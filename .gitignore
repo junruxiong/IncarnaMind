@@ -1,0 +1,6 @@
+Archieve
+.vscode
+.history
+__pycache__
+app.log
+.DS_Store
