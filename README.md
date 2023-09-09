@@ -5,15 +5,32 @@
 Chat with your personal documents.
 Upload documents 📁(PDF, TXT) and answer questions about them.
 
+together gif:
+Sliding Window Chunking (diagram)
+Whole workflow (diagram)
+![image](figs/Frame%201.png)
+
+## 💢 Problems
+
+-current chunking is too fixed
+sliding windows chunking, we tried other methods, this one is balanced with time, computing power and performance.
+
+-small chunks can retrieve fine grained information, large chunks can retrieve coarse grained information, embedding based retrieval are good at semantic searching, howerver like keywords searching and bm25 are good at precision matching, we emsemble both of them to retrieve information.
+
+-Normally, only qa with 1 document each time
+multiple documents qa
+
 ## 🎯 Key Features
 
+- **Sliding window chunking**
+- **Multi-docs QA**
 - **File compatibility**
   - .pdf
   - .txt
 
 ## 💻 Demo
 
-hahahaha
+A short video
 
 ## 🚀 Getting Started
 
@@ -75,7 +92,7 @@ PARAMETERS n = (replace_me)
 
 #### 2.1. Upload and process your files
 
-Put all your files into the **/data** directory and run the following command to ingest all the data.
+Put all your files into the **/data** directory and run the following command to ingest all the data:
 
 ```shell
 python docs2db.py
@@ -91,11 +108,15 @@ python main.py
 
 #### 2.3. Chat and ask any questions
 
-And wait for the script to require your input like the below.
+Wait for the script to require your input like the below.
 
 ```shell
 Human:
 ```
+
+#### 2.4. Others
+
+Enable/disable logging
 
 ## 🚫 Limitations
 
