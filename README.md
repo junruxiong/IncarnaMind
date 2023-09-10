@@ -8,7 +8,8 @@ Upload documents 📁(PDF, TXT) and answer questions about them.
 together gif:
 Sliding Window Chunking (diagram)
 Whole workflow (diagram)
-![image](figs/Frame%201.png)
+
+![image](figs/Sliding_Window_Chunking.png)
 
 ## 💢 Problems
 
@@ -117,6 +118,7 @@ Human:
 #### 2.4. Others
 
 Enable/disable logging
+Please don't use random name of each files
 
 ## 🚫 Limitations
 
