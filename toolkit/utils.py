@@ -18,7 +18,7 @@ import tiktoken
 from langchain.vectorstores import Chroma
 
 from langchain.schema import Document, BaseMessage
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.embeddings.openai import OpenAIEmbeddings
 
 
@@ -132,6 +132,11 @@ def choose_embeddings(embedding_name):
     try:
         if embedding_name == "openAIEmbeddings":
             return OpenAIEmbeddings()
+        elif embedding_name == "hkunlpInstructorLarge":
+            device = check_device()
+            return HuggingFaceInstructEmbeddings(
+                model_name="hkunlp/instructor-large", model_kwargs={"device": device}
+            )
         else:
             device = check_device()
             return HuggingFaceEmbeddings(model_name=embedding_name, device=device)

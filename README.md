@@ -2,9 +2,9 @@
 
 ## 👀 In a Nutshell
 
-IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Language Learning Models (LLMs) like GPT (architecture overview). Our Sliding Window Chunking mechanism and Emsemble Retriever allow you to quickly find and search specific sections and both fine-grained and coarse-grained information within your documents to agument LLMs.
+IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Language Learning Models (LLMs) like GPT ([architecture overview](#high-level-architecture)). Utilize our [Sliding Window Chunking](#sliding-window-chunking) mechanism and Emsemble Retriever allow you to efficiently query specific sections for both fine-grained and coarse-grained information of your documents to agument LLMs.
 
-Powered by Langchain.
+Powered by [Langchain](https://github.com/langchain-ai/langchain) and [Chroma DB](https://github.com/chroma-core/chroma).
 
 ## 💡 Challenges Addressed
 
@@ -18,7 +18,7 @@ Powered by Langchain.
 
 ## 🎯 Key Features
 
-- **Sliding Window Chunking**: Dynamically adjust the size and position of text chunks to improve retrieval augmented generation (RAG).
+- **Adaptive Chunking**: Dynamically adjust the size and position of text chunks to improve retrieval augmented generation (RAG).
 
 - **Multi-Document QA**: Perform queries across multiple documents simultaneously.
 
@@ -116,7 +116,7 @@ Human:
 
 #### 2.4. Others
 
-If you want to enable/disable the logging, please edit in in **configparser.ini** file.
+If you want to eidt the logging, please edit in in **configparser.ini** file.
 
 ```shell
 ***REMOVED***
@@ -126,7 +126,7 @@ If you want to enable/disable the logging, please edit in in **configparser.ini*
 ***REMOVED***
 ```
 
-## 👀 Architecture
+## 🏗 Architecture
 
 ### High Level Architecture
 
@@ -138,15 +138,15 @@ If you want to enable/disable the logging, please edit in in **configparser.ini*
 
 ## 🚫 Limitations
 
-- Citation is not supported for now.
-- Asynchronous is not very good for now.
+- Citation is not supported for currention version, but will release soon.
+- Limited asynchronous capabilities.
 
 ## 📝 Upcoming Features
 
-- UI
-- OCR
-- Optimise Async call
-- Support Open Source LLMs
+- Frontend UI interface
+- OCR support
+- Asynchronous optimization
+- Support open source LLMs
 - support more document formats
 
 ## 📑 License

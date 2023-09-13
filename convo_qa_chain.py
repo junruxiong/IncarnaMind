@@ -174,9 +174,9 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
             database=self.file_names,
             callbacks=callbacks,
         )
-        print("new_questions:", new_questions)
+        # print("new_questions:", new_questions)
         new_question_list = _get_standalone_questions_list(new_questions, question)[:3]
-        print("new_question_list:", new_question_list)
+        # print("new_question_list:", new_question_list)
         logger.info("user_input: %s", question)
         logger.info("new_question_list: %s", new_question_list)
 
