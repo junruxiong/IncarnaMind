@@ -342,7 +342,7 @@ def _get_standalone_questions_list(
         r"(?i)standalone[^\n]*:\n(.*)", standalone_questions_str, re.DOTALL
     )
 
-    sentence_source = match.group(1).strip() if match else original_question
+    sentence_source = match.group(1).strip() if match else standalone_questions_str
     sentences = sentence_source.split("\n")
 
     return [

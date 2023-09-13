@@ -7,11 +7,10 @@ from langchain.prompts.chat import (
 
 # ================================================================================
 
-refine_qa_template = """Given the Chat History and File Names.
-If the Follow Up Input is relevant to Chat History and File Names or is complex (such as about comparison, multi-hop questions and multiple documents etc.,) then decompose into less than 3 standalone question(s) and MUST have clear mentions. 
-Otherwise, keep the Follow Up Input as it is.
+refine_qa_template = """Given the Chat History and Doc Names, break up the Follow Up Input into less than 3 ONE-HOP query(s) for a retrieval engine input if it is a multi-hop or comparative query.
 
-File Names:
+
+Aviliable Doc Names to decompose into standalone Query(s):
 ```
 {database}
 ```
@@ -19,13 +18,14 @@ File Names:
 Chat History:
 ```
 {chat_history}
-```
 
-The number of standalone question(s) MUST be less than 3 and keep as MINIMAL as possbile!
+```
 
 Begin:
 
 Follow Up Input: {question}
+
+Standalone Query(s) :
 """
 
 CONDENSE_QUESTION_PROMPT = PromptTemplate(
@@ -36,7 +36,7 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate(
 
 # ================================================================================
 
-docs_selection_prompt = """Below are some verified sources and a human Input. If you think they are relevant or contain any keywords to Human Input, please list all possible snippet numbers. 
+docs_selection_prompt = """Below are some verified sources and a human Input. If you think any of them are relevant or contain any keywords to Human Input, then list all possible Context numbers. 
 
 ```
 {snippets}
@@ -56,7 +56,7 @@ DOCS_SELECTION_PROMPT = PromptTemplate(
 
 
 prompt_template = """You are a helpful assistant designed by IncarnaMind.
-If you think the verified source below is relevant to human input, please respond to the human based on the only relevant retrieved sources; otherwise, respond to it in your own words.
+If you think the below verified sources are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
 
 {context}
 
@@ -68,7 +68,7 @@ QA_PROMPT = PromptTemplate(
 )
 
 system_template = """You are a helpful assistant designed by IncarnaMind.
-If you think the verified source below is relevant to human input, please respond to the human based on the only relevant retrieved sources; otherwise, respond to it in your own words.
+If you think the below verified sources are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
 
 ----------------
 {context}"""

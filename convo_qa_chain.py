@@ -133,10 +133,11 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
                 else self._get_docs(question, inputs, num_query=num_query)
             )
 
-            total_results = {
-                file_name: total_results.get(file_name, []) + docs
-                for file_name, docs in docs_dict.items()
-            }
+            for file_name, docs in docs_dict.items():
+                if file_name not in total_results:
+                    total_results[file_name] = docs
+                else:
+                    total_results[file_name].extend(docs)
 
             logger.info(
                 "-----step_done--------------------------------------------------",
@@ -173,8 +174,9 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
             database=self.file_names,
             callbacks=callbacks,
         )
+        print("new_questions:", new_questions)
         new_question_list = _get_standalone_questions_list(new_questions, question)[:3]
-        # print("new_question_list:", new_question_list)
+        print("new_question_list:", new_question_list)
         logger.info("user_input: %s", question)
         logger.info("new_question_list: %s", new_question_list)
 
@@ -250,10 +252,11 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
                 else await self._aget_docs(question, inputs, num_query=num_query)
             )
 
-            total_results = {
-                file_name: total_results.get(file_name, []) + docs
-                for file_name, docs in docs_dict.items()
-            }
+            for file_name, docs in docs_dict.items():
+                if file_name not in total_results:
+                    total_results[file_name] = docs
+                else:
+                    total_results[file_name].extend(docs)
 
             logger.info(
                 "-----step_done--------------------------------------------------",

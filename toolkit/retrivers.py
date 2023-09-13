@@ -243,7 +243,7 @@ class MyRetriever:
             weights=weights,
         )
 
-    def find_overlaps(self, doc: Document):
+    def find_overlaps(self, doc: List[Document]):
         """
         Find overlapping intervals of windows.
 
@@ -438,6 +438,8 @@ class MyRetriever:
                         source_md5_dict[first[ids_c].metadata["source_md5"]].append(
                             ids_clean[ids_c]
                         )
+            if len(source_md5_dict) == 0:
+                source_md5_dict[first[0].metadata["source_md5"]] = [first[0]]
             num_docs = len(source_md5_dict.keys())
             third_num_k = max(
                 1,
@@ -553,8 +555,10 @@ class MyRetriever:
                         ]
                     else:
                         source_md5_dict[first[ids_c].metadata["source_md5"]].append(
-                            ids_clean[ids_c]
+                            first[ids_c]
                         )
+            if len(source_md5_dict) == 0:
+                source_md5_dict[first[0].metadata["source_md5"]] = [first[0]]
             num_docs = len(source_md5_dict.keys())
             third_num_k = max(
                 1,

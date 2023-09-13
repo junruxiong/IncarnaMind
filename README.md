@@ -2,33 +2,30 @@
 
 ## 👀 In a Nutshell
 
-Chat with your personal documents.
-Upload documents 📁(PDF, TXT) and answer questions about them.
+IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Language Learning Models (LLMs) like GPT (architecture overview). Our Sliding Window Chunking mechanism and Emsemble Retriever allow you to quickly find and search specific sections and both fine-grained and coarse-grained information within your documents to agument LLMs.
 
-together gif:
-Sliding Window Chunking (diagram)
-Whole workflow (diagram)
+Powered by Langchain.
 
-![image](figs/Sliding_Window_Chunking.png)
+## 💡 Challenges Addressed
 
-## 💢 Problems
+- **Fixed Chunking**: Our Sliding Window Chunking technique provides a balanced solution in terms of time, computing power, and performance.
 
--current chunking is too fixed
-sliding windows chunking, we tried other methods, this one is balanced with time, computing power and performance.
+- **Precision vs. Semantics**: Small chunks enable fine-grained information retrieval, while large chunks focus on coarse-grained data. We leverage both embedding-based and BM25 methods for a hybrid search approach.
 
--small chunks can retrieve fine grained information, large chunks can retrieve coarse grained information, embedding based retrieval are good at semantic searching, howerver like keywords searching and bm25 are good at precision matching, we emsemble both of them to retrieve information.
+- **Single-Document Limitation**: IncarnaMind supports multi-document querying, breaking the one-document-at-a-time barrier.
 
--Normally, only qa with 1 document each time
-multiple documents qa
+- **Model Compatibility**: We use Chains instead of Agent to ensure stable parsing across different LLMs.
 
 ## 🎯 Key Features
 
-- **Sliding window chunking**
-- **Multi-docs QA**
-- **File compatibility**
-  - .pdf
-  - .txt
+- **Sliding Window Chunking**: Dynamically adjust the size and position of text chunks to improve retrieval augmented generation (RAG).
 
+- **Multi-Document QA**: Perform queries across multiple documents simultaneously.
+
+- **File Compatibility**: Supports both PDF and TXT file formats.
+
+- **LLM Model Compatibility**: Supports both OpenAI GPT and Anthropic Claude models.
+  
 ## 💻 Demo
 
 A short video
@@ -36,6 +33,8 @@ A short video
 ## 🚀 Getting Started
 
 ### 1. Installation
+
+The installation is simple, you just need run few commands.
 
 #### 1.0. Prerequisites
 
@@ -93,7 +92,7 @@ PARAMETERS n = (replace_me)
 
 #### 2.1. Upload and process your files
 
-Put all your files into the **/data** directory and run the following command to ingest all the data:
+Put all your files (please name each file correctly to maximize the performance) into the **/data** directory and run the following command to ingest all data:
 
 ```shell
 python docs2db.py
@@ -117,19 +116,39 @@ Human:
 
 #### 2.4. Others
 
-Enable/disable logging
-Please don't use random name of each files
+If you want to enable/disable the logging, please edit in in **configparser.ini** file.
+
+```shell
+***REMOVED***
+***REMOVED***
+***REMOVED***
+***REMOVED***
+***REMOVED***
+```
+
+## 👀 Architecture
+
+### High Level Architecture
+
+![image](figs/High_Level_Architecture.png)
+
+### Sliding Window Chunking
+
+![image](figs/Sliding_Window_Chunking.png)
 
 ## 🚫 Limitations
 
+- Citation is not supported for now.
 - Asynchronous is not very good for now.
 
 ## 📝 Upcoming Features
 
 - UI
 - OCR
-- Async call
+- Optimise Async call
 - Support Open Source LLMs
-- support more formats
+- support more document formats
 
 ## 📑 License
+
+Apache 2.0 License
