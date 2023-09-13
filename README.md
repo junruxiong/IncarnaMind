@@ -2,9 +2,13 @@
 
 ## 👀 In a Nutshell
 
-IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Language Learning Models (LLMs) like GPT ([architecture overview](#high-level-architecture)). Utilize our [Sliding Window Chunking](#sliding-window-chunking) mechanism and Emsemble Retriever allow you to efficiently query specific sections for both fine-grained and coarse-grained information of your documents to agument LLMs.
+IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Large Language Models (LLMs) like GPT ([architecture overview](#high-level-architecture)). While OpenAI has recently launched a fine-tuning API for GPT models, it doesn't enable the base pretrained models to learn new data, and the responses can be prone to factual hallucinations. Utilize our [Sliding Window Chunking](#sliding-window-chunking) mechanism and Emsemble Retriever enable efficient querying of both fine-grained and coarse-grained information within your ground truth documents to augment the LLMs.
 
 Powered by [Langchain](https://github.com/langchain-ai/langchain) and [Chroma DB](https://github.com/chroma-core/chroma).
+
+## 💻 Demo
+
+A short video
 
 ## 💡 Challenges Addressed
 
@@ -25,10 +29,7 @@ Powered by [Langchain](https://github.com/langchain-ai/langchain) and [Chroma DB
 - **File Compatibility**: Supports both PDF and TXT file formats.
 
 - **LLM Model Compatibility**: Supports both OpenAI GPT and Anthropic Claude models.
-  
-## 💻 Demo
 
-A short video
 
 ## 🚀 Getting Started
 
@@ -116,7 +117,7 @@ Human:
 
 #### 2.4. Others
 
-If you want to eidt the logging, please edit in in **configparser.ini** file.
+If you want to eidt the logging, please edit in the **configparser.ini** file.
 
 ```shell
 ***REMOVED***
@@ -138,7 +139,7 @@ If you want to eidt the logging, please edit in in **configparser.ini** file.
 
 ## 🚫 Limitations
 
-- Citation is not supported for currention version, but will release soon.
+- Citation is not supported for current version, but will release soon.
 - Limited asynchronous capabilities.
 
 ## 📝 Upcoming Features
@@ -147,8 +148,8 @@ If you want to eidt the logging, please edit in in **configparser.ini** file.
 - OCR support
 - Asynchronous optimization
 - Support open source LLMs
-- support more document formats
+- Support more document formats
 
 ## 📑 License
 
-Apache 2.0 License
+[Apache 2.0 License](LICENSE)
