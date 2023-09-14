@@ -18,13 +18,13 @@ https://github.com/junruxiong/IncarnaMind/assets/44308338/89d479fb-de90-4f7c-b16
 
 - **Single-Document Limitation**: IncarnaMind supports multi-document querying, breaking the one-document-at-a-time barrier.
 
-- **Model Compatibility**: We use Chains instead of Agent to ensure stable parsing across different LLMs.
+- **Stability**: We use Chains instead of Agent to ensure stable parsing across different LLMs.
 
 ## 🎯 Key Features
 
 - **Adaptive Chunking**: Dynamically adjust the size and position of text chunks to improve retrieval augmented generation (RAG).
 
-- **Multi-Document Conversational QA**: Perform queries across multiple documents simultaneously.
+- **Multi-Document Conversational QA**: Perform simmple and multi-hop queries across multiple documents simultaneously.
 
 - **File Compatibility**: Supports both PDF and TXT file formats.
 
