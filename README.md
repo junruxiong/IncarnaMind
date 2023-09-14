@@ -30,6 +30,16 @@ https://github.com/junruxiong/IncarnaMind/assets/44308338/89a9ee19-9993-44ce-9c6
 
 - **LLM Model Compatibility**: Supports both OpenAI GPT and Anthropic Claude models.
 
+## 🏗 Architecture
+
+### High Level Architecture
+
+![image](figs/High_Level_Architecture.png)
+
+### Sliding Window Chunking
+
+![image](figs/Sliding_Window_Chunking.png)
+
 ## 🚀 Getting Started
 
 ### 1. Installation
@@ -125,16 +135,6 @@ If you want to eidt the logging, please edit in the **configparser.ini** file.
 ***REMOVED***
 ***REMOVED***
 ```
-
-## 🏗 Architecture
-
-### High Level Architecture
-
-![image](figs/High_Level_Architecture.png)
-
-### Sliding Window Chunking
-
-![image](figs/Sliding_Window_Chunking.png)
 
 ## 🚫 Limitations
 
