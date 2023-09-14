@@ -350,8 +350,9 @@ def _get_standalone_questions_list(
     sentence_source = match.group(1).strip() if match else standalone_questions_str
     sentences = sentence_source.split("\n")
 
+    pattern = "\((\d+)\)\.?\s*|\d+\.?\)\s*|[Qq]uery \d+:\s*|[Qq]uery:\s*"
     return [
-        re.sub(r"^(?:\d+\.\s?|\(\d+\)\s?)", "", sentence.strip())
+        re.sub(pattern, "", sentence).strip()
         for sentence in sentences
-        if sentence.strip()
+        if re.sub(pattern, "", sentence).strip()
     ]
