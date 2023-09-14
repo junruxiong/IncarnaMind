@@ -127,7 +127,8 @@ Human:
 
 #### 2.4. Others
 
-If you want to eidt the logging, please edit in the **configparser.ini** file.
+When you start a chat, the system will automatically generate a **IncarnaMind.log** file.
+If you want to edit the logging, please edit in the **configparser.ini** file.
 
 ```shell
 ***REMOVED***
