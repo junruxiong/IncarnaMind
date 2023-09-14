@@ -7,10 +7,10 @@ from langchain.prompts.chat import (
 
 # ================================================================================
 
-refine_qa_template = """Given the Chat History and Doc Names, break up the Follow Up Input into less than 3 ONE-HOP query(s) for a retrieval engine input if it is a multi-hop or comparative query.
+refine_qa_template = """Given the Chat History and Doc Names in the database, break up the Follow Up Input into less than 3 ONE-HOP query(s) for a retrieval engine input if it is a multi-hop or comparative query.
+The output must be only query(s) and nothing else and keep the same format as the original Follow Up Input.
 
-
-Aviliable Doc Names to decompose into standalone Query(s):
+Aviliable Doc Names to decompose into standalone Query(s) in the database:
 ```
 {database}
 ```
@@ -25,7 +25,7 @@ Begin:
 
 Follow Up Input: {question}
 
-Standalone Query(s) :
+Standalone Query(s):
 """
 
 CONDENSE_QUESTION_PROMPT = PromptTemplate(
@@ -56,22 +56,55 @@ DOCS_SELECTION_PROMPT = PromptTemplate(
 
 
 prompt_template = """You are a helpful assistant designed by IncarnaMind.
-If you think the below verified sources are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
+You have the access to name of files in the database.
 
+File Names:
+```
+{database}
+```
+
+Chat History:
+```
+{chat_history}
+```
+
+If you think the below verified sources from the database are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
+----------------
+
+Contexts:
+```
 {context}
+```
 
 Human Input: {question}
 Helpful Answer:"""
 
 QA_PROMPT = PromptTemplate(
-    template=prompt_template, input_variables=["context", "question"]
+    template=prompt_template,
+    input_variables=["database", "chat_history", "context", "question"],
 )
 
 system_template = """You are a helpful assistant designed by IncarnaMind.
-If you think the below verified sources are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
+You have the access to name of files in the database.
 
+File Names:
+```
+{database}
+```
+
+Chat History:
+```
+{chat_history}
+```
+
+If you think the below verified sources from the database are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
 ----------------
-{context}"""
+
+Contexts:
+```
+{context}
+```
+"""
 
 
 messages = [

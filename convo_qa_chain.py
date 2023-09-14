@@ -180,18 +180,13 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
         logger.info("user_input: %s", question)
         logger.info("new_question_list: %s", new_question_list)
 
-        context = ""
         snippets, source_docs = self._retrieve(
             new_question_list, inputs, run_manager=_run_manager
         )
 
-        context += (
-            f"Context:\n```{snippets}```\n\nChat History:\n```{chat_history_str}\n```"
-        )
-        # print("context:", context)
         docs = [
             Document(
-                page_content=context,
+                page_content=snippets,
                 metadata={},
             )
         ]
@@ -199,7 +194,10 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
         new_inputs = inputs.copy()
         new_inputs["chat_history"] = chat_history_str
         answer = self.combine_docs_chain.run(
-            input_documents=docs, callbacks=_run_manager.get_child(), **new_inputs
+            input_documents=docs,
+            database=self.file_names,
+            callbacks=_run_manager.get_child(),
+            **new_inputs,
         )
         output: Dict[str, Any] = {self.output_key: answer}
         if self.return_source_documents:
@@ -296,17 +294,13 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
         new_question_list = _get_standalone_questions_list(new_questions, question)[:3]
         logger.info("new_question_list: %s", new_question_list)
 
-        context = ""
         snippets, source_docs = await self._aretrieve(
             new_question_list, inputs, run_manager=_run_manager
         )
 
-        context += (
-            f"Context:\n```{snippets}```\n\nChat History:\n```{chat_history_str}\n```"
-        )
         docs = [
             Document(
-                page_content=context,
+                page_content=snippets,
                 metadata={},
             )
         ]
@@ -314,7 +308,10 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
         new_inputs = inputs.copy()
         new_inputs["chat_history"] = chat_history_str
         answer = await self.combine_docs_chain.arun(
-            input_documents=docs, callbacks=_run_manager.get_child(), **new_inputs
+            input_documents=docs,
+            database=self.file_names,
+            callbacks=_run_manager.get_child(),
+            **new_inputs,
         )
         output: Dict[str, Any] = {self.output_key: answer}
         if self.return_source_documents:

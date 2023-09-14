@@ -280,7 +280,7 @@ class MyRetriever:
 
             if subset_interval:
                 centroid = [(subset_interval[0] + subset_interval[1]) // 2]
-            elif len(curr_group) > 2:
+            elif len(curr_group) > 1:
                 first_overlap_set = set(
                     range(curr_group[0][0], curr_group[0][1] + 1)
                 ) & set(range(curr_group[1][0], curr_group[1][1] + 1))
