@@ -24,12 +24,11 @@ A short video
 
 - **Adaptive Chunking**: Dynamically adjust the size and position of text chunks to improve retrieval augmented generation (RAG).
 
-- **Multi-Document QA**: Perform queries across multiple documents simultaneously.
+- **Multi-Document Conversational QA**: Perform queries across multiple documents simultaneously.
 
 - **File Compatibility**: Supports both PDF and TXT file formats.
 
 - **LLM Model Compatibility**: Supports both OpenAI GPT and Anthropic Claude models.
-
 
 ## 🚀 Getting Started
 
@@ -74,9 +73,9 @@ Setup your API keys in **configparser.ini** file
 
 ```shell
 ***REMOVED***
-***REMOVED***(replace_me)
+OPENAI_API_KEY = sk-(replace_me)
 and/or
-***REMOVED***(replace_me)
+ANTHROPIC_API_KEY = sk-(replace_me)
 ```
 
 (Optional) Setup your custom parameters in **configparser.ini** file
