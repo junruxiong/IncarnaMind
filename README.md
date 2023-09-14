@@ -8,7 +8,7 @@ Powered by [Langchain](https://github.com/langchain-ai/langchain) and [Chroma DB
 
 ## 💻 Demo
 
-[https://www.youtube.com/watch?v=JSd6afyyA8Y](https://github.com/junruxiong/IncarnaMind/assets/44308338/89a9ee19-9993-44ce-9c6b-890662ff17a3)
+https://github.com/junruxiong/IncarnaMind/assets/44308338/89d479fb-de90-4f7c-b166-e54f7bc7344c
 
 ## 💡 Challenges Addressed
 
@@ -82,7 +82,7 @@ pip install -r requirements.txt
 Setup your API keys in **configparser.ini** file
 
 ```shell
-***REMOVED***
+[tokens]
 OPENAI_API_KEY = sk-(replace_me)
 and/or
 ANTHROPIC_API_KEY = sk-(replace_me)
@@ -91,7 +91,7 @@ ANTHROPIC_API_KEY = sk-(replace_me)
 (Optional) Setup your custom parameters in **configparser.ini** file
 
 ```shell
-***REMOVED***
+[parameters]
 PARAMETERS 1 = (replace_me)
 PARAMETERS 2 = (replace_me)
 ...
@@ -131,11 +131,11 @@ When you start a chat, the system will automatically generate a **IncarnaMind.lo
 If you want to edit the logging, please edit in the **configparser.ini** file.
 
 ```shell
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
+[logging]
+enabled = True
+level = INFO
+filename = IncarnaMind.log
+format = %(asctime)s [%(levelname)s] %(name)s: %(message)s
 ```
 
 ## 🚫 Limitations
