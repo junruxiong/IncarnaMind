@@ -1,4 +1,4 @@
-# IncarnaMind
+# 🧠 IncarnaMind
 
 ## 👀 In a Nutshell
 

@@ -7,10 +7,10 @@ from langchain.prompts.chat import (
 
 # ================================================================================
 
-refine_qa_template = """Given the Chat History and Doc Names in the database, break up the Follow Up Input into less than 3 ONE-HOP query(s) for a retrieval engine input if it is a multi-hop or comparative query.
-The output must be only query(s) and nothing else and keep the same format as the original Follow Up Input.
+refine_qa_template = """Given the chat history and document names in the database, break down the follow-up input into fewer than 3 ONE-HOP queries for retrieval engine input, if it is a multi-hop or comparative query.
+The output must contain only queries and should maintain the same format as the original follow-up input.
 
-Aviliable Doc Names to decompose into standalone Query(s) in the database:
+Available Document Names to decompose into standalone queries in the database:
 ```
 {database}
 ```
@@ -36,13 +36,13 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate(
 
 # ================================================================================
 
-docs_selection_prompt = """Below are some verified sources and a human Input. If you think any of them are relevant or contain any keywords to Human Input, then list all possible Context numbers. 
+docs_selection_prompt = """Below are some verified sources and a human input. If you think any of them are relevant or contain any keywords related to the human input, then list all possible context numbers.
 
 ```
 {snippets}
 ```
 
-The output format must be like the following, nothing else. If not, you will get [] instead:
+The output format must be like the following, nothing else. If not, you will output []:
 [0, ..., n]
 Human Input: {query}
 """
@@ -56,7 +56,7 @@ DOCS_SELECTION_PROMPT = PromptTemplate(
 
 
 prompt_template = """You are a helpful assistant designed by IncarnaMind.
-You have the access to name of files in the database.
+You have access to the names of files in the database.
 
 File Names:
 ```
@@ -68,7 +68,7 @@ Chat History:
 {chat_history}
 ```
 
-If you think the below verified sources from the database are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
+If you think the verified sources from the database below are relevant to the human input, please respond to the human based on the relevant retrieved sources; otherwise, respond in your own words.
 ----------------
 
 Contexts:
@@ -97,7 +97,7 @@ Chat History:
 {chat_history}
 ```
 
-If you think the below verified sources from the database are relevant to human input, please respond to the human based on the relevant retrieved sources; otherwise, respond to it in your own words.
+If you think the verified sources from the database below are relevant to the human input, please respond to the human based on the relevant retrieved sources; otherwise, respond in your own words.
 ----------------
 
 Contexts:
