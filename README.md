@@ -152,3 +152,18 @@ If you want to eidt the logging, please edit in the **configparser.ini** file.
 ## 📑 License
 
 [Apache 2.0 License](LICENSE)
+
+## Citation
+
+If you want to cite our work, please use the following bibtex entry:
+
+```bibtex
+@misc{IncarnaMind2023,
+  author = {Junru Xiong},
+  title = {IncarnaMind},
+  year = {2023},
+  publisher = {GitHub},
+  journal = {GitHub Repository},
+  howpublished = {\url{https://github.com/junruxiong/IncarnaMind}}
+}
+```
