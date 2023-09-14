@@ -103,6 +103,7 @@ PARAMETERS n = (replace_me)
 #### 2.1. Upload and process your files
 
 Put all your files (please name each file correctly to maximize the performance) into the **/data** directory and run the following command to ingest all data:
+(You can delete example files in the **/data** directory before running the command)
 
 ```shell
 python docs2db.py
