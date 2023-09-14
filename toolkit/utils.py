@@ -350,7 +350,7 @@ def _get_standalone_questions_list(
     sentence_source = match.group(1).strip() if match else standalone_questions_str
     sentences = sentence_source.split("\n")
 
-    pattern = r"\((\d+)\)\.? ?|\d+\.? ?\)?|[Qq]uery \d+: ?|[Qq]uery: ?"
+    pattern = r"^\((\d+)\)\.? ?|^\d+\.? ?\)?|^[Qq]uery \d+: ?|^[Qq]uery: ?"
     return [
         re.sub(pattern, "", sentence).strip()
         for sentence in sentences
