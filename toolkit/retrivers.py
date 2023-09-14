@@ -280,21 +280,22 @@ class MyRetriever:
 
             if subset_interval:
                 centroid = [(subset_interval[0] + subset_interval[1]) // 2]
-            elif len(curr_group) > 1:
-                first_overlap_set = set(
-                    range(curr_group[0][0], curr_group[0][1] + 1)
-                ) & set(range(curr_group[1][0], curr_group[1][1] + 1))
+            elif len(curr_group) > 2:
+                first_overlap = max(
+                    set(range(curr_group[0][0], curr_group[0][1] + 1))
+                    & set(range(curr_group[1][0], curr_group[1][1] + 1))
+                )
                 last_overlap_set = set(
                     range(curr_group[-1][0], curr_group[-1][1] + 1)
                 ) & set(range(curr_group[-2][0], curr_group[-2][1] + 1))
 
-                if first_overlap_set and last_overlap_set:
-                    first_overlap = max(first_overlap_set)
-                    last_overlap = min(last_overlap_set)
-                    step = 1 if first_overlap <= last_overlap else -1
-                    centroid = list(range(first_overlap, last_overlap + step, step))
+                if not last_overlap_set:
+                    last_overlap = first_overlap  # Fallback if no overlap
                 else:
-                    centroid = []
+                    last_overlap = min(last_overlap_set)
+
+                step = 1 if first_overlap <= last_overlap else -1
+                centroid = list(range(first_overlap, last_overlap + step, step))
             else:
                 centroid = [
                     sum([(s + e) // 2 for s, e in curr_group]) // len(curr_group)
