@@ -8,7 +8,7 @@ Powered by [Langchain](https://github.com/langchain-ai/langchain) and [Chroma DB
 
 ## 💻 Demo
 
-https://github.com/junruxiong/IncarnaMind/assets/44308338/a923d81e-4c11-482b-aac2-0d9027696300
+https://github.com/junruxiong/IncarnaMind/assets/44308338/89a9ee19-9993-44ce-9c6b-890662ff17a3
 
 ## 💡 Challenges Addressed
 
