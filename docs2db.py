@@ -102,6 +102,7 @@ def docs2vectorstore(docs: List[Document], embedding_name: str, suffix: str = ""
     """
     embedding = choose_embeddings(embedding_name)
     name = f"{embedding_name}_{suffix}"
+    # if embedding_store_path is not existing, create it
     if not os.path.exists(embedding_store_path):
         os.makedirs(embedding_store_path)
     Chroma.from_documents(
@@ -119,8 +120,6 @@ def file_names2pickle(file_names: list, save_name: str = ""):
         save_name (str, optional): The name for the saved pickle file. Defaults to "".
     """
     name = f"{save_name}"
-    if not os.path.exists(embedding_store_path):
-        os.makedirs(embedding_store_path)
     with open(f"{embedding_store_path}/{name}.pkl", "wb") as file:
         pickle.dump(file_names, file)
 
@@ -176,7 +175,8 @@ def process_metadata(doc: List[Document]):
         doc (list): List of Document objects.
     """
     # get file name and remove extension
-    file_name = doc[0].metadata["source"].split("/")[-1].split(".")[0]
+    file_name_with_extension = os.path.basename(doc[0].metadata["source"])
+    file_name, _ = os.path.splitext(file_name_with_extension)
 
     for _, item in enumerate(doc):
         for key, value in item.metadata.items():
@@ -299,7 +299,7 @@ def process_files():
 
         with tqdm(total=len(files_path), desc="Processing files", ncols=80) as pbar:
             for doc in pool.imap_unordered(load_file, files_path):
-                file_name = doc[0].metadata["source"].split("/")[-1]
+                file_name_with_extension = os.path.basename(doc[0].metadata["source"])
 
                 chunk_split_small = split_doc(
                     doc=doc,
@@ -323,7 +323,7 @@ def process_files():
                 process_metadata(chunk_split_small)
                 process_metadata(chunk_split_medium)
 
-                file_names.append(file_name)
+                file_names.append(file_name_with_extension)
                 chunks_small.extend(chunk_split_small)
                 chunks_medium.extend(chunk_split_medium)
 
