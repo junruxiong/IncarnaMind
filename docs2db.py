@@ -120,6 +120,8 @@ def file_names2pickle(file_names: list, save_name: str = ""):
         save_name (str, optional): The name for the saved pickle file. Defaults to "".
     """
     name = f"{save_name}"
+    if not os.path.exists(embedding_store_path):
+        os.makedirs(embedding_store_path)
     with open(f"{embedding_store_path}/{name}.pkl", "wb") as file:
         pickle.dump(file_names, file)
 
@@ -134,7 +136,8 @@ def docs2pickle(docs: List[Document], suffix: str = ""):
     for doc in docs:
         doc.page_content = clean_text(doc.page_content)
     name = f"pickle_{suffix}"
-
+    if not os.path.exists(embedding_store_path):
+        os.makedirs(embedding_store_path)
     with open(f"{embedding_store_path}/docs_{name}.pkl", "wb") as file:
         pickle.dump(docs, file)
 
