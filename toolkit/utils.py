@@ -10,6 +10,7 @@ import logging
 import configparser
 from enum import Enum
 from typing import List, Tuple, Union
+import nltk
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -24,6 +25,12 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 
 tokenizer_name = tiktoken.encoding_for_model("gpt-3.5-turbo")
 tokenizer = tiktoken.get_encoding(tokenizer_name.name)
+
+# if nltk stopwords not downloaded, download it
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    nltk.download("stopwords")
 
 ChatTurnType = Union[Tuple[str, str], BaseMessage]
 _ROLE_MAP = {"human": "Human: ", "ai": "Assistant: "}
@@ -350,9 +357,8 @@ def _get_standalone_questions_list(
     sentence_source = match.group(1).strip() if match else standalone_questions_str
     sentences = sentence_source.split("\n")
 
-    pattern = r"^\((\d+)\)\.? ?|^\d+\.? ?\)?|^[Qq]uery \d+: ?|^[Qq]uery: ?"
     return [
-        re.sub(pattern, "", sentence).strip()
+        re.sub(r"^(?:\d+\.\s?|\(\d+\)\s?)", "", sentence.strip())
         for sentence in sentences
-        if re.sub(pattern, "", sentence).strip()
+        if sentence.strip()
     ]
