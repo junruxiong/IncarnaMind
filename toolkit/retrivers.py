@@ -439,10 +439,10 @@ class MyRetriever:
                         source_md5_dict[first[ids_c].metadata["source_md5"]] = [
                             first[ids_c]
                         ]
-                    else:
-                        source_md5_dict[first[ids_c].metadata["source_md5"]].append(
-                            ids_clean[ids_c]
-                        )
+                    # else:
+                    #     source_md5_dict[first[ids_c].metadata["source_md5"]].append(
+                    #         ids_clean[ids_c]
+                    #     )
             if len(source_md5_dict) == 0:
                 source_md5_dict[first[0].metadata["source_md5"]] = [first[0]]
             num_docs = len(source_md5_dict.keys())
@@ -454,7 +454,8 @@ class MyRetriever:
                             configs.max_llm_context
                             / (configs.base_chunk_size * configs.chunk_scale)
                         )
-                        // ((num_docs * num_query) * 2)
+                        // num_docs
+                        * num_query
                     )
                 ),
             )
@@ -496,9 +497,10 @@ class MyRetriever:
                     weights=self.retriever_weights,
                 )
                 # ! Third retrieval
-                third = third_retriever.get_relevant_documents(
+                third_temp = third_retriever.get_relevant_documents(
                     query, callbacks=run_manager.get_child()
                 )
+                third = third_temp[:third_num_k]
                 # chunks = sorted(third, key=lambda x: x.metadata["medium_chunk_idx"])
                 for doc in third:
                     logger.info(
@@ -558,10 +560,10 @@ class MyRetriever:
                         source_md5_dict[first[ids_c].metadata["source_md5"]] = [
                             first[ids_c]
                         ]
-                    else:
-                        source_md5_dict[first[ids_c].metadata["source_md5"]].append(
-                            first[ids_c]
-                        )
+                    # else:
+                    #     source_md5_dict[first[ids_c].metadata["source_md5"]].append(
+                    #         ids_clean[ids_c]
+                    #     )
             if len(source_md5_dict) == 0:
                 source_md5_dict[first[0].metadata["source_md5"]] = [first[0]]
             num_docs = len(source_md5_dict.keys())
@@ -573,7 +575,7 @@ class MyRetriever:
                             configs.max_llm_context
                             / (configs.base_chunk_size * configs.chunk_scale)
                         )
-                        // ((num_docs * num_query) * 2)
+                        // (num_docs * num_query)
                     )
                 ),
             )
@@ -615,9 +617,10 @@ class MyRetriever:
                     weights=self.retriever_weights,
                 )
                 # ! Third retrieval
-                third = await third_retriever.aget_relevant_documents(
+                third_temp = await third_retriever.aget_relevant_documents(
                     query, callbacks=run_manager.get_child()
                 )
+                third = third_temp[:third_num_k]
                 # chunks = sorted(third, key=lambda x: x.metadata["medium_chunk_idx"])
                 for doc in third:
                     logger.info(
