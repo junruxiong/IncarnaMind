@@ -454,8 +454,7 @@ class MyRetriever:
                             configs.max_llm_context
                             / (configs.base_chunk_size * configs.chunk_scale)
                         )
-                        // num_docs
-                        * num_query
+                        // (num_docs * num_query)
                     )
                 ),
             )
