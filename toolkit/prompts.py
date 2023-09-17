@@ -7,7 +7,7 @@ from langchain.prompts.chat import (
 
 # ================================================================================
 
-refine_qa_template = """Given the chat history and document names in the database, break down the follow up input into fewer than 3 ONE-HOP queries for retrieval engine input, if it is a multi-hop or comparative query. The output must be only queries and should keep the same stylpe as the original follow up input.
+refine_qa_template = """Given the chat history and document names in the database, break down the follow up input into fewer than 3 heterogeneous ONE-HOP queries for retrieval engine input, if it is a multi-hop or comparative query. The output must be only queries and should keep the same stylpe as the original follow up input.
 
 Available Document Names to decompose into standalone queries in the database:
 ```

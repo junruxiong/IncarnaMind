@@ -12,6 +12,7 @@ Classes:
 import re
 import ast
 import copy
+import math
 import logging
 from typing import Dict, List, Optional
 from langchain.chains import LLMChain
@@ -279,7 +280,7 @@ class MyRetriever:
                         break
 
             if subset_interval:
-                centroid = [(subset_interval[0] + subset_interval[1]) // 2]
+                centroid = [math.ceil((subset_interval[0] + subset_interval[1]) / 2)]
             elif len(curr_group) > 2:
                 first_overlap = max(
                     set(range(curr_group[0][0], curr_group[0][1] + 1))
@@ -298,7 +299,10 @@ class MyRetriever:
                 centroid = list(range(first_overlap, last_overlap + step, step))
             else:
                 centroid = [
-                    sum([(s + e) // 2 for s, e in curr_group]) // len(curr_group)
+                    round(
+                        sum([math.ceil((s + e) / 2) for s, e in curr_group])
+                        / len(curr_group)
+                    )
                 ]
 
             grouped_intervals.append(
@@ -424,7 +428,7 @@ class MyRetriever:
         for doc in first:
             logger.info("----1st retrieval----: %s", doc)
         ids_clean = self.get_relevant_doc_ids(first, query)
-        logger.info("ids_clean: %s", ids_clean)
+        logger.info("relevant doc ids: %s", ids_clean)
         qa_chunks = {}  # key is file name, value is a list of relevant documents
         # res_chunks = []
         if ids_clean and isinstance(ids_clean, list):
@@ -543,7 +547,7 @@ class MyRetriever:
         for doc in first:
             logger.info("----1st retrieval----: %s", doc)
         ids_clean = self.get_relevant_doc_ids(first, query)
-        logger.info("ids_clean: %s", ids_clean)
+        logger.info("relevant doc ids: %s", ids_clean)
         qa_chunks = {}  # key is file name, value is a list of relevant documents
         # res_chunks = []
         if ids_clean and isinstance(ids_clean, list):
