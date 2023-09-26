@@ -34,6 +34,10 @@ db_store_path = configs.db_dir
 
 # get models
 def get_llm(llm_name: str, temperature: float, max_tokens: int):
+    # create a new folder for the model
+    if not os.path.exists(configs.local_model_dir):
+        os.makedirs(configs.local_model_dir)
+
     """Get the LLM model from the model name."""
     splits = llm_name.split("|")  # [provider, model_name, model_file]
 
