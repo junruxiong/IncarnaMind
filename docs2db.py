@@ -31,7 +31,7 @@ configs = Config("configparser.ini")
 os.environ["OPENAI_API_KEY"] = configs.openai_api_key
 os.environ["ANTHROPIC_API_KEY"] = configs.anthropic_api_key
 
-embedding_store_path = configs.emb_dir
+embedding_store_path = configs.db_dir
 files_path = glob.glob(configs.docs_dir + "/*")
 
 tokenizer_name = tiktoken.encoding_for_model("gpt-3.5-turbo")
@@ -303,6 +303,7 @@ def process_files():
         with tqdm(total=len(files_path), desc="Processing files", ncols=80) as pbar:
             for doc in pool.imap_unordered(load_file, files_path):
                 file_name_with_extension = os.path.basename(doc[0].metadata["source"])
+                # file_name, _ = os.path.splitext(file_name_with_extension)
 
                 chunk_split_small = split_doc(
                     doc=doc,
