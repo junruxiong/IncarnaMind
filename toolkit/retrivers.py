@@ -26,8 +26,9 @@ from langchain.callbacks.manager import (
 )
 
 from toolkit.utils import Config, clean_text, DocIndexer, IndexerOperator
-from toolkit.prompts import DOCS_SELECTION_PROMPT
+from toolkit.prompts import PromptTemplates
 
+prompt_templates = PromptTemplates()
 
 configs = Config("configparser.ini")
 logger = logging.getLogger(__name__)
@@ -381,14 +382,18 @@ class MyRetriever:
             list: A list of relevant document IDs.
         """
         snippets = "\n\n\n".join(
-            [f"Context {idx}:\n{{{doc.page_content}}}" for idx, doc in enumerate(docs)]
+            [
+                f"Context {idx}:\n{{{doc.page_content}}}. {{source: {doc.metadata['source']}}}"
+                for idx, doc in enumerate(docs)
+            ]
         )
         id_chain = LLMChain(
             llm=self.llm,
-            prompt=DOCS_SELECTION_PROMPT,
+            prompt=prompt_templates.get_docs_selection_template(configs.model_name),
             output_key="IDs",
         )
         ids = id_chain.run({"query": query, "snippets": snippets})
+        logger.info("relevant doc ids: %s", ids)
         pattern = r"\[\s*\d+\s*(?:,\s*\d+\s*)*\]"
         match = re.search(pattern, ids)
         if match:
@@ -428,7 +433,8 @@ class MyRetriever:
         for doc in first:
             logger.info("----1st retrieval----: %s", doc)
         ids_clean = self.get_relevant_doc_ids(first, query)
-        logger.info("relevant doc ids: %s", ids_clean)
+        # ids_clean = [0, 1, 2]
+        logger.info("relevant cleaned doc ids: %s", ids_clean)
         qa_chunks = {}  # key is file name, value is a list of relevant documents
         # res_chunks = []
         if ids_clean and isinstance(ids_clean, list):

@@ -1,0 +1,11 @@
+.DS_Store
+.history
+.vscode
+__pycache__
+Archieve
+database_store
+IncarnaMind.log
+experiments.ipynb
+.pylintrc
+.flake8
+models/

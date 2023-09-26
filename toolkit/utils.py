@@ -46,18 +46,25 @@ class Config:
         # Tokens
         self.openai_api_key = self.config.get("tokens", "OPENAI_API_KEY")
         self.anthropic_api_key = self.config.get("tokens", "ANTHROPIC_API_KEY")
+        self.together_api_key = self.config.get("tokens", "TOGETHER_API_KEY")
+        self.huggingface_token = self.config.get("tokens", "HUGGINGFACE_TOKEN")
         self.version = self.config.get("tokens", "VERSION")
 
         # Directory
         self.docs_dir = self.config.get("directory", "DOCS_DIR")
-        self.emb_dir = self.config.get("directory", "EMB_DIR")
+        self.db_dir = self.config.get("directory", "db_DIR")
+        self.local_model_dir = self.config.get("directory", "LOCAL_MODEL_DIR")
 
         # Parameters
-        self.llm_model = self.config.get("parameters", "LLM_MODEL")
+        self.model_name = self.config.get("parameters", "MODEL_NAME")
+        self.temperature = self.config.getfloat("parameters", "TEMPURATURE")
         self.max_chat_history = self.config.getint("parameters", "MAX_CHAT_HISTORY")
         self.max_llm_context = self.config.getint("parameters", "MAX_LLM_CONTEXT")
         self.max_llm_generation = self.config.getint("parameters", "MAX_LLM_GENERATION")
         self.embedding_name = self.config.get("parameters", "EMBEDDING_NAME")
+
+        self.n_gpu_layers = self.config.getint("parameters", "N_GPU_LAYERS")
+        self.n_batch = self.config.getint("parameters", "N_BATCH")
 
         self.base_chunk_size = self.config.getint("parameters", "BASE_CHUNK_SIZE")
         self.chunk_overlap = self.config.getint("parameters", "CHUNK_OVERLAP")
@@ -346,19 +353,29 @@ def _get_chat_history(chat_history: List[ChatTurnType]) -> str:
     return buffer
 
 
-# TODO revise
 def _get_standalone_questions_list(
     standalone_questions_str: str, original_question: str
 ) -> List[str]:
+    pattern = r"\d+\.\s(.*?)(?=\n\d+\.|\n|$)"
+
+    matches = [
+        match.group(1) for match in re.finditer(pattern, standalone_questions_str)
+    ]
+    if matches:
+        return matches
+
     match = re.search(
         r"(?i)standalone[^\n]*:\n(.*)", standalone_questions_str, re.DOTALL
     )
-
     sentence_source = match.group(1).strip() if match else standalone_questions_str
     sentences = sentence_source.split("\n")
 
     return [
-        re.sub(r"^(?:\d+\.\s?|\(\d+\)\s?)", "", sentence.strip())
+        re.sub(
+            r"^\((\d+)\)\.? ?|^\d+\.? ?\)?|^(\d+)\) ?|^(\d+)\) ?|^[Qq]uery \d+: ?|^[Qq]uery: ?",
+            "",
+            sentence.strip(),
+        )
         for sentence in sentences
         if sentence.strip()
     ]

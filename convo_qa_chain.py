@@ -8,7 +8,6 @@ from pydantic import Field
 from langchain.schema import BasePromptTemplate, BaseRetriever, Document
 from langchain.schema.language_model import BaseLanguageModel
 from langchain.chains import LLMChain
-from langchain.chains.prompt_selector import ConditionalPromptSelector, is_chat_model
 from langchain.chains.question_answering import load_qa_chain
 from langchain.chains.conversational_retrieval.base import (
     BaseConversationalRetrievalChain,
@@ -25,18 +24,12 @@ from toolkit.utils import (
     _get_standalone_questions_list,
 )
 from toolkit.retrivers import MyRetriever
-from toolkit.prompts import (
-    CONDENSE_QUESTION_PROMPT,
-    QA_PROMPT,
-    QA_CHAT_PROMPT,
-)
+from toolkit.prompts import PromptTemplates
 
 configs = Config("configparser.ini")
 logger = logging.getLogger(__name__)
 
-PROMPT_SELECTOR = ConditionalPromptSelector(
-    default_prompt=QA_PROMPT, conditionals=[(is_chat_model, QA_CHAT_PROMPT)]
-)
+prompt_templates = PromptTemplates()
 
 
 class ConvoRetrievalChain(BaseConversationalRetrievalChain):
@@ -153,7 +146,7 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
                 if doc.metadata["page_content_md5"] not in redundancy
             )
             redundancy.update(doc.metadata["page_content_md5"] for doc in sorted_docs)
-            snippets += f"\nContext about {file_name}:\n{{\n{temp}}}"
+            snippets += f"\nContext about {file_name}:\n{{{temp}}}\n"
 
         return snippets, docs_dict
 
@@ -174,7 +167,7 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
             database=self.file_names,
             callbacks=callbacks,
         )
-        # print("new_questions:", new_questions)
+        logger.info("new_questions: %s", new_questions)
         new_question_list = _get_standalone_questions_list(new_questions, question)[:3]
         # print("new_question_list:", new_question_list)
         logger.info("user_input: %s", question)
@@ -270,7 +263,7 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
                 if doc.metadata["page_content_md5"] not in redundancy
             )
             redundancy.update(doc.metadata["page_content_md5"] for doc in sorted_docs)
-            snippets += f"\nContext about {file_name}:\n{{\n{temp}}}"
+            snippets += f"\nContext about {file_name}:\n{{{temp}}}\n"
 
         return snippets, docs_dict
 
@@ -292,6 +285,7 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
             callbacks=callbacks,
         )
         new_question_list = _get_standalone_questions_list(new_questions, question)[:3]
+        logger.info("new_questions: %s", new_questions)
         logger.info("new_question_list: %s", new_question_list)
 
         snippets, source_docs = await self._aretrieve(
@@ -331,7 +325,9 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
         cls,
         llm: BaseLanguageModel,
         retriever: BaseRetriever,
-        condense_question_prompt: BasePromptTemplate = CONDENSE_QUESTION_PROMPT,
+        condense_question_prompt: BasePromptTemplate = prompt_templates.get_refine_qa_template(
+            configs.model_name
+        ),
         chain_type: str = "stuff",  # only support stuff chain now
         verbose: bool = False,
         condense_question_llm: Optional[BaseLanguageModel] = None,
@@ -363,7 +359,9 @@ class ConvoRetrievalChain(BaseConversationalRetrievalChain):
                 ConversationalRetrievalChain
         """
         combine_docs_chain_kwargs = combine_docs_chain_kwargs or {
-            "prompt": PROMPT_SELECTOR.get_prompt(llm)
+            "prompt": prompt_templates.get_retrieval_qa_template_selector(
+                configs.model_name
+            ).get_prompt(llm)
         }
         doc_chain = load_qa_chain(
             llm,

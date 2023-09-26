@@ -2,7 +2,6 @@
 from __future__ import annotations
 import os
 import re
-import configparser
 import time
 import logging
 
@@ -10,42 +9,69 @@ from langchain.chat_models import ChatOpenAI, ChatAnthropic
 from langchain.memory import ConversationTokenBufferMemory
 from convo_qa_chain import ConvoRetrievalChain
 
+from toolkit.together_api_llm import TogetherLLM
+from toolkit.retrivers import MyRetriever
+from toolkit.local_llm import load_local_llm
 from toolkit.utils import (
     Config,
     choose_embeddings,
     load_embedding,
     load_pickle,
+    check_device,
 )
-from toolkit.retrivers import MyRetriever
 
 
 # Load the config file
 configs = Config("configparser.ini")
 logger = logging.getLogger(__name__)
 
-config = configparser.ConfigParser()
-config.read("configparser.ini")
 os.environ["OPENAI_API_KEY"] = configs.openai_api_key
 os.environ["ANTHROPIC_API_KEY"] = configs.anthropic_api_key
 
 embedding = choose_embeddings(configs.embedding_name)
-embedding_store_path = config.get("directory", "EMB_DIR")
+db_store_path = configs.db_dir
 
 
-# set models
-models = {
-    "llm_chat_gpt3": ChatOpenAI(
-        temperature=0, model="gpt-3.5-turbo", max_tokens=configs.max_llm_generation
-    ),
-    "llm_chat_gpt4": ChatOpenAI(
-        temperature=0, model="gpt-4", max_tokens=configs.max_llm_generation
-    ),
-    "llm_chat_anthropic": ChatAnthropic(
-        temperature=0,
-        model="claude-2.0",
-        max_tokens_to_sample=configs.max_llm_generation,
-    ),
-}
+# get models
+def get_llm(llm_name: str, temperature: float, max_tokens: int):
+    """Get the LLM model from the model name."""
+    splits = llm_name.split("|")  # [provider, model_name, model_file]
+
+    if "openai" in splits[0].lower():
+        llm_model = ChatOpenAI(
+            model=splits[1],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    elif "anthropic" in splits[0].lower():
+        llm_model = ChatAnthropic(
+            model=splits[1],
+            temperature=temperature,
+            max_tokens_to_sample=max_tokens,
+        )
+
+    elif "together" in splits[0].lower():
+        llm_model = TogetherLLM(
+            model=splits[1],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    elif "huggingface" in splits[0].lower():
+        llm_model = load_local_llm(
+            model_id=splits[1],
+            model_basename=splits[-1],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            device_type=check_device(),
+        )
+    else:
+        raise ValueError("Invalid Model Name")
+
+    return llm_model
+
+
+llm = get_llm(configs.model_name, configs.temperature, configs.max_llm_generation)
 
 
 # load retrieval database
@@ -53,27 +79,27 @@ db_embedding_chunks_small = load_embedding(
     store_name=configs.embedding_name,
     embedding=embedding,
     suffix="chunks_small",
-    path=embedding_store_path,
+    path=db_store_path,
 )
 db_embedding_chunks_medium = load_embedding(
     store_name=configs.embedding_name,
     embedding=embedding,
     suffix="chunks_medium",
-    path=embedding_store_path,
+    path=db_store_path,
 )
 
 db_docs_chunks_small = load_pickle(
-    prefix="docs_pickle", suffix="chunks_small", path=embedding_store_path
+    prefix="docs_pickle", suffix="chunks_small", path=db_store_path
 )
 db_docs_chunks_medium = load_pickle(
-    prefix="docs_pickle", suffix="chunks_medium", path=embedding_store_path
+    prefix="docs_pickle", suffix="chunks_medium", path=db_store_path
 )
-file_names = load_pickle(prefix="file", suffix="names", path=embedding_store_path)
+file_names = load_pickle(prefix="file", suffix="names", path=db_store_path)
 
 
 # Initialize the retriever
 my_retriever = MyRetriever(
-    llm=models[configs.llm_model],
+    llm=llm,
     embedding_chunks_small=db_embedding_chunks_small,
     embedding_chunks_medium=db_embedding_chunks_medium,
     docs_chunks_small=db_docs_chunks_small,
@@ -87,7 +113,7 @@ my_retriever = MyRetriever(
 
 # Initialize the memory
 memory = ConversationTokenBufferMemory(
-    llm=models[configs.llm_model],
+    llm=llm,
     memory_key="chat_history",
     input_key="question",
     output_key="answer",
@@ -98,7 +124,7 @@ memory = ConversationTokenBufferMemory(
 
 # Initialize the QA chain
 qa = ConvoRetrievalChain.from_llm(
-    models[configs.llm_model],
+    llm,
     my_retriever,
     file_names=file_names,
     memory=memory,
@@ -118,20 +144,3 @@ if __name__ == "__main__":
         print(f"AI:{resp['answer']}")
         print(f"Time used: {time.time() - start_time}")
         print("-" * 60)
-
-        # async def async_generate(input_str: str):
-        #     resp = await qa.arun(input_str)
-        #     print()
-        #     print(f"AI:{resp}")
-
-        # async def main():
-        #     while True:
-        #         start_time = time.time()
-        #         user_input = input("Human: ")
-        #         print()
-        #         user_input_ = re.sub(r"^Human: ", "", user_input)
-        #         await asyncio.gather(*[async_generate(user_input_)])
-        #         print(f"Time used: {time.time() - start_time}")
-        #         print("-" * 50)
-
-        # asyncio.run(main())
