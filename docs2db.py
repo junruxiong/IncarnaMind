@@ -271,13 +271,13 @@ def merge_chunks(doc: Document, scale_factor: int, chunk_idx_name: str):
     merged_doc = []
     page_content = ""
     metadata_list = []
-
     chunk_idx = 0
+
     for idx, item in enumerate(doc):
         page_content += item.page_content
         metadata_list.append(item.metadata)
 
-        if ((idx + 1) % scale_factor == 0 and idx != 0) or (idx == len(doc) - 1):
+        if (idx + 1) % scale_factor == 0 or idx == len(doc) - 1:
             metadata = merge_metadata(metadata_list)
             metadata[chunk_idx_name] = chunk_idx
             merged_doc.append(

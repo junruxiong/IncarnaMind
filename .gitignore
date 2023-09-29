@@ -9,3 +9,4 @@ experiments.ipynb
 .pylintrc
 .flake8
 models/
+model/
