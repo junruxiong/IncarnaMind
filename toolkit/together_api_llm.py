@@ -33,14 +33,14 @@ class TogetherLLM(LLM):
     """The maximum number of tokens to generate in the completion."""
 
     class Config:
-        extra = Extra.forbid
+        extra = "forbid"
 
-    @root_validator()
-    def validate_environment(cls, values: Dict) -> Dict:
-        """Validate that the API key is set."""
-        api_key = get_from_dict_or_env(values, "together_api_key", "TOGETHER_API_KEY")
-        values["together_api_key"] = api_key
-        return values
+    # @root_validator()
+    # def validate_environment(cls, values: Dict) -> Dict:
+    #     """Validate that the API key is set."""
+    #     api_key = get_from_dict_or_env(values, "together_api_key", "TOGETHER_API_KEY")
+    #     values["together_api_key"] = api_key
+    #     return values
 
     @property
     def _llm_type(self) -> str:
