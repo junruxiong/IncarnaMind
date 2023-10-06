@@ -1,6 +1,6 @@
 chromadb==0.4.13
 InstructorEmbedding==1.0.1
-langchain==0.0.305
+langchain==0.0.308
 openai==0.28.1
 pypdf==3.16.2
 rank-bm25==0.2.2
