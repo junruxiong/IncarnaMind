@@ -26,11 +26,19 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 tokenizer_name = tiktoken.encoding_for_model("gpt-3.5-turbo")
 tokenizer = tiktoken.get_encoding(tokenizer_name.name)
 
-# if nltk stopwords not downloaded, download it
+# if nltk stopwords, punkt and wordnet are not downloaded, download it
 try:
     nltk.data.find("corpora/stopwords")
 except LookupError:
     nltk.download("stopwords")
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    nltk.download("punkt")
+try:
+    nltk.data.find("corpora/wordnet")
+except LookupError:
+    nltk.download("wordnet")
 
 ChatTurnType = Union[Tuple[str, str], BaseMessage]
 _ROLE_MAP = {"human": "Human: ", "ai": "Assistant: "}
@@ -365,7 +373,7 @@ def _get_standalone_questions_list(
         return matches
 
     match = re.search(
-        r"(?i)standalone[^\n]*:\n(.*)", standalone_questions_str, re.DOTALL
+        r"(?i)standalone[^\n]*:[^\n](.*)", standalone_questions_str, re.DOTALL
     )
     sentence_source = match.group(1).strip() if match else standalone_questions_str
     sentences = sentence_source.split("\n")
