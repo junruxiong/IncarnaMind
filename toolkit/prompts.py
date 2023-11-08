@@ -42,7 +42,7 @@ One-hop standalone queries(s):
 
 # ================================================================================
 
-DOCS_SELECTION_TEMPLATE = """Below are some verified sources and a human input. If you think any of them are relevant or contain any keywords related to the human input, then list all possible context numbers.
+DOCS_SELECTION_TEMPLATE = """Below are some verified sources and a human input. If you think any of them are relevant to the human input, then list all possible context numbers.
 
 ```
 {snippets}
