@@ -8,7 +8,7 @@ from langchain.chains.prompt_selector import ConditionalPromptSelector, is_chat_
 
 # ================================================================================
 
-REFINE_QA_TEMPLATE = """Break down or rephrase the follow up input into fewer than heterogeneous one-hop queries to be the input of a retrieval tool, if the follow up inout is multi-hop, multi-step, complex or comparative queries and relevant to Chat History and Document Names. Otherwise keep the follow up input as it is.
+REFINE_QA_TEMPLATE = """Break down or rephrase the follow up input into fewer than 3 heterogeneous one-hop queries to be the input of a retrieval tool, if the follow up inout is multi-hop, multi-step, complex or comparative queries and relevant to Chat History and Document Names. Otherwise keep the follow up input as it is.
 
 
 The output format should strictly follow the following, and each query can only conatain 1 document name:
