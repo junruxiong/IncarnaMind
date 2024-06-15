@@ -1,5 +1,5 @@
 setup-project:
-	pnpm create next-app frontend
+	pnpm create next-app nextjs14
 install-dependencies:
 	pnpm add @supabase/ssr
 	pnpm add zod @hookform/resolvers react-hook-form 
