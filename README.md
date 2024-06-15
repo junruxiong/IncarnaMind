@@ -4,87 +4,7 @@
 
 IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Large Language Models (LLMs) like GPT ([architecture overview](#high-level-architecture)). While OpenAI has recently launched a fine-tuning API for GPT models, it doesn't enable the base pretrained models to learn new data, and the responses can be prone to factual hallucinations. Utilize our [Sliding Window Chunking](#sliding-window-chunking) mechanism and Ensemble Retriever enables efficient querying of both fine-grained and coarse-grained information within your ground truth documents to augment the LLMs.
 
-Feel free to use it and we welcome any feedback and new feature suggestions 🙌.
-
-## ✨ New Updates
-
-### Open-Source and Local LLMs Support
-
-- **Recommended Model:** We've primarily tested with the Llama2 series models and recommend using [llama2-70b-chat](https://huggingface.co/TheBloke/Llama-2-70B-chat-GGUF) (either full or GGUF version) for optimal performance. Feel free to experiment with other LLMs.
-- **System Requirements:** It requires more than 35GB of GPU RAM to run the GGUF quantized version.
-
-### Alternative Open-Source LLMs Options
-
-- **Insufficient RAM:** If you're limited by GPU RAM, consider using the [Together.ai](https://api.together.xyz/playground) API. It supports llama2-70b-chat and most other open-source LLMs. Plus, you get $25 in free usage.
-- **Upcoming:** Smaller and cost-effecitive, fine-tuned models will be released in the future.
-
-### How to use GGUF models
-
-- For instructions on acquiring and using quantized GGUF LLM (similar to GGML), please refer to this [video](https://www.youtube.com/watch?v=lbFmceo4D5E) (from 10:45 to 12:30)..
-
-Here is a comparison table of the different models I tested, for reference only:
-
-| Metrics   | GPT-4  | GPT-3.5 | Claude 2.0 | Llama2-70b | Llama2-70b-gguf | Llama2-70b-api |
-|-----------|--------|---------|------------|------------|-----------------|----------------|
-| Reasoning | High   | Medium  | High       | Medium     | Medium          | Medium         |
-| Speed     | Medium | High    | Medium     | Very Low   | Low             | Medium         |
-| GPU RAM   | N/A    | N/A     | N/A        | Very High  | High            | N/A            |
-| Safety    | Low    | Low     | Low        | High       | High            | Low            |
-
-## 💻 Demo
-
-https://github.com/junruxiong/IncarnaMind/assets/44308338/89d479fb-de90-4f7c-b166-e54f7bc7344c
-
-## 💡 Challenges Addressed
-
-- **Fixed Chunking**: Traditional RAG tools rely on fixed chunk sizes, limiting their adaptability in handling varying data complexity and context.
-
-- **Precision vs. Semantics**:  Current retrieval methods usually focus either on semantic understanding or precise retrieval, but rarely both.
-
-- **Single-Document Limitation**: Many solutions can only query one document at a time, restricting multi-document information retrieval.
-
-- **Stability**: IncarnaMind is compatible with OpenAI GPT, Anthropic Claude, Llama2, and other open-source LLMs, ensuring stable parsing.
-
-## 🎯 Key Features
-
-- **Adaptive Chunking**: Our Sliding Window Chunking technique dynamically adjusts window size and position for RAG, balancing fine-grained and coarse-grained data access based on data complexity and context.
-
-- **Multi-Document Conversational QA**: Supports simple and multi-hop queries across multiple documents simultaneously, breaking the single-document limitation.
-
-- **File Compatibility**: Supports both PDF and TXT file formats.
-
-- **LLM Model Compatibility**: Supports OpenAI GPT, Anthropic Claude, Llama2 and other open-source LLMs.
-
-## 🏗 Architecture
-
-### High Level Architecture
-
-![image](figs/High_Level_Architecture.png)
-
-### Sliding Window Chunking
-
-![image](figs/Sliding_Window_Chunking.png)
-
-## 🚀 Getting Started
-
-### 1. Installation
-
-The installation is simple, you just need to run few commands.
-
-#### 1.0. Prerequisites
-
-- 3.8 ≤ Python < 3.11 with [Conda](https://www.anaconda.com/download)
-- One/All of [OpenAI API Key](https://beta.openai.com/signup), [Anthropic Claude API Key](https://console.anthropic.com/account/keys), [Together.ai API KEY](https://api.together.xyz/settings/api-keys) or [HuggingFace toekn for Meta Llama models](https://huggingface.co/settings/tokens)
-- And of course, your own documents.
-
-#### 1.1. Clone the repository
-
-```shell
-git clone https://github.com/junruxiong/IncarnaMind
-cd IncarnaMind
-```
-
-#### 1.2. Setup
+## 1.2. Setup
 
 Create Conda virtual environment:
 
@@ -181,16 +101,10 @@ format = %(asctime)s [%(levelname)s] %(name)s: %(message)s
 
 ## 🚫 Limitations
 
-- Citation is not supported for current version, but will release soon.
-- Limited asynchronous capabilities.
-
+- 
 ## 📝 Upcoming Features
 
-- Frontend UI interface
-- Fine-tuned small size open-source LLMs
-- OCR support
-- Asynchronous optimization
-- Support more document formats
+- 
 
 ## 🙌 Acknowledgements
 
