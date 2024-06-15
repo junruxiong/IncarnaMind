@@ -1,5 +1,5 @@
 {
-  "name": "nextjs14",
+  "name": "nextjs14-supabase-ssr-authentication",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
     "@supabase/ssr": "^0.0.10",
+    "@supabase/supabase-js": "^2.43.4",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.31.2",
     "next": "^14.2.4",
