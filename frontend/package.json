@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "push": "drizzle-kit push",
+    "pull": "drizzle-kit introspect ",
+    "generate": "drizzle-kit generate",
+    "drop": "drizzle-kit drop",
+    "check": "drizzle-kit check",
+    "up": "drizzle-kit up",
+    "migrate": "bun run src/lib/supabase/migration.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
