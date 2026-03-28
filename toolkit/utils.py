@@ -55,6 +55,7 @@ class Config:
         self.openai_api_key = self.config.get("tokens", "OPENAI_API_KEY")
         self.anthropic_api_key = self.config.get("tokens", "ANTHROPIC_API_KEY")
         self.together_api_key = self.config.get("tokens", "TOGETHER_API_KEY")
+        self.minimax_api_key = self.config.get("tokens", "MINIMAX_API_KEY")
         self.huggingface_token = self.config.get("tokens", "HUGGINGFACE_TOKEN")
         self.version = self.config.get("tokens", "VERSION")
 

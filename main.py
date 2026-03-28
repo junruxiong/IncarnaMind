@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 os.environ["OPENAI_API_KEY"] = configs.openai_api_key
 os.environ["ANTHROPIC_API_KEY"] = configs.anthropic_api_key
+os.environ["MINIMAX_API_KEY"] = configs.minimax_api_key
 
 embedding = choose_embeddings(configs.embedding_name)
 db_store_path = configs.db_dir
@@ -53,6 +54,17 @@ def get_llm(llm_name: str, temperature: float, max_tokens: int):
             model=splits[1],
             temperature=temperature,
             max_tokens_to_sample=max_tokens,
+        )
+
+    elif "minimax" in splits[0].lower():
+        # MiniMax requires temperature in (0.0, 1.0]
+        minimax_temp = max(temperature, 0.01) if temperature <= 0 else min(temperature, 1.0)
+        llm_model = ChatOpenAI(
+            model=splits[1],
+            temperature=minimax_temp,
+            max_tokens=max_tokens,
+            openai_api_key=configs.minimax_api_key,
+            openai_api_base="https://api.minimax.io/v1",
         )
 
     elif "together" in splits[0].lower():

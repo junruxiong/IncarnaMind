@@ -24,12 +24,12 @@ Feel free to use it and we welcome any feedback and new feature suggestions 🙌
 
 Here is a comparison table of the different models I tested, for reference only:
 
-| Metrics   | GPT-4  | GPT-3.5 | Claude 2.0 | Llama2-70b | Llama2-70b-gguf | Llama2-70b-api |
-|-----------|--------|---------|------------|------------|-----------------|----------------|
-| Reasoning | High   | Medium  | High       | Medium     | Medium          | Medium         |
-| Speed     | Medium | High    | Medium     | Very Low   | Low             | Medium         |
-| GPU RAM   | N/A    | N/A     | N/A        | Very High  | High            | N/A            |
-| Safety    | Low    | Low     | Low        | High       | High            | Low            |
+| Metrics   | GPT-4  | GPT-3.5 | Claude 2.0 | MiniMax-M2.7 | Llama2-70b | Llama2-70b-gguf | Llama2-70b-api |
+|-----------|--------|---------|------------|--------------|------------|-----------------|----------------|
+| Reasoning | High   | Medium  | High       | High         | Medium     | Medium          | Medium         |
+| Speed     | Medium | High    | Medium     | High         | Very Low   | Low             | Medium         |
+| GPU RAM   | N/A    | N/A     | N/A        | N/A          | Very High  | High            | N/A            |
+| Safety    | Low    | Low     | Low        | Low          | High       | High            | Low            |
 
 ## 💻 Demo
 
@@ -43,7 +43,7 @@ https://github.com/junruxiong/IncarnaMind/assets/44308338/89d479fb-de90-4f7c-b16
 
 - **Single-Document Limitation**: Many solutions can only query one document at a time, restricting multi-document information retrieval.
 
-- **Stability**: IncarnaMind is compatible with OpenAI GPT, Anthropic Claude, Llama2, and other open-source LLMs, ensuring stable parsing.
+- **Stability**: IncarnaMind is compatible with OpenAI GPT, Anthropic Claude, [MiniMax](https://www.minimax.io), Llama2, and other open-source LLMs, ensuring stable parsing.
 
 ## 🎯 Key Features
 
@@ -53,7 +53,7 @@ https://github.com/junruxiong/IncarnaMind/assets/44308338/89d479fb-de90-4f7c-b16
 
 - **File Compatibility**: Supports both PDF and TXT file formats.
 
-- **LLM Model Compatibility**: Supports OpenAI GPT, Anthropic Claude, Llama2 and other open-source LLMs.
+- **LLM Model Compatibility**: Supports OpenAI GPT, Anthropic Claude, [MiniMax](https://www.minimax.io), Llama2 and other open-source LLMs.
 
 ## 🏗 Architecture
 
@@ -74,7 +74,7 @@ The installation is simple, you just need to run few commands.
 #### 1.0. Prerequisites
 
 - 3.8 ≤ Python < 3.11 with [Conda](https://www.anaconda.com/download)
-- One/All of [OpenAI API Key](https://beta.openai.com/signup), [Anthropic Claude API Key](https://console.anthropic.com/account/keys), [Together.ai API KEY](https://api.together.xyz/settings/api-keys) or [HuggingFace toekn for Meta Llama models](https://huggingface.co/settings/tokens)
+- One/All of [OpenAI API Key](https://beta.openai.com/signup), [Anthropic Claude API Key](https://console.anthropic.com/account/keys), [MiniMax API Key](https://platform.minimax.chat), [Together.ai API KEY](https://api.together.xyz/settings/api-keys) or [HuggingFace toekn for Meta Llama models](https://huggingface.co/settings/tokens)
 - And of course, your own documents.
 
 #### 1.1. Clone the repository
@@ -125,6 +125,7 @@ Setup your one/all of API keys in **configparser.ini** file:
 OPENAI_API_KEY = (replace_me)
 ANTHROPIC_API_KEY = (replace_me)
 TOGETHER_API_KEY = (replace_me)
+MINIMAX_API_KEY = (replace_me)
 # if you use full Meta-Llama models, you may need Huggingface token to access.
 HUGGINGFACE_TOKEN = (replace_me)
 ```
