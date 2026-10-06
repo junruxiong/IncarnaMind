@@ -99,6 +99,13 @@ function parseLimit(limit: unknown): number {
 /** The file name without its extension, or the whole name if that leaves nothing. */
 const nameFromPath = (path: string) => basename(path, extname(path)).trim() || basename(path);
 
+/** A live Document's stored file, opened for reading. */
+export interface DocumentFile {
+  document: Document;
+  /** The file's bytes. Cancel the stream if it isn't read to the end, so the file is closed. */
+  stream: ReadableStream<Uint8Array>;
+}
+
 export interface DocumentsOptions {
   db: Database;
   dataDir: string;
@@ -284,6 +291,23 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       });
       processor.cancel(id);
       await releaseFile(row.content_hash);
+    },
+
+    /** Opens a live Document's stored file. Deleted or unknown Documents, and missing files, are refused. */
+    async openFile(idInput: unknown): Promise<DocumentFile> {
+      const id = parseId(idInput);
+      const row = find(id);
+      if (!row) throw new NotFoundError("There is no such Document.");
+      let stream: ReadableStream<Uint8Array>;
+      try {
+        stream = await files.open(row.content_hash);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          throw new NotFoundError("The Document's file is missing from the data folder.");
+        }
+        throw error;
+      }
+      return { document: toDocument(row), stream };
     },
 
     search(query: unknown, limit: unknown): PassageSearchResult[] {
