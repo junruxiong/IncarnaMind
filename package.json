@@ -20,7 +20,9 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:smoke": "electron-vite build && playwright test"
+    "test:smoke": "electron-vite build && playwright test",
+    "dist": "electron-vite build && electron-builder --publish never",
+    "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
   "dependencies": {
     "@tiptap/core": "3.31.4",
@@ -30,6 +32,7 @@
     "@tiptap/react": "3.31.4",
     "@tiptap/starter-kit": "3.31.4",
     "@tiptap/y-tiptap": "3.0.9",
+    "electron-updater": "6.8.10",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "y-protocols": "1.0.7",
@@ -45,6 +48,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "5.2.0",
     "electron": "44.5.1",
+    "electron-builder": "26.17.0",
     "electron-vite": "5.0.0",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",

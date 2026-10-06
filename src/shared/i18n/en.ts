@@ -41,4 +41,14 @@ export const en = {
   "error.dismiss": "Dismiss",
   "error.startup.title": "IncarnaMind couldn't start",
   "error.startup.body": "Your data folder couldn't be opened.\n\n{message}",
+
+  "update.available.message": "IncarnaMind {version} is available",
+  "update.available.detail":
+    "This copy of IncarnaMind can't update itself. Download the new version and use it to replace this one.",
+  "update.available.confirm": "Download",
+  "update.ready.message": "IncarnaMind {version} is ready to install",
+  "update.ready.detail":
+    "It installs the next time you quit IncarnaMind. Restart now to install it straight away.",
+  "update.ready.confirm": "Restart now",
+  "update.later": "Later",
 } as const satisfies Record<string, string>;

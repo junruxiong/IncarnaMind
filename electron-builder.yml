@@ -1,0 +1,62 @@
+# electron-builder: packages the built app (`out/`, from `npm run build`) into installers.
+# Local use: `npm run dist:dir` (unpacked app) or `npm run dist` (installers, never published).
+# Releases: .github/workflows/release.yml, run by pushing a version tag (v1.2.3). See the README.
+# Reference: https://www.electron.build/configuration
+
+# Never change the appId after the first release: Windows ties the installation and its
+# updates to it, and macOS ties the app's keychain entries to it.
+appId: com.incarnamind.app
+productName: IncarnaMind
+
+directories:
+  output: dist
+  # TODO(icon): there's no app icon in the repo yet (figs/ only holds diagrams), so builds
+  # use Electron's default icon. Add a 1024x1024 build/icon.png: electron-builder derives
+  # the macOS .icns, Windows .ico and Linux icons from it.
+  buildResources: build
+
+# Only the bundled app goes in. The production dependencies in node_modules are added
+# automatically; the rest of the repo (the Python tool, backend/, frontend/) stays out.
+files:
+  - out/**/*
+
+# No spaces in file names, and the architecture in every name: the auto-updater tells the
+# Apple silicon and Intel macOS downloads apart by it.
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.productivity
+  # The zip is what auto-update downloads; the dmg is what people install from.
+  target:
+    - dmg
+    - zip
+  # Signing uses the Developer ID certificate in CSC_LINK when it's set. Notarization
+  # runs after signing when Apple credentials are in the environment (APPLE_ID, or
+  # APPLE_API_KEY). The release workflow ad-hoc signs instead when there's no certificate.
+
+dmg:
+  # The zip carries the update metadata; the dmg doesn't need a blockmap.
+  writeUpdateInfo: false
+
+win:
+  # TODO(signing): unsigned in v1. SignPath Foundation's free signing for open-source
+  # projects is the follow-up; until then SmartScreen warns on first run (see the README).
+  target:
+    - nsis
+
+nsis:
+  # A per-user, one-click install: no admin rights or questions, for installs and updates alike.
+  oneClick: true
+  perMachine: false
+
+linux:
+  category: Office
+  target:
+    - AppImage
+
+publish:
+  provider: github
+  owner: junruxiong
+  repo: IncarnaMind
+  # Releases start as drafts. Installed apps only see an update once a maintainer publishes it.
+  releaseType: draft

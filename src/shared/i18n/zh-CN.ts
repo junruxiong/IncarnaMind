@@ -39,4 +39,13 @@ export const zhCN = {
   "error.dismiss": "关闭",
   "error.startup.title": "IncarnaMind 无法启动",
   "error.startup.body": "无法打开你的数据文件夹。\n\n{message}",
+
+  "update.available.message": "IncarnaMind {version} 已发布",
+  "update.available.detail":
+    "当前这份 IncarnaMind 无法自动更新。请下载新版本，并用它替换当前版本。",
+  "update.available.confirm": "下载",
+  "update.ready.message": "IncarnaMind {version} 已可安装",
+  "update.ready.detail": "下次退出 IncarnaMind 时会自动安装。立即重启即可马上安装。",
+  "update.ready.confirm": "立即重启",
+  "update.later": "稍后",
 } satisfies Dictionary;
