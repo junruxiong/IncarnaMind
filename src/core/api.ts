@@ -112,10 +112,40 @@ export interface Document {
   status: DocumentStatus;
   /** Set when `status` is "failed". */
   failure: DocumentFailure | null;
+  /** The Folder the Document is filed in, or null if it is unfiled. A Document is in at most one Folder. */
+  folderId: string | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+export interface ListDocumentsOptions {
+  /** Only Documents filed in this Folder. Omitted: every Document, filed or not. */
+  folderId?: string;
+  /** With `folderId`, also Documents filed in its sub-Folders, at any depth. Defaults to false. */
+  includeSubfolders?: boolean;
+}
+
+/** A place where the User files Documents by hand. Folders nest, with no depth limit. */
+export interface Folder {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** Never empty. */
+  name: string;
+  /** The Folder this one is in, or null at the top level. */
+  parentId: string | null;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface CreateFolderInput {
+  /** Trimmed; must not be empty. */
+  name: string;
+  /** The Folder to create it in. Omitted or null: at the top level. */
+  parentId?: string | null;
 }
 
 export interface SkippedFile {
@@ -174,8 +204,11 @@ export interface CoreApi {
    * events report its progress.
    */
   addDocuments(paths: string[]): Promise<AddDocumentsResult>;
-  /** Documents that are not deleted, most recently added first. */
-  listDocuments(): Promise<Document[]>;
+  /**
+   * Documents that are not deleted, most recently added first. With a Folder,
+   * only the Documents filed in it, and in its sub-Folders if asked.
+   */
+  listDocuments(options?: ListDocumentsOptions): Promise<Document[]>;
   /** Returns the renamed Document. */
   renameDocument(id: string, name: string): Promise<Document>;
   /**
@@ -185,6 +218,30 @@ export interface CoreApi {
   deleteDocument(id: string): Promise<void>;
   /** Keyword search over the Passages of all Documents, best match first. `limit` defaults to 20. */
   searchPassages(query: string, limit?: number): Promise<PassageSearchResult[]>;
+  /**
+   * Files a Document in a Folder, or takes it out to unfiled with `null`. It
+   * leaves any Folder it was in. Returns the Document.
+   */
+  moveDocument(documentId: string, folderId: string | null): Promise<Document>;
+  createFolder(input: CreateFolderInput): Promise<Folder>;
+  /**
+   * Folders that are not deleted, as a flat list in name order (ignoring case).
+   * Build the tree from each Folder's `parentId`; siblings keep the list's order.
+   */
+  listFolders(): Promise<Folder[]>;
+  /** Changes a Folder's name (trimmed; must not be empty) and returns the Folder. */
+  renameFolder(folderId: string, name: string): Promise<Folder>;
+  /**
+   * Moves a Folder, with everything in it, into another Folder, or to the top
+   * level with `null`. Moving a Folder into itself or one of its own sub-Folders
+   * is refused. Returns the Folder.
+   */
+  moveFolder(folderId: string, parentId: string | null): Promise<Folder>;
+  /**
+   * Soft-deletes a Folder and all its sub-Folders. The Documents filed in them
+   * are kept, and become unfiled: Documents are never deleted with a Folder.
+   */
+  deleteFolder(folderId: string): Promise<void>;
 }
 
 /**
@@ -201,6 +258,13 @@ export interface CoreEvents {
   "mind.update": MindUpdate;
   /** A Document was added or its processing status changed. Carries the whole Document. */
   "document.status": Document;
+  /**
+   * Documents moved into a Folder or out to unfiled, including those unfiled
+   * because their Folder was deleted. Carries each moved Document whole.
+   */
+  "documents.moved": Document[];
+  /** Folders were created, renamed, moved or deleted: the list as `listFolders` now returns it. */
+  "folders.changed": Folder[];
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -236,6 +300,12 @@ const methods: Record<CoreApiMethod, true> = {
   renameDocument: true,
   deleteDocument: true,
   searchPassages: true,
+  moveDocument: true,
+  createFolder: true,
+  listFolders: true,
+  renameFolder: true,
+  moveFolder: true,
+  deleteFolder: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */
