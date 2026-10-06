@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Design tokens carried over from the old frontend's tailwind.config.ts. */
+@theme {
+  --font-sans:
+    "Roboto", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-lora: "Lora", ui-serif, Georgia, serif;
+
+  --color-dark-50: #191919;
+  --color-dark-100: #151515;
+  --color-dark-150: #212121;
+  --color-dark-200: #090909;
+  --color-dark-300: #161616;
+
+  --text-custom: 15px;
+  --text-custom--line-height: 28px;
+  --text-custom-xs: 13px;
+  --text-custom-xs--line-height: 21px;
+  --text-custom-sm: 15px;
+
+  --shadow-custom-focus: 0 0 10px rgba(0, 0, 0, 0.15);
+  --shadow-custom-unfocus: 0 0 10px rgba(0, 0, 0, 0.12);
+}
+
+/* The old "New Mind" hover effect: gradient text. */
+@utility text-gradient-mind {
+  background-image: linear-gradient(
+    to right,
+    var(--color-indigo-500) 10%,
+    var(--color-sky-500) 30%,
+    var(--color-emerald-500) 90%
+  );
+  background-clip: text;
+  color: transparent;
+}
+
+@utility hide-scrollbar {
+  scrollbar-width: none;
+  overscroll-behavior: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-gray-200 font-sans text-gray-800 antialiased;
+  }
+}
+
+@layer components {
+  /* The pane divider's grip: three dots stacked vertically. */
+  .three-dots::before {
+    content: "•\A•\A•";
+    white-space: pre;
+    text-align: center;
+    line-height: 0.8;
+    display: block;
+    font-size: 7px;
+    color: var(--color-gray-500);
+  }
+}
