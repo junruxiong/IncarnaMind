@@ -52,6 +52,26 @@ export const migrations: readonly Migration[] = [
       CREATE UNIQUE INDEX device_settings_by_key ON device_settings (key) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 2,
+    description: "Mind content, stored as Yjs updates",
+    sql: `
+      -- A Mind's content is one Yjs document (ADR-0003), stored as the updates
+      -- that built it, in insertion order. Compaction replaces a Mind's rows with
+      -- one row holding the merged state; that row carries the same content, so
+      -- the merged rows are removed outright. Deleting a Mind marks its rows
+      -- deleted. No foreign key: a later sync may deliver rows before their Mind.
+      CREATE TABLE mind_updates (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        data BLOB NOT NULL, -- a Yjs update, v1 encoding
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX mind_updates_by_mind ON mind_updates (mind_id) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /** Brings the database up to the latest schema. Each migration runs in its own transaction. */
