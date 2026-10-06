@@ -27,6 +27,96 @@ export const zhCN = {
   "settings.language.zh-CN": "简体中文",
   "settings.done": "完成",
 
+  "providers.setup.title": "选择用什么模型回答问题",
+  "providers.setup.body":
+    "回答由你选择的 AI 模型生成。笔记和文档不需要模型也能使用，所以你也可以稍后在设置中完成这一步。",
+  "providers.setup.orApiKey": "或使用 API 密钥",
+  "providers.setup.later": "稍后设置",
+
+  "providers.kind.openai": "OpenAI",
+  "providers.kind.anthropic": "Anthropic",
+  "providers.kind.google": "Google",
+  "providers.kind.openai-compatible": "OpenAI 兼容服务器",
+  "providers.kind.ollama": "Ollama",
+  "providers.kind.chatgpt": "使用 ChatGPT 登录",
+  "providers.chatgpt.unavailable": "暂不可用",
+
+  "providers.form.label": "对话模型服务商",
+  "providers.form.apiKey": "API 密钥",
+  "providers.form.apiKeyOptional": "API 密钥（可选）",
+  "providers.form.apiKeySaved": "已保存密钥。留空即保留原密钥。",
+  "providers.form.baseUrl": "服务器地址",
+  "providers.form.baseUrlHint": "例如 https://api.deepseek.com/v1 或 http://localhost:1234/v1",
+  "providers.form.model": "模型",
+  "providers.form.test": "测试连接",
+  "providers.form.testing": "正在测试…",
+  "providers.form.save": "使用此服务商",
+  "providers.form.saving": "正在保存…",
+
+  "providers.test.ok": "连接成功：服务商已响应。",
+  "providers.test.auth": "密钥被拒绝。请检查密钥是否正确且仍然有效。",
+  "providers.test.model": "服务商不认识这个模型，请检查模型名称。",
+  "providers.test.rate-limit": "服务商正在限制此密钥的请求，请稍后再试。",
+  "providers.test.network": "无法连接到服务器。请检查地址和网络连接。",
+  "providers.test.provider": "服务商返回了错误。",
+  "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
+  "providers.test.unknown": "测试没有成功。",
+
+  "providers.secrets.plainText.title": "没有正在运行的密钥环",
+  "providers.secrets.plainText.body":
+    "IncarnaMind 使用系统密钥环加密 API 密钥，但当前没有运行任何密钥环，密钥会以明文形式保存在数据文件夹中。请启动 GNOME Keyring 或 KWallet（例如安装 gnome-keyring 后注销并重新登录），然后重启 IncarnaMind。",
+  "providers.secrets.plainText.accept":
+    "仍然在没有密钥环的情况下保存密钥。能读取我文件的人都能看到这些密钥。",
+  "providers.secrets.unavailable":
+    "此系统无法加密 API 密钥，因此无法保存密钥。你仍然可以使用 Ollama，或不需要密钥的服务器。",
+
+  "providers.ollama.title": "使用 Ollama 运行本地模型",
+  "providers.ollama.checking": "正在查找本机的 Ollama…",
+  "providers.ollama.detected":
+    "Ollama 正在本机运行。使用本地模型时，你的问题和文档都不会离开这台电脑。",
+  "providers.ollama.notDetected": "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
+  "providers.ollama.use": "使用本地模型（{model}）",
+  "providers.ollama.pulling": "正在下载 {model}…可能需要一些时间。",
+  "providers.ollama.checkAgain": "重新检查",
+
+  "providers.readiness.no-provider": "提问需要先设置对话模型。笔记和文档不需要模型也能使用。",
+  "providers.readiness.missing-api-key":
+    "此设备上没有保存 {service} 的 API 密钥。请在设置中添加后再提问。",
+  "providers.readiness.consent-declined":
+    "你选择了不向 {service} 发送数据，因此提问已关闭。请选择其他服务商或本地模型，或在设置中允许发送。",
+  "providers.readiness.setUp": "去设置",
+
+  "providers.settings.title": "对话模型",
+  "providers.settings.none": "尚未设置对话模型。",
+  "providers.settings.provider": "服务商：",
+  "providers.settings.local": "在本机运行",
+  "providers.settings.defaultModel": "默认模型",
+  "providers.settings.saveModel": "保存",
+  "providers.settings.change": "更换服务商",
+  "providers.settings.cancel": "取消",
+  "providers.settings.remove": "移除",
+
+  "consent.dialog.title": "向 {service} 发送数据？",
+  "consent.dialog.body": "为了{purpose}，IncarnaMind 会向 {service} 发送：",
+  "consent.dialog.bodyMore": "为了{purpose}，IncarnaMind 还将向 {service} 发送：",
+  "consent.dialog.note": "在你允许之前不会发送任何内容。你可以随时在设置中更改。",
+  "consent.dialog.allow": "允许",
+  "consent.dialog.decline": "不允许",
+
+  "consent.flow.chat": "对话",
+  "consent.flow.chat.purpose": "回答你的问题",
+  "consent.data.blocks": "你的草稿：问题上方的所有内容块，包括你的笔记和之前的回答",
+  "consent.data.passages": "文档中与问题相关的段落",
+  "consent.data.tool-results": "回答所用工具（例如连接器）返回的结果",
+
+  "consent.settings.title": "发送给其他服务的数据",
+  "consent.settings.empty": "没有向其他服务发送任何数据。",
+  "consent.settings.status.accepted": "已允许",
+  "consent.settings.status.declined": "未允许",
+  "consent.settings.status.not-asked": "尚未询问",
+  "consent.settings.revoke": "撤销",
+  "consent.settings.askAgain": "重新询问",
+
   "error.load": "IncarnaMind 无法载入你的数据：{message}",
   "error.action": "操作没有成功：{message}",
   "error.dismiss": "关闭",

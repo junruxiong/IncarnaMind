@@ -207,11 +207,25 @@ export function createConsent(
       );
     },
 
+    /**
+     * Each flow to every service it currently goes to, then every other
+     * service the User has decided on (e.g. a provider tested but not kept),
+     * so every decision can be seen and revoked.
+     */
     async list(): Promise<DataFlowStatus[]> {
       const result: DataFlowStatus[] = [];
       for (const definition of definitions.values()) {
+        const decided = db.all<{ service_id: string; service_name: string }>(
+          `SELECT service_id, service_name FROM data_flow_consents
+           WHERE flow = ? AND deleted_at IS NULL ORDER BY created_at, rowid`,
+          [definition.id],
+        );
+        const services = [
+          ...(await definition.services()),
+          ...decided.map((row) => ({ id: row.service_id, name: row.service_name })),
+        ];
         const seen = new Set<string>();
-        for (const service of await definition.services()) {
+        for (const service of services) {
           if (seen.has(service.id)) continue;
           seen.add(service.id);
           const flow = flowFor(definition.id, service);

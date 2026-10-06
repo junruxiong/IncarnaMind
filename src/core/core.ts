@@ -121,7 +121,7 @@ export function createCore(adapters: CoreAdapters): Core {
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
 
     detectOllama: (input) => detectOllama(ollamaUrl(input)),
-    useOllama: async (input) => {
+    selectOllama: async (input) => {
       const baseUrl = ollamaUrl(input);
       const model = input?.model ?? RECOMMENDED_OLLAMA_MODEL;
       if (typeof model !== "string" || model.trim() === "") {

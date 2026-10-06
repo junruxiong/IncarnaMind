@@ -39,7 +39,7 @@ describe("Ollama", () => {
     const progress: OllamaPullProgress[] = [];
     core.on("ollama.pullProgress", (update) => progress.push(update));
 
-    const provider = await core.useOllama({ baseUrl: ollama.baseUrl });
+    const provider = await core.selectOllama({ baseUrl: ollama.baseUrl });
 
     expect(ollama.pulls).toEqual([{ model: RECOMMENDED_OLLAMA_MODEL, stream: true }]);
     expect(progress.map((update) => update.status)).toEqual(PULL_LINES.map((line) => line.status));
@@ -68,7 +68,7 @@ describe("Ollama", () => {
     const ollama = await startOllamaStub({ models: ["llama3.2:latest"] });
     const core = startCore(await createTempDataFolder());
 
-    await core.useOllama({ baseUrl: ollama.baseUrl, model: "llama3.2" });
+    await core.selectOllama({ baseUrl: ollama.baseUrl, model: "llama3.2" });
 
     expect(ollama.pulls).toEqual([]);
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, modelId: "llama3.2" });
@@ -84,7 +84,7 @@ describe("Ollama", () => {
     const core = startCore(await createTempDataFolder());
 
     await expect(
-      core.useOllama({ baseUrl: ollama.baseUrl, model: "no-such-model" }),
+      core.selectOllama({ baseUrl: ollama.baseUrl, model: "no-such-model" }),
     ).rejects.toThrow(/file does not exist/);
     expect(await core.listChatProviders()).toEqual([]);
     expect(await core.getChatReadiness()).toEqual({ ready: false, reason: "no-provider" });
@@ -94,7 +94,7 @@ describe("Ollama", () => {
     const baseUrl = await unusedLocalUrl();
     const core = startCore(await createTempDataFolder());
 
-    await expect(core.useOllama({ baseUrl })).rejects.toThrow(/isn't running/);
+    await expect(core.selectOllama({ baseUrl })).rejects.toThrow(/isn't running/);
     expect(await core.listChatProviders()).toEqual([]);
   });
 });
