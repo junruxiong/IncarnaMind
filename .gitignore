@@ -10,3 +10,13 @@ experiments.ipynb
 .flake8
 models/
 model/
+
+# Desktop app (TypeScript)
+node_modules/
+out/
+dist/
+*.tsbuildinfo
+test-results/
+playwright-report/
+blob-report/
+coverage/
