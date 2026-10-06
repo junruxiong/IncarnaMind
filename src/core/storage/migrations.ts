@@ -72,6 +72,71 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX mind_updates_by_mind ON mind_updates (mind_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 3,
+    description: "Documents, their Passages and a keyword index over Passage text",
+    sql: `
+      -- Files the User added. The copy in the data folder is named by content_hash.
+      -- status: queued | extracting | ready | failed | no-text (checked in code, so later tickets can add states).
+      CREATE TABLE documents (
+        id TEXT PRIMARY KEY NOT NULL,
+        content_hash TEXT NOT NULL, -- SHA-256 of the file, hex
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL, -- pdf | text | markdown
+        size INTEGER NOT NULL,
+        page_count INTEGER,
+        status TEXT NOT NULL,
+        failure_reason TEXT,
+        failure_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      -- The same file is one Document (ADR-0003).
+      CREATE UNIQUE INDEX documents_by_content_hash ON documents (content_hash) WHERE deleted_at IS NULL;
+      CREATE INDEX documents_by_created_at ON documents (created_at) WHERE deleted_at IS NULL;
+
+      -- Spans of a Document's text that can be retrieved and cited. Never edited:
+      -- processing a Document again would replace them. Pages are 1-based and NULL
+      -- for Documents without pages; window_from and window_to are the positions of
+      -- the first and last Passage in this Passage's sliding window.
+      CREATE TABLE passages (
+        seq INTEGER PRIMARY KEY, -- local key for the keyword index only: rowids not declared like this can change on VACUUM
+        id TEXT NOT NULL UNIQUE,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        position INTEGER NOT NULL,
+        page_from INTEGER,
+        page_to INTEGER,
+        window_from INTEGER NOT NULL,
+        window_to INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX passages_by_document ON passages (document_id, position) WHERE deleted_at IS NULL;
+
+      -- PROVISIONAL (ticket #21 decides): the trigram tokenizer matches any substring
+      -- of 3 or more characters, so Chinese works without word segmentation.
+      -- The index holds live Passages only: soft-deleting one removes it.
+      CREATE VIRTUAL TABLE passages_fts USING fts5 (
+        text,
+        content = 'passages',
+        content_rowid = 'seq',
+        tokenize = 'trigram remove_diacritics 1'
+      );
+      CREATE TRIGGER passages_fts_insert AFTER INSERT ON passages WHEN new.deleted_at IS NULL BEGIN
+        INSERT INTO passages_fts (rowid, text) VALUES (new.seq, new.text);
+      END;
+      CREATE TRIGGER passages_fts_soft_delete AFTER UPDATE OF deleted_at ON passages
+      WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
+        INSERT INTO passages_fts (passages_fts, rowid, text) VALUES ('delete', old.seq, old.text);
+      END;
+      CREATE TRIGGER passages_fts_delete AFTER DELETE ON passages WHEN old.deleted_at IS NULL BEGIN
+        INSERT INTO passages_fts (passages_fts, rowid, text) VALUES ('delete', old.seq, old.text);
+      END;
+    `,
+  },
 ];
 
 /** Brings the database up to the latest schema. Each migration runs in its own transaction. */

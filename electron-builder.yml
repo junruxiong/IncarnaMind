@@ -19,6 +19,8 @@ directories:
 # automatically; the rest of the repo (the Python tool, backend/, frontend/) stays out.
 files:
   - out/**/*
+  # pdf.js's optional native canvas (about 27 MB) only renders pages in Node; text extraction doesn't use it.
+  - "!**/node_modules/@napi-rs/canvas*{,/**}"
 
 # No spaces in file names, and the architecture in every name: the auto-updater tells the
 # Apple silicon and Intel macOS downloads apart by it.
