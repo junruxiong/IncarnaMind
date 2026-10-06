@@ -137,6 +137,32 @@ export const migrations: readonly Migration[] = [
       END;
     `,
   },
+  // Versions 4 and 5 are reserved for other tickets: the runner allows gaps.
+  {
+    version: 6,
+    description: "Folders, and the Folder each Document is filed in",
+    sql: `
+      -- Folders the User files Documents in by hand. They nest with no depth
+      -- limit: parent_id is NULL at the top level. No foreign key: a later sync
+      -- may deliver a Folder before its parent. Deleting a Folder marks it and
+      -- its sub-Folders deleted.
+      CREATE TABLE folders (
+        id TEXT PRIMARY KEY NOT NULL,
+        parent_id TEXT,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX folders_by_parent ON folders (parent_id) WHERE deleted_at IS NULL;
+
+      -- A Document is in at most one Folder, so the Folder is a column on the
+      -- Document rather than a link table. NULL means unfiled. Filing a Document
+      -- moves its updated_at, like any other change to it.
+      ALTER TABLE documents ADD COLUMN folder_id TEXT;
+      CREATE INDEX documents_by_folder ON documents (folder_id) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /** Brings the database up to the latest schema. Each migration runs in its own transaction. */

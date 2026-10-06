@@ -2,8 +2,9 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import type { CoreApi, CoreEventSource, Unsubscribe } from "./api";
-import { createDocuments } from "./documents";
+import { createDocuments, parseListOptions } from "./documents";
 import { type AnyEventListener, createEventHub } from "./events";
+import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createSettings } from "./settings";
@@ -44,6 +45,8 @@ export function createCore(adapters: CoreAdapters): Core {
     if (minds.markEdited(mindId)) mindsChanged();
   });
   const settings = createSettings(db, now, adapters.systemLanguages);
+  const folders = createFolders(db, now);
+  const foldersChanged = () => events.emit("folders.changed", folders.list());
   let documents: ReturnType<typeof createDocuments>;
   try {
     documents = createDocuments({
@@ -95,10 +98,46 @@ export function createCore(adapters: CoreAdapters): Core {
       return updated;
     },
     addDocuments: (paths) => documents.add(paths),
-    listDocuments: async () => documents.list(),
+    listDocuments: async (options) => {
+      const { folderId, includeSubfolders } = parseListOptions(options);
+      if (folderId === undefined) return documents.list();
+      const folder = folders.get(folderId);
+      return documents.list(includeSubfolders ? folders.subtree(folder.id) : [folder.id]);
+    },
     renameDocument: async (id, name) => documents.rename(id, name),
     deleteDocument: (id) => documents.delete(id),
     searchPassages: async (query, limit) => documents.search(query, limit),
+    moveDocument: async (documentId, folderInput) => {
+      const folderId = folderInput === null ? null : parseFolderId(folderInput);
+      const { document, moved } = db.transaction(() => {
+        if (folderId !== null) folders.get(folderId);
+        return documents.move(documentId, folderId);
+      });
+      if (moved) events.emit("documents.moved", [document]);
+      return document;
+    },
+    createFolder: async (input) => {
+      const folder = folders.create(input);
+      foldersChanged();
+      return folder;
+    },
+    listFolders: async () => folders.list(),
+    renameFolder: async (folderId, name) => {
+      const folder = folders.rename(folderId, name);
+      foldersChanged();
+      return folder;
+    },
+    moveFolder: async (folderId, parentId) => {
+      const folder = folders.move(folderId, parentId);
+      foldersChanged();
+      return folder;
+    },
+    deleteFolder: async (folderId) => {
+      const at = now();
+      const unfiled = db.transaction(() => documents.unfile(folders.delete(folderId, at), at));
+      if (unfiled.length > 0) events.emit("documents.moved", unfiled);
+      foldersChanged();
+    },
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     close: () => {
