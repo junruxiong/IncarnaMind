@@ -123,3 +123,95 @@ export function GitHubIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A folder, in the same flat colour style as the Mind and Document icons. */
+export function FolderIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
+      <path
+        d="M1.5 4a1 1 0 0 1 1-1h3.4l1.5 1.5h6.1a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"
+        fill="#fef3c7"
+        stroke="#f59e0b"
+        strokeLinejoin="round"
+      />
+      <path d="M1.5 6.5h13" stroke="#f59e0b" />
+    </svg>
+  );
+}
+
+/** A stack of pages: every Document, whatever its Folder. */
+export function AllDocumentsIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
+      <rect x="4.5" y="1.5" width="9" height="11" rx="1" fill="#f3f4f6" stroke="#9ca3af" />
+      <rect x="2.5" y="3.5" width="9" height="11" rx="1" fill="#e0e7ff" stroke="#6366f1" />
+      <path d="M5 7.5h4M5 10h4" stroke="#6366f1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function FolderPlusIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M14.5 8V5.5a1 1 0 0 0-1-1H7.4L5.9 3H2.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h5.5" />
+      <path d="M12.5 10v4M10.5 12h4" />
+    </svg>
+  );
+}
+
+/** A folder with an arrow into it: "Move to…". */
+export function MoveToFolderIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M1.5 4a1 1 0 0 1 1-1h3.4l1.5 1.5h6.1a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" />
+      <path d="M5.5 9h5M8.5 7l2 2-2 2" />
+    </svg>
+  );
+}
+
+/** Points right; rotate it 90° to point down. */
+export function ChevronIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M6 4l4 4-4 4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M3.5 8.5l3 3 6-7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

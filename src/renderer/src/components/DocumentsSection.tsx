@@ -1,9 +1,13 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentFailureReason, DocumentStatus } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { endSidebarDrag, startSidebarDrag } from "../folders";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
-import { CloseIcon, DocumentIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
+import { selectVisibleDocuments, useAppStore } from "../store";
+import { FolderTree, type NewFolderPlace } from "./FolderTree";
+import { CloseIcon, DocumentIcon, FolderPlusIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
+import { MoveToMenu } from "./MoveToMenu";
 
 /** What the file picker offers. The core decides what it takes. */
 const ACCEPTED_FILES = ".pdf,.txt,.md,.markdown";
@@ -33,15 +37,19 @@ const statusTones: Record<DocumentStatus, string> = {
 /**
  * The sidebar's Documents: a list with each Document's processing status, an
  * add button with a file picker, and rename and delete. Dropping files anywhere
- * on the window adds them too (see `FileDrop`). Opening a Document in the
- * viewer arrives in a later ticket.
+ * on the window adds them too (see `FileDrop`). Above the list, the Folder tree
+ * filters it; Documents are filed by dragging them onto a Folder or with
+ * "Move to…". Opening a Document in the viewer arrives in a later ticket.
  */
 export function DocumentsSection() {
   const t = useT();
-  const documents = useAppStore((state) => state.documents);
+  // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
+  const documents = useAppStore(useShallow(selectVisibleDocuments));
+  const filtered = useAppStore((state) => state.folderFilter !== null);
   const addDocuments = useAppStore((state) => state.addDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
+  const [newFolderIn, setNewFolderIn] = useState<NewFolderPlace>(undefined);
 
   const addPicked = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
@@ -58,16 +66,28 @@ export function DocumentsSection() {
         >
           {t("documents.title")}
         </h2>
-        <button
-          type="button"
-          data-testid="add-documents"
-          aria-label={t("documents.add")}
-          title={t("documents.add")}
-          onClick={() => picker.current?.click()}
-          className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
-        >
-          <PlusIcon className="size-4" />
-        </button>
+        <div className="flex items-center gap-[2px]">
+          <button
+            type="button"
+            data-testid="new-folder"
+            aria-label={t("folders.new")}
+            title={t("folders.new")}
+            onClick={() => setNewFolderIn(null)}
+            className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+          >
+            <FolderPlusIcon className="size-4" />
+          </button>
+          <button
+            type="button"
+            data-testid="add-documents"
+            aria-label={t("documents.add")}
+            title={t("documents.add")}
+            onClick={() => picker.current?.click()}
+            className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+          >
+            <PlusIcon className="size-4" />
+          </button>
+        </div>
         <input
           ref={picker}
           type="file"
@@ -79,8 +99,15 @@ export function DocumentsSection() {
         />
       </div>
       <SkippedFilesNotice />
+      <FolderTree
+        newFolderIn={newFolderIn}
+        onNewFolder={setNewFolderIn}
+        onNewFolderDone={() => setNewFolderIn(undefined)}
+      />
       {documents.length === 0 ? (
-        <p className="mx-4 py-[5px] text-sm text-gray-400">{t("documents.none")}</p>
+        <p className="mx-4 py-[5px] text-sm text-gray-400">
+          {t(filtered ? "folders.empty" : "documents.none")}
+        </p>
       ) : (
         <ul className="mx-3">
           {documents.map((item) => (
@@ -108,7 +135,11 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
     <li
       data-testid="document-list-item"
       data-document-id={item.id}
+      data-folder-id={item.folderId ?? ""}
       data-status={item.status}
+      draggable={!renaming}
+      onDragStart={(event) => startSidebarDrag(event, { kind: "document", id: item.id })}
+      onDragEnd={endSidebarDrag}
       className="group my-[1px] flex items-start gap-[6px] rounded-[9px] px-1 py-[5px] text-sm hover:bg-gray-100"
     >
       <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
@@ -130,6 +161,7 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       </div>
       {!renaming && (
         <div className="flex shrink-0 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <MoveToMenu item={item} buttonClassName={actionButton} />
           <button
             type="button"
             aria-label={t("documents.rename", { name: item.name })}

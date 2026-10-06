@@ -135,8 +135,9 @@ export function createCore(adapters: CoreAdapters): Core {
     deleteFolder: async (folderId) => {
       const at = now();
       const unfiled = db.transaction(() => documents.unfile(folders.delete(folderId, at), at));
-      if (unfiled.length > 0) events.emit("documents.moved", unfiled);
+      // Folders first, so a listener filtering by a deleted Folder hears it's gone before it refreshes.
       foldersChanged();
+      if (unfiled.length > 0) events.emit("documents.moved", unfiled);
     },
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
