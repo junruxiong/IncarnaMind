@@ -25,6 +25,7 @@
   "dependencies": {
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "yjs": "13.6.33",
     "zustand": "5.0.15"
   },
   "devDependencies": {

@@ -24,6 +24,26 @@ export interface CreateMindInput {
   title?: string;
 }
 
+/**
+ * The name of the Y.XmlFragment that holds a Mind's Blocks in its Yjs document
+ * (ADR-0003). The editor binds to it, and the core reads it.
+ */
+export const MIND_CONTENT_FIELD = "blocks";
+
+/** A Mind opened for editing. */
+export interface OpenedMind {
+  mind: Mind;
+  /** The Mind's whole Yjs document, encoded as one update: apply it to an empty `Y.Doc`. */
+  state: Uint8Array;
+}
+
+/** A change to one Mind's Yjs document. */
+export interface MindUpdate {
+  mindId: string;
+  /** A Yjs update (the default v1 encoding). */
+  update: Uint8Array;
+}
+
 /** Settings that belong to the User and will sync across their devices (ADR-0003). */
 export interface UserSettings {
   language: LanguagePreference;
@@ -51,8 +71,25 @@ export interface SettingsPatch {
 
 export interface CoreApi {
   createMind(input?: CreateMindInput): Promise<Mind>;
-  /** Minds that are not deleted, most recently updated first. */
+  /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
+  /** Changes a Mind's title (trimmed; empty means "Untitled") and returns the Mind. */
+  renameMind(mindId: string, title: string): Promise<Mind>;
+  /** Soft-deletes a Mind: it leaves the list, and its rows stay, marked deleted (ADR-0003). */
+  deleteMind(mindId: string): Promise<void>;
+  /**
+   * Returns a Mind's content for editing. A client applies `state` to an empty
+   * `Y.Doc`, sends its own changes with `applyMindUpdate`, and applies every
+   * `"mind.update"` event for the Mind (these include its own changes, which Yjs ignores).
+   */
+  openMind(mindId: string): Promise<OpenedMind>;
+  /** Applies a client's Yjs update to the Mind, stores it, and pushes it to every client as `"mind.update"`. */
+  applyMindUpdate(mindId: string, update: Uint8Array): Promise<void>;
+  /**
+   * Tells the core a client stopped editing the Mind, so it can compact the
+   * Mind's stored updates and free its memory. Editing the Mind again is fine.
+   */
+  closeMind(mindId: string): Promise<void>;
   getSettings(): Promise<Settings>;
   /** Changes only the fields given and returns the settings now in effect. */
   updateSettings(patch: SettingsPatch): Promise<Settings>;
@@ -60,12 +97,16 @@ export interface CoreApi {
 
 /**
  * Events the core pushes to the UI, by name, with their payloads. Tickets that
- * need to push something (Yjs updates, processing progress, Answer streams)
- * add their events here. Payloads are plain data, so they survive IPC.
+ * need to push something (processing progress, Answer streams) add their
+ * events here. Payloads are plain data (Uint8Array included), so they survive IPC.
  */
 export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
+  /** Minds were created, renamed, deleted or edited: the list as `listMinds` now returns it. */
+  "minds.changed": Mind[];
+  /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
+  "mind.update": MindUpdate;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -89,6 +130,11 @@ export type CoreApiMethod = keyof CoreApi;
 const methods: Record<CoreApiMethod, true> = {
   createMind: true,
   listMinds: true,
+  renameMind: true,
+  deleteMind: true,
+  openMind: true,
+  applyMindUpdate: true,
+  closeMind: true,
   getSettings: true,
   updateSettings: true,
 };

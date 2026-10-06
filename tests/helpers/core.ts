@@ -2,7 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { onTestFinished } from "vitest";
-import { type Core, type CoreAdapters, createCore, type Keychain } from "../../src/core";
+import {
+  type Core,
+  type CoreAdapters,
+  createCore,
+  DATABASE_FILE,
+  type Keychain,
+} from "../../src/core";
+import { openDatabase, type SqlValue } from "../../src/core/storage";
 
 /** A fresh, empty data folder, deleted when the current test finishes. */
 export async function createTempDataFolder(): Promise<string> {
@@ -49,6 +56,34 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
   });
   onTestFinished(() => core.close());
   return core;
+}
+
+/**
+ * Reads the data folder's database directly, for checking how things are
+ * stored (e.g. that a delete is soft). Everything else goes through the core.
+ */
+export function queryDatabase<Row>(
+  dataDir: string,
+  sql: string,
+  params: readonly SqlValue[] = [],
+): Row[] {
+  const db = openDatabase(join(dataDir, DATABASE_FILE));
+  try {
+    return db.all<Row>(sql, params);
+  } finally {
+    db.close();
+  }
+}
+
+/** A clock that only moves when the test moves it. */
+export function manualClock(start = "2026-10-06T09:00:00.000Z") {
+  let time = Date.parse(start);
+  return {
+    now: () => new Date(time),
+    advance(ms: number) {
+      time += ms;
+    },
+  };
 }
 
 /** A clock that starts at `start` and moves on one second every time it is read. */

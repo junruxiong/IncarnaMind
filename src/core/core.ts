@@ -3,7 +3,8 @@ import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import type { CoreApi, CoreEventSource, Unsubscribe } from "./api";
 import { type AnyEventListener, createEventHub } from "./events";
-import { createMinds } from "./minds";
+import { createMindContent } from "./mindContent";
+import { createMinds, parseMindId } from "./minds";
 import { createSettings } from "./settings";
 import { migrate, openDatabase } from "./storage";
 
@@ -36,12 +37,44 @@ export function createCore(adapters: CoreAdapters): Core {
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   const events = createEventHub();
   const minds = createMinds(db, now);
+  const mindsChanged = () => events.emit("minds.changed", minds.list());
+  const content = createMindContent(db, now, (mindId, update) => {
+    events.emit("mind.update", { mindId, update });
+    if (minds.markEdited(mindId)) mindsChanged();
+  });
   const settings = createSettings(db, now, adapters.systemLanguages);
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
-    createMind: async (input) => minds.create(input),
+    createMind: async (input) => {
+      const mind = minds.create(input);
+      mindsChanged();
+      return mind;
+    },
     listMinds: async () => minds.list(),
+    renameMind: async (mindId, title) => {
+      const mind = minds.rename(mindId, title);
+      mindsChanged();
+      return mind;
+    },
+    deleteMind: async (mindId) => {
+      const at = now();
+      db.transaction(() => {
+        const mind = minds.delete(mindId, at);
+        content.remove(mind.id, at);
+      });
+      mindsChanged();
+    },
+    openMind: async (mindId) => {
+      const mind = minds.get(mindId);
+      return { mind, state: content.state(mind.id) };
+    },
+    applyMindUpdate: async (mindId, update) => {
+      content.apply(minds.get(mindId).id, update);
+    },
+    closeMind: async (mindId) => {
+      content.close(parseMindId(mindId));
+    },
     getSettings: async () => settings.get(),
     updateSettings: async (patch) => {
       const updated = settings.update(patch);
@@ -52,6 +85,7 @@ export function createCore(adapters: CoreAdapters): Core {
     onAnyEvent: (listener) => events.onAny(listener),
     close: () => {
       events.clear();
+      content.closeAll();
       db.close();
     },
   };
