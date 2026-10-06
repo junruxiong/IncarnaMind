@@ -4,6 +4,7 @@ import { type Core, coreApiMethods, createCore, resolveLanguage } from "../core"
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { createElectronAdapters, systemBrowser } from "./platform";
+import { startAutoUpdates } from "./updater";
 
 // Points the app at another data folder: the smoke test uses a temporary one.
 // Set before anything reads `userData`, so Chromium's own data moves there too.
@@ -98,6 +99,8 @@ app.whenReady().then(() => {
   }
   exposeCore(core);
   createWindow();
+  // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
+  if (!testHooks) startAutoUpdates(core);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
