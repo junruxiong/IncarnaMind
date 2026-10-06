@@ -11,6 +11,18 @@ export type {
   SpawnOptions,
 } from "./adapters";
 export * from "./api";
+export type { DataFlowDefinition, DataFlowRegistry } from "./consent";
 export { type Core, createCore, DATABASE_FILE } from "./core";
-export { InvalidInputError, NotFoundError } from "./errors";
+export {
+  ChatNotReadyError,
+  ConsentDeclinedError,
+  InvalidInputError,
+  NotFoundError,
+  SecretStorageError,
+} from "./errors";
 export * from "./language";
+export type { PreparedChatModel } from "./providers/chat";
+export { OLLAMA_DEFAULT_URL } from "./providers/kinds";
+export type { ChatLanguageModel, ChatModelFactory, ChatModelSpec } from "./providers/models";
+export { RECOMMENDED_OLLAMA_MODEL } from "./providers/ollama";
+export { classifyProviderError } from "./providers/providerErrors";

@@ -4,6 +4,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { MindIcon, PlusIcon } from "./icons";
 import { MindEditor } from "./MindEditor";
+import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
 
 /** The centre: the open Mind, its title and its Blocks. */
 export function MindPane() {
@@ -36,6 +37,7 @@ export function MindPane() {
             className="mt-2 px-10 pb-24"
           >
             <MindTitle mind={mind} />
+            <ChatReadinessNotice />
             <MindEditor mindId={mind.id} />
           </article>
         ) : (
