@@ -1,8 +1,11 @@
+import { type KeyboardEvent, useState } from "react";
+import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { MindIcon, PlusIcon } from "./icons";
+import { MindEditor } from "./MindEditor";
 
-/** The centre: the open Mind. Editing its Blocks arrives in a later ticket. */
+/** The centre: the open Mind, its title and its Blocks. */
 export function MindPane() {
   const t = useT();
   const mind = useAppStore((state) => state.minds.find((each) => each.id === state.openMindId));
@@ -25,13 +28,15 @@ export function MindPane() {
 
       <div className="flex-grow overflow-auto rounded-tl-[6px] bg-white">
         {mind ? (
-          <article data-testid="mind-pane" data-mind-id={mind.id} className="mt-2 px-10">
-            <h1
-              data-testid="mind-title"
-              className={`mt-4 p-3 text-3xl font-medium break-words ${mind.title ? "" : "text-gray-400"}`}
-            >
-              {title}
-            </h1>
+          // Keyed, so switching Minds starts a fresh title field and editor.
+          <article
+            key={mind.id}
+            data-testid="mind-pane"
+            data-mind-id={mind.id}
+            className="mt-2 px-10 pb-24"
+          >
+            <MindTitle mind={mind} />
+            <MindEditor mindId={mind.id} />
           </article>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-10 text-center">
@@ -49,5 +54,40 @@ export function MindPane() {
         )}
       </div>
     </main>
+  );
+}
+
+/**
+ * The Mind's title, edited in place. Every change is saved as it is typed; while
+ * the field has focus it shows what was typed, not the saved (trimmed) title.
+ */
+function MindTitle({ mind }: { mind: Mind }) {
+  const t = useT();
+  const renameMind = useAppStore((state) => state.renameMind);
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const moveIntoContent = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    event.currentTarget.closest("article")?.querySelector<HTMLElement>(".mind-editor")?.focus();
+  };
+
+  return (
+    <h1 className="mt-4">
+      <input
+        data-testid="mind-title"
+        aria-label={t("mind.title.label")}
+        placeholder={t("mind.untitled")}
+        value={draft ?? mind.title}
+        onFocus={() => setDraft(mind.title)}
+        onBlur={() => setDraft(null)}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          void renameMind(mind.id, event.target.value);
+        }}
+        onKeyDown={moveIntoContent}
+        className="w-full bg-transparent p-3 text-3xl font-medium text-gray-800 outline-none placeholder:text-gray-400"
+      />
+    </h1>
   );
 }

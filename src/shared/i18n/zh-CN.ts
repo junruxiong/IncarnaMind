@@ -15,6 +15,13 @@ export const zhCN = {
   "mind.untitled": "未命名",
   "mind.noneOpen.title": "开始一个 Mind",
   "mind.noneOpen.body": "Mind 是为一个主题或项目准备的笔记本。",
+  "mind.title.label": "Mind 标题",
+  "mind.editor.label": "Mind 内容",
+  "mind.editor.placeholder": "开始写作…",
+  "mind.delete": "删除 Mind",
+  "mind.delete.body": "“{title}”将从你的 Minds 中移除。",
+  "mind.delete.confirm": "删除",
+  "mind.delete.cancel": "取消",
 
   "viewer.label": "文档查看器",
   "viewer.close": "关闭文档查看器",

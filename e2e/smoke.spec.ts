@@ -33,6 +33,62 @@ test("a Mind created before quitting is still there after reopening the app", as
   await second.app.close();
 });
 
+test("what was typed in a Mind, and its title, are still there after reopening the app", async () => {
+  const paragraphs = ["Typed before quitting.", "A second paragraph."];
+
+  const first = await launchApp(dataDir);
+  await first.window.getByTestId("new-mind").click();
+  await first.window.getByTestId("mind-title").fill("Field notes");
+  const editor = first.window.getByTestId("mind-editor");
+  await editor.click();
+  await first.window.keyboard.type(paragraphs[0] ?? "");
+  await first.window.keyboard.press("Enter");
+  await first.window.keyboard.type(paragraphs[1] ?? "");
+  await expect(editor.locator("p")).toHaveText(paragraphs);
+  await expect(first.window.getByTestId("mind-list-item")).toHaveText("Field notes");
+  await first.app.close();
+
+  const second = await launchApp(dataDir);
+  const item = second.window.getByTestId("mind-list-item");
+  await expect(item).toHaveText("Field notes");
+  await item.click();
+  await expect(second.window.getByTestId("mind-title")).toHaveValue("Field notes");
+  await expect(second.window.getByTestId("mind-editor").locator("p")).toHaveText(paragraphs);
+  await second.app.close();
+});
+
+test("the sidebar lists the most recently edited Mind first, and a deleted Mind leaves it", async () => {
+  const first = await launchApp(dataDir);
+  const { window } = first;
+  const items = window.getByTestId("mind-list-item");
+  for (const title of ["Older", "Newer"]) {
+    await window.getByTestId("new-mind").click();
+    await window.getByTestId("mind-title").fill(title);
+    await expect(items.first()).toHaveText(title);
+  }
+  await expect(items).toHaveText(["Newer", "Older"]);
+
+  // Editing the older Mind moves it to the top.
+  await items.filter({ hasText: "Older" }).click();
+  await window.getByTestId("mind-editor").click();
+  await window.keyboard.type("An edit");
+  await expect(items).toHaveText(["Older", "Newer"]);
+
+  // Deleting it asks first, then removes it from the sidebar and closes it.
+  const older = window.getByRole("listitem").filter({ hasText: "Older" });
+  await older.hover();
+  await older.getByTestId("delete-mind").click();
+  await window.getByTestId("confirm-delete-mind").click();
+  await expect(items).toHaveText(["Newer"]);
+  await expect(window.getByTestId("mind-pane")).toHaveCount(0);
+  await first.app.close();
+
+  // It stays deleted after a restart.
+  const second = await launchApp(dataDir);
+  await expect(second.window.getByTestId("mind-list-item")).toHaveText(["Newer"]);
+  await second.app.close();
+});
+
 test("the Document viewer is hidden until opened, resizes from its left edge and keeps its width", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;

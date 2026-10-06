@@ -66,4 +66,69 @@
     font-size: 7px;
     color: var(--color-gray-500);
   }
+
+  /* The Mind editor's content (Tiptap), in the old editor's typography. */
+  .mind-editor {
+    @apply min-h-40 px-3 pb-6 text-custom text-gray-800 outline-none;
+
+    > * + * {
+      margin-top: 0.75em;
+    }
+
+    h1 {
+      @apply my-4 text-3xl font-bold;
+    }
+    h2 {
+      @apply my-3 text-2xl font-bold;
+    }
+    h3 {
+      @apply my-2 text-xl font-bold;
+    }
+    h4,
+    h5,
+    h6 {
+      @apply my-1 text-lg font-bold;
+    }
+
+    ul {
+      @apply list-disc pl-6;
+    }
+    ol {
+      @apply list-decimal pl-6;
+    }
+
+    blockquote {
+      @apply ml-4 border-l-2 border-gray-200 pl-2;
+    }
+
+    a {
+      @apply text-sky-600 underline;
+    }
+
+    code {
+      @apply rounded bg-gray-100 px-1 font-mono text-sm;
+    }
+
+    pre {
+      @apply rounded-lg px-4 py-3 font-mono text-white;
+      background: #0d0d0d;
+
+      code {
+        @apply bg-transparent p-0 text-[0.8rem] text-inherit;
+      }
+    }
+
+    hr {
+      @apply my-8 border-0 border-t-2 border-black/10;
+    }
+
+    /* The placeholder of an empty Mind. */
+    p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
+      float: left;
+      height: 0;
+      pointer-events: none;
+      color: var(--color-gray-400);
+    }
+  }
 }

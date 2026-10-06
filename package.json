@@ -23,8 +23,16 @@
     "test:smoke": "electron-vite build && playwright test"
   },
   "dependencies": {
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-collaboration": "3.31.4",
+    "@tiptap/extensions": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "@tiptap/y-tiptap": "3.0.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "y-protocols": "1.0.7",
     "yjs": "13.6.33",
     "zustand": "5.0.15"
   },
