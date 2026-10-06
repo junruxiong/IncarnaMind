@@ -1,8 +1,10 @@
 import type { Database } from "./database";
 
 /**
- * Schema migrations, applied in order. `PRAGMA user_version` records the last
- * one applied. Never edit a migration that has shipped; add a new one.
+ * Schema migrations. The `schema_migrations` table records each one applied, so
+ * a migration with a lower number that lands after a higher one (tickets built
+ * in parallel reserve numbers up front) still runs. Never edit a migration that
+ * has shipped; add a new one.
  *
  * Sync-ready rules (ADR-0003), for every table:
  * - `id` is a random UUID generated on the device;
@@ -169,12 +171,38 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 6,
+    description: "Folders, and the Folder each Document is filed in",
+    sql: `
+      -- Folders the User files Documents in by hand. They nest with no depth
+      -- limit: parent_id is NULL at the top level. No foreign key: a later sync
+      -- may deliver a Folder before its parent. Deleting a Folder marks it and
+      -- its sub-Folders deleted.
+      CREATE TABLE folders (
+        id TEXT PRIMARY KEY NOT NULL,
+        parent_id TEXT,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX folders_by_parent ON folders (parent_id) WHERE deleted_at IS NULL;
+
+      -- A Document is in at most one Folder, so the Folder is a column on the
+      -- Document rather than a link table. NULL means unfiled. Filing a Document
+      -- moves its updated_at, like any other change to it.
+      ALTER TABLE documents ADD COLUMN folder_id TEXT;
+      CREATE INDEX documents_by_folder ON documents (folder_id) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
- * Brings the database up to the latest schema. Each migration runs in its own
- * transaction. Version numbers must increase but may skip numbers: tickets
- * built in parallel reserve theirs up front.
+ * Brings the database up to the latest schema: every migration in the list that
+ * isn't recorded as applied runs, in version order, each in its own transaction.
+ * A database recording a migration this build doesn't know was written by a
+ * newer version of IncarnaMind, and is refused.
  */
 export function migrate(db: Database, list: readonly Migration[] = migrations): void {
   list.forEach((migration, index) => {
@@ -185,18 +213,63 @@ export function migrate(db: Database, list: readonly Migration[] = migrations): 
       );
     }
   });
-  const current = db.get<{ user_version: number }>("PRAGMA user_version")?.user_version ?? 0;
-  const latest = list.at(-1)?.version ?? 0;
-  if (current > latest) {
+
+  const applied = appliedVersions(db, list);
+  const known = new Set(list.map((migration) => migration.version));
+  const unknown = [...applied].filter((version) => !known.has(version));
+  if (unknown.length > 0) {
     throw new Error(
-      `The database was written by a newer version of IncarnaMind (schema ${current}; this version supports up to ${latest}).`,
+      `The database was written by a newer version of IncarnaMind (it has schema migration ${Math.max(...unknown)}, which this version doesn't know).`,
     );
   }
+
   for (const migration of list) {
-    if (migration.version <= current) continue;
+    if (applied.has(migration.version)) continue;
     db.transaction(() => {
       db.exec(migration.sql);
-      db.exec(`PRAGMA user_version = ${migration.version}`);
+      db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", [
+        migration.version,
+        new Date().toISOString(),
+      ]);
+      // Kept for tools that read it: the highest migration applied.
+      const highest = db.get<{ v: number }>("SELECT max(version) AS v FROM schema_migrations")?.v;
+      db.exec(`PRAGMA user_version = ${highest ?? 0}`);
     });
   }
+}
+
+/**
+ * The versions recorded as applied. Creates the bookkeeping table on first use.
+ * It is local to this device and never synced, so the sync-ready rules don't apply.
+ *
+ * Databases from before the table existed recorded only their highest version in
+ * `PRAGMA user_version`: every listed migration up to it counts as applied.
+ */
+function appliedVersions(db: Database, list: readonly Migration[]): Set<number> {
+  const exists = db.get(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+  );
+  if (!exists) {
+    db.transaction(() => {
+      db.exec(
+        "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY NOT NULL, applied_at TEXT NOT NULL) STRICT",
+      );
+      const legacy = db.get<{ user_version: number }>("PRAGMA user_version")?.user_version ?? 0;
+      const at = new Date().toISOString();
+      for (const migration of list) {
+        if (migration.version > legacy) break;
+        db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", [
+          migration.version,
+          at,
+        ]);
+      }
+      // A legacy database at a version this build doesn't list was written by a newer build.
+      if (legacy > (list.at(-1)?.version ?? 0)) {
+        db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", [legacy, at]);
+      }
+    });
+  }
+  return new Set(
+    db.all<{ version: number }>("SELECT version FROM schema_migrations").map((row) => row.version),
+  );
 }

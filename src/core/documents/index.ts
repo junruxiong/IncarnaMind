@@ -1,6 +1,6 @@
 /**
  * Documents: adding files, processing them into Passages off the main thread,
- * renaming, soft-deleting and keyword search.
+ * renaming, filing in Folders, soft-deleting and keyword search.
  */
 import { randomUUID } from "node:crypto";
 import { basename, extname, isAbsolute } from "node:path";
@@ -13,7 +13,7 @@ import type {
   PassageSearchResult,
   SkippedFile,
 } from "../api";
-import { InvalidInputError, NotFoundError } from "../errors";
+import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
 import { createDocumentFiles, kindOf } from "./files";
 import type { ProcessingJob, ProcessingResult } from "./processing";
@@ -34,12 +34,13 @@ interface DocumentRow {
   status: string;
   failure_reason: string | null;
   failure_message: string | null;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
-  failure_reason, failure_message, created_at, updated_at`;
+  failure_reason, failure_message, folder_id, created_at, updated_at`;
 
 const toDocument = (row: DocumentRow): Document => ({
   id: row.id,
@@ -56,6 +57,7 @@ const toDocument = (row: DocumentRow): Document => ({
           message: row.failure_message ?? "",
         }
       : null,
+  folderId: row.folder_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -86,6 +88,23 @@ function parseName(name: unknown): string {
     );
   }
   return trimmed;
+}
+
+/** `listDocuments` options, checked. `folderId` undefined means every Document. */
+export function parseListOptions(options: unknown): {
+  folderId: string | undefined;
+  includeSubfolders: boolean;
+} {
+  if (options === undefined) return { folderId: undefined, includeSubfolders: false };
+  if (!isRecord(options)) throw new InvalidInputError("listDocuments expects an object.");
+  const { folderId, includeSubfolders = false } = options;
+  if (folderId !== undefined && (typeof folderId !== "string" || folderId === "")) {
+    throw new InvalidInputError("A Folder id must be a non-empty string.");
+  }
+  if (typeof includeSubfolders !== "boolean") {
+    throw new InvalidInputError("includeSubfolders must be true or false.");
+  }
+  return { folderId, includeSubfolders };
 }
 
 function parseLimit(limit: unknown): number {
@@ -204,6 +223,23 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
     processor.enqueue(jobFor(row));
   }
 
+  /** Most recently added first. With `folderIds`, only Documents filed in one of those Folders. */
+  const list = (folderIds?: readonly string[]): Document[] => {
+    const rows =
+      folderIds === undefined
+        ? db.all<DocumentRow>(
+            `SELECT ${COLUMNS} FROM documents WHERE deleted_at IS NULL
+             ORDER BY created_at DESC, rowid DESC`,
+          )
+        : db.all<DocumentRow>(
+            `SELECT ${COLUMNS} FROM documents
+             WHERE deleted_at IS NULL AND folder_id IN (SELECT value FROM json_each(?))
+             ORDER BY created_at DESC, rowid DESC`,
+            [JSON.stringify(folderIds)],
+          );
+    return rows.map(toDocument);
+  };
+
   /** Adds one file whose kind is known. Returns undefined if it can't be read. */
   async function addFile(path: string, kind: DocumentKind): Promise<Document | undefined> {
     let imported: Awaited<ReturnType<typeof files.import>>;
@@ -250,13 +286,40 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       return { documents, skipped };
     },
 
-    list(): Document[] {
-      return db
-        .all<DocumentRow>(
-          `SELECT ${COLUMNS} FROM documents WHERE deleted_at IS NULL
-           ORDER BY created_at DESC, rowid DESC`,
-        )
-        .map(toDocument);
+    list,
+
+    /**
+     * Files a Document in a Folder, or unfiles it with null. The caller checks
+     * that the Folder exists. Returns the Document and whether it moved.
+     */
+    move(idInput: unknown, folderId: string | null): { document: Document; moved: boolean } {
+      const id = parseId(idInput);
+      return db.transaction(() => {
+        const row = find(id);
+        if (!row) throw new NotFoundError("There is no such Document.");
+        if (row.folder_id === folderId) return { document: toDocument(row), moved: false };
+        db.run("UPDATE documents SET folder_id = ?, updated_at = ? WHERE id = ?", [
+          folderId,
+          now(),
+          id,
+        ]);
+        const moved = find(id);
+        if (!moved) throw new NotFoundError("There is no such Document.");
+        return { document: toDocument(moved), moved: true };
+      });
+    },
+
+    /** Unfiles every Document filed in one of `folderIds`, at `at`. Returns them, unfiled. */
+    unfile(folderIds: readonly string[], at: string): Document[] {
+      return db.transaction(() => {
+        const filed = list(folderIds);
+        db.run(
+          `UPDATE documents SET folder_id = NULL, updated_at = ?
+           WHERE deleted_at IS NULL AND folder_id IN (SELECT value FROM json_each(?))`,
+          [at, JSON.stringify(folderIds)],
+        );
+        return filed.map((document) => ({ ...document, folderId: null, updatedAt: at }));
+      });
     },
 
     rename(idInput: unknown, nameInput: unknown): Document {

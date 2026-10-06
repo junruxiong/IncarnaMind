@@ -31,4 +31,43 @@ describe("Migrations", () => {
     expect(userVersion(db)).toBe(0);
     db.close();
   });
+
+  test("a migration with a lower number that lands later still runs", async () => {
+    const db = openDatabase(join(await createTempDataFolder(), "test.db"));
+    const one = { version: 1, description: "one", sql: "CREATE TABLE one (id TEXT) STRICT;" };
+    const six = { version: 6, description: "six", sql: "CREATE TABLE six (id TEXT) STRICT;" };
+    const five = { version: 5, description: "five", sql: "CREATE TABLE five (id TEXT) STRICT;" };
+
+    migrate(db, [one, six]);
+    migrate(db, [one, five, six]);
+
+    expect(db.get("SELECT name FROM sqlite_master WHERE name = 'five'")).toBeDefined();
+    expect(userVersion(db)).toBe(6);
+    db.close();
+  });
+
+  test("a database with a migration this version doesn't know is refused", async () => {
+    const db = openDatabase(join(await createTempDataFolder(), "test.db"));
+    const one = { version: 1, description: "one", sql: "CREATE TABLE one (id TEXT) STRICT;" };
+    const two = { version: 2, description: "two", sql: "CREATE TABLE two (id TEXT) STRICT;" };
+
+    migrate(db, [one, two]);
+
+    expect(() => migrate(db, [one])).toThrow(/newer version/);
+    db.close();
+  });
+
+  test("a database from before migrations were recorded keeps what it applied", async () => {
+    const db = openDatabase(join(await createTempDataFolder(), "test.db"));
+    db.exec("CREATE TABLE one (id TEXT) STRICT; PRAGMA user_version = 1;");
+
+    migrate(db, [
+      { version: 1, description: "one", sql: "CREATE TABLE one (id TEXT) STRICT;" },
+      { version: 2, description: "two", sql: "CREATE TABLE two (id TEXT) STRICT;" },
+    ]);
+
+    expect(db.get("SELECT name FROM sqlite_master WHERE name = 'two'")).toBeDefined();
+    expect(userVersion(db)).toBe(2);
+    db.close();
+  });
 });

@@ -3,9 +3,10 @@ import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createDocuments } from "./documents";
+import { createDocuments, parseListOptions } from "./documents";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
+import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createChat, type PreparedChatModel } from "./providers/chat";
@@ -63,6 +64,8 @@ export function createCore(adapters: CoreAdapters): Core {
     if (minds.markEdited(mindId)) mindsChanged();
   });
   const settings = createSettings(db, now, adapters.systemLanguages);
+  const folders = createFolders(db, now);
+  const foldersChanged = () => events.emit("folders.changed", folders.list());
   let documents: ReturnType<typeof createDocuments>;
   try {
     documents = createDocuments({
@@ -148,7 +151,12 @@ export function createCore(adapters: CoreAdapters): Core {
       return updated;
     },
     addDocuments: (paths) => documents.add(paths),
-    listDocuments: async () => documents.list(),
+    listDocuments: async (options) => {
+      const { folderId, includeSubfolders } = parseListOptions(options);
+      if (folderId === undefined) return documents.list();
+      const folder = folders.get(folderId);
+      return documents.list(includeSubfolders ? folders.subtree(folder.id) : [folder.id]);
+    },
     renameDocument: async (id, name) => documents.rename(id, name),
     deleteDocument: (id) => documents.delete(id),
     searchPassages: async (query, limit) => documents.search(query, limit),
@@ -205,6 +213,38 @@ export function createCore(adapters: CoreAdapters): Core {
       await readinessChanged();
     },
 
+    moveDocument: async (documentId, folderInput) => {
+      const folderId = folderInput === null ? null : parseFolderId(folderInput);
+      const { document, moved } = db.transaction(() => {
+        if (folderId !== null) folders.get(folderId);
+        return documents.move(documentId, folderId);
+      });
+      if (moved) events.emit("documents.moved", [document]);
+      return document;
+    },
+    createFolder: async (input) => {
+      const folder = folders.create(input);
+      foldersChanged();
+      return folder;
+    },
+    listFolders: async () => folders.list(),
+    renameFolder: async (folderId, name) => {
+      const folder = folders.rename(folderId, name);
+      foldersChanged();
+      return folder;
+    },
+    moveFolder: async (folderId, parentId) => {
+      const folder = folders.move(folderId, parentId);
+      foldersChanged();
+      return folder;
+    },
+    deleteFolder: async (folderId) => {
+      const at = now();
+      const unfiled = db.transaction(() => documents.unfile(folders.delete(folderId, at), at));
+      // Folders first, so a listener filtering by a deleted Folder hears it's gone before it refreshes.
+      foldersChanged();
+      if (unfiled.length > 0) events.emit("documents.moved", unfiled);
+    },
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,

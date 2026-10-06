@@ -65,6 +65,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         pageCount: null,
         status: "queued",
         failure: null,
+        folderId: null,
         createdAt: "2026-10-06T12:00:00.000Z",
         updatedAt: "2026-10-06T12:00:00.000Z",
       },

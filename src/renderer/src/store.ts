@@ -3,6 +3,7 @@ import type {
   ChatReadiness,
   DeviceSettings,
   Document,
+  Folder,
   Mind,
   Settings,
   SettingsPatch,
@@ -28,6 +29,12 @@ interface AppState {
   /** Names of the files the last add couldn't take, shown until dismissed. */
   skippedFiles: string[];
   settingsOpen: boolean;
+  /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
+  folders: Folder[];
+  /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
+  folderFilter: string | null;
+  /** The Documents in `folderFilter`, by id, as the core last listed them. Null until listed. */
+  filteredDocumentIds: ReadonlySet<string> | null;
 
   load(): Promise<void>;
   createMind(): Promise<void>;
@@ -50,6 +57,14 @@ interface AppState {
   renameDocument(id: string, name: string): Promise<void>;
   deleteDocument(id: string): Promise<void>;
   dismissSkippedFiles(): void;
+  /** Files a Document in a Folder, or unfiles it with null. */
+  moveDocument(documentId: string, folderId: string | null): Promise<void>;
+  /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
+  filterByFolder(folderId: string | null): Promise<void>;
+  createFolder(name: string, parentId: string | null): Promise<void>;
+  renameFolder(id: string, name: string): Promise<void>;
+  moveFolder(id: string, parentId: string | null): Promise<void>;
+  deleteFolder(id: string): Promise<void>;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -61,6 +76,13 @@ const upsert = (documents: Document[], item: Document) =>
   documents.some((each) => each.id === item.id)
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
+
+/** The Documents the sidebar lists: all of them, or those in the Folder it is filtered by. */
+export const selectVisibleDocuments = (state: AppState): Document[] => {
+  const ids = state.filteredDocumentIds;
+  if (state.folderFilter === null || ids === null) return state.documents;
+  return state.documents.filter((item) => ids.has(item.id));
+};
 
 export const useAppStore = create<AppState>()((set, get) => {
   /** Runs an action, reporting a failure instead of throwing. */
@@ -83,16 +105,20 @@ export const useAppStore = create<AppState>()((set, get) => {
     documents: [],
     skippedFiles: [],
     settingsOpen: false,
+    folders: [],
+    folderFilter: null,
+    filteredDocumentIds: null,
 
     async load() {
       try {
-        const [minds, settings, documents, chatReadiness] = await Promise.all([
+        const [minds, settings, documents, chatReadiness, folders] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
           core.listDocuments(),
           core.getChatReadiness(),
+          core.listFolders(),
         ]);
-        set({ minds, settings, documents, chatReadiness, status: { kind: "ready" } });
+        set({ minds, settings, documents, chatReadiness, folders, status: { kind: "ready" } });
       } catch (error) {
         set({ status: { kind: "failed", message: messageOf(error) } });
       }
@@ -204,8 +230,69 @@ export const useAppStore = create<AppState>()((set, get) => {
     dismissSkippedFiles() {
       set({ skippedFiles: [] });
     },
+
+    // The lists follow the core's "documents.moved" and "folders.changed" events, which
+    // arrive before these calls return.
+    moveDocument: (documentId, folderId) =>
+      attempt(async () => {
+        await core.moveDocument(documentId, folderId);
+      }),
+
+    async filterByFolder(folderId) {
+      if (folderId === get().folderFilter) return;
+      set({ folderFilter: folderId, filteredDocumentIds: null });
+      await refreshFolderFilter();
+    },
+
+    createFolder: (name, parentId) =>
+      attempt(async () => {
+        await core.createFolder({ name, parentId });
+      }),
+
+    renameFolder: (id, name) =>
+      attempt(async () => {
+        await core.renameFolder(id, name);
+      }),
+
+    moveFolder: (id, parentId) =>
+      attempt(async () => {
+        await core.moveFolder(id, parentId);
+      }),
+
+    deleteFolder: (id) =>
+      attempt(async () => {
+        await core.deleteFolder(id);
+      }),
   };
 });
+
+/** Counts Folder-filter requests, so a slow answer to an old one never overwrites a newer one. */
+let filterRequests = 0;
+
+/** Asks the core which Documents are in the filtered Folder, including its sub-Folders. */
+async function refreshFolderFilter(): Promise<void> {
+  const request = ++filterRequests;
+  const folderId = useAppStore.getState().folderFilter;
+  if (folderId === null) {
+    useAppStore.setState({ filteredDocumentIds: null });
+    return;
+  }
+  try {
+    const listed = await core.listDocuments({ folderId, includeSubfolders: true });
+    if (request === filterRequests) {
+      useAppStore.setState({ filteredDocumentIds: new Set(listed.map((item) => item.id)) });
+    }
+  } catch (error) {
+    if (request !== filterRequests) return;
+    const { folders } = useAppStore.getState();
+    // The Folder was deleted meanwhile: show every Document again. Anything else is a failure.
+    if (folders.some((folder) => folder.id === folderId)) {
+      useAppStore.setState({ actionError: messageOf(error) });
+    } else {
+      useAppStore.setState({ folderFilter: null, filteredDocumentIds: null });
+    }
+  }
+}
 
 // Settings can change outside this window (another window, or the core itself), so follow the core's event.
 core.on("settings.changed", (settings) => useAppStore.setState({ settings }));
@@ -224,3 +311,26 @@ core.on("document.status", (changed) =>
 );
 
 core.on("chatReadiness.changed", (chatReadiness) => useAppStore.setState({ chatReadiness }));
+
+// Folders change through this window or another: follow the list, and keep the filter right.
+core.on("folders.changed", (folders) => {
+  const { folderFilter } = useAppStore.getState();
+  useAppStore.setState({ folders });
+  if (folderFilter === null) return;
+  if (folders.some((folder) => folder.id === folderFilter)) {
+    // Moving a Folder can change which Documents are below the filtered one.
+    void refreshFolderFilter();
+  } else {
+    // The filtered Folder was deleted, perhaps with a parent: show every Document again.
+    filterRequests++;
+    useAppStore.setState({ folderFilter: null, filteredDocumentIds: null });
+  }
+});
+
+// Documents moved between Folders, or unfiled by a Folder's deletion.
+core.on("documents.moved", (moved) => {
+  useAppStore.setState((state) => ({
+    documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
+  }));
+  if (useAppStore.getState().folderFilter !== null) void refreshFolderFilter();
+});
