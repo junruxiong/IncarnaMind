@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { MindPane } from "./components/MindPane";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -46,8 +47,9 @@ export function App() {
 }
 
 /**
- * Sidebar with Minds on the left and the open Mind filling the rest. The
- * Document viewer panel appears on the right only while open, narrowing the Mind area.
+ * Sidebar with Minds and Documents on the left and the open Mind filling the
+ * rest. The Document viewer panel appears on the right only while open,
+ * narrowing the Mind area. Files dropped anywhere are added as Documents.
  */
 function Workspace() {
   const t = useT();
@@ -56,6 +58,8 @@ function Workspace() {
   const closeViewer = useAppStore((state) => state.closeViewer);
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
+  const addDocuments = useAppStore((state) => state.addDocuments);
+  const fileDrop = useFileDrop((files) => void addDocuments(files));
   const windowWidth = useWindowWidth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   useDevViewerShortcut();
@@ -66,7 +70,7 @@ function Workspace() {
   const room = windowWidth - ROD_WIDTH - CENTRE_MIN;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="relative flex h-screen overflow-hidden" {...fileDrop.handlers}>
       <Sidebar width={sidebarWidth} onOpenSettings={() => setSettingsOpen(true)} />
       <ResizeRod
         label={t("sidebar.resize")}
@@ -95,6 +99,7 @@ function Workspace() {
       )}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ActionError />
+      {fileDrop.active && <DropOverlay />}
     </div>
   );
 }

@@ -69,6 +69,81 @@ export interface SettingsPatch {
   device?: Partial<DeviceSettings>;
 }
 
+/** The kinds of file that can be added as Documents. */
+export type DocumentKind = "pdf" | "text" | "markdown";
+
+/**
+ * Where a Document is in processing: "queued", then "extracting", then "ready".
+ * The other end states are "failed" (see `failure`) and "no-text": the file has
+ * no text to extract, e.g. a scan without a text layer.
+ */
+export type DocumentStatus = "queued" | "extracting" | "ready" | "failed" | "no-text";
+
+export type DocumentFailureReason =
+  /** The file isn't a valid PDF, or a text file holds binary data. */
+  | "unreadable"
+  | "password-protected"
+  /** The copy in the data folder has gone. */
+  | "file-missing"
+  /** Anything else, e.g. the processing worker crashed. */
+  | "processing-error";
+
+export interface DocumentFailure {
+  reason: DocumentFailureReason;
+  /** Technical detail in English, for logs and tooltips. */
+  message: string;
+}
+
+export interface Document {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** The display name. It starts as the file name without its extension and can be renamed. */
+  name: string;
+  kind: DocumentKind;
+  /**
+   * SHA-256 of the file's bytes, in hex. The same file always gives the same hash,
+   * so it is recognised as one Document (ADR-0003). It also names the stored copy.
+   */
+  contentHash: string;
+  /** In bytes. */
+  size: number;
+  /** PDFs only, once their text has been extracted. */
+  pageCount: number | null;
+  status: DocumentStatus;
+  /** Set when `status` is "failed". */
+  failure: DocumentFailure | null;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface SkippedFile {
+  path: string;
+  /** "unsupported-type": not PDF, TXT or Markdown. "unreadable": missing, a folder, or not readable. */
+  reason: "unsupported-type" | "unreadable";
+}
+
+export interface AddDocumentsResult {
+  /** One per added file, in the order given. A file already added gives its existing Document. */
+  documents: Document[];
+  /** Files that were not added. */
+  skipped: SkippedFile[];
+}
+
+export interface PassageSearchResult {
+  passageId: string;
+  documentId: string;
+  documentName: string;
+  /** The first page the Passage covers, from 1. Null for Documents without pages (TXT, Markdown). */
+  pageFrom: number | null;
+  /** The last page the Passage covers. A Passage can cross a page break. */
+  pageTo: number | null;
+  /** The Passage's position in its Document, from 0. */
+  position: number;
+  text: string;
+}
+
 export interface CoreApi {
   createMind(input?: CreateMindInput): Promise<Mind>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
@@ -93,6 +168,23 @@ export interface CoreApi {
   getSettings(): Promise<Settings>;
   /** Changes only the fields given and returns the settings now in effect. */
   updateSettings(patch: SettingsPatch): Promise<Settings>;
+  /**
+   * Adds PDF, TXT and Markdown files, given their absolute paths. Each file is
+   * copied into the data folder and queued for processing; "document.status"
+   * events report its progress.
+   */
+  addDocuments(paths: string[]): Promise<AddDocumentsResult>;
+  /** Documents that are not deleted, most recently added first. */
+  listDocuments(): Promise<Document[]>;
+  /** Returns the renamed Document. */
+  renameDocument(id: string, name: string): Promise<Document>;
+  /**
+   * Soft-deletes a Document and its Passages, so search ignores them. The stored
+   * file is removed once no Document uses it.
+   */
+  deleteDocument(id: string): Promise<void>;
+  /** Keyword search over the Passages of all Documents, best match first. `limit` defaults to 20. */
+  searchPassages(query: string, limit?: number): Promise<PassageSearchResult[]>;
 }
 
 /**
@@ -107,6 +199,8 @@ export interface CoreEvents {
   "minds.changed": Mind[];
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
+  /** A Document was added or its processing status changed. Carries the whole Document. */
+  "document.status": Document;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -137,6 +231,11 @@ const methods: Record<CoreApiMethod, true> = {
   closeMind: true,
   getSettings: true,
   updateSettings: true,
+  addDocuments: true,
+  listDocuments: true,
+  renameDocument: true,
+  deleteDocument: true,
+  searchPassages: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

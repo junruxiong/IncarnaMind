@@ -1,4 +1,7 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { buildPdf } from "../tests/helpers/pdf";
 import { createDataFolder, dragBy, launchApp, openViewer, removeDataFolder, widthOf } from "./app";
 
 let dataDir: string;
@@ -123,4 +126,43 @@ test("the Document viewer is hidden until opened, resizes from its left edge and
   await second.window.getByTestId("viewer-close").click();
   await expect(second.window.getByTestId("viewer")).toHaveCount(0);
   await second.app.close();
+});
+
+test("added files are processed, show as ready in the sidebar, and can be deleted", async () => {
+  // The User's own files live outside the data folder.
+  const sources = await createDataFolder();
+  try {
+    const notes = join(sources, "Reading notes.txt");
+    const report = join(sources, "Report.pdf");
+    await writeFile(notes, "Attention lets a model focus on the most relevant words.\n");
+    await writeFile(
+      report,
+      buildPdf([{ lines: ["Quarterly report"] }, { lines: ["Revenue grew by ten percent."] }]),
+    );
+
+    const first = await launchApp(dataDir);
+    const { window } = first;
+    await window.getByTestId("add-documents-input").setInputFiles([notes, report]);
+
+    const items = window.getByTestId("document-list-item");
+    await expect(items).toHaveCount(2);
+    const notesItem = items.filter({ hasText: "Reading notes" });
+    const reportItem = items.filter({ hasText: "Report" });
+    await expect(notesItem).toHaveAttribute("data-status", "ready");
+    await expect(reportItem).toHaveAttribute("data-status", "ready");
+    await expect(notesItem.getByTestId("document-status")).toHaveText("Ready");
+    await first.app.close();
+
+    // After a restart both are still there. Deleting one asks first, then removes it.
+    const second = await launchApp(dataDir);
+    const restored = second.window.getByTestId("document-list-item");
+    await expect(restored).toHaveCount(2);
+    await restored.filter({ hasText: "Reading notes" }).getByTestId("delete-document").click();
+    await second.window.getByTestId("confirm-delete-document").click();
+    await expect(restored).toHaveCount(1);
+    await expect(restored).toHaveAttribute("data-status", "ready");
+    await second.app.close();
+  } finally {
+    await removeDataFolder(sources);
+  }
 });
