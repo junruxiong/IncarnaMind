@@ -116,10 +116,102 @@
       code {
         @apply bg-transparent p-0 text-[0.8rem] text-inherit;
       }
+
+      /* Syntax highlighting (lowlight), in the old editor's colours. */
+      .hljs-comment,
+      .hljs-quote {
+        color: #616161;
+      }
+      .hljs-variable,
+      .hljs-template-variable,
+      .hljs-attribute,
+      .hljs-tag,
+      .hljs-name,
+      .hljs-regexp,
+      .hljs-link,
+      .hljs-selector-id,
+      .hljs-selector-class {
+        color: #f98181;
+      }
+      .hljs-number,
+      .hljs-meta,
+      .hljs-built_in,
+      .hljs-builtin-name,
+      .hljs-literal,
+      .hljs-type,
+      .hljs-params {
+        color: #fbbc88;
+      }
+      .hljs-string,
+      .hljs-symbol,
+      .hljs-bullet {
+        color: #b9f18d;
+      }
+      .hljs-title,
+      .hljs-section {
+        color: #faf594;
+      }
+      .hljs-keyword,
+      .hljs-selector-tag {
+        color: #70cff8;
+      }
+      .hljs-emphasis {
+        font-style: italic;
+      }
+      .hljs-strong {
+        font-weight: 700;
+      }
     }
 
     hr {
       @apply my-8 border-0 border-t-2 border-black/10;
+    }
+
+    /* The Block being written in is outlined, like the old editor's focused Note. */
+    > * {
+      border-radius: 3px;
+    }
+    > .has-focus {
+      outline: 1px solid rgb(227 227 227);
+      outline-offset: 6px;
+    }
+
+    /* A code block's language picker, top right as in the old editor. */
+    .code-block {
+      @apply relative;
+    }
+    .code-language {
+      @apply absolute top-2 right-2 rounded-[6px] bg-white/10 px-1.5 py-0.5 text-custom-xs text-gray-300 outline-none hover:bg-white/20;
+
+      option {
+        @apply bg-dark-150 text-gray-200;
+      }
+    }
+
+    /* Formulas (KaTeX). Clicking one opens its LaTeX. */
+    .tiptap-mathematics-render {
+      @apply inline-block rounded px-1;
+    }
+    .tiptap-mathematics-render--editable {
+      @apply cursor-pointer transition-colors hover:bg-[#eee];
+    }
+    [data-type="block-math"] {
+      @apply block px-3 py-2 text-center;
+
+      .katex-display {
+        margin: 0;
+      }
+    }
+    .tiptap-mathematics-render[data-latex=""]::before {
+      content: var(--empty-formula);
+      color: var(--color-gray-400);
+    }
+    .block-math-error,
+    .inline-math-error {
+      @apply font-mono text-red-700;
+    }
+    .ProseMirror-selectednode.tiptap-mathematics-render {
+      @apply bg-sky-100;
     }
 
     /* The placeholder of an empty Mind. */
@@ -130,5 +222,71 @@
       pointer-events: none;
       color: var(--color-gray-400);
     }
+
+    /* The hint on the empty line being written in. */
+    &.ProseMirror-focused > p.is-empty:not(.is-editor-empty)::before {
+      content: attr(data-placeholder);
+      float: left;
+      height: 0;
+      pointer-events: none;
+      color: var(--color-gray-400);
+    }
+  }
+
+  /* The bubble menu over selected text, as in the old editor. */
+  .format-menu {
+    @apply flex rounded-lg bg-white p-[0.2rem] shadow-custom-unfocus outline-1 outline-[rgb(227_227_227)];
+
+    > button {
+      @apply px-[0.2rem] text-[0.85rem] font-medium text-black opacity-60 hover:opacity-100;
+
+      &[aria-pressed="true"] {
+        @apply opacity-100;
+      }
+    }
+  }
+
+  /* The handle left of the Block under the mouse: drag it to move the Block, click it for its menu. */
+  .block-handle > button {
+    @apply flex cursor-grab rounded-[6px] p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600;
+  }
+  .block-handle[data-dragging="true"] > button {
+    @apply cursor-grabbing;
+  }
+
+  /* The editor's popovers sit where Popover puts them, not where [popover] would. */
+  .editor-popover {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    background: transparent;
+    color: inherit;
+    visibility: hidden;
+  }
+
+  /* The slash menu and the Block menu, in the old slash menu's style. */
+  .editor-menu {
+    @apply flex flex-col rounded-[9px] bg-white p-1.5 text-custom text-gray-800 shadow-custom-focus outline-1 outline-gray-200;
+  }
+  .editor-menu-item {
+    @apply flex w-full items-center gap-2 rounded-[6px] px-1.5 py-1 text-left outline-none;
+
+    &[aria-selected="true"],
+    &[role="menuitem"]:hover,
+    &[role="menuitem"]:focus-visible {
+      background-color: rgb(46 50 56 / 13%);
+    }
+  }
+  .editor-menu-icon {
+    @apply flex size-6 shrink-0 items-center justify-center rounded-[6px] border border-gray-200 bg-white text-custom-xs font-medium text-gray-600;
+  }
+
+  /* The LaTeX field, in the old math editor's colours. */
+  .math-input {
+    @apply block w-full resize-none rounded px-2 py-1 font-mono text-sm text-white outline-none;
+    background: #202020;
   }
 }
