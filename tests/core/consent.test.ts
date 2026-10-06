@@ -197,6 +197,24 @@ describe("Data-flow consent", () => {
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
   });
 
+  test("a decision on a provider that was only tested is listed, so it can be revoked", async () => {
+    const { core } = await startWithModel();
+    const declined = await testAndWaitForConsent(core);
+    await core.respondToConsent(declined.request.requestId, false);
+    await declined.result;
+    expect(await core.listChatProviders()).toEqual([]);
+
+    expect(await core.listDataFlows()).toEqual([
+      {
+        flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
+        consent: "declined",
+        decidedAt: expect.any(String),
+      },
+    ]);
+    await core.revokeConsent("chat", OPENAI_SERVICE.id);
+    expect(await core.listDataFlows()).toEqual([]);
+  });
+
   test("a flow that starts sending a new kind of data asks again, for the new kind", async () => {
     const { core, models } = await startWithModel();
     await core.saveChatProvider(OPENAI);

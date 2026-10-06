@@ -188,7 +188,7 @@ export type OllamaStatus =
       recommendedModel: string;
     };
 
-export interface UseOllamaInput {
+export interface SelectOllamaInput {
   /** Defaults to Ollama's local port. */
   baseUrl?: string;
   /** Defaults to the recommended model. */
@@ -277,9 +277,12 @@ export interface CoreApi {
    * One click "use local models": pulls the model if needed (progress arrives as
    * "ollama.pullProgress" events), saves Ollama as a provider and makes the model the default.
    */
-  useOllama(input?: UseOllamaInput): Promise<ChatProvider>;
+  selectOllama(input?: SelectOllamaInput): Promise<ChatProvider>;
 
-  /** Every registered external data flow for the services currently configured, with the User's decision. */
+  /**
+   * Every registered external data flow, to each service it currently goes to
+   * and each service the User has decided on, with that decision.
+   */
   listDataFlows(): Promise<DataFlowStatus[]>;
   /** Consent requests still waiting for an answer, e.g. for a window that opened after they were raised. */
   listConsentRequests(): Promise<ConsentRequest[]>;
@@ -337,7 +340,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
-  useOllama: true,
+  selectOllama: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,

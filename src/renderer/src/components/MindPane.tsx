@@ -1,6 +1,7 @@
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { MindIcon, PlusIcon } from "./icons";
+import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
 
 /** The centre: the open Mind. Editing its Blocks arrives in a later ticket. */
 export function MindPane() {
@@ -32,6 +33,7 @@ export function MindPane() {
             >
               {title}
             </h1>
+            <ChatReadinessNotice />
           </article>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-10 text-center">

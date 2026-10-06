@@ -32,6 +32,16 @@ export async function launchApp(dataDir: string): Promise<RunningApp> {
   return { app, window };
 }
 
+/**
+ * On a fresh data folder the first-run chat setup covers the window: choose
+ * "set up later". The choice is remembered, so later launches don't show it.
+ */
+export async function dismissChatSetup(window: Page): Promise<void> {
+  const setup = window.getByTestId("chat-setup");
+  await setup.getByTestId("chat-setup-later").click();
+  await setup.waitFor({ state: "hidden" });
+}
+
 /** Opens the Document viewer through the test hook: nothing in the UI opens it yet. */
 export async function openViewer(window: Page): Promise<void> {
   await window.evaluate(() => {

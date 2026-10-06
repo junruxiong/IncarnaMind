@@ -1,5 +1,7 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { ConsentDialog } from "./components/ConsentDialog";
 import { MindPane } from "./components/MindPane";
+import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -57,7 +59,7 @@ function Workspace() {
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const windowWidth = useWindowWidth();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = useAppStore((state) => state.openSettings);
   useDevViewerShortcut();
 
   if (!device) return null;
@@ -67,7 +69,7 @@ function Workspace() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar width={sidebarWidth} onOpenSettings={() => setSettingsOpen(true)} />
+      <Sidebar width={sidebarWidth} onOpenSettings={openSettings} />
       <ResizeRod
         label={t("sidebar.resize")}
         width={sidebarWidth}
@@ -93,7 +95,10 @@ function Workspace() {
           <ViewerPanel width={viewerWidth} onClose={closeViewer} />
         </>
       )}
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog />
+      <ChatSetupDialog />
+      {/* Opens after the dialog that triggered the request, so it shows on top of it. */}
+      <ConsentDialog />
       <ActionError />
     </div>
   );
