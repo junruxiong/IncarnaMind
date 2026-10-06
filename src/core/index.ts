@@ -13,6 +13,7 @@ export type {
 export * from "./api";
 export type { DataFlowDefinition, DataFlowRegistry } from "./consent";
 export { type Core, createCore, DATABASE_FILE } from "./core";
+export type { DocumentFile } from "./documents";
 export {
   ChatNotReadyError,
   ConsentDeclinedError,

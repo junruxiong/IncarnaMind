@@ -4,9 +4,11 @@ import { join, resolve } from "node:path";
 import {
   type ElectronApplication,
   _electron as electron,
+  expect,
   type Locator,
   type Page,
 } from "@playwright/test";
+import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
 const appDir = resolve(__dirname, "..");
@@ -42,12 +44,60 @@ export async function dismissChatSetup(window: Page): Promise<void> {
   await setup.waitFor({ state: "hidden" });
 }
 
-/** Opens the Document viewer through the test hook: nothing in the UI opens it yet. */
+/** Opens the empty Document viewer panel through the test hook. */
 export async function openViewer(window: Page): Promise<void> {
   await window.evaluate(() => {
     const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
     if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
     hooks.openViewer();
+  });
+}
+
+/** Opens a Document in the viewer at a location, as a Citation will, through the test hook. */
+export async function openDocumentAt(window: Page, location: DocumentLocation): Promise<void> {
+  await window.evaluate((at) => {
+    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
+    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
+    hooks.openDocument(at);
+  }, location);
+}
+
+/** Adds files through the sidebar's file picker and waits until each is processed and ready. */
+export async function addDocuments(window: Page, paths: string[]): Promise<void> {
+  await window.getByTestId("add-documents-input").setInputFiles(paths);
+  const items = window.getByTestId("document-list-item");
+  await expect(items).toHaveCount(paths.length);
+  for (let index = 0; index < paths.length; index++) {
+    await expect(items.nth(index)).toHaveAttribute("data-status", "ready");
+  }
+}
+
+/** The id of the Document listed in the sidebar under `name`. */
+export async function documentIdOf(window: Page, name: string): Promise<string> {
+  const id = await window
+    .getByTestId("document-list-item")
+    .filter({ hasText: name })
+    .getAttribute("data-document-id");
+  if (!id) throw new Error(`No Document named ${name} in the sidebar.`);
+  return id;
+}
+
+/** How many of a canvas's pixels are dark: more than zero once something is drawn on it. */
+export function darkPixels(canvas: Locator): Promise<number> {
+  return canvas.evaluate((element) => {
+    const drawing = element as unknown as {
+      width: number;
+      height: number;
+      getContext(kind: "2d"): {
+        getImageData(x: number, y: number, w: number, h: number): { data: Uint8ClampedArray };
+      };
+    };
+    const { data } = drawing.getContext("2d").getImageData(0, 0, drawing.width, drawing.height);
+    let dark = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      if ((data[index] as number) < 128 && (data[index + 3] as number) > 0) dark++;
+    }
+    return dark;
   });
 }
 

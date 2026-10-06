@@ -111,6 +111,50 @@ export function GripIcon(props: IconProps) {
   );
 }
 
+export function MinusIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path d="M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Chevron({ d, ...props }: IconProps & { d: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d={d}
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export const ChevronUpIcon = (props: IconProps) => <Chevron d="M4 10l4-4 4 4" {...props} />;
+
+export const ChevronDownIcon = (props: IconProps) => <Chevron d="M4 6l4 4 4-4" {...props} />;
+
+/** Two arrows pointing out to the sides: fit to width. */
+export function FitWidthIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M2 3v10M14 3v10M5 8h6M6.5 6L5 8l1.5 2M9.5 6L11 8l-1.5 2" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg

@@ -39,7 +39,7 @@ const statusTones: Record<DocumentStatus, string> = {
  * add button with a file picker, and rename and delete. Dropping files anywhere
  * on the window adds them too (see `FileDrop`). Above the list, the Folder tree
  * filters it; Documents are filed by dragging them onto a Folder or with
- * "Move to…". Opening a Document in the viewer arrives in a later ticket.
+ * "Move to…". Clicking a Document opens it in the viewer.
  */
 export function DocumentsSection() {
   const t = useT();
@@ -123,6 +123,10 @@ export function DocumentsSection() {
 function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
+  const openDocument = useAppStore((state) => state.openDocument);
+  const isOpen = useAppStore(
+    (state) => state.viewerOpen && state.viewerTarget?.documentId === item.id,
+  );
   const status =
     item.status === "failed"
       ? t("documents.status.failed", {
@@ -130,6 +134,15 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
         })
       : t(statusMessages[item.status]);
   const actionButton = "rounded-[6px] p-[3px] text-gray-500 hover:bg-gray-200 hover:text-gray-700";
+  const statusLine = (
+    <p
+      data-testid="document-status"
+      title={item.failure?.message}
+      className={`truncate text-[11px] leading-4 ${statusTones[item.status]}`}
+    >
+      {status}
+    </p>
+  );
 
   return (
     <li
@@ -140,25 +153,36 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       draggable={!renaming}
       onDragStart={(event) => startSidebarDrag(event, { kind: "document", id: item.id })}
       onDragEnd={endSidebarDrag}
-      className="group my-[1px] flex items-start gap-[6px] rounded-[9px] px-1 py-[5px] text-sm hover:bg-gray-100"
+      className={`group my-[1px] flex items-start gap-[6px] rounded-[9px] px-1 py-[5px] text-sm ${
+        isOpen ? "bg-gray-200" : "hover:bg-gray-100"
+      }`}
     >
-      <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
-      <div className="min-w-0 flex-1">
-        {renaming ? (
-          <RenameInput item={item} onDone={() => setRenaming(false)} />
-        ) : (
-          <p className="truncate text-gray-700" title={item.name}>
-            {item.name}
-          </p>
-        )}
-        <p
-          data-testid="document-status"
-          title={item.failure?.message}
-          className={`truncate text-[11px] leading-4 ${statusTones[item.status]}`}
+      {renaming ? (
+        <>
+          <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <RenameInput item={item} onDone={() => setRenaming(false)} />
+            {statusLine}
+          </div>
+        </>
+      ) : (
+        // Opens the Document in the viewer, replacing whatever it showed.
+        <button
+          type="button"
+          data-testid="open-document"
+          aria-current={isOpen ? "true" : undefined}
+          onClick={() => openDocument({ documentId: item.id })}
+          className="flex min-w-0 flex-1 items-start gap-[6px] text-left"
         >
-          {status}
-        </p>
-      </div>
+          <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-gray-700" title={item.name}>
+              {item.name}
+            </span>
+            {statusLine}
+          </span>
+        </button>
+      )}
       {!renaming && (
         <div className="flex shrink-0 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
           <MoveToMenu item={item} buttonClassName={actionButton} />
