@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  labels:
+    app: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      pod: celery-beat
+  template:
+    metadata:
+      labels:
+        pod: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: incarnaregistry.azurecr.io/django:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              rm -f './celerybeat.pid'
+              celery -A backend beat -l debug
+          envFrom:
+            - secretRef:
+                name: django-prod-env
+          volumeMounts:
+            - name: gcp-service-account
+              mountPath: /var/secrets/google/
+              readOnly: true
+      volumes:
+        - name: gcp-service-account
+          secret:
+            secretName: gcp-service-account-key
