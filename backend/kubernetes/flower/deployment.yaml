@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-flower
+  labels:
+    pod: celery-flower
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      pod: celery-flower
+  template:
+    metadata:
+      labels:
+        pod: celery-flower
+    spec:
+      containers:
+        - name: celery-flower
+          image: incarnaregistry.azurecr.io/django:latest
+          command:
+            - celery
+            - "-A"
+            - "backend"
+            - flower
+            - "--basic_auth=$(CELERY_FLOWER_USER):$(CELERY_FLOWER_PASSWORD)"
+          ports:
+            - containerPort: 5555
+          resources:
+            limits:
+              cpu: 100m
+          envFrom:
+            - secretRef:
+                name: django-prod-env
+          volumeMounts:
+            - name: gcp-service-account
+              mountPath: /var/secrets/google/
+              readOnly: true
+      volumes:
+        - name: gcp-service-account
+          secret:
+            secretName: gcp-service-account-key
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower-service
+spec:
+  type: LoadBalancer
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5555
+  selector:
+    pod: celery-flower

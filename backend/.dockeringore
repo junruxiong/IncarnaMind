@@ -1,0 +1,10 @@
+.devcontainer
+.github
+.vscode
+.git
+.env
+.env.prod
+.env.smaple
+.env.sample.devcontainer
+.gitattributes
+.deployment

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  labels:
+    deployment: celery-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      pod: celery-worker
+  template:
+    metadata:
+      labels:
+        pod: celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: incarnaregistry.azurecr.io/django:latest
+          command: ["celery", "-A", "backend", "worker", "-l", "info"]
+          # command: ["/bin/sh", "-c"]
+          # args:
+          #   - |
+          #     watchfiles --filter python 'celery -A backend worker --loglevel=info'
+          envFrom:
+            - secretRef:
+                name: django-prod-env
+          volumeMounts:
+            - name: gcp-service-account
+              mountPath: /var/secrets/google/
+              readOnly: true
+      volumes:
+        - name: gcp-service-account
+          secret:
+            secretName: gcp-service-account-key
+
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: celery-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: celery-worker
+  minReplicas: 1
+  maxReplicas: 30
+  targetCPUUtilizationPercentage: 90

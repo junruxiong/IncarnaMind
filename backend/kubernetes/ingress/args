@@ -1,0 +1,4 @@
+- --certificatesresolvers.default.acme.tlschallenge
+  - --certificatesresolvers.default.acme.email=junru@incarnamind.com
+  - --certificatesresolvers.default.acme.storage=/data/acme.json
+  - --certificatesresolvers.default.acme.caserver=https://acme-v02.api.letsencrypt.org/directory
