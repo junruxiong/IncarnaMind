@@ -23,6 +23,7 @@
     "test:smoke": "electron-vite build && playwright test"
   },
   "dependencies": {
+    "pdfjs-dist": "6.4.299",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zustand": "5.0.15"

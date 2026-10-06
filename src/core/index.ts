@@ -12,5 +12,5 @@ export type {
 } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
-export { InvalidInputError } from "./errors";
+export { InvalidInputError, NotFoundError } from "./errors";
 export * from "./language";
