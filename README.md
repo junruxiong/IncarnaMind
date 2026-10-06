@@ -4,6 +4,23 @@
 
 IncarnaMind enables you to chat with your personal documents 📁 (PDF, TXT) using Large Language Models (LLMs) like GPT ([architecture overview](#high-level-architecture)). While OpenAI has recently launched a fine-tuning API for GPT models, it doesn't enable the base pretrained models to learn new data, and the responses can be prone to factual hallucinations. Utilize our [Sliding Window Chunking](#sliding-window-chunking) mechanism and Ensemble Retriever enables efficient querying of both fine-grained and coarse-grained information within your ground truth documents to augment the LLMs.
 
+## 🖥 Desktop app (in development)
+
+IncarnaMind v1 is being rebuilt as a local-first desktop app (Electron and TypeScript). The Python command-line tool described below keeps working until the new app replaces it.
+
+You need Node.js 24 or newer. After cloning:
+
+```shell
+npm install
+npm run dev          # start the app in development
+npm run typecheck    # TypeScript, strict
+npm run lint         # Biome
+npm test             # Vitest: drives the core's public interface
+npm run test:smoke   # Playwright: builds the app and drives it in Electron
+```
+
+Code lives in `src/`: `core` (app logic, no Electron imports), `main` (Electron main process), `preload` (the typed bridge to the UI), `renderer` (React UI) and `shared` (i18n dictionaries and bridge names).
+
 ## 1.2. Setup
 
 Create Conda virtual environment:
