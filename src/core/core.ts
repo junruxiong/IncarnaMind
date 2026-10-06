@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import type { CoreApi, CoreEventSource, Unsubscribe } from "./api";
+import { createDocuments } from "./documents";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createMinds } from "./minds";
 import { createSettings } from "./settings";
@@ -37,6 +38,18 @@ export function createCore(adapters: CoreAdapters): Core {
   const events = createEventHub();
   const minds = createMinds(db, now);
   const settings = createSettings(db, now, adapters.systemLanguages);
+  let documents: ReturnType<typeof createDocuments>;
+  try {
+    documents = createDocuments({
+      db,
+      dataDir,
+      now,
+      emitStatus: (document) => events.emit("document.status", document),
+    });
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
@@ -48,9 +61,15 @@ export function createCore(adapters: CoreAdapters): Core {
       events.emit("settings.changed", updated);
       return updated;
     },
+    addDocuments: (paths) => documents.add(paths),
+    listDocuments: async () => documents.list(),
+    renameDocument: async (id, name) => documents.rename(id, name),
+    deleteDocument: (id) => documents.delete(id),
+    searchPassages: async (query, limit) => documents.search(query, limit),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     close: () => {
+      documents.close();
       events.clear();
       db.close();
     },
