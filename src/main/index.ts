@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain } from "el
 import { type Core, coreApiMethods, createCore, resolveLanguage } from "../core";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
+import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { startAutoUpdates } from "./updater";
 
@@ -14,8 +15,10 @@ if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
 /** Set by electron-vite in development; absent in a built app. */
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 
-/** Test-only launch flag: lets the smoke tests open UI that nothing else opens yet (the Document viewer). */
+/** Test-only launch flag: lets the smoke tests drive UI directly, e.g. open the Document viewer at a page. */
 const testHooks = process.env.INCARNAMIND_TEST_HOOKS === "1";
+
+registerDocumentScheme();
 
 let core: Core | undefined;
 
@@ -98,6 +101,7 @@ app.whenReady().then(() => {
     return;
   }
   exposeCore(core);
+  serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);
