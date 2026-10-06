@@ -1,8 +1,15 @@
 import { create } from "zustand";
 import type { DeviceSettings, Document, Mind, Settings, SettingsPatch } from "../../core/api";
+import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
+
+/** What the Document viewer shows: one Document, opened at a location. */
+export interface ViewerTarget extends DocumentLocation {
+  /** Counts every `openDocument` call, so opening the same Document again re-applies its location. */
+  request: number;
+}
 
 interface AppState {
   status: Status;
@@ -12,8 +19,10 @@ interface AppState {
   settings: Settings | null;
   /** The last action that failed, shown until dismissed. */
   actionError: string | null;
-  /** The Document viewer panel on the right. Closed on launch; Documents and Citations open it in later tickets. */
+  /** The Document viewer panel on the right. Closed on launch; opening a Document opens it. */
   viewerOpen: boolean;
+  /** The Document the viewer shows, if any. It may since have been deleted: the viewer then says so. */
+  viewerTarget: ViewerTarget | null;
   /** Most recently added first. */
   documents: Document[];
   /** Names of the files the last add couldn't take, shown until dismissed. */
@@ -29,6 +38,11 @@ interface AppState {
   openViewer(): void;
   closeViewer(): void;
   toggleViewer(): void;
+  /**
+   * Shows a Document in the viewer, opening the panel; it replaces whatever the
+   * viewer showed. Optionally at a page range, highlighting a quote (Citations).
+   */
+  openDocument(location: DocumentLocation): void;
   updateSettings(patch: SettingsPatch): Promise<void>;
   /** Changes pane widths on screen only, e.g. while dragging a divider. */
   previewLayout(layout: Partial<DeviceSettings>): void;
@@ -67,6 +81,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     settings: null,
     actionError: null,
     viewerOpen: false,
+    viewerTarget: null,
     documents: [],
     skippedFiles: [],
 
@@ -116,12 +131,30 @@ export const useAppStore = create<AppState>()((set, get) => {
       set({ viewerOpen: true });
     },
 
+    // Closing forgets the Document, so its PDF is released.
     closeViewer() {
-      set({ viewerOpen: false });
+      set({ viewerOpen: false, viewerTarget: null });
     },
 
     toggleViewer() {
-      set((state) => ({ viewerOpen: !state.viewerOpen }));
+      set((state) => ({
+        viewerOpen: !state.viewerOpen,
+        viewerTarget: state.viewerOpen ? null : state.viewerTarget,
+      }));
+    },
+
+    openDocument(location) {
+      const { documentId, pageFrom, pageTo, quote } = location;
+      set((state) => ({
+        viewerOpen: true,
+        viewerTarget: {
+          documentId,
+          pageFrom,
+          pageTo,
+          quote,
+          request: (state.viewerTarget?.request ?? 0) + 1,
+        },
+      }));
     },
 
     updateSettings: (patch) =>
