@@ -1,0 +1,89 @@
+/**
+ * Auto-update from GitHub Releases, with electron-updater.
+ *
+ * A packaged app checks the latest published release once, at startup. Development and
+ * the tests run the app unpackaged, so they never check.
+ *
+ * - Where an update can install itself (Windows, the Linux AppImage, a macOS build signed
+ *   with a Developer ID), it downloads in the background and installs when the User quits.
+ *   Once it's downloaded, the User can restart to install it straight away.
+ * - An unsigned macOS build can't install updates: Squirrel.Mac refuses to update an app
+ *   that isn't signed with a Developer ID. The User is told that a new version is out
+ *   and offered its download page instead.
+ */
+import { execFile } from "node:child_process";
+import { resolve } from "node:path";
+import { app, BrowserWindow, dialog } from "electron";
+import { autoUpdater } from "electron-updater";
+import type { CoreApi, Language } from "../core";
+import { translate } from "../shared/i18n";
+import { systemBrowser } from "./platform";
+
+const RELEASES_PAGE = "https://github.com/junruxiong/IncarnaMind/releases";
+
+type SettingsSource = Pick<CoreApi, "getSettings">;
+
+/** Starts this run's update check in the background. Does nothing in an unpackaged app. */
+export function startAutoUpdates(core: SettingsSource): void {
+  if (!app.isPackaged) return;
+  checkForUpdates(core).catch((error: unknown) => {
+    // Offline, rate-limited, or no release yet: the next start tries again.
+    console.warn("The update check failed:", error);
+  });
+}
+
+async function checkForUpdates(core: SettingsSource): Promise<void> {
+  const installable = await canInstallUpdates();
+  autoUpdater.autoDownload = installable;
+  autoUpdater.autoInstallOnAppQuit = installable;
+
+  // Null when the updater is inactive, e.g. on Linux outside an AppImage.
+  const result = await autoUpdater.checkForUpdates();
+  if (!result?.isUpdateAvailable) return;
+  const { version } = result.updateInfo;
+
+  if (!installable) {
+    const { language } = await core.getSettings();
+    if (await ask(language, "available", version)) {
+      await systemBrowser.open(`${RELEASES_PAGE}/tag/v${version}`);
+    }
+    return;
+  }
+
+  await result.downloadPromise;
+  const { language } = await core.getSettings();
+  if (await ask(language, "ready", version)) autoUpdater.quitAndInstall();
+}
+
+/** Squirrel.Mac only installs updates into an app signed with a Developer ID. */
+function canInstallUpdates(): Promise<boolean> {
+  if (process.platform !== "darwin") return Promise.resolve(true);
+  // …/IncarnaMind.app/Contents/MacOS/IncarnaMind → …/IncarnaMind.app
+  const bundle = resolve(process.execPath, "../../..");
+  return new Promise((done) => {
+    execFile("/usr/bin/codesign", ["--display", "--verbose=2", bundle], (error, _out, details) => {
+      done(!error && /^Authority=Developer ID Application:/m.test(details));
+    });
+  });
+}
+
+/** Asks the User whether to act on the update now. True if they agree. */
+async function ask(
+  language: Language,
+  prompt: "available" | "ready",
+  version: string,
+): Promise<boolean> {
+  const options = {
+    type: "info" as const,
+    message: translate(language, `update.${prompt}.message`, { version }),
+    detail: translate(language, `update.${prompt}.detail`),
+    buttons: [translate(language, `update.${prompt}.confirm`), translate(language, "update.later")],
+    defaultId: 0,
+    cancelId: 1,
+  };
+  const window = BrowserWindow.getAllWindows().find((it) => it.isVisible());
+  const { response } = window
+    ? await dialog.showMessageBox(window, options)
+    : await dialog.showMessageBox(options);
+  return response === 0;
+}
