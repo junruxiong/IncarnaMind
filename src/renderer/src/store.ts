@@ -93,3 +93,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
   };
 });
+
+// Settings can change outside this window (another window, or the core itself), so follow the core's event.
+core.on("settings.changed", (settings) => useAppStore.setState({ settings }));

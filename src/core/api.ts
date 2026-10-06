@@ -58,6 +58,31 @@ export interface CoreApi {
   updateSettings(patch: SettingsPatch): Promise<Settings>;
 }
 
+/**
+ * Events the core pushes to the UI, by name, with their payloads. Tickets that
+ * need to push something (Yjs updates, processing progress, Answer streams)
+ * add their events here. Payloads are plain data, so they survive IPC.
+ */
+export interface CoreEvents {
+  /** The settings in effect changed, e.g. the interface language. */
+  "settings.changed": Settings;
+}
+
+export type CoreEventName = keyof CoreEvents;
+
+export type CoreEventListener<E extends CoreEventName> = (payload: CoreEvents[E]) => void;
+
+/** Stops a listener. Safe to call more than once. */
+export type Unsubscribe = () => void;
+
+/** The push half of the core's public interface. */
+export interface CoreEventSource {
+  on<E extends CoreEventName>(event: E, listener: CoreEventListener<E>): Unsubscribe;
+}
+
+/** What the renderer gets on `window.incarnamind`: every method plus events. */
+export type CoreBridge = CoreApi & CoreEventSource;
+
 export type CoreApiMethod = keyof CoreApi;
 
 // A Record over every method name: adding a method to CoreApi without listing it here fails the type-check.

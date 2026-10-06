@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain } from "electron";
 import { type Core, coreApiMethods, createCore, resolveLanguage } from "../core";
-import { channelFor } from "../shared/bridge";
+import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { createElectronAdapters, systemBrowser } from "./platform";
 
@@ -23,7 +23,10 @@ function isFromOurRenderer(event: IpcMainInvokeEvent): boolean {
   return rendererUrl ? url.startsWith(rendererUrl) : url.startsWith("file://");
 }
 
-/** Serves the core's public interface to the renderer, one IPC channel per method. */
+/**
+ * Serves the core's public interface to the renderer: one IPC channel per method,
+ * and every core event pushed to every window on one event channel.
+ */
 function exposeCore(core: Core): void {
   for (const method of coreApiMethods) {
     ipcMain.handle(channelFor(method), (event, ...args: unknown[]) => {
@@ -31,6 +34,11 @@ function exposeCore(core: Core): void {
       return Reflect.apply(core[method], core, args) as Promise<unknown>;
     });
   }
+  core.onAnyEvent((name, payload) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
+    }
+  });
 }
 
 function createWindow(): BrowserWindow {
