@@ -1,0 +1,145 @@
+/* The Document viewer's styles. Loaded after styles.css (see main.tsx). */
+@reference "../styles.css";
+
+@layer components {
+  /* A quote the Document viewer was opened at (TXT and Markdown). */
+  .quote-highlight {
+    @apply rounded-[3px] bg-amber-200 text-inherit;
+  }
+
+  /* A Markdown Document: the Mind editor's typography, a little smaller. */
+  .document-markdown {
+    @apply text-custom-xs text-gray-800;
+
+    > * + * {
+      margin-top: 0.75em;
+    }
+
+    h1 {
+      @apply my-4 text-2xl font-bold;
+    }
+    h2 {
+      @apply my-3 text-xl font-bold;
+    }
+    h3 {
+      @apply my-2 text-lg font-bold;
+    }
+    h4,
+    h5,
+    h6 {
+      @apply my-1 font-bold;
+    }
+
+    ul {
+      @apply list-disc pl-6;
+    }
+    ol {
+      @apply list-decimal pl-6;
+    }
+
+    blockquote {
+      @apply border-l-2 border-gray-200 pl-3 text-gray-600;
+    }
+
+    a {
+      @apply text-sky-600 underline;
+    }
+
+    code {
+      @apply rounded bg-gray-100 px-1 font-mono text-[0.85em];
+    }
+
+    pre {
+      @apply overflow-x-auto rounded-lg bg-gray-50 px-4 py-3 font-mono text-[12px] leading-5 whitespace-pre;
+    }
+
+    hr {
+      @apply my-6 border-0 border-t-2 border-black/10;
+    }
+  }
+
+  /* A PDF page. Its text layer sizes itself from these (pdf.js's own viewer sets the same). */
+  .pdf-page {
+    --user-unit: 1;
+    --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+    --scale-round-x: 1px;
+    --scale-round-y: 1px;
+  }
+}
+
+/*
+ * pdf.js's text layer: transparent text laid over a page's canvas so it can be
+ * selected. The part of pdf.js's web/pdf_viewer.css (Apache-2.0, Mozilla) that
+ * a text layer needs, with the quote highlight in IncarnaMind's colours.
+ */
+.textLayer {
+  color-scheme: only light;
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+
+  :is(span, br) {
+    color: transparent;
+    position: absolute;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+    user-select: text;
+  }
+
+  > :not(.markedContent),
+  .markedContent span:not(.markedContent) {
+    z-index: 1;
+    --font-height: 0;
+    font-size: calc(var(--text-scale-factor) * var(--font-height));
+    --scale-x: 1;
+    --rotate: 0deg;
+    transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+  }
+
+  .markedContent {
+    display: contents;
+  }
+
+  .highlight {
+    margin: -1px;
+    padding: 1px;
+    background-color: rgb(252 211 77 / 0.45);
+    border-radius: 3px;
+
+    &.appended {
+      position: initial;
+    }
+  }
+
+  ::selection {
+    background: color-mix(in srgb, AccentColor, transparent 50%);
+    color: transparent;
+  }
+
+  br::selection {
+    background: transparent;
+  }
+
+  .endOfContent {
+    display: block;
+    position: absolute;
+    inset: 100% 0 0;
+    z-index: 0;
+    cursor: default;
+    user-select: none;
+  }
+}
