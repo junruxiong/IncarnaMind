@@ -137,10 +137,54 @@ export const migrations: readonly Migration[] = [
       END;
     `,
   },
+  {
+    version: 4,
+    description: "Chat providers and data-flow consent",
+    sql: `
+      -- Chat provider settings without secrets: API keys live in the secrets file (ADR-0003).
+      CREATE TABLE chat_providers (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        base_url TEXT, -- NULL for OpenAI, Anthropic and Google
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX chat_providers_by_server ON chat_providers (kind, coalesce(base_url, ''))
+        WHERE deleted_at IS NULL;
+
+      -- The User's decision on each external data flow, per service.
+      CREATE TABLE data_flow_consents (
+        id TEXT PRIMARY KEY NOT NULL,
+        flow TEXT NOT NULL,
+        service_id TEXT NOT NULL,
+        service_name TEXT NOT NULL,
+        decision TEXT NOT NULL CHECK (decision IN ('accepted', 'declined')),
+        data_kinds TEXT NOT NULL, -- JSON array of the kinds of data accepted
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX data_flow_consents_by_flow ON data_flow_consents (flow, service_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
-/** Brings the database up to the latest schema. Each migration runs in its own transaction. */
+/**
+ * Brings the database up to the latest schema. Each migration runs in its own
+ * transaction. Version numbers must increase but may skip numbers: tickets
+ * built in parallel reserve theirs up front.
+ */
 export function migrate(db: Database, list: readonly Migration[] = migrations): void {
+  list.forEach((migration, index) => {
+    const previous = list[index - 1];
+    if (previous && migration.version <= previous.version) {
+      throw new Error(
+        `Migration ${migration.version} comes after ${previous.version}: versions must increase.`,
+      );
+    }
+  });
   const current = db.get<{ user_version: number }>("PRAGMA user_version")?.user_version ?? 0;
   const latest = list.at(-1)?.version ?? 0;
   if (current > latest) {

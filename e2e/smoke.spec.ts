@@ -2,7 +2,15 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
-import { createDataFolder, dragBy, launchApp, openViewer, removeDataFolder, widthOf } from "./app";
+import {
+  createDataFolder,
+  dismissChatSetup,
+  dragBy,
+  launchApp,
+  openViewer,
+  removeDataFolder,
+  widthOf,
+} from "./app";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -15,6 +23,7 @@ test.afterEach(async () => {
 test("a Mind created before quitting is still there after reopening the app", async () => {
   // First run: create a Mind. It appears in the sidebar and opens in the centre.
   const first = await launchApp(dataDir);
+  await dismissChatSetup(first.window);
   await first.window.getByTestId("new-mind").click();
 
   const created = first.window.getByTestId("mind-list-item");
@@ -40,6 +49,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
   const paragraphs = ["Typed before quitting.", "A second paragraph."];
 
   const first = await launchApp(dataDir);
+  await dismissChatSetup(first.window);
   await first.window.getByTestId("new-mind").click();
   await first.window.getByTestId("mind-title").fill("Field notes");
   const editor = first.window.getByTestId("mind-editor");
@@ -63,6 +73,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
 test("the sidebar lists the most recently edited Mind first, and a deleted Mind leaves it", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;
+  await dismissChatSetup(window);
   const items = window.getByTestId("mind-list-item");
   for (const title of ["Older", "Newer"]) {
     await window.getByTestId("new-mind").click();
@@ -95,6 +106,7 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
 test("the Document viewer is hidden until opened, resizes from its left edge and keeps its width", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;
+  await dismissChatSetup(window);
   const viewer = window.getByTestId("viewer");
   const mindArea = window.getByTestId("mind-area");
 
@@ -142,6 +154,7 @@ test("added files are processed, show as ready in the sidebar, and can be delete
 
     const first = await launchApp(dataDir);
     const { window } = first;
+    await dismissChatSetup(window);
     await window.getByTestId("add-documents-input").setInputFiles([notes, report]);
 
     const items = window.getByTestId("document-list-item");
@@ -165,4 +178,37 @@ test("added files are processed, show as ready in the sidebar, and can be delete
   } finally {
     await removeDataFolder(sources);
   }
+});
+
+test("first-run chat setup appears on a fresh data folder and can be set up later", async () => {
+  const first = await launchApp(dataDir);
+  const { window } = first;
+
+  // No provider is preselected, and no key is needed to get past this screen.
+  const setup = window.getByTestId("chat-setup");
+  await expect(setup).toBeVisible();
+  const providerChoices = setup.getByTestId("provider-form").getByRole("radio");
+  await expect(providerChoices).toHaveCount(4);
+  await expect(setup.getByRole("radio", { checked: true })).toHaveCount(0);
+
+  await setup.getByTestId("chat-setup-later").click();
+  await expect(setup).toBeHidden();
+
+  // Notes and Documents work without a provider; Questions explain what to configure.
+  await window.getByTestId("new-mind").click();
+  await expect(window.getByTestId("mind-pane")).toBeVisible();
+  await expect(window.getByTestId("chat-readiness")).toBeVisible();
+  await first.app.close();
+
+  // "Set up later" is remembered.
+  const second = await launchApp(dataDir);
+  await second.window.getByTestId("mind-list-item").click();
+  await expect(second.window.getByTestId("chat-readiness")).toBeVisible();
+  await expect(second.window.getByTestId("chat-setup")).toBeHidden();
+
+  // The notice opens Settings, where a provider can be set up.
+  await second.window.getByTestId("chat-readiness").getByRole("button").click();
+  await expect(second.window.getByTestId("chat-model-settings")).toBeVisible();
+  await expect(second.window.getByTestId("consent-settings")).toBeVisible();
+  await second.app.close();
 });

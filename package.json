@@ -25,6 +25,10 @@
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.73",
+    "@ai-sdk/google": "4.0.89",
+    "@ai-sdk/openai": "4.0.85",
+    "@ai-sdk/openai-compatible": "3.0.64",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-collaboration": "3.31.4",
     "@tiptap/extensions": "3.31.4",
@@ -32,6 +36,7 @@
     "@tiptap/react": "3.31.4",
     "@tiptap/starter-kit": "3.31.4",
     "@tiptap/y-tiptap": "3.0.9",
+    "ai": "7.0.129",
     "electron-updater": "6.8.10",
     "pdfjs-dist": "6.4.299",
     "react": "19.3.0",

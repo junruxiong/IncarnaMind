@@ -2,52 +2,35 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
-import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import type { Browser, CoreAdapters, Keychain, ProcessLauncher } from "../core";
+import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 
 /**
- * Secrets encrypted with `safeStorage` (backed by the OS keychain) and kept in
- * a small file in the data folder, never in SQLite. Nothing uses it yet.
+ * `safeStorage` encrypts with a key held by the OS secret store: the macOS
+ * Keychain, Windows DPAPI, or GNOME Keyring / KWallet on Linux. On Linux with
+ * no keyring running it falls back to "basic_text", a hard-coded key, which
+ * the core treats as plain text.
  */
-export function createSafeStorageKeychain(file: string): Keychain {
-  const load = async (): Promise<Record<string, string>> => {
-    try {
-      return JSON.parse(await readFile(file, "utf8")) as Record<string, string>;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-      throw error;
+export const safeStorageCipher: SecretCipher = {
+  protection() {
+    if (process.platform === "linux" && safeStorage.getSelectedStorageBackend() === "basic_text") {
+      return "plain-text";
     }
-  };
-  const save = async (entries: Record<string, string>) => {
-    const temporary = `${file}.tmp`;
-    await writeFile(temporary, JSON.stringify(entries), { mode: 0o600 });
-    await rename(temporary, file);
-  };
+    return safeStorage.isEncryptionAvailable() ? "os" : "unavailable";
+  },
+  allowPlainText() {
+    // Without this, safeStorage refuses to encrypt on Linux's basic_text backend.
+    if (process.platform === "linux") safeStorage.setUsePlainTextEncryption(true);
+  },
+  encrypt: (plainText) => safeStorage.encryptString(plainText),
+  decrypt: (cipherText) => safeStorage.decryptString(cipherText),
+};
 
-  return {
-    async get(name) {
-      const encrypted = (await load())[name];
-      return encrypted === undefined
-        ? null
-        : safeStorage.decryptString(Buffer.from(encrypted, "base64"));
-    },
-    async set(name, secret) {
-      if (!safeStorage.isEncryptionAvailable()) {
-        throw new Error("The OS keychain isn't available, so the secret can't be stored safely.");
-      }
-      const entries = await load();
-      entries[name] = safeStorage.encryptString(secret).toString("base64");
-      await save(entries);
-    },
-    async delete(name) {
-      const entries = await load();
-      if (!Object.hasOwn(entries, name)) return;
-      delete entries[name];
-      await save(entries);
-    },
-  };
+/** Secrets encrypted with `safeStorage`, kept in a secrets file in the data folder, never in SQLite. */
+export function createSafeStorageKeychain(dataDir: string): Keychain {
+  return createFileKeychain(join(dataDir, SECRETS_FILE), safeStorageCipher);
 }
 
 export const systemBrowser: Browser = {
@@ -73,7 +56,7 @@ export function createElectronAdapters(): CoreAdapters {
   return {
     paths: { dataDir },
     systemLanguages: () => app.getPreferredSystemLanguages(),
-    keychain: createSafeStorageKeychain(join(dataDir, "keychain.json")),
+    keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     processes: loginShellProcesses,
   };

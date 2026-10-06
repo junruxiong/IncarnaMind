@@ -5,9 +5,12 @@ import { onTestFinished } from "vitest";
 import {
   type Core,
   type CoreAdapters,
+  type CoreEventName,
+  type CoreEvents,
   createCore,
   DATABASE_FILE,
   type Keychain,
+  type SecretProtection,
 } from "../../src/core";
 import { openDatabase, type SqlValue } from "../../src/core/storage";
 
@@ -18,12 +21,33 @@ export async function createTempDataFolder(): Promise<string> {
   return dataDir;
 }
 
-/** An in-memory stand-in for the OS keychain. */
-export function createMemoryKeychain(): Keychain {
+export interface MemoryKeychain extends Keychain {
+  /** What is stored, for assertions. */
+  readonly secrets: ReadonlyMap<string, string>;
+}
+
+/**
+ * An in-memory stand-in for the OS keychain. Like the real one, it refuses to
+ * store secrets when `protection` is "unavailable", or "plain-text" until
+ * `allowPlainText` is called (Linux without a keyring).
+ */
+export function createMemoryKeychain(protection: SecretProtection = "os"): MemoryKeychain {
   const secrets = new Map<string, string>();
+  let plainTextAllowed = false;
+  const assertProtected = () => {
+    if (protection === "unavailable" || (protection === "plain-text" && !plainTextAllowed)) {
+      throw new Error(`The fake keychain refuses to store secrets (${protection}).`);
+    }
+  };
   return {
+    secrets,
+    protection: () => protection,
+    allowPlainText: () => {
+      plainTextAllowed = true;
+    },
     get: async (name) => secrets.get(name) ?? null,
     set: async (name, secret) => {
+      assertProtected();
       secrets.set(name, secret);
     },
     delete: async (name) => {
@@ -51,6 +75,9 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
       spawn: () => {
         throw new Error("Tests can't spawn processes.");
       },
+    },
+    createChatModel: () => {
+      throw new Error("This test didn't provide a chat model.");
     },
     ...overrides,
   });
@@ -94,4 +121,14 @@ export function tickingClock(start = "2026-10-06T09:00:00.000Z"): () => Date {
     time += 1000;
     return date;
   };
+}
+
+/** Resolves with the payload of the next `event` the core emits. */
+export function nextEvent<E extends CoreEventName>(core: Core, event: E): Promise<CoreEvents[E]> {
+  return new Promise((resolve) => {
+    const stop = core.on(event, (payload) => {
+      stop();
+      resolve(payload);
+    });
+  });
 }

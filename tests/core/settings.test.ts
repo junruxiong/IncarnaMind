@@ -7,8 +7,8 @@ describe("Settings", () => {
     const core = startCore(await createTempDataFolder());
 
     expect(await core.getSettings()).toEqual({
-      user: { language: "system" },
-      device: { sidebarWidth: 270, viewerWidth: 420 },
+      user: { language: "system", chatModel: null },
+      device: { sidebarWidth: 270, viewerWidth: 420, chatSetupDismissed: false },
       language: "en",
     });
   });
@@ -54,8 +54,12 @@ describe("Settings", () => {
     await core.updateSettings({ device: { sidebarWidth: 320 } });
     const settings = await core.updateSettings({ user: { language: "zh-CN" } });
 
-    expect(settings.user).toEqual({ language: "zh-CN" });
-    expect(settings.device).toEqual({ sidebarWidth: 320, viewerWidth: 420 });
+    expect(settings.user).toEqual({ language: "zh-CN", chatModel: null });
+    expect(settings.device).toEqual({
+      sidebarWidth: 320,
+      viewerWidth: 420,
+      chatSetupDismissed: false,
+    });
   });
 
   test("settings survive a restart", async () => {
@@ -63,15 +67,15 @@ describe("Settings", () => {
     const before = startCore(dataDir);
     await before.updateSettings({
       user: { language: "zh-CN" },
-      device: { sidebarWidth: 300, viewerWidth: 500 },
+      device: { sidebarWidth: 300, viewerWidth: 500, chatSetupDismissed: true },
     });
     before.close();
 
     const after = startCore(dataDir);
 
     expect(await after.getSettings()).toEqual({
-      user: { language: "zh-CN" },
-      device: { sidebarWidth: 300, viewerWidth: 500 },
+      user: { language: "zh-CN", chatModel: null },
+      device: { sidebarWidth: 300, viewerWidth: 500, chatSetupDismissed: true },
       language: "zh-CN",
     });
   });
@@ -83,6 +87,14 @@ describe("Settings", () => {
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
     { name: "a width that isn't a number", patch: { device: { viewerWidth: "wide" } } },
+    {
+      name: "a default model without a model",
+      patch: { user: { chatModel: { providerId: "x" } } },
+    },
+    {
+      name: "a default model on a provider that doesn't exist",
+      patch: { user: { chatModel: { providerId: "no-such-provider", modelId: "gpt-5.4-mini" } } },
+    },
   ])("rejects $name and changes nothing", async ({ patch }) => {
     const core = startCore(await createTempDataFolder());
     const before = await core.getSettings();
