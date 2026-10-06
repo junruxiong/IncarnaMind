@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import type { CoreApi, CoreEventSource, Unsubscribe } from "./api";
-import { createDocuments } from "./documents";
+import { createDocuments, type DocumentFile } from "./documents";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
@@ -13,6 +13,13 @@ export const DATABASE_FILE = "incarnamind.db";
 
 /** The core as its host sees it: the public interface (methods and events) plus host-only hooks. */
 export interface Core extends CoreApi, CoreEventSource {
+  /**
+   * Opens a Document's stored file for reading, for the host to serve to the UI
+   * (the desktop app streams it over a custom protocol, so files never cross IPC).
+   * Only live Documents: throws NotFoundError for an unknown or deleted Document,
+   * or if its file is missing from the data folder.
+   */
+  openDocumentFile(documentId: string): Promise<DocumentFile>;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Closes the database and drops all listeners. The core can't be used afterwards. Safe to call twice. */
@@ -99,6 +106,7 @@ export function createCore(adapters: CoreAdapters): Core {
     renameDocument: async (id, name) => documents.rename(id, name),
     deleteDocument: (id) => documents.delete(id),
     searchPassages: async (query, limit) => documents.search(query, limit),
+    openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     close: () => {

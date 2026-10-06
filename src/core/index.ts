@@ -12,5 +12,6 @@ export type {
 } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
+export type { DocumentFile } from "./documents";
 export { InvalidInputError, NotFoundError } from "./errors";
 export * from "./language";

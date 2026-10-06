@@ -3,9 +3,11 @@
  * SHA-256 of its content: `documents/<hash>`.
  */
 import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { createReadStream, createWriteStream, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { access, rename, rm } from "node:fs/promises";
 import { extname, join } from "node:path";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { DocumentKind } from "../api";
 
@@ -84,6 +86,21 @@ export function createDocumentFiles(dataDir: string) {
         await rm(temporary, { force: true });
         throw error;
       }
+    },
+
+    /**
+     * Opens a stored file for reading, as a Web stream of its bytes. Rejects (e.g.
+     * with ENOENT) if the file can't be opened, before any byte is read.
+     */
+    async open(contentHash: string): Promise<ReadableStream<Uint8Array>> {
+      const stream = createReadStream(pathFor(contentHash));
+      try {
+        await once(stream, "open");
+      } catch (error) {
+        stream.destroy();
+        throw error;
+      }
+      return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
     },
 
     /** Removes a stored file. A failure (e.g. Windows locks it) leaves it for `prepare` next time. */
