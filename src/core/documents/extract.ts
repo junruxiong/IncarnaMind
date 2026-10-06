@@ -5,6 +5,7 @@
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import type { DocumentFailureReason, DocumentKind } from "../api";
+import { decodeText } from "./decode";
 import type { PageText } from "./passages";
 import { CJK } from "./text";
 
@@ -30,38 +31,10 @@ export async function extractText(kind: DocumentKind, bytes: Uint8Array): Promis
     const pages = await extractPdf(bytes);
     return { pageCount: pages.length, pages };
   }
-  return { pageCount: null, pages: [{ page: null, text: decodeText(bytes) }] };
-}
-
-/**
- * Decodes a TXT or Markdown file: UTF-8 or UTF-16 with a byte-order mark,
- * otherwise UTF-8, falling back to GB18030 (common for Chinese text files).
- */
-export function decodeText(bytes: Uint8Array): string {
-  const encoding =
-    bytes[0] === 0xff && bytes[1] === 0xfe
-      ? "utf-16le"
-      : bytes[0] === 0xfe && bytes[1] === 0xff
-        ? "utf-16be"
-        : undefined;
-  let text: string | undefined;
-  if (encoding) {
-    text = new TextDecoder(encoding).decode(bytes);
-  } else {
-    for (const candidate of ["utf-8", "gb18030"]) {
-      try {
-        text = new TextDecoder(candidate, { fatal: true }).decode(bytes);
-        break;
-      } catch {
-        // Not this encoding; try the next one.
-      }
-    }
-    text ??= new TextDecoder("utf-8").decode(bytes);
-  }
-  if (text.includes("\u0000")) {
+  const text = decodeText(bytes);
+  if (text === null)
     throw new ExtractionError("unreadable", "The file holds binary data, not text.");
-  }
-  return text.replace(/\r\n?/g, "\n");
+  return { pageCount: null, pages: [{ page: null, text }] };
 }
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createDocuments, parseListOptions } from "./documents";
+import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createFolders, parseFolderId } from "./folders";
@@ -26,6 +26,13 @@ export const DATABASE_FILE = "incarnamind.db";
 
 /** The core as its host sees it: the public interface (methods and events) plus host-only hooks. */
 export interface Core extends CoreApi, CoreEventSource {
+  /**
+   * Opens a Document's stored file for reading, for the host to serve to the UI
+   * (the desktop app streams it over a custom protocol, so files never cross IPC).
+   * Only live Documents: throws NotFoundError for an unknown or deleted Document,
+   * or if its file is missing from the data folder.
+   */
+  openDocumentFile(documentId: string): Promise<DocumentFile>;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -245,6 +252,7 @@ export function createCore(adapters: CoreAdapters): Core {
       foldersChanged();
       if (unfiled.length > 0) events.emit("documents.moved", unfiled);
     },
+    openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
