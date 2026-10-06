@@ -1,0 +1,114 @@
+name: Release
+
+# Pushing a version tag (v1.2.3, v1.2.3-beta.1) builds the installers on macOS, Windows and
+# Linux and uploads them, with the auto-update metadata, to a draft GitHub Release.
+# A maintainer then reviews the draft and publishes it. See "Cutting a release" in the README.
+on:
+  push:
+    # Version tags only: v1-python-cli, the tag of the old Python tool, doesn't match.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Create the draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the tag matches package.json
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the package.json version ($version). Tag the commit that sets the version as v$version."
+            exit 1
+          fi
+      # Created once, up front, so the three builds below upload to the same release
+      # instead of racing to create one each.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "A release for $GITHUB_REF_NAME exists already; the builds upload to it."
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes \
+              --title "IncarnaMind ${GITHUB_REF_NAME#v}"
+          fi
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: draft
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows
+            os: windows-latest
+          - name: Linux
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # Signs with the Developer ID certificate and notarizes when the secrets exist.
+      # Without the certificate, the app is ad-hoc signed instead: it still opens (see the
+      # README), but it can't update itself, and the job still succeeds.
+      - name: Package and publish (macOS)
+        if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A base64-encoded .p12 export of a "Developer ID Application" certificate, and its password.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization with an Apple ID and an app-specific password...
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # ...or with an App Store Connect API key (the contents of the .p8 file).
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          signing=""
+          if [ -z "$CSC_LINK" ]; then
+            echo "::warning title=Unsigned macOS build::No CSC_LINK secret, so the macOS app is ad-hoc signed and not notarized. It can't update itself."
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            signing="-c.mac.identity=- -c.mac.notarize=false"
+          else
+            if [ -n "$APPLE_API_KEY_P8" ]; then
+              # electron-builder wants the API key as a file.
+              export APPLE_API_KEY="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+              printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY"
+            elif [ -z "$APPLE_ID" ]; then
+              echo "::warning title=macOS build not notarized::The app is signed, but there are no notarization secrets, so Gatekeeper will still block it."
+            fi
+          fi
+          # $signing is unquoted on purpose: it holds zero or two arguments.
+          npx electron-builder --mac --arm64 --x64 --publish always $signing
+
+      # Windows is unsigned in v1 (SmartScreen warns, see the README); Linux needs no signing.
+      - name: Package and publish (Windows)
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --x64 --publish always
+
+      - name: Package and publish (Linux)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --linux --x64 --publish always
