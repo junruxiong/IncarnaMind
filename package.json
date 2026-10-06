@@ -23,6 +23,11 @@
     "test:smoke": "electron-vite build && playwright test"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.73",
+    "@ai-sdk/google": "4.0.89",
+    "@ai-sdk/openai": "4.0.85",
+    "@ai-sdk/openai-compatible": "3.0.64",
+    "ai": "7.0.129",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zustand": "5.0.15"

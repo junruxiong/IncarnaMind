@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DeviceSettings, Settings, UserSettings } from "./api";
+import type { ChatModelChoice, DeviceSettings, Settings, UserSettings } from "./api";
 import { InvalidInputError, isRecord } from "./errors";
 import { isLanguagePreference, resolveLanguage } from "./language";
 import type { Database } from "./storage";
@@ -18,24 +18,52 @@ interface Scope<T> {
 const isPaneWidth = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 10_000;
 
+const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
+
+const isNonBlankText = (value: unknown): value is string =>
+  typeof value === "string" && value.trim() !== "" && value.length <= 500;
+
+/** Checks the shape only; the core checks that the provider exists. */
+export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
+  isRecord(value) &&
+  Object.keys(value).length === 2 &&
+  isNonBlankText(value.providerId) &&
+  isNonBlankText(value.modelId);
+
 const userScope: Scope<UserSettings> = {
   name: "user",
   table: "user_settings",
-  defaults: { language: "system" },
-  validators: { language: isLanguagePreference },
+  defaults: { language: "system", chatModel: null },
+  validators: {
+    language: isLanguagePreference,
+    chatModel: (value): value is ChatModelChoice | null =>
+      value === null || isChatModelChoice(value),
+  },
 };
 
 const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
-  defaults: { sidebarWidth: 270, viewerWidth: 420 },
-  validators: { sidebarWidth: isPaneWidth, viewerWidth: isPaneWidth },
+  defaults: { sidebarWidth: 270, viewerWidth: 420, chatSetupDismissed: false },
+  validators: {
+    sidebarWidth: isPaneWidth,
+    viewerWidth: isPaneWidth,
+    chatSetupDismissed: isBoolean,
+  },
 };
 
 function validatorFor<T>(scope: Scope<T>, key: string) {
   return Object.hasOwn(scope.validators, key)
     ? (scope.validators[key as keyof T] as (value: unknown) => boolean)
     : undefined;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function read<T>(db: Database, scope: Scope<T>): T {
@@ -47,13 +75,8 @@ function read<T>(db: Database, scope: Scope<T>): T {
     // Keys this version doesn't know (e.g. written by a newer version) are left alone.
     const isValid = validatorFor(scope, row.key);
     if (!isValid) continue;
-    let value: unknown;
-    try {
-      value = JSON.parse(row.value);
-    } catch {
-      continue;
-    }
-    if (isValid(value)) values[row.key] = value;
+    const value = parseJson(row.value);
+    if (value !== undefined && isValid(value)) values[row.key] = value;
   }
   return values as T;
 }
@@ -91,6 +114,8 @@ function write(db: Database, table: string, key: string, value: unknown, at: str
   }
 }
 
+export type SettingsStore = ReturnType<typeof createSettings>;
+
 export function createSettings(
   db: Database,
   now: () => string,
@@ -124,6 +149,23 @@ export function createSettings(
         for (const [table, key, value] of changes) write(db, table, key, value, at);
       });
       return get();
+    },
+
+    /**
+     * A per-device value the core keeps for itself, outside `DeviceSettings`,
+     * so `updateSettings` can't change it (e.g. accepting plain-text secrets).
+     */
+    readDeviceValue(key: string): unknown {
+      const row = db.get<{ value: string }>(
+        `SELECT value FROM ${deviceScope.table} WHERE key = ? AND deleted_at IS NULL`,
+        [key],
+      );
+      return row ? parseJson(row.value) : undefined;
+    },
+
+    writeDeviceValue(key: string, value: unknown): void {
+      if (validatorFor(deviceScope, key)) throw new Error(`"${key}" is a device setting.`);
+      write(db, deviceScope.table, key, value, now());
     },
   };
 }
