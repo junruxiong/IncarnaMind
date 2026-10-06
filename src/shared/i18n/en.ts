@@ -17,6 +17,13 @@ export const en = {
   "mind.untitled": "Untitled",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
+  "mind.title.label": "Mind title",
+  "mind.editor.label": "Mind content",
+  "mind.editor.placeholder": "Start writing…",
+  "mind.delete": "Delete Mind",
+  "mind.delete.body": "“{title}” will be removed from your Minds.",
+  "mind.delete.confirm": "Delete",
+  "mind.delete.cancel": "Cancel",
 
   "viewer.label": "Document viewer",
   "viewer.close": "Close the Document viewer",

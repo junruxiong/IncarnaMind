@@ -1,6 +1,9 @@
+import { useState } from "react";
+import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { GitHubIcon, LogoIcon, MindIcon, PlusIcon, SettingsIcon } from "./icons";
+import { DeleteMindDialog } from "./DeleteMindDialog";
+import { GitHubIcon, LogoIcon, MindIcon, PlusIcon, SettingsIcon, TrashIcon } from "./icons";
 
 const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
 
@@ -13,6 +16,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
   const openMindId = useAppStore((state) => state.openMindId);
   const createMind = useAppStore((state) => state.createMind);
   const openMind = useAppStore((state) => state.openMind);
+  const [confirmingDelete, setConfirmingDelete] = useState<Mind | null>(null);
 
   return (
     <aside
@@ -46,14 +50,14 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
             {minds.map((mind) => {
               const isOpen = mind.id === openMindId;
               return (
-                <li key={mind.id}>
+                <li key={mind.id} className="group relative">
                   <button
                     type="button"
                     data-testid="mind-list-item"
                     data-mind-id={mind.id}
                     aria-current={isOpen ? "page" : undefined}
                     onClick={() => openMind(mind.id)}
-                    className={`my-[1px] flex w-full items-center gap-[6px] rounded-[9px] px-1 py-[5px] text-left text-sm ${
+                    className={`my-[1px] flex w-full items-center gap-[6px] rounded-[9px] py-[5px] pr-7 pl-1 text-left text-sm ${
                       isOpen ? "bg-gray-200" : "hover:bg-gray-100"
                     }`}
                   >
@@ -61,6 +65,16 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
                     <span className={`truncate ${mind.title ? "text-gray-700" : "text-gray-500"}`}>
                       {mind.title || t("mind.untitled")}
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="delete-mind"
+                    aria-label={t("mind.delete")}
+                    title={t("mind.delete")}
+                    onClick={() => setConfirmingDelete(mind)}
+                    className="absolute top-1/2 right-1 -translate-y-1/2 rounded-[9px] p-[3px] text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-gray-300 hover:text-gray-700 focus-visible:opacity-100"
+                  >
+                    <TrashIcon className="size-[14px]" />
                   </button>
                 </li>
               );
@@ -79,6 +93,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
           <span className="text-[11px]">{t("sidebar.github")}</span>
         </a>
       </footer>
+      <DeleteMindDialog mind={confirmingDelete} onClose={() => setConfirmingDelete(null)} />
     </aside>
   );
 }
