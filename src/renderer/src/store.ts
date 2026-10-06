@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { DeviceSettings, Mind, Settings, SettingsPatch } from "../../core/api";
-import { core } from "./core";
+import type { DeviceSettings, Document, Mind, Settings, SettingsPatch } from "../../core/api";
+import { core, files } from "./core";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -14,6 +14,10 @@ interface AppState {
   actionError: string | null;
   /** The Document viewer panel on the right. Closed on launch; Documents and Citations open it in later tickets. */
   viewerOpen: boolean;
+  /** Most recently added first. */
+  documents: Document[];
+  /** Names of the files the last add couldn't take, shown until dismissed. */
+  skippedFiles: string[];
 
   load(): Promise<void>;
   createMind(): Promise<void>;
@@ -25,9 +29,22 @@ interface AppState {
   /** Changes pane widths on screen only, e.g. while dragging a divider. */
   previewLayout(layout: Partial<DeviceSettings>): void;
   dismissActionError(): void;
+  /** Adds dropped or picked files as Documents. */
+  addDocuments(picked: readonly File[]): Promise<void>;
+  renameDocument(id: string, name: string): Promise<void>;
+  deleteDocument(id: string): Promise<void>;
+  dismissSkippedFiles(): void;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const fileName = (path: string) => path.split(/[\\/]/).at(-1) ?? path;
+
+/** Puts a Document in the list: in place if it's there, otherwise first. */
+const upsert = (documents: Document[], item: Document) =>
+  documents.some((each) => each.id === item.id)
+    ? documents.map((each) => (each.id === item.id ? item : each))
+    : [item, ...documents];
 
 export const useAppStore = create<AppState>()((set, get) => {
   /** Runs an action, reporting a failure instead of throwing. */
@@ -46,11 +63,17 @@ export const useAppStore = create<AppState>()((set, get) => {
     settings: null,
     actionError: null,
     viewerOpen: false,
+    documents: [],
+    skippedFiles: [],
 
     async load() {
       try {
-        const [minds, settings] = await Promise.all([core.listMinds(), core.getSettings()]);
-        set({ minds, settings, status: { kind: "ready" } });
+        const [minds, settings, documents] = await Promise.all([
+          core.listMinds(),
+          core.getSettings(),
+          core.listDocuments(),
+        ]);
+        set({ minds, settings, documents, status: { kind: "ready" } });
       } catch (error) {
         set({ status: { kind: "failed", message: messageOf(error) } });
       }
@@ -91,8 +114,57 @@ export const useAppStore = create<AppState>()((set, get) => {
     dismissActionError() {
       set({ actionError: null });
     },
+
+    addDocuments: (picked) =>
+      attempt(async () => {
+        const paths: string[] = [];
+        const notOnDisk: string[] = [];
+        for (const file of picked) {
+          const path = files.pathForFile(file);
+          if (path) paths.push(path);
+          else notOnDisk.push(file.name);
+        }
+        const result =
+          paths.length > 0 ? await core.addDocuments(paths) : { documents: [], skipped: [] };
+        set((state) => {
+          // Status events may already have brought newer copies of these; keep those.
+          const known = new Set(state.documents.map((each) => each.id));
+          const added = new Map<string, Document>();
+          for (const item of result.documents) {
+            if (!known.has(item.id)) added.set(item.id, item);
+          }
+          return {
+            documents: [...[...added.values()].reverse(), ...state.documents],
+            skippedFiles: [
+              ...notOnDisk,
+              ...result.skipped.map((skipped) => fileName(skipped.path)),
+            ],
+          };
+        });
+      }),
+
+    renameDocument: (id, name) =>
+      attempt(async () => {
+        const renamed = await core.renameDocument(id, name);
+        set((state) => ({ documents: upsert(state.documents, renamed) }));
+      }),
+
+    deleteDocument: (id) =>
+      attempt(async () => {
+        await core.deleteDocument(id);
+        set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
+      }),
+
+    dismissSkippedFiles() {
+      set({ skippedFiles: [] });
+    },
   };
 });
 
 // Settings can change outside this window (another window, or the core itself), so follow the core's event.
 core.on("settings.changed", (settings) => useAppStore.setState({ settings }));
+
+// Processing happens in the background: follow each Document's status as the core reports it.
+core.on("document.status", (changed) =>
+  useAppStore.setState((state) => ({ documents: upsert(state.documents, changed) })),
+);

@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import type { DocumentKind } from "../../../core/api";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -29,6 +30,50 @@ export function MindIcon(props: IconProps) {
     <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
       <rect x="2.5" y="1.5" width="11" height="13" rx="2" fill="#bfdbfe" stroke="#3b82f6" />
       <path d="M5.5 5h5M5.5 8h5M5.5 11h3" stroke="#3b82f6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** A page with a folded corner: red for PDFs, indigo for text and Markdown. */
+export function DocumentIcon({ kind, ...props }: IconProps & { kind: DocumentKind }) {
+  const [fill, stroke] = kind === "pdf" ? ["#fee2e2", "#ef4444"] : ["#e0e7ff", "#6366f1"];
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
+      <path
+        d="M4.5 1.5h5l3 3v9a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"
+        fill={fill}
+        stroke={stroke}
+        strokeLinejoin="round"
+      />
+      <path d="M9.5 1.5v3h3" fill="none" stroke={stroke} strokeLinejoin="round" />
+      <path d="M6 8.5h4M6 11h4" stroke={stroke} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10.5 2.5l3 3L6 13H3v-3z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M2.5 4.5h11M6.5 4.5v-2h3v2M4 4.5l.7 9h6.6l.7-9"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

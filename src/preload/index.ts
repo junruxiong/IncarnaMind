@@ -3,7 +3,7 @@
  * Runs sandboxed with context isolation: the renderer gets these functions and
  * nothing else from Node or Electron.
  */
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import {
   type CoreApi,
   type CoreBridge,
@@ -11,7 +11,13 @@ import {
   type CoreEventName,
   coreApiMethods,
 } from "../core/api";
-import { BRIDGE_KEY, channelFor, EVENT_CHANNEL } from "../shared/bridge";
+import {
+  BRIDGE_KEY,
+  channelFor,
+  EVENT_CHANNEL,
+  FILES_BRIDGE_KEY,
+  type FilesBridge,
+} from "../shared/bridge";
 
 const methods = Object.fromEntries(
   coreApiMethods.map((method) => [
@@ -49,3 +55,10 @@ const bridge: CoreBridge = {
 };
 
 contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);
+
+// A sandboxed renderer can't see where a dropped or picked file lives; Electron's preload can.
+const files: FilesBridge = {
+  pathForFile: (file) => webUtils.getPathForFile(file),
+};
+
+contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
