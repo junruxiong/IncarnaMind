@@ -1,5 +1,5 @@
-import { readFile, realpath, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
@@ -89,4 +89,6 @@ test("Open in default app opens a copy named after the Document, not its stored 
   expect(await realpath(opened ?? "")).not.toContain(await realpath(dataDir));
   expect(new Uint8Array(await readFile(opened ?? ""))).toEqual(REPORT);
   await app.close();
+  // The app would remove it a day later; the test doesn't leave it behind.
+  if (opened) await rm(dirname(opened), { recursive: true, force: true });
 });
