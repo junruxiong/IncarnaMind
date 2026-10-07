@@ -3,6 +3,7 @@
  * returns. The evaluation itself needs the real model and isn't part of
  * `npm test`; its scoring is, since a mistake there would skew every report.
  */
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   type AnswerRecord,
@@ -33,8 +34,18 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
   ...overrides,
 });
 
+import { readConfig } from "../../eval/lib/config";
+import { loadEvaluationSet } from "../../eval/lib/evaluationSet";
 import { reviewerSheet } from "../../eval/lib/report";
-import { checkPassage, isHit } from "../../eval/lib/retrieval";
+import {
+  checkPassage,
+  isHit,
+  modesOf,
+  type QuestionResult,
+  scoreRanking,
+  summarise,
+} from "../../eval/lib/retrieval";
+import { RERANKING_MODEL_CANDIDATES } from "../../src/core";
 
 const MARK = "\uE000";
 
@@ -119,6 +130,93 @@ describe("The retrieval hit rule", () => {
     expect(checkPassage(passage({ text: "Trade slowed." }), expected, "doc-1")).toMatchObject({
       hasQuote: false,
     });
+  });
+
+  test("a ranking is a hit in its top 5, and a near miss shows its rank in the top 20", () => {
+    const miss = passage({ documentId: "doc-2" });
+    const ranked = (at: number) =>
+      Array.from({ length: 20 }, (_, index) => (index === at ? passage({}) : miss));
+    expect(scoreRanking(ranked(4), expected, "doc-1")).toMatchObject({ hit: true, rank: 5 });
+    expect(scoreRanking(ranked(5), expected, "doc-1")).toMatchObject({ hit: false, rank: 6 });
+    expect(scoreRanking([miss], expected, "doc-1")).toMatchObject({ hit: false, rank: null });
+    expect(scoreRanking(ranked(0), expected, "doc-1").top).toHaveLength(5);
+  });
+});
+
+describe("Retrieval tallies", () => {
+  const result = (
+    id: string,
+    modes: QuestionResult["modes"],
+    extra: Partial<QuestionResult> = {},
+  ): QuestionResult => ({
+    id,
+    language: id.startsWith("zh") ? "zh" : "en",
+    crossLingual: id.startsWith("xl"),
+    question: id,
+    modes,
+    ...extra,
+  });
+  const at = (rank: number | null) => ({ hit: rank !== null && rank <= 5, rank, top: [] });
+
+  test("reranked modes are tallied like the others; a translated second query counts when either search hits", () => {
+    const results = [
+      result("en-01", { hybrid: at(7), "rerank:mmarco-minilm": at(2) }),
+      result("zh-01", { hybrid: at(1), "rerank:mmarco-minilm": at(1) }),
+      result(
+        "xl-01",
+        { hybrid: at(null), "rerank:mmarco-minilm": at(null) },
+        { translated: { hybrid: at(3), "rerank:mmarco-minilm": at(9) } },
+      ),
+      result(
+        "xl-02",
+        { hybrid: at(4), "rerank:mmarco-minilm": at(1) },
+        { translated: { hybrid: at(null), "rerank:mmarco-minilm": at(1) } },
+      ),
+      // No translation: it isn't in the translated tally.
+      result("xl-03", { hybrid: at(2), "rerank:mmarco-minilm": at(2) }),
+    ];
+
+    const summary = summarise(results);
+
+    expect(modesOf(results)).toEqual(["hybrid", "rerank:mmarco-minilm"]);
+    expect(summary.hybrid).toEqual({
+      en: { hits: 0, total: 1 },
+      zh: { hits: 1, total: 1 },
+      core: { hits: 1, total: 2 },
+      crossLingual: { hits: 2, total: 3 },
+      crossLingualTranslated: { hits: 2, total: 2 },
+    });
+    expect(summary["rerank:mmarco-minilm"]).toMatchObject({
+      en: { hits: 1, total: 1 },
+      crossLingual: { hits: 2, total: 3 },
+      crossLingualTranslated: { hits: 1, total: 2 },
+    });
+    // Keyword search never ran on the translated query: no tally rather than a misleading one.
+    expect(summarise([result("xl-01", { keyword: at(1) })]).keyword?.crossLingualTranslated).toBe(
+      null,
+    );
+  });
+});
+
+describe("The evaluation's settings for reranking", () => {
+  test("INCARNAMIND_EVAL_RERANK names candidates, or all of them; none by default", () => {
+    expect(readConfig("/repo", {}).rerank).toEqual([]);
+    expect(
+      readConfig("/repo", { INCARNAMIND_EVAL_RERANK: "all" }).rerank.map((each) => each.id),
+    ).toEqual(RERANKING_MODEL_CANDIDATES.map((each) => each.id));
+    expect(
+      readConfig("/repo", { INCARNAMIND_EVAL_RERANK: "bge-m3, mmarco-minilm" }).rerank.map(
+        (each) => each.id,
+      ),
+    ).toEqual(["bge-m3", "mmarco-minilm"]);
+    expect(() => readConfig("/repo", { INCARNAMIND_EVAL_RERANK: "jina-v2" })).toThrow(/jina-v2/);
+  });
+
+  test("every cross-lingual Question has a translated query, and only those do", () => {
+    const set = loadEvaluationSet(fileURLToPath(new URL("../..", import.meta.url)));
+    for (const question of set.questions) {
+      expect(question.translatedQuery !== undefined, question.id).toBe(question.crossLingual);
+    }
   });
 });
 
