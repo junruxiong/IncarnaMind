@@ -8,6 +8,13 @@
  */
 import type { CitationAttributes, CitationCheck, CitationCheckReason, Document } from "../core/api";
 import type { MessageKey } from "./i18n";
+import {
+  citationLocation,
+  englishLocation,
+  formatLocation,
+  readsIn,
+  type Translate,
+} from "./locations";
 
 export interface CitationState {
   /** What the badge shows. */
@@ -61,41 +68,46 @@ export function citationState(
   return { check, reason, documentId: live.id, changedAfterCited };
 }
 
-/** The cited pages, e.g. "3" or "3–4"; null for a Document without pages. */
-export function citedPages(attributes: Partial<CitationAttributes>): string | null {
-  const { pageFrom, pageTo } = attributes;
-  if (typeof pageFrom !== "number") return null;
-  return typeof pageTo === "number" && pageTo !== pageFrom
-    ? `${pageFrom}–${pageTo}`
-    : `${pageFrom}`;
+/**
+ * A Citation's short Location label in a language ("p. 3", "slide 4",
+ * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134"); null for a
+ * whole TXT or Markdown file cited before Locations.
+ */
+export function citedLocation(
+  attributes: Partial<CitationAttributes>,
+  t: Translate,
+): string | null {
+  const location = citationLocation(attributes);
+  return location ? formatLocation(location, t) : null;
 }
 
 /** A Citation as plain text, e.g. "[Attention Is All You Need, p. 3]", for copying as text. */
 export function citationReference(attributes: Partial<CitationAttributes>): string {
   const name = attributes.documentName;
   if (!name) return "";
-  const pages = citedPages(attributes);
-  return pages ? `[${name}, p. ${pages}]` : `[${name}]`;
+  const location = citationLocation(attributes);
+  return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
 }
 
-/** The message key and parameters of a Citation's badge. */
+/** The message key and parameters of a Citation's badge, its Location worded with `t`. */
 export function badgeMessage(
   state: CitationState,
   attributes: Partial<CitationAttributes>,
+  t: Translate,
 ): { key: MessageKey; params?: Record<string, string> } {
-  const pages = citedPages(attributes);
+  const location = citationLocation(attributes);
   const document = attributes.documentName ?? "";
+  const params: Record<string, string> = location
+    ? { location: formatLocation(location, t) }
+    : { document };
+  const where = location === null ? "document" : readsIn(location) ? "in" : "on";
   switch (state.check) {
     case "checking":
       return { key: "citation.badge.checking" };
     case "found":
-      return pages
-        ? { key: "citation.badge.found.page", params: { pages } }
-        : { key: "citation.badge.found.document", params: { document } };
+      return { key: `citation.badge.found.${where}`, params };
     case "not-found":
-      return pages
-        ? { key: "citation.badge.notFound.page", params: { pages } }
-        : { key: "citation.badge.notFound.document", params: { document } };
+      return { key: `citation.badge.notFound.${where}`, params };
     case "cant-check":
       return { key: "citation.badge.cantCheck" };
   }

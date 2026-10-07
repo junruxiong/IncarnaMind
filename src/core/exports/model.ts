@@ -24,7 +24,7 @@ export interface Marks {
 
 /** A Citation's footnote: one per Citation, in the order they appear. */
 export interface Footnote {
-  /** The Document's name and the cited pages, e.g. "Tides, p. 12–13". */
+  /** The Document's name and the Citation's Location, e.g. "Tides, p. 12–13" or "Deck, slide 4". */
   source: string;
   /** The quote wasn't found, or can't be checked: the footnote gets the "[unverified]" marker. */
   unverified: boolean;

@@ -11,8 +11,10 @@ import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } fro
 export interface ShownPassage {
   id: string;
   document: string;
-  /** "3" or "3-4"; null for a Document without pages. */
+  /** A PDF's: "3" or "3-4". Null for other kinds, which have a `location`. */
   pages: string | null;
+  /** Every kind but PDF: where the Passage is, e.g. "slides 3–4" or "lines 1–12". */
+  location: string | null;
   text: string;
 }
 
@@ -20,13 +22,14 @@ export interface ShownPassage {
 export function shownPassages(result: string): ShownPassage[] {
   const passages: ShownPassage[] = [];
   const pattern =
-    /<passage id="([^"]+)" document="([^"]*)"(?: pages="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+    /<passage id="([^"]+)" document="([^"]*)"(?: pages="([^"]+)")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
   for (const match of result.matchAll(pattern)) {
     passages.push({
       id: match[1] as string,
       document: match[2] as string,
       pages: match[3] ?? null,
-      text: match[4] as string,
+      location: match[4] ?? null,
+      text: match[5] as string,
     });
   }
   return passages;

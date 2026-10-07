@@ -1,14 +1,16 @@
 import { describe, expect, test } from "vitest";
 import type { CitationAttributes } from "../../src/core/api";
+import type { Language } from "../../src/core/language";
 import {
   badgeMessage,
   citationReference,
   citationState,
-  citedPages,
+  citedLocation,
 } from "../../src/shared/citations";
-import { translate } from "../../src/shared/i18n";
+import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { findQuoteInPages } from "../../src/shared/quoteMatch";
 
+/** A Citation from before Locations: its pages say where it points. */
 const found: CitationAttributes = {
   passageId: "passage",
   documentId: "tides",
@@ -16,19 +18,26 @@ const found: CitationAttributes = {
   contentHash: "abc",
   pageFrom: 12,
   pageTo: 13,
+  location: null,
   quote: "Spring tides happen at new moon.",
   check: "found",
   checkReason: null,
 };
 
+/** Words in a language, as the renderer's `t` does. */
+const in_ = (language: Language) => (key: MessageKey, params?: MessageParams) =>
+  translate(language, key, params);
+
 const words = (
   attributes: Partial<CitationAttributes>,
   documents = [{ id: "tides", contentHash: "abc" }],
 ) => {
-  const message = badgeMessage(citationState(attributes, documents), attributes);
+  const state = citationState(attributes, documents);
+  const en = badgeMessage(state, attributes, in_("en"));
+  const zh = badgeMessage(state, attributes, in_("zh-CN"));
   return {
-    en: translate("en", message.key, message.params),
-    zh: translate("zh-CN", message.key, message.params),
+    en: translate("en", en.key, en.params),
+    zh: translate("zh-CN", zh.key, zh.params),
   };
 };
 
@@ -92,9 +101,75 @@ describe("A Citation's badge", () => {
   });
 
   test("names its source in plain text, for copying and for Question context", () => {
-    expect(citedPages(found)).toBe("12–13");
+    expect(citedLocation(found, in_("en"))).toBe("p. 12–13");
     expect(citationReference(found)).toBe("[Tides, p. 12–13]");
     expect(citationReference({ ...found, pageFrom: null, pageTo: null })).toBe("[Tides]");
+  });
+});
+
+describe("A Citation's Location label (ADR-0011)", () => {
+  const at = (location: CitationAttributes["location"], name = "Deck") => ({
+    ...found,
+    documentName: name,
+    location,
+  });
+
+  test("shows a slide, a range of rows, a section and lines, in English and Chinese", () => {
+    const cases: [CitationAttributes["location"], string, string][] = [
+      [{ kind: "page", from: 4, to: 4 }, "p. 4", "第 4 页"],
+      [{ kind: "slide", from: 4, to: 4 }, "slide 4", "第 4 张幻灯片"],
+      [{ kind: "slide", from: 3, to: 4 }, "slides 3–4", "第 3–4 张幻灯片"],
+      [
+        { kind: "rows", sheet: "Revenue", from: 12, to: 14 },
+        "Revenue, rows 12–14",
+        "Revenue，第 12–14 行",
+      ],
+      [{ kind: "rows", sheet: "Revenue", from: 7, to: 7 }, "Revenue, row 7", "Revenue，第 7 行"],
+      [{ kind: "rows", sheet: null, from: 2, to: 3 }, "rows 2–3", "第 2–3 行"],
+      [{ kind: "section", heading: "2.1 Sensitivity" }, "§ 2.1 Sensitivity", "§ 2.1 Sensitivity"],
+      [{ kind: "section", heading: null }, "§ Start", "§ 开头"],
+      [{ kind: "section", heading: null, notes: true }, "§ Notes", "§ 注释"],
+      [{ kind: "lines", from: 120, to: 134 }, "lines 120–134", "第 120–134 行"],
+    ];
+    for (const [location, en, zh] of cases) {
+      expect(citedLocation(at(location), in_("en"))).toBe(en);
+      expect(citedLocation(at(location), in_("zh-CN"))).toBe(zh);
+    }
+  });
+
+  test("words the badge with the label: on a page, slide or lines; in rows or a section", () => {
+    expect(words(at({ kind: "slide", from: 4, to: 4 }))).toEqual({
+      en: "Quote found on slide 4",
+      zh: "已在第 4 张幻灯片找到引文",
+    });
+    expect(words(at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 })).en).toBe(
+      "Quote found in Revenue, rows 12–14",
+    );
+    expect(
+      words({
+        ...at({ kind: "section", heading: "2.1 Sensitivity" }),
+        check: "not-found",
+        checkReason: "quote-not-on-pages",
+      }),
+    ).toEqual({
+      en: "Quote not found in § 2.1 Sensitivity",
+      zh: "未在 § 2.1 Sensitivity 中找到引文",
+    });
+    expect(words(at({ kind: "lines", from: 120, to: 134 })).en).toBe(
+      "Quote found on lines 120–134",
+    );
+  });
+
+  test("copies as text with its label, and a stored Location that isn't one falls back to the pages", () => {
+    expect(citationReference(at({ kind: "slide", from: 4, to: 4 }))).toBe("[Deck, slide 4]");
+    expect(
+      citationReference(at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model")),
+    ).toBe("[Model, Revenue, rows 12–14]");
+    const broken = {
+      ...found,
+      location: { kind: "slide", from: "x" },
+    } as unknown as CitationAttributes;
+    expect(citationReference(broken)).toBe("[Tides, p. 12–13]");
   });
 });
 

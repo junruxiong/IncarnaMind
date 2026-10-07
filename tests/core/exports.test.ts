@@ -451,6 +451,53 @@ describe("exporting a Mind", () => {
     );
   });
 
+  test("a footnote names its Citation's Location: a slide, rows of a sheet, a section, lines", async () => {
+    const { core, mind, client, tides } = await setUp();
+    const at = (location: object, name: string): JSONContent => {
+      const node = citation(tides, [1, 1], "found");
+      return { ...node, attrs: { ...node.attrs, documentName: name, location } };
+    };
+    writeMind(client, [
+      paragraph(
+        text("Growth"),
+        at({ kind: "slide", from: 3, to: 3 }, "Deck"),
+        text(", revenue"),
+        at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model"),
+        text(", the crest"),
+        at({ kind: "section", heading: "2.1 Sensitivity" }, "Review"),
+        text(", the log"),
+        at({ kind: "lines", from: 120, to: 134 }, "Log"),
+        text("."),
+      ),
+    ]);
+    await client.settled();
+
+    expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
+      [
+        "[^1]: Deck, slide 3",
+        "[^2]: Model, Revenue, rows 12–14",
+        "[^3]: Review, § 2.1 Sensitivity",
+        "[^4]: Log, lines 120–134",
+      ].join("\n"),
+    );
+    const docx = unzip((await core.exportMind(mind.id, { format: "docx" })).data);
+    expect(footnotesOf(part(docx, "word/footnotes.xml"))).toEqual({
+      "1": "Deck, slide 3",
+      "2": "Model, Revenue, rows 12–14",
+      "3": "Review, § 2.1 Sensitivity",
+      "4": "Log, lines 120–134",
+    });
+    await core.updateSettings({ user: { language: "zh-CN" } });
+    expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
+      [
+        "[^1]: Deck，第 3 张幻灯片",
+        "[^2]: Model，Revenue，第 12–14 行",
+        "[^3]: Review，§ 2.1 Sensitivity",
+        "[^4]: Log，第 120–134 行",
+      ].join("\n"),
+    );
+  });
+
   test("refuses unknown formats and Minds", async () => {
     const { core, mind } = await setUp();
     await expect(

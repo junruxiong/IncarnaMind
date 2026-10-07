@@ -39,6 +39,21 @@
  *
  * Nothing else is forgiven: a quote with a word changed, added or dropped
  * isn't found.
+ *
+ * Spreadsheets (ADR-0011) are matched with `numbers` on: number formatting is
+ * normalised in the quote and the text alike, so a figure matches however it
+ * is written, while its digits, decimals and sign must agree:
+ *
+ * - thousands separators go: "4,812", "4 812" and "4812" are the same. In the
+ *   text, a separating space must be a real one: a tab, which separates
+ *   cells, never joins numbers. In the quote, spaces between groups of three
+ *   digits are tried as separators first, then as spaces;
+ * - trailing zeros after a decimal point go ("4,812.50" is "4812.5", "3.0"
+ *   is "3"), but other decimals stay: "4812.05" isn't "4812.5";
+ * - currency symbols next to a number go ("£4,812" is "4812");
+ * - an accounting negative "(4,812)" reads "-4812";
+ * - a number is matched whole: "4812" isn't found in "14812", "48125",
+ *   "4812.5" or "-4812".
  */
 import { type NormalisedUnit, normaliseWithOffsets } from "./text";
 
@@ -93,11 +108,96 @@ function fold(char: string): string {
   return FOLDED[one] ?? one;
 }
 
+/** How matching treats numbers (see the module comment). */
+export interface MatchOptions {
+  /** Normalise number formatting in the quote and the text: for spreadsheets. */
+  numbers?: boolean;
+}
+
+/**
+ * Which spaces between groups of three digits are thousands separators:
+ * "text", those that are real spaces in the text (not tabs or line breaks);
+ * "all" or "none", for the two readings of a quote.
+ */
+type GroupSpaces = "text" | "all" | "none";
+
+const SEPARATORS: ReadonlySet<string> = new Set([",", " ", "'"]);
+const CURRENCY = /^\p{Sc}$/u;
+const LETTER_OR_DIGIT_CHAR = /^[\p{L}\p{N}]$/u;
+
+/** Marks the number formatting in `units` (of `text`) `removed`, as the module comment says. */
+function normaliseNumbers(units: NormalisedUnit[], text: string, spaces: GroupSpaces): void {
+  const live = () => units.filter((unit) => !unit.removed);
+  const isDigit = (unit: NormalisedUnit | undefined) => unit !== undefined && DIGIT.test(unit.char);
+
+  // Thousands separators: between a digit and exactly three more.
+  let list = live();
+  list.forEach((unit, at) => {
+    if (!SEPARATORS.has(unit.char)) return;
+    if (unit.char === " ") {
+      if (spaces === "none") return;
+      if (spaces === "text" && /[^     ]/.test(text.slice(unit.start, unit.end))) {
+        return;
+      }
+    }
+    if (!isDigit(list[at + 1]) || !isDigit(list[at + 2]) || !isDigit(list[at + 3])) return;
+    if (isDigit(list[at + 4])) return;
+    // Before it, a group of one to three digits, not a number's decimals.
+    let start = at;
+    while (start > 0 && isDigit(list[start - 1])) start--;
+    if (at - start < 1 || at - start > 3 || list[start - 1]?.char === ".") return;
+    unit.removed = true;
+  });
+
+  // Currency symbols next to a number.
+  list = live();
+  list.forEach((unit, at) => {
+    if (!CURRENCY.test(unit.char)) return;
+    const next = list[at + 1];
+    if (
+      isDigit(list[at - 1]) ||
+      isDigit(next) ||
+      (next && "(-".includes(next.char) && isDigit(list[at + 2]))
+    ) {
+      unit.removed = true;
+    }
+  });
+
+  // Accounting negatives: "(4,812)" or "(12.5)" reads "-4812", "-12.5".
+  list = live();
+  list.forEach((unit, at) => {
+    if (unit.char !== "(") return;
+    let end = at + 1;
+    while (isDigit(list[end]) || list[end]?.char === ".") end++;
+    const close = list[end];
+    if (close?.char !== ")" || end === at + 1 || !isDigit(list[at + 1])) return;
+    const inside = units.slice(units.indexOf(unit) + 1, units.indexOf(close));
+    if (!inside.some((each) => each.removed || each.char === ".")) return;
+    unit.char = "-";
+    close.removed = true;
+  });
+
+  // Trailing zeros after a decimal point, and the point too when nothing is left after it.
+  list = live();
+  list.forEach((unit, at) => {
+    if (unit.char !== "." || !isDigit(list[at - 1]) || !isDigit(list[at + 1])) return;
+    let end = at + 1;
+    while (isDigit(list[end])) end++;
+    let last = end - 1;
+    while (last > at && list[last]?.char === "0") {
+      (list[last] as NormalisedUnit).removed = true;
+      last--;
+    }
+    if (last === at) unit.removed = true;
+  });
+}
+
 /**
  * The text normalised for matching: the shared normaliser's units, folded,
- * with the caret of each "[^N]" marked `removed`.
+ * with the caret of each "[^N]" marked `removed`, and with `numbers`, number
+ * formatting too.
  */
-function matchUnits(text: string): NormalisedUnit[] {
+function matchUnits(text: string, numbers?: GroupSpaces): NormalisedUnit[] {
   // Same length, so the offsets of the units still point into `text`.
   const { units } = normaliseWithOffsets(text.replace(SOFT_HYPHEN_AT_LINE_END, "-"));
   const folded = units.map((unit) => ({ ...unit, char: fold(unit.char) }));
@@ -108,15 +208,62 @@ function matchUnits(text: string): NormalisedUnit[] {
     if (end > at + 2 && folded[end]?.char === "]")
       (folded[at + 1] as NormalisedUnit).removed = true;
   }
+  if (numbers) normaliseNumbers(folded, text, numbers);
   return folded;
 }
 
 /** The quote normalised for matching, as a string: what is looked for in the text's units. */
-const needleOf = (quote: string) =>
-  matchUnits(quote)
+const needleOf = (quote: string, numbers?: GroupSpaces) =>
+  matchUnits(quote, numbers)
     .filter((unit) => !unit.removed)
     .map((unit) => unit.char)
     .join("");
+
+/** Accepts or refuses a match of `needle` at units `first` to `last`. */
+type Accept = (needle: string, first: number, last: number) => boolean;
+
+/**
+ * Numbers are matched whole: a match that starts with a digit mustn't follow
+ * a digit, a decimal point or a minus sign, and one that ends with a digit
+ * mustn't be followed by a digit or decimals.
+ */
+function wholeNumbers(units: readonly NormalisedUnit[]): Accept {
+  const liveBefore = (at: number, steps: number) => {
+    let found = 0;
+    for (let index = at - 1; index >= 0; index--) {
+      const unit = units[index] as NormalisedUnit;
+      if (unit.removed) continue;
+      if (++found === steps) return unit;
+    }
+    return undefined;
+  };
+  const liveAfter = (at: number, steps: number) => {
+    let found = 0;
+    for (let index = at + 1; index < units.length; index++) {
+      const unit = units[index] as NormalisedUnit;
+      if (unit.removed) continue;
+      if (++found === steps) return unit;
+    }
+    return undefined;
+  };
+  const digit = (unit: NormalisedUnit | undefined) => unit !== undefined && DIGIT.test(unit.char);
+  return (needle, first, last) => {
+    if (DIGIT.test(needle[0] ?? "")) {
+      const before = liveBefore(first, 1);
+      if (digit(before)) return false;
+      if (before?.char === "." && digit(liveBefore(first, 2))) return false;
+      if (before?.char === "-" && !LETTER_OR_DIGIT_CHAR.test(liveBefore(first, 2)?.char ?? "")) {
+        return false;
+      }
+    }
+    if (DIGIT.test(needle.at(-1) ?? "")) {
+      const after = liveAfter(last, 1);
+      if (digit(after)) return false;
+      if (after?.char === "." && digit(liveAfter(last, 2))) return false;
+    }
+    return true;
+  };
+}
 
 /** The index of the last unit of a match of `needle` starting at `first`, or -1. */
 function matchAt(units: readonly NormalisedUnit[], needle: string, first: number): number {
@@ -142,12 +289,13 @@ function findFrom(
   units: readonly NormalisedUnit[],
   needle: string,
   from: number,
+  accept?: Accept,
 ): { first: number; last: number } | null {
   for (let first = from; first < units.length; first++) {
     const unit = units[first] as NormalisedUnit;
     if (unit.removed || unit.char !== needle[0]) continue;
     const last = matchAt(units, needle, first);
-    if (last >= 0) return { first, last };
+    if (last >= 0 && (!accept || accept(needle, first, last))) return { first, last };
   }
   return null;
 }
@@ -162,21 +310,27 @@ function longEnough(part: string): boolean {
   return words >= MIN_PART_WORDS;
 }
 
-/**
- * Where `quote` is in `text` after both are normalised, or null if it isn't:
- * one range, or one for each part of a quote with an ellipsis (see the module
- * comment), in order.
- */
-export function findQuote(text: string, quote: string): TextRange[] | null {
-  const needle = needleOf(quote);
+/** Where `needle` is in `units`, whole or part by part (see `findQuote`), as ranges of the text. */
+function findNeedle(
+  units: readonly NormalisedUnit[],
+  needle: string,
+  accept?: Accept,
+): TextRange[] | null {
   if (!needle) return null;
-  const units = matchUnits(text);
-  const range = ({ first, last }: { first: number; last: number }): TextRange => ({
-    start: (units[first] as NormalisedUnit).start,
-    end: (units[last] as NormalisedUnit).end,
-  });
+  // With numbers, a match takes in the formatting around its figures: "£", ")" and ".00".
+  const widen = accept !== undefined;
+  const range = ({ first, last }: { first: number; last: number }): TextRange => {
+    let from = first;
+    let to = last;
+    while (widen && from > 0 && units[from - 1]?.removed && !units[from - 1]?.optional) from--;
+    while (widen && units[to + 1]?.removed && !units[to + 1]?.optional) to++;
+    return {
+      start: (units[from] as NormalisedUnit).start,
+      end: (units[to] as NormalisedUnit).end,
+    };
+  };
 
-  const whole = findFrom(units, needle, 0);
+  const whole = findFrom(units, needle, 0, accept);
   if (whole) return [range(whole)];
   if (!ELLIPSIS.test(needle)) return null;
 
@@ -186,12 +340,32 @@ export function findQuote(text: string, quote: string): TextRange[] | null {
   const found: TextRange[] = [];
   let from = 0;
   for (const part of parts) {
-    const match = findFrom(units, part, from);
+    const match = findFrom(units, part, from, accept);
     if (!match) return null;
     found.push(range(match));
     from = match.last + 1;
   }
   return found;
+}
+
+/**
+ * Where `quote` is in `text` after both are normalised, or null if it isn't:
+ * one range, or one for each part of a quote with an ellipsis (see the module
+ * comment), in order. With `numbers`, number formatting is normalised too.
+ */
+export function findQuote(
+  text: string,
+  quote: string,
+  options: MatchOptions = {},
+): TextRange[] | null {
+  if (!options.numbers) return findNeedle(matchUnits(text), needleOf(quote));
+  const units = matchUnits(text, "text");
+  const accept = wholeNumbers(units);
+  const grouped = needleOf(quote, "all");
+  const found = findNeedle(units, grouped, accept);
+  if (found) return found;
+  const spaced = needleOf(quote, "none");
+  return spaced === grouped ? null : findNeedle(units, spaced, accept);
 }
 
 /**
@@ -203,6 +377,7 @@ export function findQuote(text: string, quote: string): TextRange[] | null {
 export function findQuoteInPieces(
   pieces: readonly TextPiece[],
   quote: string,
+  options: MatchOptions = {},
 ): PieceRange[] | null {
   let text = "";
   const offsets: number[] = [];
@@ -211,7 +386,7 @@ export function findQuoteInPieces(
     text += piece.text;
     if (piece.breakAfter) text += "\n";
   }
-  const ranges = findQuote(text, quote);
+  const ranges = findQuote(text, quote, options);
   if (!ranges) return null;
   const covered: PieceRange[] = [];
   for (const range of ranges) {

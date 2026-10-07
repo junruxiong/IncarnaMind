@@ -64,7 +64,12 @@ export interface CitationRecordInput {
   marker: number;
   /** The Passage's id, as the search gave it (e.g. "P3"). */
   passage: string;
-  /** The page or two consecutive pages the quote is on; left out for a Document without pages. */
+  /**
+   * Where the quote is, as the Passage's marks name it (ADR-0011): "p. 4",
+   * "slide 4", "§ 2.1 Sensitivity", "Revenue, rows 12–14", "lines 120–134".
+   */
+  location?: string | null;
+  /** For a PDF (or a deck), instead of `location`: the page or two consecutive pages the quote is on. */
   pageFrom?: number | null;
   pageTo?: number | null;
   /** A short quote, copied word for word from the Passage. */
@@ -353,13 +358,19 @@ const recordsSchema = {
     properties: {
       marker: { type: "integer", description: "The marker's number: 1 for [^1]." },
       passage: { type: "string", description: "The Passage's id, e.g. P1." },
+      location: {
+        type: "string",
+        description:
+          'Where the quote is, as the Passage names it: e.g. "p. 4", "slide 4", "§ 2.1 Sensitivity", "Revenue, rows 12–14" or "lines 120–134". One place, or two in a row.',
+      },
       pageFrom: {
         type: "integer",
-        description: "The page the quote starts on. Leave out for a Passage without pages.",
+        description:
+          "For a PDF, instead of location: the page the quote starts on. Leave out for other Passages.",
       },
       pageTo: {
         type: "integer",
-        description: "The page the quote ends on: the same page, or the next one.",
+        description: "For a PDF: the page the quote ends on: the same page, or the next one.",
       },
       quote: {
         type: "string",
@@ -383,14 +394,23 @@ function parseRecords(value: unknown): CitationRecordInput[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): CitationRecordInput[] => {
     if (typeof item !== "object" || item === null) return [];
-    const { marker, passage, pageFrom, pageTo, quote } = item as Record<string, unknown>;
+    const { marker, passage, location, pageFrom, pageTo, quote } = item as Record<string, unknown>;
     const number = typeof marker === "string" ? Number.parseInt(marker, 10) : marker;
     if (typeof number !== "number" || typeof passage !== "string" || typeof quote !== "string") {
       return [];
     }
     const page = (value: unknown) =>
       typeof value === "number" ? value : typeof value === "string" ? Number(value) : null;
-    return [{ marker: number, passage, pageFrom: page(pageFrom), pageTo: page(pageTo), quote }];
+    return [
+      {
+        marker: number,
+        passage,
+        ...(typeof location === "string" && location.trim() ? { location } : {}),
+        pageFrom: page(pageFrom),
+        pageTo: page(pageTo),
+        quote,
+      },
+    ];
   });
 }
 
@@ -678,7 +698,7 @@ async function* toolLoop(
   const documentTools: ToolSet = {
     [SEARCH_TOOL]: tool({
       description:
-        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages. The search sees only the query, not the conversation: write it to stand on its own.",
+        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.",
       inputSchema: jsonSchema<{ query: string }>({
         type: "object",
         properties: {
@@ -698,7 +718,7 @@ async function* toolLoop(
     }),
     [CITE_TOOL]: tool({
       description:
-        "Record the Citations of your Answer: for each marker such as [^1], the Passage, the page or two consecutive pages its quote is on, and a short quote copied word for word from the Passage.",
+        "Record the Citations of your Answer: for each marker such as [^1], the Passage, where its quote is (a page, slide, section, or rows or lines, or two in a row), and a short quote copied word for word from the Passage.",
       inputSchema: jsonSchema<{ citations: unknown }>({
         type: "object",
         properties: { citations: recordsSchema },

@@ -4,7 +4,7 @@
  * with the system save dialog), so nothing here touches the file system.
  */
 import type * as Y from "yjs";
-import { citationState, citedPages } from "../../shared/citations";
+import { citationState, citedLocation } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
 import type {
   CitationAttributes,
@@ -108,8 +108,9 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
 }
 
 /**
- * A Citation's footnote: its Document's name and the cited pages, e.g.
- * "Tides, p. 12–13", unverified unless its badge says "Quote found".
+ * A Citation's footnote: its Document's name and its Location's short label,
+ * e.g. "Tides, p. 12–13", "Deck, slide 4" or "Model, Revenue, rows 12–14",
+ * unverified unless its badge says "Quote found".
  */
 function footnoteOf(
   attributes: Partial<CitationAttributes>,
@@ -117,10 +118,10 @@ function footnoteOf(
   language: Language,
 ): Footnote {
   const document = attributes.documentName || translate(language, "export.unnamedDocument");
-  const pages = citedPages(attributes);
+  const location = citedLocation(attributes, (key, params) => translate(language, key, params));
   return {
-    source: pages
-      ? translate(language, "export.citation.pages", { document, pages })
+    source: location
+      ? translate(language, "export.citation.location", { document, location })
       : translate(language, "export.citation.document", { document }),
     unverified: citationState(attributes, documents).check !== "found",
   };

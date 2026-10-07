@@ -31,13 +31,17 @@ export function documentIdFromUrl(url: string): string | null {
  */
 export interface DocumentLocation {
   documentId: string;
-  /** PDFs: the first page to show, from 1. */
+  /**
+   * The first Unit to show, from 1 (ADR-0011): a PDF's page, a deck's slide,
+   * otherwise the number of a section, block of rows or block of lines.
+   */
   pageFrom?: number;
-  /** PDFs: the last page the quote may be on. Defaults to `pageFrom`. */
+  /** The last Unit the quote may be in. Defaults to `pageFrom`. */
   pageTo?: number;
   /**
-   * Text to highlight if it is found: on the pages from `pageFrom` to `pageTo`
-   * for a PDF, anywhere for TXT and Markdown (which the viewer scrolls to it).
+   * Text to highlight if it is found: in the Units from `pageFrom` to
+   * `pageTo` (the viewer scrolls to it), or without them, anywhere in a
+   * TXT or Markdown file.
    */
   quote?: string;
   /**
@@ -54,4 +58,6 @@ export interface ViewerCitation {
   check: CitationCheck;
   /** The number the Citation shows in its Answer, from 1. */
   number?: number;
+  /** Its Location's short label, e.g. "slide 4" or "Revenue, rows 12–14": the mark shows it. */
+  label?: string;
 }

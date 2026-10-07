@@ -1,23 +1,40 @@
 /**
  * Citations (the v1 design's "Wedge mechanics"). An Answer cites a Passage by
  * writing a marker such as "[^1]" right after a claim, and giving, through the
- * `cite` Tool or structured output, a record for it: the Passage, the page or
- * two consecutive pages its quote is on, and the quote, copied word for word.
- * The core turns each marker with a record into an inline Citation node; a
- * marker without a record is removed, and a record without a marker dropped.
+ * `cite` Tool or structured output, a record for it: the Passage, the
+ * Location its quote is at (ADR-0011: one or two pages, slides, sections, or
+ * blocks of rows or lines, the Units of src/shared/units.ts), and the quote,
+ * copied word for word. The core turns each marker with a record into an
+ * inline Citation node; a marker without a record is removed, and a record
+ * without a marker dropped.
  *
  * When the Answer finishes, each Citation is checked once, and the result
- * stored with it: the cited pages must lie within the Passage's pages and be
- * at most two consecutive ones (the page-range rule), and the quote must be in
- * their text, matched exactly after both are normalised the same way (see
- * `findQuote`: letter case, spacing, hyphenation at line ends, quote marks and
- * "[^36]" for "[36]" don't count, and a quote with an ellipsis is found when
- * each part, of at least 3 words, is there in order). The pages are read as
- * stored when the Document was processed, without running headers, footers and
- * page numbers, so a quote may run across a page break. "Found" means the quote
- * is there, never that it supports the sentence.
+ * stored with it: the cited Units must lie within the Passage's Units and be
+ * at most two consecutive ones of one sheet or Document (the Location rule),
+ * and the quote must be in their text, matched exactly after both are
+ * normalised the same way (see `findQuote`: letter case, spacing, hyphenation
+ * at line ends, quote marks and "[^36]" for "[36]" don't count, and a quote
+ * with an ellipsis is found when each part, of at least 3 words, is there in
+ * order; in spreadsheets, number formatting doesn't count either). The Units
+ * are read as stored when the Document was processed, a PDF's without
+ * running headers, footers and page numbers, so a quote may run across a page
+ * break. "Found" means the quote is there, never that it supports the sentence.
+ *
+ * Each Citation also stores its Location for its label: for blocks of rows or
+ * lines, narrowed to those the quote covers ("Revenue, rows 12–14"); for
+ * sections, the heading it sits under.
  */
+import {
+  englishLocation,
+  locationOf,
+  parseRequestedLocation,
+  quoteInUnits,
+  type RowsOrLines,
+  resolveRequested,
+  unitLocation,
+} from "../../shared/locations";
 import { findQuote } from "../../shared/quoteMatch";
+import { sameRun } from "../../shared/units";
 import {
   CITATION_NODE,
   type Citation,
@@ -39,8 +56,16 @@ const MAX_SEARCHES_PER_ANSWER = 5;
 /** A Citation marker as the model writes it in the text: "[^1]". */
 const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
 
-/** Where a new page starts inside a Passage given to the model, e.g. "[p. 4]". */
-const PAGE_MARK = /\[p\.\s*\d+\]/gi;
+/**
+ * Where a new Unit starts inside a Passage given to the model ("[p. 4]",
+ * "[slide 4]", "[§ 2.1 Sensitivity]", "[Revenue, rows 2–41]", "[lines 51–100]"),
+ * and where a slide's speaker notes start ("[speaker notes]").
+ */
+const LOCATION_MARK =
+  /\[(?:p\.\s*\d+(?:[–-]\d+)?|slides?\s+\d+(?:[–-]\d+)?|(?:[^\]\n]{1,100},\s*)?rows?\s+\d+(?:[–-]\d+)?|lines?\s+\d+(?:[–-]\d+)?|§[^\]\n]{0,200}|speaker notes)\]/gi;
+
+/** Marks where a slide's speaker notes start, inside a Passage given to the model. */
+const NOTES_MARK = "[speaker notes]";
 
 const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
   ['"', '"'],
@@ -53,11 +78,11 @@ const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
 ];
 
 /**
- * The quote as the model meant it: without page marks, without the ellipses
- * and quotation marks models put around a quote. Its words are left alone.
+ * The quote as the model meant it: without location marks, without the
+ * ellipses and quotation marks models put around a quote. Its words are left alone.
  */
 function cleanQuote(raw: string): string {
-  let quote = raw.replace(PAGE_MARK, " ").trim();
+  let quote = raw.replace(LOCATION_MARK, " ").trim();
   for (;;) {
     const before = quote;
     quote = quote
@@ -73,7 +98,7 @@ function cleanQuote(raw: string): string {
   }
 }
 
-/** The pages a Citation names: both null for a Document without pages. */
+/** The Units a Citation names, by number: both null for a whole TXT or Markdown file stored before Units. */
 export interface PageRange {
   pageFrom: number | null;
   pageTo: number | null;
@@ -82,29 +107,93 @@ export interface PageRange {
 const asPage = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
 
-/**
- * The pages a record cites, in order. A record that names no page cites the
- * Passage's own pages; a Document without pages has none.
- */
-function citedPages(
-  record: Pick<CitationRecordInput, "pageFrom" | "pageTo">,
-  passage: PageRange,
-): PageRange {
-  if (passage.pageFrom === null || passage.pageTo === null) return { pageFrom: null, pageTo: null };
-  const from = asPage(record.pageFrom);
-  const to = asPage(record.pageTo);
-  if (from === null && to === null) return { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
-  const first = (from ?? to) as number;
-  const last = (to ?? from) as number;
-  return { pageFrom: Math.min(first, last), pageTo: Math.max(first, last) };
+/** What a record cites: its Units, the rows or lines it named, and whether its Location named nothing there. */
+interface Cited {
+  range: PageRange;
+  /** Rows or lines the record named more narrowly than its Units: the label's fallback. */
+  requested: RowsOrLines | null;
+  /** The record named a Location the Passage doesn't have. */
+  unresolved: boolean;
 }
 
 /**
- * The page-range rule: the cited pages must lie within the cited Passage's
- * pages, and be one page or two consecutive ones. Returns why they break it,
- * or null.
+ * The Units a record cites, in order. A record names a Location ("slide 4",
+ * "Revenue, rows 12–14", "§ 2.1 Sensitivity"), or for a PDF or deck, its
+ * pages. One that names none cites the Passage's own Units; when they are
+ * more than two, the quote's own Unit (or two) among them, if it is there.
+ * `units` are the Passage's.
  */
-function pageRangeProblem(range: PageRange, passage: PageRange): CitationCheckReason | null {
+function citedUnits(
+  record: Pick<CitationRecordInput, "pageFrom" | "pageTo" | "location" | "quote">,
+  passage: PageRange,
+  units: readonly PageText[],
+): Cited {
+  if (passage.pageFrom === null || passage.pageTo === null) {
+    return { range: { pageFrom: null, pageTo: null }, requested: null, unresolved: false };
+  }
+  const own = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
+  const kind = units[0]?.kind ?? "page";
+  const requested =
+    typeof record.location === "string" ? parseRequestedLocation(record.location) : null;
+  if (requested) {
+    const resolved = resolveRequested(requested, units);
+    if (!resolved) return { range: own, requested: null, unresolved: true };
+    return {
+      range: { pageFrom: resolved.from, pageTo: resolved.to },
+      requested:
+        requested.kind === "rows" || requested.kind === "lines"
+          ? { from: requested.from, to: requested.to }
+          : null,
+      unresolved: false,
+    };
+  }
+  const from = asPage(record.pageFrom);
+  const to = asPage(record.pageTo);
+  if ((kind === "page" || kind === "slide") && (from !== null || to !== null)) {
+    const first = (from ?? to) as number;
+    const last = (to ?? from) as number;
+    return {
+      range: { pageFrom: Math.min(first, last), pageTo: Math.max(first, last) },
+      requested: null,
+      unresolved: false,
+    };
+  }
+  if (kind !== "page" && own.pageTo - own.pageFrom + 1 > MAX_CITED_PAGES) {
+    const quote = cleanQuote(typeof record.quote === "string" ? record.quote : "");
+    const found = locateQuote(units, quote);
+    if (found) return { range: found, requested: null, unresolved: false };
+  }
+  return { range: own, requested: null, unresolved: false };
+}
+
+/** The first Unit, or two consecutive Units of one run, among `units` whose text holds the quote. */
+function locateQuote(units: readonly PageText[], quote: string): PageRange | null {
+  if (!quote) return null;
+  for (const unit of units) {
+    if (unit.page !== null && quoteInUnits([unit], quote)) {
+      return { pageFrom: unit.page, pageTo: unit.page };
+    }
+  }
+  for (let index = 0; index + 1 < units.length; index++) {
+    const first = units[index] as PageText;
+    const second = units[index + 1] as PageText;
+    if (first.page === null || second.page !== first.page + 1 || !sameRun(first, second)) continue;
+    if (quoteInUnits([first, second], quote)) return { pageFrom: first.page, pageTo: second.page };
+  }
+  return null;
+}
+
+/**
+ * The Location rule: the cited Units must lie within the cited Passage's
+ * Units, and be one Unit or two consecutive ones of one run. Returns why they
+ * break it, or null.
+ */
+function pageRangeProblem(
+  range: PageRange,
+  passage: PageRange,
+  unresolved = false,
+): CitationCheckReason | null {
+  if (unresolved) return "pages-outside-passage";
   if (range.pageFrom === null || range.pageTo === null) return null;
   if (passage.pageFrom === null || passage.pageTo === null) return null;
   if (range.pageFrom < passage.pageFrom || range.pageTo > passage.pageTo) {
@@ -120,8 +209,9 @@ export interface CheckResult {
 }
 
 /**
- * The Citation check. `pages` is the stored text of the cited pages (for a
- * Document without pages, its one text), as `AnswerDocuments.pageTexts` gives it.
+ * The Citation check. `pages` is the stored text of the cited Units (for a
+ * whole TXT or Markdown file stored before Units, its one text), as
+ * `AnswerDocuments.pageTexts` gives it.
  */
 export function checkCitation(input: {
   quote: string;
@@ -129,13 +219,20 @@ export function checkCitation(input: {
   passage: PageRange;
   documentDeleted: boolean;
   pages: readonly PageText[];
+  /** The record named a Location the Passage doesn't have. */
+  unresolved?: boolean;
 }): CheckResult {
   if (input.documentDeleted) return { check: "cant-check", checkReason: "document-removed" };
-  const problem = pageRangeProblem(input.range, input.passage);
+  const problem = pageRangeProblem(input.range, input.passage, input.unresolved);
   if (problem) return { check: "not-found", checkReason: problem };
-  const text = input.pages.map((page) => page.text).join("\n");
-  if (text.trim() === "") return { check: "cant-check", checkReason: "no-text" };
-  return findQuote(text, input.quote)
+  const [first, second] = input.pages;
+  if (first && second && !sameRun(first, second)) {
+    return { check: "not-found", checkReason: "too-many-pages" };
+  }
+  if (input.pages.every((page) => page.text.trim() === "")) {
+    return { check: "cant-check", checkReason: "no-text" };
+  }
+  return quoteInUnits(input.pages, input.quote)
     ? { check: "found", checkReason: null }
     : { check: "not-found", checkReason: "quote-not-on-pages" };
 }
@@ -148,7 +245,7 @@ export interface AnswerDocuments {
   search(query: string, signal?: AbortSignal): Promise<WindowedPassage[]>;
   /** A Passage and its Document, deleted or not; null if unknown. */
   citationSource(passageId: string): CitationSource | null;
-  /** The stored text of one version of a live Document's pages (see `pageTexts` in ../documents). */
+  /** The stored text of one version of a live Document's Units (see `pageTexts` in ../documents). */
   pageTexts(
     documentId: string,
     contentHash: string,
@@ -162,7 +259,7 @@ export interface RecheckDocuments {
   /** The current version of a live Document; null if it was deleted. */
   currentVersion(documentId: string): string | null;
   pageTexts: AnswerDocuments["pageTexts"];
-  /** The live Passages of the current version covering these pages, in reading order. */
+  /** The live Passages of the current version covering these Units, in reading order. */
   passagesCovering(
     documentId: string,
     from: number | null,
@@ -172,10 +269,10 @@ export interface RecheckDocuments {
 
 /**
  * Checks a Citation again against its Document's current version (see
- * `CoreApi.recheckCitation`): on the cited pages first, then on each page,
- * and each two consecutive pages, of the current version, in order. The
- * Passage given is one of the current version that holds the pages,
- * preferably one whose text holds the quote too.
+ * `CoreApi.recheckCitation`): in the cited Units first, then in each Unit,
+ * and each two consecutive Units of one run, of the current version, in
+ * order. The Passage given is one of the current version that holds the
+ * Units, preferably one whose text holds the quote too.
  */
 export function recheckCitation(
   documents: RecheckDocuments,
@@ -190,10 +287,11 @@ export function recheckCitation(
       contentHash: null,
       passageId: null,
       ...cited,
+      location: null,
     };
   }
   const quote = cleanQuote(input.quote);
-  const pages = documents.pageTexts(input.documentId, contentHash, null, null);
+  const units = documents.pageTexts(input.documentId, contentHash, null, null);
   const passageFor = (range: PageRange): string | null => {
     const covering = documents.passagesCovering(input.documentId, range.pageFrom, range.pageTo);
     return (
@@ -202,53 +300,47 @@ export function recheckCitation(
       null
     );
   };
-  const result = (check: CheckResult, range: PageRange): CitationRecheck => ({
-    ...check,
-    contentHash,
-    passageId: passageFor(range),
-    ...range,
-  });
-  if (pages.every((page) => page.text.trim() === "")) {
+  const inRange = (range: PageRange) =>
+    units.filter(
+      (unit) =>
+        range.pageFrom === null ||
+        range.pageTo === null ||
+        (unit.page !== null && unit.page >= range.pageFrom && unit.page <= range.pageTo),
+    );
+  const result = (check: CheckResult, range: PageRange): CitationRecheck => {
+    const covered = inRange(range);
+    return {
+      ...check,
+      contentHash,
+      passageId: passageFor(range),
+      ...range,
+      location: locationOf(covered, check.check === "found" ? quoteInUnits(covered, quote) : null),
+    };
+  };
+  if (units.every((unit) => unit.text.trim() === "")) {
     return result({ check: "cant-check", checkReason: "no-text" }, cited);
   }
-  const text = (from: number | null, to: number | null) =>
-    pages
-      .filter(
-        (page) =>
-          from === null ||
-          to === null ||
-          (page.page !== null && page.page >= from && page.page <= to),
-      )
-      .map((page) => page.text)
-      .join("\n");
-  const found = (from: number | null, to: number | null) =>
-    quote !== "" && findQuote(text(from, to), quote);
-  // A Document without pages (TXT, Markdown) is checked as one text.
-  if (pages[0]?.page === null) {
+  // A whole TXT or Markdown file stored before Units is checked as one text.
+  if (units.length === 1 && units[0]?.kind === "text") {
     const whole = { pageFrom: null, pageTo: null };
-    return found(null, null)
+    return quote !== "" && quoteInUnits(units, quote)
       ? result({ check: "found", checkReason: null }, whole)
       : result({ check: "not-found", checkReason: "quote-not-on-pages" }, whole);
   }
-  if (
-    cited.pageFrom !== null &&
-    cited.pageTo !== null &&
-    cited.pageTo - cited.pageFrom + 1 <= MAX_CITED_PAGES &&
-    found(cited.pageFrom, cited.pageTo)
-  ) {
-    return result({ check: "found", checkReason: null }, cited);
-  }
-  const numbers = pages.flatMap((page) => (page.page === null ? [] : [page.page]));
-  for (const page of numbers) {
-    if (found(page, page)) {
-      return result({ check: "found", checkReason: null }, { pageFrom: page, pageTo: page });
+  if (cited.pageFrom !== null && cited.pageTo !== null) {
+    const range = inRange(cited);
+    const [first, second] = range;
+    if (
+      range.length > 0 &&
+      range.length <= MAX_CITED_PAGES &&
+      (!first || !second || sameRun(first, second)) &&
+      quoteInUnits(range, quote)
+    ) {
+      return result({ check: "found", checkReason: null }, cited);
     }
   }
-  for (const page of numbers) {
-    if (numbers.includes(page + 1) && found(page, page + 1)) {
-      return result({ check: "found", checkReason: null }, { pageFrom: page, pageTo: page + 1 });
-    }
-  }
+  const located = locateQuote(units, quote);
+  if (located) return result({ check: "found", checkReason: null }, located);
   return result({ check: "not-found", checkReason: "quote-not-on-pages" }, cited);
 }
 
@@ -259,27 +351,54 @@ const pagesLabel = ({ pageFrom, pageTo }: PageRange) =>
       ? `${pageFrom}-${pageTo}`
       : `${pageFrom}`;
 
+/** The English label of a Unit, as its mark in a Passage shows it. */
+function unitMark(unit: PageText): string | null {
+  const location = unitLocation(unit);
+  return location ? `[${englishLocation(location)}]` : null;
+}
+
+/** The start of a stretch of text, long enough to find it again where it was laid out. */
+const headOf = (text: string) => text.trim().slice(0, 200);
+
 /**
- * The Passage's text with "[p. N]" where each of its later pages starts, so
- * the model can tell which page a quote is on. Found by matching the start of
- * each page's stored text after a paragraph break, which is how pages were
- * laid out when the Passages were built.
+ * The Passage's text with marks where each of its later Units starts ("[p. 4]",
+ * "[slide 4]", "[§ 2.1 Sensitivity]", "[Revenue, rows 2–41]") and where a
+ * slide's speaker notes start ("[speaker notes]"), so the model can tell
+ * where a quote is. Found by matching the start of each Unit's stored text
+ * after a paragraph break, which is how Units were laid out when the Passages
+ * were built (and how a slide's notes follow its text). `units` are the
+ * Passage's, in order.
  */
-function withPageMarks(text: string, range: PageRange, pages: readonly PageText[]): string {
-  if (range.pageFrom === null || range.pageTo === null || range.pageFrom === range.pageTo) {
-    return text;
-  }
+function withUnitMarks(text: string, units: readonly PageText[]): string {
+  const marks: { head: string; mark: string; unit: boolean }[] = [];
+  units.forEach((unit, index) => {
+    const mark = unitMark(unit);
+    if (index > 0 && mark && unit.text.trim()) {
+      marks.push({ head: headOf(unit.text), mark, unit: true });
+    }
+    const notes =
+      unit.kind === "slide" ? unit.anchors?.find((each) => each.target === "notes") : null;
+    if (notes) {
+      marks.push({
+        head: headOf(unit.text.slice(notes.start, notes.end)),
+        mark: NOTES_MARK,
+        unit: false,
+      });
+    }
+  });
   let marked = "";
   let from = 0;
-  for (const page of pages) {
-    if (page.page === null || page.page <= range.pageFrom || page.page > range.pageTo) continue;
-    const start = page.text.trim();
-    if (!start) continue;
+  for (const { head, mark } of marks) {
+    if (!head) continue;
+    if (from === 0 && marked === "" && text.startsWith(head) && mark === NOTES_MARK) {
+      marked = `${mark} `;
+      continue;
+    }
     for (let at = text.indexOf("\n\n", from); at >= 0; at = text.indexOf("\n\n", at + 1)) {
       const rest = text.slice(at + 2);
-      const length = Math.min(rest.length, start.length, 200);
-      if (length > 0 && rest.slice(0, length) === start.slice(0, length)) {
-        marked += `${text.slice(from, at)}\n\n[p. ${page.page}] `;
+      const length = Math.min(rest.length, head.length);
+      if (length > 0 && rest.slice(0, length) === head.slice(0, length)) {
+        marked += `${text.slice(from, at)}\n\n${mark} `;
         from = at + 2;
         break;
       }
@@ -290,15 +409,27 @@ function withPageMarks(text: string, range: PageRange, pages: readonly PageText[
 
 const attribute = (value: string) => value.replace(/"/g, "'").replace(/\s+/g, " ");
 
-/** Passages as the model sees them, each with its short id, Document and pages. */
-function formatPassages(
-  passages: readonly { id: string; documentName: string; range: PageRange; text: string }[],
-): string {
+/** A Passage as the model sees it: its short id, Document, where it is, and its text. */
+interface ShownPassage {
+  id: string;
+  documentName: string;
+  range: PageRange;
+  /** For every kind but PDF: the label of the Units it covers, e.g. "slides 3–4". */
+  location: string | null;
+  text: string;
+}
+
+/** Passages as the model sees them, each with its short id, Document and pages or Location. */
+function formatPassages(passages: readonly ShownPassage[]): string {
   return passages
-    .map(({ id, documentName, range, text }) => {
+    .map(({ id, documentName, range, location, text }) => {
       const pages = pagesLabel(range);
-      const attributes = `id="${id}" document="${attribute(documentName)}"${pages ? ` pages="${pages}"` : ""}`;
-      return `<passage ${attributes}>\n${text}\n</passage>`;
+      const where = location
+        ? ` location="${attribute(location)}"`
+        : pages
+          ? ` pages="${pages}"`
+          : "";
+      return `<passage id="${id}" document="${attribute(documentName)}"${where}>\n${text}\n</passage>`;
     })
     .join("\n\n");
 }
@@ -309,7 +440,11 @@ interface Accepted {
   handle: string;
   source: CitationSource;
   range: PageRange;
+  requested: RowsOrLines | null;
+  unresolved: boolean;
   quote: string;
+  /** Where it points, for its label, worked out once when the record is taken. */
+  location: Citation["location"];
   result: CheckResult | null;
 }
 
@@ -320,6 +455,7 @@ const toCitation = (record: Accepted, result: CheckResult | null): Citation => (
   contentHash: record.source.contentHash,
   pageFrom: record.range.pageFrom,
   pageTo: record.range.pageTo,
+  location: record.location,
   quote: record.quote,
   check: result?.check ?? "checking",
   checkReason: result?.checkReason ?? null,
@@ -334,6 +470,7 @@ function citationNode(citation: Citation | null): NodeJSON {
     contentHash: null,
     pageFrom: null,
     pageTo: null,
+    location: null,
     quote: null,
     check: "checking",
     checkReason: null,
@@ -389,6 +526,15 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     return null;
   };
 
+  /** The stored text of the Units a record cites, of the version its Passage was built from. */
+  const citedText = (record: Pick<Accepted, "source" | "range">) =>
+    documents.pageTexts(
+      record.source.documentId,
+      record.source.contentHash,
+      record.range.pageFrom,
+      record.range.pageTo,
+    );
+
   /**
    * The check, with the Document as it is now: it may have been deleted since
    * the record. The text read is that of the version the Passage was built
@@ -401,13 +547,22 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       range: record.range,
       passage: record.source,
       documentDeleted: !now || now.documentDeleted,
-      pages: documents.pageTexts(
-        record.source.documentId,
-        record.source.contentHash,
-        record.range.pageFrom,
-        record.range.pageTo,
-      ),
+      pages: citedText(record),
+      unresolved: record.unresolved,
     });
+  };
+
+  /** Where a record points, for its label: narrowed to its quote when the quote is there. */
+  const locationFor = (record: Omit<Accepted, "location">): Citation["location"] => {
+    if (record.range.pageFrom === null) return null;
+    const units = citedText(record);
+    if (units.length === 0) {
+      return record.source.documentKind === "pdf" && record.range.pageTo !== null
+        ? { kind: "page", from: record.range.pageFrom, to: record.range.pageTo }
+        : null;
+    }
+    const usable = record.unresolved || units.length > MAX_CITED_PAGES ? null : units;
+    return locationOf(units, usable ? quoteInUnits(usable, record.quote) : null, record.requested);
   };
 
   /** Takes records; returns what to tell the model about them. */
@@ -431,31 +586,49 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         );
         continue;
       }
-      const range = citedPages(input, source);
-      const record: Accepted = {
+      const quote = cleanQuote(typeof input.quote === "string" ? input.quote : "");
+      const passageUnits = documents.pageTexts(
+        source.documentId,
+        source.contentHash,
+        source.pageFrom,
+        source.pageTo,
+      );
+      const { range, requested, unresolved } = citedUnits(
+        { ...input, quote },
+        source,
+        passageUnits,
+      );
+      const taken = {
         marker,
         handle: found.handle,
         source,
         range,
-        quote: cleanQuote(typeof input.quote === "string" ? input.quote : ""),
+        requested,
+        unresolved,
+        quote,
         result: null,
       };
+      const record: Accepted = { ...taken, location: locationFor(taken) };
       records.set(marker, record);
       recorded.push(marker);
       events.onRecord(marker, toCitation(record, null));
 
       // Tell the model now what the check will find, so it can fix the record.
-      const problem = pageRangeProblem(range, source);
+      const problem = pageRangeProblem(range, source, unresolved);
+      const where = passageUnits.length > 0 ? passageLocation(passageUnits) : null;
       if (problem) {
         problems.push(
-          `${label}: cite one page, or two consecutive pages, within ${found.handle}'s pages (${pagesLabel(source)}).`,
+          where
+            ? `${label}: give a location inside ${found.handle} (${where}), naming one place, or two in a row.`
+            : `${label}: cite one page, or two consecutive pages, within ${found.handle}'s pages (${pagesLabel(source)}).`,
         );
       } else if (!record.quote) {
         problems.push(`${label}: the quote is empty; copy a short quote from ${found.handle}.`);
       } else if (check(record).check === "not-found") {
-        const where = range.pageFrom === null ? "" : ` on p. ${pagesLabel(range)}`;
         problems.push(
-          `${label}: the quote isn't word for word${where} in ${found.handle}; copy it exactly, and check its page.`,
+          where
+            ? `${label}: the quote isn't word for word at ${cutLocation(record) ?? where} in ${found.handle}; copy it exactly, and check where it is.`
+            : `${label}: the quote isn't word for word${range.pageFrom === null ? "" : ` on p. ${pagesLabel(range)}`} in ${found.handle}; copy it exactly, and check its page.`,
         );
       }
     }
@@ -467,6 +640,20 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       : " Write the Answer now if you haven't yet; don't repeat it.";
     return `${done}${fix}`;
   }
+
+  /** The English label of a record's cited Units, as a whole: "slide 4", "§ 2.1 Sensitivity". */
+  const cutLocation = (record: Accepted): string | null => {
+    if (record.range.pageFrom === null) return null;
+    const location = locationOf(citedText(record), null, record.requested);
+    return location ? englishLocation(location) : null;
+  };
+
+  /** The English label of a Passage's Units, as its `location` attribute shows them. */
+  const passageLocation = (units: readonly PageText[]): string | null => {
+    if ((units[0]?.kind ?? "page") === "page") return null;
+    const location = locationOf(units, null);
+    return location ? englishLocation(location) : null;
+  };
 
   const tools: AnswerTools = {
     get documentCount() {
@@ -485,14 +672,14 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       if (found.length === 0) {
         return { text: "No Passages in the User's Documents match this search.", passageCount: 0 };
       }
-      const formatted = found.map((passage) => {
+      const formatted = found.map((passage): ShownPassage => {
         const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
-        const pages =
-          passage.pageFrom !== null && passage.pageTo !== null && passage.pageFrom < passage.pageTo
+        const units =
+          passage.pageFrom !== null && passage.pageTo !== null
             ? documents.pageTexts(
                 passage.documentId,
                 passage.contentHash,
-                passage.pageFrom + 1,
+                passage.pageFrom,
                 passage.pageTo,
               )
             : [];
@@ -500,7 +687,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
           id: handleFor(passage.passageId),
           documentName: passage.documentName,
           range,
-          text: withPageMarks(passage.text, range, pages),
+          location: passageLocation(units),
+          text:
+            units.length > 1 || units[0]?.kind === "slide"
+              ? withUnitMarks(passage.text, units)
+              : passage.text,
         };
       });
       return { text: formatPassages(formatted), passageCount: found.length };

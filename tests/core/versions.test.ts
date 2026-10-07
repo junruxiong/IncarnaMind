@@ -118,6 +118,7 @@ describe("Versions of a Document", { timeout: 30_000 }, () => {
       passageId: expect.any(String),
       pageFrom: 2,
       pageTo: 2,
+      location: { kind: "page", from: 2, to: 2 },
     });
     // In version 3 the quote is back, on page 3: the recheck finds it there.
     await changeFile(core, document.id, document.path, V3);
@@ -129,6 +130,7 @@ describe("Versions of a Document", { timeout: 30_000 }, () => {
       passageId: expect.any(String),
       pageFrom: 3,
       pageTo: 3,
+      location: { kind: "page", from: 3, to: 3 },
     });
     // Written onto the Citation, it no longer says the Document changed.
     expect(

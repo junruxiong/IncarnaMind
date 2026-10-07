@@ -228,9 +228,10 @@ export const CITATION_NODE = "citation";
 
 /**
  * Where a Citation's check stands. The check compares the model's quote with
- * the text of the cited pages (for a Document without pages, its whole text),
- * once, when the Answer finishes. "found" means the quote is there, not that
- * it supports the sentence.
+ * the text of the cited Units (its Location: one or two pages, slides,
+ * sections, blocks of rows or of lines; see src/shared/units.ts), once, when
+ * the Answer finishes. "found" means the quote is there, not that it supports
+ * the sentence.
  * - "checking": the Answer is still being written.
  * - "found", "not-found": see `checkReason` for why it wasn't found.
  * - "cant-check": there is no text to look in (see `checkReason`).
@@ -238,23 +239,24 @@ export const CITATION_NODE = "citation";
 export type CitationCheck = "checking" | "found" | "not-found" | "cant-check";
 
 export type CitationCheckReason =
-  /** Not found: the quote isn't in the text of the cited pages. */
+  /** Not found: the quote isn't in the text of the cited Units (pages, slides…). */
   | "quote-not-on-pages"
-  /** Not found: the cited pages aren't all among the pages of the cited Passage. */
+  /** Not found: the cited Units aren't all among the Units of the cited Passage. */
   | "pages-outside-passage"
-  /** Not found: a Citation covers one page, or two consecutive pages, at most. */
+  /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
   | "too-many-pages"
-  /** Can't check: the cited pages have no text, e.g. they are scanned. */
+  /** Can't check: the cited Units have no text, e.g. scanned pages. */
   | "no-text"
   /** Can't check: the Document was deleted. */
   | "document-removed";
 
 /**
  * What to re-check a Citation with against its Document's current version
- * (see `CoreApi.recheckCitation`): its Document, cited pages and quote.
+ * (see `CoreApi.recheckCitation`): its Document, cited Units and quote.
  */
 export interface RecheckCitationInput {
   documentId: string;
+  /** The cited Units (pages, slides…), from 1; null for a whole TXT or Markdown file. */
   pageFrom: number | null;
   pageTo: number | null;
   quote: string;
@@ -263,22 +265,41 @@ export interface RecheckCitationInput {
 /**
  * A Citation checked again against its Document's current version: the
  * attributes to store on its node in place of the old ones. The quote is
- * looked for on the cited pages first, then on any page (or two consecutive
- * pages) of the current version, so `pageFrom` and `pageTo` may change.
+ * looked for in the cited Units first, then in any Unit (or two consecutive
+ * ones) of the current version, so `pageFrom`, `pageTo` and `location` may change.
  */
 export interface CitationRecheck {
   check: Exclude<CitationCheck, "checking">;
   checkReason: CitationCheckReason | null;
   /** The version checked: the Document's current `contentHash`; null when it can't be checked. */
   contentHash: string | null;
-  /** A Passage of the current version that holds the pages, or null. */
+  /** A Passage of the current version that holds the Units, or null. */
   passageId: string | null;
   pageFrom: number | null;
   pageTo: number | null;
+  location: CitationLocation | null;
 }
 
-/** At most this many consecutive pages per Citation (the page-range rule). */
+/** At most this many consecutive Units (pages, slides…) per Citation (the Location rule). */
 export const MAX_CITED_PAGES = 2;
+
+/**
+ * Where in a Document a Citation points, as its short label shows it
+ * (ADR-0011), stored with it so the label still reads after the Document is
+ * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
+ * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134").
+ * - "page", "slide": the cited pages or slides.
+ * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
+ *   the cited block's when it wasn't found.
+ * - "section": the heading of the section the quote sits under; null before
+ *   the first heading. `notes`: a Word file's footnotes and endnotes.
+ * - "lines": the lines the quote covers, or the cited block's.
+ */
+export type CitationLocation =
+  | { kind: "page" | "slide"; from: number; to: number }
+  | { kind: "rows"; sheet: string | null; from: number; to: number }
+  | { kind: "lines"; from: number; to: number }
+  | { kind: "section"; heading: string | null; notes?: boolean };
 
 /**
  * A Citation's attributes, as stored on its node in the Mind's Yjs document.
@@ -298,9 +319,18 @@ export interface CitationAttributes {
    * cited (see `citationState` in src/shared/citations.ts).
    */
   contentHash: string | null;
-  /** The cited pages, from 1. Both null for a Document without pages (TXT, Markdown). */
+  /**
+   * The cited Units, from 1: pages of a PDF, slides of a deck, and otherwise
+   * the Units' numbers in the version quoted (see src/shared/units.ts). Both
+   * null for a whole TXT or Markdown file, cited before Units.
+   */
   pageFrom: number | null;
   pageTo: number | null;
+  /**
+   * Where the Citation points, for its label (see `CitationLocation`). Null
+   * for Citations made before Locations: their label comes from the pages.
+   */
+  location: CitationLocation | null;
   /** The quote the model gave, which it was asked to copy word for word from the Passage. */
   quote: string | null;
   check: CitationCheck;
@@ -315,6 +345,7 @@ export interface Citation {
   contentHash: string;
   pageFrom: number | null;
   pageTo: number | null;
+  location: CitationLocation | null;
   quote: string;
   check: CitationCheck;
   checkReason: CitationCheckReason | null;

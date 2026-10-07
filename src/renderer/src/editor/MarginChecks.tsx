@@ -92,7 +92,7 @@ export function MarginChecks({ editor }: { editor: Editor }) {
         const rect = marker.getBoundingClientRect();
         if (rect.height === 0) continue;
         const state = citationState(citation.attributes, live);
-        const badge = badgeMessage(state, citation.attributes);
+        const badge = badgeMessage(state, citation.attributes, translate);
         const mark: Mark = {
           key: citation.key,
           number: citation.number,

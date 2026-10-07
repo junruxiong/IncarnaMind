@@ -1,0 +1,205 @@
+/**
+ * Migration 22 (ADR-0011): each Document's stored page text becomes Units,
+ * PDFs keep theirs, and Markdown and TXT processed before Units are processed
+ * again into sections and lines, while their old Citations stay valid.
+ */
+import { stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { describe, expect, test } from "vitest";
+import { DATABASE_FILE, type Document } from "../../src/core";
+import { CURRENT_SINCE, PROCESSING_VERSION } from "../../src/core/documents/processing";
+import { migrate, openDatabase } from "../../src/core/storage";
+import { migrations } from "../../src/core/storage/migrations";
+import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import { createSourceFolder, sha256, waitForProcessing } from "../helpers/documents";
+import { buildPdf } from "../helpers/pdf";
+
+const NOTES =
+  "# Methods\n\nGauges were read hourly.\n\n# Results\n\nSpring tides came at full moon.\n";
+const LOG = Array.from({ length: 70 }, (_, index) => `Entry ${index + 1}: calm.`).join("\n");
+const PDF = buildPdf([
+  { lines: ["Tides and the Moon"] },
+  { lines: ["Spring tides happen at new moon."] },
+]);
+const AT = "2026-10-01T09:00:00.000Z";
+
+const IDS = { notes: "d1", log: "d2", pdf: "d3" } as const;
+
+/** The built-in model's vector of a Passage: 384 float32s. */
+const vector = () => {
+  const values = new Float32Array(384);
+  values[0] = 1;
+  return new Uint8Array(values.buffer);
+};
+
+/**
+ * A data folder as version 4 of processing left it, before migration 22: a
+ * Markdown and a TXT file stored as one text each (page NULL), and a PDF by
+ * page, all ready and embedded.
+ */
+async function beforeUnits(): Promise<{
+  dataDir: string;
+  paths: Record<keyof typeof IDS, string>;
+}> {
+  const dataDir = await createTempDataFolder();
+  const sources = await createSourceFolder();
+  const paths = {
+    notes: join(sources, "Notes.md"),
+    log: join(sources, "Log.txt"),
+    pdf: join(sources, "Tides.pdf"),
+  };
+  const contents = { notes: NOTES, log: LOG, pdf: PDF };
+  const kinds = { notes: "markdown", log: "text", pdf: "pdf" };
+  const db = openDatabase(join(dataDir, DATABASE_FILE));
+  try {
+    migrate(
+      db,
+      migrations.filter((migration) => migration.version < 22),
+    );
+    for (const key of Object.keys(IDS) as (keyof typeof IDS)[]) {
+      await writeFile(paths[key], contents[key]);
+      const info = await stat(paths[key]);
+      const hash = sha256(contents[key]);
+      db.run(
+        `INSERT INTO documents (id, content_hash, name, kind, size, status, page_count, path,
+           file_status, file_mtime_ms, processing_version, embedding_model, embedding_dimensions,
+           tagging_status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'ready', ?, ?, 'available', ?, 4, 'multilingual-e5-small-int8',
+           384, 'tagged', ?, ?)`,
+        [
+          IDS[key],
+          hash,
+          key,
+          kinds[key],
+          info.size,
+          key === "pdf" ? 2n : null,
+          paths[key],
+          info.mtimeMs,
+          AT,
+          AT,
+        ],
+      );
+      const pages = key === "pdf" ? [1, 2] : [null];
+      for (const page of pages) {
+        const text = key === "pdf" ? `page ${page}` : contents[key];
+        db.run(
+          `INSERT INTO passages (id, document_id, content_hash, position, page_from, page_to,
+             window_from, window_to, text, embedding, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+          [
+            `${IDS[key]}-passage-${page ?? 0}`,
+            IDS[key],
+            hash,
+            BigInt(page ?? 0),
+            page === null ? null : BigInt(page),
+            page === null ? null : BigInt(page),
+            text,
+            vector(),
+            AT,
+            AT,
+          ],
+        );
+        db.run(
+          `INSERT INTO document_pages (id, document_id, content_hash, page, text, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            `${IDS[key]}-page-${page ?? 0}`,
+            IDS[key],
+            hash,
+            page === null ? null : BigInt(page),
+            text,
+            AT,
+            AT,
+          ],
+        );
+      }
+    }
+  } finally {
+    db.close();
+  }
+  return { dataDir, paths };
+}
+
+describe("Migration 22: Units", { timeout: 30_000 }, () => {
+  test("a PDF's pages stay its Units, and a text stored whole becomes Unit 1 of kind 'text'", async () => {
+    const { dataDir } = await beforeUnits();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      migrate(db);
+    } finally {
+      db.close();
+    }
+
+    expect(
+      queryDatabase(
+        dataDir,
+        "SELECT document_id, page, kind, label, anchors FROM document_pages ORDER BY document_id, page",
+      ),
+    ).toEqual([
+      { document_id: "d1", page: 1, kind: "text", label: null, anchors: null },
+      { document_id: "d2", page: 1, kind: "text", label: null, anchors: null },
+      { document_id: "d3", page: 1, kind: "page", label: null, anchors: null },
+      { document_id: "d3", page: 2, kind: "page", label: null, anchors: null },
+    ]);
+  });
+
+  test("at startup, Markdown and TXT are processed again into sections and lines; PDFs are left as they are", async () => {
+    expect(PROCESSING_VERSION).toBe(5);
+    expect(CURRENT_SINCE.pdf).toBe(4);
+    const { dataDir } = await beforeUnits();
+    const core = startCore(dataDir);
+    const statuses: [string, Document["status"]][] = [];
+    core.on("document.status", (document) => statuses.push([document.id, document.status]));
+
+    await waitForProcessing(core, [IDS.notes, IDS.log]);
+
+    expect(
+      queryDatabase(
+        dataDir,
+        `SELECT document_id, page, kind, label FROM document_pages
+         WHERE deleted_at IS NULL ORDER BY document_id, page`,
+      ),
+    ).toEqual([
+      { document_id: "d1", page: 1, kind: "section", label: '{"path":["Methods"]}' },
+      { document_id: "d1", page: 2, kind: "section", label: '{"path":["Results"]}' },
+      { document_id: "d2", page: 1, kind: "lines", label: '{"from":1,"to":50}' },
+      { document_id: "d2", page: 2, kind: "lines", label: '{"from":51,"to":70}' },
+      { document_id: "d3", page: 1, kind: "page", label: null },
+      { document_id: "d3", page: 2, kind: "page", label: null },
+    ]);
+    // The PDF wasn't touched: its Passages and their vectors are the ones it had.
+    expect(statuses.filter(([id]) => id === IDS.pdf)).toEqual([]);
+    expect(
+      queryDatabase(
+        dataDir,
+        `SELECT id, deleted_at IS NULL AS live FROM passages WHERE document_id = 'd3' ORDER BY id`,
+      ),
+    ).toEqual([
+      { id: "d3-passage-1", live: 1 },
+      { id: "d3-passage-2", live: 1 },
+    ]);
+    expect(
+      queryDatabase(dataDir, "SELECT id, processing_version FROM documents ORDER BY id"),
+    ).toEqual([
+      { id: "d1", processing_version: 5 },
+      { id: "d2", processing_version: 5 },
+      { id: "d3", processing_version: 4 },
+    ]);
+
+    // A Citation of a whole file, from before Units, is still checked: now in its section.
+    expect(
+      await core.recheckCitation({
+        documentId: IDS.notes,
+        quote: "Spring tides came at full moon.",
+        pageFrom: null,
+        pageTo: null,
+      }),
+    ).toMatchObject({
+      check: "found",
+      pageFrom: 2,
+      pageTo: 2,
+      location: { kind: "section", heading: "Results" },
+    });
+    core.close();
+  });
+});

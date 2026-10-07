@@ -1,6 +1,7 @@
 import { mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
 import { CITATION_NODE, type CitationAttributes } from "../../../core/api";
 import { citationReference } from "../../../shared/citations";
+import { parseLocation } from "../../../shared/locations";
 
 export interface CitationOptions {
   /** Draws the Citation: its badge, and what clicking it does. */
@@ -55,6 +56,15 @@ export const Citation = Node.create<CitationOptions>({
       contentHash: dataAttribute("contentHash"),
       pageFrom: dataAttribute("pageFrom", "page"),
       pageTo: dataAttribute("pageTo", "page"),
+      // Where it points (ADR-0011), as JSON in the HTML.
+      location: {
+        default: null,
+        parseHTML: (element: HTMLElement) => parseLocation(element.getAttribute("data-location")),
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const location = parseLocation(attributes.location);
+          return location ? { "data-location": JSON.stringify(location) } : {};
+        },
+      },
       quote: dataAttribute("quote"),
       check: {
         default: "checking",
