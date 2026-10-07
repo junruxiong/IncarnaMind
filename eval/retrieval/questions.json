@@ -4,6 +4,7 @@
   "hitRule": "A question is a hit if one of the top 5 retrieved Passages (a) belongs to expected.document, (b) has a page range that covers expected.pages, and (c) contains expected.quote after both are normalised (src/shared/text.ts normaliseText, matched by src/shared/quoteMatch.ts findQuote: NFKC, CJK radical folding, unified quotes/dashes/full-width punctuation, end-of-line hyphenation removed, whitespace collapsed, whitespace next to CJK characters removed).",
   "pageNumbers": "Physical 1-based page index as pdf.js reports it, not the printed page label.",
   "core": "The 40 questions without crossLingual: true (20 en, 20 zh) are the gating set. crossLingual questions (Chinese questions about English documents, and English questions about Chinese documents) are reported separately.",
+  "translatedQuery": "A crossLingual question may have translatedQuery: the question translated by hand into its document's language. It is searched as a second query, standing in for the second search an Answer makes in the documents' language, and a hit in either search's top 5 counts. Reported only, as the most that approach can bring.",
   "documents": {
     "attention-is-all-you-need": "data/Attention Is All You Need.pdf",
     "language-models-are-few-shot-learners": "data/Language Models are Few-Shot Learners.pdf",
@@ -264,6 +265,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "Transformer 大模型在 WMT 2014 英德翻译任务上取得了多少 BLEU 分数？",
+      "translatedQuery": "What BLEU score did the big Transformer model achieve on the WMT 2014 English-to-German translation task?",
       "expected": { "document": "attention-is-all-you-need", "pages": [8, 8], "quote": "BLEU score of 28.4" }
     },
     {
@@ -271,6 +273,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "GPT-2 使用的 WebText 数据集有多大？",
+      "translatedQuery": "How large is the WebText dataset used for GPT-2?",
       "expected": { "document": "language-models-are-unsupervised-multitask-learners", "pages": [3, 3], "quote": "contains slightly over 8 million documents for a total of 40 GB of text" }
     },
     {
@@ -278,6 +281,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "制药公司给医疗专业人员提供餐饮，每人花费上限是多少？",
+      "translatedQuery": "What is the maximum cost per person when pharmaceutical companies provide food and drink to health professionals?",
       "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [23, 23], "quote": "must not exceed £75 per person" }
     },
     {
@@ -285,6 +289,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "摩根大通计划在十年内为可持续发展投入多少资金？",
+      "translatedQuery": "How much money does JPMorgan Chase plan to put toward sustainable development over ten years?",
       "expected": { "document": "jp-morgan-2022-environmental-social-governance-report", "pages": [8, 8], "quote": "facilitate more than $2.5 trillion over 10 years" }
     },
     {
@@ -292,6 +297,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "2022 年联合国促成的黑海粮食倡议是由哪些国家签署的？",
+      "translatedQuery": "Which countries signed the Black Sea Grain Initiative that the United Nations brokered in 2022?",
       "expected": { "document": "united-nations-2022-annual-report", "pages": [26, 26], "quote": "signed by Ukraine, the Russian Federation and Türkiye" }
     },
     {
@@ -299,6 +305,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "GPT-3 的模型是在谁提供的计算集群上训练的？",
+      "translatedQuery": "Who provided the computing cluster that the GPT-3 models were trained on?",
       "expected": { "document": "language-models-are-few-shot-learners", "pages": [9, 9], "quote": "trained on V100 GPU’s on part of a high-bandwidth cluster provided by Microsoft" }
     },
     {
@@ -306,6 +313,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "每多加一层超优化器，运行时间大约增加多少？",
+      "translatedQuery": "Roughly how much does the runtime increase with each additional level of hyperoptimizer?",
       "expected": { "document": "gradient-descent-the-ultimate-optimizer", "pages": [9, 9], "quote": "each additional level costs only 1-2% in additional runtime above the non-hyperoptimized baseline" }
     },
     {
@@ -313,6 +321,7 @@
       "language": "zh",
       "crossLingual": true,
       "question": "制药公司披露的向医疗专业人员付款的信息至少要公开多长时间？",
+      "translatedQuery": "For at least how long must the information that pharmaceutical companies disclose about payments to health professionals remain public?",
       "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [52, 52], "quote": "must remain in the public domain for at least three years from the time of first disclosure" }
     },
     {
@@ -320,6 +329,7 @@
       "language": "en",
       "crossLingual": true,
       "question": "In what year did Haskell Curry first study the convergence of gradient descent on non-linear optimisation problems?",
+      "translatedQuery": "哈斯凯尔·加里在哪一年首次研究了梯度下降法在非线性优化问题上的收敛性？",
       "expected": { "document": "维基百科-梯度下降法", "pages": [1, 1], "quote": "在1944年首先研究了该方法对非线性优化问题的收敛性" }
     },
     {
@@ -327,6 +337,7 @@
       "language": "en",
       "crossLingual": true,
       "question": "What share of coastal and marine areas do the Sustainable Development Goals aim to conserve by 2020?",
+      "translatedQuery": "可持续发展目标计划到 2020 年保护多大比例的沿海和海洋区域？",
       "expected": { "document": "维基百科-可持续发展目标", "pages": [9, 9], "quote": "保護至少10%的海岸與海洋區" }
     }
   ]

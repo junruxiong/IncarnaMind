@@ -6,9 +6,10 @@ It drives the core's public interface in Node, the way the desktop app's UI does
 
 1. It creates a temporary data folder. It never touches the app's real data folder.
 2. It adds the seven sample PDFs in `data/` and the five Chinese Wikipedia articles in `retrieval/fixtures/` with `addDocuments`, and waits until each is processed: text extracted, Passages built and embedded with the real built-in model, multilingual-e5-small.
-3. It searches for each Question with `searchPassages` in hybrid, keyword and vector mode, and scores the top 5.
-4. When a chat model is given, it asks each Question with `askQuestion` and scores the Citations of each Answer.
-5. It writes a report under `eval/results/` and prints a summary.
+3. It searches for each Question with `searchPassages` in hybrid, keyword and vector mode, and scores the top 5. A cross-lingual Question with a translated query is searched with that too.
+4. When reranking candidates are given, it reranks each hybrid top 20 with each of them and scores the top 5 again.
+5. When a chat model is given, it asks each Question with `askQuestion` and scores the Citations of each Answer.
+6. It writes a report under `eval/results/` and prints a summary.
 
 The command fails (exit code 1) when a gating target is missed. It isn't part of `npm test` or CI's default run.
 
@@ -25,6 +26,26 @@ The first run downloads the model, about 135 MB from Hugging Face, into `~/.cach
 The model runs on a Node worker thread (`lib/embedderWorker.ts`). It uses the same code as the app's embedding utility process: `createOnnxEmbedder`, served over the channel in `src/core/embedding/channel.ts`.
 
 A run takes about a minute on an Apple M2 Max, most of it spent embedding about 1,200 Passages.
+
+### Reranking candidates
+
+The built-in reranking model (Settings → Reranking, "On this computer") has three candidates, all multilingual cross-encoders under Apache-2.0, as int8 ONNX (`src/core/reranking/model.ts`). Name the ones to compare, or all of them:
+
+```sh
+INCARNAMIND_EVAL_RERANK=all npm run eval
+INCARNAMIND_EVAL_RERANK=mmarco-minilm,bge-m3 npm run eval
+```
+
+| Id | Model | Download |
+|---|---|---|
+| `mmarco-minilm` | cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (the one Settings offers for now) | 136 MB |
+| `gte-multilingual` | Alibaba-NLP/gte-multilingual-reranker-base | 358 MB |
+| `bge-m3` | BAAI/bge-reranker-v2-m3 | 588 MB |
+
+- **How:** after the searches, each candidate in turn reranks every hybrid top 20 (and each translated query's), with the core's own reranking code (`createRerankingModel`: what the model reads, its scores) and the model on a worker thread (`lib/rerankerWorker.ts`), as the app's reranking utility process runs it. The evaluation's core keeps reranking off, so the gating mode is unchanged.
+- **Downloads:** the first run downloads each candidate into the model cache, next to the embedding model, checked against its pinned SHA-256 hashes; later runs reuse them. All three come to about 1.1 GB.
+- **Time:** reranking 50 searches, plus 10 translated ones, takes about half a minute with `mmarco-minilm`, a minute and a half with `gte-multilingual` and four minutes with `bge-m3` on an Apple M2 Max.
+- **Reported:** a row per candidate, "hybrid + model", next to the search modes, and each candidate's download and time per search (mean, median, 95th percentile and slowest, after the first search, which loads the model). Reranked modes never gate.
 
 ### Citation quality
 
@@ -70,7 +91,8 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_EMBED_MODEL` | none | For example `text-embedding-3-small` or `gemini-embedding-001`. |
 | `INCARNAMIND_EVAL_EMBED_KEY` | none | Required with `INCARNAMIND_EVAL_EMBED_KIND`. |
 | `INCARNAMIND_EVAL_EMBED_BASE_URL` | none | An OpenAI-compatible server instead of OpenAI (`openai` only). |
-| `INCARNAMIND_EVAL_CACHE` | `~/.cache/incarnamind-eval` | Where the built-in model is kept between runs. |
+| `INCARNAMIND_EVAL_RERANK` | none | `all`, or reranking candidates' ids separated by commas (see Reranking candidates). Adds their reranked modes. |
+| `INCARNAMIND_EVAL_CACHE` | `~/.cache/incarnamind-eval` | Where the built-in models are kept between runs. |
 | `INCARNAMIND_EVAL_MIN_CITATIONS` | `30` | Citations each language needs for the Citation targets to count. |
 | `INCARNAMIND_EVAL_MAX_ROUNDS` | `3` | Rounds of Questions at most. |
 | `INCARNAMIND_EVAL_ANSWER_TIMEOUT_S` | `300` | An Answer that takes longer is stopped and counted as failed. |
@@ -107,8 +129,9 @@ The evaluation set is `retrieval/questions.json`: 40 gating Questions (20 Englis
 
   The quote is matched as the Citation check matches quotes, with `findQuote`: both are normalised the same way and compared.
 - **Gate:** hybrid search, which is what the search Tool runs, with the built-in model must find at least 80% of the gating Questions overall and in each language: 32 of 40, and 16 of 20 per language, with today's set.
-- **Reported, not gating:** keyword-only and vector-only search, the cross-lingual Questions, and a cloud embedding model if one is given.
-- **Per Question:** the report gives the rank of the first hit in each mode. A rank in brackets is a near miss, between 6 and 20. For each hybrid miss, it lists what the top 5 were and what each lacked.
+- **Reported, not gating:** keyword-only and vector-only search, the cross-lingual Questions, a cloud embedding model if one is given, and the reranked modes of the candidates given.
+- **A translated second query:** each cross-lingual Question has a `translatedQuery`, the Question translated by hand into its Document's language. An Answer is told to search again in the Documents' language when the Question is in another one (the search Tool names their languages), and the translation stands in for that second search, without a chat model. The column "with a translated second query" counts a hit when either search's top 5 has one, in hybrid mode and each reranked mode. The translations are written and checked by hand, so this is the most the approach can bring: a model's own translation may find less.
+- **Per Question:** the report gives the rank of the first hit in each mode. A rank in brackets is a near miss, between 6 and 20; for a cross-lingual Question, "a / b" is the rank for the Question, then for its translation. For each hybrid miss, it lists what the top 5 were and what each lacked.
 
 ### Citation quality
 
@@ -222,7 +245,8 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `evaluationSet.ts`: reads and checks `retrieval/questions.json`.
   - `library.ts`: the temporary data folder, the core, and the Documents.
   - `embedder.ts` and `embedderWorker.ts`: the built-in model on a worker thread, and cloud embedders.
-  - `retrieval.ts`: the hit rule, searches and tallies.
+  - `rerank.ts` and `rerankerWorker.ts`: a reranking candidate on a worker thread, and its download and timings.
+  - `retrieval.ts`: the hit rule, searches, reranked modes, the translated second query, and tallies.
   - `citations.ts`: asks Questions, reads Answers, and scores Citations.
   - `report.ts`: the reports and the summary.
 - **Evaluation set:**

@@ -13,7 +13,7 @@ import { arch, cpus, platform } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { BUILT_IN_EMBEDDING_MODEL } from "../src/core";
+import { BUILT_IN_EMBEDDING_MODEL, type RerankingModelDefinition } from "../src/core";
 import { type CitationRun, runCitations } from "./lib/citations";
 import { readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
@@ -21,10 +21,13 @@ import { loadEvaluationSet } from "./lib/evaluationSet";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
 import { type EvalReport, terminalSummary, writeReports } from "./lib/report";
+import { openReranker, type RerankerInfo } from "./lib/rerank";
 import {
   GATING_MODE,
+  type RetrievalMode,
   type RetrievalRun,
   retrievalFailures,
+  runReranked,
   runRetrieval,
   summarise,
   TOP_K,
@@ -51,23 +54,46 @@ async function retrieve(
   gating: boolean,
   questions: Parameters<typeof runRetrieval>[1],
   log: Log,
+  rerank: { candidates: readonly RerankingModelDefinition[]; cacheDir: string } | null = null,
 ): Promise<RetrievalRun> {
   const ids = new Map([...library.documents].map(([key, document]) => [key, document.id]));
   const results = await runRetrieval(library.core, questions, ids);
-  const summary = summarise(results);
-  const gate = summary[GATING_MODE];
-  if (gate) {
+  const line = (mode: RetrievalMode, label: string) => {
+    const summary = summarise(results, [mode])[mode];
+    if (!summary) return;
+    const translated = summary.crossLingualTranslated;
     log(
-      `${embedding}, ${GATING_MODE}: English ${gate.en.hits}/${gate.en.total}, Chinese ${gate.zh.hits}/${gate.zh.total}, cross-lingual ${gate.crossLingual.hits}/${gate.crossLingual.total}`,
+      `${embedding}, ${label}: English ${summary.en.hits}/${summary.en.total}, Chinese ${summary.zh.hits}/${summary.zh.total}, cross-lingual ${summary.crossLingual.hits}/${summary.crossLingual.total}${translated ? ` (${translated.hits}/${translated.total} with a translated second query)` : ""}`,
     );
+  };
+  line(GATING_MODE, GATING_MODE);
+
+  // Reranked modes, one candidate at a time: each is downloaded once into the model cache.
+  const rerankers: RerankerInfo[] = [];
+  for (const candidate of rerank?.candidates ?? []) {
+    log(`Reranking hybrid search's top 20 with ${candidate.name}`);
+    const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log);
+    try {
+      await runReranked(library.core, questions, ids, reranker, results);
+      const info = reranker.info();
+      rerankers.push(info);
+      line(info.mode as RetrievalMode, `hybrid + ${candidate.name}`);
+      log(
+        `${candidate.name}: ${info.latency.mean.toFixed(0)} ms a query on average (95th percentile ${info.latency.p95.toFixed(0)} ms), loaded in ${info.loadSeconds.toFixed(1)} s`,
+      );
+    } finally {
+      reranker.close();
+    }
   }
+
   return {
     embedding,
     gating,
     passageCount: library.passageCount,
     processingSeconds: library.processingSeconds,
     questions: results,
-    summary,
+    summary: summarise(results),
+    ...(rerankers.length > 0 && { rerankers }),
   };
 }
 
@@ -96,6 +122,7 @@ test("retrieval and Citation evaluation", async () => {
         true,
         set.questions,
         log,
+        { candidates: config.rerank, cacheDir: config.cacheDir },
       ),
     ];
 

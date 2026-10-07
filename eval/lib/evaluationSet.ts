@@ -23,6 +23,13 @@ export interface EvalQuestion {
   /** Asked in one language about a Document in the other: reported apart, never gating. */
   crossLingual: boolean;
   question: string;
+  /**
+   * Cross-lingual Questions only: the search query an Answer would add, the
+   * Question translated into its Document's language (written by hand). It
+   * stands in for the chat model's second search, to measure the most that
+   * searching again in the Documents' language can bring.
+   */
+  translatedQuery?: string;
   expected: ExpectedPassage;
 }
 
@@ -68,11 +75,20 @@ function readQuestion(raw: unknown, documents: ReadonlySet<string>): EvalQuestio
     fail(`${id}: expected.pages must be [first, last].`);
   }
   if (typeof expected.quote !== "string" || !expected.quote.trim()) fail(`${id}: no quote.`);
+  const crossLingual = question.crossLingual === true;
+  const { translatedQuery } = question as { translatedQuery?: unknown };
+  if (translatedQuery !== undefined) {
+    if (!crossLingual) fail(`${id}: only a cross-lingual question has a translatedQuery.`);
+    if (typeof translatedQuery !== "string" || !translatedQuery.trim()) {
+      fail(`${id}: translatedQuery must be text.`);
+    }
+  }
   return {
     id,
     language: language as EvalLanguage,
-    crossLingual: question.crossLingual === true,
+    crossLingual,
     question: question.question,
+    ...(typeof translatedQuery === "string" && { translatedQuery }),
     expected: {
       document: expected.document,
       pages: [from, to] as [number, number],
