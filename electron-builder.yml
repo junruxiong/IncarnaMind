@@ -10,13 +10,13 @@ productName: IncarnaMind
 
 directories:
   output: dist
-  # TODO(icon): there's no app icon in the repo yet (figs/ only holds diagrams), so builds
-  # use Electron's default icon. Add a 1024x1024 build/icon.png: electron-builder derives
-  # the macOS .icns, Windows .ico and Linux icons from it.
+  # TODO(icon): there's no app icon in the repo yet, so builds use Electron's default icon.
+  # Add a 1024x1024 build/icon.png: electron-builder derives the macOS .icns, Windows .ico
+  # and Linux icons from it.
   buildResources: build
 
 # Only the bundled app goes in. The production dependencies in node_modules are added
-# automatically; the rest of the repo (the Python tool, backend/, frontend/) stays out.
+# automatically; the rest of the repo (sources, tests, the sample PDFs in data/) stays out.
 files:
   - out/**/*
   # pdf.js's optional native canvas (about 27 MB) only renders pages in Node; text extraction doesn't use it.

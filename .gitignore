@@ -1,17 +1,7 @@
 .DS_Store
 .history
 .vscode
-__pycache__
-Archieve
-database_store
-IncarnaMind.log
-experiments.ipynb
-.pylintrc
-.flake8
-models/
-model/
 
-# Desktop app (TypeScript)
 node_modules/
 out/
 dist/
