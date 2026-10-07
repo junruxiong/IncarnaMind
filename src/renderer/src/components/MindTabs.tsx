@@ -1,4 +1,11 @@
-import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type DragEvent,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
@@ -39,6 +46,8 @@ export function MindTabs({ onExport }: { onExport(): void }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<{ id: string; side: "before" | "after" } | null>(null);
   useTabShortcuts();
+
+  const overflow = useOverflow(list);
 
   // The shown tab stays in sight when there are more tabs than room.
   useEffect(() => {
@@ -85,8 +94,16 @@ export function MindTabs({ onExport }: { onExport(): void }) {
         role="tablist"
         aria-label={t("tabs.label")}
         data-testid="mind-tabs"
+        data-hidden-before={overflow.before || undefined}
+        data-hidden-after={overflow.after || undefined}
         className="mind-tabs-list"
         onKeyDown={moveFocus}
+        // A mouse wheel turns vertically; the strip scrolls sideways.
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && list.current) {
+            list.current.scrollLeft += event.deltaY;
+          }
+        }}
       >
         {tabs.map((id, index) => {
           const selected = id === openMindId;
@@ -289,4 +306,36 @@ function useTabShortcuts() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+}
+
+/**
+ * Whether tabs are scrolled out of sight before or after the strip's visible
+ * part: the strip fades out on that side (see `.mind-tabs-list`).
+ */
+function useOverflow(list: RefObject<HTMLDivElement | null>) {
+  const [overflow, setOverflow] = useState({ before: false, after: false });
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const measure = () => {
+      const before = element.scrollLeft > 1;
+      const after = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+      setOverflow((current) =>
+        current.before === before && current.after === after ? current : { before, after },
+      );
+    };
+    measure();
+    element.addEventListener("scroll", measure, { passive: true });
+    // The strip's size changes with the window; its width of tabs, as tabs open and close.
+    const resized = new ResizeObserver(measure);
+    resized.observe(element);
+    const changed = new MutationObserver(measure);
+    changed.observe(element, { childList: true });
+    return () => {
+      element.removeEventListener("scroll", measure);
+      resized.disconnect();
+      changed.disconnect();
+    };
+  }, [list]);
+  return overflow;
 }

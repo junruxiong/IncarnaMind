@@ -277,3 +277,34 @@ test("a new Mind's title has the focus, so typing names it instead of making mor
   await expect(titlesOf(window)).toHaveText(["Hello world", "Second one"]);
   await app.close();
 });
+
+test("tabs are 220px while there is room, and a mouse wheel scrolls the strip to tabs out of sight", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 800));
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
+  for (const name of ["Alpha notes", "Beta research", "Gamma draft"]) {
+    await window.getByTestId("new-mind").click();
+    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await window.keyboard.type(name);
+  }
+  // Short titles show in full: the tabs take their 220px, not their text's width.
+  for (const tab of await tabsOf(window).all())
+    expect((await boxOf(tab)).width).toBeCloseTo(220, 0);
+  await expect(titlesOf(window)).toHaveText(["Alpha notes", "Beta research", "Gamma draft"]);
+
+  // More tabs than room: the first ones scroll out of sight, and the strip fades on that side.
+  for (let index = 0; index < 13; index++) {
+    await window.getByTestId("new-tab").click();
+    await expect(tabsOf(window)).toHaveCount(4 + index);
+  }
+  const strip = window.getByTestId("mind-tabs");
+  await expect(strip).toHaveAttribute("data-hidden-before", "true");
+  // A mouse wheel, turned up, brings them back.
+  const box = await boxOf(strip);
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await window.mouse.wheel(0, -2000);
+  await expect(strip).not.toHaveAttribute("data-hidden-before");
+  await expect(strip).toHaveAttribute("data-hidden-after", "true");
+  await app.close();
+});
