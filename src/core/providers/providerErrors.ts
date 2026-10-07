@@ -1,5 +1,5 @@
 import { APICallError, RetryError } from "ai";
-import type { ProviderError } from "../api";
+import type { ProviderError, ProviderErrorKind } from "../api";
 import { ConsentDeclinedError } from "../errors";
 import { OAuthTokenError } from "../oauth";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
@@ -7,11 +7,45 @@ import { JevRequestError } from "./jev";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/** A local model can't take a request, found before anything is sent: e.g. it isn't a chat model. */
+export class LocalModelError extends Error {
+  constructor(
+    readonly kind: Extract<ProviderErrorKind, "model" | "too-long">,
+    message: string,
+  ) {
+    super(message);
+    this.name = "LocalModelError";
+  }
+}
+
+/**
+ * Ollama's refusal of a request longer than the model's context window (sent
+ * with `truncate: false`): "request (6029 tokens) exceeds the available
+ * context size (4096 tokens)". The counts, when it gives them.
+ */
+export function contextOverflow(
+  error: unknown,
+): { promptTokens: number | null; windowTokens: number | null } | null {
+  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  if (!APICallError.isInstance(cause) || cause.statusCode !== 400) return null;
+  const text = `${cause.message} ${cause.responseBody ?? ""}`;
+  if (!/exceeds? the available context size|exceed_context_size/i.test(text)) return null;
+  const count = (pattern: RegExp) => {
+    const found = pattern.exec(text);
+    return found ? Number(found[1]) : null;
+  };
+  return {
+    promptTokens: count(/request \((\d+) tokens?\)/i),
+    windowTokens: count(/context size \((\d+) tokens?\)/i),
+  };
+}
+
 /**
  * Sorts a failed provider request into a kind the UI can explain: a bad key,
  * an unknown model, rate limiting, no connection, or the provider's own error.
  * For the ChatGPT plan, also a missing or expired sign-in, a reached plan
  * limit, or OpenAI refusing the sign-in. Jev's errors come sorted already.
+ * For a local model, a request too long for its context window.
  * Answers (#29) reuse it for errors shown inside an Answer.
  */
 export function classifyProviderError(error: unknown): ProviderError {
@@ -19,6 +53,8 @@ export function classifyProviderError(error: unknown): ProviderError {
   const message = messageOf(cause);
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
+  if (cause instanceof LocalModelError) return { kind: cause.kind, message };
+  if (contextOverflow(cause)) return { kind: "too-long", message };
   if (cause instanceof JevRequestError) return { kind: cause.kind, message };
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
   if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message };

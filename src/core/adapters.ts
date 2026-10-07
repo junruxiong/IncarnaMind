@@ -13,6 +13,7 @@ import type { WatchFolder } from "./documents/watcher";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
+import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
 
 export interface Paths {
@@ -247,6 +248,12 @@ export interface CoreAdapters {
    * providers; tests pass AI SDK mock models.
    */
   createChatModel?: ChatModelFactory;
+  /**
+   * Looks up models in Ollama (`/api/tags`, `/api/show`) for the settings
+   * their requests carry and how they cite. Defaults to asking Ollama, with
+   * this computer's memory; tests pass a stub.
+   */
+  ollamaModels?: OllamaModels;
   /**
    * Where the experimental ChatGPT plan provider signs in and sends Questions.
    * Defaults to OpenAI's servers and the Codex CLI's callback port; tests

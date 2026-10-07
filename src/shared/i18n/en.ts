@@ -357,6 +357,7 @@ export const en = {
   "providers.test.provider": "The provider returned an error.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
+  "providers.test.too-long": "The model's context window is too small for even a short request.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -562,6 +563,8 @@ export const en = {
     "The provider ran into a problem. Try again, or pick another model on the Question.",
   "answer.error.consent-declined":
     "Nothing was sent, because you chose not to send data to this service. You can allow it in Settings.",
+  "answer.error.too-long":
+    "This Question is too long for the local model's context window, even without the Notes above it. Shorten it, or pick another model on the Question.",
   "answer.error.unknown": "This Answer couldn't be written. Try again.",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT. Sign in again in Settings.",
   "answer.error.plan-limit":

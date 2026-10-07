@@ -989,6 +989,11 @@ export type ProviderErrorKind =
   | "plan-limit"
   /** ChatGPT plan: OpenAI refused a valid sign-in (401 or 403), e.g. it blocked this integration. */
   | "blocked"
+  /**
+   * A local model: the request doesn't fit its context window, even with the
+   * oldest Question context left out. Nothing is cut silently.
+   */
+  | "too-long"
   | "unknown";
 
 export interface ProviderError {
