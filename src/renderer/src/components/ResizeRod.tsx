@@ -13,6 +13,8 @@ interface ResizeRodProps {
   onPreview(width: number): void;
   /** Called once with the final width. */
   onCommit(width: number): void;
+  /** Starts below the 44px band the panes' headers share (`.pane-divider--below-band`). */
+  belowBand?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export function ResizeRod({
   direction,
   onPreview,
   onCommit,
+  belowBand = false,
 }: ResizeRodProps) {
   const drag = useRef<{ startX: number; startWidth: number; latest: number } | null>(null);
   const clamp = (value: number) => Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
@@ -79,7 +82,7 @@ export function ResizeRod({
       onPointerUp={endDrag}
       onPointerCancel={cancelDrag}
       onKeyDown={resizeWithKeys}
-      className="pane-divider"
+      className={belowBand ? "pane-divider pane-divider--below-band" : "pane-divider"}
     />
   );
 }
