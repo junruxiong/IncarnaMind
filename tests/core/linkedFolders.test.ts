@@ -13,6 +13,7 @@ import {
   NotFoundError,
   type WatchListener,
 } from "../../src/core";
+import { suggestLayout } from "../../src/core/documents/library";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import {
   addAndProcess,
@@ -150,7 +151,8 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     const library = await createSourceFolder();
     // Zotero's storage: one folder per item, each with one file (and its hidden cache).
     const pdf = buildPdf([{ lines: ["A paper about tides."] }]);
-    for (const key of ["ABCD1234", "EFGH5678", "IJKL9012", "MNOP3456"]) {
+    const keys = Array.from({ length: 20 }, (_, index) => `KEY${String(index).padStart(5, "0")}`);
+    for (const key of keys) {
       await writeSourceFile(library, `storage/${key}/paper.pdf`, pdf);
       await writeSourceFile(library, `storage/${key}/.zotero-ft-cache`, "cache");
     }
@@ -160,8 +162,8 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
 
     expect(preview).toEqual({
       path: join(library, "storage"),
-      files: 4,
-      bytes: pdf.byteLength * 4,
+      files: 20,
+      bytes: pdf.byteLength * 20,
       onlineOnly: { files: 0, bytes: 0 },
       estimatedSeconds: expect.any(Number),
       layout: "flat",
@@ -182,6 +184,23 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
     );
     await expect(core.previewLinkedFolder(join(library, "nowhere"))).rejects.toThrow(NotFoundError);
     await expect(core.addLinkedFolder("relative/path")).rejects.toThrow(InvalidInputError);
+  });
+
+  test("only a big library of one-file folders starts flat; a small one keeps its folders", () => {
+    const zotero = (items: number) =>
+      Array.from({ length: items }, (_, index) => `KEY${index}/paper.pdf`);
+    expect(suggestLayout(zotero(20))).toBe("flat");
+    expect(suggestLayout([...zotero(20), "KEY0/supplement.pdf", "KEY1/supplement.pdf"])).toBe(
+      "flat",
+    );
+    // Three one-file folders, or nineteen, is someone's own filing: shown as folders.
+    expect(suggestLayout(zotero(3))).toBe("tree");
+    expect(suggestLayout(zotero(19))).toBe("tree");
+    // Twenty folders, but many with several files: folders.
+    expect(
+      suggestLayout([...zotero(20), ...zotero(5).map((path) => path.replace("paper", "notes"))]),
+    ).toBe("tree");
+    expect(suggestLayout(["a.pdf", "b.pdf"])).toBe("tree");
   });
 
   test("a folder inside a Linked folder is linked already; one around Linked folders takes them in, their Documents keeping their ids", async () => {

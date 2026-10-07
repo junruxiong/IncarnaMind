@@ -74,7 +74,8 @@ function useMenuCommands(): void {
  * Sidebar with Minds and Documents on the left, on the frame, and the open
  * Mind filling the rest, on the sheet; 1px rules divide them. The Document
  * viewer panel appears on the right only while open, narrowing the Mind area.
- * Files dropped anywhere are added as Documents.
+ * Files dropped anywhere are added as Documents; a folder dropped is offered
+ * for linking.
  */
 function Workspace() {
   const t = useT();
@@ -83,8 +84,8 @@ function Workspace() {
   const closeViewer = useAppStore((state) => state.closeViewer);
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
-  const addDocuments = useAppStore((state) => state.addDocuments);
-  const fileDrop = useFileDrop((files) => void addDocuments(files));
+  const addDropped = useAppStore((state) => state.addDropped);
+  const fileDrop = useFileDrop((files, folders) => void addDropped(files, folders));
   const windowWidth = useWindowWidth();
   const openSettings = useAppStore((state) => state.openSettings);
   useDevViewerShortcut();

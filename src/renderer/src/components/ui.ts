@@ -161,7 +161,7 @@ export const rowStatusClass = "text-[13px] leading-5 text-ink-meta";
 
 /** A popover menu's element. */
 export const menuClass =
-  "inset-auto m-0 max-h-[60vh] w-max max-w-72 min-w-48 overflow-y-auto rounded-lg border-0 bg-sheet p-1 text-ui text-ink shadow-popover";
+  "inset-auto m-0 max-h-[60vh] w-max max-w-72 min-w-48 overflow-y-auto rounded-lg border-0 bg-sheet p-1 text-ui font-normal text-ink shadow-popover";
 
 /** A menu's small heading. */
 export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-ink-meta";
@@ -169,6 +169,13 @@ export const menuTitleClass = "px-2 pt-1.5 pb-1 text-label font-semibold text-in
 /** A menu item: a 28px row, in the menu's ink unless it says otherwise. */
 export const menuItemClass =
   "flex h-7 w-full items-center gap-2 rounded-md pr-2 text-left outline-none hover:bg-hover focus-visible:bg-hover disabled:text-ink-placeholder disabled:hover:bg-transparent";
+
+/**
+ * A menu item that can't be used right now (`aria-disabled`): it stays in
+ * the arrow keys' reach, greyed, with the reason as its tooltip.
+ */
+export const menuItemUnavailableClass =
+  "aria-disabled:cursor-default aria-disabled:text-ink-placeholder aria-disabled:hover:bg-transparent";
 
 /** A rule between groups of menu items. */
 export const menuRuleClass = "mx-1 my-1 border-t border-rule";

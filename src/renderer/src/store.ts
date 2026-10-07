@@ -7,6 +7,8 @@ import type {
   EmbeddingSettings,
   Folder,
   LinkedFolder,
+  LinkedFolderLayout,
+  LinkedFolderPreview,
   Mind,
   Settings,
   SettingsPatch,
@@ -33,6 +35,16 @@ export type SettingsPage = (typeof settingsPages)[number];
 
 const isSettingsPage = (page: unknown): page is SettingsPage =>
   settingsPages.some((each) => each === page);
+
+/**
+ * A folder the User picked to link, while the link dialog shows what linking
+ * it would take: the preview once it is counted, or why it couldn't be.
+ */
+export interface LinkingFolder {
+  path: string;
+  preview: LinkedFolderPreview | null;
+  error: string | null;
+}
 
 /** What the Document viewer shows: one Document, opened at a location. */
 export interface ViewerTarget extends DocumentLocation {
@@ -66,6 +78,8 @@ interface AppState {
   documents: Document[];
   /** Names of the files the last add couldn't take, shown until dismissed. */
   skippedFiles: string[];
+  /** Names of the files the last add found in IncarnaMind already, shown until dismissed. */
+  alreadyAdded: string[];
   /** The built-in embedding model and its download. Set once loaded, then follows the core's event. */
   embeddingModel: EmbeddingModelStatus | null;
   /** The embedding model search uses, local mode and any rebuild. Set once loaded, then follows the core's event. */
@@ -80,6 +94,10 @@ interface AppState {
   folders: Folder[];
   /** The Linked folders, in path order. Set once loaded, then follows the core's event. */
   linkedFolders: LinkedFolder[];
+  /** The folder the link dialog asks about, until the User links it or cancels. */
+  linking: LinkingFolder | null;
+  /** More folders dropped at once, which the link dialog asks about in turn. */
+  linkQueue: LinkingFolder[];
   /** Every Tag, in name order. */
   tags: Tag[];
   /** The Tag whose Documents the sidebar shows. Null: any. */
@@ -127,17 +145,51 @@ interface AppState {
   /** Changes pane widths on screen only, e.g. while dragging a divider. */
   previewLayout(layout: Partial<DeviceSettings>): void;
   dismissActionError(): void;
-  /** Adds dropped or picked files as Documents. */
+  /**
+   * Adds picked files as Documents. Files already in IncarnaMind, and those
+   * it can't take, are named in the footer, once.
+   */
   addDocuments(picked: readonly File[]): Promise<void>;
+  /**
+   * What dropping on the window does: files are added as Documents, and each
+   * folder opens the link dialog (see `addLinkedFolder`), one after another.
+   * `folders` are the dropped items the drop said are folders.
+   */
+  addDropped(dropped: readonly File[], folders: readonly File[]): Promise<void>;
+  /**
+   * The same, given absolute paths: a path that turns out to be a folder is
+   * offered for linking. For the smoke tests, which can't drop a folder.
+   */
+  addPaths(paths: readonly string[]): Promise<void>;
   renameDocument(id: string, name: string): Promise<void>;
   deleteDocument(id: string): Promise<void>;
+  /** Processes a Document that failed again, from its file. */
+  retryDocument(id: string): Promise<void>;
   dismissSkippedFiles(): void;
+  dismissAlreadyAdded(): void;
   /** Downloads the embedding model again after a failure. */
   downloadEmbeddingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
-  /** Asks for a folder with the system's folder picker, and links it. */
+  /**
+   * Asks for a folder with the system's folder picker, then opens the link
+   * dialog on it: what linking it would take, counted from its files' metadata.
+   */
   addLinkedFolder(): Promise<void>;
+  /** Links the folder the link dialog asks about, shown in `layout`, and closes the dialog. */
+  confirmLinkedFolder(layout: LinkedFolderLayout): Promise<void>;
+  /** Closes the link dialog without linking. */
+  cancelLinkedFolder(): void;
+  /** Pauses or resumes a Linked folder's indexing. */
+  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<void>;
+  /** Shows a Linked folder as Folders or as a flat list. */
+  setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<void>;
+  /** Downloads a Linked folder's online-only files and indexes them. */
+  downloadOnlineOnlyFiles(linkedFolderId: string): Promise<void>;
+  /** Shows a Linked folder in the system's file manager. */
+  showLinkedFolder(linkedFolderId: string): Promise<void>;
+  /** Unlinks a folder: its Documents leave the index; nothing on disk changes. */
+  removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Shows only the Documents with a Tag; null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -163,6 +215,10 @@ const upsert = (documents: Document[], item: Document) =>
   documents.some((each) => each.id === item.id)
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
+
+/** Puts a Linked folder in the list in place, if it's there. New ones arrive with the core's event. */
+const replaceLinked = (linkedFolders: LinkedFolder[], linked: LinkedFolder) =>
+  linkedFolders.map((each) => (each.id === linked.id ? linked : each));
 
 /** Open tabs and the shown one, after `id`'s tab closes: the one after it is shown, or else before. */
 function withoutTab(
@@ -209,6 +265,92 @@ export const useAppStore = create<AppState>()((set, get) => {
     saveTabs(next.tabs, next.openMindId);
   };
 
+  /**
+   * Opens the link dialog on a folder: at once, then with what linking it
+   * would take once that's counted (unless it already is).
+   */
+  const showLinking = async (folder: LinkingFolder) => {
+    set({ linking: folder });
+    if (folder.preview || folder.error) return;
+    const { path } = folder;
+    try {
+      const preview = await core.previewLinkedFolder(path);
+      if (get().linking?.path === path) set({ linking: { path, preview, error: null } });
+    } catch (error) {
+      if (get().linking?.path === path) {
+        set({ linking: { path, preview: null, error: messageOf(error) } });
+      }
+    }
+  };
+
+  /** Asks about folders to link, one at a time: now if the dialog is free, otherwise after the others. */
+  const offerLinks = (folders: readonly LinkingFolder[]) => {
+    const [first, ...rest] = get().linking ? [] : folders;
+    set((state) => ({ linkQueue: [...state.linkQueue, ...(first ? rest : folders)] }));
+    if (first) void showLinking(first);
+  };
+
+  /** The dialog is done with a folder: it asks about the next one, if any. */
+  const nextLink = () => {
+    const [next, ...rest] = get().linkQueue;
+    set({ linking: null, linkQueue: rest });
+    if (next) void showLinking(next);
+  };
+
+  /**
+   * Adds files by path, as Documents: names those IncarnaMind has already,
+   * and those it can't take, once (in the footer), and offers any that turn
+   * out to be folders for linking.
+   */
+  const addByPath = async (
+    paths: readonly string[],
+    folders: readonly string[],
+    notOnDisk: readonly string[],
+  ) => {
+    // Before adding: what status events bring meanwhile is new, not something added before.
+    const known = new Set(get().documents.map((each) => each.id));
+    const result =
+      paths.length > 0 ? await core.addDocuments([...paths]) : { documents: [], skipped: [] };
+    const linkable: LinkingFolder[] = folders.map((path) => ({ path, preview: null, error: null }));
+    const skipped = [...notOnDisk];
+    for (const { path } of result.skipped) {
+      // A folder (the drop didn't say) can't be added, but can be linked: only a folder has a preview.
+      const preview = await core.previewLinkedFolder(path).catch(() => null);
+      if (preview) linkable.push({ path, preview, error: null });
+      else skipped.push(fileName(path));
+    }
+    set((state) => {
+      // Status events may already have brought newer copies of these; keep those.
+      const listed = new Set(state.documents.map((each) => each.id));
+      const added = new Map<string, Document>();
+      for (const item of result.documents) {
+        if (!listed.has(item.id)) added.set(item.id, item);
+      }
+      return {
+        documents: [...[...added.values()].reverse(), ...state.documents],
+        skippedFiles: skipped,
+        alreadyAdded: [
+          ...new Set(
+            result.documents.filter((item) => known.has(item.id)).map((item) => item.name),
+          ),
+        ],
+      };
+    });
+    offerLinks(linkable);
+  };
+
+  /** Dropped or picked files' paths, and the names of those that aren't on disk. */
+  const pathsOf = (picked: readonly File[]) => {
+    const paths: string[] = [];
+    const notOnDisk: string[] = [];
+    for (const file of picked) {
+      const path = files.pathForFile(file);
+      if (path) paths.push(path);
+      else notOnDisk.push(file.name);
+    }
+    return { paths, notOnDisk };
+  };
+
   return {
     status: { kind: "loading" },
     minds: [],
@@ -222,12 +364,15 @@ export const useAppStore = create<AppState>()((set, get) => {
     viewerTarget: null,
     documents: [],
     skippedFiles: [],
+    alreadyAdded: [],
     embeddingModel: null,
     embedding: null,
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
     linkedFolders: [],
+    linking: null,
+    linkQueue: [],
     tags: [],
     tagFilter: null,
     filteredDocumentIds: null,
@@ -401,31 +546,19 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     addDocuments: (picked) =>
       attempt(async () => {
-        const paths: string[] = [];
-        const notOnDisk: string[] = [];
-        for (const file of picked) {
-          const path = files.pathForFile(file);
-          if (path) paths.push(path);
-          else notOnDisk.push(file.name);
-        }
-        const result =
-          paths.length > 0 ? await core.addDocuments(paths) : { documents: [], skipped: [] };
-        set((state) => {
-          // Status events may already have brought newer copies of these; keep those.
-          const known = new Set(state.documents.map((each) => each.id));
-          const added = new Map<string, Document>();
-          for (const item of result.documents) {
-            if (!known.has(item.id)) added.set(item.id, item);
-          }
-          return {
-            documents: [...[...added.values()].reverse(), ...state.documents],
-            skippedFiles: [
-              ...notOnDisk,
-              ...result.skipped.map((skipped) => fileName(skipped.path)),
-            ],
-          };
-        });
+        const { paths, notOnDisk } = pathsOf(picked);
+        await addByPath(paths, [], notOnDisk);
       }),
+
+    addDropped: (dropped, folders) =>
+      attempt(async () => {
+        const folderPaths = pathsOf(folders).paths;
+        const { paths, notOnDisk } = pathsOf(dropped);
+        const filePaths = paths.filter((path) => !folderPaths.includes(path));
+        await addByPath(filePaths, folderPaths, notOnDisk);
+      }),
+
+    addPaths: (paths) => attempt(() => addByPath(paths, [], [])),
 
     renameDocument: (id, name) =>
       attempt(async () => {
@@ -439,8 +572,19 @@ export const useAppStore = create<AppState>()((set, get) => {
         set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
       }),
 
+    // Its status follows the core's "document.status" event too.
+    retryDocument: (id) =>
+      attempt(async () => {
+        const retried = await core.retryDocument(id);
+        set((state) => ({ documents: upsert(state.documents, retried) }));
+      }),
+
     dismissSkippedFiles() {
       set({ skippedFiles: [] });
+    },
+
+    dismissAlreadyAdded() {
+      set({ alreadyAdded: [] });
     },
 
     downloadEmbeddingModel: () =>
@@ -453,11 +597,59 @@ export const useAppStore = create<AppState>()((set, get) => {
         set({ embedding: await core.retryEmbedding() });
       }),
 
-    // Its Documents, Folders and progress arrive with the core's events.
     addLinkedFolder: () =>
       attempt(async () => {
         const path = await files.pickLinkedFolder();
-        if (path) await core.addLinkedFolder(path);
+        // The dialog opens at once; a big folder takes a moment to count.
+        if (path) offerLinks([{ path, preview: null, error: null }]);
+      }),
+
+    // Its Documents, Folders and progress arrive with the core's events.
+    confirmLinkedFolder: (layout) =>
+      attempt(async () => {
+        const preview = get().linking?.preview;
+        nextLink();
+        if (!preview) return;
+        const linked = await core.addLinkedFolder(preview.path);
+        // Inside a Linked folder already: nothing was linked, so its layout stays as the User set it.
+        if (preview.insideLinkedFolderId !== null) return;
+        // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
+        const shown = await core.setLinkedFolderLayout(linked.id, layout);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
+      }),
+
+    // The dialog's own close (Esc, or after linking) calls this too: only a folder still asked about counts.
+    cancelLinkedFolder() {
+      if (get().linking) nextLink();
+    },
+
+    setLinkedFolderPaused: (linkedFolderId, paused) =>
+      attempt(async () => {
+        const linked = await core.setLinkedFolderPaused(linkedFolderId, paused);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+      }),
+
+    setLinkedFolderLayout: (linkedFolderId, layout) =>
+      attempt(async () => {
+        const linked = await core.setLinkedFolderLayout(linkedFolderId, layout);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+      }),
+
+    downloadOnlineOnlyFiles: (linkedFolderId) =>
+      attempt(async () => {
+        const linked = await core.downloadOnlineOnlyFiles(linkedFolderId);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+      }),
+
+    showLinkedFolder: (linkedFolderId) =>
+      attempt(async () => {
+        await files.showLinkedFolder(linkedFolderId);
+      }),
+
+    // The list, its Folders and Documents follow the core's events.
+    removeLinkedFolder: (linkedFolderId) =>
+      attempt(async () => {
+        await core.removeLinkedFolder(linkedFolderId);
       }),
 
     async filterByTag(tagId) {

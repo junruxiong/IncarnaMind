@@ -15,4 +15,9 @@ export interface TestHooks {
    * this path (null: cancelled) instead of showing the system's open dialog.
    */
   interceptSkillPicker(path: string | null): void;
+  /**
+   * What dropping these files and folders (absolute paths) on the window
+   * does, once their paths are known: a test can't drop a folder.
+   */
+  addPaths(paths: string[]): Promise<void>;
 }

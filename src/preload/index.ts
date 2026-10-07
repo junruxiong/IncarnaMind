@@ -72,6 +72,8 @@ const files: FilesBridge = {
   showDocumentInFolder: (documentId) =>
     ipcRenderer.invoke(FILES_CHANNELS.showDocumentInFolder, documentId),
   pickLinkedFolder: () => ipcRenderer.invoke(FILES_CHANNELS.pickLinkedFolder),
+  showLinkedFolder: (linkedFolderId) =>
+    ipcRenderer.invoke(FILES_CHANNELS.showLinkedFolder, linkedFolderId),
   logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),
   onMenuCommand: (listener) => {
     const receive = (_event: unknown, command: MenuCommand) => listener(command);

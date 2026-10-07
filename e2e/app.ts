@@ -239,6 +239,55 @@ export function urlsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
 }
 
+/**
+ * "Add folder…" from the sidebar: the system's folder picker (answered by the
+ * test with `path`), then the link dialog's preview. Returns the dialog, with
+ * the preview counted. Choose a layout in it, then `confirmLink`.
+ */
+export async function previewLink(
+  app: ElectronApplication,
+  window: Page,
+  path: string,
+  button = window.getByTestId("add-linked-folder"),
+): Promise<Locator> {
+  await interceptOpenDialog(app, path);
+  await button.click();
+  const dialog = window.getByTestId("link-folder-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId("link-folder-files")).toBeVisible();
+  return dialog;
+}
+
+/** "Link folder" in the link dialog; it closes. */
+export async function confirmLink(dialog: Locator): Promise<void> {
+  await dialog.getByTestId("link-folder-confirm").click();
+  await expect(dialog).toBeHidden();
+}
+
+/** Links a folder as the User does: "Add folder…", the picker, then "Link folder" in the dialog. */
+export async function linkFolderFromSidebar(
+  app: ElectronApplication,
+  window: Page,
+  path: string,
+): Promise<void> {
+  await confirmLink(await previewLink(app, window, path));
+}
+
+/** A Linked folder's own row in the sidebar, by its folder's name on disk. */
+export const linkedFolderRow = (window: Page, name: string) =>
+  window.locator('[data-testid="folder-item"][data-root="true"]').filter({
+    has: window.getByTestId("row-text").getByText(name, { exact: true }),
+  });
+
+/** Opens a Linked folder's "More" menu from its row. Returns the menu. */
+export async function openLinkedFolderMenu(row: Locator): Promise<Locator> {
+  await row.hover();
+  await row.getByTestId("linked-folder-menu").click();
+  const menu = row.getByTestId("linked-folder-actions");
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
 /** Opens the empty Document viewer panel through the test hook. */
 export async function openViewer(window: Page): Promise<void> {
   await window.evaluate(() => {
