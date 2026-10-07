@@ -50,7 +50,10 @@ export function openRowMenu(event: MouseEvent<HTMLElement>, menuTestId: string):
   // With a button still held, open once it's let go: letting go outside the menu would close it.
   if (event.buttons === 0) button.click();
   else {
-    window.addEventListener("pointerup", () => setTimeout(() => button.click()), { once: true });
+    const open = () => {
+      if (button.isConnected) button.click();
+    };
+    window.addEventListener("pointerup", () => setTimeout(open), { once: true });
   }
 }
 
