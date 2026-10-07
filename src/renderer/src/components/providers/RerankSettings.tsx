@@ -44,6 +44,8 @@ export function RerankSettingsSection() {
   const t = useT();
   const [rerank, setRerank] = useState<RerankSettings | null>(null);
   const [editing, setEditing] = useState(false);
+  // Every reranking provider is a cloud service.
+  const localOnly = useAppStore((state) => state.embedding?.localOnly === true);
 
   useEffect(() => {
     core.getRerankSettings().then(setRerank, () => undefined);
@@ -85,7 +87,14 @@ export function RerankSettingsSection() {
                   )}
                 </>
               ) : (
-                <p className={rowStatusClass}>{t("privacy.traffic.off")}</p>
+                <>
+                  <p className={rowStatusClass}>{t("privacy.traffic.off")}</p>
+                  {localOnly && (
+                    <p data-testid="rerank-local-only" className={`mt-1.5 ${rowTextClass}`}>
+                      {t("rerank.settings.localOnly")}
+                    </p>
+                  )}
+                </>
               )}
             </div>
             <div className={rowButtonsClass}>
@@ -107,6 +116,7 @@ export function RerankSettingsSection() {
                 <button
                   type="button"
                   data-testid="rerank-set-up"
+                  disabled={localOnly}
                   onClick={() => setEditing(true)}
                   className={buttonClass}
                 >
@@ -278,7 +288,7 @@ function RerankForm({
         </button>
       </div>
 
-      {test && <TestResult result={test} />}
+      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}

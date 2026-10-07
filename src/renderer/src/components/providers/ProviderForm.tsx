@@ -244,7 +244,7 @@ export function ProviderForm({
             </button>
           </div>
 
-          {test && <TestResult result={test} />}
+          {test && <TestResult result={test} onRetry={() => void run("testing")} />}
           {error && (
             <p role="alert" className={errorTextClass}>
               {error}
@@ -256,7 +256,26 @@ export function ProviderForm({
   );
 }
 
-export function TestResult({ result }: { result: ConnectionTestResult }) {
+/** Forgets the User's latest "Don't allow", so the next request asks again. */
+async function forgetLatestDecline(): Promise<void> {
+  const flows = await core.listDataFlows();
+  const latest = flows
+    .filter((each) => each.consent === "declined" && each.decidedAt !== null)
+    .sort((a, b) => (b.decidedAt ?? "").localeCompare(a.decidedAt ?? ""))[0];
+  if (latest) await core.revokeConsent(latest.flow.id, latest.flow.service.id);
+}
+
+/**
+ * A connection test's outcome. After a "Don't allow", `onRetry` offers to ask
+ * again: the decision is forgotten and the test runs again, asking first.
+ */
+export function TestResult({
+  result,
+  onRetry,
+}: {
+  result: ConnectionTestResult;
+  onRetry?: () => void;
+}) {
   const t = useT();
   if (result.ok) {
     return (
@@ -273,6 +292,18 @@ export function TestResult({ result }: { result: ConnectionTestResult }) {
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
           {result.error.message}
         </p>
+      )}
+      {result.error.kind === "consent-declined" && onRetry && (
+        <button
+          type="button"
+          data-testid="connection-test-ask-again"
+          onClick={() => {
+            void forgetLatestDecline().then(onRetry, onRetry);
+          }}
+          className={`mt-2 ${buttonClass}`}
+        >
+          {t("consent.settings.askAgain")}
+        </button>
       )}
     </div>
   );

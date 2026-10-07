@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import type { SecretStorageStatus } from "../../../../core/api";
+import type { LocalConnector, SecretStorageStatus } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -15,6 +15,7 @@ import {
   inputClass,
   primaryButtonClass,
 } from "../ui";
+import { splitCommandLine } from "./commandLine";
 
 /** Non-empty lines, trimmed. */
 const lines = (text: string) =>
@@ -41,12 +42,19 @@ function parseEnvLines(text: string): Record<string, string> | null {
  * environment, or a remote one by its name and URL (and, for a service that
  * can't register IncarnaMind by itself, the User's own OAuth app).
  */
-export function ConnectorForm({ onDone }: { onDone(): void }) {
+export function ConnectorForm({
+  onDone,
+  editing,
+}: {
+  onDone(): void;
+  /** A local Connector to change instead of adding one: its fields start filled in. */
+  editing?: LocalConnector;
+}) {
   const t = useT();
   const [kind, setKind] = useState<"local" | "remote">("local");
-  const [name, setName] = useState("");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
+  const [name, setName] = useState(editing?.name ?? "");
+  const [command, setCommand] = useState(editing?.command ?? "");
+  const [args, setArgs] = useState(editing?.args.join("\n") ?? "");
   const [env, setEnv] = useState("");
   const [url, setUrl] = useState("");
   const [clientId, setClientId] = useState("");
@@ -78,6 +86,13 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
           ? { clientId, ...(clientSecret.trim() ? { clientSecret } : {}) }
           : undefined;
         await core.addConnector({ name, url, ...(client ? { client } : {}) });
+      } else if (editing) {
+        await core.editConnector(editing.id, {
+          name,
+          command,
+          args: lines(args),
+          env: variables ?? {},
+        });
       } else {
         await core.addConnector({ name, command, args: lines(args), env: variables ?? {} });
       }
@@ -103,7 +118,7 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
       onSubmit={(event) => void submit(event)}
       className="flex flex-col gap-3"
     >
-      <fieldset>
+      <fieldset hidden={editing !== undefined}>
         <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("remoteConnectors.form.kind")}</legend>
         <div className={choiceListClass}>
           {(["local", "remote"] as const).map((each) => (
@@ -183,6 +198,7 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
           env={env}
           setEnv={setEnv}
           envInvalid={variables === null}
+          savedEnv={editing?.env ?? []}
         />
       )}
 
@@ -192,7 +208,13 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" disabled={busy || invalid || blocked} className={primaryButtonClass}>
-          {busy ? t("connectors.form.adding") : t("connectors.form.add")}
+          {editing
+            ? busy
+              ? t("connectors.form.saving")
+              : t("connectors.form.save")
+            : busy
+              ? t("connectors.form.adding")
+              : t("connectors.form.add")}
         </button>
         <button type="button" onClick={onDone} className={ghostButtonClass}>
           {t("connectors.form.cancel")}
@@ -216,9 +238,21 @@ function LocalFields(props: {
   env: string;
   setEnv(value: string): void;
   envInvalid: boolean;
+  /** The names of a Connector's saved variables, kept unless others are entered. */
+  savedEnv: readonly string[];
 }) {
   const t = useT();
   const { command, setCommand, args, setArgs, env, setEnv } = props;
+  const [argsMoved, setArgsMoved] = useState(false);
+  // A whole command line pasted as the command: the program stays, its
+  // arguments move to their own field (before any already there).
+  const splitPasted = () => {
+    const [program, ...rest] = splitCommandLine(command);
+    if (program === undefined || rest.length === 0) return;
+    setCommand(program);
+    setArgs([...rest, ...lines(args)].join("\n"));
+    setArgsMoved(true);
+  };
   return (
     <>
       <label className={fieldLabelClass}>
@@ -226,12 +260,18 @@ function LocalFields(props: {
         <input
           required
           value={command}
-          onChange={(event) => setCommand(event.target.value)}
+          onChange={(event) => {
+            setCommand(event.target.value);
+            setArgsMoved(false);
+          }}
+          onBlur={splitPasted}
           placeholder="npx"
           spellCheck={false}
           className={`${inputClass} font-mono`}
         />
-        <span className={hintClass}>{t("connectors.form.commandHint")}</span>
+        <span className={hintClass}>
+          {argsMoved ? t("connectors.form.argsMoved") : t("connectors.form.commandHint")}
+        </span>
       </label>
       <label className={fieldLabelClass}>
         {t("connectors.form.args")}
@@ -255,7 +295,11 @@ function LocalFields(props: {
           autoComplete="off"
           className={`${inputClass} font-mono`}
         />
-        <span className={hintClass}>{t("connectors.form.envHint")}</span>
+        <span className={hintClass}>
+          {props.savedEnv.length > 0
+            ? t("connectors.form.envKeep", { names: props.savedEnv.join(", ") })
+            : t("connectors.form.envHint")}
+        </span>
         {props.envInvalid && (
           <span role="alert" className="mt-1 block text-[12px] leading-[18px] text-danger">
             {t("connectors.form.envInvalid")}

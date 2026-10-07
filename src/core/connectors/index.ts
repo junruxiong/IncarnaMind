@@ -873,6 +873,42 @@ export function createConnectors(options: ConnectorsOptions) {
       return toConnector(requireRow(id));
     },
 
+    /**
+     * Changes a local Connector's name, command and arguments, and its
+     * environment when one is given (none keeps the saved values), then starts
+     * it again with them. Its Tools' approvals and its data-flow decision stay:
+     * they belong to the Connector, not to its command.
+     */
+    async edit(id: unknown, input: unknown): Promise<Connector> {
+      const row = requireRow(id);
+      const current = storedConfig(row);
+      const config = parseAddInput(input);
+      if (current.transport !== "stdio" || config.transport !== "stdio") {
+        throw new InvalidInputError("Only a local Connector's command can be changed.");
+      }
+      if (liveRows().some((other) => other.id !== row.id && sameName(other.name, config.name))) {
+        throw new InvalidInputError(`A Connector named "${config.name}" already exists.`);
+      }
+      const envNames = Object.keys(config.env);
+      if (envNames.length > 0) await secrets.set(envSecret(row.id), JSON.stringify(config.env));
+      const stored = {
+        command: config.command,
+        args: config.args,
+        env: envNames.length > 0 ? envNames : current.env,
+      };
+      db.run("UPDATE connectors SET name = ?, config = ?, updated_at = ? WHERE id = ?", [
+        config.name,
+        JSON.stringify(stored),
+        now(),
+        row.id,
+      ]);
+      stop(row.id);
+      if (row.enabled === 1) start(row.id);
+      changed();
+      options.onEnabledChange();
+      return toConnector(requireRow(row.id));
+    },
+
     setEnabled(id: unknown, enabled: unknown): Connector {
       const row = requireRow(id);
       if (typeof enabled !== "boolean")
