@@ -1202,6 +1202,70 @@ export interface DataFlowStatus {
   decidedAt: string | null;
 }
 
+/** A registered external data flow, for the Privacy page: what it sends, and where. */
+export interface RegisteredDataFlow {
+  id: DataFlowId;
+  /** Everything the flow sends. */
+  sends: DataKind[];
+  /**
+   * The flow to each service it currently goes to and each service the User
+   * has decided on, with that decision. Empty when nothing is sent on it now,
+   * e.g. chat with a model on this computer.
+   */
+  services: DataFlowStatus[];
+}
+
+// ---------------------------------------------------------------------------
+// Privacy
+
+/**
+ * Network traffic that carries no User content: it needs no consent, and the
+ * Privacy page lists it. The UI names and describes each one
+ * (`privacy.traffic.<id>`). Features register theirs; later tickets add ids.
+ * - "update-check": asks GitHub Releases for a newer version, when IncarnaMind starts.
+ * - "embedding-model": downloads the built-in embedding model's files, once.
+ * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
+ * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
+ */
+export const networkTrafficIds = [
+  "update-check",
+  "embedding-model",
+  "ollama-pull",
+  "chatgpt-sign-in",
+] as const;
+
+export type NetworkTrafficId = (typeof networkTrafficIds)[number];
+
+export interface NetworkTraffic {
+  id: NetworkTrafficId;
+  /** Where it goes. */
+  service: ExternalService;
+  /** False while the User has turned it off, e.g. automatic update checks. */
+  enabled: boolean;
+}
+
+/** The privacy choices on this device. IncarnaMind collects no usage data, whatever they are. */
+export interface PrivacySettings {
+  crashReports: {
+    /**
+     * Whether this copy of IncarnaMind can send crash reports: only a build
+     * made with a crash-report address (a Sentry DSN) can. Without one, they
+     * aren't offered.
+     */
+    available: boolean;
+    /** The User opted in to sending scrubbed crash reports. Off by default. */
+    enabled: boolean;
+  };
+  /** IncarnaMind checks GitHub Releases for a new version when it starts. On by default. */
+  automaticUpdateChecks: boolean;
+}
+
+/** The choices to change; the others are kept. */
+export interface PrivacySettingsPatch {
+  crashReports?: boolean;
+  automaticUpdateChecks?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // TypeSafe Jev, the optional tagger (ADR-0005)
 
@@ -1613,6 +1677,28 @@ export interface CoreApi {
   /** Forgets the User's decision: the next request on the flow asks again. */
   revokeConsent(flowId: DataFlowId, serviceId: string): Promise<void>;
   /**
+   * Every registered external data flow, each with the services it goes to,
+   * including a flow that sends nothing now: the Privacy page lists them all.
+   */
+  listRegisteredDataFlows(): Promise<RegisteredDataFlow[]>;
+  /**
+   * The User allows a flow to one of its services from Settings, without
+   * waiting to be asked, e.g. after declining it. Everything the flow sends
+   * counts as accepted, and a request waiting for that flow and service is
+   * answered too.
+   */
+  allowDataFlow(flowId: DataFlowId, serviceId: string): Promise<void>;
+
+  /** Network traffic that carries nothing of the User's, such as update checks and model downloads. */
+  listNetworkTraffic(): Promise<NetworkTraffic[]>;
+  getPrivacySettings(): Promise<PrivacySettings>;
+  /**
+   * Changes the privacy choices on this device and returns them. Turning crash
+   * reports on starts them; turning them off stops them at once. Refused if
+   * this copy can't send crash reports.
+   */
+  updatePrivacySettings(patch: PrivacySettingsPatch): Promise<PrivacySettings>;
+  /**
    * Files a Document in a Folder, or takes it out to unfiled with `null`. It
    * leaves any Folder it was in. Returns the Document.
    */
@@ -1801,6 +1887,10 @@ export interface CoreEvents {
   "consent.requested": ConsentRequest;
   /** A consent request was answered, here or in another window. */
   "consent.resolved": { requestId: string; accepted: boolean };
+  /** The User allowed or revoked a data flow in Settings. */
+  "dataFlows.changed": RegisteredDataFlow[];
+  /** The privacy choices changed, e.g. crash reports were turned on. */
+  "privacy.changed": PrivacySettings;
   /** Progress of a model download through Ollama. */
   "ollama.pullProgress": OllamaPullProgress;
   /**
@@ -1913,6 +2003,11 @@ const methods: Record<CoreApiMethod, true> = {
   listConsentRequests: true,
   respondToConsent: true,
   revokeConsent: true,
+  listRegisteredDataFlows: true,
+  allowDataFlow: true,
+  listNetworkTraffic: true,
+  getPrivacySettings: true,
+  updatePrivacySettings: true,
   moveDocument: true,
   createFolder: true,
   listFolders: true,

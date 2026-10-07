@@ -17,6 +17,9 @@ import { core, files } from "./core";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
+/** The pages of the Settings dialog. */
+export type SettingsPage = "general" | "privacy";
+
 /** What the Document viewer shows: one Document, opened at a location. */
 export interface ViewerTarget extends DocumentLocation {
   /** Counts every `openDocument` call, so opening the same Document again re-applies its location. */
@@ -46,6 +49,8 @@ interface AppState {
   /** The embedding model search uses, local mode and any rebuild. Set once loaded, then follows the core's event. */
   embedding: EmbeddingSettings | null;
   settingsOpen: boolean;
+  /** The page Settings shows. */
+  settingsPage: SettingsPage;
   /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
   folders: Folder[];
   /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
@@ -70,8 +75,10 @@ interface AppState {
   openViewer(): void;
   closeViewer(): void;
   toggleViewer(): void;
-  openSettings(): void;
+  /** Opens Settings at a page: the general one unless asked otherwise, e.g. Privacy to allow a declined flow. */
+  openSettings(page?: SettingsPage): void;
   closeSettings(): void;
+  showSettingsPage(page: SettingsPage): void;
   /**
    * Shows a Document in the viewer, opening the panel; it replaces whatever the
    * viewer showed. Optionally at a page range, highlighting a quote (Citations).
@@ -157,6 +164,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     embeddingModel: null,
     embedding: null,
     settingsOpen: false,
+    settingsPage: "general",
     folders: [],
     folderFilter: null,
     tags: [],
@@ -264,8 +272,13 @@ export const useAppStore = create<AppState>()((set, get) => {
       }));
     },
 
-    openSettings() {
-      set({ settingsOpen: true });
+    openSettings(page) {
+      // Also a click handler: anything but a page name opens the general page.
+      set({ settingsOpen: true, settingsPage: page === "privacy" ? "privacy" : "general" });
+    },
+
+    showSettingsPage(page) {
+      set({ settingsPage: page });
     },
 
     closeSettings() {

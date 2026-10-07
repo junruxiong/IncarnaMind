@@ -5,6 +5,7 @@
 export type {
   Browser,
   CoreAdapters,
+  CrashReporter,
   Embedder,
   EmbeddingModelFiles,
   EmbeddingModelSource,
@@ -37,6 +38,7 @@ export {
   TaggingNotReadyError,
 } from "./errors";
 export * from "./language";
+export type { NetworkTrafficDefinition, NetworkTrafficRegistry } from "./privacy";
 export type { PreparedChatModel } from "./providers/chat";
 export type { ChatGptCredentials } from "./providers/chatgpt/codexEndpoint";
 export { ChatGptPlanError, ChatGptSignInRequiredError } from "./providers/chatgpt/errors";

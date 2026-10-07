@@ -68,6 +68,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Where opt-in crash reports go. Without the secret it's empty, and the build
+          # doesn't offer crash reports at all (src/main/crashReports.ts).
+          MAIN_VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
       # Signs with the Developer ID certificate and notarizes when the secrets exist.
       # Without the certificate, the app is ad-hoc signed instead: it still opens (see the

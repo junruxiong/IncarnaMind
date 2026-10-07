@@ -9,8 +9,10 @@ import {
   BUILT_IN_SKILLS_PACKAGED,
   BUILT_IN_SKILLS_SOURCE,
   type CoreAdapters,
+  type CrashReporter,
   type Keychain,
 } from "../core";
+import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createLoginShellProcesses } from "./processes";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
@@ -79,10 +81,39 @@ function builtInSkillsFolder(): string {
     : join(app.getAppPath(), BUILT_IN_SKILLS_SOURCE);
 }
 
+/**
+ * Where crash reports go: the Sentry DSN this copy was built with
+ * (`MAIN_VITE_SENTRY_DSN`), if any. A test build ignores it, so the smoke
+ * tests never reach Sentry; they may point it at a local server instead.
+ */
+function crashReportDsn(): string | undefined {
+  const dsn =
+    import.meta.env.MODE === "test"
+      ? process.env.INCARNAMIND_TEST_SENTRY_DSN
+      : import.meta.env.MAIN_VITE_SENTRY_DSN;
+  return dsn?.trim() || undefined;
+}
+
+/** Sentry crash reports, if this copy can send them. The core starts them only once the User opts in. */
+function createCrashReporter(dataDir: string): CrashReporter | undefined {
+  const dsn = crashReportDsn();
+  if (!dsn) return undefined;
+  return createSentryCrashReporter({
+    dsn,
+    paths: {
+      homeDir: app.getPath("home"),
+      dataDir,
+      others: [app.getPath("temp")],
+    },
+  });
+}
+
 /** Builds the core's adapters. Call after `app` is ready. */
 export function createElectronAdapters(): CoreAdapters {
   const dataDir = app.getPath("userData");
+  const crashReporter = createCrashReporter(dataDir);
   return {
+    ...(crashReporter && { crashReporter }),
     paths: { dataDir, builtInSkills: builtInSkillsFolder() },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
