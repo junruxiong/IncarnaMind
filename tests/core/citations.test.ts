@@ -3,6 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test } from "vitest";
 import type { Citation, Core, CoreEvents } from "../../src/core";
+import { ANSWER_TEMPERATURE } from "../../src/core/answers/engine";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   answerEnded,
@@ -727,9 +728,10 @@ describe("Searching for a follow-up Question", { timeout: 30_000 }, () => {
       "When do they happen?",
     );
 
-    // One short request, with the Blocks above and the Question.
+    // One short request, with the Blocks above, the Question, and the Answer temperature.
     const rewrites = rewritesOf(model);
     expect(rewrites).toHaveLength(1);
+    expect(rewrites[0]?.temperature).toBe(ANSWER_TEMPERATURE);
     expect(rewrites[0]?.prompt).toContain("User: Tell me about spring tides.");
     expect(rewrites[0]?.prompt).toMatch(/The Question: When do they happen\?$/);
     // The search used the rewrite, without its quotes, and found the Passages it needs.

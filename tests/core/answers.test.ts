@@ -3,6 +3,8 @@ import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type * as Y from "yjs";
 import type { Core, CoreEvents } from "../../src/core";
+import { ANSWER_TEMPERATURE, answerTemperature } from "../../src/core/answers/engine";
+import { askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import {
@@ -20,6 +22,7 @@ import {
   controlledModel,
   failingStreamModel,
   promptOf,
+  scriptedModel,
   scriptedModels,
   streamingModel,
 } from "../helpers/models";
@@ -768,5 +771,100 @@ describe("Editing while an Answer streams", () => {
     expect(readMind(reader).child(3).textContent).toBe("Below.");
     // The Note below isn't part of the Question context.
     expect(promptOf(model).at(-1)?.text).toBe("Above.\n\nWhere does this go?");
+  });
+});
+
+describe("Temperature", () => {
+  test("Answers are written at a low temperature, so quotes are copied word for word", async () => {
+    const model = streamingModel("Twice a day.");
+    const { core, mind, writer } = await setUp(model);
+    const asked = question("How often are high tides?");
+    writeMind(writer, [asked]);
+
+    await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    expect(ANSWER_TEMPERATURE).toBeLessThanOrEqual(0.3);
+    expect(model.doStreamCalls[0]?.temperature).toBe(ANSWER_TEMPERATURE);
+  });
+
+  test("models that reject a temperature, or should run at their default, are sent none", async () => {
+    const model = scriptedModel(() => ({ text: "Twice a day." }), { modelId: "o3-mini" });
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("How often are high tides?");
+    writeMind(writer, [asked]);
+
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    expect(answerText(reader, answerId)).toBe("Twice a day.");
+    expect(model.doStreamCalls[0]?.temperature).toBeUndefined();
+
+    // OpenAI's reasoning models, wherever they are served, and Gemini 3 and later.
+    for (const modelId of [
+      "o1",
+      "o4-mini",
+      "openai/o3",
+      "gpt-5",
+      "gpt-5.1",
+      "gpt-6.1-sol",
+      "gemini-3-pro-preview",
+      "models/gemini-3.1-flash",
+    ]) {
+      expect(answerTemperature({ modelId }), modelId).toBeUndefined();
+    }
+    // Models that take one.
+    for (const modelId of [
+      "gpt-4.1",
+      "gpt-4o-mini",
+      "gpt-5-chat-latest",
+      "gpt-oss:20b",
+      "gemini-2.5-flash",
+      "claude-sonnet-4-5",
+      "llama3.2:latest",
+      "omni-local",
+    ]) {
+      expect(answerTemperature({ modelId }), modelId).toBe(ANSWER_TEMPERATURE);
+    }
+  });
+
+  test("a provider that refuses the temperature gets the request again without one, and the model gets none from then on", async () => {
+    // e.g. an OpenAI reasoning model behind an OpenAI-compatible server, under a name of its own.
+    const model = scriptedModel(
+      (call) => {
+        if (call.options.temperature !== undefined) {
+          return {
+            error: {
+              status: 400,
+              message: "Unsupported parameter: 'temperature' is not supported with this model.",
+            },
+          };
+        }
+        if (call.results.length === 0) {
+          return { calls: [{ tool: "search_documents", input: { query: "tides" } }] };
+        }
+        return { text: "Twice a day." };
+      },
+      { modelId: "my-reasoning-deployment" },
+    );
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.md", contents: "# Tides\n\nHigh tides come twice a day.\n" },
+    ]);
+
+    const first = await askAndFinish(core, client, mind.id, "How often are high tides?");
+
+    expect(answerText(client, first.answerId)).toBe("Twice a day.");
+    // Still with Tools: a refused temperature isn't a refusal of Tools.
+    expect(first.finished.citationSupport).toBe("tools");
+    expect(model.doStreamCalls.map((call) => call.temperature)).toEqual([
+      ANSWER_TEMPERATURE,
+      undefined,
+      undefined,
+    ]);
+
+    await askAndFinish(core, client, mind.id, "How often are high tides again?");
+    expect(model.doStreamCalls).toHaveLength(5);
+    expect(model.doStreamCalls.slice(3).map((call) => call.temperature)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 });
