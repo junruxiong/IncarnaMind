@@ -1,7 +1,7 @@
 import "katex/dist/katex.min.css";
 import Collaboration from "@tiptap/extension-collaboration";
 import { Focus, Placeholder } from "@tiptap/extensions";
-import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
+import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
@@ -13,6 +13,13 @@ import { BlockCommands } from "../editor/blockCommands";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { CitationNumbers } from "../editor/citationNumbers";
+import {
+  EndHint,
+  type HintPlace,
+  type HintText,
+  isEmptyMind,
+  startQuestionAtEnd,
+} from "../editor/EndHint";
 import { FormatMenu } from "../editor/FormatMenu";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
@@ -27,6 +34,10 @@ import { SmartTypography } from "../editor/typography";
 import { useT } from "../i18n";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
+import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+
+/** Stands in for the hint's button in its translated words, which are split around it. */
+const ASK = "\uE000";
 
 /** Marks changes that came from the core, so they aren't sent back to it. */
 const FROM_CORE = Symbol("from the core");
@@ -115,11 +126,19 @@ const citationView = ReactNodeViewRenderer(CitationView, {
  */
 function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
   const t = useT();
-  const placeholders = useRef({ empty: "", line: "", afterAnswer: "" });
-  placeholders.current = {
-    empty: t("question.mind.placeholder", { shortcut: QUESTION_SHORTCUT_LABEL }),
-    line: t("editor.placeholder"),
-    afterAnswer: t("question.followUp.placeholder", { shortcut: QUESTION_SHORTCUT_LABEL }),
+  const isExample = useIsExample(mindId);
+  const placeholder = useRef("");
+  placeholder.current = t("editor.placeholder");
+  // The example Mind invites a Question of one's own at its end.
+  const hintText = (place: HintPlace): HintText => {
+    const key =
+      place === "empty"
+        ? "editor.hint.empty"
+        : isExample
+          ? "editor.hint.example"
+          : "editor.hint.afterAnswer";
+    const [before = "", after = ""] = t(key, { ask: ASK }).split(ASK);
+    return { before, ask: t(`${key}.ask`, { shortcut: QUESTION_SHORTCUT_LABEL }), after };
   };
   const label = t("mind.editor.label");
   const emptyFormula = t("editor.math.empty");
@@ -141,12 +160,11 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
         CitationNumbers,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
+          // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).
           placeholder: ({ editor: current, pos }) => {
-            if (current.isEmpty) return placeholders.current.empty;
+            if (isEmptyMind(current.state.doc)) return "";
             const before = current.state.doc.resolve(pos).nodeBefore;
-            return before?.type.name === ANSWER_BLOCK
-              ? placeholders.current.afterAnswer
-              : placeholders.current.line;
+            return before?.type.name === ANSWER_BLOCK ? "" : placeholder.current;
           },
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
@@ -177,12 +195,29 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
     editor.setOptions({ editorProps: editorPropsFor(label, emptyFormula) });
   }, [editor, label, emptyFormula]);
 
+  // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get started.
+  const questionHere = useAppStore((state) => state.questionToStart === mindId);
+  useEffect(() => {
+    if (!questionHere) return;
+    startQuestionAtEnd(editor);
+    useAppStore.getState().questionStarted();
+  }, [questionHere, editor]);
+
+  // An empty Mind of the User's own shows the three steps while Get started is shown.
+  const empty = useEditorState({
+    editor,
+    selector: ({ editor: current }) => isEmptyMind(current.state.doc),
+  });
+  const guide = useGettingStarted() !== null && empty && !isExample;
+
   return (
     <MindIdContext.Provider value={mindId}>
-      <div className="mind-editor-frame">
+      <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         <EditorContent editor={editor} />
+        <EndHint editor={editor} text={hintText} />
         <MarginChecks editor={editor} />
       </div>
+      {guide && <StartGuide />}
       <BlockHandle editor={editor} />
       <FormatMenu editor={editor} />
       {editingMath !== null && (

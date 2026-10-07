@@ -3,6 +3,7 @@ import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
+import { ExampleBanner, useIsExample } from "./GettingStarted";
 import { PlusLineIcon } from "./lineIcons";
 import { MindEditor } from "./MindEditor";
 import { MindTabs } from "./MindTabs";
@@ -18,6 +19,7 @@ export function MindPane() {
   const t = useT();
   const mind = useAppStore((state) => state.minds.find((each) => each.id === state.openMindId));
   const createMind = useAppStore((state) => state.createMind);
+  const isExample = useIsExample(mind?.id);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
 
@@ -51,8 +53,10 @@ export function MindPane() {
             className="mind-column"
           >
             <div className="mind-measure">
+              {isExample && <ExampleBanner />}
               <MindTitle mind={mind} />
-              <ChatReadinessNotice />
+              {/* The example works without a chat model: it says so in its Answer instead. */}
+              {!isExample && <ChatReadinessNotice />}
               <MindEditor mindId={mind.id} />
             </div>
           </article>

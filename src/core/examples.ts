@@ -76,7 +76,7 @@ const TEXT: Record<
     ].join("\n"),
   },
   "zh-CN": {
-    folder: "示例",
+    folder: "示例文档",
     title: "茶从哪里来",
     intro: "一篇关于茶的历史的简短阅读笔记。两篇文章作为文档链接在这里：一篇英文，一篇中文。",
     question: "茶起源于哪里？又是如何传遍世界的？",
@@ -140,18 +140,17 @@ export function createExamples(options: ExamplesOptions) {
       : null;
   };
 
+  /** Each part while it exists: the Mind can be deleted, or the folder unlinked, on its own. */
   const status = (): Examples => {
     const examples = stored();
-    const live =
-      examples &&
-      options.mindExists(examples.mindId) &&
-      options.linkedFolderExists(examples.linkedFolderId)
-        ? examples
-        : null;
+    const mind = examples && options.mindExists(examples.mindId) ? examples : null;
+    const folder =
+      examples && options.linkedFolderExists(examples.linkedFolderId) ? examples : null;
     return {
       available: options.source !== undefined,
-      mindId: live?.mindId ?? null,
-      linkedFolderId: live?.linkedFolderId ?? null,
+      mindId: mind?.mindId ?? null,
+      linkedFolderId: folder?.linkedFolderId ?? null,
+      answerId: mind?.answerId ?? null,
     };
   };
 
@@ -229,11 +228,30 @@ export function createExamples(options: ExamplesOptions) {
     options.writeValue(EXAMPLES_VALUE, { ...examples, checked: true });
   };
 
+  /** Deletes the example Mind and unlinks its Documents, and the copies of their files. */
+  const remove = async (): Promise<void> => {
+    const examples = stored();
+    if (!examples) return;
+    if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
+    if (options.linkedFolderExists(examples.linkedFolderId)) {
+      options.unlinkFolder(examples.linkedFolderId);
+    }
+    // Only the copies the examples made, in the data folder: never anything else.
+    const inside = relative(resolve(options.dataDir), resolve(examples.folder));
+    if (inside !== "" && !inside.startsWith("..") && !inside.includes(":")) {
+      await rm(examples.folder, { recursive: true, force: true });
+    }
+    options.writeValue(EXAMPLES_VALUE, null);
+    options.changed(status());
+  };
+
   const create = async (): Promise<Examples> => {
     const current = status();
-    if (current.mindId) return current;
+    if (current.mindId && current.linkedFolderId) return current;
     const source = options.source;
     if (!source) throw new Error("This copy of IncarnaMind has no examples.");
+    // What is left of them (the Mind deleted, or the folder unlinked) goes first.
+    if (stored()) await remove();
     const language = options.language();
     const text = TEXT[language];
 
@@ -299,22 +317,7 @@ export function createExamples(options: ExamplesOptions) {
       return create();
     },
 
-    /** Deletes the example Mind and unlinks its Documents, and the copies of their files. */
-    async remove(): Promise<void> {
-      const examples = stored();
-      if (!examples) return;
-      if (options.mindExists(examples.mindId)) options.deleteMind(examples.mindId);
-      if (options.linkedFolderExists(examples.linkedFolderId)) {
-        options.unlinkFolder(examples.linkedFolderId);
-      }
-      // Only the copies the examples made, in the data folder: never anything else.
-      const inside = relative(resolve(options.dataDir), resolve(examples.folder));
-      if (inside !== "" && !inside.startsWith("..") && !inside.includes(":")) {
-        await rm(examples.folder, { recursive: true, force: true });
-      }
-      options.writeValue(EXAMPLES_VALUE, null);
-      options.changed(status());
-    },
+    remove,
 
     /** A Document's status changed: the examples' Citations may now be checkable. */
     documentChanged: checkWhenRead,

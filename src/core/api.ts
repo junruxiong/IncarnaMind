@@ -386,6 +386,24 @@ export interface UserSettings {
   chatModel: ChatModelChoice | null;
 }
 
+/**
+ * The "Get started" checklist of a first run, at the bottom of the sidebar:
+ * check a Citation in the example Mind, add Documents or connect an app, and
+ * ask a Question of one's own. Each step ticks itself as the User does it.
+ */
+export interface GettingStarted {
+  /** Shown: the examples were made on this device's first run. */
+  started: boolean;
+  /** The User opened a Citation's card. */
+  citationChecked: boolean;
+  /** The User added Documents of their own, or connected an app. */
+  indexed: boolean;
+  /** The User asked a Question of their own, not the example's. */
+  askedOwn: boolean;
+  /** The User hid the checklist. */
+  hidden: boolean;
+}
+
 /** Settings that belong to this device and never sync (ADR-0003). */
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
@@ -404,6 +422,8 @@ export interface DeviceSettings {
   activeMind: string | null;
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
+  /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
+  gettingStarted: GettingStarted;
   /**
    * Skill scripts may run on this device: on by default, and each run still
    * asks first unless the Skill's scripts always run. Off, Answers aren't
@@ -689,12 +709,6 @@ export type LinkedFolderLayout = "tree" | "flat";
 export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailable";
 
 /**
- * A folder on the User's computer that IncarnaMind keeps in sync, read only:
- * every supported file in it, at any depth, is a Document indexed where it
- * is. Hidden files and folders, .git and node_modules are left out, and cloud
- * placeholders (online-only files) aren't read unless the User asks.
- */
-/**
  * The example Mind (onboarding, see src/core/examples.ts): "Where tea comes
  * from", with two example Documents in their own Linked folder, written in
  * advance so it works before any chat model is set up.
@@ -706,8 +720,16 @@ export interface Examples {
   mindId: string | null;
   /** The Linked folder of the example Documents, while it exists. */
   linkedFolderId: string | null;
+  /** The example Answer, written in advance, while the example Mind exists. */
+  answerId: string | null;
 }
 
+/**
+ * A folder on the User's computer that IncarnaMind keeps in sync, read only:
+ * every supported file in it, at any depth, is a Document indexed where it
+ * is. Hidden files and folders, .git and node_modules are left out, and cloud
+ * placeholders (online-only files) aren't read unless the User asks.
+ */
 export interface LinkedFolder {
   /** A random UUID generated on this device. */
   id: string;

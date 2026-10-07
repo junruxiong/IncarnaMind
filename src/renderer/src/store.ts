@@ -5,7 +5,9 @@ import type {
   Document,
   EmbeddingModelStatus,
   EmbeddingSettings,
+  Examples,
   Folder,
+  GettingStarted,
   KeptCitationText,
   LinkedFolder,
   LinkedFolderLayout,
@@ -113,12 +115,32 @@ interface AppState {
   tagsDialogOpen: boolean;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
+  /** The example Mind and its Documents (onboarding). Null until loaded. */
+  examples: Examples | null;
+  /** The Mind whose editor should start a Question at its end once it shows, e.g. a new one. */
+  questionToStart: string | null;
 
   load(): Promise<void>;
-  /** Creates a Mind and opens it in a new tab, at the end, with its title focused. */
-  createMind(): Promise<void>;
+  /**
+   * Creates a Mind and opens it in a new tab, at the end, with its title
+   * focused, or with a Question started in it.
+   */
+  createMind(options?: { startQuestion?: boolean }): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
+  /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
+  startQuestion(): void;
+  /** Called once the Question asked for is started. */
+  questionStarted(): void;
+  /** Opens the example Mind, making the examples again if they were removed. */
+  openExamples(): Promise<void>;
+  /** Deletes the example Mind and its Documents. */
+  removeExamples(): Promise<void>;
+  /**
+   * Ticks steps of the "Get started" checklist, or hides it. Only once it
+   * started (a first run), and only what changes.
+   */
+  updateGettingStarted(patch: Partial<GettingStarted>): void;
   /**
    * Shows a Mind: its tab if it is open; otherwise it opens in the current tab
    * or, with `newTab` (⌘-click, middle-click), in a new tab after the current one.
@@ -390,9 +412,14 @@ export const useAppStore = create<AppState>()((set, get) => {
     filteredDocumentIds: null,
     tagsDialogOpen: false,
     skills: [],
+    examples: null,
+    questionToStart: null,
 
     async load() {
       try {
+        // A first run: the example Mind is made, once, and is what the app opens on.
+        const offered = await core.offerExamples().catch(() => null);
+        if (offered?.mindId) await startGettingStarted(offered.mindId);
         const [
           minds,
           settings,
@@ -405,6 +432,8 @@ export const useAppStore = create<AppState>()((set, get) => {
           embedding,
           linkedFolders,
           keptCitationTexts,
+          examples,
+          connectors,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -417,6 +446,8 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.getEmbeddingSettings(),
           core.listLinkedFolders(),
           core.listKeptCitationTexts(),
+          core.getExamples(),
+          core.listConnectors(),
         ]);
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
@@ -435,20 +466,22 @@ export const useAppStore = create<AppState>()((set, get) => {
           tags,
           skills,
           embedding,
+          examples,
           status: { kind: "ready" },
         });
+        tickIndexed(connectors.length);
       } catch (error) {
         set({ status: { kind: "failed", message: messageOf(error) } });
       }
     },
 
-    createMind: () =>
+    createMind: (options) =>
       attempt(async () => {
         const mind = await core.createMind();
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          titleToFocus: mind.id,
+          ...(options?.startQuestion ? { questionToStart: mind.id } : { titleToFocus: mind.id }),
         }));
         const { tabs } = get();
         setTabs({
@@ -458,6 +491,45 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     titleFocused: () => set({ titleToFocus: null }),
+
+    startQuestion() {
+      const { openMindId, createMind } = get();
+      if (openMindId) set({ questionToStart: openMindId });
+      else void createMind({ startQuestion: true });
+    },
+
+    questionStarted: () => set({ questionToStart: null }),
+
+    openExamples: () =>
+      attempt(async () => {
+        let { examples } = get();
+        if (!examples?.mindId) {
+          examples = await core.createExamples();
+          set({ examples });
+        }
+        if (examples.mindId) get().openMind(examples.mindId);
+      }),
+
+    // The Mind's tab closes with the core's "minds.changed" event; its Documents go with their Linked folder.
+    removeExamples: () =>
+      attempt(async () => {
+        await core.removeExamples();
+      }),
+
+    updateGettingStarted(patch) {
+      const { settings } = get();
+      const current = settings?.device.gettingStarted;
+      if (!settings || !current?.started) return;
+      const next = { ...current, ...patch };
+      if (
+        Object.entries(next).every(([key, value]) => current[key as keyof GettingStarted] === value)
+      ) {
+        return;
+      }
+      // At once, so ticks made together don't undo each other; the core's event confirms it.
+      set({ settings: { ...settings, device: { ...settings.device, gettingStarted: next } } });
+      core.updateSettings({ device: { gettingStarted: next } }).catch(() => undefined);
+    },
 
     openMind(id, options) {
       const { tabs, openMindId } = get();
@@ -732,6 +804,37 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 });
 
+/**
+ * The checklist starts with the example Mind on a first run, which opens as
+ * the only tab, before the store has loaded the settings.
+ */
+async function startGettingStarted(exampleMindId: string): Promise<void> {
+  try {
+    const { device } = await core.getSettings();
+    await core.updateSettings({
+      device: {
+        gettingStarted: { ...device.gettingStarted, started: true },
+        openMinds: [exampleMindId],
+        activeMind: exampleMindId,
+      },
+    });
+  } catch {
+    // Then the app opens as usual, without the checklist.
+  }
+}
+
+/** A Document of the User's own: not one of the examples. */
+const isOwnDocument = (document: Document) => {
+  const { examples } = useAppStore.getState();
+  return document.linkedFolderId === null || document.linkedFolderId !== examples?.linkedFolderId;
+};
+
+/** Ticks "Index your Documents or connect apps" once there are Documents of the User's own, or Connectors. */
+function tickIndexed(connectors: number): void {
+  const { documents, updateGettingStarted } = useAppStore.getState();
+  if (connectors > 0 || documents.some(isOwnDocument)) updateGettingStarted({ indexed: true });
+}
+
 /** Counts filter requests, so a slow answer to an old one never overwrites a newer one. */
 let filterRequests = 0;
 
@@ -772,8 +875,15 @@ core.on("settings.changed", (settings) => useAppStore.setState({ settings }));
 // The same for the list of Minds: created, renamed, deleted, or reordered by an edit.
 // A deleted Mind's tab closes, as if closed by hand.
 core.on("minds.changed", (minds) => {
-  const { tabs, openMindId, status } = useAppStore.getState();
+  const { tabs, openMindId, status, examples } = useAppStore.getState();
   useAppStore.setState({ minds });
+  // The example Mind deleted like any other: no longer the examples.
+  if (examples?.mindId && !minds.some((mind) => mind.id === examples.mindId)) {
+    core.getExamples().then(
+      (current) => useAppStore.setState({ examples: current }),
+      () => undefined,
+    );
+  }
   // Before loading, the tabs aren't known yet: loading filters them.
   if (status.kind !== "ready") return;
   let next = { tabs, openMindId };
@@ -787,9 +897,22 @@ core.on("minds.changed", (minds) => {
 });
 
 // Processing happens in the background: follow each Document's status as the core reports it.
-core.on("document.status", (changed) =>
-  useAppStore.setState((state) => ({ documents: upsert(state.documents, changed) })),
-);
+core.on("document.status", (changed) => {
+  useAppStore.setState((state) => ({ documents: upsert(state.documents, changed) }));
+  if (isOwnDocument(changed)) useAppStore.getState().updateGettingStarted({ indexed: true });
+});
+
+// The examples made, opened again or removed: their Mind and Linked folder show "Example".
+core.on("examples.changed", (examples) => useAppStore.setState({ examples }));
+
+// A Connector is one way to "Index your Documents or connect apps".
+core.on("connectors.changed", (connectors) => tickIndexed(connectors.length));
+
+// A Question of the User's own: anything but the example Answer, written again.
+core.on("answer.started", ({ answerId }) => {
+  const { examples, updateGettingStarted } = useAppStore.getState();
+  if (answerId !== examples?.answerId) updateGettingStarted({ askedOwn: true });
+});
 
 core.on("chatReadiness.changed", (chatReadiness) => useAppStore.setState({ chatReadiness }));
 
