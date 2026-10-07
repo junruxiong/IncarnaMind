@@ -152,4 +152,4 @@ If you want to cite IncarnaMind, please use this BibTeX entry:
 
 IncarnaMind is licensed under the [Apache License 2.0](LICENSE).
 
-The app bundles two fonts, both under the [SIL Open Font License 1.1](https://openfontlicense.org): Roboto (from `@fontsource-variable/roboto`) and Lora (from `@fontsource/lora`). Their licences ship with the app, in the renderer's `licenses/` folder.
+The app bundles three fonts, all under the [SIL Open Font License 1.1](https://openfontlicense.org): Source Serif 4 (from `@fontsource-variable/source-serif-4`), Source Sans 3 (from `@fontsource-variable/source-sans-3`) and JetBrains Mono (from `@fontsource/jetbrains-mono`). Their licences ship with the app, in the renderer's `licenses/` folder.

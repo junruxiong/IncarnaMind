@@ -59,12 +59,13 @@ function pdfjsData(): Plugin {
 
 /**
  * The licences of the fonts the renderer bundles (src/renderer/src/fonts.css).
- * Both are the SIL Open Font License 1.1, which asks that every copy of a font
+ * All are under the SIL Open Font License 1.1, which asks that every copy of a font
  * comes with it.
  */
 const FONT_LICENCES: Readonly<Record<string, string>> = {
-  "Roboto-OFL.txt": "@fontsource-variable/roboto/LICENSE",
-  "Lora-OFL.txt": "@fontsource/lora/LICENSE",
+  "SourceSerif4-OFL.txt": "@fontsource-variable/source-serif-4/LICENSE",
+  "SourceSans3-OFL.txt": "@fontsource-variable/source-sans-3/LICENSE",
+  "JetBrainsMono-OFL.txt": "@fontsource/jetbrains-mono/LICENSE",
 };
 
 /** Copies the bundled fonts' licences into a build, under licenses/. */
