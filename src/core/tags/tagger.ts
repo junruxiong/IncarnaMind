@@ -4,6 +4,11 @@
  * up on this device, otherwise by the default chat model. One Document at a
  * time, in the order they became ready.
  *
+ * - Each Document takes one turn in the background model queue (see
+ *   ../backgroundQueue), which other background model work shares and which
+ *   gives way to Answers. A call to a model on this computer that an Answer
+ *   interrupts leaves its Document waiting, first in line once no Answer is
+ *   being written.
  * - Nothing is sent before the User accepts the "tagging" data flow to the
  *   tagger's service; a local model needs no consent.
  * - With no usable tagger (no chat model set up, a missing key or sign-in, or
@@ -13,6 +18,7 @@
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
  */
 import type { DocumentKind, ProviderError } from "../api";
+import type { BackgroundCall, BackgroundJob, BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
@@ -64,6 +70,8 @@ export interface TaggerOptions {
   /** Pushes "documents.tagged" for these Documents. */
   announce(documentIds: readonly string[]): void;
   reportError(error: unknown): void;
+  /** The background model queue, in which tagging each Document takes one turn. */
+  background: BackgroundQueue;
 }
 
 interface DocumentRow {
@@ -77,12 +85,13 @@ interface DocumentRow {
 }
 
 export function createTagger(options: TaggerOptions) {
-  const { db, now, tags, announce } = options;
+  const { db, now, tags, announce, background } = options;
   const lifetime = new AbortController();
   const queue: string[] = [];
   /** The Document being tagged, if any. */
   let current: string | null = null;
-  let running = false;
+  /** The tagger's turn in the background queue, while one is queued or running. */
+  let turn: BackgroundJob | null = null;
   /**
    * Counts re-tag requests per Document. A result worked out before the
    * latest request is dropped: the run that request queued decides.
@@ -152,10 +161,14 @@ export function createTagger(options: TaggerOptions) {
    * Tags one ready Document. If no tagger can be used after all, it and the
    * rest of the queue wait for one.
    */
-  async function tagDocument(id: string): Promise<void> {
+  async function tagDocument(id: string, call: BackgroundCall): Promise<void> {
     const request = requests.get(id) ?? 0;
-    /** The core closed, or a re-tag came in meanwhile: the run it queued decides instead. */
-    const stale = () => lifetime.signal.aborted || (requests.get(id) ?? 0) !== request;
+    /**
+     * The core closed, the call gave way to an Answer, or a re-tag came in
+     * meanwhile: the run that comes next decides instead.
+     */
+    const stale = () =>
+      lifetime.signal.aborted || call.signal.aborted || (requests.get(id) ?? 0) !== request;
     const row = rowOf(id);
     if (row?.status !== "ready") return;
     const definitions = tags.list();
@@ -181,12 +194,14 @@ export function createTagger(options: TaggerOptions) {
         }
         return;
       }
+      // A model on this computer serves one request at a time: an Answer goes first.
+      if (tagger.local) call.runsLocally();
       if (stale()) return;
       try {
         decisions = await tagger.decide({
           tags: definitions,
           excerpt: excerptOf(id, row),
-          signal: lifetime.signal,
+          signal: AbortSignal.any([lifetime.signal, call.signal]),
         });
       } catch (error) {
         if (!stale()) fail(id, error);
@@ -203,35 +218,56 @@ export function createTagger(options: TaggerOptions) {
     if (changed) announce([id]);
   }
 
-  async function pump(): Promise<void> {
-    if (running) return;
-    running = true;
+  /** Tags the first Document in the queue, if it can: one turn in the background queue. */
+  async function tagNext(call: BackgroundCall): Promise<void> {
     try {
-      while (queue.length > 0 && !lifetime.signal.aborted) {
-        const ready = await options.canRun();
-        if (lifetime.signal.aborted) return;
-        if (!ready) {
-          park();
-          break;
-        }
-        const id = queue.shift();
-        if (id === undefined) break;
-        current = id;
-        try {
-          await tagDocument(id);
-        } finally {
-          current = null;
-        }
+      if (queue.length === 0 || lifetime.signal.aborted) return;
+      const ready = await options.canRun();
+      if (lifetime.signal.aborted) return;
+      if (!ready) {
+        park();
+        return;
+      }
+      const id = queue.shift();
+      if (id === undefined) return;
+      current = id;
+      try {
+        await tagDocument(id, call);
+      } finally {
+        current = null;
+      }
+      if (call.gaveWay && !lifetime.signal.aborted) {
+        // Interrupted by an Answer: it waits, first in line, until no Answer is being written.
+        if (!queue.includes(id)) queue.unshift(id);
+        if (setState(id, "pending")) announce([id]);
       }
     } catch (error) {
       if (lifetime.signal.aborted) return;
       options.reportError(error);
       park();
-    } finally {
-      running = false;
     }
-    // Something may have been queued while the last Document was finishing.
-    if (!lifetime.signal.aborted && queue.length > 0) void pump();
+  }
+
+  /** Queues a turn in the background queue, unless one is queued or running, or nothing waits. */
+  function schedule(): void {
+    if (turn || queue.length === 0 || lifetime.signal.aborted) return;
+    const job: BackgroundJob = {
+      kind: "tagging",
+      run: async (call) => {
+        try {
+          await tagNext(call);
+        } finally {
+          // A turn that gave way runs again, first; otherwise the next Document takes a new
+          // turn, after the work queued meanwhile.
+          if (!call.gaveWay) {
+            turn = null;
+            schedule();
+          }
+        }
+      },
+    };
+    turn = job;
+    background.add(job);
   }
 
   /**
@@ -244,7 +280,7 @@ export function createTagger(options: TaggerOptions) {
     if (fresh) requests.set(id, (requests.get(id) ?? 0) + 1);
     else if (id === current) return;
     if (!queue.includes(id)) queue.push(id);
-    void pump();
+    schedule();
   }
 
   /** Queues every ready Document that still needs tagging, or marks them waiting if no tagger can be used. */

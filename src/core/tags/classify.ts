@@ -41,6 +41,13 @@ export interface TagDecision {
 
 /** What decides a Document's Tags: the chat model, or Jev. */
 export interface TagClassifier {
+  /**
+   * Whether its requests go to a model server on this computer (Ollama, or
+   * another local endpoint), which serves one request at a time: then a
+   * request in flight gives way to an Answer (see ../backgroundQueue).
+   * Otherwise, a cloud provider's, it finishes.
+   */
+  readonly local?: boolean;
   /** The Tags that apply to the Document. Throws what the provider throws. */
   decide(input: {
     tags: readonly TagDefinition[];
@@ -203,9 +210,13 @@ async function chooseTags(input: {
   return [...ids];
 }
 
-/** The chat model as a tagger: the Tags it chooses apply, with no confidence. */
-export function chatClassifier(model: ChatLanguageModel): TagClassifier {
+/**
+ * The chat model as a tagger: the Tags it chooses apply, with no confidence.
+ * `local`: the model runs on a server on this computer.
+ */
+export function chatClassifier(model: ChatLanguageModel, { local = false } = {}): TagClassifier {
   return {
+    local,
     async decide({ tags, excerpt, signal }) {
       const ids = await chooseTags({ model, tags, excerpt, signal });
       return ids.map((tagId) => ({ tagId, confidence: null, needsReview: false }));
