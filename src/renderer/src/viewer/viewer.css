@@ -1,33 +1,185 @@
 /* The Document viewer's styles. Loaded after styles.css (see main.tsx). */
 @reference "../styles.css";
 
+/* The pane slides in as it opens (DESIGN.md, Motion: medium, enter ease-out). */
+@keyframes viewer-pane-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
 @layer components {
-  /* A quote the Document viewer was opened at (TXT and Markdown). */
-  .quote-highlight {
-    @apply rounded-[3px] bg-amber-200 text-inherit;
+  .viewer-pane {
+    container: viewer / inline-size;
+    animation: viewer-pane-in 180ms ease-out;
+    /* The quote's wash: a found Citation's green, unless the scroller says otherwise. */
+    --quote-wash: var(--color-success-wash);
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
   }
 
-  /* A Markdown Document: the Mind editor's typography, a little smaller. */
+  /* The one 44px header, like every pane's. Too narrow for its controls, it scrolls sideways. */
+  .viewer-header {
+    @apply flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-b border-rule bg-sheet px-2 text-[13px] leading-5 text-ink-secondary;
+    scrollbar-width: none;
+  }
+  .viewer-title {
+    @apply min-w-12 flex-1 truncate text-ui font-semibold text-ink-secondary;
+  }
+  .viewer-icon-button {
+    @apply flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary;
+
+    &:hover:not(:disabled) {
+      @apply bg-hover text-ink;
+    }
+    &[aria-pressed="true"] {
+      @apply bg-chip text-ink;
+    }
+    &:disabled {
+      @apply text-ink-placeholder;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 0;
+    }
+  }
+  .viewer-divider {
+    @apply mx-1 h-4 w-px shrink-0 bg-rule;
+  }
+  .viewer-page-input {
+    @apply h-6 shrink-0 rounded-sm border border-rule bg-sheet px-1 text-center text-ink tabular-nums;
+
+    &:focus {
+      border-color: var(--color-accent);
+      outline: 1px solid var(--color-accent);
+      outline-offset: 0;
+    }
+  }
+  .viewer-page-count {
+    @apply shrink-0 pr-0.5 whitespace-nowrap text-ink-meta;
+  }
+  .viewer-zoom-level {
+    @apply min-w-9 shrink-0 text-center whitespace-nowrap tabular-nums;
+  }
+  /* In a narrow viewer the labels give way first (still read out), then the dividers. */
+  @container viewer (width < 520px) {
+    .viewer-zoom-level {
+      @apply sr-only;
+    }
+  }
+  @container viewer (width < 460px) {
+    .viewer-page-count {
+      @apply sr-only;
+    }
+    .viewer-divider {
+      @apply hidden;
+    }
+  }
+
+  /* The outline: rows like the sidebar's, the entry for the page in view on a sheet. */
+  .pdf-outline {
+    @apply w-[200px] max-w-[45%] shrink-0 overflow-y-auto border-r border-rule bg-frame p-2 text-[13px] leading-5;
+  }
+  .pdf-outline-row {
+    @apply flex h-7 items-center rounded-md text-ink-secondary;
+
+    &:hover {
+      @apply bg-hover;
+    }
+  }
+  .pdf-outline-row--nested {
+    @apply text-ink-meta;
+  }
+  .pdf-outline-row--current,
+  .pdf-outline-row--current:hover {
+    @apply bg-sheet font-semibold text-ink;
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+  }
+  .pdf-outline-title {
+    @apply h-full min-w-0 flex-1 truncate rounded-md pr-2 text-left;
+
+    &:disabled {
+      @apply text-ink-placeholder;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
+  .pdf-outline-expand {
+    @apply mr-1 flex size-5 shrink-0 items-center justify-center rounded-sm text-ink-meta;
+
+    &:hover {
+      @apply bg-chip text-ink;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 0;
+    }
+  }
+
+  /* Pages lie on a grey backdrop: sheets with a hairline edge, no heavy shadow. */
+  .viewer-backdrop {
+    background: var(--color-chip);
+  }
+  [data-quote-tone="not-found"] {
+    --quote-wash: var(--color-warning-wash);
+  }
+  .viewer-page {
+    @apply bg-sheet;
+    box-shadow:
+      0 0 0 1px var(--color-rule),
+      0 1px 2px rgb(23 25 28 / 0.06);
+  }
+
+  /* A TXT or Markdown Document: one page, the Mind's serif at a readable measure. */
+  .viewer-text-backdrop {
+    @apply px-6 pt-6 pb-12;
+  }
+  .viewer-text-page {
+    /* A 680px measure, with a right margin wide enough for the Citation's mark. */
+    @apply mx-auto max-w-[776px] px-12 pt-10 pb-14;
+  }
+  @container viewer (width < 520px) {
+    .viewer-text-backdrop {
+      @apply px-4 pt-4 pb-8;
+    }
+    .viewer-text-page {
+      @apply pt-6 pr-12 pb-8 pl-6;
+    }
+  }
+
+  .document-plain {
+    @apply m-0 font-serif text-body break-words whitespace-pre-wrap text-ink;
+  }
+
   .document-markdown {
-    @apply text-custom-xs text-gray-800;
+    @apply font-serif text-body break-words text-ink;
 
     > * + * {
-      margin-top: 0.75em;
+      margin-top: 16px;
+    }
+    /* Headings get 16px more above. */
+    > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
+      margin-top: 32px;
     }
 
     h1 {
-      @apply my-4 text-2xl font-bold;
+      @apply text-[28px] leading-9 font-semibold tracking-[-0.01em];
     }
     h2 {
-      @apply my-3 text-xl font-bold;
+      @apply text-heading font-semibold;
     }
     h3 {
-      @apply my-2 text-lg font-bold;
+      @apply text-[19px] leading-7 font-semibold;
     }
     h4,
     h5,
     h6 {
-      @apply my-1 font-bold;
+      @apply font-semibold;
     }
 
     ul {
@@ -36,26 +188,70 @@
     ol {
       @apply list-decimal pl-6;
     }
+    li + li {
+      margin-top: 4px;
+    }
 
     blockquote {
-      @apply border-l-2 border-gray-200 pl-3 text-gray-600;
+      @apply border-l-2 border-rule-strong pl-4 text-ink-secondary;
     }
 
     a {
-      @apply text-sky-600 underline;
+      @apply text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent;
     }
 
     code {
-      @apply rounded bg-gray-100 px-1 font-mono text-[0.85em];
+      @apply rounded-sm bg-chip px-1 font-mono text-[0.8em];
     }
 
     pre {
-      @apply overflow-x-auto rounded-lg bg-gray-50 px-4 py-3 font-mono text-[12px] leading-5 whitespace-pre;
+      @apply overflow-x-auto rounded-md bg-frame px-4 py-3 font-mono text-[13px] leading-5 whitespace-pre;
+
+      code {
+        @apply bg-transparent p-0 text-[1em];
+      }
     }
 
     hr {
-      @apply my-6 border-0 border-t-2 border-black/10;
+      @apply my-8 border-0 border-t border-rule;
     }
+  }
+
+  /*
+   * A quote the viewer was opened at (TXT and Markdown), in its Citation's colour.
+   * The wash reaches 2px past the words without moving them (padding against a
+   * negative margin), except where one part of the quote continues in the next
+   * inline (e.g. over a line break): there the two meet square, without overlapping.
+   */
+  .quote-highlight {
+    @apply rounded-[2px] text-inherit;
+    background: var(--quote-wash);
+    padding: 2px;
+    margin-inline: -2px;
+    box-decoration-break: clone;
+  }
+  .quote-highlight--joins-before {
+    padding-inline-start: 0;
+    margin-inline-start: 0;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+  }
+  .quote-highlight--joins-after {
+    padding-inline-end: 0;
+    margin-inline-end: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  /* The Citation's check mark, in the page's margin beside its quote: the Mind's 18px mark. */
+  .quote-mark {
+    @apply pointer-events-auto absolute z-[1] flex h-[18px] items-center gap-0.5 rounded-sm pr-[5px] pl-[3px] font-sans text-[11px] leading-[18px] font-bold tabular-nums select-none;
+  }
+  .quote-mark--found {
+    @apply bg-success-wash text-success;
+  }
+  .quote-mark--not-found {
+    @apply bg-warning-wash text-warning;
   }
 
   /* A PDF page. Its text layer sizes itself from these (pdf.js's own viewer sets the same). */
@@ -87,6 +283,8 @@
   transform-origin: 0 0;
   caret-color: CanvasText;
   z-index: 0;
+  /* Multiplied with the page under it, a wash tints the paper and leaves the ink black. */
+  mix-blend-mode: multiply;
   --min-font-size: 1;
   --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
   --min-font-size-inv: calc(1 / var(--min-font-size));
@@ -117,8 +315,8 @@
   .highlight {
     margin: -1px;
     padding: 1px;
-    background-color: rgb(252 211 77 / 0.45);
-    border-radius: 3px;
+    background-color: var(--quote-wash);
+    border-radius: 2px;
 
     &.appended {
       position: initial;

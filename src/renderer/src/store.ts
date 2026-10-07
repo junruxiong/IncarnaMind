@@ -259,7 +259,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     openDocument(location) {
-      const { documentId, pageFrom, pageTo, quote } = location;
+      const { documentId, pageFrom, pageTo, quote, citation } = location;
       set((state) => ({
         viewerOpen: true,
         viewerTarget: {
@@ -267,6 +267,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           pageFrom,
           pageTo,
           quote,
+          citation,
           request: (state.viewerTarget?.request ?? 0) + 1,
         },
       }));
