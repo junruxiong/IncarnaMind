@@ -412,6 +412,8 @@ interface RunFormat {
   bold?: boolean;
   italic?: boolean;
   strike?: boolean;
+  /** Word's yellow text highlight, as the editor's. */
+  highlight?: boolean;
   underline?: boolean;
   /** Monospaced, for code inside a link (code elsewhere uses its character style). */
   monospace?: boolean;
@@ -423,6 +425,7 @@ function formatOf(marks: Marks, context: Context, style?: string): RunFormat {
     bold: marks.bold || context.bold,
     italic: marks.italic,
     strike: marks.strike,
+    highlight: marks.highlight,
     underline: marks.underline,
     monospace: marks.code && style !== undefined,
   };
@@ -437,6 +440,7 @@ function run(text: string, format: RunFormat = {}): string {
     format.bold ? "<w:b/>" : "",
     format.italic ? "<w:i/>" : "",
     format.strike ? "<w:strike/>" : "",
+    format.highlight ? '<w:highlight w:val="yellow"/>' : "",
     format.underline ? '<w:u w:val="single"/>' : "",
   ].join("");
   let content = "";

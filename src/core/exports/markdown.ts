@@ -1,7 +1,8 @@
 /**
  * A Mind as Markdown (CommonMark, with GitHub's tables and footnotes), for an
  * archive: Notes and Answers as Markdown, Questions marked as Questions, math
- * as `$…$` and `$$…$$`, and each Citation as its own footnote.
+ * as `$…$` and `$$…$$`, highlights as `==…==` (as Obsidian, Typora and
+ * markdown-it-mark read them), and each Citation as its own footnote.
  */
 import type { Block, Footnote, Inline, Marks } from "./model";
 
@@ -137,8 +138,9 @@ class MarkdownWriter {
   }
 
   /**
-   * Inline content with its marks: **bold**, *italic*, ~~strike~~, `code` and
-   * [links](…), properly nested; $math$; footnote references; hard breaks.
+   * Inline content with its marks: **bold**, *italic*, ~~strike~~,
+   * ==highlight==, `code` and [links](…), properly nested; $math$; footnote
+   * references; hard breaks.
    */
   inline(content: readonly Inline[], context: Context): string {
     let out = "";
@@ -196,7 +198,9 @@ class MarkdownWriter {
   }
 }
 
-type OpenMark = { kind: "link"; href: string } | { kind: "bold" | "italic" | "strike" };
+type OpenMark =
+  | { kind: "link"; href: string }
+  | { kind: "bold" | "italic" | "strike" | "highlight" };
 
 /** The marks Markdown can write, outermost first. Underline has no Markdown. */
 function wantedMarks(marks: Marks): OpenMark[] {
@@ -205,6 +209,7 @@ function wantedMarks(marks: Marks): OpenMark[] {
   if (marks.bold) wanted.push({ kind: "bold" });
   if (marks.italic) wanted.push({ kind: "italic" });
   if (marks.strike) wanted.push({ kind: "strike" });
+  if (marks.highlight) wanted.push({ kind: "highlight" });
   return wanted;
 }
 
@@ -221,6 +226,8 @@ function openingDelimiter(mark: OpenMark): string {
       return "*";
     case "strike":
       return "~~";
+    case "highlight":
+      return "==";
   }
 }
 
@@ -235,9 +242,17 @@ function image(src: string, alt: string, context: Context): string {
   return src ? `![${escapeText(alt, context.table)}](${destination(src)})` : "";
 }
 
-/** Escapes what Markdown would read as formatting: emphasis, code, links, math, HTML, entities. */
+/**
+ * Escapes what Markdown would read as formatting: emphasis, code, links, math,
+ * HTML, entities, and the "==" of a highlight. A "=" is escaped only where it
+ * could make one: before another, or at either end of the text, which a
+ * highlight's "==" may be written next to.
+ */
 function escapeText(text: string, table: boolean): string {
-  const escaped = text.replace(/[\\`*_~[\]$<]/g, "\\$&").replace(/&(?=#?\w+;)/g, "\\&");
+  const escaped = text
+    .replace(/[\\`*_~[\]$<]/g, "\\$&")
+    .replace(/&(?=#?\w+;)/g, "\\&")
+    .replace(/^=|=(?==|[ \t]*$)/g, "\\=");
   return table ? escaped.replace(/\|/g, "\\|") : escaped;
 }
 

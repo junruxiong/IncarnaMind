@@ -274,6 +274,49 @@ describe("exporting a Mind", () => {
     );
   });
 
+  test("highlighted text is ==marked== in Markdown and highlighted in Word", async () => {
+    const { core, mind, client } = await setUp();
+    writeMind(client, [
+      paragraph(
+        text("Spring tides are "),
+        text("strongest", "highlight"),
+        text(" at "),
+        text("new moon", "bold", "highlight"),
+        text("."),
+      ),
+      // A "==" that isn't a highlight stays text; so does a highlight that starts with "=".
+      paragraph(text("In code, a == b; "), text("= b", "highlight")),
+    ]);
+    await client.settled();
+
+    const markdown = decode(await core.exportMind(mind.id, { format: "markdown" }));
+    expect(markdown).toBe(
+      [
+        "# Tides",
+        "",
+        "Spring tides are ==strongest== at **==new moon==**.",
+        "",
+        "In code, a \\== b; ==\\= b==",
+        "",
+      ].join("\n"),
+    );
+
+    const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
+    expect(paragraphsOf(document)).toEqual([
+      { style: "Title", text: "Tides" },
+      { text: "Spring tides are strongest at new moon." },
+      { text: "In code, a == b; = b" },
+    ]);
+    // Word's own highlighting, which its Text Highlight Color button shows and removes.
+    expect(document).toContain(
+      '<w:r><w:rPr><w:highlight w:val="yellow"/></w:rPr><w:t xml:space="preserve">strongest</w:t></w:r>',
+    );
+    expect(document).toContain(
+      '<w:r><w:rPr><w:b/><w:highlight w:val="yellow"/></w:rPr><w:t xml:space="preserve">new moon</w:t></w:r>',
+    );
+    expect(document.match(/<w:highlight /g)).toHaveLength(3);
+  });
+
   test("to .docx with Questions: they are put back, marked as Questions", async () => {
     const { core, mind, client, tides } = await setUp();
     writeSample(client, tides);
