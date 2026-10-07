@@ -97,6 +97,24 @@ export function TrashIcon(props: IconProps) {
   );
 }
 
+/** An arrow out of a tray: exporting a Mind to a file. */
+export function ExportIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M8 10V2.5M5 5.5l3-3 3 3M3 9.5v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+    </svg>
+  );
+}
+
 /** Six dots: the handle a Block is dragged by, like the old editor's "holder". */
 export function GripIcon(props: IconProps) {
   return (
