@@ -347,9 +347,21 @@ export function createDocuments(options: DocumentsOptions) {
     return counts && counts.total > 0 ? counts.embedded / counts.total : 0;
   };
 
+  /**
+   * The status shown: stored "embedding" is the Document being embedded, or
+   * one waiting its turn, which is queued (see `EmbeddingQueue.isEmbedding`);
+   * a failure kept with a good version is "failed" (see `failedNow`).
+   */
+  const statusOf = (row: DocumentRow): DocumentStatus => {
+    if (failedNow(row)) return "failed";
+    if (row.status === "embedding" && !embedding.isEmbedding(row.id)) return "queued";
+    return row.status as DocumentStatus;
+  };
+
   const toDocument = (row: DocumentRow): Document => {
     const tagging = taggingOf(row.status, row.tagging_status);
-    const failed = failedNow(row);
+    const status = statusOf(row);
+    const failed = status === "failed";
     return {
       id: row.id,
       name: row.name,
@@ -360,8 +372,8 @@ export function createDocuments(options: DocumentsOptions) {
       linkedFolderId: row.linked_folder_id,
       size: row.size,
       pageCount: row.page_count,
-      status: failed ? "failed" : (row.status as DocumentStatus),
-      progress: row.status === "embedding" ? progressOf(row) : null,
+      status,
+      progress: status === "embedding" ? progressOf(row) : null,
       failure: failed
         ? {
             reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
@@ -651,8 +663,10 @@ export function createDocuments(options: DocumentsOptions) {
           reportError(error);
         }
       }
-      announce(job.documentId);
-      if (status === "embedding") embedding.enqueue(job.documentId);
+      // Its turn to be embedded may come at once: then the queue has announced it.
+      if (!(status === "embedding" && embedding.enqueue(job.documentId))) {
+        announce(job.documentId);
+      }
       if (status === "waiting-for-model") model.ensure();
     },
   });
@@ -919,7 +933,8 @@ export function createDocuments(options: DocumentsOptions) {
   model.onSwitch(() => {
     embedding.restart();
     vectors.reset();
-    for (const id of embedWithCurrentModel()) announce(id);
+    // Queued, but for one whose turn came at once, which the queue announced.
+    for (const id of embedWithCurrentModel()) if (!embedding.isEmbedding(id)) announce(id);
   });
 
   /** The live Documents a filter keeps, as SQL conditions on `documents`, with their parameters. */

@@ -437,7 +437,8 @@ export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx
 /**
  * Where a Document is in processing: "queued", then "extracting" its text, then
  * "embedding" its Passages with the embedding model (the built-in one unless
- * the User chose another), then "ready". Before the model has been
+ * the User chose another), then "ready". Documents are embedded one at a
+ * time: one waiting its turn is "queued" again. Before the model has been
  * downloaded, or while the chosen provider can't be used, a Document waits
  * after extracting as "waiting-for-model", and carries on by itself once it
  * can; keyword search already finds its Passages. Switching the embedding

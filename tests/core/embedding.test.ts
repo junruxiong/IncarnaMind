@@ -5,9 +5,11 @@ import {
   BUILT_IN_EMBEDDING_MODEL,
   type Core,
   type Document,
+  type Embedder,
   EmbeddingModelNotReadyError,
   type EmbeddingModelStatus,
 } from "../../src/core";
+import { createFakeEmbedder } from "../../src/core/embedding/fake";
 import { createTempDataFolder, NO_MODEL_FILES, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import {
@@ -305,6 +307,61 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     expect(document?.status).toBe("ready");
     expect(embedder.failEmbeds).toBe(0);
     expect(embedder.texts).toHaveLength(1);
+  });
+
+  test("only the Document being embedded says so, with its progress; those waiting their turn are queued", async () => {
+    const fake = createFakeEmbedder();
+    let open = () => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let firstEmbed = () => {};
+    const embedding = new Promise<void>((resolve) => {
+      firstEmbed = resolve;
+    });
+    // Holds every Passage until the gate opens: the first Document's turn lasts until then.
+    const embedder: Embedder = {
+      load: (files) => fake.load(files),
+      embed: async (text) => {
+        firstEmbed();
+        await gate;
+        return fake.embed(text);
+      },
+      close: () => fake.close(),
+    };
+    const sources = await createTempDataFolder();
+    const core = startCore(await createTempDataFolder(), { embedder });
+    const statuses = statusesOf(core);
+    const long = Array.from(
+      { length: 400 },
+      (_, index) => `Sentence ${index} is about photosynthesis and light.`,
+    ).join(" ");
+    const { documents } = await core.addDocuments([
+      await writeSourceFile(sources, "Big.md", long),
+      await writeSourceFile(sources, "plants.md", PLANTS),
+      await writeSourceFile(sources, "markets.md", MARKETS),
+    ]);
+    const [big, plants, markets] = documents;
+    if (!big || !plants || !markets) throw new Error("Nothing was added.");
+
+    await embedding;
+    // The small ones are extracted, then wait for the big one: queued again, not "Embedding… 0%".
+    for (const small of [plants, markets]) {
+      await expect.poll(() => statuses(small.id)).toEqual(["queued", "extracting", "queued"]);
+    }
+    const waiting = await core.listDocuments();
+    expect(waiting.map((each) => [each.name, each.status, each.progress])).toEqual([
+      ["markets", "queued", null],
+      ["plants", "queued", null],
+      ["Big", "embedding", 0],
+    ]);
+
+    open();
+    await waitForProcessing(core, [big.id, plants.id, markets.id]);
+    expect(statuses(big.id)).toEqual(["queued", "extracting", "embedding", "ready"]);
+    for (const small of [plants, markets]) {
+      expect(statuses(small.id)).toEqual(["queued", "extracting", "queued", "embedding", "ready"]);
+    }
   });
 
   test("Passages are embedded one at a time, with the Document's name and the e5 prefixes", async () => {
