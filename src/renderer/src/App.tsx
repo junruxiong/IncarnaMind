@@ -6,6 +6,7 @@ import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
+import { TagsDialog } from "./components/TagsDialog";
 import { ViewerPanel } from "./components/ViewerPanel";
 import { useLanguage, useT } from "./i18n";
 import { useAppStore } from "./store";
@@ -100,6 +101,7 @@ function Workspace() {
         </>
       )}
       <SettingsDialog />
+      <TagsDialog />
       <ChatSetupDialog />
       {/* Opens after the dialog that triggered the request, so it shows on top of it. */}
       <ConsentDialog />

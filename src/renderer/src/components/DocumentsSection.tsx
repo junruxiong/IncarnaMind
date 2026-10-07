@@ -10,8 +10,17 @@ import type { MessageKey } from "../../../shared/i18n";
 import { endSidebarDrag, startSidebarDrag } from "../folders";
 import { useT } from "../i18n";
 import { selectVisibleDocuments, useAppStore } from "../store";
+import { DocumentTagChips, DocumentTagMenu, TagFilter, TaggingStatus } from "./DocumentTags";
 import { FolderTree, type NewFolderPlace } from "./FolderTree";
-import { CloseIcon, DocumentIcon, FolderPlusIcon, PencilIcon, PlusIcon, TrashIcon } from "./icons";
+import {
+  CloseIcon,
+  DocumentIcon,
+  FolderPlusIcon,
+  PencilIcon,
+  PlusIcon,
+  TagIcon,
+  TrashIcon,
+} from "./icons";
 import { MoveToMenu } from "./MoveToMenu";
 
 /** What the file picker offers. The core decides what it takes. */
@@ -44,18 +53,27 @@ const statusTones: Record<DocumentStatus, string> = {
 };
 
 /**
- * The sidebar's Documents: a list with each Document's processing status, an
- * add button with a file picker, and rename and delete. Dropping files anywhere
- * on the window adds them too (see `FileDrop`). Above the list, the Folder tree
- * filters it; Documents are filed by dragging them onto a Folder or with
- * "Move to…". Clicking a Document opens it in the viewer.
+ * The sidebar's Documents: a list with each Document's processing status, its
+ * Tags and its tagging, an add button with a file picker, and rename and
+ * delete. Dropping files anywhere on the window adds them too (see
+ * `FileDrop`). Above the list, the Folder tree and the Tag chips filter it;
+ * Documents are filed by dragging them onto a Folder or with "Move to…", and
+ * tagged from their Tags menu. Clicking a Document opens it in the viewer.
  */
 export function DocumentsSection() {
   const t = useT();
   // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
   const documents = useAppStore(useShallow(selectVisibleDocuments));
-  const filtered = useAppStore((state) => state.folderFilter !== null);
+  const emptyMessage = useAppStore(
+    (state): MessageKey =>
+      state.tagFilter !== null
+        ? "tags.filter.empty"
+        : state.folderFilter !== null
+          ? "folders.empty"
+          : "documents.none",
+  );
   const addDocuments = useAppStore((state) => state.addDocuments);
+  const openTagsDialog = useAppStore((state) => state.openTagsDialog);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
   const [newFolderIn, setNewFolderIn] = useState<NewFolderPlace>(undefined);
@@ -76,6 +94,16 @@ export function DocumentsSection() {
           {t("documents.title")}
         </h2>
         <div className="flex items-center gap-[2px]">
+          <button
+            type="button"
+            data-testid="manage-tags"
+            aria-label={t("tags.manage")}
+            title={t("tags.manage")}
+            onClick={openTagsDialog}
+            className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+          >
+            <TagIcon className="size-4" />
+          </button>
           <button
             type="button"
             data-testid="new-folder"
@@ -114,10 +142,9 @@ export function DocumentsSection() {
         onNewFolder={setNewFolderIn}
         onNewFolderDone={() => setNewFolderIn(undefined)}
       />
+      <TagFilter />
       {documents.length === 0 ? (
-        <p className="mx-4 py-[5px] text-sm text-gray-400">
-          {t(filtered ? "folders.empty" : "documents.none")}
-        </p>
+        <p className="mx-4 py-[5px] text-sm text-gray-400">{t(emptyMessage)}</p>
       ) : (
         <ul className="mx-3">
           {documents.map((item) => (
@@ -160,6 +187,7 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       data-document-id={item.id}
       data-folder-id={item.folderId ?? ""}
       data-status={item.status}
+      data-tagging={item.tagging}
       draggable={!renaming}
       onDragStart={(event) => startSidebarDrag(event, { kind: "document", id: item.id })}
       onDragEnd={endSidebarDrag}
@@ -167,34 +195,40 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
         isOpen ? "bg-gray-200" : "hover:bg-gray-100"
       }`}
     >
-      {renaming ? (
-        <>
-          <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <RenameInput item={item} onDone={() => setRenaming(false)} />
-            {statusLine}
+      <div className="min-w-0 flex-1">
+        {renaming ? (
+          <div className="flex items-start gap-[6px]">
+            <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <RenameInput item={item} onDone={() => setRenaming(false)} />
+              {statusLine}
+              <TaggingStatus item={item} />
+            </div>
           </div>
-        </>
-      ) : (
-        // Opens the Document in the viewer, replacing whatever it showed.
-        <button
-          type="button"
-          data-testid="open-document"
-          aria-current={isOpen ? "true" : undefined}
-          onClick={() => openDocument({ documentId: item.id })}
-          className="flex min-w-0 flex-1 items-start gap-[6px] text-left"
-        >
-          <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-gray-700" title={item.name}>
-              {item.name}
+        ) : (
+          // Opens the Document in the viewer, replacing whatever it showed.
+          <button
+            type="button"
+            data-testid="open-document"
+            aria-current={isOpen ? "true" : undefined}
+            onClick={() => openDocument({ documentId: item.id })}
+            className="flex w-full min-w-0 items-start gap-[6px] text-left"
+          >
+            <DocumentIcon kind={item.kind} className="mt-[2px] size-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-gray-700" title={item.name}>
+                {item.name}
+              </span>
+              {statusLine}
+              <TaggingStatus item={item} />
             </span>
-            {statusLine}
-          </span>
-        </button>
-      )}
+          </button>
+        )}
+        <DocumentTagChips item={item} />
+      </div>
       {!renaming && (
         <div className="flex shrink-0 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <DocumentTagMenu item={item} buttonClassName={actionButton} />
           <MoveToMenu item={item} buttonClassName={actionButton} />
           <button
             type="button"

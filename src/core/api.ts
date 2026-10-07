@@ -777,8 +777,8 @@ export interface CoreApi {
   /** Returns the renamed Document. */
   renameDocument(id: string, name: string): Promise<Document>;
   /**
-   * Soft-deletes a Document and its Passages, so search ignores them. The stored
-   * file is removed once no Document uses it.
+   * Soft-deletes a Document, its Passages and its Tags, so search ignores them.
+   * The stored file is removed once no Document uses it.
    */
   deleteDocument(id: string): Promise<void>;
   /**
