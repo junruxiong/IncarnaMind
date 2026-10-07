@@ -1,7 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { ConsentDeclinedError, DATABASE_FILE, InvalidInputError } from "../../src/core";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  ConsentDeclinedError,
+  type CoreAdapters,
+  type CrossEncoder,
+  DATABASE_FILE,
+  InvalidInputError,
+  type RerankSettings,
+} from "../../src/core";
 import {
   askAndFinish,
   citingModel,
@@ -9,6 +17,7 @@ import {
   setUpWithDocuments,
 } from "../helpers/citations";
 import { createMemoryKeychain, nextEvent } from "../helpers/core";
+import { startModelServer } from "../helpers/embedding";
 import { mockRerankingModels } from "../helpers/embeddingProviders";
 
 const COHERE = { id: "https://api.cohere.com", name: "Cohere" };
@@ -31,11 +40,31 @@ function sections(count: number, marked: number, topic: string): string {
 /** A reranking model that prefers the Weather Document's Passages, whatever search found. */
 const prefersWeather = (text: string) => (text.startsWith("Weather\n") ? 0.9 : 0.1);
 
+/** A built-in reranking model that, like `prefersWeather`, puts the Weather Document first. */
+function weatherCrossEncoder() {
+  const calls: { query: string; texts: string[] }[] = [];
+  let loaded = false;
+  const crossEncoder: CrossEncoder = {
+    async load() {
+      loaded = true;
+    },
+    async score(query, texts) {
+      if (!loaded) throw new Error("Not loaded.");
+      calls.push({ query, texts: [...texts] });
+      return texts.map((text) => (text.startsWith("Weather\n") ? 4 : -4));
+    },
+    close() {
+      loaded = false;
+    },
+  };
+  return { crossEncoder, calls, isLoaded: () => loaded };
+}
+
 /**
  * Two Documents, a local chat model that searches for "lighthouse" and shows
  * what it was given, and mock reranking models.
  */
-async function setUp() {
+async function setUp(overrides: Partial<CoreAdapters> = {}) {
   let shown: ShownPassage[] = [];
   const rerankers = mockRerankingModels(prefersWeather);
   const keychain = createMemoryKeychain();
@@ -53,7 +82,7 @@ async function setUp() {
       { name: "Coast.md", contents: sections(24, 12, "red") },
       { name: "Weather.md", contents: sections(6, 0, "") },
     ],
-    { createRerankingModel: rerankers.createRerankingModel, keychain },
+    { createRerankingModel: rerankers.createRerankingModel, keychain, ...overrides },
   );
   const ask = async (text = "Where is the lighthouse?") => {
     await askAndFinish(setup.core, setup.client, setup.mind.id, text);
@@ -84,6 +113,7 @@ describe("Rerank", { timeout: 30_000 }, () => {
       hasApiKey: false,
       service: null,
       paused: false,
+      model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name }),
     });
     const shown = await ask();
 
@@ -105,6 +135,7 @@ describe("Rerank", { timeout: 30_000 }, () => {
       hasApiKey: true,
       service: COHERE,
       paused: false,
+      model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name }),
     };
     expect(saved).toEqual(expected);
     expect(await changed).toEqual(expected);
@@ -275,5 +306,167 @@ describe("Testing the rerank connection", { timeout: 30_000 }, () => {
     });
     // With no key given or saved for the provider, it refuses.
     await expect(core.testRerankConnection({ kind: "voyage" })).rejects.toThrow(InvalidInputError);
+  });
+});
+
+/** Resolves with the first "rerank.changed" whose settings pass `until`. */
+function rerankWhen(
+  core: Awaited<ReturnType<typeof setUp>>["core"],
+  until: (settings: RerankSettings) => boolean,
+): Promise<RerankSettings> {
+  return new Promise((resolve) => {
+    const stop = core.on("rerank.changed", (settings) => {
+      if (!until(settings)) return;
+      stop();
+      resolve(settings);
+    });
+  });
+}
+
+/** The built-in model's files, as a local server serves them (see `startModelServer`). */
+const MODEL_FILES = {
+  [BUILT_IN_RERANKING_MODEL.files.model]: 4000,
+  [BUILT_IN_RERANKING_MODEL.files.tokenizer]: 300,
+  [BUILT_IN_RERANKING_MODEL.files.tokenizerConfig]: 20,
+};
+
+describe("The built-in reranking model", { timeout: 30_000 }, () => {
+  test("reranks on this computer: no key, no consent, and the flow sends nothing", async () => {
+    const weather = weatherCrossEncoder();
+    const { core, rerankers, ask } = await setUp({ crossEncoder: weather.crossEncoder });
+    const requests: string[] = [];
+    core.on("consent.requested", (request) => requests.push(request.flow.id));
+
+    const saved = await core.saveRerankSettings({ kind: "built-in" });
+
+    expect(saved).toEqual({
+      enabled: true,
+      kind: "built-in",
+      modelId: BUILT_IN_RERANKING_MODEL.name,
+      hasApiKey: false,
+      service: null,
+      paused: false,
+      model: expect.objectContaining({ name: BUILT_IN_RERANKING_MODEL.name, state: "ready" }),
+    });
+    const shown = await ask();
+
+    expect(shown[0]?.document).toBe("Weather");
+    expect(weather.calls).toHaveLength(1);
+    expect(weather.calls[0]?.query).toBe("lighthouse");
+    // The fused top 20, each with its Document's name.
+    const texts = weather.calls[0]?.texts ?? [];
+    expect(texts.length).toBeGreaterThan(1);
+    expect(texts.length).toBeLessThanOrEqual(20);
+    expect(texts.some((text) => text.startsWith("Coast\n"))).toBe(true);
+    expect(requests).toEqual([]);
+    expect(rerankers.calls).toEqual([]);
+    const flow = (await core.listRegisteredDataFlows()).find((each) => each.id === "rerank");
+    expect(flow?.services).toEqual([]);
+  });
+
+  test("local mode doesn't pause it, and choosing it forgets a service's key", async () => {
+    const weather = weatherCrossEncoder();
+    const { core, keychain, ask } = await setUp({ crossEncoder: weather.crossEncoder });
+    await useCohere(core);
+    await core.setLocalOnly(true);
+
+    expect(await core.saveRerankSettings({ kind: "built-in" })).toMatchObject({
+      kind: "built-in",
+      paused: false,
+    });
+
+    expect(keychain.secrets.has("rerank:api-key")).toBe(false);
+    expect((await ask())[0]?.document).toBe("Weather");
+    // It takes no key or model name.
+    await expect(
+      core.saveRerankSettings({ kind: "built-in", apiKey: "a-key" } as never),
+    ).rejects.toThrow(InvalidInputError);
+    await expect(core.testRerankConnection({ kind: "built-in" } as never)).rejects.toThrow(
+      InvalidInputError,
+    );
+  });
+
+  test("its files download once it is chosen; until then search keeps its own order", async () => {
+    const server = await startModelServer(MODEL_FILES);
+    server.behave(BUILT_IN_RERANKING_MODEL.files.model, { held: true });
+    const weather = weatherCrossEncoder();
+    const { core, dataDir, ask } = await setUp({
+      crossEncoder: weather.crossEncoder,
+      rerankingModelSource: server.source,
+    });
+    const traffic = async () => (await core.listNetworkTraffic()).map((each) => each.id);
+
+    // Nothing is downloaded before the User chooses it.
+    expect((await core.getRerankSettings()).model.state).toBe("not-downloaded");
+    expect(await traffic()).not.toContain("reranking-model");
+    expect(server.requests).toEqual([]);
+
+    expect((await core.saveRerankSettings({ kind: "built-in" })).model.state).toBe("downloading");
+    expect(await traffic()).toContain("reranking-model");
+    expect((await ask())[0]?.document).toBe("Coast");
+    expect(weather.calls).toEqual([]);
+
+    const ready = rerankWhen(core, (settings) => settings.model.state === "ready");
+    server.release();
+    expect((await ready).model).toMatchObject({ state: "ready", error: null });
+    expect((await ask())[0]?.document).toBe("Weather");
+    const stored = await readFile(
+      join(
+        dataDir,
+        "models",
+        BUILT_IN_RERANKING_MODEL.folder,
+        BUILT_IN_RERANKING_MODEL.files.model,
+      ),
+    );
+    expect(stored.byteLength).toBe(4000);
+  });
+
+  test("a failed download says why, search keeps its order, and choosing it again retries", async () => {
+    const server = await startModelServer(MODEL_FILES);
+    server.behave(BUILT_IN_RERANKING_MODEL.files.tokenizer, { corrupt: true });
+    const weather = weatherCrossEncoder();
+    const { core, ask } = await setUp({
+      crossEncoder: weather.crossEncoder,
+      rerankingModelSource: server.source,
+    });
+
+    const failed = rerankWhen(core, (settings) => settings.model.state === "failed");
+    await core.saveRerankSettings({ kind: "built-in" });
+    expect((await failed).model.error).toMatchObject({ kind: "integrity" });
+    expect((await ask())[0]?.document).toBe("Coast");
+
+    server.behave(BUILT_IN_RERANKING_MODEL.files.tokenizer, {});
+    const ready = rerankWhen(core, (settings) => settings.model.state === "ready");
+    await core.saveRerankSettings({ kind: "built-in" });
+    await ready;
+    expect((await ask())[0]?.document).toBe("Weather");
+  });
+
+  test("a model that fails as it reranks leaves search's order", async () => {
+    const failing: CrossEncoder = {
+      load: async () => {},
+      score: async () => {
+        throw new Error("The reranking process stopped (exit code 1).");
+      },
+      close: () => {},
+    };
+    const { core, ask } = await setUp({ crossEncoder: failing });
+    await core.saveRerankSettings({ kind: "built-in" });
+
+    expect((await ask())[0]?.document).toBe("Coast");
+  });
+
+  test("stopping reranking stops the model: search is as before", async () => {
+    const weather = weatherCrossEncoder();
+    const { core, ask } = await setUp({ crossEncoder: weather.crossEncoder });
+    await core.saveRerankSettings({ kind: "built-in" });
+    await ask();
+    expect(weather.isLoaded()).toBe(true);
+
+    expect(await core.removeRerankSettings()).toMatchObject({ enabled: false, kind: null });
+
+    expect(weather.isLoaded()).toBe(false);
+    expect((await ask())[0]?.document).toBe("Coast");
+    expect(weather.calls).toHaveLength(1);
   });
 });

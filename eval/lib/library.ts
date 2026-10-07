@@ -18,6 +18,7 @@ import {
   type Keychain,
   type SaveEmbeddingProviderInput,
 } from "../../src/core";
+import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase } from "../../src/core/storage";
 import type { EvalDocument } from "./evaluationSet";
 import type { Log } from "./log";
@@ -160,6 +161,9 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       },
     },
     embedder: options.embedder,
+    // The reranked mode reranks outside the core (./rerank); the core's own reranking stays off.
+    crossEncoder: createFakeCrossEncoder(),
+    rerankingModelSource: { baseUrl: "http://127.0.0.1/", files: [] },
   };
   const core = createCore(adapters);
   const close = async () => {

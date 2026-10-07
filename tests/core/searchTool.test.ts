@@ -5,6 +5,8 @@ import {
   clusterByOverlap,
   documentWindows,
   SEARCH_TOOL_PARAMETERS,
+  type SearchToolSources,
+  searchDocumentsTool,
   type WindowedHit,
 } from "../../src/core/documents/searchTool";
 import {
@@ -209,5 +211,42 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
 
     expect(reranked).toEqual(["lighthouse"]);
     expect(shown[0]?.document).toBe("Weather");
+  });
+
+  test("with a reranker, hybrid search hands it the fused top 20, which are then all the hits", async () => {
+    const asked: number[] = [];
+    const reranked: number[] = [];
+    const sources: SearchToolSources = {
+      candidates: async (_query, limit) => {
+        asked.push(limit);
+        return Array.from({ length: limit }, (_, index) => ({
+          seq: index,
+          passageId: `p${index}`,
+          documentId: `d${index}`,
+          documentName: `Document ${index}`,
+          documentKind: "markdown",
+          contentHash: "hash",
+          pageFrom: 1,
+          pageTo: 1,
+          position: 0,
+          windowFrom: 0,
+          windowTo: 0,
+          text: `Passage ${index}`,
+          score: 1 / (60 + index + 1),
+        }));
+      },
+      window: () => [],
+    };
+    const reranker: Reranker = async (_query, candidates) => {
+      reranked.push(candidates.length);
+      return [...candidates].reverse();
+    };
+
+    await searchDocumentsTool(sources, "lighthouse");
+    await searchDocumentsTool(sources, "lighthouse", { rerank: reranker });
+
+    expect(SEARCH_TOOL_PARAMETERS.rerankCandidates).toBe(20);
+    expect(asked).toEqual([SEARCH_TOOL_PARAMETERS.candidates, 20]);
+    expect(reranked).toEqual([20]);
   });
 });

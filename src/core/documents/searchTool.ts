@@ -4,7 +4,9 @@
  *
  * 1. Hybrid search: keyword (FTS5) and vector search, fused by reciprocal rank
  *    fusion, over the Search scope.
- * 2. Rerank, if a reranker is plugged in (a hook: none is built in yet).
+ * 2. Rerank, if the User turned reranking on (the built-in reranking model, or
+ *    a Cohere or Voyage key; see ../providers/rerank): it reorders the fused
+ *    top 20, which are then all the hits.
  * 3. Group the hits by Document.
  * 4. The old backend's sliding-window clustering (its `find_overlaps`), ported:
  *    each Passage belongs to the overlapping windows of 3 consecutive Passages
@@ -23,8 +25,15 @@
 import type { WindowedPassage } from "./search";
 
 export interface SearchToolParameters {
-  /** How many fused hits hybrid search hands on to the reranker and the clustering. */
+  /** How many fused hits hybrid search hands on to the clustering, without a reranker. */
   candidates: number;
+  /**
+   * How many fused hits hybrid search hands on to the reranker, and then to
+   * the clustering. Each costs the built-in reranking model tens of
+   * milliseconds, so fewer than `candidates`: the retrieval evaluation (#31)
+   * found the Passages it missed within the fused top 20.
+   */
+  rerankCandidates: number;
   /** The most Documents one search returns Passages from. */
   maxDocuments: number;
   /** The most windows (clusters) one search returns from a Document. */
@@ -39,6 +48,7 @@ export interface SearchToolParameters {
  */
 export const SEARCH_TOOL_PARAMETERS: SearchToolParameters = {
   candidates: 30,
+  rerankCandidates: 20,
   maxDocuments: 4,
   maxWindowsPerDocument: 2,
   maxPassages: 8,
@@ -50,8 +60,9 @@ export interface SearchCandidate extends WindowedPassage {
 }
 
 /**
- * Reorders (and may rescore or drop) the hybrid hits, best first, e.g. with a
- * Cohere or Voyage reranking model. Scores must stay comparable: higher is better.
+ * Reorders (and may rescore or drop) the hybrid hits, best first, e.g. with
+ * the built-in reranking model or a Cohere or Voyage one. Scores must stay
+ * comparable and positive: higher is better.
  */
 export type Reranker = (
   query: string,
@@ -178,6 +189,7 @@ export interface SearchToolOptions {
   /** Only these Documents (a Search scope). Omitted: every Document. */
   documentIds?: readonly string[];
   parameters?: Partial<SearchToolParameters>;
+  /** The reranker, while reranking is on; undefined otherwise. */
   rerank?: Reranker;
   signal?: AbortSignal;
 }
@@ -192,7 +204,11 @@ export async function searchDocumentsTool(
   options: SearchToolOptions = {},
 ): Promise<WindowedPassage[]> {
   const parameters = { ...SEARCH_TOOL_PARAMETERS, ...options.parameters };
-  let candidates = await sources.candidates(query, parameters.candidates, options.documentIds);
+  let candidates = await sources.candidates(
+    query,
+    options.rerank ? parameters.rerankCandidates : parameters.candidates,
+    options.documentIds,
+  );
   if (options.rerank && candidates.length > 0) {
     candidates = await options.rerank(query, candidates, options.signal);
   }
