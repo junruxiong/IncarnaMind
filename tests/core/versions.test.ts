@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
-import type { Core } from "../../src/core";
+import type { Core, Document } from "../../src/core";
 import { citationState } from "../../src/shared/citations";
 import {
   answerEnded,
@@ -10,8 +10,14 @@ import {
   onlyCitation,
   setUpWithDocuments,
 } from "../helpers/citations";
-import { queryDatabase, startCore } from "../helpers/core";
-import { sha256, waitForProcessing } from "../helpers/documents";
+import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import {
+  createSourceFolder,
+  linkAndProcess,
+  sha256,
+  waitForProcessing,
+  writeSourceFile,
+} from "../helpers/documents";
 import { buildPdf } from "../helpers/pdf";
 
 const SPRING = "Spring tides happen at new moon and at full moon.";
@@ -164,5 +170,133 @@ describe("Versions of a Document", { timeout: 30_000 }, () => {
 
     startCore(dataDir);
     expect(pagesByVersion(dataDir)).toEqual({ [sha256(V3)]: 3 });
+  });
+});
+
+/** The next version, written half-way, as a sync client leaves a file it is still downloading. */
+const HALF_V2 = V2.subarray(0, Math.floor(V2.length / 2));
+
+const documentIds = (results: readonly { documentId: string }[]) => [
+  ...new Set(results.map((result) => result.documentId)),
+];
+
+/** Writes a new version of a Linked file, reconciles, and waits for it to be processed. */
+async function rewrite(core: Core, documentId: string, path: string, contents: Uint8Array) {
+  await writeFile(path, contents);
+  await core.reconcileDocuments();
+  const [processed] = await waitForProcessing(core, [documentId]);
+  if (!processed) throw new Error("The Document went.");
+  return processed;
+}
+
+/** A Linked folder holding Tides.pdf at version 1, processed. */
+async function linkedTides() {
+  const dataDir = await createTempDataFolder();
+  const library = await createSourceFolder();
+  const path = await writeSourceFile(library, "Tides.pdf", V1);
+  const core = startCore(dataDir);
+  const [document] = await linkAndProcess(core, library);
+  if (!document) throw new Error("Nothing was linked.");
+  return { dataDir, core, path, document };
+}
+
+describe("A new version that can't be read", { timeout: 30_000 }, () => {
+  test("leaves the last good version indexed and searched, says it failed, and a later change or Retry reads the file again", async () => {
+    const { dataDir, core, path, document } = await linkedTides();
+    expect(document).toMatchObject({ status: "ready", contentHash: sha256(V1), pageCount: 2 });
+
+    const failed = await rewrite(core, document.id, path, HALF_V2);
+
+    // Shown as failed, so the User can retry, with the version still indexed.
+    expect(failed).toMatchObject({
+      id: document.id,
+      status: "failed",
+      failure: { reason: "unreadable", message: expect.any(String) },
+      contentHash: sha256(V1),
+      pageCount: 2,
+      fileStatus: "available",
+      progress: null,
+    });
+    // That version's text, Passages and vectors are still searched, and its text read.
+    expect(documentIds(await core.searchPassages("happen", { mode: "keyword" }))).toEqual([
+      document.id,
+    ]);
+    expect(documentIds(await core.searchPassages("spring tides", { mode: "vector" }))).toEqual([
+      document.id,
+    ]);
+    expect(documentIds(await core.searchPassages("full moon"))).toEqual([document.id]);
+    expect(await core.readDocumentText(document.id)).toMatchObject({
+      contentHash: sha256(V1),
+      pages: [expect.objectContaining({ page: 1 }), expect.objectContaining({ page: 2 })],
+    });
+    expect(pagesByVersion(dataDir)).toEqual({ [sha256(V1)]: 2 });
+    core.close();
+
+    // After a restart it is the same: the half-written file isn't read again by itself.
+    const second = startCore(dataDir);
+    const seen: Document[] = [];
+    second.on("document.status", (each) => seen.push(each));
+    await second.reconcileDocuments();
+    expect(seen).toEqual([]);
+    expect(await second.listDocuments()).toEqual([failed]);
+    expect(documentIds(await second.searchPassages("full moon"))).toEqual([document.id]);
+
+    // Retry reads it again; still half-written, it fails again, and the version stays.
+    expect(await second.retryDocument(document.id)).toMatchObject({
+      status: "queued",
+      failure: null,
+      contentHash: sha256(V1),
+    });
+    const [retried] = await waitForProcessing(second, [document.id]);
+    expect(retried).toMatchObject({ status: "failed", contentHash: sha256(V1) });
+    expect(documentIds(await second.searchPassages("happen", { mode: "keyword" }))).toEqual([
+      document.id,
+    ]);
+
+    // Written in full, the next change is read, and replaces the old version in search.
+    const fixed = await rewrite(second, document.id, path, V2);
+    expect(fixed).toMatchObject({ status: "ready", failure: null, contentHash: sha256(V2) });
+    expect(await second.searchPassages("happen", { mode: "keyword" })).toEqual([]);
+    expect(documentIds(await second.searchPassages("follow", { mode: "keyword" }))).toEqual([
+      document.id,
+    ]);
+  });
+
+  test("a file put back as the version indexed is ready again, without being read", async () => {
+    const { core, path, document } = await linkedTides();
+    await rewrite(core, document.id, path, HALF_V2);
+    const seen: Document[] = [];
+    core.on("document.status", (each) => seen.push(each));
+
+    await writeFile(path, V1);
+    await core.reconcileDocuments();
+
+    expect(seen.map((each) => each.status)).toEqual(["ready"]);
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ status: "ready", failure: null, contentHash: sha256(V1) }),
+    ]);
+  });
+
+  test("a Document that never had a version read still fails as it did, with nothing to search", async () => {
+    const dataDir = await createTempDataFolder();
+    const library = await createSourceFolder();
+    const path = await writeSourceFile(library, "Tides.pdf", HALF_V2);
+    const core = startCore(dataDir);
+
+    const [failed] = await linkAndProcess(core, library);
+
+    expect(failed).toMatchObject({
+      status: "failed",
+      failure: { reason: "unreadable" },
+      contentHash: sha256(HALF_V2),
+    });
+    expect(await core.searchPassages("moon")).toEqual([]);
+    // Another unreadable version: still failed, now of that version.
+    const broken = new TextEncoder().encode("%PDF-1.7\nnot the rest of a PDF");
+    expect(await rewrite(core, failed?.id as string, path, broken)).toMatchObject({
+      status: "failed",
+      contentHash: sha256(broken),
+    });
+    expect(await core.searchPassages("moon")).toEqual([]);
   });
 });

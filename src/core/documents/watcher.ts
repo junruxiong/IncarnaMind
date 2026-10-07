@@ -2,7 +2,8 @@
  * Watching a Linked folder while the app runs, with `fs.watch` in recursive
  * mode: Node 24 supports it on macOS (FSEvents), Windows
  * (ReadDirectoryChangesW) and Linux (inotify on each folder, set up by Node),
- * so no dependency is needed.
+ * so no dependency is needed. A folder holding files added on their own is
+ * watched without what is below it.
  *
  * Events come in bursts (an editor saving, a download being written), and
  * name a path without saying what happened to it. Each path is reported once
@@ -28,8 +29,17 @@ export interface FolderWatcher {
   close(): void;
 }
 
-/** Starts watching a folder, at any depth. */
-export type WatchFolder = (root: string, listener: WatchListener) => FolderWatcher;
+export interface WatchOptions {
+  /** Whether what is in its folders, at any depth, is watched too. Defaults to true. */
+  recursive?: boolean;
+}
+
+/** Starts watching a folder, at any depth unless `recursive` is false. */
+export type WatchFolder = (
+  root: string,
+  listener: WatchListener,
+  options?: WatchOptions,
+) => FolderWatcher;
 
 /** A path's size, modified time and type, or "gone": what must stay the same for it to have settled. */
 async function signatureOf(path: string): Promise<string> {
@@ -43,7 +53,7 @@ async function signatureOf(path: string): Promise<string> {
 
 /** Watches with `fs.watch`, reporting each path once it has settled for `settleMs`. */
 export function fsWatchFolder(settleMs: number): WatchFolder {
-  return (root, listener) => {
+  return (root, listener, options = {}) => {
     interface Pending {
       timer: ReturnType<typeof setTimeout>;
       signature?: string;
@@ -97,7 +107,8 @@ export function fsWatchFolder(settleMs: number): WatchFolder {
     };
 
     try {
-      watcher = watch(root, { recursive: true, persistent: false }, (_event, filename) => {
+      const recursive = options.recursive ?? true;
+      watcher = watch(root, { recursive, persistent: false }, (_event, filename) => {
         if (closed) return;
         // No name: something changed, but not said where. Look at the whole folder.
         touched(filename ? join(root, filename.toString()) : root);

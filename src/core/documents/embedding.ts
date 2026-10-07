@@ -3,8 +3,12 @@
  * after another: the built-in model one Passage at a time (ADR-0009: batches
  * were no faster, and changed int8 results), an API provider in batches. A
  * Document's status goes from "embedding" to "ready"; while the model can't
- * be used it waits as "waiting-for-model". Each batch of vectors is stored as
- * it comes, so a quit loses at most one batch's work.
+ * be used it waits as "waiting-for-model". Only the Document whose turn it is
+ * is shown as embedding; the others stored as "embedding" wait their turn,
+ * shown as queued (`isEmbedding`). Each batch of vectors is stored as it
+ * comes, so a quit loses at most one batch's work. A Document is only ready
+ * once every live Passage has its vector: a new version stored during its
+ * turn takes another.
  *
  * The model each Document's vectors come from is recorded with them
  * (documents.embedding_model, and their size in documents.embedding_dimensions).
@@ -38,8 +42,16 @@ export interface EmbeddingQueueOptions {
 }
 
 export interface EmbeddingQueue {
-  /** Queues a Document whose status is "embedding". */
-  enqueue(documentId: string): void;
+  /**
+   * Queues a Document whose status is "embedding". Returns whether its turn
+   * came at once: then it has been announced as being embedded.
+   */
+  enqueue(documentId: string): boolean;
+  /**
+   * Whether this is the Document being embedded now. The others stored as
+   * "embedding" are waiting their turn: they are shown as queued.
+   */
+  isEmbedding(documentId: string): boolean;
   /** Moves every Document waiting for the model on to "embedding", and queues it. */
   resumeWaiting(): void;
   /**
@@ -66,6 +78,8 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
   const queue: string[] = [];
   let running = false;
   let closed = false;
+  /** The Document whose turn it is, from its model loading to its last vector. */
+  let current: string | undefined;
   /** Counts model switches: work started under an earlier count stops. */
   let generation = 0;
 
@@ -83,6 +97,14 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       id,
       from,
     ]);
+
+  /** Whether any of the Document's live Passages has no vector yet. */
+  const unembedded = (id: string) =>
+    db.get(
+      `SELECT 1 FROM passages
+       WHERE document_id = ? AND deleted_at IS NULL AND embedding IS NULL LIMIT 1`,
+      [id],
+    ) !== undefined;
 
   /** The model can't be used: every Document being embedded waits for it again. */
   function park(): void {
@@ -122,11 +144,29 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     vectors.removeDocument(id);
   }
 
+  /**
+   * Embeds a Document, as its turn: until now it was shown as queued. If it
+   * stops part way (processed again, paused, or the model switched), it is
+   * announced again, as whatever it is now.
+   */
   async function embedDocument(id: string): Promise<Outcome> {
-    const started = generation;
-    const stopped = () => closed || generation !== started;
     const document = stateOf(id);
     if (document?.status !== "embedding" || options.isPaused?.(id)) return "skipped";
+    current = id;
+    announce(id);
+    let outcome: Outcome = "skipped";
+    try {
+      outcome = await embedPassages(id, document);
+      return outcome;
+    } finally {
+      if (current === id) current = undefined;
+      if (outcome === "skipped" && !closed) announce(id);
+    }
+  }
+
+  async function embedPassages(id: string, document: DocumentState): Promise<Outcome> {
+    const started = generation;
+    const stopped = () => closed || generation !== started;
     if (!(await model.load())) return stopped() ? "skipped" : "model-unavailable";
     if (stopped()) return "skipped";
     let dimensions = document.embedding_dimensions;
@@ -167,26 +207,33 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
         );
         return "done";
       }
-      db.transaction(() => {
+      // Only live Passages get vectors: a new version may have replaced these meanwhile.
+      const stored = db.transaction(() => {
         if (dimensions === null) {
           db.run("UPDATE documents SET embedding_dimensions = ? WHERE id = ?", [BigInt(size), id]);
         }
-        batch.forEach((passage, index) => {
+        return batch.flatMap((passage, index) => {
           const vector = embedded[index] as Float32Array;
-          db.run("UPDATE passages SET embedding = ? WHERE seq = ? AND deleted_at IS NULL", [
-            encodeVector(vector),
-            BigInt(passage.seq),
-          ]);
+          const row = db.get<{ seq: number }>(
+            `UPDATE passages SET embedding = ? WHERE seq = ? AND deleted_at IS NULL
+             RETURNING seq`,
+            [encodeVector(vector), BigInt(passage.seq)],
+          );
+          return row ? [{ seq: row.seq, vector }] : [];
         });
       });
       dimensions = size;
-      batch.forEach((passage, index) => {
-        vectors.add(id, passage.seq, embedded[index] as Float32Array);
-      });
+      for (const { seq, vector } of stored) vectors.add(id, seq, vector);
       if (Date.now() - announced >= PROGRESS_INTERVAL_MS) {
         announced = Date.now();
         announce(id);
       }
+    }
+    // A new version, extracted during the last batch, has Passages still to embed: it isn't
+    // ready, and takes another turn, which reads what is stored now.
+    if (unembedded(id)) {
+      if (!queue.includes(id)) queue.push(id);
+      return "skipped";
     }
     setStatus(id, "ready", "embedding");
     if (stateOf(id)?.status === "ready") {
@@ -219,14 +266,19 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     if (!closed && queue.length > 0) void pump();
   }
 
-  function enqueue(documentId: string): void {
-    if (closed || queue.includes(documentId)) return;
+  function enqueue(documentId: string): boolean {
+    if (closed || queue.includes(documentId)) return false;
+    const already = current === documentId; // e.g. a new version, while the old one is embedded
     queue.push(documentId);
+    // Idle, the queue starts on it before returning: its turn has come.
     void pump();
+    return !already && current === documentId;
   }
 
   return {
     enqueue,
+
+    isEmbedding: (documentId) => current === documentId,
 
     resumeWaiting() {
       if (closed) return;
@@ -236,14 +288,15 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       );
       for (const { id } of waiting) {
         setStatus(id, "embedding", "waiting-for-model");
-        announce(id);
-        enqueue(id);
+        if (!enqueue(id)) announce(id);
       }
     },
 
     restart() {
       generation++;
       queue.length = 0;
+      // What was under way stops at its next step: nothing is being embedded meanwhile.
+      current = undefined;
     },
 
     close() {

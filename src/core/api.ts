@@ -440,13 +440,18 @@ export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx
 /**
  * Where a Document is in processing: "queued", then "extracting" its text, then
  * "embedding" its Passages with the embedding model (the built-in one unless
- * the User chose another), then "ready". Before the model has been
+ * the User chose another), then "ready". Documents are embedded one at a
+ * time: one waiting its turn is "queued" again. Before the model has been
  * downloaded, or while the chosen provider can't be used, a Document waits
  * after extracting as "waiting-for-model", and carries on by itself once it
  * can; keyword search already finds its Passages. Switching the embedding
  * model takes every Document back through "embedding" (see `EmbeddingRebuild`).
  * The other end states are "failed" (see `failure`) and "no-text": the file
- * has no text to extract, e.g. a scan without a text layer.
+ * has no text to extract, e.g. a scan without a text layer. When a new
+ * version of a file fails (a sync client wrote it half-way, it is corrupt),
+ * the last good version stays indexed: its text is still searched and read,
+ * `contentHash` is still its, and the Document is "failed" until a later
+ * change of the file, or a retry, is read.
  */
 export type DocumentStatus =
   | "queued"
@@ -545,7 +550,8 @@ export interface Document {
   /**
    * The version whose text is indexed: the SHA-256 of the file's bytes as
    * they were read, in hex. When the file changes, the new version is
-   * processed, and this changes once its text is indexed. A file found at a
+   * processed, and this changes once its text is indexed (not if it fails:
+   * see `DocumentStatus`). A file found at a
    * new path with the hash of a Document whose file went is that Document,
    * moved. The same content at two paths is two Documents.
    */
@@ -563,7 +569,7 @@ export interface Document {
   status: DocumentStatus;
   /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
   progress: number | null;
-  /** Set when `status` is "failed". */
+  /** Set when `status` is "failed": why the latest version read failed. */
   failure: DocumentFailure | null;
   /**
    * The Folder its file is in: the Linked folder's own Folder, or one inside
@@ -2106,7 +2112,7 @@ export interface CoreApi {
   /**
    * Processes a Document that failed again, from its file as it is now, e.g.
    * once the User has fixed it. Returns it, queued; "document.status" events
-   * report its progress. Throws InvalidInputError for a Document that didn't
+   * report its progress. A last good version it kept stays searched meanwhile. Throws InvalidInputError for a Document that didn't
    * fail, and NotFoundError for an unknown one or one whose file isn't there.
    */
   retryDocument(id: string): Promise<Document>;

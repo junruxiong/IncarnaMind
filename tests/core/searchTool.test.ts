@@ -22,6 +22,22 @@ const hit = (position: number, score = 1): WindowedHit & { position: number } =>
   score,
 });
 
+/**
+ * A long, repetitive logbook: every one of `count` long sections ends with
+ * the same sentence about the lighthouse keeper, so each of its Passages is
+ * a weaker match than one short note about the keeper.
+ */
+function logbook(count: number, book: number): string {
+  return Array.from({ length: count }, (_, index) => {
+    const day = index + 1;
+    const filler = Array.from(
+      { length: 18 },
+      (_, line) => `Book ${book} day ${day} entry ${line} notes the ordinary coastal weather.`,
+    ).join(" ");
+    return `## Day ${day}\n\n${filler} The lighthouse keeper walked the shore.`;
+  }).join("\n\n");
+}
+
 /** A Markdown Document of `count` long sections, the word "lighthouse" only in `marked`. */
 function sections(count: number, marked: number, topic: string): string {
   return Array.from({ length: count }, (_, index) => {
@@ -61,11 +77,20 @@ describe("The sliding-window clustering", () => {
     expect(chain.map((window) => window.hits.length)).toEqual([2, 1]);
   });
 
-  test("a Document's windows come best first, by the summed scores of the hits they take in", () => {
+  test("a Document's windows come best first: by their best hit, then by the summed scores of the hits they take in", () => {
     const windows = documentWindows([hit(3, 0.2), hit(40, 0.5), hit(41, 0.4)]);
 
     expect(windows.map((window) => window.window)).toEqual([39, 2]);
     expect(windows[0]?.score).toBeCloseTo(0.9);
+    expect(windows[0]?.best).toBeCloseTo(0.5);
+    // Three weaker hits together don't outrank one better hit.
+    const crowded = documentWindows([hit(3, 0.5), hit(40, 0.3), hit(41, 0.3), hit(42, 0.3)]);
+    expect(crowded.map((window) => [window.window, window.hits.length])).toEqual([
+      [2, 1],
+      [40, 3],
+    ]);
+    // With the same best hit, the window that takes in more comes first.
+    expect(documentWindows([hit(3, 0.5), hit(40, 0.5), hit(41, 0.3)])[0]?.window).toBe(39);
   });
 });
 
@@ -113,6 +138,41 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
     // Every Passage has a short id to cite it by.
     expect(new Set(shown.map((passage) => passage.id)).size).toBe(shown.length);
     expect(shown.every((passage) => /^P\d+$/.test(passage.id))).toBe(true);
+  });
+
+  test("a short Document with the best match comes first, before long, repetitive ones whose weaker matches add up", async () => {
+    let shown: ShownPassage[] = [];
+    const model = citingModel({
+      query: "lighthouse keeper",
+      records: (passages) => {
+        shown = passages;
+        return [];
+      },
+      answer: "The keeper lit it.",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Log 1.md", contents: logbook(30, 1) },
+      { name: "Log 2.md", contents: logbook(30, 2) },
+      {
+        name: "Keeper.md",
+        contents: "The lighthouse keeper lit the lamp at dusk, and kept it burning all night.",
+      },
+    ]);
+    // The note's Passage is the best match, by keyword and by vector search alike.
+    for (const mode of ["keyword", "vector"] as const) {
+      const [best] = await core.searchPassages("lighthouse keeper", { mode });
+      expect(best?.documentName).toBe("Keeper");
+    }
+
+    await askAndFinish(core, client, mind.id, "Who lit the lighthouse lamp?");
+
+    // Summed, the logbooks' windows of three weaker hits each came first, and
+    // filled the 8 Passages: the note wasn't shown at all.
+    expect(shown[0]?.document).toBe("Keeper");
+    expect(shown.length).toBeLessThanOrEqual(SEARCH_TOOL_PARAMETERS.maxPassages);
+    expect(new Set(shown.map((passage) => passage.document))).toEqual(
+      new Set(["Keeper", "Log 1", "Log 2"]),
+    );
   });
 
   test("a reranker plugged into the core reorders the hits before they are grouped", async () => {
