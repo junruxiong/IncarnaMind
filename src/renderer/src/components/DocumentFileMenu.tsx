@@ -15,11 +15,12 @@ import {
 import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
- * A Document's "More" menu: rename it; its file, where the User keeps it
- * ("Open in default app" and "Show in folder", which the main process does
- * for live Documents whose file is there, and which say why not for a file
- * that is missing or can't be reached); and delete it, or, for a missing
- * one, remove it from IncarnaMind.
+ * A Document's "More" menu: process it again if it failed (and its file is
+ * there); rename it; its file, where the User keeps it ("Open in default
+ * app" and "Show in folder", which the main process does for live Documents
+ * whose file is there, and which say why not for a file that is missing or
+ * can't be reached); and delete it, or, for a missing one, remove it from
+ * IncarnaMind.
  */
 export function DocumentFileMenu({
   item,
@@ -34,8 +35,10 @@ export function DocumentFileMenu({
 }) {
   const t = useT();
   const menu = usePopoverMenu();
+  const retryDocument = useAppStore((state) => state.retryDocument);
   const fileState = fileStatusLabel(item.fileStatus);
   const reason = fileState ? t(fileState.reason) : undefined;
+  const canRetry = item.status === "failed" && fileState === null;
 
   const run = (action: (documentId: string) => Promise<unknown>) => {
     if (fileState) return; // its file isn't there: the item says why
@@ -64,6 +67,23 @@ export function DocumentFileMenu({
         data-testid="document-file-actions"
         className={menuClass}
       >
+        {canRetry && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="retry-document"
+              onClick={() => {
+                menu.close();
+                void retryDocument(item.id);
+              }}
+              className={`${menuItemClass} pl-2`}
+            >
+              {t("documents.retryAction")}
+            </button>
+            <div className={menuRuleClass} />
+          </>
+        )}
         <button
           type="button"
           role="menuitem"

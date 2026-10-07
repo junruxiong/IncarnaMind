@@ -3,7 +3,8 @@
  * - test hooks, present only when the app was launched with
  *   INCARNAMIND_TEST_HOOKS=1 (the main process then adds `?testHooks` to the page URL):
  *   open the empty panel, or open a Document at a page range and quote, as a Citation will
- *   (and, not about the viewer, answer the Skill picker without the system's dialog);
+ *   (and, not about the viewer, answer the Skill picker without the system's dialog, or
+ *   add files and folders by path as a drop would);
  * - a development-only shortcut, Cmd/Ctrl+Shift+D, that toggles the panel.
  */
 import { useEffect } from "react";
@@ -19,8 +20,14 @@ declare global {
 
 export function installTestHooks(): void {
   if (!new URLSearchParams(window.location.search).has("testHooks")) return;
-  const { openViewer, closeViewer, openDocument } = useAppStore.getState();
-  window.incarnamindTestHooks = { openViewer, closeViewer, openDocument, interceptSkillPicker };
+  const { openViewer, closeViewer, openDocument, addPaths } = useAppStore.getState();
+  window.incarnamindTestHooks = {
+    openViewer,
+    closeViewer,
+    openDocument,
+    interceptSkillPicker,
+    addPaths: (paths) => addPaths(paths),
+  };
 }
 
 export function useDevViewerShortcut(): void {

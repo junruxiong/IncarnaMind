@@ -11,6 +11,7 @@ import { FolderTree } from "./FolderTree";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
 import {
+  openRowMenu,
   rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
@@ -229,6 +230,7 @@ function DocumentRow({
       data-status={item.status}
       data-file-status={item.fileStatus}
       data-tagging={item.tagging}
+      onContextMenu={renaming ? undefined : (event) => openRowMenu(event, "document-file-menu")}
       className={rowClass(isOpen, muted ? "muted" : "item")}
     >
       {renaming ? (
