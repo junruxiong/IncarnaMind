@@ -257,6 +257,21 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await second.app.close();
 });
 
+test("the window opens at the size and place it was left at", async () => {
+  const first = await launchApp(dataDir);
+  await first.app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]?.setBounds({ x: 120, y: 90, width: 1100, height: 760 }),
+  );
+  await first.app.close();
+
+  const second = await launchApp(dataDir);
+  const bounds = await second.app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]?.getBounds(),
+  );
+  expect(bounds).toMatchObject({ x: 120, y: 90, width: 1100, height: 760 });
+  await second.app.close();
+});
+
 test("an API key typed for one chat provider is cleared when another is chosen, or when the server changes", async () => {
   const { app, window } = await launchApp(dataDir);
   const form = window.getByTestId("chat-setup").getByTestId("provider-form");
