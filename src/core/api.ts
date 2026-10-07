@@ -112,11 +112,19 @@ export interface AnswerAttributes {
 export interface AnswerToolCall {
   /** Unique within its Answer. */
   id: string;
-  /** "search_documents": the document-search Tool. Connectors and Skills add theirs. */
+  /**
+   * "search_documents": the document-search Tool. A Connector's Tool: its name
+   * as the Connector gives it, e.g. "search_issues". Skills add theirs.
+   */
   tool: string;
-  /** Where the Tool comes from: "documents" is IncarnaMind's own document search. */
-  source: "documents";
-  /** What the model asked, e.g. `{ query }` for a search. */
+  /**
+   * Where the Tool comes from: "documents" is IncarnaMind's own document
+   * search; "connector" is one of the User's Connectors (see `connector`).
+   */
+  source: "documents" | "connector";
+  /** A Connector's Tool: which Connector, with its name when the call was made. */
+  connector?: { id: string; name: string };
+  /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
   input: Record<string, unknown>;
   status: "running" | "done" | "failed";
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
@@ -833,6 +841,7 @@ export const dataKinds = [
   "tool-results",
   "tags",
   "document-excerpts",
+  "tool-arguments",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -842,8 +851,11 @@ export type DataKind = (typeof dataKinds)[number];
  * - "chat": Questions, to the chat provider they are asked with.
  * - "tagging": automatic tagging, to Jev's service when a Jev key is set up,
  *   otherwise to the default chat model's provider.
+ * - "connectors": the arguments of the Tool calls an Answer makes, to the
+ *   Connector it calls, one service per Connector. A Connector on this
+ *   computer counts too: it can reach the internet itself.
  */
-export const dataFlowIds = ["chat", "tagging"] as const;
+export const dataFlowIds = ["chat", "tagging", "connectors"] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
@@ -931,6 +943,129 @@ export interface TestJevConnectionInput {
   apiKey?: string;
   endpoint?: string | null;
   model?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Connectors (MCP servers)
+
+/**
+ * Where a Connector is:
+ * - "off": the User turned it off, so its process isn't running.
+ * - "connecting": its process is starting, and IncarnaMind is connecting to it.
+ * - "ready": connected; Answers can use its read-only Tools.
+ * - "error": it couldn't start, or it stopped (see `error`).
+ */
+export type ConnectorState = "off" | "connecting" | "ready" | "error";
+
+export type ConnectorErrorKind =
+  /**
+   * Its command, or the runtime the command needs, isn't installed or isn't
+   * on the PATH of the User's login shell (see `command` and `install`).
+   */
+  | "missing-command"
+  /** Its environment variables are kept in the keychain, and can't be read on this device. */
+  | "missing-secrets"
+  /** Its process started but didn't answer in time. */
+  | "timed-out"
+  /** Its process exited, or closed the connection. */
+  | "stopped"
+  /** Anything else, e.g. it doesn't speak MCP. */
+  | "failed";
+
+export interface ConnectorError {
+  kind: ConnectorErrorKind;
+  /** "missing-command": the command that wasn't found, e.g. "npx". Null otherwise. */
+  command: string | null;
+  /** "missing-command": what to install to get it, when known, e.g. "Node.js". */
+  install: string | null;
+  /** Technical detail in English, e.g. the last lines the process wrote to its error output. */
+  message: string;
+  /** IncarnaMind will start it again by itself shortly, waiting longer after each failure. */
+  retrying: boolean;
+}
+
+/** A Tool a Connector offers. */
+export interface ConnectorTool {
+  /** As the Connector names it, e.g. "search_issues". */
+  name: string;
+  /** A display name, when the Connector gives one. */
+  title: string | null;
+  description: string;
+  /**
+   * The Connector says the Tool only reads and changes nothing (its
+   * `readOnlyHint` annotation). That is the Connector's claim, not something
+   * IncarnaMind can check. Answers are offered only these Tools for now.
+   */
+  readOnly: boolean;
+}
+
+/**
+ * An external service the User has connected: an MCP server. Local ones are
+ * programs on this computer, started with the User's login-shell environment
+ * and spoken to over their standard input and output.
+ */
+export interface Connector {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** Unique among Connectors, ignoring case. Answers see its Tools under this name. */
+  name: string;
+  /** "stdio": a program on this computer. Remote Connectors come with #39. */
+  transport: "stdio";
+  /** The program to run, e.g. "npx", found on the PATH of the User's login shell. */
+  command: string;
+  args: string[];
+  /**
+   * The names of the environment variables it is started with, e.g. API keys.
+   * Their values are kept in the keychain, never in the database, and never shown.
+   */
+  env: string[];
+  /** The User turned it on. Off, its process doesn't run and Answers don't use it. */
+  enabled: boolean;
+  state: ConnectorState;
+  /** Set when `state` is "error". */
+  error: ConnectorError | null;
+  /** Its Tools, as of when it last connected; null before it has. Null while it is off. */
+  tools: ConnectorTool[] | null;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface AddConnectorInput {
+  /** Trimmed; must not be empty, nor another Connector's name (ignoring case). */
+  name: string;
+  /** The program to run, e.g. "npx", or a full path. */
+  command: string;
+  /** Defaults to none. */
+  args?: string[];
+  /** Environment variables to start it with, e.g. API keys. Their values go to the keychain, never the database. */
+  env?: Record<string, string>;
+}
+
+/**
+ * One server of an `mcpServers` configuration (from Claude Desktop or
+ * Cursor), and what importing it would do:
+ * - "add": it is added as a Connector;
+ * - "exists": a Connector with its name already exists (or the configuration
+ *   lists the name twice), so it is skipped;
+ * - "remote": it is a remote server (a URL), which IncarnaMind can't connect to yet;
+ * - "invalid": it has no command, or its arguments or environment aren't text.
+ */
+export interface ConnectorImportEntry {
+  name: string;
+  command: string | null;
+  args: string[];
+  /** The names of its environment variables. Their values go to the keychain. */
+  env: string[];
+  action: "add" | "exists" | "remote" | "invalid";
+}
+
+export interface ConnectorImportResult {
+  /** The Connectors added, in the configuration's order. They start right away. */
+  added: Connector[];
+  /** The servers that weren't added, with why. */
+  skipped: ConnectorImportEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,6 +1281,31 @@ export interface CoreApi {
    * consent first.
    */
   testJevConnection(input?: TestJevConnectionInput): Promise<ConnectionTestResult>;
+
+  /** Connectors that are not deleted, in name order (ignoring case), each with its state. */
+  listConnectors(): Promise<Connector[]>;
+  /**
+   * Adds a local Connector, turned on, and starts it: "connectors.changed"
+   * events follow its state. Its environment's values go to the keychain; if
+   * they can't be stored safely, nothing is added.
+   */
+  addConnector(input: AddConnectorInput): Promise<Connector>;
+  /** Turns a Connector on (starting it) or off (stopping its process). */
+  setConnectorEnabled(connectorId: string, enabled: boolean): Promise<Connector>;
+  /** Starts a Connector that is on again, e.g. after an error. */
+  restartConnector(connectorId: string): Promise<Connector>;
+  /**
+   * Soft-deletes a Connector: stops its process, removes its environment from
+   * the keychain and forgets the User's consent decision for it.
+   */
+  deleteConnector(connectorId: string): Promise<void>;
+  /**
+   * What importing an `mcpServers` configuration (Claude Desktop's or
+   * Cursor's JSON, pasted or read from a file) would add, without adding anything.
+   */
+  previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
+  /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
+  importConnectors(json: string): Promise<ConnectorImportResult>;
 }
 
 /**
@@ -1191,6 +1351,11 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
+  /**
+   * Connectors were added, turned on or off, or deleted, or one's state
+   * changed (connecting, ready, error): the list as `listConnectors` now returns it.
+   */
+  "connectors.changed": Connector[];
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -1280,6 +1445,13 @@ const methods: Record<CoreApiMethod, true> = {
   saveJevSettings: true,
   removeJevSettings: true,
   testJevConnection: true,
+  listConnectors: true,
+  addConnector: true,
+  setConnectorEnabled: true,
+  restartConnector: true,
+  deleteConnector: true,
+  previewConnectorImport: true,
+  importConnectors: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

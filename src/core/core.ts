@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
+import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
@@ -11,7 +12,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
-import { createChat, type PreparedChatModel } from "./providers/chat";
+import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
@@ -132,6 +133,33 @@ export function createCore(adapters: CoreAdapters): Core {
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
   });
+
+  /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */
+  let connectorsToggled = () => {};
+  const connectors = createConnectors({
+    db,
+    now,
+    secrets,
+    processes: adapters.processes,
+    consent,
+    onChange: (list) => events.emit("connectors.changed", list),
+    onEnabledChange: () => connectorsToggled(),
+    reportError: (error) => console.error(error),
+  });
+  /**
+   * With a Connector on, Answers send the chat model what its Tools return,
+   * so the chat flow sends "tool-results" too, and asks again for it.
+   */
+  const syncChatFlow = () => {
+    const flow = consent.registry.get("chat");
+    if (!flow) return;
+    const sends = connectors.anyEnabled()
+      ? [...CHAT_FLOW_SENDS, "tool-results" as const]
+      : CHAT_FLOW_SENDS;
+    consent.registry.register({ ...flow, sends });
+  };
+  syncChatFlow();
+
   const answers = createAnswers({
     content,
     events,
@@ -154,6 +182,7 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
     },
+    connectorTools: (signal) => connectors.toolsForAnswer(signal),
     reportError: (error) => console.error(error),
   });
 
@@ -229,6 +258,13 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
   tagger.start();
+
+  connectorsToggled = () => {
+    syncChatFlow();
+    readinessChanged().catch((error: unknown) => console.error(error));
+  };
+  // Connectors that are on start with the app.
+  connectors.startAll();
 
   const ollamaUrl = (input: unknown) => {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
@@ -449,6 +485,15 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     testJevConnection: (input) => jev.test(input),
 
+    listConnectors: async () => connectors.list(),
+    addConnector: (input) => connectors.add(input),
+    setConnectorEnabled: async (connectorId, enabled) =>
+      connectors.setEnabled(connectorId, enabled),
+    restartConnector: async (connectorId) => connectors.restart(connectorId),
+    deleteConnector: (connectorId) => connectors.delete(connectorId),
+    previewConnectorImport: async (json) => connectors.previewImport(json),
+    importConnectors: (json) => connectors.import(json),
+
     openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
@@ -460,6 +505,7 @@ export function createCore(adapters: CoreAdapters): Core {
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped".
       answers.stopAll();
+      connectors.close();
       tagger.close();
       consent.close();
       documents.close();
