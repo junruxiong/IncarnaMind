@@ -11,7 +11,7 @@ import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { createElectronAdapters, systemBrowser } from "./platform";
-import { startAutoUpdates } from "./updater";
+import { registerUpdateCheck, startAutoUpdates } from "./updater";
 
 // Points the app at another data folder: the smoke test uses a temporary one.
 // Set before anything reads `userData`, so Chromium's own data moves there too.
@@ -121,6 +121,7 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
+  registerUpdateCheck(core);
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.

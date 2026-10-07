@@ -62,6 +62,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.63.0",
+    "@sentry/electron": "8.1.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",
