@@ -18,8 +18,21 @@ import { core, files } from "./core";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
-/** The pages of the Settings dialog. */
-export type SettingsPage = "general" | "privacy";
+/** The pages of the Settings dialog, in the order its list shows them. */
+export const settingsPages = [
+  "general",
+  "chat-model",
+  "search",
+  "connectors",
+  "skills",
+  "approvals",
+  "privacy",
+] as const;
+
+export type SettingsPage = (typeof settingsPages)[number];
+
+const isSettingsPage = (page: unknown): page is SettingsPage =>
+  settingsPages.some((each) => each === page);
 
 /** What the Document viewer shows: one Document, opened at a location. */
 export interface ViewerTarget extends DocumentLocation {
@@ -30,7 +43,15 @@ export interface ViewerTarget extends DocumentLocation {
 interface AppState {
   status: Status;
   minds: Mind[];
+  /** The Minds open as tabs in the Mind pane, by ID, in order. Kept per device across restarts. */
+  tabs: string[];
+  /** The Mind shown: the active tab, or null with no tab open. */
   openMindId: string | null;
+  /**
+   * A Mind just created, whose title takes the focus once it shows (see
+   * `MindTitle`), so typing names it instead of pressing the button again.
+   */
+  titleToFocus: string | null;
   /** Set once loaded. */
   settings: Settings | null;
   /** Whether Questions can be asked. Set once loaded, then follows the core's event. */
@@ -52,25 +73,37 @@ interface AppState {
   settingsOpen: boolean;
   /** The page Settings shows. */
   settingsPage: SettingsPage;
-  /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
+  /**
+   * Every Folder of every Linked folder, flat, in name order: each Linked
+   * folder's own Folder and those inside it. The sidebar builds the tree from each `parentId`.
+   */
   folders: Folder[];
   /** The Linked folders, in path order. Set once loaded, then follows the core's event. */
   linkedFolders: LinkedFolder[];
-  /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
-  folderFilter: string | null;
   /** Every Tag, in name order. */
   tags: Tag[];
-  /** The Tag whose Documents the sidebar shows, within `folderFilter` if that is set too. Null: any. */
+  /** The Tag whose Documents the sidebar shows. Null: any. */
   tagFilter: string | null;
-  /** The Documents matching both filters, by id, as the core last listed them. Null until listed. */
+  /** The Documents with that Tag, by id, as the core last listed them. Null until listed. */
   filteredDocumentIds: ReadonlySet<string> | null;
   tagsDialogOpen: boolean;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
 
   load(): Promise<void>;
+  /** Creates a Mind and opens it in a new tab, at the end, with its title focused. */
   createMind(): Promise<void>;
-  openMind(id: string): void;
+  /** Called once the new Mind's title has the focus. */
+  titleFocused(): void;
+  /**
+   * Shows a Mind: its tab if it is open; otherwise it opens in the current tab
+   * or, with `newTab` (⌘-click, middle-click), in a new tab after the current one.
+   */
+  openMind(id: string, options?: { newTab?: boolean }): void;
+  /** Closes a Mind's tab; if it was shown, the tab after it (or else before it) is shown. */
+  closeTab(id: string): void;
+  /** Moves a tab to a place among the tabs (0 is first). */
+  moveTab(id: string, index: number): void;
   renameMind(id: string, title: string): Promise<void>;
   deleteMind(id: string): Promise<void>;
   /** Shows a failure that happened outside a store action, e.g. while saving an edit. */
@@ -78,7 +111,10 @@ interface AppState {
   openViewer(): void;
   closeViewer(): void;
   toggleViewer(): void;
-  /** Opens Settings at a page: the general one unless asked otherwise, e.g. Privacy to allow a declined flow. */
+  /**
+   * Opens Settings at a page: the general one unless asked otherwise, e.g.
+   * Chat model to set one up, or Privacy to allow a declined flow.
+   */
   openSettings(page?: SettingsPage): void;
   closeSettings(): void;
   showSettingsPage(page: SettingsPage): void;
@@ -100,11 +136,9 @@ interface AppState {
   downloadEmbeddingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
-  /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
-  filterByFolder(folderId: string | null): Promise<void>;
   /** Asks for a folder with the system's folder picker, and links it. */
   addLinkedFolder(): Promise<void>;
-  /** Shows only the Documents with a Tag (in the filtered Folder, if any); null shows them whatever their Tags. */
+  /** Shows only the Documents with a Tag; null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
   removeDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -130,12 +164,30 @@ const upsert = (documents: Document[], item: Document) =>
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
 
-/** The Documents the sidebar lists: all of them, or those matching its Folder and Tag filters. */
+/** Open tabs and the shown one, after `id`'s tab closes: the one after it is shown, or else before. */
+function withoutTab(
+  tabs: readonly string[],
+  openMindId: string | null,
+  id: string,
+): { tabs: string[]; openMindId: string | null } {
+  const index = tabs.indexOf(id);
+  if (index === -1) return { tabs: [...tabs], openMindId };
+  const rest = tabs.filter((each) => each !== id);
+  if (openMindId !== id) return { tabs: rest, openMindId };
+  return { tabs: rest, openMindId: rest[Math.min(index, rest.length - 1)] ?? null };
+}
+
+/** Saves the open tabs, their order and the shown one, for this device. A failure only loses that. */
+function saveTabs(tabs: readonly string[], openMindId: string | null): void {
+  core
+    .updateSettings({ device: { openMinds: [...tabs], activeMind: openMindId } })
+    .catch(() => undefined);
+}
+
+/** The Documents the sidebar lists: all of them, or those with the Tag it filters by. */
 export const selectVisibleDocuments = (state: AppState): Document[] => {
   const ids = state.filteredDocumentIds;
-  if ((state.folderFilter === null && state.tagFilter === null) || ids === null) {
-    return state.documents;
-  }
+  if (state.tagFilter === null || ids === null) return state.documents;
   return state.documents.filter((item) => ids.has(item.id));
 };
 
@@ -149,10 +201,20 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
 
+  /** Changes the tabs, and saves them if they changed. */
+  const setTabs = (next: { tabs: string[]; openMindId: string | null }) => {
+    const { tabs, openMindId } = get();
+    if (next.openMindId === openMindId && next.tabs.join("\n") === tabs.join("\n")) return;
+    set(next);
+    saveTabs(next.tabs, next.openMindId);
+  };
+
   return {
     status: { kind: "loading" },
     minds: [],
+    tabs: [],
     openMindId: null,
+    titleToFocus: null,
     settings: null,
     chatReadiness: null,
     actionError: null,
@@ -166,7 +228,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsPage: "general",
     folders: [],
     linkedFolders: [],
-    folderFilter: null,
     tags: [],
     tagFilter: null,
     filteredDocumentIds: null,
@@ -198,9 +259,14 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.getEmbeddingSettings(),
           core.listLinkedFolders(),
         ]);
+        // The tabs open at the last quit come back, without Minds deleted since.
+        const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
+        const active = settings.device.activeMind;
         set({
           linkedFolders,
           minds,
+          tabs,
+          openMindId: active !== null && tabs.includes(active) ? active : (tabs[0] ?? null),
           settings,
           documents,
           chatReadiness,
@@ -222,12 +288,42 @@ export const useAppStore = create<AppState>()((set, get) => {
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          openMindId: mind.id,
+          titleToFocus: mind.id,
         }));
+        const { tabs } = get();
+        setTabs({
+          tabs: [...tabs.filter((each) => each !== mind.id), mind.id],
+          openMindId: mind.id,
+        });
       }),
 
-    openMind(id) {
-      set({ openMindId: id });
+    titleFocused: () => set({ titleToFocus: null }),
+
+    openMind(id, options) {
+      const { tabs, openMindId } = get();
+      if (tabs.includes(id)) {
+        setTabs({ tabs: [...tabs], openMindId: id });
+        return;
+      }
+      const current = openMindId === null ? -1 : tabs.indexOf(openMindId);
+      const next = [...tabs];
+      if (current === -1) next.push(id);
+      else if (options?.newTab) next.splice(current + 1, 0, id);
+      else next[current] = id;
+      setTabs({ tabs: next, openMindId: id });
+    },
+
+    closeTab(id) {
+      const { tabs, openMindId } = get();
+      setTabs(withoutTab(tabs, openMindId, id));
+    },
+
+    moveTab(id, index) {
+      const { tabs, openMindId } = get();
+      if (!tabs.includes(id)) return;
+      const next = tabs.filter((each) => each !== id);
+      next.splice(Math.max(0, Math.min(index, next.length)), 0, id);
+      setTabs({ tabs: next, openMindId });
     },
 
     // The list follows the core's "minds.changed" event, which arrives before these calls return.
@@ -278,7 +374,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     openSettings(page) {
       // Also a click handler: anything but a page name opens the general page.
-      set({ settingsOpen: true, settingsPage: page === "privacy" ? "privacy" : "general" });
+      set({ settingsOpen: true, settingsPage: isSettingsPage(page) ? page : "general" });
     },
 
     showSettingsPage(page) {
@@ -357,12 +453,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         set({ embedding: await core.retryEmbedding() });
       }),
 
-    async filterByFolder(folderId) {
-      if (folderId === get().folderFilter) return;
-      set({ folderFilter: folderId, filteredDocumentIds: null });
-      await refreshFilter();
-    },
-
     // Its Documents, Folders and progress arrive with the core's events.
     addLinkedFolder: () =>
       attempt(async () => {
@@ -426,45 +516,34 @@ export const useAppStore = create<AppState>()((set, get) => {
 /** Counts filter requests, so a slow answer to an old one never overwrites a newer one. */
 let filterRequests = 0;
 
-/** Asks the core which Documents match the filters: in the Folder (sub-Folders included), with the Tag. */
+/** Asks the core which Documents have the Tag the sidebar filters by. */
 async function refreshFilter(): Promise<void> {
   const request = ++filterRequests;
-  const { folderFilter: folderId, tagFilter: tagId } = useAppStore.getState();
-  if (folderId === null && tagId === null) {
+  const { tagFilter: tagId } = useAppStore.getState();
+  if (tagId === null) {
     useAppStore.setState({ filteredDocumentIds: null });
     return;
   }
   try {
-    const listed = await core.listDocuments({
-      ...(folderId !== null && { folderId, includeSubfolders: true }),
-      ...(tagId !== null && { tagId }),
-    });
+    const listed = await core.listDocuments({ tagId });
     if (request === filterRequests) {
       useAppStore.setState({ filteredDocumentIds: new Set(listed.map((item) => item.id)) });
     }
   } catch (error) {
     if (request !== filterRequests) return;
-    const { folders, tags } = useAppStore.getState();
-    const folderGone = folderId !== null && !folders.some((folder) => folder.id === folderId);
-    const tagGone = tagId !== null && !tags.some((tag) => tag.id === tagId);
-    // The Folder or Tag was deleted meanwhile: drop that filter. Anything else is a failure.
-    if (!folderGone && !tagGone) {
+    // The Tag was deleted meanwhile: drop the filter. Anything else is a failure.
+    if (useAppStore.getState().tags.some((tag) => tag.id === tagId)) {
       useAppStore.setState({ actionError: messageOf(error) });
       return;
     }
-    useAppStore.setState({
-      folderFilter: folderGone ? null : folderId,
-      tagFilter: tagGone ? null : tagId,
-      filteredDocumentIds: null,
-    });
-    void refreshFilter();
+    useAppStore.setState({ tagFilter: null, filteredDocumentIds: null });
+    filterRequests++; // nothing to filter by: an answer still to come is for an old filter
   }
 }
 
 /** Refreshes the filtered list, if the sidebar is filtered. */
 function refreshFilterIfAny(): void {
-  const { folderFilter, tagFilter } = useAppStore.getState();
-  if (folderFilter !== null || tagFilter !== null) void refreshFilter();
+  if (useAppStore.getState().tagFilter !== null) void refreshFilter();
   else filterRequests++; // nothing to filter by: an answer still to come is for an old filter
 }
 
@@ -472,12 +551,21 @@ function refreshFilterIfAny(): void {
 core.on("settings.changed", (settings) => useAppStore.setState({ settings }));
 
 // The same for the list of Minds: created, renamed, deleted, or reordered by an edit.
-core.on("minds.changed", (minds) =>
-  useAppStore.setState((state) => ({
-    minds,
-    openMindId: minds.some((mind) => mind.id === state.openMindId) ? state.openMindId : null,
-  })),
-);
+// A deleted Mind's tab closes, as if closed by hand.
+core.on("minds.changed", (minds) => {
+  const { tabs, openMindId, status } = useAppStore.getState();
+  useAppStore.setState({ minds });
+  // Before loading, the tabs aren't known yet: loading filters them.
+  if (status.kind !== "ready") return;
+  let next = { tabs, openMindId };
+  for (const id of tabs) {
+    if (!minds.some((mind) => mind.id === id)) next = withoutTab(next.tabs, next.openMindId, id);
+  }
+  if (next.tabs.length !== tabs.length) {
+    useAppStore.setState(next);
+    saveTabs(next.tabs, next.openMindId);
+  }
+});
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) =>
@@ -492,17 +580,8 @@ core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embe
 // The embedding model can change in Settings or by local mode, and a rebuild reports its progress.
 core.on("embedding.changed", (embedding) => useAppStore.setState({ embedding }));
 
-// Folders change through this window or another: follow the list, and keep the filter right.
-core.on("folders.changed", (folders) => {
-  const { folderFilter } = useAppStore.getState();
-  useAppStore.setState({ folders });
-  if (folderFilter !== null && !folders.some((folder) => folder.id === folderFilter)) {
-    // The filtered Folder was deleted, perhaps with a parent: drop that filter.
-    useAppStore.setState({ folderFilter: null, filteredDocumentIds: null });
-  }
-  // Moving a Folder can change which Documents are below the filtered one.
-  refreshFilterIfAny();
-});
+// Folders change through this window or another: follow the list. The sidebar's tree follows it.
+core.on("folders.changed", (folders) => useAppStore.setState({ folders }));
 
 // Linked folders added, removed, or scanning, paused, out of reach, or making progress.
 core.on("linkedFolders.changed", (linkedFolders) => useAppStore.setState({ linkedFolders }));
@@ -520,7 +599,6 @@ core.on("documents.moved", (moved) => {
   useAppStore.setState((state) => ({
     documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
   }));
-  refreshFilterIfAny();
 });
 
 // Tags change through this window or another: follow the list, and drop a filter by a deleted Tag.

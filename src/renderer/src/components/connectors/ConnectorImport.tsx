@@ -4,7 +4,16 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { SecretStorageNotice } from "../providers/ProviderForm";
-import { buttonClass, inputClass, primaryButtonClass } from "../providers/shared";
+import {
+  buttonClass,
+  errorTextClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  inputClass,
+  primaryButtonClass,
+  rowTitleClass,
+  ruledListClass,
+} from "../ui";
 import { commandLine } from "./commandLine";
 
 /**
@@ -69,9 +78,9 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
   };
 
   return (
-    <div data-testid="connector-import-form" className="mt-3 flex flex-col gap-3">
-      <p className="text-sm text-gray-600">{t("connectors.import.body")}</p>
-      <label className="text-sm text-gray-600">
+    <div data-testid="connector-import-form" className="flex flex-col gap-3">
+      <p className="text-[13px] leading-5 text-ink-secondary">{t("connectors.import.body")}</p>
+      <label className={fieldLabelClass}>
         {t("connectors.import.json")}
         <textarea
           value={json}
@@ -84,7 +93,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
           placeholder={
             '{\n  "mcpServers": {\n    "github": { "command": "npx", "args": ["-y", "…"] }\n  }\n}'
           }
-          className={`${inputClass} font-mono text-xs`}
+          className={`${inputClass} font-mono`}
         />
       </label>
       <div className="flex flex-wrap items-center gap-2">
@@ -106,38 +115,42 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
         >
           {t("connectors.import.preview")}
         </button>
-        <button type="button" onClick={onDone} className={buttonClass}>
+        <button type="button" onClick={onDone} className={ghostButtonClass}>
           {t("connectors.form.cancel")}
         </button>
       </div>
 
       {preview && (
         <>
-          <ul data-testid="connector-import-preview" className="flex flex-col gap-1.5">
+          <ul data-testid="connector-import-preview" className={ruledListClass}>
             {preview.map((entry) => (
               <li
                 key={entry.name}
                 data-action={entry.action}
-                className="rounded-[9px] border border-gray-200 px-3 py-1.5 text-sm"
+                className="flex flex-col gap-0.5 py-2.5"
               >
                 <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
+                  <span className={`min-w-0 flex-1 truncate ${rowTitleClass}`}>{entry.name}</span>
                   <span
-                    className={`shrink-0 text-xs ${entry.action === "add" ? "text-green-700" : "text-gray-500"}`}
+                    className={`shrink-0 text-[13px] leading-5 ${
+                      entry.action === "add" ? "font-semibold text-success" : "text-ink-meta"
+                    }`}
                   >
                     {t(`connectors.import.action.${entry.action}`)}
                   </span>
                 </div>
                 {entry.command && (
-                  <p className="truncate font-mono text-xs text-gray-500">
+                  <p className="truncate font-mono text-[12px] leading-[18px] text-ink-meta">
                     {commandLine(entry.command, entry.args)}
                   </p>
                 )}
                 {entry.url && (
-                  <p className="truncate font-mono text-xs text-gray-500">{entry.url}</p>
+                  <p className="truncate font-mono text-[12px] leading-[18px] text-ink-meta">
+                    {entry.url}
+                  </p>
                 )}
                 {entry.env.length > 0 && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-[12px] leading-[18px] text-ink-meta">
                     {t("connectors.import.env", { names: entry.env.join(", ") })}
                   </p>
                 )}
@@ -148,7 +161,9 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
           )}
           {adding.length === 0 ? (
-            <p className="text-sm text-gray-600">{t("connectors.import.nothing")}</p>
+            <p className="text-[13px] leading-5 text-ink-secondary">
+              {t("connectors.import.nothing")}
+            </p>
           ) : (
             <div>
               <button
@@ -169,7 +184,7 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
         </>
       )}
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

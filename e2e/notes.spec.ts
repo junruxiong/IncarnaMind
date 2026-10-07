@@ -1,5 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
-import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
+import {
+  createDataFolder,
+  dismissChatSetup,
+  dragBlock,
+  launchApp,
+  removeDataFolder,
+  slideToHandle,
+} from "./app";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -80,11 +87,9 @@ test("a Block dragged above another stays there after reopening the app", async 
   const paragraphs = editor.locator("p");
   await expect(paragraphs).toHaveText(["First", "Second", "Third"]);
 
-  // Hovering a Block shows its handle. Dropping it on the top of "First" moves the Block above it.
-  await paragraphs.nth(2).hover();
-  const handle = window.getByTestId("block-handle");
-  await expect(handle).toBeVisible();
-  await handle.dragTo(paragraphs.nth(0), { targetPosition: { x: 4, y: 2 } });
+  // Pointing at a Block shows its handle, which stays while the mouse crosses the margin to it.
+  // Dragging it down the margin to the top of "First" moves the Block above it.
+  await dragBlock(window, paragraphs.nth(2), paragraphs.nth(0));
   await expect(paragraphs).toHaveText(["Third", "First", "Second"]);
   await first.app.close();
 
@@ -96,6 +101,35 @@ test("a Block dragged above another stays there after reopening the app", async 
     "Second",
   ]);
   await second.app.close();
+});
+
+test("Esc closes a Block's menu, and the handle then moves on to the Block under the mouse", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  for (const [index, text] of ["One", "Two", "Three"].entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(text);
+  }
+  const paragraphs = editor.locator("p");
+
+  // Opened with the mouse, the menu takes the focus, so Esc closes it.
+  await (await slideToHandle(window, paragraphs.nth(0))).click();
+  const menu = window.getByTestId("block-menu");
+  await expect(menu).toBeVisible();
+  await expect(window.getByTestId("block-menu-context")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  // The handle isn't stuck on the first Block: it follows the mouse to the third.
+  const handle = await slideToHandle(window, paragraphs.nth(2));
+  const grip = await handle.boundingBox();
+  const third = await paragraphs.nth(2).boundingBox();
+  if (!grip || !third) throw new Error("The handle or the Block isn't visible.");
+  expect(Math.abs(grip.y + grip.height / 2 - (third.y + third.height / 2))).toBeLessThan(4);
+  await app.close();
 });
 
 test("a Block is deleted from its handle's menu, and with the keyboard", async () => {
@@ -115,8 +149,7 @@ test("a Block is deleted from its handle's menu, and with the keyboard", async (
   const paragraphs = editor.locator("p");
 
   // Clicking the handle opens the Block's menu.
-  await paragraphs.nth(1).hover();
-  await window.getByTestId("block-handle").click();
+  await (await slideToHandle(window, paragraphs.nth(1))).click();
   await expect(window.getByTestId("block-menu")).toBeVisible();
   await window.getByTestId("block-menu-delete").click();
   await expect(window.getByTestId("block-menu")).toHaveCount(0);

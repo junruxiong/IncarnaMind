@@ -41,7 +41,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(chat).toContainText("Passages from your Documents");
   await expect(privacy.locator('[data-flow-id="tagging"]')).toContainText("Automatic Tags");
   const service = chat.getByTestId("data-flow-service");
-  await expect(service).toContainText("To llm.example.com");
+  await expect(service).toContainText("to llm.example.com");
   await expect(service).toHaveAttribute("data-consent", "not-asked");
 
   // Allowed from here, with the date; revoked, it asks again next time.

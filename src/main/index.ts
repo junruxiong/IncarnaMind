@@ -13,14 +13,18 @@ import {
   coreApiMethods,
   createCore,
   resolveLanguage,
+  type Settings,
 } from "../core";
+import type { Language } from "../core/language";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
+import { installAppMenu } from "./menu";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
+import { keepWindowPlace, windowPlace } from "./windowState";
 
 // Points the app at another data folder: the smoke test uses a temporary one.
 // Set before anything reads `userData`, so Chromium's own data moves there too.
@@ -77,9 +81,12 @@ function exposeCore(core: Core): void {
 }
 
 function createWindow(): BrowserWindow {
+  const dataDir = app.getPath("userData");
+  const place = windowPlace(dataDir, { width: 1280, height: 800 }, { width: 900, height: 560 });
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(place.x !== undefined && place.y !== undefined ? { x: place.x, y: place.y } : {}),
+    width: place.width,
+    height: place.height,
     minWidth: 900,
     minHeight: 560,
     show: false,
@@ -92,7 +99,11 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   });
-  window.once("ready-to-show", () => window.show());
+  window.once("ready-to-show", () => {
+    if (place.maximized) window.maximize();
+    window.show();
+  });
+  keepWindowPlace(window, dataDir);
 
   // Links open in the User's browser, never inside the app.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -112,6 +123,28 @@ function createWindow(): BrowserWindow {
     void window.loadFile(join(__dirname, "../renderer/index.html"), { query });
   }
   return window;
+}
+
+/**
+ * The application menu, in the interface language, and again whenever it
+ * changes. Reload and the developer tools only outside a packaged app.
+ */
+function installMenuInLanguage(core: Core): void {
+  const developer = !app.isPackaged;
+  let shown: Language | null = null;
+  const install = (language: Language) => {
+    if (language === shown) return;
+    shown = language;
+    installAppMenu(language, { developer });
+  };
+  install(resolveLanguage("system", app.getPreferredSystemLanguages()));
+  core.getSettings().then(
+    (settings) => install(settings.language),
+    () => undefined,
+  );
+  core.onAnyEvent((name, payload) => {
+    if (name === "settings.changed") install((payload as Settings).language);
+  });
 }
 
 function showStartupError(error: unknown): void {
@@ -144,6 +177,7 @@ app.whenReady().then(async () => {
     logger,
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
+  installMenuInLanguage(core);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);

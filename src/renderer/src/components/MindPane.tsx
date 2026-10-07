@@ -1,53 +1,46 @@
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
-import { ExportIcon, MindIcon, PlusIcon } from "./icons";
+import { PlusLineIcon } from "./lineIcons";
 import { MindEditor } from "./MindEditor";
+import { MindTabs } from "./MindTabs";
 import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
+import { buttonStyle } from "./ui";
 
-/** The centre: the open Mind, its title and its Blocks. */
+/**
+ * The centre: a 44px strip of the open Minds as tabs (with "+" and Export),
+ * then the shown Mind, its title and its Blocks. With no tab open, a way to
+ * start a Mind.
+ */
 export function MindPane() {
   const t = useT();
   const mind = useAppStore((state) => state.minds.find((each) => each.id === state.openMindId));
   const createMind = useAppStore((state) => state.createMind);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
-  const title = mind ? mind.title || t("mind.untitled") : "";
 
   return (
-    <main data-testid="mind-area" className="flex min-w-[300px] flex-1 flex-col overflow-hidden">
-      <div className="flex h-10 shrink-0 items-end">
-        {mind && (
-          <>
-            <div
-              title={title}
-              className="relative ml-2 flex h-8 max-w-[220px] items-center rounded-t-[9px] bg-white pr-4 pl-8 text-sm text-gray-700"
-            >
-              <MindIcon className="absolute left-[10px] size-4" />
-              <span className="truncate">{title}</span>
-            </div>
-            <button
-              type="button"
-              data-testid="export-mind"
-              aria-label={t("export.action.label")}
-              title={t("export.action.label")}
-              onClick={() => setExportingId(mind.id)}
-              className="mr-3 mb-1 ml-auto flex items-center gap-1 rounded-[9px] px-2 py-1 text-sm text-gray-600 hover:bg-gray-200 hover:text-gray-800"
-            >
-              <ExportIcon className="size-4" />
-              <span>{t("export.action")}</span>
-            </button>
-          </>
-        )}
-      </div>
+    <main
+      data-testid="mind-area"
+      className="flex min-w-[300px] flex-1 flex-col overflow-hidden bg-sheet"
+    >
+      {/* 44px, like every pane header, so it lines up with the sidebar's. */}
+      <MindTabs onExport={() => setExportingId(mind?.id ?? null)} />
       <ExportDialog
         mind={mind && mind.id === exportingId ? mind : null}
         onClose={() => setExportingId(null)}
       />
 
-      <div className="flex-grow overflow-auto rounded-tl-[6px] bg-white">
+      <div
+        className="min-h-0 flex-grow overflow-auto"
+        {...(mind && {
+          role: "tabpanel",
+          id: "mind-tabpanel",
+          "aria-labelledby": `mind-tab-${mind.id}`,
+        })}
+      >
         {mind ? (
           // Keyed, so switching Minds starts a fresh title field and editor. Every text
           // in it starts at one edge (styles.css, `.mind-column`).
@@ -64,16 +57,21 @@ export function MindPane() {
             </div>
           </article>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-10 text-center">
-            <h1 className="text-xl font-medium text-gray-700">{t("mind.noneOpen.title")}</h1>
-            <p className="text-sm text-gray-500">{t("mind.noneOpen.body")}</p>
+          <div
+            data-testid="mind-none-open"
+            className="flex h-full flex-col items-center justify-center gap-2 px-10 pb-11 text-center"
+          >
+            <h1 className="font-serif text-heading font-semibold text-ink">
+              {t("mind.noneOpen.title")}
+            </h1>
+            <p className="max-w-sm text-ui text-ink-secondary">{t("mind.noneOpen.body")}</p>
             <button
               type="button"
               onClick={() => void createMind()}
-              className="group mt-2 flex items-center gap-2 rounded-[9px] border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:shadow-custom-unfocus"
+              className={`mt-3 ${buttonStyle("primary")}`}
             >
-              <PlusIcon className="size-4 text-gray-500" />
-              <span className="group-hover:text-gradient-mind">{t("sidebar.newMind")}</span>
+              <PlusLineIcon className="size-4" />
+              {t("sidebar.newMind")}
             </button>
           </div>
         )}
@@ -90,6 +88,15 @@ function MindTitle({ mind }: { mind: Mind }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
   const [draft, setDraft] = useState<string | null>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
+
+  // A Mind just created: its title takes the focus from the button that made it.
+  useEffect(() => {
+    if (!focusNow) return;
+    field.current?.focus();
+    useAppStore.getState().titleFocused();
+  }, [focusNow]);
 
   const moveIntoContent = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
@@ -100,6 +107,7 @@ function MindTitle({ mind }: { mind: Mind }) {
   return (
     <h1 className="mind-title">
       <input
+        ref={field}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
         placeholder={t("mind.untitled")}

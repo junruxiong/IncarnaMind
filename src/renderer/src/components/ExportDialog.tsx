@@ -5,7 +5,22 @@ import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { QuoteNotFoundIcon } from "./icons";
-import { buttonClass, primaryButtonClass } from "./providers/shared";
+import {
+  buttonClass,
+  choiceListClass,
+  choiceRadioClass,
+  choiceRowClass,
+  choiceTextClass,
+  choiceTitleClass,
+  dialogActionsClass,
+  dialogBodyClass,
+  dialogClass,
+  dialogTitleClass,
+  errorTextClass,
+  fieldLabelClass,
+  hintClass,
+  primaryButtonClass,
+} from "./ui";
 import { useModal } from "./useModal";
 
 const FORMATS: readonly { value: ExportFormat; label: MessageKey; hint: MessageKey }[] = [
@@ -27,13 +42,15 @@ export function ExportDialog({ mind, onClose }: { mind: Mind | null; onClose(): 
       onClose={onClose}
       data-testid="export-dialog"
       aria-labelledby="export-title"
-      className="m-auto w-[28rem] max-w-[calc(100vw-2rem)] rounded-[9px] bg-white p-5 text-gray-800 shadow-custom-focus backdrop:bg-black/20"
+      className={`${dialogClass} w-[30rem]`}
     >
-      <h2 id="export-title" className="text-lg font-semibold">
-        {t("export.title")}
-      </h2>
-      {/* Mounted only while open, so each export starts from the defaults and counts afresh. */}
-      {mind && <ExportForm mind={mind} onDone={onClose} />}
+      <div className={dialogBodyClass}>
+        <h2 id="export-title" className={dialogTitleClass}>
+          {t("export.title")}
+        </h2>
+        {/* Mounted only while open, so each export starts from the defaults and counts afresh. */}
+        {mind && <ExportForm mind={mind} onDone={onClose} />}
+      </div>
     </dialog>
   );
 }
@@ -82,41 +99,44 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const leftOut = preview && !includeQuestions ? preview.questions : 0;
 
   return (
-    <div className="mt-4 flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <fieldset>
-        <legend className="mb-1 text-sm font-medium">{t("export.format")}</legend>
-        {FORMATS.map((option) => (
-          <label key={option.value} className="flex items-start gap-2 py-1 text-sm">
-            <input
-              type="radio"
-              name="export-format"
-              value={option.value}
-              data-testid={`export-format-${option.value}`}
-              checked={format === option.value}
-              onChange={() => setFormat(option.value)}
-              className="mt-[3px]"
-            />
-            <span>
-              {t(option.label)}
-              <span className="block text-xs text-gray-500">{t(option.hint)}</span>
-            </span>
-          </label>
-        ))}
+        <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("export.format")}</legend>
+        <div className={choiceListClass}>
+          {FORMATS.map((option) => (
+            <label key={option.value} className={choiceRowClass}>
+              <input
+                type="radio"
+                name="export-format"
+                value={option.value}
+                data-testid={`export-format-${option.value}`}
+                checked={format === option.value}
+                onChange={() => setFormat(option.value)}
+                className={choiceRadioClass}
+              />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className={choiceTitleClass}>{t(option.label)}</span>
+                <span className={choiceTextClass}>{t(option.hint)}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       {format === "docx" && (
-        <div className="text-sm">
-          <label className="flex items-center gap-2">
+        <div>
+          <label className="flex items-center gap-2 text-ui text-ink">
             <input
               type="checkbox"
               data-testid="export-include-questions"
               checked={questionsWanted}
               onChange={(event) => setQuestionsWanted(event.target.checked)}
+              className="size-4 shrink-0 accent-ink"
             />
             {t("export.includeQuestions")}
           </label>
           {leftOut > 0 && (
-            <p className="mt-1 ml-6 text-xs text-gray-500">
+            <p className={`ml-6 ${hintClass}`}>
               {leftOut === 1
                 ? t("export.questionsLeftOut.one")
                 : t("export.questionsLeftOut.other", { count: leftOut })}
@@ -128,12 +148,12 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
       <CitationSummary preview={preview} />
 
       {error && (
-        <p role="alert" className="text-sm break-words text-red-700">
+        <p role="alert" className={errorTextClass}>
           {t("export.failed", { message: error })}
         </p>
       )}
 
-      <div className="flex justify-end gap-2">
+      <div className={dialogActionsClass}>
         <button type="button" onClick={onDone} className={buttonClass}>
           {t("export.cancel")}
         </button>
@@ -155,15 +175,16 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
 function CitationSummary({ preview }: { preview: MindExportPreview | null }) {
   const t = useT();
   if (!preview) {
-    return <p className="text-sm text-gray-500">{t("export.checking")}</p>;
+    return <p className="text-[13px] leading-5 text-ink-meta">{t("export.checking")}</p>;
   }
   const { citations: total, unverifiedCitations: count } = preview;
   if (count > 0) {
+    // Not found is a Citation check, so it takes the not-found colours.
     return (
       <p
         data-testid="export-citations"
         data-unverified={count}
-        className="flex items-start gap-2 rounded-[9px] bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        className="flex items-start gap-2 rounded-lg bg-warning-wash px-3 py-2 text-[13px] leading-5 text-warning"
       >
         <QuoteNotFoundIcon className="mt-[2px] size-4 shrink-0" />
         <span>
@@ -175,7 +196,11 @@ function CitationSummary({ preview }: { preview: MindExportPreview | null }) {
     );
   }
   return (
-    <p data-testid="export-citations" data-unverified={0} className="text-sm text-gray-600">
+    <p
+      data-testid="export-citations"
+      data-unverified={0}
+      className="text-[13px] leading-5 text-ink-secondary"
+    >
       {total === 0
         ? t("export.noCitations")
         : total === 1
