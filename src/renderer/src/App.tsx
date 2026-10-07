@@ -70,9 +70,15 @@ function Workspace() {
   useDevViewerShortcut();
 
   if (!device) return null;
-  const { sidebarWidth, viewerWidth } = device;
-  const shownViewerWidth = viewerOpen ? viewerWidth + ROD_WIDTH : 0;
+  const { sidebarWidth } = device;
   const room = windowWidth - ROD_WIDTH - CENTRE_MIN;
+  // In a window too narrow for the saved width, the viewer gives way to the
+  // Mind (down to its own minimum); the saved width comes back as the window grows.
+  const viewerWidth = Math.max(
+    VIEWER.min,
+    Math.min(device.viewerWidth, room - ROD_WIDTH - sidebarWidth),
+  );
+  const shownViewerWidth = viewerOpen ? viewerWidth + ROD_WIDTH : 0;
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-sheet" {...fileDrop.handlers}>
