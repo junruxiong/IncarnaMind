@@ -18,10 +18,11 @@ function overlapOf(previous: string, next: string): string {
 }
 
 describe("Passages", () => {
-  test("approximate tokens: one per CJK character, one per four other characters", () => {
+  test("approximate tokens: one per CJK character, one per four other characters, spaces included", () => {
     expect(approximateTokens("")).toBe(0);
     expect(approximateTokens("abcd")).toBe(1);
-    expect(approximateTokens("ab  \n\t cd")).toBe(1.25);
+    expect(approximateTokens("ab  \n\t cd")).toBe(2.25);
+    expect(approximateTokens("如 GPT-3 含")).toBe(3.75);
     expect(approximateTokens("注意力")).toBe(3);
   });
 
@@ -49,7 +50,7 @@ describe("Passages", () => {
   });
 
   test("long text gives overlapping Passages within the token budget, ending at sentences", () => {
-    const all = sentences(120);
+    const all = sentences(200);
     const passages = buildPassages([{ page: null, text: all.join(" ") }]);
 
     expect(passages.length).toBeGreaterThan(3);
@@ -106,7 +107,9 @@ describe("Passages", () => {
 
     expect(passages.length).toBeGreaterThan(2);
     for (const passage of passages) {
-      expect(Array.from(passage.text).length).toBeLessThanOrEqual(PASSAGE_PARAMETERS.maxTokens);
+      expect(approximateTokens(passage.text)).toBeLessThanOrEqual(PASSAGE_PARAMETERS.maxTokens);
+      // Only the full stops count less than one.
+      expect(Array.from(passage.text).length).toBeLessThan(PASSAGE_PARAMETERS.maxTokens * 1.05);
       expect(passage.text.endsWith("。")).toBe(true);
     }
   });

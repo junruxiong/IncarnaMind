@@ -1,6 +1,11 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Document, DocumentFailureReason, DocumentStatus } from "../../../core/api";
+import type {
+  Document,
+  DocumentFailureReason,
+  DocumentStatus,
+  EmbeddingModelError,
+} from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { endSidebarDrag, startSidebarDrag } from "../folders";
 import { useT } from "../i18n";
@@ -15,6 +20,8 @@ const ACCEPTED_FILES = ".pdf,.txt,.md,.markdown";
 const statusMessages: Record<Exclude<DocumentStatus, "failed">, MessageKey> = {
   queued: "documents.status.queued",
   extracting: "documents.status.extracting",
+  "waiting-for-model": "embedding.status.waiting",
+  embedding: "embedding.status.embedding",
   ready: "documents.status.ready",
   "no-text": "documents.status.noText",
 };
@@ -29,6 +36,8 @@ const failureMessages: Record<DocumentFailureReason, MessageKey> = {
 const statusTones: Record<DocumentStatus, string> = {
   queued: "text-gray-400",
   extracting: "text-gray-400 animate-pulse",
+  "waiting-for-model": "text-gray-400",
+  embedding: "text-gray-400 animate-pulse",
   ready: "text-gray-400",
   failed: "text-red-600",
   "no-text": "text-amber-600",
@@ -99,6 +108,7 @@ export function DocumentsSection() {
         />
       </div>
       <SkippedFilesNotice />
+      <EmbeddingModelNotice />
       <FolderTree
         newFolderIn={newFolderIn}
         onNewFolder={setNewFolderIn}
@@ -132,7 +142,7 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       ? t("documents.status.failed", {
           reason: t(failureMessages[item.failure?.reason ?? "processing-error"]),
         })
-      : t(statusMessages[item.status]);
+      : t(statusMessages[item.status], { percent: Math.floor((item.progress ?? 0) * 100) });
   const actionButton = "rounded-[6px] p-[3px] text-gray-500 hover:bg-gray-200 hover:text-gray-700";
   const statusLine = (
     <p
@@ -271,6 +281,69 @@ function SkippedFilesNotice() {
         className="shrink-0 rounded-[6px] p-[2px] hover:bg-amber-100"
       >
         <CloseIcon className="size-3" />
+      </button>
+    </div>
+  );
+}
+
+/** Decimal megabytes, as the model's 135 MB is quoted elsewhere. */
+const MEGABYTE = 1_000_000;
+
+const modelFailures: Record<Exclude<EmbeddingModelError["kind"], "load">, MessageKey> = {
+  network: "embedding.model.failure.network",
+  integrity: "embedding.model.failure.integrity",
+  storage: "embedding.model.failure.storage",
+};
+
+/**
+ * The built-in embedding model's download, shown while it runs and when it
+ * fails (with a retry). The core starts it when the first Document needs it.
+ */
+function EmbeddingModelNotice() {
+  const t = useT();
+  const model = useAppStore((state) => state.embeddingModel);
+  const retry = useAppStore((state) => state.downloadEmbeddingModel);
+  if (model?.state === "downloading") {
+    const share = model.totalBytes > 0 ? model.downloadedBytes / model.totalBytes : 0;
+    return (
+      <div
+        role="status"
+        data-testid="embedding-model-download"
+        className="mx-3 mb-1 rounded-[9px] bg-gray-100 px-2 py-[5px] text-[12px] text-gray-600"
+      >
+        <p>
+          {t("embedding.model.downloading", {
+            downloaded: Math.floor(model.downloadedBytes / MEGABYTE),
+            total: Math.ceil(model.totalBytes / MEGABYTE),
+          })}
+        </p>
+        <div className="mt-1 h-1 overflow-hidden rounded-full bg-gray-200">
+          <div className="h-full bg-gray-500" style={{ width: `${Math.round(share * 100)}%` }} />
+        </div>
+        <p className="mt-1 text-[11px] leading-4 text-gray-400">{t("embedding.model.note")}</p>
+      </div>
+    );
+  }
+  if (model?.state !== "failed" || !model.error) return null;
+  const { kind, message } = model.error;
+  return (
+    <div
+      role="alert"
+      data-testid="embedding-model-failed"
+      className="mx-3 mb-1 flex items-start gap-2 rounded-[9px] bg-amber-50 px-2 py-[5px] text-[12px] text-amber-800"
+    >
+      <p className="min-w-0 flex-1 break-words" title={message}>
+        {kind === "load"
+          ? t("embedding.model.loadFailed")
+          : t("embedding.model.failed", { reason: t(modelFailures[kind]) })}
+      </p>
+      <button
+        type="button"
+        data-testid="embedding-model-retry"
+        onClick={() => void retry()}
+        className="shrink-0 rounded-[6px] px-1 font-medium hover:bg-amber-100"
+      >
+        {t("embedding.model.retry")}
       </button>
     </div>
   );

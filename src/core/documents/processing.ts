@@ -5,7 +5,18 @@
 import { readFile } from "node:fs/promises";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import { ExtractionError, extractText } from "./extract";
+import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
+
+/**
+ * The version of this pipeline: text extraction, Passage building, text
+ * normalisation and keyword indexing. Bump it whenever any of them changes the
+ * Passages or the index: Documents processed by an older version are
+ * processed again at startup, going through the usual statuses.
+ * 1: #25 (400/200 Passages, trigram index). 2: ADR-0009 (500/200 Passages,
+ * normalised text, segmented keyword index, embeddings).
+ */
+export const PROCESSING_VERSION = 2;
 
 export interface ProcessingJob {
   documentId: string;
@@ -15,8 +26,18 @@ export interface ProcessingJob {
   file: string;
 }
 
+/** A Passage as the worker hands it over. */
+export interface ProcessedPassage extends BuiltPassage {
+  /**
+   * The Passage's words for the keyword index (see ./keywords), worked out here
+   * so the core's thread doesn't have to. The Document's name isn't included:
+   * the core adds it, so a rename only redoes that part.
+   */
+  keywords: string;
+}
+
 export type ProcessingResult =
-  | { outcome: "ready"; pageCount: number | null; passages: BuiltPassage[] }
+  | { outcome: "ready"; pageCount: number | null; passages: ProcessedPassage[] }
   | { outcome: "no-text"; pageCount: number | null }
   | { outcome: "failed"; reason: DocumentFailureReason; message: string };
 
@@ -46,7 +67,10 @@ export async function processFile(job: ProcessingJob): Promise<ProcessingResult>
   }
   try {
     const { pageCount, pages } = await extractText(job.kind, bytes);
-    const passages = buildPassages(pages);
+    const passages = buildPassages(pages).map((passage) => ({
+      ...passage,
+      keywords: keywordText(passage.text),
+    }));
     if (passages.length === 0) return { outcome: "no-text", pageCount };
     return { outcome: "ready", pageCount, passages };
   } catch (error) {

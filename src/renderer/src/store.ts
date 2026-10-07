@@ -3,6 +3,7 @@ import type {
   ChatReadiness,
   DeviceSettings,
   Document,
+  EmbeddingModelStatus,
   Folder,
   Mind,
   Settings,
@@ -37,6 +38,8 @@ interface AppState {
   documents: Document[];
   /** Names of the files the last add couldn't take, shown until dismissed. */
   skippedFiles: string[];
+  /** The built-in embedding model and its download. Set once loaded, then follows the core's event. */
+  embeddingModel: EmbeddingModelStatus | null;
   settingsOpen: boolean;
   /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
   folders: Folder[];
@@ -71,6 +74,8 @@ interface AppState {
   renameDocument(id: string, name: string): Promise<void>;
   deleteDocument(id: string): Promise<void>;
   dismissSkippedFiles(): void;
+  /** Downloads the embedding model again after a failure. */
+  downloadEmbeddingModel(): Promise<void>;
   /** Files a Document in a Folder, or unfiles it with null. */
   moveDocument(documentId: string, folderId: string | null): Promise<void>;
   /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
@@ -119,6 +124,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     viewerTarget: null,
     documents: [],
     skippedFiles: [],
+    embeddingModel: null,
     settingsOpen: false,
     folders: [],
     folderFilter: null,
@@ -126,14 +132,24 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     async load() {
       try {
-        const [minds, settings, documents, chatReadiness, folders] = await Promise.all([
-          core.listMinds(),
-          core.getSettings(),
-          core.listDocuments(),
-          core.getChatReadiness(),
-          core.listFolders(),
-        ]);
-        set({ minds, settings, documents, chatReadiness, folders, status: { kind: "ready" } });
+        const [minds, settings, documents, chatReadiness, folders, embeddingModel] =
+          await Promise.all([
+            core.listMinds(),
+            core.getSettings(),
+            core.listDocuments(),
+            core.getChatReadiness(),
+            core.listFolders(),
+            core.getEmbeddingModel(),
+          ]);
+        set({
+          minds,
+          settings,
+          documents,
+          chatReadiness,
+          folders,
+          embeddingModel,
+          status: { kind: "ready" },
+        });
       } catch (error) {
         set({ status: { kind: "failed", message: messageOf(error) } });
       }
@@ -264,6 +280,11 @@ export const useAppStore = create<AppState>()((set, get) => {
       set({ skippedFiles: [] });
     },
 
+    downloadEmbeddingModel: () =>
+      attempt(async () => {
+        set({ embeddingModel: await core.downloadEmbeddingModel() });
+      }),
+
     // The lists follow the core's "documents.moved" and "folders.changed" events, which
     // arrive before these calls return.
     moveDocument: (documentId, folderId) =>
@@ -344,6 +365,9 @@ core.on("document.status", (changed) =>
 );
 
 core.on("chatReadiness.changed", (chatReadiness) => useAppStore.setState({ chatReadiness }));
+
+// The embedding model downloads in the background: follow its state and progress.
+core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embeddingModel }));
 
 // Folders change through this window or another: follow the list, and keep the filter right.
 core.on("folders.changed", (folders) => {

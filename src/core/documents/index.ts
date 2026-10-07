@@ -1,6 +1,7 @@
 /**
- * Documents: adding files, processing them into Passages off the main thread,
- * renaming, filing in Folders, soft-deleting and keyword search.
+ * Documents: adding files, processing them into Passages off the main thread
+ * (extracting on a worker thread, embedding through the embedder), renaming,
+ * filing in Folders, soft-deleting, and keyword, vector and hybrid search.
  */
 import { randomUUID } from "node:crypto";
 import { basename, extname, isAbsolute } from "node:path";
@@ -11,18 +12,29 @@ import type {
   DocumentKind,
   DocumentStatus,
   PassageSearchResult,
+  SearchMode,
   SkippedFile,
 } from "../api";
-import { InvalidInputError, isRecord, NotFoundError } from "../errors";
+import type { EmbeddingModel } from "../embedding";
+import { EmbeddingModelNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
+import { createEmbeddingQueue } from "./embedding";
 import { createDocumentFiles, kindOf } from "./files";
-import type { ProcessingJob, ProcessingResult } from "./processing";
+import { keywordText } from "./keywords";
+import {
+  PROCESSING_VERSION,
+  type ProcessedPassage,
+  type ProcessingJob,
+  type ProcessingResult,
+} from "./processing";
 import { createProcessor } from "./processor";
-import { searchPassages } from "./search";
+import { fuseRankings, HYBRID_CANDIDATES, keywordSearch, passagesBySeq } from "./search";
+import { createVectorIndex } from "./vectors";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
 const MAX_NAME_LENGTH = 500;
+const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
 interface DocumentRow {
   id: string;
@@ -41,26 +53,6 @@ interface DocumentRow {
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, created_at, updated_at`;
-
-const toDocument = (row: DocumentRow): Document => ({
-  id: row.id,
-  name: row.name,
-  kind: row.kind as DocumentKind,
-  contentHash: row.content_hash,
-  size: row.size,
-  pageCount: row.page_count,
-  status: row.status as DocumentStatus,
-  failure:
-    row.status === "failed"
-      ? {
-          reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
-          message: row.failure_message ?? "",
-        }
-      : null,
-  folderId: row.folder_id,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -107,16 +99,42 @@ export function parseListOptions(options: unknown): {
   return { folderId, includeSubfolders };
 }
 
-function parseLimit(limit: unknown): number {
-  if (limit === undefined) return DEFAULT_SEARCH_LIMIT;
+/** `searchPassages` options, checked and with their defaults. */
+function parseSearchOptions(options: unknown): {
+  mode: SearchMode;
+  limit: number;
+  documentIds: string[] | undefined;
+} {
+  if (options === undefined) {
+    return { mode: "hybrid", limit: DEFAULT_SEARCH_LIMIT, documentIds: undefined };
+  }
+  if (!isRecord(options)) throw new InvalidInputError("searchPassages expects an object.");
+  const { mode = "hybrid", limit = DEFAULT_SEARCH_LIMIT, documentIds } = options;
+  if (!SEARCH_MODES.includes(mode as SearchMode)) {
+    throw new InvalidInputError(`The search mode must be one of ${SEARCH_MODES.join(", ")}.`);
+  }
   if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_SEARCH_LIMIT) {
     throw new InvalidInputError(`The limit must be a whole number from 1 to ${MAX_SEARCH_LIMIT}.`);
   }
-  return limit as number;
+  if (
+    documentIds !== undefined &&
+    (!Array.isArray(documentIds) || !documentIds.every((id) => typeof id === "string" && id !== ""))
+  ) {
+    throw new InvalidInputError("documentIds must be a list of Document ids.");
+  }
+  return {
+    mode: mode as SearchMode,
+    limit: limit as number,
+    documentIds: documentIds as string[] | undefined,
+  };
 }
 
 /** The file name without its extension, or the whole name if that leaves nothing. */
 const nameFromPath = (path: string) => basename(path, extname(path)).trim() || basename(path);
+
+/** What the keyword index holds for a Passage: its Document's name, then its own words. */
+const indexedText = (nameKeywords: string, passageKeywords: string) =>
+  nameKeywords ? `${nameKeywords} ${passageKeywords}` : passageKeywords;
 
 /** A live Document's stored file, opened for reading. */
 export interface DocumentFile {
@@ -129,12 +147,46 @@ export interface DocumentsOptions {
   db: Database;
   dataDir: string;
   now: () => string;
+  /** The built-in embedding model, which embeds Passages and search queries. */
+  model: EmbeddingModel;
   /** Pushes the "document.status" event. */
   emitStatus(document: Document): void;
 }
 
-export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptions) {
+export function createDocuments({ db, dataDir, now, model, emitStatus }: DocumentsOptions) {
   const files = createDocumentFiles(dataDir);
+  const vectors = createVectorIndex(db, model);
+
+  /** The share of a Document's Passages embedded so far. */
+  const progressOf = (id: string): number => {
+    const counts = db.get<{ total: number; embedded: number }>(
+      `SELECT count(*) AS total, count(embedding) AS embedded FROM passages
+       WHERE document_id = ? AND deleted_at IS NULL`,
+      [id],
+    );
+    return counts && counts.total > 0 ? counts.embedded / counts.total : 0;
+  };
+
+  const toDocument = (row: DocumentRow): Document => ({
+    id: row.id,
+    name: row.name,
+    kind: row.kind as DocumentKind,
+    contentHash: row.content_hash,
+    size: row.size,
+    pageCount: row.page_count,
+    status: row.status as DocumentStatus,
+    progress: row.status === "embedding" ? progressOf(row.id) : null,
+    failure:
+      row.status === "failed"
+        ? {
+            reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
+            message: row.failure_message ?? "",
+          }
+        : null,
+    folderId: row.folder_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
 
   const find = (id: string) =>
     db.get<DocumentRow>(`SELECT ${COLUMNS} FROM documents WHERE id = ? AND deleted_at IS NULL`, [
@@ -167,42 +219,79 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
   const setStatus = (id: string, status: DocumentStatus) =>
     db.run("UPDATE documents SET status = ?, updated_at = ? WHERE id = ?", [status, now(), id]);
 
-  /** Writes a job's result, unless the Document was deleted meanwhile. Returns whether it did. */
-  function record(job: ProcessingJob, result: ProcessingResult): boolean {
+  const embedding = createEmbeddingQueue({ db, now, model, vectors, announce });
+
+  /** Adds a Passage to the keyword index, under the `seq` it was stored with. */
+  const index = (seq: number, text: string) =>
+    db.run("INSERT INTO passages_fts (rowid, text) VALUES (?, ?)", [BigInt(seq), text]);
+
+  /** Stores Passages and indexes them. Run in a transaction. */
+  function insertPassages(documentId: string, name: string, passages: ProcessedPassage[]): void {
+    const at = now();
+    const nameKeywords = keywordText(name);
+    for (const passage of passages) {
+      const stored = db.get<{ seq: number }>(
+        `INSERT INTO passages (id, document_id, position, page_from, page_to,
+           window_from, window_to, text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING seq`,
+        [
+          randomUUID(),
+          documentId,
+          BigInt(passage.position),
+          passage.pageFrom === null ? null : BigInt(passage.pageFrom),
+          passage.pageTo === null ? null : BigInt(passage.pageTo),
+          BigInt(passage.windowFrom),
+          BigInt(passage.windowTo),
+          passage.text,
+          at,
+          at,
+        ],
+      );
+      if (!stored) throw new Error("The Passage wasn't saved.");
+      index(stored.seq, indexedText(nameKeywords, passage.keywords));
+    }
+  }
+
+  /**
+   * Writes a job's result, replacing Passages from an earlier processing,
+   * unless the Document was deleted meanwhile. Returns the status it wrote, if it did.
+   */
+  function record(job: ProcessingJob, result: ProcessingResult): DocumentStatus | undefined {
     return db.transaction(() => {
       const row = find(job.documentId);
-      if (row?.status !== "extracting") return false;
+      if (row?.status !== "extracting") return undefined;
       const at = now();
+      db.run(
+        `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
+         WHERE document_id = ? AND deleted_at IS NULL`,
+        [at, at, job.documentId],
+      );
+      let status: DocumentStatus;
       if (result.outcome === "ready") {
-        for (const passage of result.passages) {
-          db.run(
-            `INSERT INTO passages (id, document_id, position, page_from, page_to,
-               window_from, window_to, text, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              randomUUID(),
-              job.documentId,
-              passage.position,
-              passage.pageFrom,
-              passage.pageTo,
-              passage.windowFrom,
-              passage.windowTo,
-              passage.text,
-              at,
-              at,
-            ],
-          );
-        }
+        insertPassages(job.documentId, row.name, result.passages);
+        status = model.isReady() ? "embedding" : "waiting-for-model";
+      } else {
+        status = result.outcome;
       }
       db.run(
         `UPDATE documents SET status = ?, page_count = ?, failure_reason = ?, failure_message = ?,
-           updated_at = ?
+           processing_version = ?, embedding_model = ?, updated_at = ?
          WHERE id = ?`,
-        result.outcome === "failed"
-          ? ["failed", null, result.reason, result.message, at, job.documentId]
-          : [result.outcome, result.pageCount, null, null, at, job.documentId],
+        [
+          status,
+          result.outcome === "failed" || result.pageCount === null
+            ? null
+            : BigInt(result.pageCount),
+          result.outcome === "failed" ? result.reason : null,
+          result.outcome === "failed" ? result.message : null,
+          BigInt(PROCESSING_VERSION),
+          status === "embedding" ? model.id : null,
+          at,
+          job.documentId,
+        ],
       );
-      return true;
+      return status;
     });
   }
 
@@ -213,13 +302,28 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       announce(job.documentId);
     },
     onResult(job, result) {
-      if (record(job, result)) announce(job.documentId);
-      else void releaseFile(job.contentHash); // deleted while processing
+      const status = record(job, result);
+      if (status === undefined) {
+        void releaseFile(job.contentHash); // deleted while processing
+        return;
+      }
+      // Any vectors from an earlier processing went with the old Passages.
+      vectors.removeDocument(job.documentId);
+      announce(job.documentId);
+      if (status === "embedding") embedding.enqueue(job.documentId);
+      if (status === "waiting-for-model") model.ensure();
     },
   });
 
   // Startup: tidy the folder, then pick up work a quit interrupted.
   files.prepare((contentHash) => findByHash(contentHash) !== undefined);
+  // Documents processed by an older pipeline are processed again, through the usual statuses.
+  db.run(
+    `UPDATE documents SET status = 'queued', updated_at = ?
+     WHERE deleted_at IS NULL AND processing_version < ?
+       AND status IN ('ready', 'embedding', 'waiting-for-model')`,
+    [now(), BigInt(PROCESSING_VERSION)],
+  );
   const unfinished = db.all<DocumentRow>(
     `SELECT ${COLUMNS} FROM documents
      WHERE deleted_at IS NULL AND status IN ('queued', 'extracting')
@@ -229,6 +333,21 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
     if (row.status === "extracting") setStatus(row.id, "queued");
     processor.enqueue(jobFor(row));
   }
+  // Embedding carries on where it stopped, or waits for the model.
+  const embeddingRows = db.all<{ id: string }>(
+    `SELECT id FROM documents WHERE deleted_at IS NULL AND status = 'embedding'
+     ORDER BY created_at, rowid`,
+  );
+  for (const { id } of embeddingRows) {
+    if (model.isReady()) embedding.enqueue(id);
+    else setStatus(id, "waiting-for-model");
+  }
+  model.onReady(() => embedding.resumeWaiting());
+  if (model.isReady()) embedding.resumeWaiting();
+  else if (
+    db.get("SELECT 1 FROM documents WHERE deleted_at IS NULL AND status = 'waiting-for-model'")
+  )
+    model.ensure();
 
   /** Most recently added first. With `folderIds`, only Documents filed in one of those Folders. */
   const list = (folderIds?: readonly string[]): Document[] => {
@@ -276,6 +395,31 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       processor.enqueue(jobFor(added.row));
     }
     return document;
+  }
+
+  /**
+   * The query's vector, or null when a hybrid search has to do without:
+   * the model isn't ready, or fails. A vector search throws instead.
+   */
+  async function queryVector(query: string, mode: SearchMode): Promise<Float32Array | null> {
+    const unavailable = () => {
+      if (mode === "vector") throw new EmbeddingModelNotReadyError(model.status());
+      return null;
+    };
+    if (!(await model.load())) return unavailable();
+    try {
+      return await model.embedQuery(query);
+    } catch {
+      // The process running the model may have stopped: start it again and retry once.
+      if (!(await model.load())) return unavailable();
+      try {
+        return await model.embedQuery(query);
+      } catch (error) {
+        if (mode === "vector") throw error;
+        console.error(error);
+        return null;
+      }
+    }
   }
 
   return {
@@ -329,11 +473,26 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       });
     },
 
+    /**
+     * Renames a Document, and re-indexes its Passages' keywords, which include
+     * the name. Its vectors keep the name they were embedded with.
+     */
     rename(idInput: unknown, nameInput: unknown): Document {
       const id = parseId(idInput);
       const name = parseName(nameInput);
       if (!find(id)) throw new NotFoundError("There is no such Document.");
-      db.run("UPDATE documents SET name = ?, updated_at = ? WHERE id = ?", [name, now(), id]);
+      db.transaction(() => {
+        db.run("UPDATE documents SET name = ?, updated_at = ? WHERE id = ?", [name, now(), id]);
+        const nameKeywords = keywordText(name);
+        const passages = db.all<{ seq: number; text: string }>(
+          "SELECT seq, text FROM passages WHERE document_id = ? AND deleted_at IS NULL",
+          [id],
+        );
+        for (const { seq, text } of passages) {
+          db.run("DELETE FROM passages_fts WHERE rowid = ?", [BigInt(seq)]);
+          index(seq, indexedText(nameKeywords, keywordText(text)));
+        }
+      });
       const row = find(id);
       if (!row) throw new NotFoundError("There is no such Document.");
       return toDocument(row);
@@ -347,11 +506,12 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       db.transaction(() => {
         db.run("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, id]);
         db.run(
-          `UPDATE passages SET deleted_at = ?, updated_at = ?
+          `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
            WHERE document_id = ? AND deleted_at IS NULL`,
           [at, at, id],
         );
       });
+      vectors.removeDocument(id);
       processor.cancel(id);
       await releaseFile(row.content_hash);
     },
@@ -373,12 +533,30 @@ export function createDocuments({ db, dataDir, now, emitStatus }: DocumentsOptio
       return { document: toDocument(row), stream };
     },
 
-    search(query: unknown, limit: unknown): PassageSearchResult[] {
+    async search(query: unknown, options: unknown): Promise<PassageSearchResult[]> {
       if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
-      return searchPassages(db, query, parseLimit(limit));
+      const { mode, limit, documentIds } = parseSearchOptions(options);
+      if (query.trim() === "") return [];
+      if (mode === "keyword")
+        return passagesBySeq(db, keywordSearch(db, query, limit, documentIds));
+
+      const vector = await queryVector(query, mode);
+      if (mode === "vector") {
+        const hits = vector ? vectors.search(vector, limit, documentIds) : [];
+        return passagesBySeq(
+          db,
+          hits.map((hit) => hit.seq),
+        );
+      }
+      const keyword = keywordSearch(db, query, HYBRID_CANDIDATES, documentIds);
+      const similar = vector
+        ? vectors.search(vector, HYBRID_CANDIDATES, documentIds).map((hit) => hit.seq)
+        : [];
+      return passagesBySeq(db, fuseRankings([keyword, similar], limit));
     },
 
     close(): void {
+      embedding.close();
       processor.close();
     },
   };

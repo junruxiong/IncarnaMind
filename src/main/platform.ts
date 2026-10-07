@@ -5,6 +5,7 @@
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import type { Browser, CoreAdapters, Keychain, ProcessLauncher } from "../core";
+import { createUtilityProcessEmbedder } from "./embedder";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 
 /**
@@ -50,6 +51,12 @@ export const loginShellProcesses: ProcessLauncher = {
   },
 };
 
+/**
+ * Test-only launch flag: the smoke tests run a deterministic fake embedding
+ * model in the utility process, so no model is downloaded.
+ */
+const fakeEmbedder = process.env.INCARNAMIND_TEST_EMBEDDER === "fake";
+
 /** Builds the core's adapters. Call after `app` is ready. */
 export function createElectronAdapters(): CoreAdapters {
   const dataDir = app.getPath("userData");
@@ -59,5 +66,8 @@ export function createElectronAdapters(): CoreAdapters {
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     processes: loginShellProcesses,
+    embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
+    // The fake model has no files to download.
+    ...(fakeEmbedder && { embeddingModelSource: { baseUrl: "http://localhost/", files: [] } }),
   };
 }

@@ -52,10 +52,15 @@ export function waitForProcessing(
 }
 
 /** Adds files and waits until they have all finished processing. */
-export async function addAndProcess(core: Core, paths: string[]): Promise<Document[]> {
+export async function addAndProcess(
+  core: Core,
+  paths: string[],
+  timeout?: number,
+): Promise<Document[]> {
   const { documents } = await core.addDocuments(paths);
   return waitForProcessing(
     core,
     documents.map((document) => document.id),
+    timeout,
   );
 }
