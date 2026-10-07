@@ -1,18 +1,19 @@
 /**
  * The main process's half of the renderer's file helpers (`FilesBridge`):
- * saving an exported Mind where the User chooses, showing the data folder,
- * choosing a Skill folder or zip to import, and getting a Document's
- * original back (opened in another app, or saved where the User chooses).
- * The core makes the export's bytes, reads the Skill and copies Documents'
- * files, and only for live Documents; only this side touches dialogs, the
- * shell and paths the User picks.
+ * saving an exported Mind where the User chooses, showing the data and logs
+ * folders, choosing a Skill folder or zip to import, getting a Document's
+ * original back (opened in another app, or saved where the User chooses),
+ * and logging the window's uncaught errors. The core makes the export's
+ * bytes, reads the Skill and copies Documents' files, and only for live
+ * Documents; only this side touches dialogs, the shell and paths the User picks.
  */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import {
   app,
   BrowserWindow,
   dialog,
+  type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
   type OpenDialogOptions,
@@ -22,6 +23,7 @@ import {
 import type { Core, DocumentKind, ExportFormat, ExportMindOptions } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
+import { type FileLogger, logsFolder, logWindowError } from "./log";
 
 const FILE_TYPES: Readonly<Record<ExportFormat, { name: MessageKey; extension: string }>> = {
   docx: { name: "export.dialog.filter.docx", extension: "docx" },
@@ -38,10 +40,15 @@ export interface FileActionsOptions {
   /** The data folder, which "Open data folder" shows. */
   dataDir: string;
   /** Whether a call comes from IncarnaMind's own page. */
-  trusted(event: IpcMainInvokeEvent): boolean;
+  trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean;
+  /** Where the window's uncaught errors are logged. */
+  logger: FileLogger;
 }
 
-export function serveFileActions(core: Core, { dataDir, trusted }: FileActionsOptions): void {
+export function serveFileActions(
+  core: Core,
+  { dataDir, trusted, logger }: FileActionsOptions,
+): void {
   const refuseUnknown = (event: IpcMainInvokeEvent) => {
     if (!trusted(event)) throw new Error("Refused a call from an unknown page.");
   };
@@ -82,6 +89,13 @@ export function serveFileActions(core: Core, { dataDir, trusted }: FileActionsOp
   ipcMain.handle(FILES_CHANNELS.openDataFolder, async (event) => {
     refuseUnknown(event);
     await openPath(dataDir);
+  });
+
+  ipcMain.handle(FILES_CHANNELS.openLogsFolder, async (event) => {
+    refuseUnknown(event);
+    const folder = logsFolder(dataDir);
+    await mkdir(folder, { recursive: true });
+    await openPath(folder);
   });
 
   ipcMain.handle(FILES_CHANNELS.pickSkill, async (event, kind: unknown): Promise<string | null> => {
@@ -133,4 +147,8 @@ export function serveFileActions(core: Core, { dataDir, trusted }: FileActionsOp
       return filePath;
     },
   );
+
+  ipcMain.on(FILES_CHANNELS.logError, (event, report: unknown) => {
+    if (trusted(event)) logWindowError(logger, report);
+  });
 }

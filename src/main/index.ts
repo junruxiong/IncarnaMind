@@ -1,5 +1,12 @@
 import { join, resolve } from "node:path";
-import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  ipcMain,
+} from "electron";
 import {
   type ChatModelFactory,
   type Core,
@@ -11,6 +18,7 @@ import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
+import { startLogging } from "./logging";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 
@@ -18,6 +26,9 @@ import { registerUpdateCheck, startAutoUpdates } from "./updater";
 // Set before anything reads `userData`, so Chromium's own data moves there too.
 const dataDirOverride = process.env.INCARNAMIND_DATA_DIR;
 if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
+
+// The log in the data folder's `logs/`, from the start, so it has what goes wrong at startup too.
+const logger = startLogging(app.getPath("userData"));
 
 /** Set by electron-vite in development; absent in a built app. */
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
@@ -42,7 +53,7 @@ async function testChatModel(): Promise<ChatModelFactory | undefined> {
 
 let core: Core | undefined;
 
-function isFromOurRenderer(event: IpcMainInvokeEvent): boolean {
+function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const url = event.senderFrame?.url ?? "";
   return rendererUrl ? url.startsWith(rendererUrl) : url.startsWith("file://");
 }
@@ -104,6 +115,7 @@ function createWindow(): BrowserWindow {
 }
 
 function showStartupError(error: unknown): void {
+  logger.exception("app.startFailed", error);
   const language = resolveLanguage("system", app.getPreferredSystemLanguages());
   const message = error instanceof Error ? error.message : String(error);
   dialog.showErrorBox(
@@ -115,7 +127,10 @@ function showStartupError(error: unknown): void {
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
   try {
-    core = createCore({ ...createElectronAdapters(), ...(createChatModel && { createChatModel }) });
+    core = createCore({
+      ...createElectronAdapters(logger),
+      ...(createChatModel && { createChatModel }),
+    });
   } catch (error) {
     showStartupError(error);
     app.quit();
@@ -123,7 +138,11 @@ app.whenReady().then(async () => {
   }
   exposeCore(core);
   registerUpdateCheck(core);
-  serveFileActions(core, { dataDir: app.getPath("userData"), trusted: isFromOurRenderer });
+  serveFileActions(core, {
+    dataDir: app.getPath("userData"),
+    trusted: isFromOurRenderer,
+    logger,
+  });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
