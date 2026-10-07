@@ -19,7 +19,7 @@ export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector
 /** The gating mode: what the search Tool runs. */
 export const GATING_MODE: SearchMode = "hybrid";
 
-/** The v1 design's bar: 16 of 20 overall, and 8 of 10 in each language. */
+/** The v1 design's bar: 80% of the gating Questions overall and in each language (32 of 40, and 16 of 20 per language, with today's set). */
 const RETRIEVAL_TARGET = { share: 0.8 } as const;
 
 /** One retrieved Passage, against the expected one. */
