@@ -15,7 +15,11 @@ interface ResizeRodProps {
   onCommit(width: number): void;
 }
 
-/** The old app's 3px pane divider with a three-dot grip, draggable and keyboard-operable. */
+/**
+ * The divider between two panes: a 1px rule that shows a three-dot grip only
+ * while pointed at, dragged or focused (see `.pane-divider`). Draggable, and
+ * keyboard-operable with the arrow keys.
+ */
 export function ResizeRod({
   label,
   testId,
@@ -75,7 +79,7 @@ export function ResizeRod({
       onPointerUp={endDrag}
       onPointerCancel={cancelDrag}
       onKeyDown={resizeWithKeys}
-      className="three-dots flex h-auto w-[3px] shrink-0 cursor-col-resize items-center justify-center border-0 bg-gray-200 outline-none focus-visible:bg-gray-300"
+      className="pane-divider"
     />
   );
 }

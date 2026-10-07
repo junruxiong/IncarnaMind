@@ -80,13 +80,68 @@ export async function useLocalChatModel(window: Page, modelId = "fake-model"): P
   }, modelId);
 }
 
+/** The pages in Settings' list. */
+export type SettingsPage =
+  | "general"
+  | "chat-model"
+  | "search"
+  | "connectors"
+  | "skills"
+  | "approvals"
+  | "privacy";
+
+/** Opens Settings from the sidebar, then one of the pages in its list. Returns the dialog. */
+export async function openSettings(window: Page, page: SettingsPage): Promise<Locator> {
+  await window.getByRole("button", { name: "Settings" }).click();
+  return showSettingsPage(window, page);
+}
+
+/** In open Settings, shows one of the pages in its list. Returns the dialog. */
+export async function showSettingsPage(window: Page, page: SettingsPage): Promise<Locator> {
+  const settings = window.getByTestId("settings");
+  await settings.getByTestId(`settings-nav-${page}`).click();
+  await expect(settings).toHaveAttribute("data-page", page);
+  return settings;
+}
+
+/** Closes Settings with its close button. */
+export async function closeSettings(window: Page): Promise<void> {
+  const settings = window.getByTestId("settings");
+  await settings.getByRole("button", { name: "Close Settings" }).click();
+  await expect(settings).toBeHidden();
+}
+
 /** Opens Settings from the sidebar, on its Privacy page. */
 export async function openPrivacySettings(window: Page): Promise<Locator> {
-  await window.getByRole("button", { name: "Settings" }).click();
-  await window.getByTestId("settings-tab-privacy").click();
+  await openSettings(window, "privacy");
   const privacy = window.getByTestId("privacy-settings");
   await privacy.waitFor();
   return privacy;
+}
+
+/** Opens a Document's "More" menu in the sidebar, for rename, its original file, and delete. */
+export async function openDocumentMenu(item: Locator): Promise<void> {
+  await item.hover();
+  await item.getByTestId("document-file-menu").click();
+}
+
+/**
+ * Opens a Document's Tags menu in the sidebar and returns the Tags it has
+ * (each a checked item, with `data-source` and, if unsure, `data-needs-review`).
+ * Esc closes the menu again.
+ */
+export async function openDocumentTags(item: Locator): Promise<Locator> {
+  await item.hover();
+  await item.getByTestId("document-tags-menu").click();
+  const menu = item.getByTestId("document-tags-popover");
+  await expect(menu).toBeVisible();
+  return menu.locator('[data-testid="tag-menu-item"][aria-checked="true"]');
+}
+
+/** Shows only the Documents with a Tag, or, choosing the same Tag again, all of them. */
+export async function filterByTag(window: Page, name: string): Promise<void> {
+  await window.getByTestId("tag-filter-menu").click();
+  await window.getByTestId("tag-filters").getByRole("menuitemradio", { name, exact: true }).click();
 }
 
 /**
@@ -266,15 +321,54 @@ export async function widthOf(locator: Locator): Promise<number> {
   return box.width;
 }
 
-/** Drags an element horizontally by `dx` CSS pixels. */
+/**
+ * Drags an element horizontally by `dx` CSS pixels, as a person grabs it: a
+ * few pixels off its centre (a divider is a 1px rule with a wider strip to
+ * grab), after sliding the mouse there.
+ */
 export async function dragBy(window: Page, handle: Locator, dx: number): Promise<void> {
   const box = await handle.boundingBox();
   if (!box) throw new Error("The drag handle isn't visible.");
-  const x = box.x + box.width / 2;
+  const x = box.x + box.width / 2 - 3;
   const y = box.y + box.height / 2;
-  await window.mouse.move(x, y);
+  await window.mouse.move(x - 30, y);
+  await window.mouse.move(x, y, { steps: 6 });
   await window.mouse.down();
   await window.mouse.move(x + dx, y, { steps: 5 });
+  await window.mouse.up();
+}
+
+/**
+ * Moves the mouse as a person does onto a Block's handle: onto the Block's
+ * first line, then left across the margin in small steps (not a jump, which
+ * would skip the margin in between), and returns the handle.
+ */
+export async function slideToHandle(window: Page, block: Locator): Promise<Locator> {
+  const text = await block.boundingBox();
+  if (!text) throw new Error("The Block isn't visible.");
+  const y = text.y + Math.min(text.height, 28) / 2;
+  await window.mouse.move(text.x + 8, y, { steps: 4 });
+  const handle = window.getByTestId("block-handle");
+  await expect(handle).toBeVisible();
+  const grip = await handle.boundingBox();
+  if (!grip) throw new Error("The block handle isn't visible.");
+  await window.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2, { steps: 12 });
+  await expect(handle).toBeVisible();
+  return handle;
+}
+
+/**
+ * Drags a Block by its handle, as a person does: slide onto the handle, press,
+ * move straight up or down the margin to the top of `target`, and let go.
+ */
+export async function dragBlock(window: Page, block: Locator, target: Locator): Promise<void> {
+  const handle = await slideToHandle(window, block);
+  const grip = await handle.boundingBox();
+  const to = await target.boundingBox();
+  if (!grip || !to) throw new Error("The handle or the target isn't visible.");
+  const x = grip.x + grip.width / 2;
+  await window.mouse.down();
+  await window.mouse.move(x, to.y + 4, { steps: 12 });
   await window.mouse.up();
 }
 

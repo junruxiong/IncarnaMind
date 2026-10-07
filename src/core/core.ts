@@ -855,6 +855,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
     listConnectors: async () => connectors.list(),
     addConnector: (input) => connectors.add(input),
+    editConnector: (connectorId, input) => connectors.edit(connectorId, input),
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
     restartConnector: (connectorId) => connectors.restart(connectorId),

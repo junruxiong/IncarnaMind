@@ -5,9 +5,12 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   addDocuments,
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openDocumentTags,
+  openSettings,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -73,7 +76,7 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await useLocalChatModel(window);
 
   // Settings → Automatic tagging: a key and a Jev-compatible server, tested, then used.
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "chat-model");
   const section = window.getByTestId("jev-settings");
   await section.getByTestId("jev-set-up").click();
   const form = section.getByTestId("jev-form");
@@ -87,26 +90,32 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await form.getByRole("button", { name: "Use Jev for tagging" }).click();
   await expect(section).toContainText("TypeSafe Jev tags your Documents.");
   await expect(section).toContainText(`Server: ${jev.url}`);
-  await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
+  await closeSettings(window);
 
   await addDocuments(window, [summary]);
 
-  // Paper is likely; Report is unsure, so it is applied and marked for review.
+  // Paper is likely; Report is unsure, so it is applied and marked for review. The
+  // Document's Tags menu shows its Tags.
   const item = window.getByTestId("document-list-item");
   await expect(item).toHaveAttribute("data-tagging", "tagged");
-  const chips = item.getByTestId("document-tag");
-  await expect(chips).toHaveCount(2);
-  const paper = chips.filter({ hasText: "Paper" });
-  const report = chips.filter({ hasText: "Report" });
+  const tags = await openDocumentTags(item);
+  await expect(tags).toHaveCount(2);
+  const paper = tags.filter({ hasText: "Paper" });
+  const report = tags.filter({ hasText: "Report" });
   await expect(paper).toHaveAttribute("title", "Paper: added automatically, 92% likely");
-  await expect(paper.getByTestId("confirm-document-tag")).toHaveCount(0);
+  await expect(paper).not.toHaveAttribute("data-needs-review");
   await expect(report).toHaveAttribute("data-needs-review", "true");
   await expect(report).toHaveAttribute("title", /only 50% likely/);
+  await expect(report).toContainText("needs review");
+  // Only the unsure one can be confirmed.
+  const confirm = item.getByTestId("confirm-document-tag");
+  await expect(confirm).toHaveCount(1);
 
   // Confirming it makes it the User's.
-  await report.getByRole("button", { name: "Confirm Report on Attention" }).click();
+  await item.getByRole("menuitem", { name: "Confirm Report on Attention" }).click();
   await expect(report).toHaveAttribute("data-source", "user");
   await expect(report).not.toHaveAttribute("data-needs-review");
   await expect(item.locator("[data-needs-review]")).toHaveCount(0);
+  await expect(confirm).toHaveCount(0);
   await app.close();
 });

@@ -11,7 +11,6 @@ export const en = {
   "sidebar.minds": "Minds",
   "sidebar.noMinds": "No Minds yet",
   "sidebar.settings": "Settings",
-  "sidebar.github": "GitHub",
   "sidebar.resize": "Resize the sidebar",
 
   "mind.untitled": "Untitled",
@@ -23,6 +22,11 @@ export const en = {
   "mind.delete.body": "“{title}” will be removed from your Minds.",
   "mind.delete.confirm": "Delete",
   "mind.delete.cancel": "Cancel",
+
+  "tabs.label": "Open Minds",
+  "tabs.new": "New Mind ({shortcut})",
+  "tabs.close": "Close {title}",
+  "tabs.writing": "An Answer is being written",
 
   "editor.placeholder": "Type / for headings, code, math and Questions",
   "editor.slash.label": "Insert",
@@ -116,15 +120,22 @@ export const en = {
   "documents.status.ready": "Ready",
   "documents.status.failed": "Failed: {reason}",
   "documents.status.noText": "No text found",
+  "documents.statusShort.queued": "Queued",
+  "documents.statusShort.extracting": "Reading",
+  "documents.statusShort.waiting": "Waiting",
+  "documents.statusShort.embedding": "{percent}%",
+  "documents.statusShort.noText": "No text",
+  "documents.statusShort.failed": "Failed",
   "documents.failure.unreadable": "the file couldn't be read",
   "documents.failure.passwordProtected": "the file needs a password",
   "documents.failure.fileMissing": "its file is missing",
   "documents.file.missing": "File missing",
   "documents.file.unavailable": "File can't be reached",
   "documents.failure.processingError": "something went wrong while processing it",
-  "documents.rename": "Rename {name}",
+  "documents.more": "More actions for {name}",
+  "documents.renameAction": "Rename",
   "documents.renameLabel": "New name for {name}",
-  "documents.delete": "Delete {name}",
+  "documents.deleteAction": "Delete…",
   "documents.delete.title": "Delete this Document?",
   "documents.delete.body":
     "“{name}” will be removed from IncarnaMind, along with its search index. Your original file isn't touched.",
@@ -132,7 +143,6 @@ export const en = {
   "documents.delete.confirm": "Delete",
   "documents.skipped":
     "Only PDF, Word, PowerPoint, Excel, CSV, TXT and Markdown files can be added. Skipped: {names}",
-  "documents.copy.menu": "Original file of {name}",
   "documents.copy.menuTitle": "Original file",
   "documents.copy.open": "Open in default app",
   "documents.copy.showInFolder": "Show in folder",
@@ -158,6 +168,22 @@ export const en = {
   "linkedFolders.remove": "Unlink {name}",
   "linkedFolders.remove.body":
     "IncarnaMind stops following “{name}” and removes its Documents from the index. The folder and its files aren't touched.",
+
+  "status.processing.one": "Processing 1 Document…",
+  "status.processing.other": "Processing {count} Documents…",
+  "status.tagging.one": "Tagging 1 Document…",
+  "status.tagging.other": "Tagging {count} Documents…",
+  "status.taggingWaiting": "Tagging needs a model",
+  "status.setUp": "Set up",
+  "status.downloading": "Search model: {downloaded} of {total} MB",
+  "status.downloadFailed": "Search model download failed",
+  "status.modelFailed": "Search model couldn't start",
+  "status.rebuilding": "Rebuilding search: {done} of {total}",
+  "status.searchError": "Search can't use {provider}",
+  "status.retry": "Retry",
+  "status.skipped.one": "Skipped 1 file",
+  "status.skipped.other": "Skipped {count} files",
+
   "embedding.status.waiting": "Waiting for the model",
   "embedding.status.embedding": "Embedding… {percent}%",
   "embedding.model.downloading": "Downloading the search model: {downloaded} of {total} MB",
@@ -168,7 +194,6 @@ export const en = {
   "embedding.model.failure.network": "check your internet connection",
   "embedding.model.failure.integrity": "the downloaded file was damaged",
   "embedding.model.failure.storage": "it couldn't be saved to the data folder",
-  "embedding.model.retry": "Try again",
 
   "embeddingProviders.settings.title": "Document search",
   "embeddingProviders.settings.body":
@@ -190,6 +215,8 @@ export const en = {
   "embeddingProviders.form.label": "Embedding model",
   "embeddingProviders.form.localOnly":
     "Local mode is on, so only models on this computer can be chosen.",
+  "embeddingProviders.form.localOnlyServer":
+    'Local mode is on, and this server isn\'t on this computer: use one at localhost or 127.0.0.1, or turn off "Keep everything on this computer" above.',
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -228,6 +255,8 @@ export const en = {
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
   "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.localOnly":
+    'Local mode is on: reranking would send search matches to Cohere or Voyage AI. Turn off "Keep everything on this computer" to set it up.',
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Stop reranking",
   "rerank.kind.cohere": "Cohere",
@@ -237,21 +266,19 @@ export const en = {
   "rerank.form.save": "Use for reranking",
 
   "folders.label": "Folders",
-  "folders.all": "All Documents",
-  "folders.expand": "Expand {name}",
-  "folders.collapse": "Collapse {name}",
-  "folders.empty": "No Documents in this Folder.",
 
   "tags.title": "Tags",
-  "tags.manage": "Manage Tags",
   "tags.filter.label": "Filter by Tag",
+  "tags.filter.title": "Show only Documents tagged",
+  "tags.filter.active": "Tagged {tag}",
+  "tags.filter.clear": "Show all Documents",
   "tags.filter.empty": "No Documents here have this Tag.",
   "tags.chip.automatic": "{tag}: added automatically",
   "tags.chip.user": "{tag}: added by you",
-  "tags.chip.remove": "Remove {tag} from {name}",
   "tags.menu.open": "Tags of {name}",
   "tags.menu.title": "Tags",
   "tags.menu.none": "No Tags yet.",
+  "tags.menu.confirm": "Confirm {tag}",
   "tags.menu.retag": "Re-tag automatically",
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
@@ -280,7 +307,6 @@ export const en = {
 
   "jev.waiting.notice":
     "Automatic tagging is waiting for a model. Your Documents are tagged as soon as one is set up.",
-  "jev.waiting.setUp": "Set up a model",
   "jev.chip.needsReview": "needs review",
   "jev.chip.likely": "{tag}: added automatically, {percent}% likely",
   "jev.chip.review":
@@ -314,13 +340,24 @@ export const en = {
   "settings.language.system": "Same as system",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
-  "settings.done": "Done",
+  "settings.close": "Close Settings",
+  "settings.about.title": "About",
+  "settings.about.body": "IncarnaMind is open source, under the Apache 2.0 licence.",
+  "settings.about.repository": "IncarnaMind on GitHub",
 
-  "providers.setup.title": "Choose how Questions are answered",
+  "providers.setup.title": "Where should Answers come from?",
   "providers.setup.body":
-    "Answers come from an AI model you choose. Notes and Documents work without one, so you can also do this later in Settings.",
-  "providers.setup.orApiKey": "Or use an API key",
+    "Asking Questions needs a chat model. Notes and Documents work without one, and you can change this later in Settings.",
   "providers.setup.later": "Set up later",
+  "providers.choice.label": "Chat model",
+  "providers.choice.local": "Stays on this computer",
+  "providers.choice.apiKey": "An API key",
+  "providers.choice.apiKey.body":
+    "OpenAI, Anthropic, Google, or an OpenAI-compatible server. Your Question and the Passages found for it are sent to that service.",
+  "providers.choice.chatgpt.body":
+    "Uses your ChatGPT plan instead of an API key. You turn it on in Settings, under Chat model.",
+  "providers.choice.experimental": "Experimental",
+  "providers.choice.continue": "Continue in Settings",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -381,7 +418,7 @@ export const en = {
 
   "providers.settings.title": "Chat model",
   "providers.settings.none": "No chat model is set up yet.",
-  "providers.settings.provider": "Provider: ",
+  "providers.settings.provider": "Provider",
   "providers.settings.local": "on this computer",
   "providers.settings.defaultModel": "Default model",
   "providers.settings.saveModel": "Save",
@@ -474,7 +511,8 @@ export const en = {
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
     "These send your content to a service outside this computer. Nothing is sent on one until you allow it.",
-  "privacy.flows.service": "To {service}",
+  "privacy.flows.service": "to {service}",
+  "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
   "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
   "privacy.flows.decided": "{status} on {date}",
@@ -764,6 +802,38 @@ export const en = {
   "error.startup.title": "IncarnaMind couldn't start",
   "error.startup.body": "Your data folder couldn't be opened.\n\n{message}",
 
+  // The application menu (src/main/menu.ts).
+  "menu.about": "About IncarnaMind",
+  "menu.settings": "Settings…",
+  "menu.services": "Services",
+  "menu.hide": "Hide IncarnaMind",
+  "menu.hideOthers": "Hide Others",
+  "menu.showAll": "Show All",
+  "menu.quit": "Quit IncarnaMind",
+  "menu.file": "File",
+  "menu.newMind": "New Mind",
+  "menu.closeTab": "Close Tab",
+  "menu.closeWindow": "Close Window",
+  "menu.edit": "Edit",
+  "menu.undo": "Undo",
+  "menu.redo": "Redo",
+  "menu.cut": "Cut",
+  "menu.copy": "Copy",
+  "menu.paste": "Paste",
+  "menu.selectAll": "Select All",
+  "menu.view": "View",
+  "menu.actualSize": "Actual Size",
+  "menu.zoomIn": "Zoom In",
+  "menu.zoomOut": "Zoom Out",
+  "menu.fullScreen": "Toggle Full Screen",
+  "menu.reload": "Reload",
+  "menu.forceReload": "Force Reload",
+  "menu.devTools": "Toggle Developer Tools",
+  "menu.window": "Window",
+  "menu.minimize": "Minimize",
+  "menu.zoom": "Zoom",
+  "menu.front": "Bring All to Front",
+
   "update.available.message": "IncarnaMind {version} is available",
   "update.available.detail":
     "This copy of IncarnaMind can't update itself. Download the new version and use it to replace this one.",
@@ -786,6 +856,7 @@ export const en = {
   "connectors.state.error": "Error",
   "connectors.toggle": "Use {name}",
   "connectors.remove": "Remove {name}",
+  "connectors.edit": "Change {name}",
   "connectors.retry": "Try again",
   "connectors.restarting": "Restarting…",
   "connectors.details": "Details",
@@ -809,6 +880,7 @@ export const en = {
   "connectors.form.commandHint":
     "The program that starts the MCP server, e.g. npx or uvx. It's found the way your terminal finds it.",
   "connectors.form.args": "Arguments, one per line",
+  "connectors.form.argsMoved": "The rest of what you pasted went into Arguments, one per line.",
   "connectors.form.env": "Environment variables, NAME=value, one per line",
   "connectors.form.envHint":
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
@@ -816,6 +888,9 @@ export const en = {
   "connectors.form.add": "Add Connector",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
+  "connectors.form.save": "Save and restart",
+  "connectors.form.saving": "Saving…",
+  "connectors.form.envKeep": "Leave empty to keep the saved values of {names}.",
   "connectors.import.body":
     "Paste the mcpServers JSON from Claude Desktop (claude_desktop_config.json) or Cursor (mcp.json), or choose the file. You'll see what will be added first.",
   "connectors.import.json": "Configuration",

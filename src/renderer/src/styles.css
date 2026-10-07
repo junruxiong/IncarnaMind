@@ -29,6 +29,10 @@
   --color-rule-strong: #d5d8dd;
   --color-hover: #ebedf0;
   --color-chip: #eef0f3;
+  /* The Mind tab strip, a step darker than the frame; an inactive tab's hover; the dividers between tabs. */
+  --color-tab-strip: #e6e8eb;
+  --color-tab-hover: #d9dce1;
+  --color-tab-divider: #c3c7ce;
   /* Text, darkest first. ink-meta passes 4.5:1 on sheet and frame. */
   --color-ink: #17191c;
   --color-ink-answer: #3b4048;
@@ -85,16 +89,19 @@
   --shadow-custom-unfocus: 0 0 10px rgba(0, 0, 0, 0.12);
 }
 
-/* The old "New Mind" hover effect: gradient text. */
-@utility text-gradient-mind {
-  background-image: linear-gradient(
-    to right,
-    var(--color-indigo-500) 10%,
-    var(--color-sky-500) 30%,
-    var(--color-emerald-500) 90%
-  );
-  background-clip: text;
-  color: transparent;
+/*
+ * The app's chrome (sidebar, pane headers, dialogs, Settings), from the
+ * approved mockups: values they use that DESIGN.md's palette doesn't name.
+ */
+@theme {
+  /* Names in the sidebar and pane titles, secondary buttons' text, and a primary button's hover. */
+  --color-ink-strong: #2e3238;
+  /* A switch that is off. */
+  --color-control-off: #c9cdd3;
+  /* A chosen row in a list of choices, and its hover. */
+  --color-wash: #f7f8fa;
+  /* Behind a dialog. */
+  --color-scrim: rgb(23 25 28 / 0.32);
 }
 
 @utility hide-scrollbar {
@@ -112,21 +119,387 @@
     height: 100%;
   }
 
+  /* Panes sit on the sheet; the sidebar paints its own frame. */
   body {
-    @apply bg-gray-200 font-sans text-gray-800 antialiased;
+    @apply bg-sheet font-sans text-ink antialiased;
+  }
+
+  /* Reached by keyboard, a radio or checkbox gets the blue focus outline, not the system's. */
+  input:is([type="radio"], [type="checkbox"]):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
 
 @layer components {
-  /* The pane divider's grip: three dots stacked vertically. */
-  .three-dots::before {
-    content: "•\A•\A•";
-    white-space: pre;
-    text-align: center;
-    line-height: 0.8;
+  /*
+   * The divider between panes: a 1px rule, with a wider invisible strip to
+   * grab. Its grip of three dots shows only while it is pointed at, dragged
+   * or focused.
+   */
+  .pane-divider {
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    align-self: stretch;
+    width: 1px;
+    height: auto;
+    margin: 0;
+    border: 0;
+    background: var(--color-rule);
+    cursor: col-resize;
+    outline: none;
+    /* An <hr> clips by default, which would cut the grab strip and the grip down to the 1px rule. */
+    overflow: visible;
+    transition: background-color 80ms ease-out;
+
+    /* The strip to grab: 4px either side of the rule. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0 -4px;
+    }
+
+    &::before {
+      content: "•\A•\A•";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
+      padding: 3px 1px;
+      border-radius: 4px;
+      background: var(--color-sheet);
+      box-shadow: 0 0 0 1px var(--color-rule-strong);
+      color: var(--color-ink-meta);
+      font-size: 7px;
+      line-height: 0.8;
+      text-align: center;
+      white-space: pre;
+      opacity: 0;
+      transition: opacity 80ms ease-out;
+    }
+
+    &:hover,
+    &:active {
+      background: var(--color-rule-strong);
+    }
+    &:hover::before,
+    &:active::before,
+    &:focus-visible::before {
+      opacity: 1;
+    }
+    &:focus-visible {
+      background: var(--color-accent);
+    }
+  }
+
+  /*
+   * A switch: a native checkbox (role="switch"), so it is checked, focused
+   * and labelled like one. The knob is a background, moved when checked.
+   */
+  .switch {
+    appearance: none;
+    flex-shrink: 0;
+    width: 36px;
+    height: 20px;
+    margin: 0;
+    border-radius: 9999px;
+    background: var(--color-control-off)
+      radial-gradient(circle at center, var(--color-sheet) 7.5px, transparent 8px) no-repeat;
+    background-size: 20px 20px;
+    background-position: 0 0;
+    cursor: pointer;
+    transition:
+      background-color 120ms ease-out,
+      background-position 120ms ease-out;
+
+    &:checked {
+      background-color: var(--color-ink);
+      background-position: 16px 0;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    &:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pane-divider,
+    .pane-divider::before,
+    .switch {
+      transition: none;
+    }
+  }
+
+  /*
+   * The Mind tabs (DESIGN.md, Components: Mind tabs), the whole of their look:
+   * MindTabs.tsx only sets these classes and data-* attributes, so the look
+   * changes here alone. Chrome-style (option A): a 44px strip in tab-strip,
+   * a step darker than the frame, with no bottom rule. 34px tabs sit on its
+   * bottom edge, 220px wide, shrinking equally to 64px. The shown tab
+   * (aria-selected) is the sheet with radius 10 at the top and concave feet
+   * flaring into the Mind below; the others hold a 28px inner shape that
+   * takes tab-hover when pointed at.
+   */
+  .mind-tabs {
+    display: flex;
+    flex-shrink: 0;
+    align-items: flex-end;
+    height: 44px;
+    padding-right: 8px;
+    background: var(--color-tab-strip);
+  }
+  /* The strip's 16px left padding is the list's, so the first tab's foot isn't clipped. */
+  .mind-tabs-list {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: flex-end;
+    align-self: stretch;
+    min-width: 0;
+    padding: 0 10px 0 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+  /* Fades out on a side where tabs are scrolled out of sight. */
+  .mind-tabs-list[data-hidden-before] {
+    mask-image: linear-gradient(to right, transparent, #000 32px);
+  }
+  .mind-tabs-list[data-hidden-after] {
+    mask-image: linear-gradient(to left, transparent, #000 32px);
+  }
+  .mind-tabs-list[data-hidden-before][data-hidden-after] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 32px,
+      #000 calc(100% - 32px),
+      transparent
+    );
+  }
+  .mind-tab {
+    position: relative;
+    display: flex;
+    flex: 0 1 220px;
+    align-items: center;
+    /* As well as the basis: the strip sizes to its tabs' widths, which would otherwise be their text's. */
+    width: 220px;
+    min-width: 64px;
+    height: 34px;
+    color: var(--color-ink-secondary);
+    font-size: 13px;
+    line-height: 20px;
+    cursor: default;
+    outline: none;
+    user-select: none;
+
+    &[aria-selected="true"] {
+      z-index: 1;
+      border-radius: 10px 10px 0 0;
+      background: var(--color-sheet);
+      color: var(--color-ink);
+      font-weight: 600;
+    }
+    /* A 1px divider on a tab's right edge; hidden by the tab pointed at, on both its sides. */
+    &[data-divider]::after {
+      content: "";
+      position: absolute;
+      top: 9px;
+      right: 0;
+      bottom: 9px;
+      width: 1px;
+      background: var(--color-tab-divider);
+    }
+    &[data-divider]:is(:hover, :has(+ .mind-tab:hover))::after {
+      display: none;
+    }
+    &[data-dragging] {
+      opacity: 0.5;
+    }
+    /* Where a dragged tab will land. */
+    &[data-drop]::before {
+      content: "";
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--color-accent);
+    }
+    &[data-drop="before"]::before {
+      left: -1px;
+    }
+    &[data-drop="after"]::before {
+      right: -1px;
+    }
+  }
+  /*
+   * The content of a tab: inset 4px at the sides and 3px from the bottom on
+   * the tabs not shown (a 28px shape with radius 8), the whole tab on the shown one.
+   */
+  .mind-tab-inner {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 28px;
+    margin: 0 4px 3px;
+    padding: 0 4px 0 8px;
+    border-radius: 8px;
+  }
+  .mind-tab[aria-selected="true"] .mind-tab-inner {
+    align-self: stretch;
+    height: auto;
+    margin: 0;
+    padding: 0 8px 0 12px;
+    border-radius: 10px 10px 0 0;
+  }
+  /* The tab is the keyboard stop; its shape shows the focus. */
+  .mind-tab:focus-visible .mind-tab-inner {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+  .mind-tab:not([aria-selected="true"]):hover .mind-tab-inner {
+    background: var(--color-tab-hover);
+  }
+  /* The shown tab's feet: 10px concave curves outside its bottom corners, in the sheet. */
+  .mind-tab-foot {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    width: 10px;
+    height: 10px;
+
+    &[data-side="left"] {
+      left: -10px;
+      background: radial-gradient(circle at 0 0, transparent 9.5px, var(--color-sheet) 10px);
+    }
+    &[data-side="right"] {
+      right: -10px;
+      background: radial-gradient(circle at 100% 0, transparent 9.5px, var(--color-sheet) 10px);
+    }
+  }
+  .mind-tab[aria-selected="true"] .mind-tab-foot {
     display: block;
-    font-size: 7px;
-    color: var(--color-gray-500);
+  }
+  /* The Mind icon, or in its place what the Mind is busy with. */
+  .mind-tab-icon {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    width: 14px;
+    color: var(--color-ink-meta);
+
+    > svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+  .mind-tab-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+
+    &[data-status="writing"] {
+      background: var(--color-accent);
+      animation: mind-tab-pulse 1.4s ease-in-out infinite;
+    }
+    &[data-status="waiting-for-approval"] {
+      background: var(--color-attention);
+    }
+  }
+  .mind-tab-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* ✕, round and 18px: always on the shown tab; on the others while pointed at or focused. */
+  .mind-tab-close {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 9999px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    > svg {
+      width: 10px;
+      height: 10px;
+      stroke-width: 2.75;
+    }
+    &:hover {
+      background: var(--color-tab-hover);
+      color: var(--color-ink);
+    }
+  }
+  .mind-tab:is([aria-selected="true"], :hover, :focus-visible) .mind-tab-close {
+    opacity: 1;
+  }
+  /* "+" (28px, round) and Export: ghost buttons on the strip, "+" level with the tabs' inner shapes. */
+  .mind-tabs-new,
+  .mind-tabs-export {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    color: var(--color-ink-strong);
+    outline: none;
+
+    > svg {
+      width: 16px;
+      height: 16px;
+    }
+    &:hover {
+      background: var(--color-tab-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
+  /* 6px from the last tab: the list's 10px end padding (room for a foot) less 4px. */
+  .mind-tabs-new {
+    width: 28px;
+    margin: 0 0 3px -4px;
+    border-radius: 9999px;
+  }
+  .mind-tabs-spacer {
+    flex: 1 1 auto;
+  }
+  .mind-tabs-export {
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 20px;
+  }
+  @keyframes mind-tab-pulse {
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mind-tab-dot[data-status="writing"] {
+      animation: none;
+    }
   }
 
   /*
@@ -184,7 +557,15 @@
     --handle-gap: 28px;
     /* Clear of the Question band, which takes 52px of the margin. */
     --handle-gap-question: 56px;
+    /*
+     * The editor's box reaches over the left margin, past the block handle,
+     * while its text keeps the edge: Tiptap hides the handle once the pointer
+     * leaves the editor, so the pointer has to stay in it all the way there.
+     */
+    --editor-gutter: 80px;
 
+    margin-left: calc(-1 * var(--editor-gutter));
+    padding-left: var(--editor-gutter);
     min-height: 10rem;
     outline: none;
     font-family: var(--font-serif);
@@ -1604,6 +1985,8 @@
     .mind-editor {
       --handle-gap: 2px;
       --handle-gap-question: 2px;
+      /* The whole margin left of the measure. */
+      --editor-gutter: 24px;
     }
     .question-block {
       margin-inline: -12px;

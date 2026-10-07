@@ -39,15 +39,15 @@ export function useFileDrop(onDrop: (files: File[]) => void) {
   };
 }
 
-/** Shown over the window while files are dragged over it. */
+/** Shown over the window while files are dragged over it: blue, as something to act on. */
 export function DropOverlay() {
   const t = useT();
   return (
     <div
       data-testid="drop-overlay"
-      className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-[9px] border-2 border-dashed border-sky-400 bg-sky-50/80"
+      className="pointer-events-none absolute inset-2 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-accent-wash/85"
     >
-      <p className="text-sm font-medium text-sky-700">{t("documents.drop")}</p>
+      <p className="text-ui font-semibold text-accent">{t("documents.drop")}</p>
     </div>
   );
 }

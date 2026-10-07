@@ -26,6 +26,17 @@ const isPaneWidth = (value: unknown): value is number =>
 
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
+/** A Mind's ID, as a tab names it: any short non-blank text (the Mind may be gone since). */
+const isMindId = (value: unknown): value is string =>
+  typeof value === "string" && value.trim() !== "" && value.length <= 200;
+
+/** Open Mind tabs: a list of distinct IDs, at most 100. */
+const isMindIdList = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length <= 100 &&
+  value.every(isMindId) &&
+  new Set(value).size === value.length;
+
 const isNonBlankText = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "" && value.length <= 500;
 
@@ -57,8 +68,11 @@ const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
   defaults: {
-    sidebarWidth: 270,
+    // DESIGN.md: the sidebar is 248px by default.
+    sidebarWidth: 248,
     viewerWidth: 420,
+    openMinds: [],
+    activeMind: null,
     chatSetupDismissed: false,
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
@@ -66,6 +80,8 @@ const deviceScope: Scope<DeviceSettings> = {
   validators: {
     sidebarWidth: isPaneWidth,
     viewerWidth: isPaneWidth,
+    openMinds: isMindIdList,
+    activeMind: (value): value is string | null => value === null || isMindId(value),
     chatSetupDismissed: isBoolean,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,

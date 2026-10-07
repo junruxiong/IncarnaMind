@@ -12,8 +12,29 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import {
+  buttonClass,
+  choiceListClass,
+  compactChoiceRadioClass,
+  compactChoiceRowClass,
+  errorTextClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  hintClass,
+  inputClass,
+  noticeClass,
+  primaryButtonClass,
+  rowButtonsClass,
+  rowStatusClass,
+  rowTextClass,
+  ruledListClass,
+  ruledRow,
+  ruledRowClass,
+  sectionNoteClass,
+  sectionTitleClass,
+} from "../ui";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
-import { buttonClass, inputClass, primaryButtonClass } from "./shared";
+import { useProviderKey } from "./shared";
 
 /**
  * Settings → Reranking: off without a key; with a Cohere or Voyage AI key,
@@ -23,6 +44,8 @@ export function RerankSettingsSection() {
   const t = useT();
   const [rerank, setRerank] = useState<RerankSettings | null>(null);
   const [editing, setEditing] = useState(false);
+  // Every reranking provider is a cloud service.
+  const localOnly = useAppStore((state) => state.embedding?.localOnly === true);
 
   useEffect(() => {
     core.getRerankSettings().then(setRerank, () => undefined);
@@ -40,51 +63,69 @@ export function RerankSettingsSection() {
   if (!rerank) return null;
   const service = rerank.service?.name ?? "";
   return (
-    <section data-testid="rerank-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("rerank.settings.title")}</h3>
-      <p className="text-sm text-gray-600">{t("rerank.settings.body")}</p>
+    <section data-testid="rerank-settings" className="flex flex-col">
+      <h4 className={sectionTitleClass}>{t("rerank.settings.title")}</h4>
+      <p className={sectionNoteClass}>{t("rerank.settings.body")}</p>
 
-      {rerank.enabled && !editing && (
-        <div className="mt-2 flex flex-col gap-2">
-          {rerank.paused && (
-            <p className="rounded-[9px] bg-gray-100 p-2 text-sm text-gray-700">
-              {t("rerank.settings.paused")}
-            </p>
-          )}
-          {!rerank.hasApiKey && (
-            <p className="rounded-[9px] bg-amber-50 p-2 text-sm text-amber-900">
-              {t("rerank.settings.keyMissing", { service })}
-            </p>
-          )}
-          <p className="text-sm">
-            {t("rerank.settings.inUse", { service, model: rerank.modelId ?? "" })}{" "}
-            <span className="text-gray-600">{t("rerank.settings.sends", { service })}</span>
-          </p>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setEditing(true)} className={buttonClass}>
-              {t("rerank.settings.change")}
-            </button>
-            <button
-              type="button"
-              data-testid="rerank-remove"
-              onClick={() => void remove()}
-              className={buttonClass}
-            >
-              {t("rerank.settings.remove")}
-            </button>
+      {!editing && (
+        <div className={ruledListClass}>
+          <div className={rerank.enabled ? ruledRowClass : ruledRow("center", true)}>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              {rerank.enabled ? (
+                <>
+                  <p className="text-ui text-ink">
+                    {t("rerank.settings.inUse", { service, model: rerank.modelId ?? "" })}
+                  </p>
+                  <p className={rowTextClass}>{t("rerank.settings.sends", { service })}</p>
+                  {rerank.paused && (
+                    <p className={`mt-1.5 ${noticeClass}`}>{t("rerank.settings.paused")}</p>
+                  )}
+                  {!rerank.hasApiKey && (
+                    <p className={`mt-1.5 ${noticeClass}`}>
+                      {t("rerank.settings.keyMissing", { service })}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className={rowStatusClass}>{t("privacy.traffic.off")}</p>
+                  {localOnly && (
+                    <p data-testid="rerank-local-only" className={`mt-1.5 ${rowTextClass}`}>
+                      {t("rerank.settings.localOnly")}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className={rowButtonsClass}>
+              {rerank.enabled ? (
+                <>
+                  <button type="button" onClick={() => setEditing(true)} className={buttonClass}>
+                    {t("rerank.settings.change")}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="rerank-remove"
+                    onClick={() => void remove()}
+                    className={buttonClass}
+                  >
+                    {t("rerank.settings.remove")}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="rerank-set-up"
+                  disabled={localOnly}
+                  onClick={() => setEditing(true)}
+                  className={buttonClass}
+                >
+                  {t("rerank.settings.setUp")}
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      )}
-
-      {!rerank.enabled && !editing && (
-        <button
-          type="button"
-          data-testid="rerank-set-up"
-          onClick={() => setEditing(true)}
-          className={`${buttonClass} mt-2`}
-        >
-          {t("rerank.settings.setUp")}
-        </button>
       )}
 
       {editing && (
@@ -114,7 +155,8 @@ function RerankForm({
   const t = useT();
   const id = useId();
   const [kind, setKind] = useState<RerankProviderKind>(current.kind ?? "cohere");
-  const [apiKey, setApiKey] = useState("");
+  const key = useProviderKey();
+  const { apiKey } = key;
   const [model, setModel] = useState(
     current.kind && current.modelId !== DEFAULT_RERANK_MODELS[current.kind]
       ? (current.modelId ?? "")
@@ -148,7 +190,7 @@ function RerankForm({
         setTest(await core.testRerankConnection(input()));
       } else {
         const saved = await core.saveRerankSettings(input());
-        setApiKey("");
+        key.clear();
         onSaved(saved);
       }
     } catch (failure) {
@@ -172,26 +214,24 @@ function RerankForm({
   };
 
   return (
-    <form data-testid="rerank-form" onSubmit={submit} className="mt-3 flex flex-col gap-3">
+    <form data-testid="rerank-form" onSubmit={submit} className="flex flex-col gap-3">
       <fieldset>
-        <legend className="mb-1 text-sm text-gray-600">{t("rerank.form.label")}</legend>
-        <div className="grid grid-cols-2 gap-2">
+        <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("rerank.form.label")}</legend>
+        <div className={choiceListClass}>
           {rerankProviderKinds.map((option) => (
-            <label
-              key={option}
-              className={`flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-sm ${
-                kind === option ? "border-gray-800" : "border-gray-300 hover:bg-gray-50"
-              }`}
-            >
+            <label key={option} className={compactChoiceRowClass}>
               <input
                 type="radio"
                 name={`${id}-kind`}
                 value={option}
                 checked={kind === option}
                 onChange={() => {
+                  // A key typed for one provider is never sent to another.
+                  if (option !== kind) key.clear();
                   setKind(option);
                   setTest(null);
                 }}
+                className={compactChoiceRadioClass}
               />
               {t(`rerank.kind.${option}`)}
             </label>
@@ -199,28 +239,24 @@ function RerankForm({
         </div>
       </fieldset>
 
-      <label className="text-sm text-gray-600">
+      <label className={fieldLabelClass}>
         {t("providers.form.apiKey")}
         <input
           type="password"
           value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
+          onChange={(event) => key.type(event.target.value)}
           autoComplete="off"
           spellCheck={false}
           className={inputClass}
         />
-        {keySaved && (
-          <span className="mt-1 block text-xs text-gray-500">
-            {t("providers.form.apiKeySaved")}
-          </span>
-        )}
+        {keySaved && <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>}
       </label>
 
       {secretStorage && !secretStorage.canSave && (
         <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
 
-      <label className="text-sm text-gray-600">
+      <label className={fieldLabelClass}>
         {t("rerank.form.model")}
         <input
           value={model}
@@ -233,6 +269,13 @@ function RerankForm({
 
       <div className="flex flex-wrap items-center gap-2">
         <button
+          type="submit"
+          disabled={!hasKey || keyBlocked || busy !== null}
+          className={primaryButtonClass}
+        >
+          {busy === "saving" ? t("providers.form.saving") : t("rerank.form.save")}
+        </button>
+        <button
           type="button"
           disabled={!hasKey || busy !== null}
           onClick={() => void run("testing")}
@@ -240,21 +283,14 @@ function RerankForm({
         >
           {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
         </button>
-        <button
-          type="submit"
-          disabled={!hasKey || keyBlocked || busy !== null}
-          className={primaryButtonClass}
-        >
-          {busy === "saving" ? t("providers.form.saving") : t("rerank.form.save")}
-        </button>
-        <button type="button" onClick={onCancel} className={buttonClass}>
+        <button type="button" onClick={onCancel} className={ghostButtonClass}>
           {t("providers.settings.cancel")}
         </button>
       </div>
 
-      {test && <TestResult result={test} />}
+      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
       {error && (
-        <p role="alert" className="text-sm break-words text-red-700">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}

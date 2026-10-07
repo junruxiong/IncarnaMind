@@ -10,8 +10,23 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import {
+  buttonClass,
+  errorTextClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  hintClass,
+  inputClass,
+  noticeClass,
+  primaryButtonClass,
+  rowButtonsClass,
+  rowTextClass,
+  ruledListClass,
+  ruledRowClass,
+  sectionNoteClass,
+  sectionTitleClass,
+} from "../ui";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
-import { buttonClass, inputClass, primaryButtonClass } from "./shared";
 
 /** TypeSafe's hosted API, shown as the server's placeholder. */
 const HOSTED_URL = "https://api.typesafe.ai";
@@ -43,48 +58,50 @@ export function JevSettingsSection() {
 
   if (!jev) return null;
   return (
-    <section data-testid="jev-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("jev.settings.title")}</h3>
-      <p className="text-sm text-gray-600">{t("jev.settings.body")}</p>
+    <section data-testid="jev-settings" className="flex flex-col">
+      <h4 className={sectionTitleClass}>{t("jev.settings.title")}</h4>
+      <p className={sectionNoteClass}>{t("jev.settings.body")}</p>
 
       {jev.enabled && !editing && (
-        <div className="mt-2 flex flex-col gap-2">
-          {!jev.hasApiKey && (
-            <p className="rounded-[9px] bg-amber-50 p-2 text-sm text-amber-900">
-              {t("jev.settings.keyMissing")}
-            </p>
-          )}
-          <p className="text-sm">
-            {t("jev.settings.inUse")}{" "}
-            <span className="text-gray-600">
-              {t("jev.settings.server", { server: jev.endpoint ?? t("jev.settings.hosted") })}
-            </span>
-          </p>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setEditing(true)} className={buttonClass}>
-              {t("jev.settings.change")}
-            </button>
-            <button
-              type="button"
-              data-testid="jev-remove"
-              onClick={() => void remove()}
-              className={buttonClass}
-            >
-              {t("jev.settings.remove")}
-            </button>
+        <div className={ruledListClass}>
+          <div className={ruledRowClass}>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p className="text-ui text-ink">{t("jev.settings.inUse")}</p>
+              <p className={`${rowTextClass} break-words`}>
+                {t("jev.settings.server", { server: jev.endpoint ?? t("jev.settings.hosted") })}
+              </p>
+              {!jev.hasApiKey && (
+                <p className={`mt-1.5 ${noticeClass}`}>{t("jev.settings.keyMissing")}</p>
+              )}
+            </div>
+            <div className={rowButtonsClass}>
+              <button type="button" onClick={() => setEditing(true)} className={buttonClass}>
+                {t("jev.settings.change")}
+              </button>
+              <button
+                type="button"
+                data-testid="jev-remove"
+                onClick={() => void remove()}
+                className={buttonClass}
+              >
+                {t("jev.settings.remove")}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {!jev.enabled && !editing && (
-        <button
-          type="button"
-          data-testid="jev-set-up"
-          onClick={() => setEditing(true)}
-          className={`${buttonClass} mt-2`}
-        >
-          {t("jev.settings.setUp")}
-        </button>
+        <div>
+          <button
+            type="button"
+            data-testid="jev-set-up"
+            onClick={() => setEditing(true)}
+            className={buttonClass}
+          >
+            {t("jev.settings.setUp")}
+          </button>
+        </div>
       )}
 
       {editing && (
@@ -172,7 +189,7 @@ function JevForm({
   };
 
   const percentInput = (value: number, onChange: (next: number) => void, label: string) => (
-    <label className="flex-1 text-sm text-gray-600">
+    <label className={`flex-1 ${fieldLabelClass}`}>
       {label}
       <input
         type="number"
@@ -188,8 +205,8 @@ function JevForm({
   );
 
   return (
-    <form data-testid="jev-form" onSubmit={submit} className="mt-3 flex flex-col gap-3">
-      <label className="text-sm text-gray-600">
+    <form data-testid="jev-form" onSubmit={submit} className="flex flex-col gap-3">
+      <label className={fieldLabelClass}>
         {t("jev.form.apiKey")}
         <input
           type="password"
@@ -199,21 +216,19 @@ function JevForm({
           spellCheck={false}
           className={inputClass}
         />
-        {current.hasApiKey && (
-          <span className="mt-1 block text-xs text-gray-500">
-            {t("providers.form.apiKeySaved")}
-          </span>
-        )}
+        {current.hasApiKey && <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>}
       </label>
 
       {secretStorage && !secretStorage.canSave && (
         <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
 
-      <details className="text-sm text-gray-600">
-        <summary className="cursor-pointer select-none">{t("jev.form.advanced")}</summary>
+      <details className="text-[13px] leading-5 text-ink-secondary">
+        <summary className="cursor-pointer select-none hover:text-ink">
+          {t("jev.form.advanced")}
+        </summary>
         <div className="mt-2 flex flex-col gap-3">
-          <label>
+          <label className={fieldLabelClass}>
             {t("jev.form.endpoint")}
             <input
               type="url"
@@ -223,9 +238,9 @@ function JevForm({
               spellCheck={false}
               className={inputClass}
             />
-            <span className="mt-1 block text-xs text-gray-500">{t("jev.form.endpointHint")}</span>
+            <span className={hintClass}>{t("jev.form.endpointHint")}</span>
           </label>
-          <label>
+          <label className={fieldLabelClass}>
             {t("jev.form.model")}
             <input
               value={model}
@@ -240,12 +255,19 @@ function JevForm({
               {percentInput(low, setLow, t("jev.form.reviewFrom"))}
               {percentInput(high, setHigh, t("jev.form.reviewTo"))}
             </div>
-            <span className="mt-1 block text-xs text-gray-500">{t("jev.form.reviewHint")}</span>
+            <span className={hintClass}>{t("jev.form.reviewHint")}</span>
           </div>
         </div>
       </details>
 
       <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          disabled={!hasKey || !bandValid || keyBlocked || busy !== null}
+          className={primaryButtonClass}
+        >
+          {busy === "saving" ? t("providers.form.saving") : t("jev.form.save")}
+        </button>
         <button
           type="button"
           disabled={!hasKey || busy !== null}
@@ -254,21 +276,14 @@ function JevForm({
         >
           {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
         </button>
-        <button
-          type="submit"
-          disabled={!hasKey || !bandValid || keyBlocked || busy !== null}
-          className={primaryButtonClass}
-        >
-          {busy === "saving" ? t("providers.form.saving") : t("jev.form.save")}
-        </button>
-        <button type="button" onClick={onCancel} className={buttonClass}>
+        <button type="button" onClick={onCancel} className={ghostButtonClass}>
           {t("providers.settings.cancel")}
         </button>
       </div>
 
-      {test && <TestResult result={test} />}
+      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}
