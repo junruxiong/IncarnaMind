@@ -66,10 +66,12 @@ export interface FileRow {
   linked_folder_id: string | null;
   folder_id: string | null;
   status: string;
+  /** Unless "failed": the latest version read failed, and this is the last good one. */
+  failure_reason: string | null;
 }
 
 const FILE_COLUMNS = `id, path, name, kind, content_hash, size, file_mtime_ms, file_status,
-  linked_folder_id, folder_id, status`;
+  linked_folder_id, folder_id, status, failure_reason`;
 
 interface LinkedFolderRow {
   id: string;
@@ -502,15 +504,26 @@ export function createLibrary(options: LibraryOptions) {
     const current = documentById(row.id);
     if (!current || current.path !== row.path) return true; // removed or moved meanwhile
     const newVersion = hashed.contentHash !== current.content_hash;
+    // Put back as the version indexed, after a version that couldn't be read: nothing failed now.
+    const recovered = !newVersion && current.status !== "failed" && current.failure_reason !== null;
     db.run(
       `UPDATE documents SET size = ?, file_mtime_ms = ?, file_status = 'available',
          linked_folder_id = ?, folder_id = ?, updated_at = ?
        WHERE id = ?`,
       [hashed.size, file.mtimeMs, place.linkedFolderId, place.folderId, now(), row.id],
     );
+    if (recovered) {
+      db.run(
+        `UPDATE documents SET failure_reason = NULL, failure_message = NULL
+         WHERE id = ? AND status <> 'failed'`,
+        [row.id],
+      );
+    }
     // Only what the UI shows is announced: a modified time alone isn't. (A new
     // version is announced as it is queued.)
-    if (placeChanged || current.file_status !== "available") changes.announced.add(row.id);
+    if (placeChanged || recovered || current.file_status !== "available") {
+      changes.announced.add(row.id);
+    }
     if (placeChanged) noteMoved(row, place, changes);
     // A new version is processed; its text replaces the old one's in search once indexed.
     if (newVersion || current.status === "queued") hooks.process(row.id);
