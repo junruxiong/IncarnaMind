@@ -30,6 +30,7 @@ import { searchScopeOf } from "../../shared/searchScope";
 import {
   ANSWER_BLOCK,
   type AnswerAttributes,
+  type AnswerPhase,
   type AnswerToolCall,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
@@ -254,6 +255,9 @@ function setAttributes(element: Y.XmlElement, attributes: Partial<AnswerAttribut
     else element.setAttribute(key, value as any);
   }
 }
+
+/** How often, while a local model loads, Ollama is asked whether it is ready. */
+const LOAD_POLL_MS = 1_000;
 
 const CITING_ORDER: readonly CitationSupport[] = ["tools", "structured-output", "none"];
 
@@ -696,6 +700,38 @@ export function createAnswers(options: AnswersOptions) {
               }),
             }
           : null;
+      // The phase the meta line shows: searching, the model loading (a local model, until
+      // Ollama has it loaded or it starts to answer), or writing.
+      let activity: Exclude<AnswerPhase, "loading"> = "writing";
+      let loading = false;
+      let responded = false;
+      let shown: AnswerPhase | null = null;
+      const showPhase = () => {
+        const phase: AnswerPhase =
+          activity === "searching" ? activity : loading && !responded ? "loading" : "writing";
+        if (finished || phase === shown) return;
+        shown = phase;
+        events.emit("answer.phase", { mindId, answerId, phase });
+      };
+      const watchLoading = async (loaded: () => Promise<boolean | null>) => {
+        for (let first = true; !finished && !responded; first = false) {
+          const ready = await loaded().catch(() => null);
+          if (finished || responded) return;
+          if (ready !== false) {
+            loading = false;
+            showPhase();
+            return;
+          }
+          if (first) {
+            loading = true;
+            showPhase();
+          }
+          await new Promise((resolve) => setTimeout(resolve, LOAD_POLL_MS).unref?.());
+        }
+      };
+      // Until a phase is known, the meta line says "Writing…".
+      if (prepared.loaded) void watchLoading(prepared.loaded);
+
       const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
@@ -733,12 +769,21 @@ export function createAnswers(options: AnswersOptions) {
           case "support":
             support = event.support;
             supportByModel.set(learntKey, event.support);
+            // The model has begun to answer: it is loaded.
+            responded = true;
+            showPhase();
             writeSoon();
+            break;
+          case "phase":
+            activity = event.phase;
+            showPhase();
             break;
           case "markers-placed":
             placedMarkers += event.count;
             break;
           case "text-delta":
+            responded = true;
+            showPhase();
             markdown += event.text;
             events.emit("answer.delta", { mindId, answerId, text: event.text });
             writeSoon();

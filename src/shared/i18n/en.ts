@@ -547,6 +547,9 @@ export const en = {
 
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",
+  "answer.phase.loading": "Loading the model…",
+  "answer.phase.searching": "Searching your Documents…",
+  "answer.phase.writing": "Writing…",
   "answer.status.stopped": "Stopped",
   "answer.stop": "Stop",
   "answer.regenerate": "Regenerate",

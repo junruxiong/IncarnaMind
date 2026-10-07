@@ -51,7 +51,7 @@ import {
   tool,
   UnsupportedFunctionalityError,
 } from "ai";
-import type { CitationSupport, ProviderError } from "../api";
+import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import { classifyProviderError, contextOverflow } from "../providers/providerErrors";
 import { earlierContext } from "./context";
@@ -213,6 +213,8 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
+  /** What the Answer is doing now: searching the Documents, or the model's turn. */
+  | { type: "phase"; phase: Exclude<AnswerPhase, "loading"> }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */
@@ -637,6 +639,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         const query = await searchQuery(request, temperature());
         signal.throwIfAborted();
         const id = "question-search";
+        yield { type: "phase", phase: "searching" };
         yield { type: "tool-call-started", id, tool: SEARCH_TOOL, input: { query } };
         try {
           const result = await request.tools.searchDocuments(query, signal);
@@ -648,6 +651,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
           yield { type: "tool-call-finished", id, ok: false, resultCount: null };
           searched = "The search of the User's Documents failed.";
         }
+        yield { type: "phase", phase: "writing" };
         return searched;
       }
 
@@ -901,6 +905,8 @@ async function* toolLoop(
   let keptText = "";
   let stepTools: string[] = [];
   let produced = false;
+  /** Searches running now: the Answer is "searching" while there are any. */
+  let searching = 0;
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
@@ -923,6 +929,9 @@ async function* toolLoop(
           produced = true;
           stepTools.push(part.toolName);
           const outside = external.get(part.toolName);
+          if (part.toolName === SEARCH_TOOL && searching++ === 0) {
+            yield { type: "phase", phase: "searching" };
+          }
           if (SHOWN_TOOLS.has(part.toolName)) {
             yield {
               type: "tool-call-started",
@@ -950,6 +959,9 @@ async function* toolLoop(
               resultCount: results.get(part.toolCallId) ?? null,
             };
           }
+          if (part.toolName === SEARCH_TOOL && --searching === 0) {
+            yield { type: "phase", phase: "writing" };
+          }
           break;
         case "tool-error":
           if (SHOWN_TOOLS.has(part.toolName) || external.has(part.toolName)) {
@@ -957,6 +969,9 @@ async function* toolLoop(
             // model's; a Connector's failure (or a declined consent) is told to the model.
             if (part.toolName === SEARCH_TOOL && !signal.aborted) console.error(part.error);
             yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
+          }
+          if (part.toolName === SEARCH_TOOL && --searching === 0) {
+            yield { type: "phase", phase: "writing" };
           }
           break;
         case "finish-step": {

@@ -9,6 +9,7 @@ import {
   type SkillScriptApprovalRequest,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { AnswerPhaseText } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
@@ -119,7 +120,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         data-testid="answer-writing"
         className={`answer-writing ${paused ? "answer-writing--waiting" : ""}`}
       >
-        {paused ? t("approvals.answer.waiting") : t("answer.status.streaming")}
+        {paused ? t("approvals.answer.waiting") : <AnswerPhaseText answerId={answerId} />}
       </span>,
     );
   } else if (status === "stopped") {

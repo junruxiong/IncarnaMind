@@ -1100,6 +1100,20 @@ export interface AnswerDelta {
   text: string;
 }
 
+/**
+ * What an Answer being written is doing, for its meta line: "loading", Ollama
+ * is loading the local model; "searching", the User's Documents are being
+ * searched; "writing", the model is at work.
+ */
+export type AnswerPhase = "loading" | "searching" | "writing";
+
+/** An Answer being written moved to another phase. */
+export interface AnswerPhaseEvent {
+  mindId: string;
+  answerId: string;
+  phase: AnswerPhase;
+}
+
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent {
   mindId: string;
@@ -2512,6 +2526,8 @@ export interface CoreEvents {
    * for the evaluation.
    */
   "answer.started": AnswerStarted;
+  /** The Answer is loading its model, searching, or writing: its meta line says which. */
+  "answer.phase": AnswerPhaseEvent;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;
