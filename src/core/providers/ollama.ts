@@ -1,7 +1,8 @@
 /**
  * Ollama's own API, used for local mode: `/api/tags` to detect it and list
- * pulled models, `/api/pull` to download a model with progress. Chat itself
- * goes through Ollama's OpenAI-compatible API (see `./models`).
+ * pulled models, `/api/pull` to download a model with progress. Chat goes
+ * through `/api/chat` (see ./ollamaChat), with settings chosen per model
+ * from `/api/show` (see ./ollamaModels).
  *
  * Pulling a model sends no User content, so it isn't a consented data flow;
  * the Privacy page lists it as traffic without User content.
@@ -16,11 +17,23 @@ export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
 };
 
 /**
- * Small, multilingual (English and Chinese), supports tool calling, and runs on
- * an ordinary laptop. No quality promise until the evaluation runs against
- * local models (design record, "Local mode").
+ * The model one click pulls and selects: the one place the choice is made.
+ * Qwen3.5-4B: Apache-2.0, multilingual (English and Chinese), calls Tools,
+ * and its context needs little memory (only a quarter of its layers use full
+ * attention), so a 16 GB laptop holds a 16k window. It can think, but every
+ * request to it turns thinking off (see ./ollamaModels). Not the bare
+ * "qwen3:4b", which now points to a thinking-only build that takes minutes
+ * per Answer (docs/research/ollama-integration.md). No quality promise until
+ * the evaluation runs against local models (design record, "Local mode").
+ *
+ * Changing it: set `RECOMMENDED_OLLAMA_DOWNLOAD_GB` to its download, and the
+ * size in the "providers.ollama.use" and "providers.ollama.pulling" strings
+ * (a test checks they agree).
  */
-export const RECOMMENDED_OLLAMA_MODEL = "qwen3:4b";
+export const RECOMMENDED_OLLAMA_MODEL = "qwen3.5:4b";
+
+/** Its download in Ollama's library, in GB, as the one-click copy names it. */
+export const RECOMMENDED_OLLAMA_DOWNLOAD_GB = 3.3;
 
 const DETECT_TIMEOUT_MS = 2_000;
 

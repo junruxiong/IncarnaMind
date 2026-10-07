@@ -452,6 +452,7 @@ export const zhCN = {
   "providers.test.network": "无法连接到服务器。请检查地址和网络连接。",
   "providers.test.provider": "服务商返回了错误。",
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
+  "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.unknown": "测试没有成功。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -467,8 +468,8 @@ export const zhCN = {
   "providers.ollama.detected":
     "Ollama 正在本机运行。使用本地模型时，你的问题和文档都不会离开这台电脑。",
   "providers.ollama.notDetected": "如需在本机运行模型，请从 ollama.com 安装并启动 Ollama。",
-  "providers.ollama.use": "使用本地模型（{model}）",
-  "providers.ollama.pulling": "正在下载 {model}…可能需要一些时间。",
+  "providers.ollama.use": "使用本地模型（{model}，3.3 GB）",
+  "providers.ollama.pulling": "正在下载 {model}（3.3 GB）…可能需要一些时间。",
   "providers.ollama.checkAgain": "重新检查",
 
   "providers.readiness.no-provider": "提问需要先设置对话模型。笔记和文档不需要模型也能使用。",
@@ -631,6 +632,10 @@ export const zhCN = {
 
   "answer.label": "回答",
   "answer.status.streaming": "正在回答…",
+  "answer.phase.waiting-for-consent": "等待你允许发送",
+  "answer.phase.loading": "正在加载模型…",
+  "answer.phase.searching": "正在搜索你的文档…",
+  "answer.phase.writing": "正在回答…",
   "answer.status.stopped": "已停止",
   "answer.stop": "停止",
   "answer.regenerate": "重新生成",
@@ -644,6 +649,8 @@ export const zhCN = {
   "answer.error.provider": "服务商出现了问题。请重试，或在问题上换一个模型。",
   "answer.error.consent-declined":
     "没有发送任何内容，因为你选择了不向这个服务发送数据。你可以在设置中允许。",
+  "answer.error.too-long":
+    "这个问题太长：即使不带上方的笔记，也放不进本地模型的上下文窗口。请缩短问题，或在问题上换一个模型。",
   "answer.error.unknown": "这个回答没能生成。请重试。",
   "answer.error.not-signed-in": "你还没有登录 ChatGPT。请在设置中重新登录。",
   "answer.error.plan-limit":

@@ -698,6 +698,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     },
 
     cite,
+
+    hasRecord: (marker) => records.has(marker),
   };
 
   return {

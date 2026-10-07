@@ -477,6 +477,7 @@ export const en = {
   "providers.test.provider": "The provider returned an error.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
+  "providers.test.too-long": "The model's context window is too small for even a short request.",
   "providers.test.unknown": "The test didn't work.",
 
   "providers.secrets.plainText.title": "No keyring is running",
@@ -493,8 +494,8 @@ export const en = {
     "Ollama is running on this computer. With a local model, your Questions and Documents stay on it.",
   "providers.ollama.notDetected":
     "To run models on this computer, install Ollama from ollama.com and start it.",
-  "providers.ollama.use": "Use local models ({model})",
-  "providers.ollama.pulling": "Downloading {model}… This can take a while.",
+  "providers.ollama.use": "Use local models ({model}, 3.3 GB)",
+  "providers.ollama.pulling": "Downloading {model} (3.3 GB)… This can take a while.",
   "providers.ollama.checkAgain": "Check again",
 
   "providers.readiness.no-provider":
@@ -667,6 +668,10 @@ export const en = {
 
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",
+  "answer.phase.waiting-for-consent": "Waiting for your permission to send",
+  "answer.phase.loading": "Loading the model…",
+  "answer.phase.searching": "Searching your Documents…",
+  "answer.phase.writing": "Writing…",
   "answer.status.stopped": "Stopped",
   "answer.stop": "Stop",
   "answer.regenerate": "Regenerate",
@@ -683,6 +688,8 @@ export const en = {
     "The provider ran into a problem. Try again, or pick another model on the Question.",
   "answer.error.consent-declined":
     "Nothing was sent, because you chose not to send data to this service. You can allow it in Settings.",
+  "answer.error.too-long":
+    "This Question is too long for the local model's context window, even without the Notes above it. Shorten it, or pick another model on the Question.",
   "answer.error.unknown": "This Answer couldn't be written. Try again.",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT. Sign in again in Settings.",
   "answer.error.plan-limit":

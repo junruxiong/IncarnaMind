@@ -9,6 +9,7 @@ import {
   type Document,
   type EmbeddingSettings,
   InvalidInputError,
+  RECOMMENDED_OLLAMA_MODEL,
 } from "../../src/core";
 import {
   createMemoryKeychain,
@@ -702,7 +703,7 @@ describe("Local mode", { timeout: 30_000 }, () => {
   });
 
   test("choosing local models with one click turns it on, switching cloud embeddings back too", async () => {
-    const ollama = await startOllamaStub({ models: ["qwen3:4b"] });
+    const ollama = await startOllamaStub({ models: [RECOMMENDED_OLLAMA_MODEL] });
     const { core, dataDir } = await withOpenAi();
     const changed = new Promise<EmbeddingSettings>((resolve) => {
       const stop = core.on("embedding.changed", (settings) => {
