@@ -1,0 +1,759 @@
+import { updateYFragment } from "@tiptap/y-tiptap";
+import type { MockLanguageModelV4 } from "ai/test";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
+import type * as Y from "yjs";
+import type { Core, CoreEvents } from "../../src/core";
+import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
+import { connectToMind, type MindClient } from "../helpers/mindClient";
+import {
+  answerIn,
+  answerText,
+  editMind,
+  heading,
+  note,
+  outline,
+  question,
+  readMind,
+  writeMind,
+} from "../helpers/minds";
+import {
+  controlledModel,
+  failingStreamModel,
+  promptOf,
+  scriptedModels,
+  streamingModel,
+} from "../helpers/models";
+import { startModelListStub, startOllamaStub, unusedLocalUrl } from "../helpers/ollama";
+
+/** A core with a local chat model set up (so no consent is needed), and a Mind with two clients. */
+async function setUp(model: MockLanguageModelV4, dataDir?: string) {
+  const models = scriptedModels(model);
+  const core = startCore(dataDir ?? (await createTempDataFolder()), {
+    createChatModel: models.createChatModel,
+  });
+  const provider = await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  const mind = await core.createMind({ title: "Tides" });
+  const writer = await connectToMind(core, mind.id);
+  const reader = await connectToMind(core, mind.id);
+  return { core, models, provider, mind, writer, reader };
+}
+
+/** Resolves with the next "answer.finished" or "answer.failed" event for this Answer. */
+function answerEnded(core: Core, answerId: string) {
+  return new Promise<
+    | { event: "finished"; payload: CoreEvents["answer.finished"] }
+    | {
+        event: "failed";
+        payload: CoreEvents["answer.failed"];
+      }
+  >((resolve) => {
+    const stops = [
+      core.on("answer.finished", (payload) => {
+        if (payload.answerId !== answerId) return;
+        for (const stop of stops) stop();
+        resolve({ event: "finished", payload });
+      }),
+      core.on("answer.failed", (payload) => {
+        if (payload.answerId !== answerId) return;
+        for (const stop of stops) stop();
+        resolve({ event: "failed", payload });
+      }),
+    ];
+  });
+}
+
+/** Asks a Question and expects it to be asked; returns the Answer's id. */
+async function ask(core: Core, mindId: string, questionId: string): Promise<string> {
+  const result = await core.askQuestion({ mindId, questionId });
+  if (!result.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(result)}`);
+  return result.answerId;
+}
+
+/** Asks a Question and waits for its Answer to be complete. */
+async function askAndWait(core: Core, client: MindClient, mindId: string, questionId: string) {
+  await client.settled();
+  const answerId = await ask(core, mindId, questionId);
+  const ended = await answerEnded(core, answerId);
+  expect(ended.event).toBe("finished");
+  return answerId;
+}
+
+describe("Asking a Question", () => {
+  test("a Question in an empty Mind gets an Answer that streams into the Mind, seen by every client", async () => {
+    const controlled = controlledModel();
+    const { core, provider, mind, writer, reader } = await setUp(controlled.model);
+    const events: { name: string; payload: unknown }[] = [];
+    for (const name of ["answer.started", "answer.delta", "answer.finished"] as const) {
+      core.on(name, (payload) => events.push({ name, payload }));
+    }
+
+    const asked = question("What is a Mind?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+
+    // Right away, below the Question: an Answer being written, and a line to go on writing in.
+    expect(outline(reader)).toEqual(["question", "answer:streaming", "paragraph"]);
+    expect(answerIn(reader, answerId).attrs).toMatchObject({
+      questionId: asked.attrs.id,
+      providerId: provider.id,
+      modelId: "local-model",
+      status: "streaming",
+    });
+
+    // The other client sees each part as the model writes it.
+    await controlled.requested();
+    controlled.push("A Mind is ");
+    await vi.waitFor(() => expect(answerText(reader, answerId)).toBe("A Mind is"));
+    expect(answerIn(reader, answerId).attrs.status).toBe("streaming");
+    controlled.push("a notebook.");
+    await vi.waitFor(() => expect(answerText(reader, answerId)).toBe("A Mind is a notebook."));
+
+    const finished = nextEvent(core, "answer.finished");
+    controlled.finish();
+    expect(await finished).toEqual({ mindId: mind.id, answerId, status: "done" });
+    expect(outline(reader)).toEqual(["question", "answer:done", "paragraph"]);
+    expect(answerText(reader, answerId)).toBe("A Mind is a notebook.");
+
+    // The model was given the Question alone, and told how to answer.
+    const prompt = promptOf(controlled.model);
+    expect(prompt.map((message) => message.role)).toEqual(["system", "user"]);
+    expect(prompt[1]?.text).toBe("What is a Mind?");
+
+    // The event stream: started, the deltas in order, finished.
+    expect(events.map((event) => event.name)).toEqual([
+      "answer.started",
+      "answer.delta",
+      "answer.delta",
+      "answer.finished",
+    ]);
+    expect(events[0]?.payload).toEqual({
+      mindId: mind.id,
+      answerId,
+      questionId: asked.attrs.id,
+      model: { providerId: provider.id, modelId: "local-model" },
+    });
+    expect(events.slice(1, 3).map((event) => (event.payload as { text: string }).text)).toEqual([
+      "A Mind is ",
+      "a notebook.",
+    ]);
+  });
+
+  test("the system prompt asks for the Question's language, and to say so when the model doesn't know", async () => {
+    const model = streamingModel("潮汐是由月球引力引起的。");
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("潮汐是怎么形成的？");
+    writeMind(writer, [note("Notes in English about tides."), asked]);
+
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    const system = promptOf(model)[0]?.text ?? "";
+    expect(system).toMatch(/answer in the language the Question is written in/i);
+    expect(system).toMatch(/The Question is written in Chinese/);
+    expect(system).toMatch(/don't know/i);
+    expect(answerText(reader, answerId)).toBe("潮汐是由月球引力引起的。");
+  });
+
+  test("asking a Question with no text is refused, and an unknown Question isn't found", async () => {
+    const { core, mind, writer } = await setUp(streamingModel("Unused."));
+    const empty = question("");
+    writeMind(writer, [empty]);
+    await writer.settled();
+
+    await expect(core.askQuestion({ mindId: mind.id, questionId: empty.attrs.id })).rejects.toThrow(
+      /Write the Question/,
+    );
+    await expect(core.askQuestion({ mindId: mind.id, questionId: "nope" })).rejects.toThrow(
+      /isn't in this Mind/,
+    );
+  });
+});
+
+describe("Question context", () => {
+  test("is every Block above the Question, without switched-off Notes: Notes and Questions from the User, Answers from the model", async () => {
+    const model = streamingModel(["The Moon's gravity pulls the oceans.", "Twice a month."]);
+    const { core, mind, writer } = await setUp(model);
+    const first = question("Why are there tides?");
+    writeMind(writer, [
+      heading(1, "Tides"),
+      note("The Moon matters."),
+      note("Remember to buy milk.", { off: true }),
+      first,
+    ]);
+    await askAndWait(core, writer, mind.id, first.attrs.id);
+
+    const second = question("When are spring tides?");
+    editMind(writer, (blocks) => [
+      ...blocks.filter((block) => !(block.type === "paragraph" && !block.content)),
+      note("Spring tides are the big ones."),
+      second,
+      note("This Note is below the Question."),
+    ]);
+    await askAndWait(core, writer, mind.id, second.attrs.id);
+
+    expect(promptOf(model, 1).slice(1)).toEqual([
+      { role: "user", text: "# Tides\n\nThe Moon matters.\n\nWhy are there tides?" },
+      { role: "assistant", text: "The Moon's gravity pulls the oceans." },
+      { role: "user", text: "Spring tides are the big ones.\n\nWhen are spring tides?" },
+    ]);
+  });
+
+  test("leaves out the oldest content first when it is over the token budget", async () => {
+    const model = streamingModel("Answered.");
+    const { core, mind, writer } = await setUp(model);
+    // 30 Notes of about 500 tokens each: more than the 12k-token budget.
+    const notes = Array.from({ length: 30 }, (_, index) =>
+      note(`Note ${String(index + 1).padStart(2, "0")}: ${"lorem ipsum ".repeat(170)}`),
+    );
+    const asked = question("Summarise my Notes.");
+    writeMind(writer, [...notes, asked]);
+
+    await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    const [, context] = promptOf(model);
+    const text = context?.text ?? "";
+    expect(text.endsWith("Summarise my Notes.")).toBe(true);
+    // About 12k tokens at about four characters each, and the newest Notes are the ones kept.
+    expect(text.length).toBeLessThanOrEqual(12_000 * 4 + 100);
+    expect(text.length).toBeGreaterThan(11_000 * 4);
+    expect(text).toContain("Note 30:");
+    expect(text).toContain("Note 10:");
+    expect(text).not.toContain("Note 01:");
+    const kept = [...text.matchAll(/Note (\d\d):/g)].map((match) => Number(match[1]));
+    expect(kept).toEqual(
+      Array.from({ length: kept.length }, (_, index) => 31 - kept.length + index),
+    );
+  });
+});
+
+describe("Streaming Answers into the Mind", () => {
+  test("Markdown arrives as rich text: headings, lists, code and math, without flickering through raw Markdown", async () => {
+    const markdown = [
+      "## Tidal forces",
+      "",
+      "The **Moon** pulls hardest on the near side, where $F = G\\frac{m_1 m_2}{r^2}$ is largest.",
+      "",
+      "- High tide faces the Moon",
+      "- *Another* one is opposite",
+      "",
+      "```python",
+      "print('tide')",
+      "```",
+      "",
+      "$$",
+      "h(t) = A \\cos(\\omega t)",
+      "$$",
+      "",
+      "See [NOAA](https://oceanservice.noaa.gov) and `tide tables`.",
+    ].join("\n");
+    const model = streamingModel(markdown, { chunkSize: 2, delayMs: 2 });
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("Explain tides.");
+    writeMind(writer, [asked]);
+    await writer.settled();
+
+    // Every state the other client sees while the Answer streams.
+    const seen: { types: string[]; text: string }[] = [];
+    reader.doc.on("afterTransaction", () => {
+      const answer = readMind(reader).maybeChild(1);
+      if (answer?.type.name !== "answer") return;
+      const types: string[] = [];
+      answer.forEach((block) => {
+        types.push(block.type.name);
+      });
+      seen.push({ types, text: answer.textBetween(0, answer.content.size, "\n") });
+    });
+
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    await answerEnded(core, answerId);
+
+    expect(answerIn(reader, answerId).toJSON().content).toEqual([
+      {
+        type: "heading",
+        attrs: { id: expect.any(String), level: 2, includeInContext: null },
+        content: [{ type: "text", text: "Tidal forces" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { id: expect.any(String), includeInContext: null },
+        content: [
+          { type: "text", text: "The " },
+          { type: "text", text: "Moon", marks: [{ type: "bold" }] },
+          { type: "text", text: " pulls hardest on the near side, where " },
+          { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}" } },
+          { type: "text", text: " is largest." },
+        ],
+      },
+      {
+        type: "bulletList",
+        attrs: { id: expect.any(String), includeInContext: null },
+        content: [
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                attrs: { id: expect.any(String), includeInContext: null },
+                content: [{ type: "text", text: "High tide faces the Moon" }],
+              },
+            ],
+          },
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                attrs: { id: expect.any(String), includeInContext: null },
+                content: [
+                  { type: "text", text: "Another", marks: [{ type: "italic" }] },
+                  { type: "text", text: " one is opposite" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "codeBlock",
+        attrs: { id: expect.any(String), language: "python", includeInContext: null },
+        content: [{ type: "text", text: "print('tide')" }],
+      },
+      {
+        type: "blockMath",
+        attrs: {
+          id: expect.any(String),
+          latex: "h(t) = A \\cos(\\omega t)",
+          includeInContext: null,
+        },
+      },
+      {
+        type: "paragraph",
+        attrs: { id: expect.any(String), includeInContext: null },
+        content: [
+          { type: "text", text: "See " },
+          {
+            type: "text",
+            text: "NOAA",
+            marks: [
+              {
+                type: "link",
+                attrs: {
+                  href: "https://oceanservice.noaa.gov",
+                  target: "_blank",
+                  rel: "noopener noreferrer nofollow",
+                  class: null,
+                  title: null,
+                },
+              },
+            ],
+          },
+          { type: "text", text: " and " },
+          { type: "text", text: "tide tables", marks: [{ type: "code" }] },
+          { type: "text", text: "." },
+        ],
+      },
+    ]);
+
+    // While streaming, no Markdown syntax ever showed, and Blocks only grew at the end.
+    const final = seen.at(-1)?.types ?? [];
+    expect(seen.length).toBeGreaterThan(5);
+    for (const state of seen) {
+      expect(state.text).not.toMatch(/\*\*|`|\$|\[NOAA\]|^#|^- /m);
+      expect(state.types.slice(0, -1)).toEqual(final.slice(0, state.types.length - 1));
+      if (state.types.length > 0) expect(final).toContain(state.types.at(-1));
+    }
+  });
+
+  test("the editor reads what the core writes as valid Blocks, and has nothing to rewrite", async () => {
+    const model = streamingModel(
+      "# Title\n\n1. one\n2. **two** and $x^2$\n   - nested\n\n> quoted with [a link](https://example.com)\n\n---\n\n```\nplain code\n```\n\nLine *one*\nLine ~~two~~ `code`",
+    );
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("Show me everything.");
+    writeMind(writer, [note("Before."), asked]);
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    // readMind checks the document against the editor's schema.
+    const answer = answerIn(reader, answerId);
+    const types: string[] = [];
+    answer.forEach((block) => {
+      types.push(block.type.name);
+    });
+    expect(types).toEqual([
+      "heading",
+      "orderedList",
+      "blockquote",
+      "horizontalRule",
+      "codeBlock",
+      "paragraph",
+    ]);
+    expect(answer.child(5).toJSON().content).toEqual([
+      { type: "text", text: "Line " },
+      { type: "text", text: "one", marks: [{ type: "italic" }] },
+      { type: "hardBreak" },
+      { type: "text", text: "Line " },
+      { type: "text", text: "two", marks: [{ type: "strike" }] },
+      { type: "text", text: " " },
+      { type: "text", text: "code", marks: [{ type: "code" }] },
+    ]);
+
+    // Tiptap's Yjs binding would write the Mind exactly as the core did: nothing changes.
+    let rewritten = false;
+    reader.blocks.observeDeep(() => {
+      rewritten = true;
+    });
+    reader.doc.transact(() =>
+      updateYFragment(reader.doc, reader.blocks, readMind(reader), {
+        mapping: new Map(),
+        isOMark: new Map(),
+      }),
+    );
+    expect(rewritten).toBe(false);
+  });
+});
+
+describe("Stopping and regenerating", () => {
+  test("stopping an Answer keeps what was written and marks it stopped", async () => {
+    const controlled = controlledModel();
+    const { core, mind, writer, reader } = await setUp(controlled.model);
+    const asked = question("Tell me a long story.");
+    writeMind(writer, [asked]);
+    await writer.settled();
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    await controlled.requested();
+    controlled.push("Once upon a time, ");
+    await vi.waitFor(() => expect(answerText(reader, answerId)).toBe("Once upon a time,"));
+
+    const finished = nextEvent(core, "answer.finished");
+    await core.stopAnswer({ mindId: mind.id, answerId });
+
+    expect(await finished).toEqual({ mindId: mind.id, answerId, status: "stopped" });
+    expect(controlled.aborted).toBe(true);
+    expect(answerIn(reader, answerId).attrs.status).toBe("stopped");
+    expect(answerText(reader, answerId)).toBe("Once upon a time,");
+
+    // Stopping it again, or a finished Answer, does nothing.
+    await core.stopAnswer({ mindId: mind.id, answerId });
+    expect(answerIn(reader, answerId).attrs.status).toBe("stopped");
+  });
+
+  test("regenerating replaces the Answer in place", async () => {
+    const model = streamingModel(["The first Answer.", "The second Answer."]);
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("Try twice.");
+    writeMind(writer, [asked]);
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+    editMind(writer, (blocks) => [...blocks, note("A Note after the Answer.")]);
+    await writer.settled();
+    expect(outline(reader)).toEqual(["question", "answer:done", "paragraph", "paragraph"]);
+
+    const result = await core.regenerateAnswer({ mindId: mind.id, answerId });
+    expect(result).toEqual({ asked: true, answerId });
+    expect(await answerEnded(core, answerId)).toMatchObject({ event: "finished" });
+
+    // The same Block, in the same place, with the new Answer.
+    expect(outline(reader)).toEqual(["question", "answer:done", "paragraph", "paragraph"]);
+    expect(answerText(reader, answerId)).toBe("The second Answer.");
+    expect(readMind(reader).child(3).textContent).toBe("A Note after the Answer.");
+    // Asked from the same Question context.
+    expect(promptOf(model, 1)).toEqual(promptOf(model, 0));
+  });
+
+  test("an Answer the User has edited is replaced only once they agree", async () => {
+    const model = streamingModel(["Generated text.", "Regenerated text."]);
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("Write something.");
+    writeMind(writer, [asked]);
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    // Answers are ordinary text: the User edits this one.
+    const answerElement = writer.blocks.get(1) as Y.XmlElement;
+    const paragraph = answerElement.get(0) as Y.XmlElement;
+    (paragraph.get(0) as Y.XmlText).insert("Generated text.".length, " My own words.");
+    await writer.settled();
+    expect(answerText(reader, answerId)).toBe("Generated text. My own words.");
+
+    // Regenerating, or asking the Question again, sends nothing and says it has edits.
+    expect(await core.regenerateAnswer({ mindId: mind.id, answerId })).toEqual({
+      asked: false,
+      reason: "edited",
+      answerId,
+    });
+    expect(await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id })).toEqual({
+      asked: false,
+      reason: "edited",
+      answerId,
+    });
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(answerText(reader, answerId)).toBe("Generated text. My own words.");
+
+    // Once the User agrees, it is replaced.
+    const result = await core.regenerateAnswer({ mindId: mind.id, answerId, discardEdits: true });
+    expect(result).toEqual({ asked: true, answerId });
+    await answerEnded(core, answerId);
+    expect(answerText(reader, answerId)).toBe("Regenerated text.");
+  });
+
+  test("an Answer cut off by quitting is kept, marked stopped, after a restart", async () => {
+    const dataDir = await createTempDataFolder();
+    const controlled = controlledModel();
+    const first = await setUp(controlled.model, dataDir);
+    const asked = question("Will this survive?");
+    writeMind(first.writer, [asked]);
+    await first.writer.settled();
+    const answerId = await ask(first.core, first.mind.id, asked.attrs.id);
+    await controlled.requested();
+    controlled.push("Half of an ");
+    await vi.waitFor(() => expect(answerText(first.reader, answerId)).toBe("Half of an"));
+    first.core.close();
+
+    const second = startCore(dataDir);
+    const reader = await connectToMind(second, first.mind.id);
+    expect(outline(reader)).toEqual(["question", "answer:stopped", "paragraph"]);
+    expect(answerText(reader, answerId)).toBe("Half of an");
+  });
+});
+
+describe("When Questions can't be answered", () => {
+  test.each([
+    { status: 401, message: "Incorrect API key provided.", kind: "auth" },
+    { status: 429, message: "Rate limit reached.", kind: "rate-limit" },
+    { status: 500, message: "The server had an error.", kind: "provider" },
+    { status: undefined, message: "Cannot connect to API.", kind: "network" },
+  ])(
+    "a provider error ($kind) fails the Answer, which shows its kind",
+    async ({ status, message, kind }) => {
+      const { core, mind, writer, reader } = await setUp(failingStreamModel(status, message));
+      const asked = question("Will this work?");
+      writeMind(writer, [asked]);
+      await writer.settled();
+
+      const answerId = await ask(core, mind.id, asked.attrs.id);
+      const ended = await answerEnded(core, answerId);
+
+      expect(ended).toEqual({
+        event: "failed",
+        payload: {
+          mindId: mind.id,
+          answerId,
+          error: { kind, message: expect.stringContaining(message) },
+        },
+      });
+      expect(answerIn(reader, answerId).attrs).toMatchObject({
+        status: "failed",
+        errorKind: kind,
+        errorMessage: expect.stringContaining(message),
+      });
+    },
+  );
+
+  test("without a chat model nothing is sent, and asking says why", async () => {
+    const model = streamingModel("Unused.");
+    const models = scriptedModels(model);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: models.createChatModel,
+    });
+    const mind = await core.createMind();
+    const writer = await connectToMind(core, mind.id);
+    const asked = question("Is anyone there?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+
+    expect(await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id })).toEqual({
+      asked: false,
+      reason: "not-ready",
+      readiness: { ready: false, reason: "no-provider" },
+    });
+    expect(outline(writer)).toEqual(["question"]);
+    expect(models.specs).toEqual([]);
+    expect(model.doStreamCalls).toEqual([]);
+  });
+
+  test("an Answer stopped while consent is being asked sends nothing, even once it is given", async () => {
+    const model = streamingModel("Unused.");
+    const models = scriptedModels(model);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: models.createChatModel,
+    });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    const requested = nextEvent(core, "consent.requested");
+    const mind = await core.createMind();
+    const writer = await connectToMind(core, mind.id);
+    const asked = question("Wait for me?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    const request = await requested;
+    await core.stopAnswer({ mindId: mind.id, answerId });
+    expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
+
+    await core.respondToConsent(request.requestId, true);
+    await vi.waitFor(() => expect(models.specs).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(model.doStreamCalls).toEqual([]);
+    expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
+  });
+
+  test("declining to send data to the provider fails the Answer and sends nothing", async () => {
+    const model = streamingModel("Unused.");
+    const models = scriptedModels(model);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: models.createChatModel,
+    });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    core.on("consent.requested", (request) => void core.respondToConsent(request.requestId, false));
+    const mind = await core.createMind();
+    const writer = await connectToMind(core, mind.id);
+    const asked = question("Can I ask this?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    const ended = await answerEnded(core, answerId);
+
+    expect(ended).toMatchObject({
+      event: "failed",
+      payload: { error: { kind: "consent-declined" } },
+    });
+    expect(answerIn(writer, answerId).attrs).toMatchObject({
+      status: "failed",
+      errorKind: "consent-declined",
+    });
+    expect(models.specs).toEqual([]);
+    expect(model.doStreamCalls).toEqual([]);
+
+    // Asking again is refused up front: Questions are off for that service.
+    expect(await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id })).toMatchObject({
+      asked: false,
+      reason: "not-ready",
+      readiness: { ready: false, reason: "consent-declined" },
+    });
+    expect(model.doStreamCalls).toEqual([]);
+  });
+});
+
+describe("Choosing the model", () => {
+  test("a model picked on the Question is used instead of the default, and the Answer records it", async () => {
+    const model = streamingModel("Answered by the picked model.");
+    const { core, models, mind, writer, reader } = await setUp(model);
+    const picked = await core.saveChatProvider({
+      kind: "openai-compatible",
+      baseUrl: "http://127.0.0.1:1234/v1",
+      modelId: "picked-model",
+    });
+    // Saving makes a provider the default: put the default back on Ollama.
+    const ollama = (await core.listChatProviders()).find((provider) => provider.kind === "ollama");
+    await core.updateSettings({
+      user: { chatModel: { providerId: ollama?.id ?? "", modelId: "local-model" } },
+    });
+
+    const asked = question("Which model are you?", {
+      providerId: picked.id,
+      modelId: "picked-model",
+    });
+    writeMind(writer, [asked]);
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    expect(models.specs).toEqual([
+      {
+        kind: "openai-compatible",
+        baseUrl: "http://127.0.0.1:1234/v1",
+        apiKey: null,
+        modelId: "picked-model",
+      },
+    ]);
+    expect(answerIn(reader, answerId).attrs).toMatchObject({
+      providerId: picked.id,
+      modelId: "picked-model",
+    });
+  });
+
+  test("the model picker lists each saved provider's models, the default first", async () => {
+    const core = startCore(await createTempDataFolder());
+    const ollama = await startOllamaStub({
+      models: ["llama3.2:latest", "nomic-embed-text:latest", "qwen3:4b"],
+    });
+    const server = await startModelListStub(["deepseek-reasoner", "deepseek-chat"]);
+    const local = await core.saveChatProvider({
+      kind: "ollama",
+      baseUrl: ollama.baseUrl,
+      modelId: "qwen3:4b",
+    });
+    const compatible = await core.saveChatProvider({
+      kind: "openai-compatible",
+      baseUrl: server.baseUrl,
+      apiKey: "sk-local",
+      modelId: "deepseek-chat",
+    });
+
+    expect(await core.listChatModels()).toEqual([
+      // Embedding models can't answer, so they aren't offered.
+      { provider: local, models: ["llama3.2:latest", "qwen3:4b"] },
+      { provider: compatible, models: ["deepseek-chat", "deepseek-reasoner"] },
+    ]);
+    expect(server.authorizations).toEqual(["Bearer sk-local"]);
+  });
+
+  test("a cloud provider isn't asked for its models before the User allows the chat flow to it", async () => {
+    const core = startCore(await createTempDataFolder());
+    const provider = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-test",
+    });
+    const fetch = vi.spyOn(globalThis, "fetch");
+    onTestFinished(() => fetch.mockRestore());
+
+    expect(await core.listChatModels()).toEqual([{ provider, models: ["gpt-test"] }]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("a provider that can't be reached offers only its default model", async () => {
+    const core = startCore(await createTempDataFolder());
+    const provider = await core.saveChatProvider({
+      kind: "ollama",
+      baseUrl: await unusedLocalUrl(),
+      modelId: "qwen3:4b",
+    });
+
+    expect(await core.listChatModels()).toEqual([{ provider, models: ["qwen3:4b"] }]);
+  });
+});
+
+describe("Editing while an Answer streams", () => {
+  test("deleting an Answer while it is written stops it", async () => {
+    const controlled = controlledModel();
+    const { core, mind, writer, reader } = await setUp(controlled.model);
+    const asked = question("Start something.");
+    writeMind(writer, [asked]);
+    await writer.settled();
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    await controlled.requested();
+    controlled.push("Some text");
+    await vi.waitFor(() => expect(answerText(reader, answerId)).toBe("Some text"));
+
+    const finished = nextEvent(core, "answer.finished");
+    editMind(writer, (blocks) => blocks.filter((block) => block.type !== "answer"));
+    await writer.settled();
+    controlled.push(" and more");
+
+    expect(await finished).toEqual({ mindId: mind.id, answerId, status: "stopped" });
+    expect(controlled.aborted).toBe(true);
+    expect(outline(reader)).toEqual(["question", "paragraph"]);
+  });
+
+  test("an Answer goes right after its Question, wherever that is, and Blocks below stay below", async () => {
+    const model = streamingModel("In the middle.");
+    const { core, mind, writer, reader } = await setUp(model);
+    const asked = question("Where does this go?");
+    writeMind(writer, [note("Above."), asked, note("Below.")]);
+
+    await askAndWait(core, writer, mind.id, asked.attrs.id);
+
+    expect(outline(reader)).toEqual(["paragraph", "question", "answer:done", "paragraph"]);
+    expect(readMind(reader).child(3).textContent).toBe("Below.");
+    // The Note below isn't part of the Question context.
+    expect(promptOf(model).at(-1)?.text).toBe("Above.\n\nWhere does this go?");
+  });
+});

@@ -4,14 +4,18 @@ import { Focus, Placeholder } from "@tiptap/extensions";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
-import { MIND_CONTENT_FIELD } from "../../../core/api";
+import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
 import { core } from "../core";
+import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { FormatMenu } from "../editor/FormatMenu";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindIdContext } from "../editor/mindContext";
 import { noteExtensions } from "../editor/noteSchema";
+import { QuestionView } from "../editor/QuestionView";
+import { askInEditor, QUESTION_SHORTCUT_LABEL, QuestionCommands } from "../editor/questionCommands";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems } from "../editor/slashItems";
 import { useT } from "../i18n";
@@ -66,7 +70,7 @@ function useMindDocument(mindId: string): Y.Doc | null {
 /** The open Mind's Blocks, edited with Tiptap and saved through the core as they change. */
 export function MindEditor({ mindId }: { mindId: string }) {
   const doc = useMindDocument(mindId);
-  return doc ? <MindEditorView doc={doc} /> : null;
+  return doc ? <MindEditorView mindId={mindId} doc={doc} /> : null;
 }
 
 const editorPropsFor = (label: string, emptyFormula: string) => ({
@@ -80,13 +84,18 @@ const editorPropsFor = (label: string, emptyFormula: string) => ({
 });
 
 /**
- * Notes (see `noteExtensions`) in the Mind's Yjs document, with the slash menu,
- * the drag handle, the formatting menu and the LaTeX field.
+ * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
+ * document, with the slash menu, the drag handle, the formatting menu and the
+ * LaTeX field.
  */
-function MindEditorView({ doc }: { doc: Y.Doc }) {
+function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
   const t = useT();
-  const placeholders = useRef({ empty: "", line: "" });
-  placeholders.current = { empty: t("mind.editor.placeholder"), line: t("editor.placeholder") };
+  const placeholders = useRef({ empty: "", line: "", afterAnswer: "" });
+  placeholders.current = {
+    empty: t("question.mind.placeholder", { shortcut: QUESTION_SHORTCUT_LABEL }),
+    line: t("editor.placeholder"),
+    afterAnswer: t("question.followUp.placeholder", { shortcut: QUESTION_SHORTCUT_LABEL }),
+  };
   const label = t("mind.editor.label");
   const emptyFormula = t("editor.math.empty");
   /** The position of the formula whose LaTeX is being edited. */
@@ -100,16 +109,26 @@ function MindEditorView({ doc }: { doc: Y.Doc }) {
         ...noteExtensions({
           onEditMath: setEditingMath,
           codeBlockView: ReactNodeViewRenderer(CodeBlockView),
+          questionView: ReactNodeViewRenderer(QuestionView),
+          answerView: ReactNodeViewRenderer(AnswerView),
         }),
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
-          placeholder: ({ editor: current }) =>
-            current.isEmpty ? placeholders.current.empty : placeholders.current.line,
+          placeholder: ({ editor: current, pos }) => {
+            if (current.isEmpty) return placeholders.current.empty;
+            const before = current.state.doc.resolve(pos).nodeBefore;
+            return before?.type.name === ANSWER_BLOCK
+              ? placeholders.current.afterAnswer
+              : placeholders.current.line;
+          },
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
         SlashMenu.configure({ items: () => noteSlashItems }),
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
+        QuestionCommands.configure({
+          onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
+        }),
       ],
     },
     [doc],
@@ -121,7 +140,7 @@ function MindEditorView({ doc }: { doc: Y.Doc }) {
   }, [editor, label, emptyFormula]);
 
   return (
-    <>
+    <MindIdContext.Provider value={mindId}>
       <EditorContent editor={editor} className="relative" />
       <BlockHandle editor={editor} />
       <FormatMenu editor={editor} />
@@ -133,6 +152,6 @@ function MindEditorView({ doc }: { doc: Y.Doc }) {
           onClose={() => setEditingMath(null)}
         />
       )}
-    </>
+    </MindIdContext.Provider>
   );
 }

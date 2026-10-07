@@ -4,6 +4,7 @@ import { PluginKey } from "@tiptap/pm/state";
 import { ReactRenderer } from "@tiptap/react";
 import { Suggestion, type SuggestionProps } from "@tiptap/suggestion";
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { QUESTION_BLOCK } from "../../../core/api";
 import { useT } from "../i18n";
 import { matchSlashItems, noteSlashItems, type SlashItem } from "./slashItems";
 
@@ -36,8 +37,11 @@ export const SlashMenu = Extension.create<SlashMenuOptions>({
         editor: this.editor,
         pluginKey: new PluginKey("slashMenu"),
         char: "/",
-        // Not in code, where a slash is just a slash.
-        allow: ({ state, range }) => !state.doc.resolve(range.from).parent.type.spec.code,
+        // Not in code, where a slash is just a slash, nor in a Question, where Enter asks.
+        allow: ({ state, range }) => {
+          const { parent } = state.doc.resolve(range.from);
+          return !parent.type.spec.code && parent.type.name !== QUESTION_BLOCK;
+        },
         items: () => [...this.options.items()],
         command: ({ editor, range, props: item }) => item.run(editor, range),
         floatingUi: { strategy: "fixed", middleware: [shift({ padding: 8 })] },

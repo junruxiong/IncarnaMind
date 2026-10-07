@@ -8,6 +8,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
@@ -18,8 +19,20 @@ export interface RunningApp {
   window: Page;
 }
 
+export interface LaunchOptions {
+  /**
+   * Every chat model is the scripted one in `src/main/fakeChatModel.ts`, so
+   * Questions are answered with no network or keys. Needs a test build
+   * (`npm run test:smoke` makes one).
+   */
+  fakeChat?: boolean;
+}
+
 /** Launches the built app (`out/`) on the given data folder, with test hooks on. */
-export async function launchApp(dataDir: string): Promise<RunningApp> {
+export async function launchApp(
+  dataDir: string,
+  { fakeChat = false }: LaunchOptions = {},
+): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
     if (value !== undefined) env[name] = value;
@@ -27,6 +40,7 @@ export async function launchApp(dataDir: string): Promise<RunningApp> {
   delete env.ELECTRON_RUN_AS_NODE;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
+  if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
 
   const app = await electron.launch({ args: [appDir], env });
   const window = await app.firstWindow();
@@ -42,6 +56,17 @@ export async function dismissChatSetup(window: Page): Promise<void> {
   const setup = window.getByTestId("chat-setup");
   await setup.getByTestId("chat-setup-later").click();
   await setup.waitFor({ state: "hidden" });
+}
+
+/**
+ * Sets up a local chat model (Ollama's, so nothing needs consent), through the
+ * core's bridge as the setup screen would. With `fakeChat`, the scripted model answers.
+ */
+export async function useLocalChatModel(window: Page, modelId = "fake-model"): Promise<void> {
+  await window.evaluate(async (model) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.saveChatProvider({ kind: "ollama", modelId: model });
+  }, modelId);
 }
 
 /** Opens the empty Document viewer panel through the test hook. */

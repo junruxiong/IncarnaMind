@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import { MIND_CONTENT_FIELD } from "./api";
 import { InvalidInputError } from "./errors";
 import type { Database } from "./storage";
+
+/** The origin of the core's own changes to a Mind's document. */
+const CORE_ORIGIN = Symbol("the core");
+
+export type MindContent = ReturnType<typeof createMindContent>;
 
 /**
  * Once a Mind has this many stored updates, they are merged into one. The same
@@ -119,6 +125,32 @@ export function createMindContent(
       if (failure !== undefined) {
         throw new InvalidInputError("That isn't a valid Yjs update.", { cause: failure });
       }
+    },
+
+    /**
+     * Reads the Mind's Blocks. `look` must not change them, nor keep them: the
+     * document can be dropped from memory, and loaded again, between calls.
+     */
+    read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T {
+      return look(load(mindId).doc.getXmlFragment(MIND_CONTENT_FIELD));
+    },
+
+    /**
+     * Changes the Mind's Blocks in one Yjs transaction (the core's own edits,
+     * e.g. writing an Answer), then stores and reports the change like any
+     * client's. `change` must not keep the Blocks, as for `read`.
+     */
+    edit<T>(mindId: string, change: (blocks: Y.XmlFragment) => T): T {
+      const mind = load(mindId);
+      let result: T | undefined;
+      try {
+        mind.doc.transact(() => {
+          result = change(mind.doc.getXmlFragment(MIND_CONTENT_FIELD));
+        }, CORE_ORIGIN);
+      } finally {
+        flush(mindId, mind);
+      }
+      return result as T;
     },
 
     /** Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded. */

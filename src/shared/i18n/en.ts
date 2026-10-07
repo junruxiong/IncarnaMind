@@ -19,13 +19,12 @@ export const en = {
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
   "mind.editor.label": "Mind content",
-  "mind.editor.placeholder": "Start writing…",
   "mind.delete": "Delete Mind",
   "mind.delete.body": "“{title}” will be removed from your Minds.",
   "mind.delete.confirm": "Delete",
   "mind.delete.cancel": "Cancel",
 
-  "editor.placeholder": "Type / for headings, code and math",
+  "editor.placeholder": "Type / for headings, code, math and Questions",
   "editor.slash.label": "Insert",
   "editor.slash.empty": "No matches",
   "editor.slash.text": "Text",
@@ -254,6 +253,46 @@ export const en = {
   "consent.settings.status.not-asked": "Not asked yet",
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
+
+  "question.slash": "Question",
+  "question.placeholder": "Ask a Question…",
+  "question.ask": "Ask",
+  "question.askHint": "Ask (Enter)",
+  "question.setUp": "Set up",
+  "question.model.label": "Model for this Question",
+  "question.model.default": "Default model ({model})",
+  "question.model.defaultUnset": "Default model",
+  "question.mind.placeholder": "Start writing, or press {shortcut} to ask a Question…",
+  "question.followUp.placeholder": "Keep writing, or press {shortcut} to ask a follow-up",
+  "question.context.include": "Include in Question context",
+
+  "answer.label": "Answer",
+  "answer.status.streaming": "Writing…",
+  "answer.status.stopped": "Stopped",
+  "answer.stop": "Stop",
+  "answer.regenerate": "Regenerate",
+  "answer.edited.body": "You've edited this Answer. Regenerating replaces it, edits and all.",
+  "answer.edited.replace": "Replace it",
+  "answer.edited.keep": "Keep my edits",
+  "answer.error.auth": "The provider refused the API key. Check it in Settings, then try again.",
+  "answer.error.model":
+    "The provider doesn't know this model. Check its name in Settings, or pick another model on the Question.",
+  "answer.error.rate-limit":
+    "The provider is limiting requests right now. Wait a moment, then try again.",
+  "answer.error.network": "Couldn't reach the provider. Check your connection, then try again.",
+  "answer.error.provider":
+    "The provider ran into a problem. Try again, or pick another model on the Question.",
+  "answer.error.consent-declined":
+    "Nothing was sent, because you chose not to send data to this service. You can allow it in Settings.",
+  "answer.error.unknown": "This Answer couldn't be written. Try again.",
+  "answer.error.not-signed-in": "You're not signed in to ChatGPT. Sign in again in Settings.",
+  "answer.error.plan-limit":
+    "Your ChatGPT plan's usage limit is reached. Try again once it resets, or pick another model.",
+  "answer.error.blocked":
+    "OpenAI refused the request although you're signed in. It may have blocked this integration: use an API key in Settings instead.",
+  "answer.error.openSettings": "Open Settings",
+  "answer.error.retry": "Try again",
+  "answer.error.details": "Details",
 
   "error.load": "IncarnaMind couldn't load your data: {message}",
   "error.action": "That didn't work: {message}",

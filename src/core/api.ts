@@ -30,6 +30,67 @@ export interface CreateMindInput {
  */
 export const MIND_CONTENT_FIELD = "blocks";
 
+/** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
+export const BLOCK_ID_ATTRIBUTE = "id";
+
+/**
+ * The node types of a Note: any top-level Block that isn't a Question or an
+ * Answer. Answers hold the same types, nested.
+ */
+export const NOTE_BLOCK_TYPES = [
+  "paragraph",
+  "heading",
+  "codeBlock",
+  "blockMath",
+  "bulletList",
+  "orderedList",
+  "blockquote",
+  "horizontalRule",
+] as const;
+
+/** The node type of a Question Block. Its content is the User's text (inline). */
+export const QUESTION_BLOCK = "question";
+
+/** The node type of an Answer Block. Its content is rich text (Note node types), which the User can edit. */
+export const ANSWER_BLOCK = "answer";
+
+/**
+ * A Note's "include in Question context" flag. Absent (or null) means on, the
+ * default; `false` means the User switched the Note off, so Questions don't see it.
+ */
+export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
+
+/**
+ * Attributes of a Question Block, as stored in the Mind's Yjs document. Later
+ * tickets add its Search scope (#30) and a forced Skill.
+ */
+export interface QuestionAttributes {
+  id: string | null;
+  /** The model picked for this Question, overriding the default. Both null: the default model. */
+  providerId: string | null;
+  modelId: string | null;
+}
+
+/** Where an Answer is: being written, finished, stopped by the User, or failed (see `errorKind`). */
+export type AnswerStatus = "streaming" | "done" | "stopped" | "failed";
+
+/** Attributes of an Answer Block, as stored in the Mind's Yjs document. */
+export interface AnswerAttributes {
+  id: string | null;
+  /** The Question it answers. */
+  questionId: string | null;
+  /** The model that wrote it. */
+  providerId: string | null;
+  modelId: string | null;
+  status: AnswerStatus;
+  /** Why it failed, when `status` is "failed". */
+  errorKind: ProviderErrorKind | null;
+  /** The provider's own message about the failure, for details. */
+  errorMessage: string | null;
+  /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
+  generatedHash: string | null;
+}
+
 /** A Mind opened for editing. */
 export interface OpenedMind {
   mind: Mind;
@@ -293,6 +354,78 @@ export type ChatReadiness =
       modelId: string;
     };
 
+/** A saved chat provider and the models a Question's model picker offers on it. */
+export interface ChatModelGroup {
+  provider: ChatProvider;
+  /**
+   * Model ids: the models the provider lists, when it can be asked, and always
+   * the default model if it is on this provider. The default comes first.
+   */
+  models: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Questions and Answers (ADR-0007)
+
+export interface AskQuestionInput {
+  mindId: string;
+  /** The Question Block's id. */
+  questionId: string;
+  /** Replace the Question's Answer even if the User has edited it. Defaults to false. */
+  discardEdits?: boolean;
+}
+
+export interface RegenerateAnswerInput {
+  mindId: string;
+  answerId: string;
+  /** Replace the Answer even if the User has edited it. Defaults to false. */
+  discardEdits?: boolean;
+}
+
+export interface StopAnswerInput {
+  mindId: string;
+  answerId: string;
+}
+
+/** What asking a Question (or regenerating its Answer) did. */
+export type AskResult =
+  /** The Answer is being written into the Mind, right after its Question. */
+  | { asked: true; answerId: string }
+  /** Nothing was sent: Questions can't be asked yet, and `readiness` says why. */
+  | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** Nothing was sent: the User has edited the Answer. Ask again with `discardEdits` to replace it. */
+  | { asked: false; reason: "edited"; answerId: string };
+
+/** An Answer started: it is in the Mind with status "streaming". */
+export interface AnswerStarted {
+  mindId: string;
+  answerId: string;
+  questionId: string;
+  /** The model writing it. */
+  model: ChatModelChoice;
+}
+
+/** More of an Answer's text arrived, as the model wrote it (Markdown). */
+export interface AnswerDelta {
+  mindId: string;
+  answerId: string;
+  text: string;
+}
+
+/** An Answer is complete ("done") or the User stopped it ("stopped"), keeping what was written. */
+export interface AnswerFinished {
+  mindId: string;
+  answerId: string;
+  status: "done" | "stopped";
+}
+
+/** An Answer failed; the Answer shows the error by kind. */
+export interface AnswerFailed {
+  mindId: string;
+  answerId: string;
+  error: ProviderError;
+}
+
 // ---------------------------------------------------------------------------
 // ChatGPT plan (experimental)
 
@@ -500,6 +633,29 @@ export interface CoreApi {
   /** Makes one small real request. A cloud provider's data flow needs consent first. */
   testChatConnection(input: TestChatConnectionInput): Promise<ConnectionTestResult>;
   getChatReadiness(): Promise<ChatReadiness>;
+  /**
+   * The models a Question's model picker offers: for each saved provider, the
+   * models it lists and its default model. Providers are asked without sending
+   * any User content, and a cloud one only once the User has allowed the chat
+   * flow to it. A provider that isn't asked, or can't be reached, offers its default.
+   */
+  listChatModels(): Promise<ChatModelGroup[]>;
+
+  /**
+   * Asks a Question: its Answer is written into the Mind right after it, as the
+   * model streams it ("answer.*" events follow its progress). Asking a Question
+   * that already has an Answer replaces that Answer in place. Nothing is sent
+   * when Questions can't be asked yet, or when the Answer has edits the User
+   * hasn't agreed to lose.
+   */
+  askQuestion(input: AskQuestionInput): Promise<AskResult>;
+  /** Writes an Answer again, in place, from its Question. Same rules as `askQuestion`. */
+  regenerateAnswer(input: RegenerateAnswerInput): Promise<AskResult>;
+  /**
+   * Stops an Answer being written. It keeps what was written so far and is
+   * marked "stopped". Stopping a finished Answer does nothing.
+   */
+  stopAnswer(input: StopAnswerInput): Promise<void>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -598,6 +754,15 @@ export interface CoreEvents {
   "folders.changed": Folder[];
   /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
   "chatGptPlan.changed": ChatGptPlanStatus;
+  /**
+   * The Answer event stream. The core writes each Answer into its Mind's Yjs
+   * document as it streams, so every window sees it; these events are for UI
+   * state, e.g. the stop button. #30 adds Tool calls and Citations.
+   */
+  "answer.started": AnswerStarted;
+  "answer.delta": AnswerDelta;
+  "answer.finished": AnswerFinished;
+  "answer.failed": AnswerFailed;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -638,6 +803,10 @@ const methods: Record<CoreApiMethod, true> = {
   deleteChatProvider: true,
   testChatConnection: true,
   getChatReadiness: true,
+  listChatModels: true,
+  askQuestion: true,
+  regenerateAnswer: true,
+  stopAnswer: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
