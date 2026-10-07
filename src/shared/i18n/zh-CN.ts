@@ -231,7 +231,7 @@ export const zhCN = {
   "linkedFolders.unlink.title": "取消关联“{name}”？",
   "linkedFolders.unlink.body":
     "文件夹及其中的文件不受影响。IncarnaMind 将不再跟踪这个文件夹，并移除它为其中文件建立的索引。",
-  "linkedFolders.unlink.citations": "它只保留你的引用所引的那几页，让这些引用仍能核对。",
+  "linkedFolders.unlink.citations": "它只保留你的引用所引的那部分文字，让这些引用仍能核对。",
   "linkedFolders.unlink.cancel": "取消",
   "linkedFolders.unlink.confirm": "取消关联",
   "units.kb": "{size} KB",

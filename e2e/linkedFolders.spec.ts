@@ -385,7 +385,7 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   const dialog = window.getByTestId("unlink-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Unlink “Library”?");
   await expect(dialog).toContainText("The folder and the files in it aren't touched.");
-  await expect(dialog).toContainText("It keeps only the few pages your Citations quote");
+  await expect(dialog).toContainText("It keeps only the text your Citations quote");
   await screenshot(window, "unlink-dialog");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
