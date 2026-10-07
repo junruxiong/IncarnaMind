@@ -368,6 +368,22 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX skills_by_name ON skills (name) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 17,
+    description: "The size of each Document's vectors, beside their embedding model (#32)",
+    sql: `
+      -- With a choice of embedding providers (#32), documents.embedding_model
+      -- names the provider and server as well as the model (the built-in
+      -- model keeps its id), and this records how many float32s each of its
+      -- Passages' vectors has: set with the first vector. Search compares a
+      -- query only with vectors of the same model and size, so vectors from
+      -- different models are never mixed. Every vector so far is the built-in
+      -- model's, of 384.
+      ALTER TABLE documents ADD COLUMN embedding_dimensions INTEGER;
+      UPDATE documents SET embedding_dimensions = 384
+        WHERE embedding_model = 'multilingual-e5-small-int8';
+    `,
+  },
 ];
 
 /**
