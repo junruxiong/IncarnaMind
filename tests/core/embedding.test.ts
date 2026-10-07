@@ -1,15 +1,23 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   BUILT_IN_EMBEDDING_MODEL,
   type Core,
   type Document,
+  type Embedder,
   EmbeddingModelNotReadyError,
   type EmbeddingModelStatus,
 } from "../../src/core";
-import { createTempDataFolder, NO_MODEL_FILES, startCore } from "../helpers/core";
-import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
+import { createFakeEmbedder } from "../../src/core/embedding/fake";
+import { createTempDataFolder, NO_MODEL_FILES, queryDatabase, startCore } from "../helpers/core";
+import {
+  addAndProcess,
+  sha256,
+  waitForDocuments,
+  waitForProcessing,
+  writeSourceFile,
+} from "../helpers/documents";
 import {
   type ControlledEmbedder,
   createControlledEmbedder,
@@ -305,6 +313,115 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     expect(document?.status).toBe("ready");
     expect(embedder.failEmbeds).toBe(0);
     expect(embedder.texts).toHaveLength(1);
+  });
+
+  test("only the Document being embedded says so, with its progress; those waiting their turn are queued", async () => {
+    const fake = createFakeEmbedder();
+    let open = () => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let firstEmbed = () => {};
+    const embedding = new Promise<void>((resolve) => {
+      firstEmbed = resolve;
+    });
+    // Holds every Passage until the gate opens: the first Document's turn lasts until then.
+    const embedder: Embedder = {
+      load: (files) => fake.load(files),
+      embed: async (text) => {
+        firstEmbed();
+        await gate;
+        return fake.embed(text);
+      },
+      close: () => fake.close(),
+    };
+    const sources = await createTempDataFolder();
+    const core = startCore(await createTempDataFolder(), { embedder });
+    const statuses = statusesOf(core);
+    const long = Array.from(
+      { length: 400 },
+      (_, index) => `Sentence ${index} is about photosynthesis and light.`,
+    ).join(" ");
+    const { documents } = await core.addDocuments([
+      await writeSourceFile(sources, "Big.md", long),
+      await writeSourceFile(sources, "plants.md", PLANTS),
+      await writeSourceFile(sources, "markets.md", MARKETS),
+    ]);
+    const [big, plants, markets] = documents;
+    if (!big || !plants || !markets) throw new Error("Nothing was added.");
+
+    await embedding;
+    // The small ones are extracted, then wait for the big one: queued again, not "Embedding… 0%".
+    for (const small of [plants, markets]) {
+      await expect.poll(() => statuses(small.id)).toEqual(["queued", "extracting", "queued"]);
+    }
+    const waiting = await core.listDocuments();
+    expect(waiting.map((each) => [each.name, each.status, each.progress])).toEqual([
+      ["markets", "queued", null],
+      ["plants", "queued", null],
+      ["Big", "embedding", 0],
+    ]);
+
+    open();
+    await waitForProcessing(core, [big.id, plants.id, markets.id]);
+    expect(statuses(big.id)).toEqual(["queued", "extracting", "embedding", "ready"]);
+    for (const small of [plants, markets]) {
+      expect(statuses(small.id)).toEqual(["queued", "extracting", "queued", "embedding", "ready"]);
+    }
+  });
+
+  test("a new version extracted during the old one's last batch is embedded before the Document is ready", async () => {
+    const fake = createFakeEmbedder();
+    let held = true;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let batchStarted = () => {};
+    const inBatch = new Promise<void>((resolve) => {
+      batchStarted = resolve;
+    });
+    // Holds the first version's Passages: its only batch, so its last, stays in flight.
+    const embedder: Embedder = {
+      load: (files) => fake.load(files),
+      embed: async (text) => {
+        if (held && text.startsWith("passage: ")) {
+          batchStarted();
+          await gate;
+        }
+        return fake.embed(text);
+      },
+      close: () => fake.close(),
+    };
+    const dataDir = await createTempDataFolder();
+    const sources = await createTempDataFolder();
+    const core = startCore(dataDir, { embedder });
+    const path = await writeSourceFile(sources, "notes.md", PLANTS);
+    const [added] = (await core.addDocuments([path])).documents;
+    if (!added) throw new Error("Nothing was added.");
+    await inBatch;
+
+    // Meanwhile the file changes, and its new version is extracted and stored.
+    await writeFile(path, MARKETS);
+    await core.reconcileDocuments();
+    await waitForDocuments(core, (documents) => {
+      expect(documents[0]?.contentHash).toBe(sha256(MARKETS));
+    });
+    held = false;
+    release();
+    const [ready] = await waitForProcessing(core, [added.id]);
+
+    expect(ready).toMatchObject({ status: "ready", contentHash: sha256(MARKETS) });
+    // Every Passage of the new version has its vector, so vector search finds it.
+    expect(
+      queryDatabase(
+        dataDir,
+        `SELECT count(*) AS total, count(embedding) AS embedded FROM passages
+         WHERE deleted_at IS NULL`,
+      ),
+    ).toEqual([{ total: 1, embedded: 1 }]);
+    const found = await core.searchPassages("interest rates", { mode: "vector" });
+    expect(found.map((result) => result.text)).toEqual([expect.stringContaining("central bank")]);
   });
 
   test("Passages are embedded one at a time, with the Document's name and the e5 prefixes", async () => {

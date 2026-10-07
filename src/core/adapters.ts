@@ -109,7 +109,11 @@ export interface LinkedFolderOptions {
    * placeholders (dataless files). Defaults to true on macOS only.
    */
   detectDatalessFiles?: boolean;
-  /** Starts watching a folder. Defaults to `fs.watch` in recursive mode; tests may pass a fake. */
+  /**
+   * Starts watching a folder: a Linked folder at any depth, a folder holding
+   * files added on their own without its subfolders. Defaults to `fs.watch`;
+   * tests may pass a fake.
+   */
   watch?: WatchFolder;
 }
 

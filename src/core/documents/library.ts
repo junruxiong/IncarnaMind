@@ -20,6 +20,11 @@
  *
  * Cloud placeholders (online-only files) are counted, never read, unless the
  * User asks to download them: reading one would download it.
+ *
+ * Files added on their own are watched too, by the folder they are in
+ * (without its subfolders): a change is read as a new version, a deleted
+ * file goes missing, and a file moved or renamed into a folder watched so is
+ * followed by its content. Nothing else in such a folder is added.
  */
 import { randomUUID } from "node:crypto";
 import { open, realpath, rm } from "node:fs/promises";
@@ -66,10 +71,12 @@ export interface FileRow {
   linked_folder_id: string | null;
   folder_id: string | null;
   status: string;
+  /** Unless "failed": the latest version read failed, and this is the last good one. */
+  failure_reason: string | null;
 }
 
 const FILE_COLUMNS = `id, path, name, kind, content_hash, size, file_mtime_ms, file_status,
-  linked_folder_id, folder_id, status`;
+  linked_folder_id, folder_id, status, failure_reason`;
 
 interface LinkedFolderRow {
   id: string;
@@ -210,6 +217,10 @@ export function createLibrary(options: LibraryOptions) {
   const isLegacyCopy = (path: string) => path !== legacyFolder && isInside(legacyFolder, path);
 
   const watchers = new Map<string, FolderWatcher>();
+  /** The folders holding files added on their own, each watched without its subfolders. */
+  const singleWatchers = new Map<string, FolderWatcher>();
+  /** Such folders whose watcher failed: watched again, and looked at, at the next retry. */
+  const singleWatchesFailed = new Set<string>();
   const statuses = new Map<string, Exclude<LinkedFolderStatus, "paused">>();
   /** Each Linked folder's cloud placeholders: path to size. */
   const onlineOnly = new Map<string, Map<string, number>>();
@@ -398,6 +409,61 @@ export function createLibrary(options: LibraryOptions) {
     watchers.delete(id);
   };
 
+  /** The paths of the files added on their own in a folder (not in its subfolders). */
+  const singlesIn = (folder: string) =>
+    db
+      .all<{ path: string }>(
+        `SELECT path FROM documents WHERE deleted_at IS NULL AND linked_folder_id IS NULL`,
+      )
+      .map((row) => row.path)
+      .filter((path) => dirname(path) === folder);
+
+  /**
+   * Watches each folder holding a file added on its own, as long as it holds
+   * one and can be reached; one inside a Linked folder is left to its watcher, and
+   * the old layout's copies in the data folder aren't watched.
+   */
+  function watchSingles(): void {
+    if (closed) return;
+    const linked = liveFolders();
+    const wanted = new Set<string>();
+    for (const { path } of db.all<{ path: string }>(
+      `SELECT path FROM documents
+       WHERE deleted_at IS NULL AND linked_folder_id IS NULL AND file_status <> 'unavailable'`,
+    )) {
+      if (!isLegacyCopy(path) && !ownerOf(path, linked)) wanted.add(dirname(path));
+    }
+    for (const [folder, watcher] of singleWatchers) {
+      if (wanted.has(folder)) continue;
+      watcher.close();
+      singleWatchers.delete(folder);
+    }
+    for (const folder of wanted) {
+      if (singleWatchers.has(folder) || singleWatchesFailed.has(folder)) continue;
+      const watcher = options.watch(
+        folder,
+        {
+          onChange(paths) {
+            // A file added on its own, or a file that may be one, moved or renamed.
+            const relevant = paths.flatMap((path) => {
+              if (path === folder) return singlesIn(folder); // something changed, not said what
+              return dirname(path) === folder && kindOf(path) ? [path] : [];
+            });
+            if (relevant.length > 0) request({ paths: relevant });
+          },
+          onError() {
+            // Events may have been missed: its files are looked at again with the next retry.
+            if (singleWatchers.get(folder) === watcher) singleWatchers.delete(folder);
+            singleWatchesFailed.add(folder);
+          },
+        },
+        { recursive: false },
+      );
+      // A watcher that failed at once has already said so.
+      if (!singleWatchesFailed.has(folder)) singleWatchers.set(folder, watcher);
+    }
+  }
+
   // --- Documents --------------------------------------------------------------
 
   const documentAt = (path: string) =>
@@ -502,15 +568,26 @@ export function createLibrary(options: LibraryOptions) {
     const current = documentById(row.id);
     if (!current || current.path !== row.path) return true; // removed or moved meanwhile
     const newVersion = hashed.contentHash !== current.content_hash;
+    // Put back as the version indexed, after a version that couldn't be read: nothing failed now.
+    const recovered = !newVersion && current.status !== "failed" && current.failure_reason !== null;
     db.run(
       `UPDATE documents SET size = ?, file_mtime_ms = ?, file_status = 'available',
          linked_folder_id = ?, folder_id = ?, updated_at = ?
        WHERE id = ?`,
       [hashed.size, file.mtimeMs, place.linkedFolderId, place.folderId, now(), row.id],
     );
+    if (recovered) {
+      db.run(
+        `UPDATE documents SET failure_reason = NULL, failure_message = NULL
+         WHERE id = ? AND status <> 'failed'`,
+        [row.id],
+      );
+    }
     // Only what the UI shows is announced: a modified time alone isn't. (A new
     // version is announced as it is queued.)
-    if (placeChanged || current.file_status !== "available") changes.announced.add(row.id);
+    if (placeChanged || recovered || current.file_status !== "available") {
+      changes.announced.add(row.id);
+    }
     if (placeChanged) noteMoved(row, place, changes);
     // A new version is processed; its text replaces the old one's in search once indexed.
     if (newVersion || current.status === "queued") hooks.process(row.id);
@@ -533,15 +610,17 @@ export function createLibrary(options: LibraryOptions) {
    * The Document a new file is, moved: one with the same content whose file
    * went, in this pass (`removed`) or before (missing), or whose copy in the
    * data folder the old layout made. Taken out of `removed` if found there.
+   * With `single`, only a file added on its own, and not such a copy.
    */
   async function movedDocument(
     contentHash: string,
     path: string,
     removed: FileRow[],
+    single = false,
   ): Promise<FileRow | undefined> {
     const name = basename(path);
     const inPass = removed
-      .filter((row) => row.content_hash === contentHash)
+      .filter((row) => row.content_hash === contentHash && (!single || !row.linked_folder_id))
       .sort((a, b) => Number(basename(b.path) === name) - Number(basename(a.path) === name))[0];
     if (inPass) {
       removed.splice(removed.indexOf(inPass), 1);
@@ -550,10 +629,12 @@ export function createLibrary(options: LibraryOptions) {
     const candidates = db.all<FileRow>(
       `SELECT ${FILE_COLUMNS} FROM documents
        WHERE content_hash = ? AND path <> ? AND deleted_at IS NULL
+         ${single ? "AND linked_folder_id IS NULL" : ""}
        ORDER BY file_status = 'missing' DESC, created_at`,
       [contentHash, path],
     );
     for (const row of candidates) {
+      if (single && isLegacyCopy(row.path)) continue;
       if (row.file_status === "missing" || isLegacyCopy(row.path)) return row;
       // Gone, though no event has said so yet: moved before its old path was looked at.
       if (row.file_status === "available" && !(await statFile(row.path).catch(() => true))) {
@@ -652,6 +733,35 @@ export function createLibrary(options: LibraryOptions) {
   }
 
   /**
+   * A file at a path where files added on their own are watched, with no
+   * Document there: one of them, moved or renamed, if one whose file went
+   * has its content. Nothing else there is added.
+   */
+  async function arrived(file: Found, removed: FileRow[], changes: Changes): Promise<void> {
+    // Cheap first: only a file added on its own, of this size, can be it.
+    const sameSize = (row: Pick<FileRow, "size" | "linked_folder_id">) =>
+      !row.linked_folder_id && row.size === file.size;
+    const possible =
+      removed.some(sameSize) ||
+      db.get(
+        `SELECT 1 FROM documents
+         WHERE deleted_at IS NULL AND linked_folder_id IS NULL AND size = ? AND path <> ?
+           AND file_status IN ('available', 'missing')`,
+        [file.size, file.path],
+      ) !== undefined;
+    if (!possible) return;
+    let hashed: Awaited<ReturnType<typeof hashFile>>;
+    try {
+      hashed = await hashFile(file.path);
+    } catch {
+      return; // gone again, or not readable: not one to follow now
+    }
+    if (closed || documentAt(file.path)) return;
+    const moved = await movedDocument(hashed.contentHash, file.path, removed, true);
+    if (moved && !closed) await relocate(moved, file, hashed.size, changes);
+  }
+
+  /**
    * A known Document whose file is gone: missing, or unavailable when what it
    * was in can't be reached (for a single file, its folder is gone too).
    */
@@ -720,6 +830,7 @@ export function createLibrary(options: LibraryOptions) {
         startWatcher(row);
       }
     }
+    watchSingles();
     if (foldersChanged) hooks.foldersChanged();
     for (const id of changes.announced) hooks.announce(id);
     if (changes.moved.size > 0) hooks.moved([...changes.moved]);
@@ -804,6 +915,22 @@ export function createLibrary(options: LibraryOptions) {
       : [...request.paths].flatMap((path) =>
           documentsUnder(path).filter((row) => row.linked_folder_id === null),
         );
+    // Paths reported in a folder of files added on their own, with no Document there.
+    const arrivals: Found[] = [];
+    for (const path of request.all ? [] : request.paths) {
+      const kind = kindOf(path);
+      if (!kind || ownerOf(path, linked) || documentAt(path)) continue;
+      const info = await statFile(path).catch(() => undefined);
+      if (!info || (options.detectDataless && isDataless(info))) continue;
+      arrivals.push({
+        path,
+        kind,
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+        onlineOnly: false,
+        owner: null,
+      });
+    }
     for (const row of singles) {
       if (known.has(row.path) || ownerOf(row.path, linked)) continue;
       known.set(row.path, row);
@@ -854,6 +981,11 @@ export function createLibrary(options: LibraryOptions) {
     } finally {
       for (const file of fresh) if (file.owner) pendingNew.delete(file.owner.id);
     }
+    // A file added on its own, moved or renamed, perhaps.
+    for (const file of arrivals) {
+      if (closed) return;
+      await arrived(file, removed, changes);
+    }
 
     // What is still unmatched has gone.
     for (const row of removed) {
@@ -880,8 +1012,12 @@ export function createLibrary(options: LibraryOptions) {
       .filter((row) => !row.paused && statuses.get(row.id) === "unavailable")
       .map((row) => row.id);
     const unreachableIds = new Set(folderIds);
+    // Folders of files added on their own whose watcher failed: watched again once looked at.
+    const unwatched = [...singleWatchesFailed].flatMap(singlesIn);
+    singleWatchesFailed.clear();
     const paths = [
       ...unreadable,
+      ...unwatched,
       ...db
         .all<{ path: string; linked_folder_id: string | null }>(
           `SELECT path, linked_folder_id FROM documents
@@ -1065,6 +1201,7 @@ export function createLibrary(options: LibraryOptions) {
       onlineOnly.delete(row.id);
       downloading.delete(row.id);
       for (const path of unreadable) if (isInside(row.path, path)) unreadable.delete(path);
+      watchSingles(); // a file added on its own inside it is watched by itself now
       if (foldersChanged) hooks.foldersChanged();
       announceFolders();
     },
@@ -1134,7 +1271,10 @@ export function createLibrary(options: LibraryOptions) {
 
     /** The User removed a Document from the index: its Folder may hold nothing now. */
     documentRemoved(linkedFolderId: string | null): void {
-      if (!linkedFolderId) return;
+      if (!linkedFolderId) {
+        watchSingles(); // its folder may hold no file added on its own now
+        return;
+      }
       if (syncFolders(linkedFolderId)) hooks.foldersChanged();
       announceFolders();
     },
@@ -1207,6 +1347,8 @@ export function createLibrary(options: LibraryOptions) {
       }
       if (progressTimer) clearTimeout(progressTimer);
       for (const id of [...watchers.keys()]) stopWatcher(id);
+      for (const watcher of singleWatchers.values()) watcher.close();
+      singleWatchers.clear();
     },
   };
 }

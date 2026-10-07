@@ -6,6 +6,7 @@ What the index keeps is enough for Citations without the file:
 - Each Document's page text and Passages live in SQLite, and the Citation check compares quotes against that stored text, not the file.
 - Each version of a file is identified by the SHA-256 of its content.
 - When a file changes, the new version is indexed and becomes what search and new Answers use. The old version's pages are kept for as long as a Citation points at them, so the Citation is still checked against the text it quoted, and it says the Document changed after it was cited.
+- A new version that can't be read (a sync client wrote it half-way, or it is corrupt) replaces nothing: the last good version stays indexed and searched, and the Document shows the failure and offers Retry until a retry or a later change is read.
 - A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it.
 - A file that disappears leaves a missing Document whose text and Citations remain. Only the rendered page, which needs the file, is lost.
 - Unlinking a Linked folder removes its Documents from the index but keeps the Units (ADR-0011) its Citations point to, so they are still checked; like an old version's pages, that text goes once no Citation quotes it (settled with the User on 2026-10-07).
@@ -31,6 +32,7 @@ This replaces the spec's original choice (issue #20, story 41: "copied into the 
 
 - Backing up the data folder backs up the Minds, the index and settings, but not the Documents. The User's files are theirs to back up.
 - IncarnaMind watches Linked folders while it runs and reconciles them at start-up (size and modified time first, then the content hash), because files change while it is closed.
+- Other Documents are watched too, by the folder each is in, without its subfolders: an edit, a deletion, or a rename or move into such a folder is picked up while the app runs. Only the files added on their own are followed; nothing else in their folders is added.
 - Opening a Document in another app opens the original; no temporary copies.
 - Linked folders on cloud drives can hold placeholder files that aren't downloaded; those wait until they're readable.
 - **Migration 21** from the copy layout drops the in-app Folders: their Documents become unfiled, and Search scopes show those Folders as deleted. Copied Documents become single files at `<data>/documents/<hash>.<ext>` until the User links the folder holding the original; that Linked folder then takes over the Document, keeping its id, and the copy is removed.

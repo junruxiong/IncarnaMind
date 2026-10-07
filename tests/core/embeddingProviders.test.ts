@@ -163,9 +163,9 @@ describe("Switching the embedding provider", { timeout: 30_000 }, () => {
     const done = await finished;
     expect(done).toMatchObject({ rebuild: null, error: null, provider: { dimensions: 64 } });
 
-    for (const document of [plants, markets]) {
-      expect(statusesOf(document.id)).toEqual(["embedding", "ready"]);
-    }
+    // Plants (added first) is embedded at once; Markets is queued until its turn.
+    expect(statusesOf(plants.id)).toEqual(["embedding", "ready"]);
+    expect(statusesOf(markets.id)).toEqual(["queued", "embedding", "ready"]);
     // The overall progress went up a Document at a time.
     const progress = settings.flatMap((each) => (each.rebuild ? [each.rebuild.done] : []));
     expect(progress).toContain(1);
@@ -207,10 +207,10 @@ describe("Switching the embedding provider", { timeout: 30_000 }, () => {
       baseUrl: LOCAL_SERVER,
       modelId: "mirror-embed",
     });
-    // Plants (added first) is being embedded again; Markets waits its turn with its old vectors.
+    // Plants (added first) is being embedded again; Markets waits its turn, queued, with its old vectors.
     await embeddings.passageRequests(1);
     expect((await core.listDocuments()).map((each) => [each.name, each.status])).toEqual([
-      ["Markets", "embedding"],
+      ["Markets", "queued"],
       ["Plants", "embedding"],
     ]);
     const passages = (name: string) =>
@@ -665,10 +665,10 @@ describe("Local mode", { timeout: 30_000 }, () => {
     });
     expect(keychain.secrets.has("embedding-provider:api-key")).toBe(false);
     await finished;
-    const documents = await core.listDocuments();
-    for (const document of documents) {
-      expect(statusesOf(document.id)).toEqual(["embedding", "ready"]);
-    }
+    // Newest first: Markets waited, queued, while Plants (added first) was embedded.
+    const [markets, plants] = await core.listDocuments();
+    expect(statusesOf(plants?.id as string)).toEqual(["embedding", "ready"]);
+    expect(statusesOf(markets?.id as string)).toEqual(["queued", "embedding", "ready"]);
     expect(recordedModels(dataDir).map((row) => row.embedding_model)).toEqual([
       BUILT_IN_ID,
       BUILT_IN_ID,

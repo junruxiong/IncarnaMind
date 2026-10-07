@@ -12,7 +12,11 @@
  *    each cluster's centroid is the window that takes in most of it; and the
  *    Passages returned are that window's, so a hit comes with its neighbours.
  * 5. The best windows, a few per Document, become the Passages returned, with
- *    their Document, pages and text, in reading order.
+ *    their Document, pages and text, in reading order. A window ranks by its
+ *    best hit, then by the summed scores of its hits: fused scores are close
+ *    together (reciprocal rank fusion, k = 60), so a sum mostly counts hits,
+ *    and a long, repetitive Document's windows of three weaker hits would
+ *    otherwise outrank a short one's single best match.
  *
  * Every count is a parameter; the retrieval evaluation (#31) tunes them.
  */
@@ -65,13 +69,18 @@ export interface WindowedHit {
 /** A cluster's centroid window, with the hits it takes in. */
 export interface CentroidWindow<Hit extends WindowedHit = WindowedHit> {
   window: number;
-  /** The summed scores of `hits`. */
+  /** The summed scores of `hits`: which window takes in most of a cluster. */
   score: number;
+  /** The best score among `hits`: how windows rank (see `byRank`). */
+  best: number;
   hits: Hit[];
 }
 
 const contains = (hit: WindowedHit, window: number) =>
   hit.windowFrom <= window && window <= hit.windowTo;
+
+/** Windows best first: by their best hit, then by their summed score. */
+const byRank = (a: CentroidWindow, b: CentroidWindow) => b.best - a.best || b.score - a.score;
 
 /**
  * Hits whose window ranges intersect, directly or through other hits: the
@@ -135,19 +144,23 @@ export function centroidWindows<Hit extends WindowedHit>(
       }
     }
     const hits = remaining.filter((hit) => contains(hit, best));
-    windows.push({ window: best, score: bestScore, hits });
+    const top = Math.max(...hits.map((hit) => hit.score));
+    windows.push({ window: best, score: bestScore, best: top, hits });
     remaining = remaining.filter((hit) => !contains(hit, best));
   }
   return windows;
 }
 
-/** One Document's best windows, best first: its hits clustered, each cluster's centroids. */
+/**
+ * One Document's windows, best first (`byRank`, then the earlier window): its
+ * hits clustered, each cluster's centroids.
+ */
 export function documentWindows<Hit extends WindowedHit>(
   hits: readonly Hit[],
 ): CentroidWindow<Hit>[] {
   return clusterByOverlap(hits)
     .flatMap((cluster) => centroidWindows(cluster))
-    .sort((a, b) => b.score - a.score || a.window - b.window);
+    .sort((a, b) => byRank(a, b) || a.window - b.window);
 }
 
 export interface SearchToolSources {
@@ -193,7 +206,7 @@ export async function searchDocumentsTool(
   const windows = [...byDocument].flatMap(([documentId, hits]) =>
     documentWindows(hits).map((window) => ({ documentId, ...window })),
   );
-  windows.sort((a, b) => b.score - a.score);
+  windows.sort(byRank);
 
   const documents: string[] = [];
   const windowsTaken = new Map<string, number>();
