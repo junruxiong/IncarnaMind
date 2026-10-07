@@ -10,6 +10,12 @@ export type {
   ProcessLauncher,
   SpawnOptions,
 } from "./adapters";
+export type {
+  AnswerEngine,
+  AnswerEngineEvent,
+  AnswerMessage,
+  AnswerRequest,
+} from "./answers/engine";
 export * from "./api";
 export type { DataFlowDefinition, DataFlowRegistry } from "./consent";
 export { type Core, createCore, DATABASE_FILE } from "./core";

@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { AnswerEngine } from "./answers/engine";
 import type { SecretProtection } from "./api";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { ChatModelFactory } from "./providers/models";
@@ -80,4 +81,9 @@ export interface CoreAdapters {
    * point it at a local fake authorization server and endpoint.
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
+  /**
+   * Turns Question context into a streamed Answer. Defaults to the AI SDK
+   * engine; an alternative agent layer plugs in here.
+   */
+  answerEngine?: AnswerEngine;
 }
