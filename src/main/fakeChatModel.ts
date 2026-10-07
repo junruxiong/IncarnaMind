@@ -10,6 +10,10 @@
  * line is on), then answers with a marker. A Question with "misquote" in it
  * gets a quote that isn't on the page.
  *
+ * With Skills: a Question that names a listed Skill gets it loaded with
+ * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
+ * by saying which.
+ *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  */
 import { MockLanguageModelV4 } from "ai/test";
@@ -24,9 +28,10 @@ type GenerateOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
 /** Time between two streamed words: slow enough for a test to watch the Answer grow. */
 const WORD_DELAY_MS = 60;
 
-/** The scripted Answer to a Question, when there are no Documents. */
-export function fakeAnswer(question: string): string {
+/** The scripted Answer to a Question, when there are no Documents; it says which Skill it follows, if any. */
+export function fakeAnswer(question: string, skill: string | null = null): string {
   return [
+    ...(skill ? [`Following the Skill ${skill}.`, ""] : []),
     `This is a **scripted** Answer to: ${question}`,
     "",
     "- It streams in a few words at a time",
@@ -63,6 +68,28 @@ function toolResults(prompt: Prompt, tool: string): string[] {
     }
   }
   return results;
+}
+
+/** The system prompt's text. */
+function systemOf(prompt: Prompt): string {
+  return prompt
+    .filter((message) => message.role === "system")
+    .map((message) => (typeof message.content === "string" ? message.content : ""))
+    .join("\n");
+}
+
+/** The Skill the Answer follows: the one the Question forces, or one loaded with use_skill. */
+function skillFollowed(prompt: Prompt): string | null {
+  const forced = /the User chose the Skill "([^"]+)"/.exec(systemOf(prompt))?.[1];
+  if (forced) return forced;
+  const loaded = toolResults(prompt, "use_skill").at(-1);
+  return (loaded && /<skill name="([^"]+)">/.exec(loaded)?.[1]) || null;
+}
+
+/** A listed Skill the Question names, to load before answering. */
+function skillNamed(prompt: Prompt, question: string): string | null {
+  const listed = [...systemOf(prompt).matchAll(/<skill name="([^"]+)">/g)].map((match) => match[1]);
+  return listed.find((name) => name && question.toLowerCase().includes(name)) ?? null;
 }
 
 /**
@@ -144,7 +171,13 @@ function nextReply(
   tools: readonly string[],
 ): { text: string } | { tool: string; input: unknown } {
   const question = lastQuestion(prompt);
-  if (!tools.includes("search_documents")) return { text: fakeAnswer(question) };
+  if (tools.includes("use_skill") && toolResults(prompt, "use_skill").length === 0) {
+    const named = skillNamed(prompt, question);
+    if (named) return { tool: "use_skill", input: { name: named } };
+  }
+  if (!tools.includes("search_documents")) {
+    return { text: fakeAnswer(question, skillFollowed(prompt)) };
+  }
   const searches = toolResults(prompt, "search_documents");
   if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
   if (toolResults(prompt, "cite").length === 0) {
