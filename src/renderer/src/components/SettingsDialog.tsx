@@ -14,7 +14,7 @@ import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { buttonClass } from "./providers/shared";
-import { SkillsSettings } from "./SkillsSettings";
+import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
 import { useModal } from "./useModal";
 
 const languageOptions: readonly { value: LanguagePreference; label: MessageKey }[] = [
@@ -123,6 +123,7 @@ function GeneralSettings() {
       <RerankSettingsSection />
       <ConnectorsSettings />
       <SkillsSettings />
+      <SkillScriptsSettings />
       <ApprovalsSettings />
       <JevSettingsSection />
       <fieldset>

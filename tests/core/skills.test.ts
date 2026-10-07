@@ -547,7 +547,8 @@ describe("Answers use Skills", () => {
 
     expect(ended.event).toBe("finished");
     const [call] = calls;
-    expect(call?.tools.sort()).toEqual(["read_skill_file", "use_skill"]);
+    // The tide Skill has a script, so run_skill_script is offered too (tests/core/skillScripts.test.ts).
+    expect(call?.tools.sort()).toEqual(["read_skill_file", "run_skill_script", "use_skill"]);
     expect(call?.system).toContain(
       '<skill name="tide-tables">Reads tide tables and explains high and low water. Use for questions about tides.</skill>',
     );
@@ -603,7 +604,7 @@ describe("Answers use Skills", () => {
     expect(text).toContain(BODY_MARKER);
     expect(text).toContain("- references/ports.md");
     expect(text).toContain(
-      "- scripts/convert.py (a script: it can't be run here, but it can be read)",
+      "- scripts/convert.py (a script: run_skill_script runs it when the instructions say to)",
     );
     expect(toolCallsOf(client, answerId)).toEqual([
       {
@@ -739,7 +740,7 @@ describe("Answers use Skills", () => {
     expect(system).toContain("- references/ports.md");
     expect(system).toContain('<skill name="almanac">Dates.</skill>');
     expect(system).not.toContain('<skill name="tide-tables">Reads tide tables');
-    expect(calls[0]?.tools.sort()).toEqual(["read_skill_file", "use_skill"]);
+    expect(calls[0]?.tools.sort()).toEqual(["read_skill_file", "run_skill_script", "use_skill"]);
     expect(toolCallsOf(client, answerId)).toEqual([
       {
         id: "forced-skill",

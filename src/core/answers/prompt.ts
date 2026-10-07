@@ -101,47 +101,60 @@ export function documentInstructions(
 const attribute = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-/** A Skill's files besides SKILL.md, for the model to read when its instructions point to them. */
-function skillFiles(files: readonly SkillFile[]): string {
+/**
+ * A Skill's files besides SKILL.md, for the model to read when its
+ * instructions point to them, and its scripts to run when `scripts` can.
+ */
+function skillFiles(files: readonly SkillFile[], scripts: boolean): string {
   const others = files.filter((file) => file.path !== "SKILL.md");
   if (others.length === 0) return "";
   return [
     "Its other files, which read_skill_file can read when the instructions point to them:",
     ...others.map((file) =>
-      file.script
-        ? `- ${file.path} (a script: it can't be run here, but it can be read)`
-        : `- ${file.path}`,
+      !file.script
+        ? `- ${file.path}`
+        : scripts
+          ? `- ${file.path} (a script: run_skill_script runs it when the instructions say to)`
+          : `- ${file.path} (a script: it can't be run here, but it can be read)`,
     ),
   ].join("\n");
 }
 
 /** A Skill's instructions, as `use_skill` gives them, or as a forced Skill is loaded up front. */
-export function loadedSkillText(skill: LoadedSkill, { withFiles }: { withFiles: boolean }): string {
+export function loadedSkillText(
+  skill: LoadedSkill,
+  { withFiles, scripts = false }: { withFiles: boolean; scripts?: boolean },
+): string {
   return [
     `<skill name="${attribute(skill.name)}">`,
     skill.instructions,
     "</skill>",
-    ...(withFiles ? [skillFiles(skill.files)] : []),
+    ...(withFiles ? [skillFiles(skill.files, scripts)] : []),
   ]
     .filter(Boolean)
     .join("\n");
 }
 
+const SCRIPTS =
+  "When a Skill's instructions say to run one of its scripts, call run_skill_script with the Skill's name, the script's path and its arguments. The User approves each run first and may deny it: then carry on without it, don't run it again, and say what wasn't done.";
+
 /**
  * What the Answer may do with Skills. The enabled Skills are listed by name
  * and description only, when the model can load them with `use_skill`; a
- * forced Skill's instructions are there in full.
+ * forced Skill's instructions are there in full. `scripts`: the model can run
+ * Skills' scripts with `run_skill_script`.
  */
 export function skillInstructions(
   listed: readonly SkillSummary[],
   forced: LoadedSkill | null,
   skillTools: boolean,
+  scripts = false,
 ): string {
   const parts: string[] = [];
   if (forced) {
     parts.push(
       `For this Question the User chose the Skill "${forced.name}": follow its instructions.`,
-      loadedSkillText(forced, { withFiles: skillTools }),
+      loadedSkillText(forced, { withFiles: skillTools, scripts: skillTools && scripts }),
     );
   }
   if (skillTools && listed.length > 0) {
@@ -159,5 +172,6 @@ export function skillInstructions(
       ].join("\n"),
     );
   }
+  if (skillTools && scripts) parts.push(SCRIPTS);
   return parts.join("\n\n");
 }

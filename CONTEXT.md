@@ -70,6 +70,10 @@ _Avoid_: MCP server, plugin, integration, connection
 A packaged description of how to do a particular task, optionally with reference files and scripts, that an Answer can follow.
 _Avoid_: plugin, command
 
+**Skill script**:
+A script that comes with a Skill, which an Answer can run on the User's computer. Each run asks the User first, unless they chose "always run" for that Skill; there is no sandbox, and a switch in Settings turns all Skill scripts off.
+_Avoid_: tool script, code execution
+
 **Built-in Skill**:
 A Skill that ships with IncarnaMind and is updated with it: summarise a Document, a literature review across Documents, and a Mind to report. The User can turn one off, remove it and restore it, or duplicate it as their own, but not change it.
 _Avoid_: default Skill, system Skill

@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { translate } from "../shared/i18n";
 import type { CoreAdapters } from "./adapters";
@@ -40,6 +41,7 @@ import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
+import { createScriptRunner } from "./skills/scripts";
 import { migrate, openDatabase } from "./storage";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
@@ -169,7 +171,11 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
-  const skillsChanged = () => events.emit("skills.changed", skills.list());
+  /** Skills changed: say so; whether scripts can run, and so what chat sends, may have too. */
+  const skillsChanged = () => {
+    events.emit("skills.changed", skills.list());
+    if (syncChatFlow()) readinessChanged().catch((error: unknown) => console.error(error));
+  };
 
   /** The embedding settings, with the rebuild's progress; a rebuild that has finished ends here. */
   const embeddingSettings = async (): Promise<EmbeddingSettings> => {
@@ -263,24 +269,41 @@ export function createCore(adapters: CoreAdapters): Core {
     onEnabledChange: () => connectorsToggled(),
     reportError: (error) => console.error(error),
   });
+  /** Skill scripts can run: the User hasn't turned them off, and a Skill that is on has some. */
+  const scriptsOffered = () =>
+    settings.get().device.skillScriptsEnabled && skills.anyEnabledWithScripts();
   /**
    * With a Connector on, Answers send the chat model what its Tools return,
-   * so the chat flow sends "tool-results" too, and asks again for it.
+   * so the chat flow sends "tool-results" too, and asks again for it. So do
+   * Skill scripts that can run (#41): what they print could be anything.
    *
-   * Skills don't: their Tools (`use_skill`, `read_skill_file`) return only
-   * the text of Skills the User imported, which is sent like the system
-   * prompt, not data fetched from another service. Skill scripts, whose
-   * output could be anything, would need "tool-results" when they land.
+   * Skills alone don't: their Tools (`use_skill`, `read_skill_file`) return
+   * only the text of Skills the User imported, which is sent like the system
+   * prompt, not data fetched from another service.
    */
-  const syncChatFlow = () => {
+  const sendsToolResults = () => connectors.anyEnabled() || scriptsOffered();
+  /** Whether the chat flow sends "tool-results", as last registered. */
+  let toolResultsSent: boolean | null = null;
+  /** Registers what the chat flow sends now; true if "tool-results" came or went. */
+  const syncChatFlow = (): boolean => {
     const flow = consent.registry.get("chat");
-    if (!flow) return;
-    const sends = connectors.anyEnabled()
-      ? [...CHAT_FLOW_SENDS, "tool-results" as const]
-      : CHAT_FLOW_SENDS;
+    if (!flow) return false;
+    const withResults = sendsToolResults();
+    const sends = withResults ? [...CHAT_FLOW_SENDS, "tool-results" as const] : CHAT_FLOW_SENDS;
     consent.registry.register({ ...flow, sends });
+    const changed = toolResultsSent !== null && toolResultsSent !== withResults;
+    toolResultsSent = withResults;
+    return changed;
   };
   syncChatFlow();
+
+  // Running Skill scripts (#41), each in its own temporary folder.
+  const scriptRunner = createScriptRunner({
+    processes: adapters.processes,
+    runtimes: adapters.scriptRuntimes,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    reportError: (error) => console.error(error),
+  });
 
   // Asking the User before a Connector Tool that may change something runs (#38).
   const approvals = createApprovals({
@@ -324,7 +347,14 @@ export function createCore(adapters: CoreAdapters): Core {
     approvals: {
       toolNeedsApproval: (connectorId, tool, readOnly) =>
         approvals.toolNeedsApproval(connectorId, tool, readOnly),
+      scriptNeedsApproval: (skillId) => approvals.scriptNeedsApproval(skillId),
       request: (call, signal) => approvals.request(call, signal),
+    },
+    scripts: {
+      enabled: () => settings.get().device.skillScriptsEnabled,
+      timeoutSeconds: () => settings.get().device.skillScriptTimeoutSeconds,
+      check: (script) => scriptRunner.check(script),
+      run: (request) => scriptRunner.run(request),
     },
     skills: {
       availability: (name) => skills.availability(name),
@@ -503,9 +533,16 @@ export function createCore(adapters: CoreAdapters): Core {
       if (isChatModelChoice(chatModel) && !chat.exists(chatModel.providerId)) {
         throw new InvalidInputError("That chat provider doesn't exist.");
       }
+      const scriptsWere = settings.get().device.skillScriptsEnabled;
       const updated = settings.update(patch);
       events.emit("settings.changed", updated);
-      if (chatModel !== undefined) await readinessChanged();
+      // Skill scripts turned off: none runs any more, and none waits to.
+      if (scriptsWere && !updated.device.skillScriptsEnabled) {
+        approvals.denyScripts();
+        scriptRunner.stopAll();
+      }
+      const flowChanged = syncChatFlow();
+      if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
     addDocuments: (paths) => documents.add(paths),
@@ -735,7 +772,8 @@ export function createCore(adapters: CoreAdapters): Core {
     setApprovalPolicy: async (input) => approvals.set(input),
     revokeApprovalPolicy: async (policyId) => approvals.revoke(policyId),
     listApprovalRequests: async () => approvals.requests(),
-    respondToApproval: async (requestId, decision) => approvals.respond(requestId, decision),
+    respondToApproval: async (requestId, decision, options) =>
+      approvals.respond(requestId, decision, options),
 
     listSkills: async () => skills.list(),
     previewSkillImport: (path) => skills.preview(path),
@@ -781,8 +819,9 @@ export function createCore(adapters: CoreAdapters): Core {
       lifetime.abort();
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
-      // the User's approval are denied.
+      // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
+      scriptRunner.close();
       approvals.close();
       connectors.close();
       tagger.close();

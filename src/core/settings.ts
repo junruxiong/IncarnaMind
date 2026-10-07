@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { ChatModelChoice, DeviceSettings, Settings, UserSettings } from "./api";
+import {
+  type ChatModelChoice,
+  type DeviceSettings,
+  type Settings,
+  SKILL_SCRIPT_LIMITS,
+  type UserSettings,
+} from "./api";
 import { InvalidInputError, isRecord } from "./errors";
 import { isLanguagePreference, resolveLanguage } from "./language";
 import type { Database } from "./storage";
@@ -41,14 +47,28 @@ const userScope: Scope<UserSettings> = {
   },
 };
 
+const isScriptTimeout = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= SKILL_SCRIPT_LIMITS.minTimeoutSeconds &&
+  value <= SKILL_SCRIPT_LIMITS.maxTimeoutSeconds;
+
 const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
-  defaults: { sidebarWidth: 270, viewerWidth: 420, chatSetupDismissed: false },
+  defaults: {
+    sidebarWidth: 270,
+    viewerWidth: 420,
+    chatSetupDismissed: false,
+    skillScriptsEnabled: true,
+    skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
+  },
   validators: {
     sidebarWidth: isPaneWidth,
     viewerWidth: isPaneWidth,
     chatSetupDismissed: isBoolean,
+    skillScriptsEnabled: isBoolean,
+    skillScriptTimeoutSeconds: isScriptTimeout,
   },
 };
 

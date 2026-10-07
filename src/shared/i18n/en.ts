@@ -388,7 +388,8 @@ export const en = {
   "consent.data.blocks":
     "Your draft: the Blocks above the Question, with your Notes and earlier Answers",
   "consent.data.passages": "Passages from your Documents that match the Question",
-  "consent.data.tool-results": "Results of the Tools an Answer uses, such as Connectors",
+  "consent.data.tool-results":
+    "Results of the Tools an Answer uses, such as Connectors and Skill scripts",
   "consent.flow.tagging": "Automatic Tags",
   "consent.flow.tagging.purpose": "tag your Documents automatically",
   "consent.data.tags": "The names and descriptions of your Tags",
@@ -444,7 +445,7 @@ export const en = {
     "The experimental ChatGPT plan signs you in with OpenAI and renews the sign-in. Questions asked with it are the chat flow above.",
   "privacy.skills.title": "Skill scripts",
   "privacy.skills.body":
-    "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does.",
+    "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
   "privacy.crashReports.title": "Crash reports",
   "privacy.crashReports.toggle": "Send crash reports",
   "privacy.crashReports.body":
@@ -554,8 +555,8 @@ export const en = {
   "skills.settings.remove": "Remove",
   "skills.settings.removeLabel": "Remove {name}",
   "skills.settings.license": "Licence: {license}",
-  "skills.settings.scripts.one": "1 script, which can't run yet",
-  "skills.settings.scripts": "{count} scripts, which can't run yet",
+  "skills.settings.scripts.one": "1 script",
+  "skills.settings.scripts": "{count} scripts",
   "skills.settings.builtIn": "Built-in",
   "skills.settings.builtIn.hint":
     "Comes with IncarnaMind and is updated with it. To change it, duplicate it as your own.",
@@ -575,7 +576,7 @@ export const en = {
   "skills.preview.compatibility": "Needs: {compatibility}",
   "skills.preview.files": "{count} files, {size} in all",
   "skills.preview.files.one": "1 file, {size}",
-  "skills.preview.script": "script: can't run yet",
+  "skills.preview.script": "script: runs only with your approval",
   "skills.preview.import": "Import",
   "skills.preview.importing": "Importing…",
   "skills.preview.cancel": "Cancel",
@@ -610,6 +611,43 @@ export const en = {
   "skills.answer.forced": "chosen for this Question",
   "skills.answer.read": "Read {path}",
   "skills.answer.readFailed": "Couldn't read {path}",
+
+  "scripts.settings.title": "Skill scripts",
+  "scripts.settings.enabled": "Let Skills run their scripts",
+  "scripts.settings.body":
+    "Scripts run on this computer, with no sandbox. Each run asks you first, unless you chose “Always run” for its Skill. Turned off, no Skill script runs at all.",
+  "scripts.settings.timeout": "Stop a script that runs longer than",
+  "scripts.settings.seconds": "seconds",
+  "scripts.card.title": "{skill} wants to run {script}",
+  "scripts.card.skill": "Skill",
+  "scripts.card.script": "Script",
+  "scripts.card.args": "Arguments",
+  "scripts.card.noArgs": "No arguments.",
+  "scripts.card.noSandbox":
+    "Scripts run on this computer with no sandbox: this one could read, change or delete your files and use the internet, as you can. Nothing runs until you choose.",
+  "scripts.card.allowOnce": "Allow once",
+  "scripts.card.alwaysRun": "Always run",
+  "scripts.card.alwaysRunHint":
+    "Run every script of {skill} from now on without asking. You'll see a warning first.",
+  "scripts.card.deny": "Deny",
+  "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
+  "scripts.alwaysRun.body":
+    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can revoke it in Settings, under Approvals.",
+  "scripts.alwaysRun.confirm": "Always run {skill}'s scripts",
+  "scripts.alwaysRun.cancel": "Cancel",
+  "scripts.call.waiting": "Waiting for your approval: {script} ({skill})",
+  "scripts.call.running": "Running {script} ({skill})…",
+  "scripts.call.denied": "Not allowed: {script} ({skill})",
+  "scripts.call.cantRun": "Couldn't run {script} ({skill})",
+  "scripts.call.timedOut": "{script} ({skill}) ran too long and was stopped",
+  "scripts.call.exited": "Ran {script} ({skill}): exit code {code}",
+  "scripts.call.stopped": "{script} ({skill}) was stopped",
+  "scripts.call.details": "Its arguments and what it wrote",
+  "scripts.call.args": "Arguments",
+  "scripts.call.stdout": "Output",
+  "scripts.call.stderr": "Errors",
+  "scripts.call.stdoutTruncated": "Cut: only the first {bytes} bytes are kept.",
+  "scripts.call.stderrTruncated": "Cut: only the last {bytes} bytes are kept.",
 
   "export.action": "Export",
   "export.action.label": "Export this Mind",
@@ -752,8 +790,9 @@ export const en = {
   "approvals.tools.always": "Always allow",
   "approvals.settings.title": "Approvals",
   "approvals.settings.body":
-    "Tools that may change something ask before each call. Here is every Tool you always allow, and every Tool you set to ask every time. Revoke one to go back to the default.",
-  "approvals.settings.empty": "No Tool is set to always allow or to ask every time.",
+    "Tools that may change something, and Skill scripts, ask before each run. Here is every Tool you always allow or set to ask every time, and every Skill whose scripts always run. Revoke one to go back to the default.",
+  "approvals.settings.empty":
+    "No Tool is set to always allow or to ask every time. No Skill's scripts always run.",
   "approvals.settings.revoke": "Revoke",
   "approvals.settings.revokeLabel": "Revoke the setting for {name}",
   "approvals.settings.skillScripts": "Scripts of {skill}",

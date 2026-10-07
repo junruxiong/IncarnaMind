@@ -17,9 +17,10 @@
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output.
  *
- * Skills add two Tools to the loop: `use_skill` loads a Skill's instructions
- * and `read_skill_file` one of its files. The User's Connectors add their
- * Tools as external Tools (those that ask the User first wait inside their
+ * Skills add Tools to the loop: `use_skill` loads a Skill's instructions,
+ * `read_skill_file` one of its files, and `run_skill_script` runs one of its
+ * scripts (asking the User first, inside the call). The User's Connectors add
+ * their Tools as external Tools (those that ask the User first wait inside their
  * `call`); their results aren't Passages, so they are never cited, and the
  * Answer shows each call as a Tool-call card. With
  * Skills or Connector Tools but no Documents, the loop runs with those alone;
@@ -122,6 +123,35 @@ export interface AnswerSkillTools {
   useSkill(name: string): Promise<string>;
   /** One of a Skill's files, as text. Throws for a path outside the Skill. */
   readSkillFile(skill: string, path: string): Promise<string>;
+  /**
+   * Runs one of a Skill's scripts (`run_skill_script`, with `{ skill, script,
+   * args }`), asking the User first unless the Skill's scripts always run.
+   * Resolves with what to tell the model (how it ended and what it wrote, or
+   * that the User denied it); rejects with why it couldn't run. Absent when no
+   * script can run: none of the Skills has one, or the User turned scripts off.
+   */
+  runScript?(
+    input: Record<string, unknown>,
+    signal: AbortSignal,
+    call: { toolCallId: string },
+  ): Promise<string>;
+}
+
+/** The Tool that runs a Skill's scripts. */
+export const RUN_SKILL_SCRIPT_TOOL = "run_skill_script";
+
+/**
+ * A `run_skill_script` call's arguments as the Tool-call card shows them:
+ * the Skill, the script and the arguments, as text.
+ */
+export function scriptCallInput(input: unknown): { skill: string; script: string; args: string[] } {
+  const fields = isPlainObject(input) ? input : {};
+  const text = (value: unknown) => (typeof value === "string" ? value : String(value ?? ""));
+  return {
+    skill: text(fields.skill),
+    script: text(fields.script),
+    args: Array.isArray(fields.args) ? fields.args.map(text) : [],
+  };
 }
 
 export interface InstructionOptions {
@@ -208,6 +238,7 @@ const SHOWN_TOOLS: ReadonlySet<string> = new Set([
   SEARCH_TOOL,
   USE_SKILL_TOOL,
   READ_SKILL_FILE_TOOL,
+  RUN_SKILL_SCRIPT_TOOL,
 ]);
 const MARKER = /\[\^\d{1,4}\]/;
 
@@ -389,7 +420,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
 }
 
 /** The Skill Tools, for the model. */
-function skillTools(skills: AnswerSkillTools): ToolSet {
+function skillTools(skills: AnswerSkillTools, signal: AbortSignal): ToolSet {
   const tools: ToolSet = {};
   if (skills.loadable) {
     tools[USE_SKILL_TOOL] = tool({
@@ -420,11 +451,37 @@ function skillTools(skills: AnswerSkillTools): ToolSet {
     execute: async ({ skill, path }) =>
       skills.readSkillFile(String(skill ?? ""), String(path ?? "")),
   });
+  const { runScript } = skills;
+  if (runScript) {
+    tools[RUN_SKILL_SCRIPT_TOOL] = tool({
+      description:
+        "Run one of a Skill's scripts when its instructions say to, with arguments. It runs on the User's computer in a new, empty working folder; the Skill's own folder is in the SKILL_DIR environment variable. Python (.py), JavaScript (.js, .mjs) and shell (.sh) scripts can run. The User approves each run first and may deny it. Returns the exit code and what the script printed.",
+      inputSchema: jsonSchema<{ skill: string; script: string; args?: string[] }>({
+        type: "object",
+        properties: {
+          skill: { type: "string", description: "The Skill's name." },
+          script: {
+            type: "string",
+            description: "The script's path inside the Skill, e.g. scripts/convert.py.",
+          },
+          args: {
+            type: "array",
+            items: { type: "string" },
+            description: "The script's command-line arguments, in order.",
+          },
+        },
+        required: ["skill", "script"],
+      }),
+      execute: (input, { abortSignal, toolCallId }) =>
+        runScript(isPlainObject(input) ? input : {}, abortSignal ?? signal, { toolCallId }),
+    });
+  }
   return tools;
 }
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /** The external Tools (a Connector's), for the model. Names IncarnaMind's own Tools use are skipped. */
 function externalTools(external: ReadonlyMap<string, ExternalTool>, signal: AbortSignal): ToolSet {
@@ -493,7 +550,7 @@ async function* toolLoop(
   const tools: ToolSet = {
     ...externalTools(external, signal),
     ...(mode === "tools" ? documentTools : {}),
-    ...(request.skills ? skillTools(request.skills) : {}),
+    ...(request.skills ? skillTools(request.skills, signal) : {}),
   };
 
   const result = streamText({
@@ -616,6 +673,7 @@ function shownInput(toolName: string, input: unknown): Record<string, unknown> {
   const text = (value: unknown) => String(value ?? "");
   if (toolName === SEARCH_TOOL) return { query: text(fields.query) };
   if (toolName === USE_SKILL_TOOL) return { name: text(fields.name) };
+  if (toolName === RUN_SKILL_SCRIPT_TOOL) return scriptCallInput(fields);
   return { skill: text(fields.skill), path: text(fields.path) };
 }
 

@@ -505,7 +505,7 @@ describe("Approval policies", { timeout: 30_000 }, () => {
     await core.respondToApproval("no-such-request", "deny");
   });
 
-  test("the policy model also covers a Skill's scripts (#41): always run, listed under the Skill's name", async () => {
+  test("the policy model also covers a Skill's scripts (#41): always run, once the risk is accepted, listed under the Skill's name", async () => {
     const { core } = await setUp(toolModel());
     const sources = await createTempDataFolder();
     const skill = await importSkill(
@@ -517,7 +517,14 @@ describe("Approval policies", { timeout: 30_000 }, () => {
     const subject = { kind: "skill-script", skillId: skill.id } as const;
 
     await expect(core.setApprovalPolicy({ subject, policy: "ask" })).rejects.toThrow(/always ask/);
-    expect(await core.setApprovalPolicy({ subject, policy: "always" })).toMatchObject({
+    // "Always run" only after the User has confirmed the warning.
+    await expect(core.setApprovalPolicy({ subject, policy: "always" })).rejects.toThrow(
+      /riskAccepted/,
+    );
+    expect(await core.listApprovalPolicies()).toEqual([]);
+    expect(
+      await core.setApprovalPolicy({ subject, policy: "always", riskAccepted: true }),
+    ).toMatchObject({
       subject,
       policy: "always",
       ownerName: "tide-tables",

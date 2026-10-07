@@ -142,8 +142,9 @@ export interface AnswerToolCall {
   /**
    * "search_documents": the document-search Tool. "use_skill": loading a
    * Skill's instructions (`{ name }`). "read_skill_file": reading one of a
-   * Skill's files (`{ skill, path }`). A Connector's Tool: its name as the
-   * Connector gives it, e.g. "search_issues".
+   * Skill's files (`{ skill, path }`). "run_skill_script": running one of a
+   * Skill's scripts (`{ skill, script, args }`, see `script`). A Connector's
+   * Tool: its name as the Connector gives it, e.g. "search_issues".
    */
   tool: string;
   /**
@@ -156,14 +157,18 @@ export interface AnswerToolCall {
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
   input: Record<string, unknown>;
-  /** "failed" also covers a call the User didn't allow (see `approval`): it never ran. */
+  /**
+   * "failed" also covers a call the User didn't allow (see `approval`): it
+   * never ran. A Skill script is "done" only when it ran and exited with 0.
+   */
   status: "running" | "done" | "failed";
   /**
-   * A Connector's Tool that asked the User first (see `ApprovalRequest`):
-   * "waiting" while the Answer waits for them; "allowed" once they allowed it
-   * (once, or always); "denied" when they denied it, or the Answer stopped
-   * (or IncarnaMind closed) before they decided, so it never ran. Absent when
-   * it didn't ask: its Connector says it only reads, or the User always allows it.
+   * A call that asked the User first (see `ApprovalRequest`): a Connector's
+   * Tool, or a Skill script. "waiting" while the Answer waits for them;
+   * "allowed" once they allowed it (once, or always); "denied" when they
+   * denied it, or the Answer stopped (or IncarnaMind closed) before they
+   * decided, so it never ran. Absent when it didn't ask: its Connector says
+   * it only reads, the User always allows the Tool, or always runs the Skill's scripts.
    */
   approval?: ToolCallApproval;
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
@@ -173,10 +178,39 @@ export interface AnswerToolCall {
    * front instead of the model calling the Tool. Absent otherwise.
    */
   forced?: boolean;
+  /**
+   * "run_skill_script" only: how the run went once it ended, or why the
+   * script couldn't run. Absent while it runs, and when it never did (denied).
+   */
+  script?: SkillScriptRun;
 }
 
 /** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
 export type ToolCallApproval = "waiting" | "allowed" | "denied";
+
+/**
+ * A run of a Skill script, as its Tool-call card shows it: what the model was
+ * given back. Each output is cut to `SKILL_SCRIPT_LIMITS.maxOutputBytes`: the
+ * start of the standard output, the end of the error output.
+ */
+export interface SkillScriptRun {
+  /** Its exit code; null when it couldn't start (see `error`), or was stopped. */
+  exitCode: number | null;
+  /** It ran longer than the timeout, so it was stopped with every process it started. */
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+  /** It wrote more to its standard output than is kept. */
+  stdoutTruncated: boolean;
+  /** It wrote more to its error output than is kept. */
+  stderrTruncated: boolean;
+  /**
+   * Why it didn't run, in plain language: e.g. its interpreter isn't
+   * installed ("python3 not found: install Python 3."), it is a shell script
+   * on Windows, or a kind of script IncarnaMind can't run. Null when it ran.
+   */
+  error: string | null;
+}
 
 /**
  * The node type of a Citation: an inline node anchored in the text of an
@@ -274,6 +308,19 @@ export interface DeviceSettings {
   viewerWidth: number;
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
+  /**
+   * Skill scripts may run on this device: on by default, and each run still
+   * asks first unless the Skill's scripts always run. Off, Answers aren't
+   * offered `run_skill_script` at all, scripts running are stopped, and runs
+   * waiting for approval are denied.
+   */
+  skillScriptsEnabled: boolean;
+  /**
+   * How long a Skill script may run, in seconds, before it is stopped with
+   * every process it started: from `SKILL_SCRIPT_LIMITS.minTimeoutSeconds` to
+   * `maxTimeoutSeconds`, `defaultTimeoutSeconds` by default.
+   */
+  skillScriptTimeoutSeconds: number;
 }
 
 export interface Settings {
@@ -970,8 +1017,11 @@ export interface SkillFile {
   /** In bytes. */
   size: number;
   /**
-   * A script: in the Skill's `scripts/` folder, or a script's file type. It is
-   * listed, and the model can read it, but Answers can't run scripts yet.
+   * A script: in the Skill's `scripts/` folder, or a script's file type. The
+   * model can read it and, unless the User turned Skill scripts off, run it
+   * with `run_skill_script`, which asks the User first. Python (.py),
+   * JavaScript (.js, .mjs, .cjs) and shell (.sh, .bash; not on Windows)
+   * scripts run; any other kind gives an error saying so.
    */
   script: boolean;
 }
@@ -1035,6 +1085,19 @@ export interface SkillImportError {
 export type SkillImportCheck =
   | { ok: true; preview: SkillImportPreview }
   | { ok: false; error: SkillImportError };
+
+/** How Skill scripts run. */
+export const SKILL_SCRIPT_LIMITS = {
+  /** How long a script may run when the User hasn't chosen (`DeviceSettings.skillScriptTimeoutSeconds`). */
+  defaultTimeoutSeconds: 60,
+  minTimeoutSeconds: 1,
+  maxTimeoutSeconds: 3600,
+  /** Of each of the standard output and the error output: what the model and the card get. */
+  maxOutputBytes: 20_000,
+  /** Arguments one run may have, and characters in all of them together. */
+  maxArgs: 100,
+  maxArgsChars: 20_000,
+} as const;
 
 /** How big a Skill may be. Checked before anything is imported. */
 export const SKILL_LIMITS = {
@@ -1471,7 +1534,7 @@ export interface ConnectorImportResult {
 /**
  * What an approval policy is about:
  * - "tool": one Tool of one Connector;
- * - "skill-script": the scripts of one Skill (Skill scripts come with #41).
+ * - "skill-script": the scripts of one Skill.
  */
 export type ApprovalSubject =
   | {
@@ -1513,29 +1576,70 @@ export interface SetApprovalPolicyInput {
   subject: ApprovalSubject;
   /** Null goes back to the default, removing the User's policy. A Skill script takes "always" or null. */
   policy: ApprovalPolicyValue | null;
+  /**
+   * "Always run" a Skill's scripts only: the User has seen the warning that
+   * its scripts will then run on this computer without asking, with no
+   * sandbox, and confirmed it. Without it, that policy is refused.
+   */
+  riskAccepted?: boolean;
 }
 
 /**
  * What the User decides about a Tool call that asks first:
  * - "allow-once": this call runs;
  * - "always-allow": this call runs, and so will every later call of the Tool
- *   without asking (the policy becomes "always");
+ *   without asking (the policy becomes "always"). For a Skill script this is
+ *   "always run": every script of the Skill runs from now on without asking,
+ *   which needs `ApprovalResponseOptions.riskAccepted`;
  * - "deny": the call doesn't run; the model is told the User denied it, and
  *   the Answer carries on without it.
  */
 export type ApprovalDecision = "allow-once" | "always-allow" | "deny";
 
+export interface ApprovalResponseOptions {
+  /**
+   * "always-allow" of a Skill script ("always run") only: the User has seen
+   * the warning that the Skill's scripts will then run on this computer
+   * without asking, with no sandbox, and confirmed it. Without it, that
+   * decision is refused and the request keeps waiting.
+   */
+  riskAccepted?: boolean;
+}
+
 /**
- * A Tool call waiting for the User's approval. Its Answer is paused until they
+ * A call waiting for the User's approval: of a Connector's Tool, or a run of
+ * a Skill script (`subject.kind` tells which). Its Answer is paused until they
  * decide; stopping the Answer, or closing IncarnaMind, denies it.
  */
-export interface ApprovalRequest {
+export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
+
+interface ApprovalRequestBase {
   requestId: string;
   mindId: string;
   answerId: string;
   /** The call's id among the Answer's `toolCalls`. */
   toolCallId: string;
-  subject: ApprovalSubject;
+}
+
+/**
+ * A run of a Skill script waiting for the User's approval: which Skill, which
+ * of its scripts, and its arguments. Scripts run on this computer with no
+ * sandbox (v1): they can do whatever the User can.
+ */
+export interface SkillScriptApprovalRequest extends ApprovalRequestBase {
+  subject: Extract<ApprovalSubject, { kind: "skill-script" }>;
+  /** The Skill the script belongs to, as named when the run was asked for. */
+  skill: { id: string; name: string };
+  tool: "run_skill_script";
+  /** The script's path inside the Skill, e.g. "scripts/convert.py". */
+  script: string;
+  /** The arguments it would run with, in order. */
+  args: string[];
+}
+
+/** A call of a Connector's Tool waiting for the User's approval. */
+export interface ToolApprovalRequest extends ApprovalRequestBase {
+  subject: Extract<ApprovalSubject, { kind: "tool" }>;
   /** The Connector the Tool belongs to, as named when the call was made. */
   connector: { id: string; name: string };
   /** The Tool's name as its Connector gives it, e.g. "create_issue". */
@@ -1901,13 +2005,14 @@ export interface CoreApi {
 
   /**
    * The User's approval policies, for the approvals page: every Tool always
-   * allowed, every Tool switched to "ask", and (#41) every Skill whose scripts
+   * allowed, every Tool switched to "ask", and every Skill whose scripts
    * always run. Policies of deleted Connectors and Skills aren't listed.
    */
   listApprovalPolicies(): Promise<ApprovalPolicy[]>;
   /**
    * Sets a policy, or with `policy: null` removes it (back to the default).
-   * Returns the policy now in effect, or null for the default.
+   * Returns the policy now in effect, or null for the default. "Always run"
+   * for a Skill's scripts needs `riskAccepted`.
    */
   setApprovalPolicy(input: SetApprovalPolicyInput): Promise<ApprovalPolicy | null>;
   /** Removes a policy by its id: its subject goes back to the default. Revoking one that's gone does nothing. */
@@ -1916,9 +2021,15 @@ export interface CoreApi {
   listApprovalRequests(): Promise<ApprovalRequest[]>;
   /**
    * Answers an approval request. Answering one that's no longer waiting (decided
-   * in another window, or its Answer stopped) does nothing.
+   * in another window, or its Answer stopped) does nothing. "always-allow" of a
+   * Skill script ("always run") is refused unless `options.riskAccepted`: the
+   * User must have seen and confirmed the risk warning first.
    */
-  respondToApproval(requestId: string, decision: ApprovalDecision): Promise<void>;
+  respondToApproval(
+    requestId: string,
+    decision: ApprovalDecision,
+    options?: ApprovalResponseOptions,
+  ): Promise<void>;
 
   /** Skills that are not removed, in name order. */
   listSkills(): Promise<Skill[]>;
