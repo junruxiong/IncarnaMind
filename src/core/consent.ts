@@ -7,7 +7,8 @@
  * every request. The first time, `ensure` raises a "consent.requested" event
  * and waits for the UI to answer with `respondToConsent`. Decisions are kept
  * per flow and service. A flow that starts sending a new kind of data asks
- * again; a declined flow stays unused until the User revokes the decision.
+ * again; a declined flow stays unused until the User revokes the decision or
+ * allows it in Settings (the Privacy page lists every registered flow).
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -19,8 +20,9 @@ import {
   dataFlowIds,
   dataKinds,
   type ExternalService,
+  type RegisteredDataFlow,
 } from "./api";
-import { ConsentDeclinedError, InvalidInputError } from "./errors";
+import { ConsentDeclinedError, InvalidInputError, NotFoundError } from "./errors";
 import type { createEventHub } from "./events";
 import type { Database } from "./storage";
 
@@ -136,10 +138,20 @@ export function createConsent(
     });
   };
 
+  const keyOf = (flow: DataFlow) => `${flow.id}\n${flow.service.id}`;
+
+  /** The request already waiting for this flow and service, if any. */
+  const waitingFor = (flow: DataFlow): Pending | undefined => {
+    const key = keyOf(flow);
+    for (const entry of pending.values()) if (entry.key === key) return entry;
+    return undefined;
+  };
+
   /** Raises a consent request, or joins the one already waiting for this flow and service. */
   const ask = (flow: DataFlow, newKinds: DataKind[]): Pending => {
-    const key = `${flow.id}\n${flow.service.id}`;
-    for (const entry of pending.values()) if (entry.key === key) return entry;
+    const waiting = waitingFor(flow);
+    if (waiting) return waiting;
+    const key = keyOf(flow);
 
     let settle!: () => void;
     let fail!: (error: Error) => void;
@@ -152,6 +164,59 @@ export function createConsent(
     pending.set(request.requestId, entry);
     events.emit("consent.requested", request);
     return entry;
+  };
+
+  /** Accepts everything the flow sends, keeping the kinds accepted before. */
+  const recordAccepted = (flow: DataFlow) => {
+    const row = find(flow.id, flow.service.id);
+    const previous = row?.decision === "accepted" ? acceptedKinds(row) : [];
+    record(flow, "accepted", [...new Set([...previous, ...flow.sends])]);
+  };
+
+  /** Records the User's answer to a waiting request, and lets the requests waiting on it go on. */
+  const answer = (entry: Pending, accepted: boolean) => {
+    const { requestId, flow } = entry.request;
+    pending.delete(requestId);
+    if (accepted) recordAccepted(flow);
+    else record(flow, "declined", []);
+    events.emit("consent.resolved", { requestId, accepted });
+    entry.settle();
+  };
+
+  /**
+   * The services a flow goes to now, then every other service the User has
+   * decided on (e.g. a provider tested but not kept), each once.
+   */
+  const servicesOf = async (definition: DataFlowDefinition): Promise<ExternalService[]> => {
+    const decided = db.all<{ service_id: string; service_name: string }>(
+      `SELECT service_id, service_name FROM data_flow_consents
+       WHERE flow = ? AND deleted_at IS NULL ORDER BY created_at, rowid`,
+      [definition.id],
+    );
+    const services = [
+      ...(await definition.services()),
+      ...decided.map((row) => ({ id: row.service_id, name: row.service_name })),
+    ];
+    const seen = new Set<string>();
+    return services.filter((service) => {
+      if (seen.has(service.id)) return false;
+      seen.add(service.id);
+      return true;
+    });
+  };
+
+  /** Every registered flow, including one going nowhere now, with each service and its decision. */
+  const listRegistered = async (): Promise<RegisteredDataFlow[]> => {
+    const result: RegisteredDataFlow[] = [];
+    for (const definition of definitions.values()) {
+      const services = (await servicesOf(definition)).map((service): DataFlowStatus => {
+        const flow = flowFor(definition.id, service);
+        const { consent, decidedAt } = statusOf(flow);
+        return { flow, consent, decidedAt };
+      });
+      result.push({ id: definition.id, sends: [...definition.sends], services });
+    }
+    return result;
   };
 
   return {
@@ -183,17 +248,25 @@ export function createConsent(
       if (typeof accept !== "boolean") throw new InvalidInputError("accept must be true or false.");
       const entry = pending.get(requestId);
       if (!entry) return; // Already answered, e.g. in another window.
-      pending.delete(requestId);
-      const { flow } = entry.request;
-      if (accept) {
-        const row = find(flow.id, flow.service.id);
-        const previous = row?.decision === "accepted" ? acceptedKinds(row) : [];
-        record(flow, "accepted", [...new Set([...previous, ...flow.sends])]);
-      } else {
-        record(flow, "declined", []);
-      }
-      events.emit("consent.resolved", { requestId, accepted: accept });
-      entry.settle();
+      answer(entry, accept);
+    },
+
+    /**
+     * The User allows a flow to a service from Settings, without being asked.
+     * The service must be one the flow goes to now, or one already decided on.
+     */
+    async allow(flowId: unknown, serviceId: unknown): Promise<void> {
+      if (!isDataFlowId(flowId)) throw new InvalidInputError(`Unknown data flow "${flowId}".`);
+      if (typeof serviceId !== "string") throw new InvalidInputError("serviceId must be text.");
+      const definition = definitions.get(flowId);
+      const services = definition ? await servicesOf(definition) : [];
+      const service = services.find((each) => each.id === serviceId);
+      if (!service)
+        throw new NotFoundError(`The "${flowId}" data flow doesn't go to ${serviceId}.`);
+      const flow = flowFor(flowId, service);
+      const waiting = waitingFor(flow);
+      if (waiting) answer(waiting, true);
+      else recordAccepted(flow);
     },
 
     revoke(flowId: unknown, serviceId: unknown): void {
@@ -207,33 +280,15 @@ export function createConsent(
       );
     },
 
+    listRegistered,
+
     /**
      * Each flow to every service it currently goes to, then every other
-     * service the User has decided on (e.g. a provider tested but not kept),
-     * so every decision can be seen and revoked.
+     * service the User has decided on, so every decision can be seen and
+     * revoked: `listRegistered`, as one list.
      */
     async list(): Promise<DataFlowStatus[]> {
-      const result: DataFlowStatus[] = [];
-      for (const definition of definitions.values()) {
-        const decided = db.all<{ service_id: string; service_name: string }>(
-          `SELECT service_id, service_name FROM data_flow_consents
-           WHERE flow = ? AND deleted_at IS NULL ORDER BY created_at, rowid`,
-          [definition.id],
-        );
-        const services = [
-          ...(await definition.services()),
-          ...decided.map((row) => ({ id: row.service_id, name: row.service_name })),
-        ];
-        const seen = new Set<string>();
-        for (const service of services) {
-          if (seen.has(service.id)) continue;
-          seen.add(service.id);
-          const flow = flowFor(definition.id, service);
-          const { consent, decidedAt } = statusOf(flow);
-          result.push({ flow, consent, decidedAt });
-        }
-      }
-      return result;
+      return (await listRegistered()).flatMap((flow) => flow.services);
     },
 
     requests(): ConsentRequest[] {

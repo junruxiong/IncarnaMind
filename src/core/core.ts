@@ -12,6 +12,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
+import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { ollamaBaseUrl } from "./providers/kinds";
@@ -19,6 +20,7 @@ import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
   hasOllamaModel,
+  OLLAMA_REGISTRY,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
@@ -46,6 +48,11 @@ export interface Core extends CoreApi, CoreEventSource {
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
   readonly dataFlows: DataFlowRegistry;
+  /**
+   * Network traffic that carries no User content, for the Privacy page. Core
+   * modules and the host (e.g. its update check) register theirs here.
+   */
+  readonly networkTraffic: NetworkTrafficRegistry;
   /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
@@ -112,6 +119,7 @@ export function createCore(adapters: CoreAdapters): Core {
   }
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
+  const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter });
   /** Aborts work still running (model downloads, a ChatGPT sign-in) when the core closes. */
   const lifetime = new AbortController();
 
@@ -242,6 +250,38 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
   tagger.start();
+
+  // Traffic that carries nothing of the User's, for the Privacy page.
+  const modelSource = adapters.embeddingModelSource ?? BUILT_IN_EMBEDDING_MODEL.source;
+  const modelHost = new URL(modelSource.baseUrl);
+  privacy.traffic.register({
+    id: "embedding-model",
+    service: {
+      id: modelHost.origin,
+      name: modelHost.host === "huggingface.co" ? "Hugging Face" : modelHost.host,
+    },
+    // A model with no files to download (the tests' fake) makes no traffic.
+    listed: () => modelSource.files.length > 0,
+  });
+  privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
+  const chatGptSignIn = new URL(
+    adapters.chatGptPlan?.authorizeUrl ?? CHATGPT_PLAN_ENDPOINTS.authorizeUrl,
+  );
+  privacy.traffic.register({
+    id: "chatgpt-sign-in",
+    service: { id: chatGptSignIn.origin, name: "OpenAI" },
+    listed: () => chatGpt.enabled(),
+  });
+  // Crash reports start now if the User opted in before; otherwise not at all.
+  privacy.start();
+  const privacyChanged = () => events.emit("privacy.changed", privacy.status());
+  /** After the User allows or revokes a flow: the flows as they are now, and what that changes. */
+  const dataFlowsChanged = async () => {
+    const flows = await consent.listRegistered();
+    if (lifetime.signal.aborted) return;
+    events.emit("dataFlows.changed", flows);
+    await readinessChanged();
+  };
 
   const ollamaUrl = (input: unknown) => {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
@@ -376,7 +416,20 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     revokeConsent: async (flowId, serviceId) => {
       consent.revoke(flowId, serviceId);
-      await readinessChanged();
+      await dataFlowsChanged();
+    },
+    listRegisteredDataFlows: () => consent.listRegistered(),
+    allowDataFlow: async (flowId, serviceId) => {
+      await consent.allow(flowId, serviceId);
+      await dataFlowsChanged();
+    },
+
+    listNetworkTraffic: () => privacy.listTraffic(),
+    getPrivacySettings: async () => privacy.status(),
+    updatePrivacySettings: async (patch) => {
+      const { changed, settings: updated } = privacy.update(patch);
+      if (changed) privacyChanged();
+      return updated;
     },
 
     moveDocument: async (documentId, folderInput) => {
@@ -466,6 +519,7 @@ export function createCore(adapters: CoreAdapters): Core {
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
+    networkTraffic: privacy.traffic,
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;

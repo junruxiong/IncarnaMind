@@ -4,10 +4,16 @@
  * goes through Ollama's OpenAI-compatible API (see `./models`).
  *
  * Pulling a model sends no User content, so it isn't a consented data flow;
- * the privacy page (#44) lists it as traffic without User content.
+ * the Privacy page lists it as traffic without User content.
  */
-import type { OllamaPullProgress, OllamaStatus } from "../api";
+import type { ExternalService, OllamaPullProgress, OllamaStatus } from "../api";
 import { isRecord } from "../errors";
+
+/** Where Ollama downloads the models it pulls from: its registry, not this app. */
+export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
+  id: "https://registry.ollama.ai",
+  name: "Ollama",
+};
 
 /**
  * Small, multilingual (English and Chinese), supports tool calling, and runs on
