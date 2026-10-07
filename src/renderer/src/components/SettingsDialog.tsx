@@ -9,6 +9,7 @@ import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { ConsentSettings } from "./providers/ConsentSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { buttonClass } from "./providers/shared";
+import { SkillsSettings } from "./SkillsSettings";
 import { useModal } from "./useModal";
 
 const languageOptions: readonly { value: LanguagePreference; label: MessageKey }[] = [
@@ -64,6 +65,7 @@ export function SettingsDialog() {
       {open && (
         <div className="mt-4 flex flex-col gap-6">
           <ChatModelSettings />
+          <SkillsSettings />
           <JevSettingsSection />
           <fieldset>
             <legend className="mb-1 text-sm font-medium">{t("settings.language")}</legend>

@@ -74,8 +74,7 @@ export interface SearchScope {
 }
 
 /**
- * Attributes of a Question Block, as stored in the Mind's Yjs document. A
- * later ticket adds a forced Skill.
+ * Attributes of a Question Block, as stored in the Mind's Yjs document.
  */
 export interface QuestionAttributes {
   id: string | null;
@@ -90,6 +89,13 @@ export interface QuestionAttributes {
   scopeFolderIds: string[] | null;
   scopeTagIds: string[] | null;
   scopeDocumentIds: string[] | null;
+  /**
+   * The name of the Skill the User forced on this Question from the slash
+   * menu: its instructions are loaded up front. Null: the model picks Skills
+   * itself. A name rather than an id, so a Skill removed and imported again
+   * still matches.
+   */
+  forcedSkill: string | null;
 }
 
 /** Where an Answer is: being written, finished, stopped by the User, or failed (see `errorKind`). */
@@ -133,15 +139,24 @@ export interface AnswerAttributes {
 export interface AnswerToolCall {
   /** Unique within its Answer. */
   id: string;
-  /** "search_documents": the document-search Tool. Connectors and Skills add theirs. */
+  /**
+   * "search_documents": the document-search Tool. "use_skill": loading a
+   * Skill's instructions (`{ name }`). "read_skill_file": reading one of a
+   * Skill's files (`{ skill, path }`). Connectors add theirs.
+   */
   tool: string;
-  /** Where the Tool comes from: "documents" is IncarnaMind's own document search. */
-  source: "documents";
+  /** Where the Tool comes from: "documents" is IncarnaMind's own document search; "skill", the Skill Tools. */
+  source: "documents" | "skill";
   /** What the model asked, e.g. `{ query }` for a search. */
   input: Record<string, unknown>;
   status: "running" | "done" | "failed";
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
+  /**
+   * "use_skill" only: the Question forced this Skill, so the core loaded it up
+   * front instead of the model calling the Tool. Absent otherwise.
+   */
+  forced?: boolean;
 }
 
 /**
@@ -674,7 +689,12 @@ export type AskResult =
   /** Nothing was sent: Questions can't be asked yet, and `readiness` says why. */
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: the User has edited the Answer. Ask again with `discardEdits` to replace it. */
-  | { asked: false; reason: "edited"; answerId: string };
+  | { asked: false; reason: "edited"; answerId: string }
+  /**
+   * Nothing was sent: the Question forces a Skill (`skill`, its name) that is
+   * turned off or no longer there. Turn it on, or take it off the Question.
+   */
+  | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
 
 /** An Answer started: it is in the Mind with status "streaming". */
 export interface AnswerStarted {
@@ -732,6 +752,116 @@ export interface AnswerFailed {
   answerId: string;
   error: ProviderError;
 }
+
+// ---------------------------------------------------------------------------
+// Skills (CONTEXT.md: Skill)
+
+/**
+ * A Skill: a packaged description of how to do a particular task, in the
+ * standard `SKILL.md` format (https://agentskills.io/specification), with
+ * optional reference files and scripts. Its files are stored in the data
+ * folder, under `skills/<id>/`. The system prompt of every Answer lists the
+ * enabled Skills' names and descriptions; the model loads a Skill's full
+ * instructions when it needs them, or the User forces one on a Question.
+ */
+export interface Skill {
+  /** A random UUID generated on this device. Importing a Skill of the same name again keeps it. */
+  id: string;
+  /** From the frontmatter: lowercase letters, digits and hyphens. Unique among Skills. */
+  name: string;
+  /** From the frontmatter: what the Skill does and when to use it. */
+  description: string;
+  /** From the frontmatter, if given: a licence name, or the name of a bundled licence file. */
+  license: string | null;
+  /** From the frontmatter, if given: what the Skill needs, e.g. "Requires Python 3.14+". */
+  compatibility: string | null;
+  /** Turned on, Answers can use it. New Skills start on. */
+  enabled: boolean;
+  /** Every file in the Skill: SKILL.md first, then the others in path order. */
+  files: SkillFile[];
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface SkillFile {
+  /** Relative to the Skill's folder, with "/" between folders, e.g. "references/guide.md". */
+  path: string;
+  /** In bytes. */
+  size: number;
+  /**
+   * A script: in the Skill's `scripts/` folder, or a script's file type. It is
+   * listed, and the model can read it, but Answers can't run scripts yet.
+   */
+  script: boolean;
+}
+
+/** Whether a Skill can be used: on, turned off, or not there (removed, or never imported). */
+export type SkillAvailability = "enabled" | "disabled" | "removed";
+
+/** What importing a Skill would add, for the User to check before importing it. */
+export interface SkillImportPreview {
+  /** Pass to `importSkill` to import exactly this, or to `cancelSkillImport`. */
+  importId: string;
+  /** The folder or zip it was read from. */
+  source: string;
+  name: string;
+  description: string;
+  license: string | null;
+  compatibility: string | null;
+  /** SKILL.md first, then the others in path order. */
+  files: SkillFile[];
+  /** The files' sizes added up, in bytes. */
+  totalBytes: number;
+  /** The Skill of the same name that importing replaces (keeping its id and whether it's on), or null. */
+  replaces: Skill | null;
+}
+
+/**
+ * Why a folder or zip can't be imported as a Skill.
+ * - "unreadable": it (or a file in it, see `path`) can't be read.
+ * - "not-a-skill": there is no SKILL.md at its top, nor in its one top-level folder.
+ * - "invalid-zip": not a zip file, or one IncarnaMind can't read (encrypted, ZIP64, damaged).
+ * - "invalid-frontmatter": SKILL.md's frontmatter is missing or breaks the format (see `field`).
+ * - "path-traversal": a zip entry's path leads outside the Skill (see `path`).
+ * - "link-outside": a symbolic link points outside the Skill (see `path`).
+ * - "too-large": its files add up to more than `SKILL_LIMITS.maxBytes`, or SKILL.md
+ *   is over `SKILL_LIMITS.maxInstructionsBytes`.
+ * - "too-many-files": more than `SKILL_LIMITS.maxFiles` files.
+ */
+export type SkillImportErrorKind =
+  | "unreadable"
+  | "not-a-skill"
+  | "invalid-zip"
+  | "invalid-frontmatter"
+  | "path-traversal"
+  | "link-outside"
+  | "too-large"
+  | "too-many-files";
+
+export interface SkillImportError {
+  kind: SkillImportErrorKind;
+  /** The file at fault, relative to the Skill (or as named in the zip), when there is one. */
+  path: string | null;
+  /** "invalid-frontmatter": the field at fault, e.g. "name", when there is one. */
+  field: string | null;
+  /** Technical detail in English, for logs and tooltips. */
+  message: string;
+}
+
+export type SkillImportCheck =
+  | { ok: true; preview: SkillImportPreview }
+  | { ok: false; error: SkillImportError };
+
+/** How big a Skill may be. Checked before anything is imported. */
+export const SKILL_LIMITS = {
+  /** All its files together, uncompressed; a zip file itself may be no larger either. */
+  maxBytes: 20 * 1024 * 1024,
+  maxFiles: 1000,
+  /** SKILL.md alone: its instructions are sent whole to the model. */
+  maxInstructionsBytes: 256 * 1024,
+} as const;
 
 // ---------------------------------------------------------------------------
 // ChatGPT plan (experimental)
@@ -1210,6 +1340,31 @@ export interface CoreApi {
    */
   testJevConnection(input?: TestJevConnectionInput): Promise<ConnectionTestResult>;
 
+  /** Skills that are not removed, in name order. */
+  listSkills(): Promise<Skill[]>;
+  /**
+   * Reads a Skill folder, or a zip holding one, given its absolute path, and
+   * checks it: SKILL.md's frontmatter, paths and links that stay inside the
+   * Skill, and its size (`SKILL_LIMITS`). Nothing is imported yet: the preview
+   * says what would be, and `importSkill` imports exactly what was read.
+   */
+  previewSkillImport(path: string): Promise<SkillImportCheck>;
+  /**
+   * Imports a previewed Skill into the data folder, turned on. A Skill of the
+   * same name is replaced, keeping its id and whether it's on. Previews are
+   * kept in memory only: after a restart, or a few newer previews, preview again.
+   */
+  importSkill(importId: string): Promise<Skill>;
+  /** Forgets a preview without importing it. Forgetting one that's gone does nothing. */
+  cancelSkillImport(importId: string): Promise<void>;
+  /** Turns a Skill on or off. Answers list and load only Skills that are on. Returns the Skill. */
+  setSkillEnabled(skillId: string, enabled: boolean): Promise<Skill>;
+  /**
+   * Removes a Skill: soft-deleted in the database (ADR-0003). Its files are
+   * deleted once nothing uses them, e.g. after Answers still being written with it finish.
+   */
+  removeSkill(skillId: string): Promise<void>;
+
   /**
    * What `exportMind` will write with these options: the file name, and how
    * many of the exported Citations are unverified, so the User sees that
@@ -1269,6 +1424,8 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
+  /** Skills were imported, turned on or off, or removed: the list as `listSkills` now returns it. */
+  "skills.changed": Skill[];
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -1358,6 +1515,12 @@ const methods: Record<CoreApiMethod, true> = {
   saveJevSettings: true,
   removeJevSettings: true,
   testJevConnection: true,
+  listSkills: true,
+  previewSkillImport: true,
+  importSkill: true,
+  cancelSkillImport: true,
+  setSkillEnabled: true,
+  removeSkill: true,
   previewMindExport: true,
   exportMind: true,
 };

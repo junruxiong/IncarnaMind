@@ -1,17 +1,21 @@
 import type { Editor, JSONContent, Range } from "@tiptap/core";
 import type { ReactNode } from "react";
+import { QUESTION_BLOCK, type Skill } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import { QuestionIcon } from "../components/icons";
+import { QuestionIcon, SkillIcon } from "../components/icons";
 
 /**
- * One entry of the slash menu. To add one (a Question, a Skill), add it to
- * `noteSlashItems`, or give `SlashMenu.configure({ items })` a list that includes it.
+ * One entry of the slash menu. To add one, add it to `noteSlashItems`, or
+ * give `SlashMenu.configure({ items })` a list that includes it (as the
+ * editor does with `skillSlashItems`).
  */
 export interface SlashItem {
   /** A stable name. Tests find the item by it (`slash-item-<id>`), and typing it after the slash finds the item. */
   id: string;
   /** What the menu shows: a dictionary key, or text shown as it is (e.g. a Skill's name). */
   label: MessageKey | { text: string };
+  /** Shown when the item is pointed at, e.g. what a Skill is for. */
+  hint?: string;
   /** More words that find the item when typed after the slash, whatever the interface language. */
   keywords?: readonly string[];
   /** A small glyph before the label. */
@@ -121,6 +125,32 @@ export const noteSlashItems: readonly SlashItem[] = [
     },
   },
 ];
+
+/**
+ * The slash menu's entries for the enabled Skills, labelled with their names
+ * as they are. Choosing one forces the Skill on the Question the cursor is
+ * in: in a Note, the line becomes that Question first.
+ */
+export function skillSlashItems(skills: readonly Skill[]): SlashItem[] {
+  return skills
+    .filter((skill) => skill.enabled)
+    .map((skill) => ({
+      id: `skill-${skill.name}`,
+      label: { text: skill.name },
+      hint: skill.description,
+      keywords: ["skill"],
+      icon: <SkillIcon className="size-4 text-violet-600" />,
+      run(editor, range) {
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .setQuestion()
+          .updateAttributes(QUESTION_BLOCK, { forcedSkill: skill.name })
+          .run();
+      },
+    }));
+}
 
 /**
  * The items `query` finds, in their order: those with a word of their label,

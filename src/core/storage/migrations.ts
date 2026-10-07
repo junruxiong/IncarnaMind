@@ -318,6 +318,33 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE documents ADD COLUMN tagging_error_message TEXT;
     `,
   },
+  {
+    version: 15,
+    description: "Skills (#40)",
+    sql: `
+      -- Skills the User imported. Their files are in the data folder under
+      -- skills/<id>/, and this row holds what the app shows and lists without
+      -- reading them: the frontmatter fields, and files, a JSON array of
+      -- { path, size, script } with SKILL.md first. Importing a Skill of the
+      -- same name again updates the row in place, so it keeps its id. Removing
+      -- one marks it deleted; its folder goes once nothing uses it. Names are
+      -- unique among live Skills: the core checks it, since a later sync may
+      -- bring two. enabled is 1 for on.
+      CREATE TABLE skills (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        license TEXT,
+        compatibility TEXT,
+        files TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX skills_by_name ON skills (name) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

@@ -244,6 +244,16 @@
     .question-notice-action {
       @apply shrink-0 rounded-[6px] px-2 py-0.5 text-gray-700 hover:bg-amber-100;
     }
+    /* The Skill forced on a Question: a chip that takes it off again. */
+    .question-skill {
+      @apply mt-1 flex max-w-[180px] shrink-0 items-center gap-1 rounded-full border border-violet-200 bg-violet-50 py-0.5 pr-0.5 pl-2 text-custom-xs text-violet-800 select-none;
+    }
+    .question-skill--unavailable {
+      @apply border-gray-200 bg-gray-50 text-gray-400 line-through;
+    }
+    .question-skill-remove {
+      @apply flex size-4 shrink-0 items-center justify-center rounded-full hover:bg-violet-100;
+    }
     /* Its Search scope: chips under its text, for what "@" chose. */
     .question-scope {
       @apply mt-0.5 mb-0.5 flex flex-wrap items-center gap-1 text-custom-xs leading-5 select-none;
@@ -313,6 +323,20 @@
     }
     .answer-tools-list {
       @apply mt-0.5 mb-1 ml-5 list-none space-y-0.5 text-gray-500;
+    }
+
+    /* The Skills an Answer used: a small card each, with the files it read. */
+    .answer-skills {
+      @apply mb-1.5 flex flex-wrap gap-1.5 select-none;
+    }
+    .answer-skill {
+      @apply max-w-full rounded-[6px] border border-violet-100 bg-violet-50/60 px-2 py-1 text-custom-xs text-violet-900;
+    }
+    .answer-skill--failed {
+      @apply border-red-100 bg-red-50 text-red-900;
+    }
+    .answer-skill-files {
+      @apply mt-0.5 ml-[18px] list-none space-y-0.5 text-violet-700/80;
     }
 
     /* A Citation: a small badge in the text. Icon, colour and words all say its state. */

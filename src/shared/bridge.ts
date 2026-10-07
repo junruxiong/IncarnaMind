@@ -26,10 +26,18 @@ export interface FilesBridge {
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<string | null>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
+  /**
+   * Shows the system's open dialog for a Skill to import: a folder, or a zip
+   * file. Resolves with its absolute path, or null if the User cancelled.
+   */
+  pickSkill(kind: SkillPickKind): Promise<string | null>;
 }
+
+export type SkillPickKind = "folder" | "zip";
 
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
   saveMindExport: "files:saveMindExport",
   openDataFolder: "files:openDataFolder",
+  pickSkill: "files:pickSkill",
 } as const;

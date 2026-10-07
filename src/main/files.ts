@@ -1,11 +1,20 @@
 /**
  * The main process's half of the renderer's file helpers (`FilesBridge`):
- * saving an exported Mind where the User chooses, and showing the data folder.
- * The core makes the export's bytes; only this side touches dialogs and disks.
+ * saving an exported Mind where the User chooses, showing the data folder,
+ * and choosing a Skill folder or zip to import. The core makes the export's
+ * bytes and reads the Skill; only this side touches dialogs and disks.
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  type IpcMainInvokeEvent,
+  ipcMain,
+  type OpenDialogOptions,
+  shell,
+} from "electron";
 import type { Core, ExportFormat, ExportMindOptions } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
@@ -56,5 +65,25 @@ export function serveFileActions(core: Core, { dataDir, trusted }: FileActionsOp
     refuseUnknown(event);
     const error = await shell.openPath(dataDir);
     if (error) throw new Error(error);
+  });
+
+  ipcMain.handle(FILES_CHANNELS.pickSkill, async (event, kind: unknown): Promise<string | null> => {
+    refuseUnknown(event);
+    const { language } = await core.getSettings();
+    const openOptions: OpenDialogOptions =
+      kind === "zip"
+        ? {
+            title: translate(language, "skills.import.pickZip"),
+            properties: ["openFile"],
+            filters: [
+              { name: translate(language, "skills.import.zipFilter"), extensions: ["zip"] },
+            ],
+          }
+        : { title: translate(language, "skills.import.pickFolder"), properties: ["openDirectory"] };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+    return canceled ? null : (filePaths[0] ?? null);
   });
 }
