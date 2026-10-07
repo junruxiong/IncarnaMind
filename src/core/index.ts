@@ -44,7 +44,7 @@ export {
   type ContextWindow,
   createAiSdkChatModel,
 } from "./providers/models";
-export { RECOMMENDED_OLLAMA_MODEL } from "./providers/ollama";
+export { RECOMMENDED_OLLAMA_DOWNLOAD_GB, RECOMMENDED_OLLAMA_MODEL } from "./providers/ollama";
 export {
   createOllamaModels,
   type OllamaModelProfile,
