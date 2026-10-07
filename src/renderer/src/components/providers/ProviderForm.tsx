@@ -256,6 +256,30 @@ export function ProviderForm({
   );
 }
 
+/**
+ * A provider's own error message, readable: some send their JSON error body
+ * (e.g. `{"error_type":"authentication_error","message":"…"}`), whose
+ * message, or else its type, says it in words.
+ */
+function readableMessage(message: string): string {
+  const text = message.trim();
+  if (!text.startsWith("{")) return message;
+  try {
+    const body = JSON.parse(text) as Record<string, unknown>;
+    const inner = body.error;
+    const nested =
+      inner && typeof inner === "object" ? (inner as Record<string, unknown>).message : inner;
+    const said = [body.message, nested, body.detail].find(
+      (each): each is string => typeof each === "string" && each.trim() !== "",
+    );
+    if (said) return said;
+    // Only a type, e.g. "authentication_error": as words.
+    return typeof body.error_type === "string" ? body.error_type.replaceAll("_", " ") : message;
+  } catch {
+    return message;
+  }
+}
+
 /** Forgets the User's latest "Don't allow", so the next request asks again. */
 async function forgetLatestDecline(): Promise<void> {
   const flows = await core.listDataFlows();
@@ -290,7 +314,7 @@ export function TestResult({
       {/* The provider's own words help with its errors; a declined consent needs none. */}
       {result.error.message && result.error.kind !== "consent-declined" && (
         <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
-          {result.error.message}
+          {readableMessage(result.error.message)}
         </p>
       )}
       {result.error.kind === "consent-declined" && onRetry && (

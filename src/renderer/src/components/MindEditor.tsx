@@ -5,6 +5,7 @@ import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
+import { translate } from "../../../shared/i18n";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
@@ -24,6 +25,7 @@ import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { SmartTypography } from "../editor/typography";
 import { useT } from "../i18n";
+import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 
 /** Marks changes that came from the core, so they aren't sent back to it. */
@@ -151,7 +153,11 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
         SmartTypography,
         SlashMenu.configure({
           items: (place) => {
-            const skills = skillSlashItems(useAppStore.getState().skills);
+            const { skills: all, settings } = useAppStore.getState();
+            const language = settings?.language ?? "en";
+            const skills = skillSlashItems(all, (skill) =>
+              skillDescription(skill, (key, params) => translate(language, key, params)),
+            );
             return place === "question" ? skills : [...noteSlashItems, ...skills];
           },
         }),

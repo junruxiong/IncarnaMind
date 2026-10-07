@@ -479,6 +479,7 @@ export const en = {
   "consent.settings.status.accepted": "Allowed",
   "consent.settings.status.declined": "Not allowed",
   "consent.settings.status.not-asked": "Not asked yet",
+  "consent.settings.status.sendsMore": "Asks again: it sends more now",
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
 
@@ -632,6 +633,13 @@ export const en = {
   "skills.settings.scripts.one": "1 script",
   "skills.settings.scripts": "{count} scripts",
   "skills.settings.builtIn": "Built-in",
+  // The Built-in Skills, as Settings and the slash menu describe them; their SKILL.md, which Answers read, stays as written.
+  "skills.builtIn.literature-review":
+    "Writes a literature review across your Documents on the Question's topic, by theme rather than one Document after another: where they agree and disagree and what they leave out, with every claim cited.",
+  "skills.builtIn.mind-to-report":
+    "Turns this Mind (the Notes, Questions and Answers above the Question) into a structured report draft with a title, a summary, sections and a conclusion, keeping their Citations and inventing no sources.",
+  "skills.builtIn.summarise-document":
+    "Writes a structured summary of a Document, or of each one in the Question's Search scope: its key claims (each cited), its methods, its limitations and the questions it leaves open.",
   "skills.settings.builtIn.hint":
     "Comes with IncarnaMind and is updated with it. To change it, duplicate it as your own.",
   "skills.settings.duplicate": "Duplicate as my own",
@@ -924,7 +932,7 @@ export const en = {
     "Its server can't be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool's arguments go to this server over the network.",
   "remoteConnectors.answer.signInRequired":
-    "Not used: {connector} needs you to sign in again, in Settings → Connectors",
+    "Not used: {connector} needs you to sign in, in Settings → Connectors",
   "remoteConnectors.page.success.title": "Signed in to {name}",
   "remoteConnectors.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "remoteConnectors.page.failure.title": "Signing in to {name} didn't work",

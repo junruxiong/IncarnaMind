@@ -1439,7 +1439,10 @@ export interface DataFlowStatus {
   flow: DataFlow;
   /** "not-asked" also covers a flow that started sending a new kind of data since the User accepted it. */
   consent: "accepted" | "declined" | "not-asked";
-  /** ISO 8601, UTC; null when not asked. */
+  /**
+   * When the User decided, ISO 8601, UTC. Null when never asked; set with
+   * "not-asked" when they allowed the flow before it started sending more.
+   */
   decidedAt: string | null;
 }
 
