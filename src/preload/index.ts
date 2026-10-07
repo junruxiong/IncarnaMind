@@ -18,6 +18,7 @@ import {
   FILES_BRIDGE_KEY,
   FILES_CHANNELS,
   type FilesBridge,
+  type MenuCommand,
 } from "../shared/bridge";
 
 const methods = Object.fromEntries(
@@ -71,6 +72,13 @@ const files: FilesBridge = {
     ipcRenderer.invoke(FILES_CHANNELS.showDocumentInFolder, documentId),
   pickLinkedFolder: () => ipcRenderer.invoke(FILES_CHANNELS.pickLinkedFolder),
   logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),
+  onMenuCommand: (listener) => {
+    const receive = (_event: unknown, command: MenuCommand) => listener(command);
+    ipcRenderer.on(FILES_CHANNELS.menuCommand, receive);
+    return () => {
+      ipcRenderer.removeListener(FILES_CHANNELS.menuCommand, receive);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);
