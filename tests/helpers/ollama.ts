@@ -52,6 +52,29 @@ export async function startOllamaStub(
   return { baseUrl: `http://127.0.0.1:${port}`, pulls };
 }
 
+/**
+ * A tiny local OpenAI-compatible server that only lists models, at
+ * `GET /v1/models`. Records the Authorization header of each request.
+ */
+export async function startModelListStub(
+  ids: string[],
+): Promise<{ baseUrl: string; authorizations: (string | undefined)[] }> {
+  const authorizations: (string | undefined)[] = [];
+  const server = createServer((request, response) => {
+    if (request.method === "GET" && request.url === "/v1/models") {
+      authorizations.push(request.headers.authorization);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ object: "list", data: ids.map((id) => ({ id })) }));
+      return;
+    }
+    response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  const { port } = server.address() as AddressInfo;
+  return { baseUrl: `http://127.0.0.1:${port}/v1`, authorizations };
+}
+
 /** A URL where nothing is listening. */
 export async function unusedLocalUrl(): Promise<string> {
   const server = createServer();

@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { generateText } from "ai";
 import type {
   ChatModelChoice,
+  ChatModelGroup,
   ChatProvider,
   ChatProviderKind,
   ChatReadiness,
@@ -19,8 +20,12 @@ import type { Secrets } from "../secrets";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
 import { acceptsApiKey, baseUrlFor, isChatProviderKind, requiresApiKey, serviceFor } from "./kinds";
+import { listProviderModels } from "./modelLists";
 import type { ChatLanguageModel, ChatModelFactory } from "./models";
 import { classifyProviderError } from "./providerErrors";
+
+/** How long a provider's model list is kept before it is asked again. */
+const MODEL_LIST_TTL_MS = 5 * 60_000;
 
 /**
  * The chat flow: what a Question sends to a cloud chat provider. Connectors
@@ -86,6 +91,8 @@ export function createChat(options: {
   createModel: ChatModelFactory;
 }) {
   const { db, now, settings, secrets, consent, createModel } = options;
+  /** Model lists by provider and server, with when they were fetched. */
+  const modelLists = new Map<string, { at: number; models: string[] }>();
 
   const rowById = (id: string) =>
     db.get<ProviderRow>(
@@ -222,7 +229,35 @@ export function createChat(options: {
 
     exists: (id: string) => rowById(id) !== undefined,
 
-    readiness: () => readinessFor(settings.get().user.chatModel),
+    /** Whether Questions can be asked with `choice`, or with the default model when it is left out. */
+    readiness: (choice?: ChatModelChoice) => readinessFor(choice ?? settings.get().user.chatModel),
+
+    /**
+     * Each saved provider with the models it lists and its default model, for
+     * a Question's model picker. Lists are kept for a few minutes.
+     */
+    async listModels(): Promise<ChatModelGroup[]> {
+      const chatModel = settings.get().user.chatModel;
+      return Promise.all(
+        knownRows().map(async (row) => {
+          const provider = await toProvider(row);
+          const cacheKey = `${row.id}\n${row.base_url ?? ""}`;
+          const cached = modelLists.get(cacheKey);
+          let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
+          if (!listed) {
+            const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
+            listed = await listProviderModels({
+              kind: provider.kind,
+              baseUrl: row.base_url,
+              apiKey,
+            });
+            if (listed.length > 0) modelLists.set(cacheKey, { at: Date.now(), models: listed });
+          }
+          const defaultModel = chatModel?.providerId === row.id ? [chatModel.modelId] : [];
+          return { provider, models: [...new Set([...defaultModel, ...listed])] };
+        }),
+      );
+    },
 
     /**
      * Sends one tiny prompt with the given settings, which need not be saved.
