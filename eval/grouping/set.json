@@ -1,0 +1,98 @@
+{
+  "about": "The grouping check's fixture set (eval/grouping/README.md, #51). Every Document is grouped together, as one library; the pass bars are scored on the held-out cases only, and the vector variant is chosen on the choosing cases (O8a). Paths are relative to the repository root; sources and licences of eval/grouping/fixtures/ are in its ATTRIBUTION.md.",
+  "subjects": {
+    "attention": "Attention and the Transformer",
+    "gradient-descent": "Gradient descent",
+    "language-models": "Large language models",
+    "sdgs": "The UN and the Sustainable Development Goals",
+    "esg": "ESG",
+    "pharma": "Medicines and the pharmaceutical industry",
+    "tea": "Tea",
+    "earthquakes": "Earthquakes",
+    "climate": "Climate change",
+    "mars": "Mars",
+    "photosynthesis": "Photosynthesis",
+    "inflation": "Inflation"
+  },
+  "documents": {
+    "attention-paper": {"path": "data/Attention Is All You Need.pdf", "language": "en", "subject": "attention", "form": "prose"},
+    "attention-zh": {"path": "eval/retrieval/fixtures/维基百科-注意力机制.pdf", "language": "zh", "subject": "attention", "form": "prose"},
+    "attention-deck": {"path": "eval/grouping/fixtures/Transformer architecture.pptx", "language": "en", "subject": "attention", "form": "deck"},
+    "attention-zh2": {"path": "eval/grouping/fixtures/维基百科-Transformer架构.md", "language": "zh", "subject": "attention", "form": "prose"},
+    "gd-paper": {"path": "data/Gradient Descent The Ultimate Optimizer.pdf", "language": "en", "subject": "gradient-descent", "form": "prose"},
+    "gd-zh": {"path": "eval/retrieval/fixtures/维基百科-梯度下降法.pdf", "language": "zh", "subject": "gradient-descent", "form": "prose"},
+    "gd-deck": {"path": "eval/grouping/fixtures/梯度下降法讲义.pptx", "language": "zh", "subject": "gradient-descent", "form": "deck"},
+    "gd-sgd": {"path": "eval/grouping/fixtures/Stochastic gradient descent · Wikipedia.md", "language": "en", "subject": "gradient-descent", "form": "prose"},
+    "lm-gpt3": {"path": "data/Language Models are Few-Shot Learners.pdf", "language": "en", "subject": "language-models", "form": "prose"},
+    "lm-gpt2": {"path": "data/Language Models are Unsupervised Multitask Learners.pdf", "language": "en", "subject": "language-models", "form": "prose"},
+    "lm-zh": {"path": "eval/retrieval/fixtures/维基百科-大型语言模型.pdf", "language": "zh", "subject": "language-models", "form": "prose"},
+    "lm-zh2": {"path": "eval/grouping/fixtures/维基百科-GPT-3.md", "language": "zh", "subject": "language-models", "form": "prose"},
+    "sdg-report": {"path": "data/United Nations 2022 Annual Report.pdf", "language": "en", "subject": "sdgs", "form": "prose"},
+    "sdg-zh": {"path": "eval/retrieval/fixtures/维基百科-可持续发展目标.pdf", "language": "zh", "subject": "sdgs", "form": "prose"},
+    "sdg-deck": {"path": "eval/grouping/fixtures/SDGs overview.pptx", "language": "en", "subject": "sdgs", "form": "deck"},
+    "sdg-zh2": {"path": "eval/grouping/fixtures/维基百科-千年发展目标.md", "language": "zh", "subject": "sdgs", "form": "prose"},
+    "esg-report": {"path": "data/JP Morgan 2022 Environmental Social Governance Report.pdf", "language": "en", "subject": "esg", "form": "prose"},
+    "esg-zh": {"path": "eval/retrieval/fixtures/维基百科-环境、社会和公司治理.pdf", "language": "zh", "subject": "esg", "form": "prose"},
+    "esg-deck": {"path": "eval/grouping/fixtures/ESG reporting basics.pptx", "language": "en", "subject": "esg", "form": "deck"},
+    "esg-sri": {"path": "eval/grouping/fixtures/Socially responsible investing · Wikipedia.md", "language": "en", "subject": "esg", "form": "prose"},
+    "pharma-code": {"path": "data/ABPI Code of Practice for the Pharmaceutical Industry 2021.pdf", "language": "en", "subject": "pharma", "form": "prose"},
+    "pharma-marketing": {"path": "eval/grouping/fixtures/Pharmaceutical marketing · Wikipedia.md", "language": "en", "subject": "pharma", "form": "prose"},
+    "pharma-zh": {"path": "eval/grouping/fixtures/维基百科-药品.md", "language": "zh", "subject": "pharma", "form": "prose"},
+    "tea-en": {"path": "resources/examples/Tea · Wikipedia.md", "language": "en", "subject": "tea", "form": "prose"},
+    "tea-zh": {"path": "resources/examples/茶 · 维基百科.md", "language": "zh", "subject": "tea", "form": "prose"},
+    "tea-deck": {"path": "eval/grouping/fixtures/茶叶加工流程.pptx", "language": "zh", "subject": "tea", "form": "deck"},
+    "tea-green": {"path": "eval/grouping/fixtures/Green tea · Wikipedia.md", "language": "en", "subject": "tea", "form": "prose"},
+    "quake-en": {"path": "eval/grouping/fixtures/Earthquake · Wikipedia.md", "language": "en", "subject": "earthquakes", "form": "prose"},
+    "quake-zh": {"path": "eval/grouping/fixtures/维基百科-地震.md", "language": "zh", "subject": "earthquakes", "form": "prose"},
+    "quake-sheet": {"path": "eval/grouping/fixtures/usgs_significant_quakes_2023.csv", "language": "en", "subject": "earthquakes", "form": "spreadsheet"},
+    "quake-zh2": {"path": "eval/grouping/fixtures/维基百科-地震学.md", "language": "zh", "subject": "earthquakes", "form": "prose"},
+    "climate-en": {"path": "eval/grouping/fixtures/Climate change · Wikipedia.md", "language": "en", "subject": "climate", "form": "prose"},
+    "climate-zh": {"path": "eval/grouping/fixtures/维基百科-气候变化.md", "language": "zh", "subject": "climate", "form": "prose"},
+    "climate-sheet": {"path": "eval/grouping/fixtures/co2_annmean_mlo.xlsx", "language": "en", "subject": "climate", "form": "spreadsheet"},
+    "climate-zh2": {"path": "eval/grouping/fixtures/维基百科-温室气体.md", "language": "zh", "subject": "climate", "form": "prose"},
+    "mars-en": {"path": "eval/grouping/fixtures/Mars · Wikipedia.md", "language": "en", "subject": "mars", "form": "prose"},
+    "mars-zh": {"path": "eval/grouping/fixtures/维基百科-火星.md", "language": "zh", "subject": "mars", "form": "prose"},
+    "mars-sheet": {"path": "eval/grouping/fixtures/Mars fact sheet (NASA).xlsx", "language": "en", "subject": "mars", "form": "spreadsheet"},
+    "mars-zh2": {"path": "eval/grouping/fixtures/维基百科-火星探测.md", "language": "zh", "subject": "mars", "form": "prose"},
+    "photo-en": {"path": "eval/grouping/fixtures/Photosynthesis · Wikipedia.md", "language": "en", "subject": "photosynthesis", "form": "prose"},
+    "photo-zh": {"path": "eval/grouping/fixtures/维基百科-光合作用.md", "language": "zh", "subject": "photosynthesis", "form": "prose"},
+    "photo-deck": {"path": "eval/grouping/fixtures/光合作用课件.pptx", "language": "zh", "subject": "photosynthesis", "form": "deck"},
+    "photo-chlorophyll": {"path": "eval/grouping/fixtures/Chlorophyll · Wikipedia.md", "language": "en", "subject": "photosynthesis", "form": "prose"},
+    "inflation-en": {"path": "eval/grouping/fixtures/Inflation · Wikipedia.md", "language": "en", "subject": "inflation", "form": "prose"},
+    "inflation-zh": {"path": "eval/grouping/fixtures/维基百科-通货膨胀.md", "language": "zh", "subject": "inflation", "form": "prose"},
+    "inflation-sheet": {"path": "eval/grouping/fixtures/CPI-U 2015-2024.xlsx", "language": "en", "subject": "inflation", "form": "spreadsheet"},
+    "inflation-cpi": {"path": "eval/grouping/fixtures/Consumer price index · Wikipedia.md", "language": "en", "subject": "inflation", "form": "prose"}
+  },
+  "choosing": {
+    "pairs": [
+      ["attention-paper", "attention-zh"],
+      ["lm-gpt3", "lm-zh"],
+      ["esg-report", "esg-zh"],
+      ["tea-en", "tea-zh"],
+      ["quake-en", "quake-zh"],
+      ["inflation-en", "inflation-zh"]
+    ],
+    "decks": ["attention-deck", "tea-deck", "esg-deck", "quake-sheet", "inflation-sheet"]
+  },
+  "heldOut": {
+    "pairs": [
+      ["gd-paper", "gd-zh"],
+      ["sdg-report", "sdg-zh"],
+      ["climate-en", "climate-zh"],
+      ["mars-en", "mars-zh"],
+      ["photo-en", "photo-zh"]
+    ],
+    "decks": ["gd-deck", "sdg-deck", "climate-sheet", "mars-sheet", "photo-deck"]
+  },
+  "sharedNames": [{"label": "\"维基百科-\" prefix", "pattern": "^维基百科-"}, {"label": "\" · Wikipedia\" suffix", "pattern": " · Wikipedia$"}],
+  "lateArrivals": ["lm-gpt2", "quake-zh", "mars-sheet", "tea-deck", "climate-en", "pharma-code", "pharma-marketing", "pharma-zh"],
+  "corrections": {
+    "rename": "tea-en",
+    "moves": 2,
+    "lastResortMove": ["pharma-code", "sdg-report"],
+    "create": {
+      "name": "My data tables",
+      "documents": ["quake-sheet", "inflation-sheet"]
+    }
+  }
+}
