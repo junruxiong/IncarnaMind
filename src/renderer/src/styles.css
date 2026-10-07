@@ -1,35 +1,86 @@
 @import "tailwindcss";
 
 /*
- * Design tokens carried over from the old frontend's tailwind.config.ts.
+ * Design tokens: "quiet paper and ink" (DESIGN.md is the source of truth;
+ * change it first). Utilities follow the names: bg-sheet, bg-frame,
+ * border-rule, text-ink, text-ink-meta, bg-success-wash, text-body, …
  *
- * Roboto and Lora are bundled (fonts.css) and cover Latin text. Chinese text
- * falls through to the system's Simplified Chinese fonts, named before the
- * generic system font so that a system font with Japanese-style Han glyphs
- * (Windows in Japanese) isn't picked for it: PingFang SC and Hiragino Sans GB
- * on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC (Source Han Sans SC)
- * on Linux.
+ * Fonts are bundled (fonts.css) for Latin and Greek. Chinese falls through to
+ * the system's Simplified Chinese fonts, named before the generic ones so a
+ * font with Japanese-style Han glyphs (Windows in Japanese) isn't picked:
+ * with the serif, Songti SC / STSong on macOS, SimSun on Windows, Noto Serif
+ * CJK SC (Source Han Serif SC) on Linux; with the sans, PingFang SC and
+ * Hiragino Sans GB on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC
+ * (Source Han Sans SC) on Linux.
  */
 @theme {
   --font-sans:
-    "Roboto", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
-    "Source Han Sans SC", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-lora:
-    "Lora", "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC", ui-serif,
-    Georgia, serif;
+    "Source Sans 3", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", ui-sans-serif, system-ui, sans-serif;
+  --font-serif:
+    "Source Serif 4", "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC",
+    ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
+  /* Surfaces and lines. */
+  --color-sheet: #ffffff;
+  --color-frame: #f4f5f7;
+  --color-rule: #e3e5e9;
+  --color-rule-strong: #d5d8dd;
+  --color-hover: #ebedf0;
+  --color-chip: #eef0f3;
+  /* Text, darkest first. ink-meta passes 4.5:1 on sheet and frame. */
+  --color-ink: #17191c;
+  --color-ink-answer: #3b4048;
+  --color-ink-secondary: #4a4f57;
+  --color-ink-meta: #656b74;
+  --color-ink-placeholder: #8a9099;
+  /* Interaction: links, focus, selection. */
+  --color-accent: #2a5bd7;
+  --color-accent-strong: #1e46b0;
+  --color-accent-wash: #e7edfb;
+  /* Citation checks only (and the same green on a found quote in the viewer). */
+  --color-success: #166534;
+  --color-success-wash: #dcf3e4;
+  --color-warning: #9a4a06;
+  --color-warning-wash: #fef3e2;
+  /* Something waiting for the User, e.g. an approval. */
+  --color-attention: #d97706;
+  --color-danger: #b42318;
+  --color-danger-wash: #fef0ee;
+
+  /* The type scale (DESIGN.md, Typography). */
+  --text-display: 34px;
+  --text-display--line-height: 42px;
+  --text-heading: 22px;
+  --text-heading--line-height: 30px;
+  --text-body: 17px;
+  --text-body--line-height: 28px;
+  --text-question: 16px;
+  --text-question--line-height: 28px;
+  --text-ui: 14px;
+  --text-ui--line-height: 20px;
+  --text-meta: 12px;
+  --text-meta--line-height: 20px;
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+
+  /* Depth for floating layers only; panes are flat. */
+  --shadow-popover: 0 0 0 1px var(--color-rule), 0 12px 32px rgb(23 25 28 / 0.12);
+  --shadow-dialog: 0 0 0 1px rgb(23 25 28 / 0.06), 0 24px 64px rgb(23 25 28 / 0.22);
+
+  /* The old look's tokens, until every component has moved to the ones above. */
+  --font-lora: var(--font-serif);
   --color-dark-50: #191919;
   --color-dark-100: #151515;
   --color-dark-150: #212121;
   --color-dark-200: #090909;
   --color-dark-300: #161616;
-
   --text-custom: 15px;
   --text-custom--line-height: 28px;
   --text-custom-xs: 13px;
   --text-custom-xs--line-height: 21px;
   --text-custom-sm: 15px;
-
   --shadow-custom-focus: 0 0 10px rgba(0, 0, 0, 0.15);
   --shadow-custom-unfocus: 0 0 10px rgba(0, 0, 0, 0.12);
 }
