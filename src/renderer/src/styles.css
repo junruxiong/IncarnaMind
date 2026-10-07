@@ -531,13 +531,17 @@
   .mind-title {
     margin: 0 0 24px;
 
-    > input {
+    /* A text area that grows with the title, so a long one wraps instead of being cut off. */
+    > textarea {
       display: block;
       width: 100%;
       padding: 0;
       border: 0;
       background: transparent;
       outline: none;
+      field-sizing: content;
+      resize: none;
+      overflow: hidden;
       font-family: var(--font-serif);
       font-size: var(--text-display);
       line-height: var(--text-display--line-height);
@@ -545,7 +549,6 @@
       font-variation-settings: "opsz" 48;
       letter-spacing: -0.01em;
       color: var(--color-ink);
-      text-overflow: ellipsis;
 
       &::placeholder {
         color: var(--color-ink-placeholder);

@@ -88,7 +88,7 @@ function MindTitle({ mind }: { mind: Mind }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
   const [draft, setDraft] = useState<string | null>(null);
-  const field = useRef<HTMLInputElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
 
   // A Mind just created: its title takes the focus from the button that made it.
@@ -98,7 +98,7 @@ function MindTitle({ mind }: { mind: Mind }) {
     useAppStore.getState().titleFocused();
   }, [focusNow]);
 
-  const moveIntoContent = (event: KeyboardEvent<HTMLInputElement>) => {
+  const moveIntoContent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
     event.currentTarget.closest("article")?.querySelector<HTMLElement>(".mind-editor")?.focus();
@@ -106,8 +106,10 @@ function MindTitle({ mind }: { mind: Mind }) {
 
   return (
     <h1 className="mind-title">
-      <input
+      {/* A text area, so a long title wraps instead of being cut off; it is still one line of text. */}
+      <textarea
         ref={field}
+        rows={1}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
         placeholder={t("mind.untitled")}
@@ -115,8 +117,10 @@ function MindTitle({ mind }: { mind: Mind }) {
         onFocus={() => setDraft(mind.title)}
         onBlur={() => setDraft(null)}
         onChange={(event) => {
-          setDraft(event.target.value);
-          void renameMind(mind.id, event.target.value);
+          // A title has no line breaks, even pasted ones.
+          const title = event.target.value.replace(/\s*[\r\n]+\s*/g, " ");
+          setDraft(title);
+          void renameMind(mind.id, title);
         }}
         onKeyDown={moveIntoContent}
       />

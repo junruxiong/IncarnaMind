@@ -250,6 +250,10 @@ describe("Data-flow consent", () => {
     core.dataFlows.register({ ...chat, sends: [...chat.sends, "tool-results"] });
 
     expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "needed" });
+    // Listed as not asked, but with the earlier decision's date: it asks again, it wasn't never asked.
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({ consent: "not-asked", decidedAt: expect.any(String) }),
+    );
     const second = await testAndWaitForConsent(core);
     expect(second.request.flow.sends).toEqual(["blocks", "passages", "tool-results"]);
     expect(second.request.newKinds).toEqual(["tool-results"]);

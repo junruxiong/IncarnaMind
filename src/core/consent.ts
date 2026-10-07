@@ -114,7 +114,8 @@ export function createConsent(
     const missing = flow.sends.filter((kind) => !accepted.includes(kind));
     return missing.length === 0
       ? { consent: "accepted" as const, decidedAt: row.updated_at, missing }
-      : { consent: "not-asked" as const, decidedAt: null, missing };
+      : // Allowed before it sent more: when, so the Privacy page can say it asks again.
+        { consent: "not-asked" as const, decidedAt: row.updated_at, missing };
   };
 
   const record = (flow: DataFlow, decision: Decision, kinds: readonly DataKind[]) => {

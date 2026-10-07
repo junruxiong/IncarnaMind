@@ -10,7 +10,7 @@ import type { SkillPickKind } from "../../../shared/bridge";
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
-import { formatSize, pickSkill } from "../skills";
+import { formatSize, pickSkill, skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { DuplicateLineIcon, TrashLineIcon } from "./lineIcons";
 import {
@@ -310,8 +310,8 @@ function SkillRow({ skill }: { skill: Skill }) {
             </span>
           )}
         </p>
-        <p className={`line-clamp-2 ${rowTextClass}`} title={skill.description}>
-          {skill.description}
+        <p className={`line-clamp-2 ${rowTextClass}`} title={skillDescription(skill, t)}>
+          {skillDescription(skill, t)}
         </p>
         {details.length > 0 && (
           <p className="text-[12px] leading-[18px] text-ink-meta">{details.join(" · ")}</p>
