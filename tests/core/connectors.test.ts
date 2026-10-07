@@ -187,7 +187,15 @@ describe("Importing an mcpServers configuration", { timeout: 30_000 }, () => {
         env: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
         action: "add",
       },
-      { name: "linear", command: null, args: [], env: [], action: "remote" },
+      // The older SSE transport: not supported.
+      {
+        name: "linear",
+        command: null,
+        args: [],
+        env: [],
+        url: "https://mcp.linear.app/sse",
+        action: "remote",
+      },
       { name: "broken", command: null, args: [], env: [], action: "invalid" },
       { name: "Existing", command: "uvx", args: ["mcp-server-fetch"], env: [], action: "exists" },
     ]);
@@ -230,13 +238,16 @@ describe("Importing an mcpServers configuration", { timeout: 30_000 }, () => {
       mcpServers: {
         fetch: { type: "stdio", command: "uvx", args: ["mcp-server-fetch"] },
         remote: { type: "streamable-http", url: "https://example.com/mcp" },
+        events: { type: "sse", url: "https://example.com/events" },
+        keyed: { url: "https://example.com/mcp", headers: { Authorization: "Bearer k" } },
       },
     };
     const bare = { fetch: { command: "uvx", args: ["mcp-server-fetch"], env: { PORT: 8080 } } };
 
+    // Remote servers over Streamable HTTP are added; SSE ones, and custom headers, aren't supported.
     expect(
       (await core.previewConnectorImport(JSON.stringify(cursor))).map((each) => each.action),
-    ).toEqual(["add", "remote"]);
+    ).toEqual(["add", "add", "remote", "remote"]);
     expect(await core.previewConnectorImport(JSON.stringify(bare))).toEqual([
       { name: "fetch", command: "uvx", args: ["mcp-server-fetch"], env: ["PORT"], action: "add" },
     ]);
@@ -446,7 +457,11 @@ describe("Connectors and restarts", { timeout: 30_000 }, () => {
 
     const second = startCore(dataDir, { keychain, processes: testProcesses() });
     expect(
-      (await second.listConnectors()).map(({ name, enabled, env }) => ({ name, enabled, env })),
+      (await second.listConnectors()).map((each) => ({
+        name: each.name,
+        enabled: each.enabled,
+        env: each.transport === "stdio" ? each.env : null,
+      })),
     ).toEqual([
       { name: "Spare tides", enabled: false, env: ["MCP_TEST_LOG", "TIDE_TOKEN"] },
       { name: "Tides", enabled: true, env: ["MCP_TEST_LOG", "TIDE_TOKEN"] },

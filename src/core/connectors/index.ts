@@ -1,30 +1,40 @@
 /**
  * Connectors (CONTEXT.md): external services the User has connected, through
- * which Answers can look things up. This ticket brings local ones: MCP
- * servers that run as programs on this computer, spoken to over their
- * standard input and output with the official MCP SDK.
+ * which Answers can look things up. Each is an MCP server, spoken to with the
+ * official MCP SDK:
+ * - local ones run as programs on this computer, over their standard input
+ *   and output;
+ * - remote ones are reached by URL over Streamable HTTP, and sign in through
+ *   the User's browser when the server requires it (./remote, ./auth).
  *
- * - Storage: one row per Connector, sync-ready and without secrets. Its
- *   environment's values (usually API keys) are one keychain secret.
+ * - Storage: one row per Connector, sync-ready and without secrets. A local
+ *   one's environment values (usually API keys) are one keychain secret; a
+ *   remote one's tokens and OAuth registration are two more.
  * - Lifecycle: enabled Connectors start when the core starts, or on first use
- *   if they haven't yet. A process that stops is started again, waiting
- *   longer after each failure. Turning one off, deleting it, or closing the
- *   core stops it.
- * - Answers: the Tools of each ready Connector, namespaced by Connector, each
- *   with its read-only claim: Answers ask the User before a call that may
- *   change something (see ../approvals). Every call checks consent for the
- *   "connectors" flow first: even a server on this computer can reach the internet.
+ *   if they haven't yet. A process that stops, or a server that can't be
+ *   reached, is tried again, waiting longer after each failure. A remote one
+ *   whose sign-in is missing or expired waits for the User instead. Turning
+ *   one off, deleting it, or closing the core stops it.
+ * - Answers: the Tools of each ready Connector, local or remote, namespaced by
+ *   Connector, each with its read-only claim: Answers ask the User before a
+ *   call that may change something (see ../approvals). Every call checks
+ *   consent for the "connectors" flow first: even a server on this computer
+ *   can reach the internet.
  */
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { ProcessLauncher } from "../adapters";
+import type { Browser, ProcessLauncher } from "../adapters";
 import type { ExternalTool } from "../answers/engine";
 import type {
   Connector,
   ConnectorError,
   ConnectorImportEntry,
   ConnectorImportResult,
+  ConnectorSignInError,
+  ConnectorSignInResult,
   ConnectorState,
   ConnectorTool,
   ExternalService,
@@ -37,10 +47,20 @@ import {
   NotFoundError,
   SecretStorageError,
 } from "../errors";
+import { DEFAULT_SIGN_IN_TIMEOUT_MS, type OAuthPage } from "../oauth";
 import type { Secrets } from "../secrets";
 import type { Database } from "../storage";
-import { type LocalConnectorConfig, parseAddInput, readMcpServers } from "./config";
+import { type ConnectorAuth, clientSecret, createConnectorAuth, manualClientRecord } from "./auth";
+import { type ConnectorConfig, parseAddInput, parseClient, readMcpServers } from "./config";
 import { startError, stoppedError } from "./errors";
+import {
+  needsSignIn,
+  remoteError,
+  remoteService,
+  remoteTransport,
+  signInError,
+  signInRemote,
+} from "./remote";
 import { ChildProcessTransport } from "./transport";
 
 /** What the "connectors" flow sends to each Connector. */
@@ -59,6 +79,8 @@ export interface ConnectorTiming {
   maxRestarts: number;
   /** A Connector that stayed up this long has its failure count reset. */
   stableMs: number;
+  /** How long the User has to finish a remote Connector's sign-in in the browser. */
+  signInTimeoutMs: number;
 }
 
 export const CONNECTOR_TIMING: ConnectorTiming = {
@@ -68,6 +90,7 @@ export const CONNECTOR_TIMING: ConnectorTiming = {
   restartDelaysMs: [1_000, 2_000, 4_000, 8_000, 16_000],
   maxRestarts: 5,
   stableMs: 60_000,
+  signInTimeoutMs: DEFAULT_SIGN_IN_TIMEOUT_MS,
 };
 
 /** The most of a Tool's result an Answer passes to the model. */
@@ -88,25 +111,33 @@ interface ConnectorRow {
   updated_at: string;
 }
 
-/** The `config` column for "stdio": no secrets, only the names of the environment variables. */
-interface StoredConfig {
-  command: string;
-  args: string[];
-  env: string[];
-}
+/**
+ * The `config` column, without secrets: for "stdio" only the names of the
+ * environment variables; for "http" the URL, and the client ID of the OAuth
+ * app the User entered (its secret, if any, is in the keychain).
+ */
+type StoredConfig =
+  | { transport: "stdio"; command: string; args: string[]; env: string[] }
+  | { transport: "http"; url: string; clientId: string | null };
 
 interface ToolInfo extends ConnectorTool {
   inputSchema: Record<string, unknown>;
 }
 
-/** A Connector's process and connection, kept in memory. */
+/** How to end a connection: gracefully, or at once when the app quits. */
+interface Session {
+  close(): Promise<void>;
+  kill(): void;
+}
+
+/** A Connector's process or connection, kept in memory. */
 interface Runtime {
   /** Counts starts and stops: work from an earlier one sees it is stale and gives up. */
   generation: number;
-  state: Exclude<ConnectorState, "off">;
+  state: Exclude<ConnectorState, "off" | "signing-in">;
   error: ConnectorError | null;
   tools: ToolInfo[] | null;
-  transport: ChildProcessTransport | null;
+  session: Session | null;
   /** Set while "ready". */
   client: Client | null;
   connectedAt: number;
@@ -115,6 +146,10 @@ interface Runtime {
   /** Failures in a row, for the wait before the next restart. */
   failures: number;
   retryTimer: ReturnType<typeof setTimeout> | null;
+  /** Remote: a browser sign-in waiting for the User. */
+  signingIn: { controller: AbortController; done: Promise<unknown> } | null;
+  /** Remote: why the last sign-in didn't work. */
+  signInError: ConnectorSignInError | null;
 }
 
 class MissingSecretsError extends Error {
@@ -124,9 +159,14 @@ class MissingSecretsError extends Error {
 export interface ConnectorsOptions {
   db: Database;
   now: () => string;
+  /** Milliseconds since the epoch, for when sign-ins expire. */
+  clock: () => number;
   secrets: Secrets;
   processes: ProcessLauncher;
+  browser: Browser;
   consent: Consent;
+  /** The browser tab's pages after a remote Connector's sign-in, in the User's language. */
+  signInPages(name: string): { success: OAuthPage; failure: OAuthPage };
   /** Something changed: the list, as `list()` returns it. */
   onChange(connectors: Connector[]): void;
   /** A Connector was added, deleted, or turned on or off. */
@@ -139,26 +179,46 @@ export type Connectors = ReturnType<typeof createConnectors>;
 
 const COLUMNS = "id, name, transport, config, enabled, created_at, updated_at";
 const envSecret = (connectorId: string) => `connector:${connectorId}:env`;
-const serviceOf = (row: { id: string; name: string }): ExternalService => ({
-  id: `connector:${row.id}`,
-  name: row.name,
-});
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 function storedConfig(row: ConnectorRow): StoredConfig {
+  const texts = (value: unknown) =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
   try {
     const parsed: unknown = JSON.parse(row.config);
+    if (row.transport === "http") {
+      if (isRecord(parsed) && typeof parsed.url === "string") {
+        const clientId = typeof parsed.clientId === "string" ? parsed.clientId : null;
+        return { transport: "http", url: parsed.url, clientId };
+      }
+      // Unreadable: a URL that can't connect.
+      return { transport: "http", url: "", clientId: null };
+    }
     if (isRecord(parsed) && typeof parsed.command === "string") {
-      const texts = (value: unknown) =>
-        Array.isArray(value)
-          ? value.filter((item): item is string => typeof item === "string")
-          : [];
-      return { command: parsed.command, args: texts(parsed.args), env: texts(parsed.env) };
+      return {
+        transport: "stdio",
+        command: parsed.command,
+        args: texts(parsed.args),
+        env: texts(parsed.env),
+      };
     }
   } catch {
     // Unreadable: treated as a Connector with no command, which fails to start.
   }
-  return { command: "", args: [], env: [] };
+  return { transport: "stdio", command: "", args: [], env: [] };
+}
+
+/** Where the "connectors" flow sends a Connector's Tool arguments. */
+function serviceOf(row: ConnectorRow): ExternalService {
+  const config = storedConfig(row);
+  if (config.transport === "http") {
+    try {
+      return remoteService(config.url);
+    } catch {
+      // An unreadable URL: the Connector can't connect, so nothing is sent anyway.
+    }
+  }
+  return { id: `connector:${row.id}`, name: row.name };
 }
 
 function toToolInfo(tool: Tool): ToolInfo {
@@ -237,6 +297,7 @@ export function createConnectors(options: ConnectorsOptions) {
   const { db, now, secrets, processes, consent } = options;
   const timing: ConnectorTiming = { ...CONNECTOR_TIMING, ...options.timing };
   const runtimes = new Map<string, Runtime>();
+  const auths = new Map<string, ConnectorAuth>();
   let closed = false;
 
   const liveRows = () =>
@@ -255,21 +316,54 @@ export function createConnectors(options: ConnectorsOptions) {
     if (!row) throw new NotFoundError("That Connector doesn't exist.");
     return row;
   };
+  const requireRemote = (id: unknown) => {
+    const row = requireRow(id);
+    const config = storedConfig(row);
+    if (config.transport !== "http") {
+      throw new InvalidInputError("Only remote Connectors sign in.");
+    }
+    return { row, config };
+  };
+
+  const changed = () => {
+    if (!closed) options.onChange(list());
+  };
+
+  /** A remote Connector's sign-in, kept for as long as the Connector exists. */
+  const authOf = (id: string, url: string): ConnectorAuth => {
+    let found = auths.get(id);
+    if (!found) {
+      found = createConnectorAuth({
+        connectorId: id,
+        url,
+        secrets,
+        now: options.clock,
+        manualClientId: () => {
+          const row = rowById(id);
+          const config = row ? storedConfig(row) : null;
+          return config?.transport === "http" ? config.clientId : null;
+        },
+        onChange: changed,
+      });
+      auths.set(id, found);
+    }
+    return found;
+  };
 
   const toConnector = (row: ConnectorRow): Connector => {
     const config = storedConfig(row);
     const enabled = row.enabled === 1;
     const runtime = runtimes.get(row.id);
-    return {
+    const common = {
       id: row.id,
       name: row.name,
-      transport: "stdio",
-      command: config.command,
-      args: config.args,
-      env: config.env,
       enabled,
-      state: enabled ? (runtime?.state ?? "connecting") : "off",
-      error: enabled ? (runtime?.error ?? null) : null,
+      state: !enabled
+        ? ("off" as const)
+        : runtime?.signingIn
+          ? ("signing-in" as const)
+          : (runtime?.state ?? "connecting"),
+      error: enabled && !runtime?.signingIn ? (runtime?.error ?? null) : null,
       tools:
         enabled && runtime?.tools
           ? runtime.tools.map(({ name, title, description, readOnly }) => ({
@@ -282,20 +376,40 @@ export function createConnectors(options: ConnectorsOptions) {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+    if (config.transport === "http") {
+      return {
+        ...common,
+        transport: "http",
+        url: config.url,
+        clientId: config.clientId,
+        signIn: {
+          ...(auths.get(row.id)?.status() ?? { signedIn: false, expired: false }),
+          error: runtime?.signInError ?? null,
+        },
+      };
+    }
+    return {
+      ...common,
+      transport: "stdio",
+      command: config.command,
+      args: config.args,
+      env: config.env,
+    };
   };
 
   const list = () => liveRows().map(toConnector);
-  const changed = () => {
-    if (!closed) options.onChange(list());
-  };
 
   consent.registry.register({
     id: "connectors",
     sends: CONNECTORS_FLOW_SENDS,
     async services() {
-      return liveRows()
-        .filter((row) => row.enabled === 1)
-        .map(serviceOf);
+      const services = new Map<string, ExternalService>();
+      for (const row of liveRows()) {
+        if (row.enabled !== 1) continue;
+        const service = serviceOf(row);
+        if (!services.has(service.id)) services.set(service.id, service);
+      }
+      return [...services.values()];
     },
   });
 
@@ -307,12 +421,14 @@ export function createConnectors(options: ConnectorsOptions) {
         state: "connecting",
         error: null,
         tools: null,
-        transport: null,
+        session: null,
         client: null,
         connectedAt: 0,
         starting: null,
         failures: 0,
         retryTimer: null,
+        signingIn: null,
+        signInError: null,
       };
       runtimes.set(id, runtime);
     }
@@ -324,17 +440,25 @@ export function createConnectors(options: ConnectorsOptions) {
     runtime.retryTimer = null;
   };
 
-  /** Ends the current process, gracefully unless `now`. Its callbacks see a new generation and stand down. */
+  /** Ends the current process or connection, gracefully unless `now`. Its callbacks see a new generation and stand down. */
   const stopProcess = (runtime: Runtime, { now = false } = {}) => {
     runtime.generation++;
     clearRetry(runtime);
     runtime.starting = null;
-    const transport = runtime.transport;
-    runtime.transport = null;
+    const session = runtime.session;
+    runtime.session = null;
     runtime.client = null;
-    if (!transport) return;
-    if (now) transport.kill();
-    else transport.close().catch(options.reportError);
+    if (!session) return;
+    if (now) session.kill();
+    else session.close().catch(options.reportError);
+  };
+
+  /** Stops waiting for a browser sign-in, and waits until it has ended. */
+  const cancelSignIn = async (runtime: Runtime | undefined) => {
+    const signing = runtime?.signingIn;
+    if (!signing) return;
+    signing.controller.abort();
+    await signing.done.catch(() => undefined);
   };
 
   const readEnv = async (id: string, names: readonly string[]) => {
@@ -352,7 +476,7 @@ export function createConnectors(options: ConnectorsOptions) {
     return env as Record<string, string>;
   };
 
-  /** Records a failure; failures the process may get over are retried, waiting longer each time. */
+  /** Records a failure; failures that may pass are retried, waiting longer each time. */
   const fail = (id: string, runtime: Runtime, error: ConnectorError) => {
     runtime.failures++;
     const retryable = error.kind !== "missing-command" && error.kind !== "missing-secrets";
@@ -372,30 +496,97 @@ export function createConnectors(options: ConnectorsOptions) {
     changed();
   };
 
-  /** The process of a ready Connector ended without being asked to. */
-  const lost = (id: string, runtime: Runtime, generation: number, command: string) => {
-    if (closed || runtime.generation !== generation) return;
-    const transport = runtime.transport;
-    runtime.transport = null;
-    runtime.client = null;
-    if (Date.now() - runtime.connectedAt >= timing.stableMs) runtime.failures = 0;
-    fail(
-      id,
-      runtime,
-      stoppedError(
-        command,
-        transport?.exit ?? null,
-        transport?.stderrTail ?? "",
-        transport?.error ?? null,
-      ),
-    );
+  /** A remote Connector's server wants a sign-in IncarnaMind doesn't have: it waits for the User. */
+  const waitForSignIn = (runtime: Runtime) => {
+    stopProcess(runtime);
+    runtime.state = "needs-sign-in";
+    runtime.error = null;
+    runtime.tools = null;
+    runtime.failures = 0;
+    changed();
   };
 
-  async function connect(id: string, runtime: Runtime, generation: number): Promise<void> {
+  /** The process of a ready Connector ended without being asked to, or its server can't be reached. */
+  const lost = (id: string, runtime: Runtime, generation: number, error: () => ConnectorError) => {
+    if (closed || runtime.generation !== generation) return;
+    // Anything else this connection does from now on stands down, including its closing.
+    runtime.generation++;
+    const session = runtime.session;
+    runtime.session = null;
+    runtime.client = null;
+    session?.kill();
+    if (Date.now() - runtime.connectedAt >= timing.stableMs) runtime.failures = 0;
+    fail(id, runtime, error());
+  };
+
+  /**
+   * MCP's handshake over a transport that is ready to start, then the Tools.
+   * `onLost` hears when a connection that was ready closes by itself.
+   */
+  async function handshake(
+    runtime: Runtime,
+    generation: number,
+    transport: Transport,
+    onLost: () => void,
+  ): Promise<{ client: Client; tools: ToolInfo[]; ready(): void }> {
     const current = () => !closed && runtime.generation === generation;
-    const row = rowById(id);
-    if (row?.enabled !== 1) return;
-    const { command, args, env: envNames } = storedConfig(row);
+    let ready = false;
+    const client = new Client(CLIENT_INFO, {
+      capabilities: {},
+      listChanged: {
+        tools: {
+          onChanged: (error, tools) => {
+            if (error || !tools || !ready || !current()) return;
+            runtime.tools = tools.map(toToolInfo);
+            changed();
+          },
+        },
+      },
+    });
+    // Lines that aren't MCP, e.g. a server logging to its standard output, are skipped.
+    client.onerror = () => undefined;
+    client.onclose = () => {
+      if (ready) onLost();
+    };
+    await client.connect(transport, { timeout: timing.connectTimeoutMs });
+    const tools: ToolInfo[] = [];
+    if (client.getServerCapabilities()?.tools) {
+      let cursor: string | undefined;
+      do {
+        const page = await client.listTools(cursor ? { cursor } : undefined, {
+          timeout: timing.connectTimeoutMs,
+        });
+        tools.push(...page.tools.map(toToolInfo));
+        cursor = page.nextCursor;
+      } while (cursor && tools.length < 1_000);
+    }
+    return {
+      client,
+      tools,
+      ready: () => {
+        ready = true;
+      },
+    };
+  }
+
+  /** The connection is up: Answers can use its Tools. */
+  const becameReady = (runtime: Runtime, client: Client, tools: ToolInfo[]) => {
+    runtime.client = client;
+    runtime.connectedAt = Date.now();
+    runtime.state = "ready";
+    runtime.error = null;
+    runtime.tools = tools;
+    changed();
+  };
+
+  async function connectLocal(
+    id: string,
+    config: Extract<StoredConfig, { transport: "stdio" }>,
+    runtime: Runtime,
+    generation: number,
+  ): Promise<void> {
+    const current = () => !closed && runtime.generation === generation;
+    const { command, args, env: envNames } = config;
     let transport: ChildProcessTransport | null = null;
     try {
       const env = await readEnv(id, envNames);
@@ -406,48 +597,19 @@ export function createConnectors(options: ConnectorsOptions) {
         transport.kill();
         return;
       }
-      runtime.transport = transport;
-      let ready = false;
-      const client = new Client(CLIENT_INFO, {
-        capabilities: {},
-        listChanged: {
-          tools: {
-            onChanged: (error, tools) => {
-              if (error || !tools || !ready || !current()) return;
-              runtime.tools = tools.map(toToolInfo);
-              changed();
-            },
-          },
-        },
-      });
-      // Lines that aren't MCP, e.g. a server logging to its standard output, are skipped.
-      client.onerror = () => undefined;
-      client.onclose = () => {
-        if (ready) lost(id, runtime, generation, command);
-      };
-      await client.connect(transport, { timeout: timing.connectTimeoutMs });
-      const tools: ToolInfo[] = [];
-      if (client.getServerCapabilities()?.tools) {
-        let cursor: string | undefined;
-        do {
-          const page = await client.listTools(cursor ? { cursor } : undefined, {
-            timeout: timing.connectTimeoutMs,
-          });
-          tools.push(...page.tools.map(toToolInfo));
-          cursor = page.nextCursor;
-        } while (cursor && tools.length < 1_000);
-      }
+      const process = transport;
+      runtime.session = { close: () => process.close(), kill: () => process.kill() };
+      const { client, tools, ready } = await handshake(runtime, generation, transport, () =>
+        lost(id, runtime, generation, () =>
+          stoppedError(command, process.exit, process.stderrTail, process.error),
+        ),
+      );
       if (!current()) {
         transport.close().catch(options.reportError);
         return;
       }
-      ready = true;
-      runtime.client = client;
-      runtime.connectedAt = Date.now();
-      runtime.state = "ready";
-      runtime.error = null;
-      runtime.tools = tools;
-      changed();
+      ready();
+      becameReady(runtime, client, tools);
     } catch (error) {
       let ended: Parameters<typeof startError>[2] = null;
       if (transport) {
@@ -464,7 +626,7 @@ export function createConnectors(options: ConnectorsOptions) {
         transport.kill();
       }
       if (!current()) return;
-      runtime.transport = null;
+      runtime.session = null;
       runtime.client = null;
       fail(
         id,
@@ -482,7 +644,57 @@ export function createConnectors(options: ConnectorsOptions) {
     }
   }
 
-  /** Starts a Connector, stopping its process first if one runs. */
+  async function connectRemote(
+    id: string,
+    url: string,
+    runtime: Runtime,
+    generation: number,
+  ): Promise<void> {
+    const current = () => !closed && runtime.generation === generation;
+    const auth = authOf(id, url);
+    let transport: StreamableHTTPClientTransport | null = null;
+    try {
+      await auth.load();
+      // An access token that has expired is renewed first, rather than sent to be refused.
+      await auth.refreshIfStale();
+      if (!current()) return;
+      const connection = remoteTransport(url, auth);
+      transport = connection;
+      runtime.session = { close: () => connection.close(), kill: () => void connection.close() };
+      const { client, tools, ready } = await handshake(runtime, generation, connection, () =>
+        lost(id, runtime, generation, () => ({
+          kind: "stopped",
+          command: null,
+          install: null,
+          message: "The connection closed.",
+          retrying: false,
+        })),
+      );
+      if (!current()) {
+        connection.close().catch(options.reportError);
+        return;
+      }
+      ready();
+      becameReady(runtime, client, tools);
+    } catch (error) {
+      transport?.close().catch(() => undefined);
+      if (!current()) return;
+      runtime.session = null;
+      runtime.client = null;
+      if (needsSignIn(error)) waitForSignIn(runtime);
+      else fail(id, runtime, remoteError(error));
+    }
+  }
+
+  async function connect(id: string, runtime: Runtime, generation: number): Promise<void> {
+    const row = rowById(id);
+    if (row?.enabled !== 1) return;
+    const config = storedConfig(row);
+    if (config.transport === "http") await connectRemote(id, config.url, runtime, generation);
+    else await connectLocal(id, config, runtime, generation);
+  }
+
+  /** Starts a Connector, stopping its process (or connection) first if one runs. */
   function start(id: string): void {
     const runtime = runtimeOf(id);
     stopProcess(runtime);
@@ -498,10 +710,11 @@ export function createConnectors(options: ConnectorsOptions) {
       });
   }
 
-  /** Turned off or deleted: the process stops, and the failure count is forgotten. */
+  /** Turned off or deleted: the process stops, a sign-in waiting is cancelled, and the failure count is forgotten. */
   const stop = (id: string) => {
     const runtime = runtimes.get(id);
     if (!runtime) return;
+    runtime.signingIn?.controller.abort();
     stopProcess(runtime);
     runtime.state = "connecting";
     runtime.error = null;
@@ -515,23 +728,43 @@ export function createConnectors(options: ConnectorsOptions) {
     }
   };
 
-  /** Stores a new Connector, its environment in the keychain first: if that is refused, nothing is added. */
-  const insert = async (config: LocalConnectorConfig): Promise<string> => {
+  /** Stores a new Connector, its secrets in the keychain first: if that is refused, nothing is added. */
+  const insert = async (config: ConnectorConfig): Promise<string> => {
     assertNameFree(config.name);
     const id = randomUUID();
-    const envNames = Object.keys(config.env);
-    if (envNames.length > 0) await secrets.set(envSecret(id), JSON.stringify(config.env));
-    const stored: StoredConfig = { command: config.command, args: config.args, env: envNames };
+    let secretName: string | null = null;
+    let stored: StoredConfig;
+    if (config.transport === "http") {
+      const secret = config.client?.clientSecret ?? null;
+      if (secret) {
+        secretName = clientSecret(id);
+        await secrets.set(secretName, manualClientRecord(secret));
+      }
+      stored = { transport: "http", url: config.url, clientId: config.client?.clientId ?? null };
+    } else {
+      const envNames = Object.keys(config.env);
+      if (envNames.length > 0) {
+        secretName = envSecret(id);
+        await secrets.set(secretName, JSON.stringify(config.env));
+      }
+      stored = {
+        transport: "stdio",
+        command: config.command,
+        args: config.args,
+        env: envNames,
+      };
+    }
+    const { transport, ...columns } = stored;
     const at = now();
     try {
       assertNameFree(config.name);
       db.run(
         `INSERT INTO connectors (id, name, transport, config, enabled, created_at, updated_at)
-         VALUES (?, ?, 'stdio', ?, 1, ?, ?)`,
-        [id, config.name, JSON.stringify(stored), at, at],
+         VALUES (?, ?, ?, ?, 1, ?, ?)`,
+        [id, config.name, transport, JSON.stringify(columns), at, at],
       );
     } catch (error) {
-      if (envNames.length > 0) await secrets.delete(envSecret(id)).catch(options.reportError);
+      if (secretName) await secrets.delete(secretName).catch(options.reportError);
       throw error;
     }
     return id;
@@ -554,14 +787,37 @@ export function createConnectors(options: ConnectorsOptions) {
     for (const row of rows) {
       const runtime = runtimes.get(row.id);
       const idle =
-        !runtime || (runtime.state === "connecting" && !runtime.starting && !runtime.retryTimer);
+        !runtime ||
+        (runtime.state === "connecting" &&
+          !runtime.starting &&
+          !runtime.retryTimer &&
+          !runtime.signingIn);
       if (idle) start(row.id);
     }
+  };
+
+  /** Why a call through a remote Connector failed: it may now need a sign-in, or its server may be gone. */
+  const remoteCallFailed = (
+    row: ConnectorRow,
+    runtime: Runtime,
+    generation: number,
+    error: unknown,
+  ) => {
+    if (closed || runtime.generation !== generation) return;
+    if (needsSignIn(error)) {
+      waitForSignIn(runtime);
+      throw new Error(
+        `The User needs to sign in to the Connector "${row.name}" again (in Settings → Connectors), so it can't be used now. Go on without it.`,
+      );
+    }
+    const reason = remoteError(error);
+    if (reason.kind === "unreachable") lost(row.id, runtime, generation, () => reason);
   };
 
   /** A Connector's Tool, as an Answer offers it to the model. */
   const answerTool = (row: ConnectorRow, tool: ToolInfo, name: string): ExternalTool => {
     const service = serviceOf(row);
+    const config = storedConfig(row);
     const description = tool.description || tool.title || tool.name;
     return {
       name,
@@ -584,13 +840,24 @@ export function createConnectors(options: ConnectorsOptions) {
           }
           throw error;
         }
-        const client = runtimes.get(row.id)?.client;
-        if (!client) throw new Error(`The Connector "${row.name}" isn't connected right now.`);
-        const result = await client.callTool({ name: tool.name, arguments: input }, undefined, {
-          signal,
-          timeout: timing.callTimeoutMs,
-          resetTimeoutOnProgress: true,
-        });
+        const runtime = runtimes.get(row.id);
+        const client = runtime?.client;
+        if (!runtime || !client) {
+          throw new Error(`The Connector "${row.name}" isn't connected right now.`);
+        }
+        const generation = runtime.generation;
+        let result: Awaited<ReturnType<Client["callTool"]>>;
+        try {
+          if (config.transport === "http") await authOf(row.id, config.url).refreshIfStale();
+          result = await client.callTool({ name: tool.name, arguments: input }, undefined, {
+            signal,
+            timeout: timing.callTimeoutMs,
+            resetTimeoutOnProgress: true,
+          });
+        } catch (error) {
+          if (config.transport === "http") remoteCallFailed(row, runtime, generation, error);
+          throw error;
+        }
         const text = resultText(result);
         if (result.isError === true) throw new Error(text);
         return text;
@@ -621,7 +888,7 @@ export function createConnectors(options: ConnectorsOptions) {
       }
       if (enabled) {
         const runtime = runtimes.get(row.id);
-        if (!runtime?.client && !runtime?.starting) start(row.id);
+        if (!runtime?.client && !runtime?.starting && !runtime?.signingIn) start(row.id);
       } else {
         stop(row.id);
       }
@@ -630,25 +897,139 @@ export function createConnectors(options: ConnectorsOptions) {
       return toConnector(requireRow(row.id));
     },
 
-    restart(id: unknown): Connector {
+    async restart(id: unknown): Promise<Connector> {
       const row = requireRow(id);
       if (row.enabled !== 1) throw new InvalidInputError("Turn the Connector on first.");
-      runtimeOf(row.id).failures = 0;
+      const runtime = runtimeOf(row.id);
+      await cancelSignIn(runtime);
+      runtime.failures = 0;
       start(row.id);
       return toConnector(requireRow(row.id));
     },
 
     async delete(id: unknown): Promise<void> {
       const row = requireRow(id);
+      const service = serviceOf(row);
+      const config = storedConfig(row);
+      const runtime = runtimes.get(row.id);
       stop(row.id);
+      await cancelSignIn(runtime);
       runtimes.delete(row.id);
       const at = now();
       db.run("UPDATE connectors SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
-      // Added again later, it is a new Connector: it asks again.
-      consent.revoke("connectors", serviceOf(row).id);
-      await secrets.delete(envSecret(row.id)).catch(options.reportError);
+      // Added again later, it is a new Connector: it asks again. A server another Connector still uses keeps its decision.
+      if (!liveRows().some((other) => serviceOf(other).id === service.id)) {
+        consent.revoke("connectors", service.id);
+      }
+      if (config.transport === "http") {
+        await authOf(row.id, config.url).deleteAll().catch(options.reportError);
+        auths.delete(row.id);
+      } else {
+        await secrets.delete(envSecret(row.id)).catch(options.reportError);
+      }
       changed();
       options.onEnabledChange();
+    },
+
+    /**
+     * Signs in to a remote Connector in the browser and waits for the User.
+     * Starting again cancels a sign-in still waiting.
+     */
+    async signIn(id: unknown): Promise<ConnectorSignInResult> {
+      const { row, config } = requireRemote(id);
+      if (row.enabled !== 1) throw new InvalidInputError("Turn the Connector on first.");
+      const storage = secrets.status();
+      // Check before the User signs in, not after: the tokens would have nowhere to go.
+      if (!storage.canSave) {
+        const error = new SecretStorageError(storage.protection);
+        return { ok: false, error: { kind: "secret-storage", message: error.message } };
+      }
+      const runtime = runtimeOf(row.id);
+      await cancelSignIn(runtime);
+      if (closed || rowById(row.id)?.enabled !== 1) {
+        return { ok: false, error: { kind: "cancelled", message: "The sign-in was cancelled." } };
+      }
+      // Nothing in the background competes with the sign-in for the server.
+      stopProcess(runtime);
+      runtime.state = "connecting";
+      runtime.error = null;
+      runtime.tools = null;
+      runtime.signInError = null;
+      const controller = new AbortController();
+      const done = signInRemote({
+        url: config.url,
+        auth: authOf(row.id, config.url),
+        browser: options.browser,
+        pages: options.signInPages(row.name),
+        timeoutMs: timing.signInTimeoutMs,
+        requestTimeoutMs: timing.connectTimeoutMs,
+        signal: controller.signal,
+        clientInfo: CLIENT_INFO,
+      });
+      runtime.signingIn = { controller, done };
+      changed();
+      let failure: ConnectorSignInError | null = null;
+      try {
+        await done;
+      } catch (error) {
+        failure = signInError(error);
+      } finally {
+        if (runtime.signingIn?.controller === controller) runtime.signingIn = null;
+      }
+      // Cancelled by a newer sign-in, by turning the Connector off or deleting it, or by quitting.
+      if (closed || runtime.signingIn || runtimes.get(row.id) !== runtime) {
+        return { ok: false, error: failure ?? { kind: "cancelled", message: "Cancelled." } };
+      }
+      // Cancelling isn't something to report on the Connector.
+      runtime.signInError = failure?.kind === "cancelled" ? null : failure;
+      if (rowById(row.id)?.enabled === 1) {
+        // Connect with the new tokens; without them, it ends up waiting for a sign-in again.
+        start(row.id);
+        await runtime.starting;
+      } else {
+        changed();
+      }
+      if (failure) return { ok: false, error: failure };
+      return { ok: true, connector: toConnector(requireRow(row.id)) };
+    },
+
+    async cancelSignIn(id: unknown): Promise<void> {
+      const row = requireRow(id);
+      await cancelSignIn(runtimes.get(row.id));
+    },
+
+    /** Deletes a remote Connector's tokens and disconnects it: it waits for a sign-in. */
+    async signOut(id: unknown): Promise<Connector> {
+      const { row, config } = requireRemote(id);
+      const runtime = runtimeOf(row.id);
+      await cancelSignIn(runtime);
+      await authOf(row.id, config.url).signOut();
+      runtime.signInError = null;
+      if (rowById(row.id)?.enabled === 1) waitForSignIn(runtime);
+      else changed();
+      return toConnector(requireRow(row.id));
+    },
+
+    /** Sets (or, with null, clears) the OAuth app a remote Connector signs in with. Signs out first. */
+    async setClient(id: unknown, input: unknown): Promise<Connector> {
+      const { row, config } = requireRemote(id);
+      const client = parseClient(input);
+      if (client?.clientSecret) {
+        const { canSave, protection } = secrets.status();
+        if (!canSave) throw new SecretStorageError(protection);
+      }
+      const runtime = runtimeOf(row.id);
+      await cancelSignIn(runtime);
+      db.run("UPDATE connectors SET config = ?, updated_at = ? WHERE id = ?", [
+        JSON.stringify({ url: config.url, clientId: client?.clientId ?? null }),
+        now(),
+        row.id,
+      ]);
+      await authOf(row.id, config.url).setManualSecret(client?.clientSecret ?? null);
+      runtime.signInError = null;
+      if (rowById(row.id)?.enabled === 1) waitForSignIn(runtime);
+      else changed();
+      return toConnector(requireRow(row.id));
     },
 
     previewImport: (json: unknown): ConnectorImportEntry[] =>
@@ -658,7 +1039,9 @@ export function createConnectors(options: ConnectorsOptions) {
       const candidates = previewImport(json);
       const adding = candidates.filter((each) => each.entry.action === "add");
       // Every environment goes to the keychain: check it can take them before adding any.
-      if (adding.some((each) => Object.keys(each.config?.env ?? {}).length > 0)) {
+      const hasSecrets = (config: ConnectorConfig | null) =>
+        config?.transport === "stdio" && Object.keys(config.env).length > 0;
+      if (adding.some((each) => hasSecrets(each.config))) {
         const { canSave, protection } = secrets.status();
         if (!canSave) throw new SecretStorageError(protection);
       }
@@ -675,9 +1058,16 @@ export function createConnectors(options: ConnectorsOptions) {
     /** Whether any Connector is on: Answers may then send Tool results to the chat model. */
     anyEnabled: () => liveRows().some((row) => row.enabled === 1),
 
-    /** Starts every enabled Connector, e.g. when the app starts. */
+    /** Starts every enabled Connector, e.g. when the app starts, and reads every remote one's sign-in. */
     startAll(): void {
-      startIdle(liveRows().filter((row) => row.enabled === 1));
+      const rows = liveRows();
+      for (const row of rows) {
+        const config = storedConfig(row);
+        if (config.transport === "http") {
+          authOf(row.id, config.url).load().then(changed, options.reportError);
+        }
+      }
+      startIdle(rows.filter((row) => row.enabled === 1));
     },
 
     /**
@@ -729,11 +1119,57 @@ export function createConnectors(options: ConnectorsOptions) {
       return tools;
     },
 
-    /** Stops every Connector's process at once, e.g. when the app quits. */
+    /**
+     * Where connecting to remote Connectors that are on, and signing in to
+     * them, goes: each one's server, and the authorization server it named.
+     * Nothing of the User's content goes there this way (Tool calls are the
+     * "connectors" data flow).
+     */
+    remoteTraffic(): ExternalService[] {
+      const services = new Map<string, ExternalService>();
+      const add = (url: string) => {
+        try {
+          const service = remoteService(url);
+          if (!services.has(service.id)) services.set(service.id, service);
+        } catch {
+          // An unreadable URL goes nowhere.
+        }
+      };
+      for (const row of liveRows()) {
+        const config = storedConfig(row);
+        if (row.enabled !== 1 || config.transport !== "http") continue;
+        add(config.url);
+        const authorizationServer = auths.get(row.id)?.authorizationServer();
+        if (authorizationServer) add(authorizationServer);
+      }
+      return [...services.values()];
+    },
+
+    /**
+     * The Connectors that are on but wait for the User to sign in, so an
+     * Answer can say why it couldn't use them.
+     */
+    needingSignIn(): { id: string; name: string }[] {
+      return liveRows()
+        .filter((row) => {
+          const runtime = runtimes.get(row.id);
+          return (
+            row.enabled === 1 &&
+            runtime !== undefined &&
+            (runtime.signingIn !== null || runtime.state === "needs-sign-in")
+          );
+        })
+        .map((row) => ({ id: row.id, name: row.name }));
+    },
+
+    /** Stops every Connector at once, e.g. when the app quits. */
     close(): void {
       if (closed) return;
       closed = true;
-      for (const runtime of runtimes.values()) stopProcess(runtime, { now: true });
+      for (const runtime of runtimes.values()) {
+        runtime.signingIn?.controller.abort();
+        stopProcess(runtime, { now: true });
+      }
       runtimes.clear();
     },
   };

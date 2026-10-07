@@ -442,6 +442,9 @@ export const en = {
   "privacy.traffic.chatgpt-sign-in": "ChatGPT sign-in",
   "privacy.traffic.chatgpt-sign-in.description":
     "The experimental ChatGPT plan signs you in with OpenAI and renews the sign-in. Questions asked with it are the chat flow above.",
+  "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
+  "privacy.traffic.remote-connectors.description":
+    "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
   "privacy.skills.title": "Skill scripts",
   "privacy.skills.body":
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does.",
@@ -665,7 +668,7 @@ export const en = {
 
   "connectors.settings.title": "Connectors",
   "connectors.settings.body":
-    "Connectors let Answers look things up in your other tools, and make changes there once you approve them. Add an MCP server that runs on this computer, or import the ones you set up in Claude Desktop or Cursor.",
+    "Connectors let Answers look things up in your other tools, and make changes there once you approve them. Add an MCP server that runs on this computer or a remote one by its URL, or import the ones you set up in Claude Desktop or Cursor.",
   "connectors.settings.empty": "No Connectors yet.",
   "connectors.settings.add": "Add Connector…",
   "connectors.settings.import": "Import from Claude Desktop or Cursor…",
@@ -712,8 +715,9 @@ export const en = {
   "connectors.import.preview": "Show what will be added",
   "connectors.import.action.add": "Will be added",
   "connectors.import.action.exists": "Skipped: a Connector with this name exists",
-  "connectors.import.action.remote": "Skipped: remote Connectors aren't supported yet",
-  "connectors.import.action.invalid": "Skipped: it has no command",
+  "connectors.import.action.remote":
+    "Skipped: it uses the older SSE transport or custom headers, which aren't supported",
+  "connectors.import.action.invalid": "Skipped: it has no command or valid URL",
   "connectors.import.env": "Environment: {names} (kept in your keychain)",
   "connectors.import.confirm": "Add {count} Connectors",
   "connectors.import.confirm.one": "Add 1 Connector",
@@ -726,6 +730,51 @@ export const en = {
   "connectors.call.failed": "Asking {connector} failed: {tool}",
   "connectors.call.arguments": "Arguments sent",
   "connectors.call.details": "What was sent",
+
+  "remoteConnectors.form.kind": "Where it runs",
+  "remoteConnectors.form.kind.local": "On this computer",
+  "remoteConnectors.form.kind.remote": "Remote server (URL)",
+  "remoteConnectors.form.url": "Server URL",
+  "remoteConnectors.form.urlHint":
+    "Its MCP endpoint, e.g. https://mcp.example.com/mcp. If it needs you to sign in, you'll do that in your browser.",
+  "remoteConnectors.form.client": "Use my own OAuth app",
+  "remoteConnectors.client.hint":
+    "Only for a service that can't register IncarnaMind by itself. Register an OAuth app with it whose redirect URI is http://127.0.0.1/callback (any port).",
+  "remoteConnectors.client.id": "Client ID",
+  "remoteConnectors.client.secret": "Client secret (if it has one)",
+  "remoteConnectors.client.secretHint": "Kept in your keychain, never in IncarnaMind's database.",
+  "remoteConnectors.client.save": "Save and sign in",
+  "remoteConnectors.client.using": "Signs in with your OAuth app {clientId}.",
+  "remoteConnectors.client.forget": "Register automatically instead",
+  "remoteConnectors.state.signing-in": "Signing in…",
+  "remoteConnectors.state.needs-sign-in": "Needs sign-in",
+  "remoteConnectors.signIn.required": "This server needs you to sign in.",
+  "remoteConnectors.signIn.expired": "Your sign-in has expired. Sign in again to use it.",
+  "remoteConnectors.signIn": "Sign in",
+  "remoteConnectors.signInAgain": "Sign in again",
+  "remoteConnectors.signingIn": "Finish signing in in your browser…",
+  "remoteConnectors.cancel": "Cancel",
+  "remoteConnectors.signedIn": "Signed in.",
+  "remoteConnectors.signOut": "Sign out",
+  "remoteConnectors.signIn.error.port-in-use":
+    "Another program is using the local port the sign-in needs. Try again.",
+  "remoteConnectors.signIn.error.timed-out": "The sign-in took too long. Try again.",
+  "remoteConnectors.signIn.error.cancelled": "The sign-in was cancelled.",
+  "remoteConnectors.signIn.error.denied": "The service didn't complete the sign-in. Try again.",
+  "remoteConnectors.signIn.error.client-id-required":
+    "This service can't register IncarnaMind by itself. Enter the client ID of an OAuth app you registered with it.",
+  "remoteConnectors.signIn.error.secret-storage":
+    "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
+  "remoteConnectors.signIn.error.failed": "The sign-in didn't work.",
+  "remoteConnectors.error.unreachable":
+    "Its server can't be reached. Check the URL and your internet connection.",
+  "remoteConnectors.consent.note": "The Tool's arguments go to this server over the network.",
+  "remoteConnectors.answer.signInRequired":
+    "Not used: {connector} needs you to sign in again, in Settings → Connectors",
+  "remoteConnectors.page.success.title": "Signed in to {name}",
+  "remoteConnectors.page.success.body": "You can close this tab and go back to IncarnaMind.",
+  "remoteConnectors.page.failure.title": "Signing in to {name} didn't work",
+  "remoteConnectors.page.failure.body": "Close this tab and try again in IncarnaMind.",
 
   "approvals.answer.waiting": "Waiting for your approval",
   "approvals.card.title": "{connector} wants to run {tool}",

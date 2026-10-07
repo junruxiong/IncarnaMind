@@ -44,6 +44,17 @@ export function connectorInstructions(
   ].join("\n");
 }
 
+/**
+ * Connectors that are on but can't be used until the User signs in to them
+ * again: their Tools aren't offered, and the Answer says so if it needed them.
+ */
+export function signInNeededInstructions(connectorNames: readonly string[]): string {
+  if (connectorNames.length === 0) return "";
+  const names = connectorNames.map((name) => `"${name}"`).join(", ");
+  const plural = connectorNames.length > 1;
+  return `The User's ${plural ? "Connectors" : "Connector"} ${names} ${plural ? "need" : "needs"} the User to sign in again (in Settings → Connectors), so ${plural ? "their" : "its"} Tools can't be used for this Answer. If the Question needs ${plural ? "them" : "it"}, say so in one short sentence, then answer as well as you can without ${plural ? "them" : "it"}.`;
+}
+
 const NOT_COVERED =
   "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
 

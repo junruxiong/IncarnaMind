@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, vi } from "vitest";
 import type {
-  AddConnectorInput,
+  AddLocalConnectorInput,
   Connector,
   ConnectorState,
   Core,
@@ -31,14 +31,14 @@ export function testProcesses(extra: Environment = {}): ProcessLauncher {
 }
 
 /** The tiny server as a Connector, logging to `logFile` (an environment variable, so a secret). */
-export function tideServer(logFile: string, input: Partial<AddConnectorInput> = {}) {
+export function tideServer(logFile: string, input: Partial<AddLocalConnectorInput> = {}) {
   return {
     name: "Tides",
     command: NODE,
     args: [TIDE_SERVER],
     ...input,
     env: { MCP_TEST_LOG: logFile, TIDE_TOKEN: "tide-secret-123", ...input.env },
-  } satisfies AddConnectorInput;
+  } satisfies AddLocalConnectorInput;
 }
 
 export type ServerRecord =

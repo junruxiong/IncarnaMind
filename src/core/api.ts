@@ -173,6 +173,12 @@ export interface AnswerToolCall {
    * front instead of the model calling the Tool. Absent otherwise.
    */
   forced?: boolean;
+  /**
+   * Not a call: the note that a remote Connector waits for the User to sign
+   * in again, so its Tools weren't offered to this Answer (`tool` is
+   * "sign_in", `status` "failed"). Absent otherwise.
+   */
+  signInRequired?: boolean;
 }
 
 /** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
@@ -1179,8 +1185,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "tagging": automatic tagging, to Jev's service when a Jev key is set up,
  *   otherwise to the default chat model's provider.
  * - "connectors": the arguments of the Tool calls an Answer makes, to the
- *   Connector it calls, one service per Connector. A Connector on this
- *   computer counts too: it can reach the internet itself.
+ *   Connector it calls: one service per local Connector (it runs on this
+ *   computer but can reach the internet itself), and one per server origin
+ *   for remote ones, e.g. "https://mcp.example.com".
  * - "embeddings": every Document's text and every search query, to a cloud
  *   embedding provider, when the User chose one instead of the built-in model.
  * - "rerank": each search query and its candidate Passages, to Cohere or
@@ -1238,12 +1245,17 @@ export interface RegisteredDataFlow {
  * - "embedding-model": downloads the built-in embedding model's files, once.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
+ * - "remote-connectors": connecting to each remote Connector that is on, and
+ *   signing in to it: its server, and the authorization server it names
+ *   (discovery, registration, tokens). One entry per server. Tool calls, which
+ *   carry the User's content, are the "connectors" data flow.
  */
 export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "ollama-pull",
   "chatgpt-sign-in",
+  "remote-connectors",
 ] as const;
 
 export type NetworkTrafficId = (typeof networkTrafficIds)[number];
@@ -1345,12 +1357,23 @@ export interface TestJevConnectionInput {
 
 /**
  * Where a Connector is:
- * - "off": the User turned it off, so its process isn't running.
- * - "connecting": its process is starting, and IncarnaMind is connecting to it.
+ * - "off": the User turned it off, so its process isn't running (or, for a
+ *   remote one, IncarnaMind isn't connected to it).
+ * - "connecting": its process is starting, or IncarnaMind is connecting to it.
+ * - "signing-in": remote: the User is signing in to it in their browser.
+ * - "needs-sign-in": remote: the server wants a sign-in IncarnaMind doesn't
+ *   have on this device: the User hasn't signed in, signed out, or renewing
+ *   the sign-in failed (`signIn.expired`). Answers skip its Tools.
  * - "ready": connected; Answers can use its Tools (see `ApprovalPolicy` for which ask first).
- * - "error": it couldn't start, or it stopped (see `error`).
+ * - "error": it couldn't start or be reached, or it stopped (see `error`).
  */
-export type ConnectorState = "off" | "connecting" | "ready" | "error";
+export type ConnectorState =
+  | "off"
+  | "connecting"
+  | "signing-in"
+  | "needs-sign-in"
+  | "ready"
+  | "error";
 
 export type ConnectorErrorKind =
   /**
@@ -1360,10 +1383,12 @@ export type ConnectorErrorKind =
   | "missing-command"
   /** Its environment variables are kept in the keychain, and can't be read on this device. */
   | "missing-secrets"
-  /** Its process started but didn't answer in time. */
+  /** Its process started but didn't answer in time; or a remote server didn't. */
   | "timed-out"
   /** Its process exited, or closed the connection. */
   | "stopped"
+  /** Remote: its server can't be reached, e.g. no network, or nothing answers at its URL. */
+  | "unreachable"
   /** Anything else, e.g. it doesn't speak MCP. */
   | "failed";
 
@@ -1396,27 +1421,12 @@ export interface ConnectorTool {
   readOnly: boolean;
 }
 
-/**
- * An external service the User has connected: an MCP server. Local ones are
- * programs on this computer, started with the User's login-shell environment
- * and spoken to over their standard input and output.
- */
-export interface Connector {
+interface ConnectorBase {
   /** A random UUID generated on this device. */
   id: string;
   /** Unique among Connectors, ignoring case. Answers see its Tools under this name. */
   name: string;
-  /** "stdio": a program on this computer. Remote Connectors come with #39. */
-  transport: "stdio";
-  /** The program to run, e.g. "npx", found on the PATH of the User's login shell. */
-  command: string;
-  args: string[];
-  /**
-   * The names of the environment variables it is started with, e.g. API keys.
-   * Their values are kept in the keychain, never in the database, and never shown.
-   */
-  env: string[];
-  /** The User turned it on. Off, its process doesn't run and Answers don't use it. */
+  /** The User turned it on. Off, it isn't running or connected, and Answers don't use it. */
   enabled: boolean;
   state: ConnectorState;
   /** Set when `state` is "error". */
@@ -1429,7 +1439,77 @@ export interface Connector {
   updatedAt: string;
 }
 
-export interface AddConnectorInput {
+/**
+ * A local Connector: a program on this computer, started with the User's
+ * login-shell environment and spoken to over its standard input and output.
+ */
+export interface LocalConnector extends ConnectorBase {
+  transport: "stdio";
+  /** The program to run, e.g. "npx", found on the PATH of the User's login shell. */
+  command: string;
+  args: string[];
+  /**
+   * The names of the environment variables it is started with, e.g. API keys.
+   * Their values are kept in the keychain, never in the database, and never shown.
+   */
+  env: string[];
+}
+
+export type ConnectorSignInErrorKind =
+  /** Another program took the local port the browser comes back to. */
+  | "port-in-use"
+  /** The User didn't finish in the browser within a few minutes. */
+  | "timed-out"
+  /** The User cancelled in IncarnaMind. */
+  | "cancelled"
+  /** The service refused the sign-in, e.g. the User declined in the browser. */
+  | "denied"
+  /**
+   * The service can't register IncarnaMind by itself: the User registers an
+   * OAuth app with it and enters its client ID (`setConnectorClient`).
+   */
+  | "client-id-required"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  | "failed";
+
+export interface ConnectorSignInError {
+  kind: ConnectorSignInErrorKind;
+  /** Technical detail in English. */
+  message: string;
+}
+
+/** A remote Connector's sign-in on this device. Its tokens are kept in the keychain, never the database. */
+export interface RemoteConnectorSignIn {
+  /** Tokens for it are stored on this device. */
+  signedIn: boolean;
+  /** Renewing the last sign-in failed, so its tokens were removed: the User signs in again. */
+  expired: boolean;
+  /** Why the last browser sign-in didn't work; null once one works or starts again. */
+  error: ConnectorSignInError | null;
+}
+
+/**
+ * A remote Connector: an MCP server reached by its URL over Streamable HTTP.
+ * If it requires a sign-in, the User signs in in their browser (OAuth 2.1
+ * with PKCE, as the MCP authorization spec describes).
+ */
+export interface RemoteConnector extends ConnectorBase {
+  transport: "http";
+  /** Its MCP endpoint, e.g. "https://mcp.example.com/mcp". */
+  url: string;
+  /**
+   * The client ID of an OAuth app the User registered with the service, for
+   * one that can't register IncarnaMind by itself. Null otherwise.
+   */
+  clientId: string | null;
+  signIn: RemoteConnectorSignIn;
+}
+
+/** An external service the User has connected: an MCP server, local or remote. */
+export type Connector = LocalConnector | RemoteConnector;
+
+export interface AddLocalConnectorInput {
   /** Trimmed; must not be empty, nor another Connector's name (ignoring case). */
   name: string;
   /** The program to run, e.g. "npx", or a full path. */
@@ -1440,21 +1520,52 @@ export interface AddConnectorInput {
   env?: Record<string, string>;
 }
 
+/** The OAuth app a User registered with a service that can't register IncarnaMind by itself. */
+export interface ConnectorClientInput {
+  clientId: string;
+  /** Only if the service gave the app one. It goes to the keychain, never the database. */
+  clientSecret?: string;
+}
+
+export interface AddRemoteConnectorInput {
+  /** Trimmed; must not be empty, nor another Connector's name (ignoring case). */
+  name: string;
+  /**
+   * Its MCP endpoint: an https URL, or http on this computer (e.g.
+   * "http://127.0.0.1:8000/mcp"). Its sign-in, if any, starts with `signInToConnector`.
+   */
+  url: string;
+  /** Only for a service that can't register IncarnaMind by itself (see `ConnectorClientInput`). */
+  client?: ConnectorClientInput;
+}
+
+/** A local Connector by its command, or a remote one by its `url`. */
+export type AddConnectorInput = AddLocalConnectorInput | AddRemoteConnectorInput;
+
+export type ConnectorSignInResult =
+  | { ok: true; connector: Connector }
+  | { ok: false; error: ConnectorSignInError };
+
 /**
  * One server of an `mcpServers` configuration (from Claude Desktop or
  * Cursor), and what importing it would do:
  * - "add": it is added as a Connector;
  * - "exists": a Connector with its name already exists (or the configuration
  *   lists the name twice), so it is skipped;
- * - "remote": it is a remote server (a URL), which IncarnaMind can't connect to yet;
- * - "invalid": it has no command, or its arguments or environment aren't text.
+ * - "remote": it is a remote server IncarnaMind can't connect to: one that
+ *   uses the older SSE transport, or needs custom headers;
+ * - "invalid": it has neither a command nor a URL, or its arguments,
+ *   environment or URL aren't valid.
  */
 export interface ConnectorImportEntry {
   name: string;
+  /** A local server's command; null for a remote one. */
   command: string | null;
   args: string[];
   /** The names of its environment variables. Their values go to the keychain. */
   env: string[];
+  /** A remote server's URL. Absent for a local one. */
+  url?: string;
   action: "add" | "exists" | "remote" | "invalid";
 }
 
@@ -1877,20 +1988,40 @@ export interface CoreApi {
   /** Connectors that are not deleted, in name order (ignoring case), each with its state. */
   listConnectors(): Promise<Connector[]>;
   /**
-   * Adds a local Connector, turned on, and starts it: "connectors.changed"
-   * events follow its state. Its environment's values go to the keychain; if
-   * they can't be stored safely, nothing is added.
+   * Adds a Connector, turned on, and starts it: "connectors.changed" events
+   * follow its state. A local one's environment values, and a remote one's
+   * client secret, go to the keychain; if they can't be stored safely,
+   * nothing is added. A remote one that requires a sign-in ends up
+   * "needs-sign-in": nothing opens in the browser until `signInToConnector`.
    */
   addConnector(input: AddConnectorInput): Promise<Connector>;
-  /** Turns a Connector on (starting it) or off (stopping its process). */
+  /** Turns a Connector on (starting it) or off (stopping its process, or disconnecting). */
   setConnectorEnabled(connectorId: string, enabled: boolean): Promise<Connector>;
   /** Starts a Connector that is on again, e.g. after an error. */
   restartConnector(connectorId: string): Promise<Connector>;
   /**
-   * Soft-deletes a Connector: stops its process, removes its environment from
-   * the keychain and forgets the User's consent decision for it.
+   * Soft-deletes a Connector: stops it, removes its environment, client
+   * secret and sign-in from the keychain, and forgets the User's consent
+   * decision for it (for a remote one, unless another Connector uses the same server).
    */
   deleteConnector(connectorId: string): Promise<void>;
+  /**
+   * Signs in to a remote Connector that is on: discovers its authorization
+   * server, registers IncarnaMind with it if needed, opens the sign-in in the
+   * User's browser and waits for them, a few minutes at most. Its tokens go
+   * to the keychain. Starting again cancels a sign-in still waiting.
+   */
+  signInToConnector(connectorId: string): Promise<ConnectorSignInResult>;
+  /** Stops waiting for a remote Connector's browser sign-in. */
+  cancelConnectorSignIn(connectorId: string): Promise<void>;
+  /** Deletes a remote Connector's tokens from this device and disconnects it. */
+  signOutOfConnector(connectorId: string): Promise<Connector>;
+  /**
+   * Sets the OAuth app a remote Connector signs in with, for a service that
+   * can't register IncarnaMind by itself; null goes back to registering
+   * automatically. Either way it signs out first.
+   */
+  setConnectorClient(connectorId: string, client: ConnectorClientInput | null): Promise<Connector>;
   /**
    * What importing an `mcpServers` configuration (Claude Desktop's or
    * Cursor's JSON, pasted or read from a file) would add, without adding anything.
@@ -2039,8 +2170,9 @@ export interface CoreEvents {
    */
   "skills.changed": Skill[];
   /**
-   * Connectors were added, turned on or off, or deleted, or one's state
-   * changed (connecting, ready, error): the list as `listConnectors` now returns it.
+   * Connectors were added, turned on or off, or deleted, or one's state or
+   * sign-in changed (connecting, signing in, ready, needs sign-in, error):
+   * the list as `listConnectors` now returns it.
    */
   "connectors.changed": Connector[];
   /** Approval policies were set or revoked: the list as `listApprovalPolicies` now returns it. */
@@ -2160,6 +2292,10 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorEnabled: true,
   restartConnector: true,
   deleteConnector: true,
+  signInToConnector: true,
+  cancelConnectorSignIn: true,
+  signOutOfConnector: true,
+  setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
   listApprovalPolicies: true,
