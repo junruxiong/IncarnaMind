@@ -634,9 +634,17 @@ test("the open viewer follows its file on disk: the new version once indexed, an
   const zoomLevel = await window.getByTestId("pdf-zoom-level").textContent();
   await window.getByTestId("pdf-page-number").fill("3");
   await window.getByTestId("pdf-page-number").press("Enter");
-  await writeFile(report, REPORT);
-  await expect(viewer.locator('[data-page-number="1"] .textLayer')).toContainText(
-    "Quarterly report",
+  await writeFile(
+    report,
+    buildPdf([
+      { lines: ["Quarterly report", "Prepared for the board."] },
+      { lines: ["Results", "Revenue grew by ten percent."] },
+      { lines: ["Outlook, revised", "We expect slower growth next year."] },
+    ]),
+  );
+  // The page in view is the new version's.
+  await expect(viewer.locator('[data-page-number="3"] .textLayer')).toContainText(
+    "Outlook, revised",
     { timeout: 15_000 },
   );
   await expect(window.getByTestId("pdf-page-number")).toHaveValue("3");
