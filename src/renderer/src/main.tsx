@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import "./fonts.css";
 import "./styles.css";
 import "./viewer/viewer.css";
 import { installTestHooks } from "./viewerControls";
