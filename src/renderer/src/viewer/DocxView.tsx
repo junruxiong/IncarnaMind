@@ -28,11 +28,14 @@ interface Loaded {
   docx: DocxResult;
 }
 
-/** The zoom that fits the drawn pages to the viewer's width, never larger than they are. */
+/**
+ * The zoom that fits the drawn pages to the width there is beside the
+ * outline, if it is open, never larger than they are.
+ */
 function fitZoom(outer: HTMLElement | null, body: HTMLElement): number {
   const page = body.querySelector<HTMLElement>(`section.${CLASS_NAME}`);
   if (!outer || !page || page.offsetWidth === 0) return 1;
-  return Math.min(1, Math.max(0.25, (outer.clientWidth - 2 * PADDING) / page.offsetWidth));
+  return Math.min(1, Math.max(0.05, (outer.clientWidth - 2 * PADDING) / page.offsetWidth));
 }
 
 const read = async (bytes: Uint8Array): Promise<Loaded> => ({

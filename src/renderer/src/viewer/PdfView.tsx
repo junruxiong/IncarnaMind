@@ -36,6 +36,11 @@ const CSS_UNITS = 96 / 72;
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 const MIN_ZOOM = ZOOM_STEPS[0] as number;
 const MAX_ZOOM = ZOOM_STEPS.at(-1) as number;
+/**
+ * Fitted to the width, a page may be smaller than the smallest step, e.g. in
+ * a narrow viewer with the outline beside it: it fits what width there is.
+ */
+const MIN_FIT_ZOOM = 0.05;
 /** Space between pages, and around them, in CSS pixels. */
 const PAGE_GAP = 16;
 const PAGE_PADDING = 24;
@@ -187,7 +192,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     zoom.fit && viewportWidth > 0
       ? clamp(
           (viewportWidth - 2 * PAGE_PADDING) / firstPage.width,
-          MIN_ZOOM * CSS_UNITS,
+          MIN_FIT_ZOOM * CSS_UNITS,
           MAX_ZOOM * CSS_UNITS,
         )
       : zoom.fit
