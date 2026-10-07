@@ -257,21 +257,27 @@ function ToolCalls({
   const unmatched = approvals.filter((request) =>
     carded.every((call) => call.id !== request.toolCallId),
   );
+  const approvalCard = (request: ApprovalRequest) => (
+    <ApprovalCard key={`approval:${request.requestId}`} request={request} />
+  );
+  // One list, with an approval card keyed by its request wherever it is, so
+  // the card keeps its state (the "Always run" warning) when its call comes in.
+  const cards = [
+    ...carded.map((call) => {
+      const request = approvalFor(call);
+      if (request) return approvalCard(request);
+      return call.source === "connector" ? (
+        <ConnectorCall key={`call:${call.id}`} call={call} />
+      ) : (
+        <ScriptCall key={`call:${call.id}`} call={call} />
+      );
+    }),
+    ...unmatched.map(approvalCard),
+  ];
   return (
     <>
       {searches.length > 0 && <Searches searches={searches} />}
-      {carded.map((call) => {
-        const request = approvalFor(call);
-        if (request) return <ApprovalCard key={call.id} request={request} />;
-        return call.source === "connector" ? (
-          <ConnectorCall key={call.id} call={call} />
-        ) : (
-          <ScriptCall key={call.id} call={call} />
-        );
-      })}
-      {unmatched.map((request) => (
-        <ApprovalCard key={request.requestId} request={request} />
-      ))}
+      {cards}
     </>
   );
 }
