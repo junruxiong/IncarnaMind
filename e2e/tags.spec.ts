@@ -84,19 +84,48 @@ test("a new Document is tagged automatically, and a Tag the User removes stays r
   await second.app.close();
 });
 
-test("without a chat model, a Document is ready to search and says its tagging waits for one", async () => {
-  const ideas = join(sources, "Ideas.txt");
-  await writeFile(ideas, "A report on ideas.\n");
-  const { app, window } = await launchApp(dataDir);
+test("without a model, Documents are ready to search, and one notice, not one per Document, says tagging waits", async () => {
+  const files = {
+    "Ideas.txt": "A report on ideas.\n",
+    "Plans.txt": "Plans for the next quarter.\n",
+    "Minutes.md": "# Minutes\n\nNotes from the weekly meeting.\n",
+  };
+  const paths: string[] = [];
+  for (const [name, text] of Object.entries(files)) {
+    paths.push(join(sources, name));
+    await writeFile(join(sources, name), text);
+  }
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  await addDocuments(window, [ideas]);
+  await addDocuments(window, paths);
 
-  const item = window.getByTestId("document-list-item");
-  await expect(item.getByTestId("document-status")).toHaveText("Ready");
-  await expect(item).toHaveAttribute("data-tagging", "waiting-for-provider");
-  await expect(item.getByTestId("document-tagging")).toHaveText(
-    "Tagging: waiting for a chat provider",
-  );
-  await expect(item.getByTestId("document-tag")).toHaveCount(0);
+  const items = window.getByTestId("document-list-item");
+  await expect(items).toHaveCount(3);
+  for (let index = 0; index < 3; index++) {
+    await expect(items.nth(index).getByTestId("document-status")).toHaveText("Ready");
+    await expect(items.nth(index)).toHaveAttribute("data-tagging", "waiting-for-provider");
+  }
+  // One notice at the top of the Documents section; no tagging line under any Document.
+  const notice = window.getByTestId("tagging-waiting");
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText("Automatic tagging is waiting for a model.");
+  await expect(window.getByTestId("document-tagging")).toHaveCount(0);
+  await expect(items.getByTestId("document-tag")).toHaveCount(0);
+
+  // Its button opens Settings, where a chat model or a Jev key can be set up.
+  await notice.getByTestId("tagging-waiting-setup").click();
+  const settings = window.getByTestId("settings");
+  await expect(settings).toBeVisible();
+  await expect(settings.getByTestId("chat-model-settings")).toBeVisible();
+  await expect(settings.getByTestId("jev-settings")).toBeVisible();
+  await settings.getByRole("button", { name: "Done" }).click();
+  await expect(settings).toBeHidden();
+
+  // Once a model is set up, the Documents are tagged and the notice goes.
+  await useLocalChatModel(window);
+  for (let index = 0; index < 3; index++) {
+    await expect(items.nth(index)).toHaveAttribute("data-tagging", "tagged");
+  }
+  await expect(notice).toHaveCount(0);
   await app.close();
 });

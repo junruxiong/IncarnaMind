@@ -1,8 +1,9 @@
 /**
- * Choosing a Document's Tags with the chat model (spec #20, "Tagging"): one
+ * Choosing a Document's Tags (spec #20, "Tagging"). With the chat model: one
  * request with structured output, which picks the applicable Tags from the
- * list by name. What it sends is the "tagging" data flow: the Tags' names and
- * descriptions, and a bounded excerpt of the Document.
+ * list by name. (With Jev, see ./jev.) What either sends is the "tagging"
+ * data flow: the Tags' names and descriptions, and a bounded excerpt of the
+ * Document.
  */
 import { generateText, jsonSchema, Output } from "ai";
 import type { DocumentKind } from "../api";
@@ -27,6 +28,25 @@ export interface TagDefinition {
   id: string;
   name: string;
   description: string;
+}
+
+/** Automatic tagging's decision that a Tag applies to a Document. */
+export interface TagDecision {
+  tagId: string;
+  /** How likely the Tag applies, from 0 to 1, when the tagger says (Jev); null for the chat model. */
+  confidence: number | null;
+  /** The tagger wasn't sure: the Tag is applied, and marked for the User to check. */
+  needsReview: boolean;
+}
+
+/** What decides a Document's Tags: the chat model, or Jev. */
+export interface TagClassifier {
+  /** The Tags that apply to the Document. Throws what the provider throws. */
+  decide(input: {
+    tags: readonly TagDefinition[];
+    excerpt: DocumentExcerpt;
+    signal: AbortSignal;
+  }): Promise<TagDecision[]>;
 }
 
 /** What the model sees of a Document. */
@@ -98,7 +118,13 @@ const KIND_NAMES: Record<DocumentKind, string> = {
   markdown: "Markdown",
 };
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+
+/** "PDF, 12 pages", "Markdown". */
+export const documentType = (excerpt: DocumentExcerpt) =>
+  excerpt.pageCount === null
+    ? KIND_NAMES[excerpt.kind]
+    : `${KIND_NAMES[excerpt.kind]}, ${excerpt.pageCount} ${excerpt.pageCount === 1 ? "page" : "pages"}`;
 
 export const TAGGING_INSTRUCTIONS = [
   "You sort Documents with Tags. You get a list of Tags, each with a name and a description,",
@@ -111,10 +137,6 @@ export const TAGGING_INSTRUCTIONS = [
 
 /** The request's text: the Tags, then the Document's excerpt. */
 export function taggingPrompt(tags: readonly TagDefinition[], excerpt: DocumentExcerpt): string {
-  const type =
-    excerpt.pageCount === null
-      ? KIND_NAMES[excerpt.kind]
-      : `${KIND_NAMES[excerpt.kind]}, ${excerpt.pageCount} ${excerpt.pageCount === 1 ? "page" : "pages"}`;
   return [
     "Tags:",
     ...tags.map((tag) =>
@@ -123,7 +145,7 @@ export function taggingPrompt(tags: readonly TagDefinition[], excerpt: DocumentE
     "",
     EXCERPT_START,
     `Name: ${excerpt.name}`,
-    `Type: ${type}`,
+    `Type: ${documentType(excerpt)}`,
     "Text:",
     excerpt.text,
     EXCERPT_END,
@@ -175,4 +197,14 @@ export async function chooseTags(input: {
     if (tag) ids.add(tag.id);
   }
   return [...ids];
+}
+
+/** The chat model as a tagger: the Tags it chooses apply, with no confidence. */
+export function chatClassifier(model: ChatLanguageModel): TagClassifier {
+  return {
+    async decide({ tags, excerpt, signal }) {
+      const ids = await chooseTags({ model, tags, excerpt, signal });
+      return ids.map((tagId) => ({ tagId, confidence: null, needsReview: false }));
+    },
+  };
 }

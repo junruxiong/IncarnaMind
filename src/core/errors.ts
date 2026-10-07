@@ -38,6 +38,14 @@ export class ChatNotReadyError extends Error {
   }
 }
 
+/**
+ * Thrown when automatic tagging's model can't be used yet, e.g. Jev is set up
+ * but its key can't be read on this device. Documents wait until it can.
+ */
+export class TaggingNotReadyError extends Error {
+  override name = "TaggingNotReadyError";
+}
+
 /** Thrown by a vector search while the built-in embedding model isn't downloaded, or can't start. */
 export class EmbeddingModelNotReadyError extends Error {
   override name = "EmbeddingModelNotReadyError";

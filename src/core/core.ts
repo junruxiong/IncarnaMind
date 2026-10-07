@@ -25,6 +25,8 @@ import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { migrate, openDatabase } from "./storage";
 import { createTags } from "./tags";
+import { chatClassifier } from "./tags/classify";
+import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 
 export const DATABASE_FILE = "incarnamind.db";
@@ -155,12 +157,20 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
-  // Automatic tagging: the default chat model, with its own data flow and consent.
+  // Automatic tagging: Jev when it is set up on this device, otherwise the
+  // default chat model; either way its own data flow and consent.
+  const jev = createJevTagging({
+    settings,
+    secrets,
+    consent,
+    hostedUrl: adapters.jevHostedUrl,
+    signal: lifetime.signal,
+  });
   consent.registry.register({
     id: "tagging",
     sends: TAGGING_FLOW_SENDS,
     async services() {
-      const service = chat.defaultService();
+      const service = jev.enabled() ? jev.service() : chat.defaultService();
       return service ? [service] : [];
     },
   });
@@ -173,12 +183,24 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     now,
     tags,
-    readiness: () => chat.readiness(undefined, "tagging"),
-    mightBeReady: () => chat.mightBeReady("tagging"),
-    prepareModel: () => chat.prepareModel(undefined, "tagging"),
+    canRun: async () =>
+      jev.enabled() ? jev.canRun() : (await chat.readiness(undefined, "tagging")).ready,
+    mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
+    prepare: async () =>
+      jev.enabled()
+        ? jev.prepare()
+        : chatClassifier((await chat.prepareModel(undefined, "tagging")).model),
     announce: announceTagged,
     reportError: (error) => console.error(error),
   });
+  /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
+  const jevChanged = async () => {
+    const status = await jev.status();
+    if (lifetime.signal.aborted) return status;
+    events.emit("jev.changed", status);
+    tagger.resume();
+    return status;
+  };
   documentReady = (documentId) => tagger.documentReady(documentId);
 
   const settingsChanged = () => events.emit("settings.changed", settings.get());
@@ -415,6 +437,17 @@ export function createCore(adapters: CoreAdapters): Core {
       return updated;
     },
     retagDocuments: async (documentIds) => tagger.retag(documentIds),
+
+    getJevSettings: () => jev.status(),
+    saveJevSettings: async (input) => {
+      await jev.save(input);
+      return jevChanged();
+    },
+    removeJevSettings: async () => {
+      await jev.remove();
+      return jevChanged();
+    },
+    testJevConnection: (input) => jev.test(input),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),

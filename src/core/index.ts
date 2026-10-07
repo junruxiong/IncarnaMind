@@ -33,6 +33,7 @@ export {
   InvalidInputError,
   NotFoundError,
   SecretStorageError,
+  TaggingNotReadyError,
 } from "./errors";
 export * from "./language";
 export type { PreparedChatModel } from "./providers/chat";

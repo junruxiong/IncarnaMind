@@ -135,11 +135,10 @@ export const en = {
   "tags.menu.retag": "Re-tag automatically",
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
-  "tags.state.waiting-for-provider": "Tagging: waiting for a chat provider",
   "tags.state.tagging": "Tagging…",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
   "tags.dialog.body":
-    "IncarnaMind tags new Documents automatically with your chat model, going by these names and descriptions. Tags you add to or remove from a Document are never changed automatically.",
+    "IncarnaMind tags new Documents automatically with your chat model, or with TypeSafe Jev if you add a Jev key in Settings, going by these names and descriptions. Tags you add to or remove from a Document are never changed automatically.",
   "tags.dialog.preset": "Preset",
   "tags.dialog.empty": "No Tags yet. Add one below.",
   "tags.dialog.name": "Name",
@@ -158,6 +157,37 @@ export const en = {
     "Works out every Document's automatic Tags again, e.g. after you edit a Tag. Tags you added or removed yourself stay as they are.",
   "tags.dialog.retag.started": "Re-tagging has started.",
   "tags.dialog.done": "Done",
+
+  "jev.waiting.notice":
+    "Automatic tagging is waiting for a model. Your Documents are tagged as soon as one is set up.",
+  "jev.waiting.setUp": "Set up a model",
+  "jev.chip.needsReview": "needs review",
+  "jev.chip.likely": "{tag}: added automatically, {percent}% likely",
+  "jev.chip.review":
+    "{tag}: added automatically, but only {percent}% likely. Confirm it to keep it, or remove it.",
+  "jev.chip.confirm": "Confirm {tag} on {name}",
+  "jev.settings.title": "Automatic tagging",
+  "jev.settings.body":
+    "Documents are tagged with your chat model. With a TypeSafe Jev key, Jev tags them instead: it is quicker and cheaper, and says how likely each Tag is. Tags it isn't sure about are marked for you to review.",
+  "jev.settings.inUse": "TypeSafe Jev tags your Documents.",
+  "jev.settings.server": "Server: {server}",
+  "jev.settings.hosted": "TypeSafe",
+  "jev.settings.keyMissing":
+    "The Jev key isn't saved on this device, so Documents wait to be tagged. Enter the key again.",
+  "jev.settings.setUp": "Use TypeSafe Jev…",
+  "jev.settings.change": "Change",
+  "jev.settings.remove": "Stop using Jev",
+  "jev.form.apiKey": "Jev API key",
+  "jev.form.advanced": "Server, model and review",
+  "jev.form.endpoint": "Server URL (optional)",
+  "jev.form.endpointHint":
+    "Leave it empty for TypeSafe's Jev. For a Jev-compatible model, enter its server, e.g. https://jev.example.com.",
+  "jev.form.model": "Model (optional)",
+  "jev.form.reviewFrom": "Needs review from (%)",
+  "jev.form.reviewTo": "to (%)",
+  "jev.form.reviewHint":
+    "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
+  "jev.form.save": "Use Jev for tagging",
 
   "settings.title": "Settings",
   "settings.language": "Interface language",
