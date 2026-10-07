@@ -1,7 +1,9 @@
 /**
  * Serves Document files to the renderer over the `incarnamind-document:`
  * protocol: the Document viewer loads a PDF (pdf.js) or a text file from
- * `documentFileUrl(id)`, and the bytes stream straight from the data folder.
+ * `documentFileUrl(id)`, and the bytes stream straight from the file, where
+ * the User keeps it. A Document whose file is missing or can't be reached is
+ * a 404: the viewer then shows the text IncarnaMind kept (`readDocumentText`).
  */
 import { protocol } from "electron";
 import { type Core, type DocumentKind, NotFoundError } from "../core";
@@ -50,9 +52,10 @@ export function serveDocumentFiles(core: Core, devServerOrigin: string | null): 
     const documentId = documentIdFromUrl(request.url);
     if (!documentId) return new Response(null, { status: 404, headers });
     try {
-      const { document, stream } = await core.openDocumentFile(documentId);
+      const { document, stream, size } = await core.openDocumentFile(documentId);
       headers["Content-Type"] = CONTENT_TYPES[document.kind];
-      headers["Content-Length"] = String(document.size);
+      // The file's size now: it may have changed since it was indexed.
+      headers["Content-Length"] = String(size);
       return new Response(stream, { status: 200, headers });
     } catch (error) {
       if (error instanceof NotFoundError) return new Response(null, { status: 404, headers });

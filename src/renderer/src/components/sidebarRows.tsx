@@ -27,18 +27,16 @@ const rowTones: Record<RowTone, string> = {
  * right end and take its background. Names of Documents and Folders are a
  * shade darker than the app's own rows.
  */
-export const rowClass = (selected: boolean, tone: RowTone = "app", droppingHere = false) =>
+export const rowClass = (selected: boolean, tone: RowTone = "app") =>
   `group relative flex h-7 shrink-0 items-center rounded-md text-ui ${
-    droppingHere
-      ? dropTargetClass
-      : selected
-        ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]"
-        : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
+    selected
+      ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]"
+      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
   }`;
 
-/** Something dragged over it lands here: a Folder, or the top level. */
-export const dropTargetClass =
-  "bg-accent-wash text-ink shadow-[inset_0_0_0_1px_var(--color-accent)]";
+/** A name being typed in a row. */
+export const rowInputClass =
+  "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-accent";
 
 /** The button that fills a row: icon, 8px gap, text, and anything at its end. */
 export const rowButtonClass =

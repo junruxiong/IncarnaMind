@@ -48,7 +48,7 @@ async function storedPages(name: string): Promise<PageText[]> {
     join(ROOT, "eval/retrieval/fixtures", `${name}.pdf`),
   ].find((path) => existsSync(path));
   if (!file) throw new Error(`No sample Document is called "${name}".`);
-  const result = await processFile({ documentId: name, contentHash: name, kind: "pdf", file });
+  const result = await processFile({ documentId: name, kind: "pdf", file });
   if (result.outcome !== "ready") throw new Error(`"${name}" couldn't be processed.`);
   return result.pages;
 }

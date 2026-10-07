@@ -1,8 +1,8 @@
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { type DocumentFile, InvalidInputError, NotFoundError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
-import { addAndProcess, storedFile, writeSourceFile } from "../helpers/documents";
+import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { buildPdf } from "../helpers/pdf";
 
 /** Reads an opened Document file's stream to the end. */
@@ -11,7 +11,7 @@ async function readAll(file: DocumentFile): Promise<Uint8Array> {
 }
 
 describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => {
-  test("streams a live Document's stored copy, byte for byte, with the Document", async () => {
+  test("streams the file where the User keeps it, byte for byte, with the Document and its size", async () => {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const core = startCore(dataDir);
@@ -24,6 +24,7 @@ describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => 
     const file = await core.openDocumentFile(document.id);
 
     expect(file.document).toEqual(document);
+    expect(file.size).toBe(pdf.byteLength);
     expect(await readAll(file)).toEqual(pdf);
   });
 
@@ -42,7 +43,26 @@ describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => 
     expect(new TextDecoder().decode(await readAll(file))).toBe("# Notes\n");
   });
 
-  test("refuses a deleted Document, even when another Document still uses the same file", async () => {
+  test("an opened file is checked first: a changed one is indexed again, and served as it is now", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const path = await writeSourceFile(sources, "notes.md", "# Notes\n");
+    const [document] = await addAndProcess(core, [path]);
+    if (!document) throw new Error("Nothing was added.");
+
+    await writeFile(path, "# Notes, edited\n\nWith a second paragraph.\n");
+    const file = await core.openDocumentFile(document.id);
+
+    expect(new TextDecoder().decode(await readAll(file))).toBe(
+      "# Notes, edited\n\nWith a second paragraph.\n",
+    );
+    const [processed] = await waitForProcessing(core, [document.id]);
+    expect(processed?.contentHash).not.toBe(document.contentHash);
+    expect(await core.searchPassages("paragraph", { mode: "keyword" })).toHaveLength(1);
+  });
+
+  test("refuses a deleted Document, though a Document added again at its path is served", async () => {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const core = startCore(dataDir);
@@ -50,7 +70,6 @@ describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => 
     const [first] = await addAndProcess(core, [path]);
     if (!first) throw new Error("Nothing was added.");
     await core.deleteDocument(first.id);
-    // The same file added again is a new Document with the same stored copy.
     const [second] = await addAndProcess(core, [path]);
     if (!second) throw new Error("Nothing was added.");
 
@@ -60,20 +79,27 @@ describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => 
     );
   });
 
-  test("refuses unknown ids, and a live Document whose file has gone from the data folder", async () => {
+  test("refuses unknown ids, and a Document whose file is missing, whose kept text is read instead", async () => {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const core = startCore(dataDir);
-    const [document] = await addAndProcess(core, [
-      await writeSourceFile(sources, "notes.txt", "Some text.\n"),
-    ]);
+    const path = await writeSourceFile(sources, "notes.txt", "Some text.\n");
+    const [document] = await addAndProcess(core, [path]);
     if (!document) throw new Error("Nothing was added.");
 
     await expect(core.openDocumentFile("no-such-document")).rejects.toThrow(NotFoundError);
     await expect(core.openDocumentFile("")).rejects.toThrow(InvalidInputError);
     await expect(core.openDocumentFile(42 as unknown as string)).rejects.toThrow(InvalidInputError);
 
-    await rm(storedFile(dataDir, document.contentHash));
+    await rm(path);
     await expect(core.openDocumentFile(document.id)).rejects.toThrow(NotFoundError);
+    expect((await core.listDocuments())[0]?.fileStatus).toBe("missing");
+    expect(await core.readDocumentText(document.id)).toEqual({
+      documentId: document.id,
+      contentHash: document.contentHash,
+      fileStatus: "missing",
+      pages: [{ page: null, text: "Some text.\n" }],
+    });
+    await expect(core.readDocumentText("no-such-document")).rejects.toThrow(NotFoundError);
   });
 });

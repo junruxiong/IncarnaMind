@@ -248,6 +248,34 @@ export type CitationCheckReason =
   /** Can't check: the Document was deleted. */
   | "document-removed";
 
+/**
+ * What to re-check a Citation with against its Document's current version
+ * (see `CoreApi.recheckCitation`): its Document, cited pages and quote.
+ */
+export interface RecheckCitationInput {
+  documentId: string;
+  pageFrom: number | null;
+  pageTo: number | null;
+  quote: string;
+}
+
+/**
+ * A Citation checked again against its Document's current version: the
+ * attributes to store on its node in place of the old ones. The quote is
+ * looked for on the cited pages first, then on any page (or two consecutive
+ * pages) of the current version, so `pageFrom` and `pageTo` may change.
+ */
+export interface CitationRecheck {
+  check: Exclude<CitationCheck, "checking">;
+  checkReason: CitationCheckReason | null;
+  /** The version checked: the Document's current `contentHash`; null when it can't be checked. */
+  contentHash: string | null;
+  /** A Passage of the current version that holds the pages, or null. */
+  passageId: string | null;
+  pageFrom: number | null;
+  pageTo: number | null;
+}
+
 /** At most this many consecutive pages per Citation (the page-range rule). */
 export const MAX_CITED_PAGES = 2;
 
@@ -261,7 +289,13 @@ export interface CitationAttributes {
   documentId: string | null;
   /** The Document's display name when the Citation was made. */
   documentName: string | null;
-  /** The SHA-256 of the Document's file (`Document.contentHash`): the content the quote was checked against. */
+  /**
+   * The version of the Document the Citation quotes: the SHA-256 of its file
+   * as it was then (`Document.contentHash`). The check reads that version's
+   * text, which is kept for as long as a Citation quotes it. When it differs
+   * from the Document's `contentHash` now, the Document changed after it was
+   * cited (see `citationState` in src/shared/citations.ts).
+   */
   contentHash: string | null;
   /** The cited pages, from 1. Both null for a Document without pages (TXT, Markdown). */
   pageFrom: number | null;
@@ -375,7 +409,10 @@ export type DocumentFailureReason =
   /** The file isn't a valid PDF, or a text file holds binary data. */
   | "unreadable"
   | "password-protected"
-  /** The copy in the data folder has gone. */
+  /**
+   * No longer given: a file that has gone is a "missing" Document (see
+   * `DocumentFileStatus`), not a failed one. Kept so older data still reads.
+   */
   | "file-missing"
   /** Anything else, e.g. the processing worker crashed. */
   | "processing-error";
@@ -433,6 +470,20 @@ export interface DocumentTag {
   needsReview: boolean;
 }
 
+/**
+ * Where a Document's file is (ADR-0010), separately from `status`:
+ * - "available": at its path, as last seen.
+ * - "missing": gone from its path, and no file elsewhere matched it as moved.
+ *   Its Linked folder (or, for a file added on its own, the folder it was in)
+ *   is still there. It keeps its text, Passages, Tags and Citations, but new
+ *   searches leave it out. If the file comes back, it isn't missing any more.
+ * - "unavailable": can't be reached right now: its Linked folder (an
+ *   unplugged drive, an unmounted share), or the folder a single file was in,
+ *   is gone, or the file can't be read. It stays searchable from its stored
+ *   text; only opening the file fails. Checked again later.
+ */
+export type DocumentFileStatus = "available" | "missing" | "unavailable";
+
 export interface Document {
   /** A random UUID generated on this device. */
   id: string;
@@ -440,10 +491,19 @@ export interface Document {
   name: string;
   kind: DocumentKind;
   /**
-   * SHA-256 of the file's bytes, in hex. The same file always gives the same hash,
-   * so it is recognised as one Document (ADR-0003). It also names the stored copy.
+   * The version whose text is indexed: the SHA-256 of the file's bytes as
+   * they were read, in hex. When the file changes, the new version is
+   * processed, and this changes once its text is indexed. A file found at a
+   * new path with the hash of a Document whose file went is that Document,
+   * moved. The same content at two paths is two Documents.
    */
   contentHash: string;
+  /** The file, where the User keeps it: an absolute path. IncarnaMind never changes it. */
+  path: string;
+  /** Where the file is: see `DocumentFileStatus`. */
+  fileStatus: DocumentFileStatus;
+  /** The Linked folder the file is in, or null for a file added on its own ("Other Documents"). */
+  linkedFolderId: string | null;
   /** In bytes. */
   size: number;
   /** PDFs only, once their text has been extracted. */
@@ -453,7 +513,10 @@ export interface Document {
   progress: number | null;
   /** Set when `status` is "failed". */
   failure: DocumentFailure | null;
-  /** The Folder the Document is filed in, or null if it is unfiled. A Document is in at most one Folder. */
+  /**
+   * The Folder its file is in: the Linked folder's own Folder, or one inside
+   * it. Null for a file added on its own.
+   */
   folderId: string | null;
   /** The Tags on the Document, in Tag name order (ignoring case). */
   tags: DocumentTag[];
@@ -468,12 +531,27 @@ export interface Document {
 }
 
 export interface ListDocumentsOptions {
-  /** Only Documents filed in this Folder. Omitted: every Document, filed or not. */
+  /** Only Documents in this Folder. Omitted: every Document, in a Folder or not. */
   folderId?: string;
-  /** With `folderId`, also Documents filed in its sub-Folders, at any depth. Defaults to false. */
+  /** With `folderId`, also Documents in its sub-Folders, at any depth. Defaults to false. */
   includeSubfolders?: boolean;
   /** Only Documents that carry this Tag. Combines with `folderId`: both must match. */
   tagId?: string;
+  /**
+   * Only the Documents of this Linked folder, or, with null, only the files
+   * added on their own (the sidebar's "Other Documents"). Omitted: all.
+   */
+  linkedFolderId?: string | null;
+}
+
+/** The text IncarnaMind kept of a Document's current version, page by page. */
+export interface DocumentText {
+  documentId: string;
+  /** The version the text is of. */
+  contentHash: string;
+  fileStatus: DocumentFileStatus;
+  /** Pages from 1, in order; one page with `page` null for a Document without pages. Empty if no text is indexed. */
+  pages: { page: number | null; text: string }[];
 }
 
 /**
@@ -509,25 +587,99 @@ export interface UpdateTagInput {
   description?: string;
 }
 
-/** A place where the User files Documents by hand. Folders nest, with no depth limit. */
+/**
+ * A folder inside a Linked folder, as it is on disk (CONTEXT.md), or the
+ * Linked folder itself. Folders follow the disk: the User doesn't create,
+ * rename or move them in IncarnaMind.
+ */
 export interface Folder {
-  /** A random UUID generated on this device. */
+  /**
+   * Derived from its Linked folder and `relativePath`, so the same folder has
+   * the same id at every scan. A folder renamed on disk is a new Folder.
+   */
   id: string;
-  /** Never empty. */
+  /** The folder's name on disk. */
   name: string;
-  /** The Folder this one is in, or null at the top level. */
+  /** The Folder this one is in, or null for a Linked folder's own Folder. */
   parentId: string | null;
+  linkedFolderId: string;
+  /** Relative to the Linked folder, "/" between names: "" for the Linked folder itself. */
+  relativePath: string;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
 
-export interface CreateFolderInput {
-  /** Trimmed; must not be empty. */
-  name: string;
-  /** The Folder to create it in. Omitted or null: at the top level. */
-  parentId?: string | null;
+/**
+ * How the sidebar shows a Linked folder: "tree", with its folders as
+ * Folders, or "flat", every Document in one list. Flat suits folders such as
+ * Zotero's storage, where nearly every folder holds one file.
+ */
+export type LinkedFolderLayout = "tree" | "flat";
+
+/**
+ * - "scanning": being compared with the index, or indexed for the first time.
+ * - "watching": up to date, and watched for changes while the app runs.
+ * - "paused": the User paused it: nothing in it is read or processed until resumed.
+ * - "unavailable": the folder can't be reached (an unplugged drive, an
+ *   unmounted share). Its Documents stay searchable; it is checked again later.
+ */
+export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailable";
+
+/**
+ * A folder on the User's computer that IncarnaMind keeps in sync, read only:
+ * every supported file in it, at any depth, is a Document indexed where it
+ * is. Hidden files and folders, .git and node_modules are left out, and cloud
+ * placeholders (online-only files) aren't read unless the User asks.
+ */
+export interface LinkedFolder {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** Absolute, symbolic links resolved. */
+  path: string;
+  /** Its own Folder, the root of its Folders. */
+  folderId: string;
+  status: LinkedFolderStatus;
+  layout: LinkedFolderLayout;
+  progress: {
+    /** Supported files in it that are or will be Documents (missing ones and online-only files not counted). */
+    files: number;
+    /** Of those, the ones processed to the end: ready, with no text, or failed. */
+    indexed: number;
+  };
+  /**
+   * Cloud placeholders found in it (iCloud Drive, Dropbox, Google Drive or
+   * OneDrive files not downloaded), which aren't indexed: reading one would
+   * download it. `downloadOnlineOnlyFiles` downloads and indexes them.
+   */
+  onlineOnly: { files: number; bytes: number; downloading: boolean };
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+/**
+ * What linking a folder would take, so the User can confirm first: found
+ * from the files' metadata, nothing read.
+ */
+export interface LinkedFolderPreview {
+  /** Absolute, symbolic links resolved: the path `addLinkedFolder` would link. */
+  path: string;
+  /** Supported files that would be indexed now, and their total size in bytes. */
+  files: number;
+  bytes: number;
+  /** Cloud placeholders, left out until the User asks to download them. */
+  onlineOnly: { files: number; bytes: number };
+  /** A rough guess at how long indexing takes on this computer, in seconds. */
+  estimatedSeconds: number;
+  /** The layout it would get. */
+  layout: LinkedFolderLayout;
+  /** The folder is inside a Linked folder already: linking it adds nothing. Its id, or null. */
+  insideLinkedFolderId: string | null;
+  /** Linked folders inside it, which linking it would merge into it (their Documents keep their ids). */
+  containsLinkedFolderIds: string[];
 }
 
 export interface SkippedFile {
@@ -1842,24 +1994,78 @@ export interface CoreApi {
   /** Changes only the fields given and returns the settings now in effect. */
   updateSettings(patch: SettingsPatch): Promise<Settings>;
   /**
-   * Adds PDF, TXT and Markdown files, given their absolute paths. Each file is
-   * copied into the data folder and queued for processing; "document.status"
-   * events report its progress.
+   * Adds PDF, TXT and Markdown files on their own, given their absolute
+   * paths. Each is indexed where it is, never copied, and queued for
+   * processing; "document.status" events report its progress. A file already
+   * indexed at that path gives its Document; a file inside a Linked folder
+   * is that Linked folder's Document; a file with the content of a missing
+   * Document is that Document, moved.
    */
   addDocuments(paths: string[]): Promise<AddDocumentsResult>;
   /**
-   * Documents that are not deleted, most recently added first. With a Folder,
-   * only the Documents filed in it, and in its sub-Folders if asked; with a
-   * Tag, only the Documents carrying it.
+   * Documents that are not deleted, missing ones included, most recently
+   * added first. With a Folder, only the Documents in it, and in its
+   * sub-Folders if asked; with a Tag, only the Documents carrying it; with a
+   * Linked folder (or null), only its Documents (or the files added on their own).
    */
   listDocuments(options?: ListDocumentsOptions): Promise<Document[]>;
-  /** Returns the renamed Document. */
+  /** Returns the renamed Document. Only its name in IncarnaMind changes, never the file. */
   renameDocument(id: string, name: string): Promise<Document>;
   /**
-   * Soft-deletes a Document, its Passages and its Tags, so search ignores them.
-   * The stored file is removed once no Document uses it.
+   * Removes a Document from the index: soft-deletes it, its Passages and its
+   * Tags, so search ignores them. The file isn't touched. A Document in a
+   * Linked folder whose file is still there stays out of the index after
+   * later scans, until the Linked folder is removed and linked again.
    */
   deleteDocument(id: string): Promise<void>;
+  /**
+   * The text IncarnaMind kept of a Document's current version: what the
+   * viewer shows when the file is missing or can't be reached. Throws
+   * NotFoundError for an unknown or deleted Document.
+   */
+  readDocumentText(documentId: string): Promise<DocumentText>;
+  /**
+   * What linking a folder would take (see `LinkedFolderPreview`), from the
+   * files' metadata, without reading or changing anything. Throws for a path
+   * that isn't a folder.
+   */
+  previewLinkedFolder(path: string): Promise<LinkedFolderPreview>;
+  /**
+   * Links a folder: every supported file in it, at any depth, becomes a
+   * Document indexed where it is, newest first, and the folder is watched
+   * for changes while the app runs. Returns at once, "scanning";
+   * "linkedFolders.changed" and "document.status" events report progress.
+   * A folder inside a Linked folder is already linked: that Linked folder is
+   * returned. Linked folders inside this one are merged into it, their
+   * Documents keeping their ids. Files added on their own that are inside it
+   * become its Documents.
+   */
+  addLinkedFolder(path: string): Promise<LinkedFolder>;
+  /** The Linked folders, in path order. */
+  listLinkedFolders(): Promise<LinkedFolder[]>;
+  /**
+   * Stops syncing a Linked folder and removes its Documents and Folders from
+   * the index. Nothing on disk is touched.
+   */
+  removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  /** Shows a Linked folder as a tree of Folders or as a flat list. Returns it. */
+  setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<LinkedFolder>;
+  /**
+   * Pauses a Linked folder's indexing: nothing in it is read, extracted or
+   * embedded until it is resumed, which scans it again. Returns it.
+   */
+  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<LinkedFolder>;
+  /**
+   * Downloads the Linked folder's online-only files (reading one makes its
+   * sync service download it) and indexes them. Returns at once.
+   */
+  downloadOnlineOnlyFiles(linkedFolderId: string): Promise<LinkedFolder>;
+  /**
+   * Checks a Citation again against its Document's current version (see
+   * `CitationRecheck`), e.g. after the Document changed. Nothing is stored:
+   * the editor writes the result onto the Citation's node.
+   */
+  recheckCitation(input: RecheckCitationInput): Promise<CitationRecheck>;
   /**
    * Searches the Passages of live Documents, best match first: hybrid
    * (keyword and vector) search by default, over every Document or only the
@@ -2021,29 +2227,11 @@ export interface CoreApi {
    */
   updatePrivacySettings(patch: PrivacySettingsPatch): Promise<PrivacySettings>;
   /**
-   * Files a Document in a Folder, or takes it out to unfiled with `null`. It
-   * leaves any Folder it was in. Returns the Document.
-   */
-  moveDocument(documentId: string, folderId: string | null): Promise<Document>;
-  createFolder(input: CreateFolderInput): Promise<Folder>;
-  /**
-   * Folders that are not deleted, as a flat list in name order (ignoring case).
-   * Build the tree from each Folder's `parentId`; siblings keep the list's order.
+   * The Folders of every Linked folder, as a flat list in name order (ignoring
+   * case). Build the tree from each Folder's `parentId`; siblings keep the
+   * list's order. Each Linked folder's own Folder has no parent.
    */
   listFolders(): Promise<Folder[]>;
-  /** Changes a Folder's name (trimmed; must not be empty) and returns the Folder. */
-  renameFolder(folderId: string, name: string): Promise<Folder>;
-  /**
-   * Moves a Folder, with everything in it, into another Folder, or to the top
-   * level with `null`. Moving a Folder into itself or one of its own sub-Folders
-   * is refused. Returns the Folder.
-   */
-  moveFolder(folderId: string, parentId: string | null): Promise<Folder>;
-  /**
-   * Soft-deletes a Folder and all its sub-Folders. The Documents filed in them
-   * are kept, and become unfiled: Documents are never deleted with a Folder.
-   */
-  deleteFolder(folderId: string): Promise<void>;
 
   /**
    * Tags that are not deleted, in name order (ignoring case). The preset Tags
@@ -2264,12 +2452,20 @@ export interface CoreEvents {
   /** Progress of a model download through Ollama. */
   "ollama.pullProgress": OllamaPullProgress;
   /**
-   * Documents moved into a Folder or out to unfiled, including those unfiled
-   * because their Folder was deleted. Carries each moved Document whole.
+   * Documents whose file moved to another Folder on disk, or into or out of
+   * a Linked folder. Carries each moved Document whole.
    */
   "documents.moved": Document[];
-  /** Folders were created, renamed, moved or deleted: the list as `listFolders` now returns it. */
+  /** Documents removed from the index, by the User or with their Linked folder: their ids. */
+  "documents.removed": string[];
+  /** Folders appeared or went with the folders on disk: the list as `listFolders` now returns it. */
   "folders.changed": Folder[];
+  /**
+   * Linked folders were added, removed, paused or resumed, or one's status,
+   * layout, progress or online-only files changed: the list as
+   * `listLinkedFolders` now returns it.
+   */
+  "linkedFolders.changed": LinkedFolder[];
   /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
   /**
@@ -2349,6 +2545,15 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  readDocumentText: true,
+  previewLinkedFolder: true,
+  addLinkedFolder: true,
+  listLinkedFolders: true,
+  removeLinkedFolder: true,
+  setLinkedFolderLayout: true,
+  setLinkedFolderPaused: true,
+  downloadOnlineOnlyFiles: true,
+  recheckCitation: true,
   searchPassages: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
@@ -2388,12 +2593,7 @@ const methods: Record<CoreApiMethod, true> = {
   listNetworkTraffic: true,
   getPrivacySettings: true,
   updatePrivacySettings: true,
-  moveDocument: true,
-  createFolder: true,
   listFolders: true,
-  renameFolder: true,
-  moveFolder: true,
-  deleteFolder: true,
   listTags: true,
   createTag: true,
   updateTag: true,

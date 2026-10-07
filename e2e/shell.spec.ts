@@ -1,12 +1,11 @@
-import { writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import type { CoreBridge, Folder } from "../src/core/api";
+import type { CoreBridge, LinkedFolder } from "../src/core/api";
 import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
-  documentIdOf,
   launchApp,
   removeDataFolder,
   useLocalChatModel,
@@ -76,23 +75,21 @@ async function rowEdges(sidebar: Locator, rows: Locator) {
   return edges;
 }
 
-const bridge = (page: Page) => ({
-  createFolder: (name: string, parentId: string | null) =>
-    page.evaluate(
-      async (input) =>
-        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.createFolder(input),
-      { name, parentId },
-    ) as Promise<Folder>,
-  moveDocument: (documentId: string, folderId: string | null) =>
-    page.evaluate(
-      async ({ documentId, folderId }) =>
-        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.moveDocument(
-          documentId,
-          folderId,
-        ),
-      { documentId, folderId },
-    ),
-});
+/** Links a folder through the core's bridge, as "Add folder…" does once the User picked it. */
+const linkFolder = (page: Page, path: string) =>
+  page.evaluate(
+    async (wanted) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.addLinkedFolder(wanted),
+    path,
+  ) as Promise<LinkedFolder>;
+
+/** Writes `files` (relative paths) under `root`, each holding its own name. */
+async function writeTree(root: string, files: string[]): Promise<void> {
+  for (const file of files) {
+    await mkdir(dirname(join(root, file)), { recursive: true });
+    await writeFile(join(root, file), `${basename(file, ".txt")}.\n`);
+  }
+}
 
 /** Long enough for a few dozen Passages, so "Embedding…" stays on screen for a moment. */
 const LONG_TEXT = Array.from(
@@ -101,13 +98,15 @@ const LONG_TEXT = Array.from(
 ).join("\n");
 
 test("sidebar rows share one text edge, a Folder's children are one step deeper, and pane headers are 44px", async () => {
-  const names = [
-    "Language Models are Unsupervised Multitask Learners",
-    "Attention Is All You Need",
-    "Supervisor meeting notes",
-    "Quarterly report",
-  ];
-  for (const name of names) await writeFile(join(sources, `${name}.txt`), `${name}.\n`);
+  // Two Linked folders, one with a folder inside, and a file added on its own.
+  const papersPath = join(sources, "Papers");
+  const reportsPath = join(sources, "Reports");
+  await writeTree(papersPath, [
+    "Language Models are Unsupervised Multitask Learners.txt",
+    "2026/Attention Is All You Need.txt",
+  ]);
+  await writeTree(reportsPath, ["Quarterly report.txt"]);
+  await writeTree(sources, ["Supervisor meeting notes.txt"]);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
@@ -120,39 +119,37 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
     await window.getByTestId("mind-title").fill(title);
     await expect(window.getByTestId("mind-list-item").first()).toHaveText(title);
   }
-  await addDocuments(
-    window,
-    names.map((name) => join(sources, `${name}.txt`)),
-  );
-  const { createFolder, moveDocument } = bridge(window);
-  const papers = await createFolder("Papers", null);
-  const year = await createFolder("2026", papers.id);
-  const reports = await createFolder("Reports", null);
-  await moveDocument(await documentIdOf(window, names[0] ?? ""), papers.id);
-  await moveDocument(await documentIdOf(window, names[1] ?? ""), year.id);
-  await moveDocument(await documentIdOf(window, names[3] ?? ""), reports.id);
+  await addDocuments(window, [join(sources, "Supervisor meeting notes.txt")]);
+  const papers = await linkFolder(window, papersPath);
+  const reports = await linkFolder(window, reportsPath);
+  const tree = window.getByTestId("sidebar-tree");
+  const folderRow = (folderId: string) =>
+    tree.locator(`[data-folder-id="${folderId}"][data-testid="folder-item"]`);
   const documents = window.getByTestId("document-list-item");
-  await expect(documents.filter({ hasText: names[1] ?? "" })).toHaveAttribute("data-depth", "2");
+  await expect(documents.filter({ hasText: "Attention Is All You Need" })).toHaveAttribute(
+    "data-depth",
+    "2",
+  );
 
   const sidebar = window.getByTestId("sidebar");
-  const tree = window.getByTestId("sidebar-tree");
-  // Every Mind, Folder and Document row: depth 0 at x 16 / 40, each level 24px deeper.
+  // Every Mind, Folder, group and Document row: depth 0 at x 16 / 40, each level 24px deeper.
   const rows = tree.locator(
-    '[data-testid="mind-list-item"], [data-testid="folder-item"], [data-testid="document-list-item"]',
+    '[data-testid="mind-list-item"], [data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
   );
-  await expect(rows).toHaveCount(3 + 3 + 4);
+  await expect(rows).toHaveCount(3 + 3 + 1 + 4);
   const edges = await rowEdges(sidebar, rows);
   for (const { icon, text, depth } of edges) {
     expect(icon).toBeCloseTo(16 + depth * 24, 0);
     expect(text).toBeCloseTo(40 + depth * 24, 0);
   }
   // A Folder's children: their icon under its text, so their text is one step deeper.
-  const papersRow = tree.locator(`[data-folder-id="${papers.id}"][data-testid="folder-item"]`);
-  const papersText = await textLeft(papersRow.getByTestId("row-text"));
-  const child = documents.filter({ hasText: names[0] ?? "" });
+  const papersText = await textLeft(folderRow(papers.folderId).getByTestId("row-text"));
+  const child = documents.filter({ hasText: "Language Models" });
   expect(await boxOf(child.locator("svg").first()).then((box) => box.x)).toBeCloseTo(papersText, 0);
   expect(await textLeft(child.getByTestId("row-text"))).toBeCloseTo(papersText + 24, 0);
-  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 2]);
+  // Minds, both Linked folders and "Other Documents" at the top; 2026 and the Documents in
+  // Papers, Reports and Other Documents one step in; the Document in 2026 two.
+  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2]);
 
   // "New Mind", Settings and the section labels share the columns.
   const sidebarLeft = (await boxOf(sidebar)).x;
@@ -186,11 +183,9 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   ).toHaveText("Reading notes: LM scaling");
 
   // Folding a Folder hides what's inside it.
-  await tree
-    .locator(`[data-folder-id="${reports.id}"][data-testid="folder-item"]`)
-    .getByTestId("folder-toggle")
-    .click();
-  await expect(documents.filter({ hasText: names[3] ?? "" })).toHaveCount(0);
+  const reportsRow = folderRow(reports.folderId);
+  await reportsRow.getByTestId("folder-toggle").click();
+  await expect(documents.filter({ hasText: "Quarterly report" })).toHaveCount(0);
 
   // A processing Document shows its progress at the row's end, on one line.
   await writeFile(join(sources, "Scaling Laws for Neural Language Models.txt"), LONG_TEXT);
@@ -198,19 +193,15 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
     .getByTestId("add-documents-input")
     .setInputFiles([join(sources, "Scaling Laws for Neural Language Models.txt")]);
   const processing = documents.filter({ hasText: "Scaling Laws" });
-  await moveDocument(await documentIdOf(window, "Scaling Laws"), papers.id);
   await expect(processing).toHaveAttribute("data-status", "embedding");
   await expect(processing.getByTestId("document-status")).toContainText("Embedding…");
+  await expect(processing).toHaveAttribute("data-depth", "1");
   expect((await boxOf(processing)).height).toBeCloseTo(28, 0);
-  // A Folder folded with the mouse keeps no highlight or actions once the pointer moves on.
+  // A Folder folded with the mouse keeps no highlight once the pointer moves on.
   await window.mouse.move(800, 400);
-  const reportsActions = tree
-    .locator(`[data-folder-id="${reports.id}"][data-testid="folder-item"]`)
-    .locator(":scope > div")
-    .last();
   await expect
-    .poll(() => reportsActions.evaluate((element) => getComputedStyle(element).opacity))
-    .toBe("0");
+    .poll(() => reportsRow.evaluate((element) => getComputedStyle(element).backgroundColor))
+    .toBe("rgba(0, 0, 0, 0)");
   if (SCREENSHOTS) {
     // For the picture, a moment past 0%; no matter if it's done first.
     await processing
@@ -232,7 +223,9 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   await dismissChatSetup(window);
   await window.getByTestId("new-mind").click();
   await window.getByTestId("mind-title").fill("Field notes");
-  await bridge(window).createFolder("Projects", null);
+  // An empty Linked folder: its own Folder is listed, with nothing in it to tag.
+  await mkdir(join(sources, "Projects"));
+  await linkFolder(window, join(sources, "Projects"));
 
   const tree = window.getByTestId("sidebar-tree");
   const footer = window.getByTestId("sidebar-footer");
@@ -328,7 +321,8 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
 
   await card.getByTestId("approval-deny").click();
   await expect(dot).toHaveCount(0);
-  await expect(tripTab.getByTestId("mind-tab-status")).toHaveCount(0);
+  // The Answer goes on (its tab shows it writing) and then ends, as slowly as the machine is.
+  await expect(tripTab.getByTestId("mind-tab-status")).toHaveCount(0, { timeout: 15_000 });
   await app.close();
 });
 

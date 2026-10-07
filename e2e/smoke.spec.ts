@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -7,6 +7,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   dragBy,
+  interceptOpenDialog,
   launchApp,
   openDocumentMenu,
   openSettings,
@@ -256,69 +257,72 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await second.app.close();
 });
 
-test("Documents are filed in nested Folders, shown inside them, and kept when their Folder is deleted", async () => {
+test("a Linked folder shows its Folders as on disk, and files added on their own are Other Documents", async () => {
   const sources = await createDataFolder();
   try {
-    const paper = join(sources, "Paper.txt");
-    const notes = join(sources, "Loose notes.txt");
-    await writeFile(paper, "A paper about attention.\n");
-    await writeFile(notes, "Notes kept for later.\n");
+    const library = join(await realpath(sources), "Library");
+    await mkdir(join(library, "Projects", "2026"), { recursive: true });
+    await writeFile(join(library, "Paper.txt"), "A paper about attention.\n");
+    await writeFile(join(library, "Projects", "2026", "Plan.txt"), "The plan for the year.\n");
+    const loose = join(sources, "Loose notes.txt");
+    await writeFile(loose, "Notes kept for later.\n");
 
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
-    // Wait until both are ready, as the User would see. (The "tagging waits for a model"
-    // notice that then appears sits in the sidebar's footer, so it no longer moves the tree.)
-    await addDocuments(window, [paper, notes]);
     const documents = window.getByTestId("document-list-item");
-    const paperItem = documents.filter({ hasText: "Paper" });
-    const notesItem = documents.filter({ hasText: "Loose notes" });
-
-    // Create a Folder, then a sub-Folder inside it.
-    await window.getByTestId("new-folder").click();
-    await window.getByTestId("folder-name-input").fill("Projects");
-    await window.keyboard.press("Enter");
     const folders = window.getByTestId("folder-item");
+    const others = window.getByTestId("other-documents");
+
+    // A file added on its own, with no Linked folder yet: just its row, at the top level.
+    await addDocuments(window, [loose]);
+    const looseItem = documents.filter({ hasText: "Loose notes" });
+    await expect(looseItem).toHaveAttribute("data-depth", "0");
+    await expect(others).toHaveCount(0);
+    // Folders come from disk: there is no making one, or moving a Document into one.
+    await expect(window.getByTestId("new-folder")).toHaveCount(0);
+    await expect(window.getByTestId("move-document")).toHaveCount(0);
+
+    // "Add folder…" links a folder, picked with the system's picker (answered by the test).
+    await interceptOpenDialog(app, library);
+    await window.getByTestId("add-linked-folder").click();
+    const root = folders.filter({ hasText: "Library" });
+    await expect(root).toHaveAttribute("data-depth", "0");
+    await expect(root.getByTestId("folder-toggle")).toHaveAttribute("aria-expanded", "true");
+    const paperItem = documents.filter({ hasText: "Paper" });
+    await expect(paperItem).toHaveAttribute("data-depth", "1");
+    // Its folders, nested as on disk, each level one step deeper.
     const projects = folders.filter({ hasText: "Projects" });
-    await expect(projects).toHaveCount(1);
-    await projects.getByTestId("new-subfolder").click();
-    await window.getByTestId("folder-name-input").fill("2026");
-    await window.keyboard.press("Enter");
+    await expect(projects).toHaveAttribute("data-depth", "1");
     const year = folders.filter({ hasText: "2026" });
-    await expect(year).toHaveCount(1);
-    const projectsId = await projects.getAttribute("data-folder-id");
-    const yearId = await year.getAttribute("data-folder-id");
-
-    // Move the paper into the sub-Folder with "Move to…", and drag the notes onto the parent.
-    await paperItem.getByTestId("move-document").click();
-    await window.getByRole("menuitemradio", { name: "2026" }).click();
-    await expect(paperItem).toHaveAttribute("data-folder-id", `${yearId}`);
-    await notesItem.dragTo(projects.getByTestId("folder-toggle"));
-    await expect(notesItem).toHaveAttribute("data-folder-id", `${projectsId}`);
-
-    // Each shows inside its Folder, one step deeper: the notes in Projects, the paper in
-    // 2026 inside Projects.
-    await expect(projects).toHaveAttribute("data-depth", "0");
-    await expect(year).toHaveAttribute("data-depth", "1");
-    await expect(notesItem).toHaveAttribute("data-depth", "1");
-    await expect(paperItem).toHaveAttribute("data-depth", "2");
-    // Folding the parent hides what's inside it, its sub-Folder's too; unfolding shows it again.
+    await expect(year).toHaveAttribute("data-depth", "2");
+    const planItem = documents.filter({ hasText: "Plan" });
+    await expect(planItem).toHaveAttribute("data-depth", "3");
+    await expect(planItem).toHaveAttribute(
+      "data-folder-id",
+      `${await year.getAttribute("data-folder-id")}`,
+    );
+    // Folding a folder hides what's inside it, its sub-Folder's too; unfolding shows it again.
     const toggle = projects.getByTestId("folder-toggle");
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await expect(year).toHaveCount(0);
-    await expect(documents).toHaveCount(0);
+    await expect(planItem).toHaveCount(0);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(documents).toHaveCount(2);
+    await expect(planItem).toBeVisible();
 
-    // Deleting the parent asks first. Both Documents stay listed, unfiled, at the top level.
-    await projects.getByTestId("delete-folder").click();
-    await window.getByTestId("confirm-delete-folder").click();
-    await expect(folders).toHaveCount(0);
-    await expect(documents).toHaveCount(2);
-    await expect(paperItem).toHaveAttribute("data-folder-id", "");
-    await expect(notesItem).toHaveAttribute("data-folder-id", "");
-    await expect(paperItem).toHaveAttribute("data-depth", "0");
+    // The file added on its own is now in "Other Documents", below the Linked folder.
+    await expect(others).toHaveAttribute("data-depth", "0");
+    await expect(looseItem).toHaveAttribute("data-depth", "1");
+    const planBox = await planItem.boundingBox();
+    const othersBox = await others.boundingBox();
+    expect(othersBox?.y).toBeGreaterThan(planBox?.y ?? Number.POSITIVE_INFINITY);
+
+    // Folding the Linked folder hides everything in it; the Other Documents stay.
+    await root.getByTestId("folder-toggle").click();
+    await expect(documents).toHaveCount(1);
+    await expect(folders).toHaveCount(1);
+    await expect(looseItem).toBeVisible();
     await app.close();
   } finally {
     await removeDataFolder(sources);
