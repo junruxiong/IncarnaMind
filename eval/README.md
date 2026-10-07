@@ -147,6 +147,8 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 | A range breaking the page-range rule | Three pages; a page outside the cited Passage. | The same. | `tests/core/citations.test.ts` ("The page-range rule") |
 | The match is exact | A paraphrase, a quote with one word changed, and a quote from another page than the one cited aren't found. | A paraphrase, and a quote from another page. | `tests/core/citations.test.ts` ("a paraphrased quote is 'not found'") |
 
+`tests/eval/recordedCitations.test.ts` also checks again the Citations a real run recorded (see Results).
+
 ## Results
 
 Measured on 2026-10-07 at commit `472d8d8`, on an Apple M2 Max (12 cores) with Node v25.5.0, using the built-in model. Two runs gave the same numbers and ranks. The 12 Documents made 1,199 Passages, added and processed in 43 to 51 s.
@@ -202,7 +204,7 @@ A run with Ollama's `mistral` on 2026-10-07 (local, so not gating) recorded 12 E
 - "… label smoothing of value ϵls = 0.1 [^36]. This hurts perplexity, …" (Attention Is All You Need, p. 8): the page's reference is "[36]", and the model wrote it in the syntax of our Citation markers. The "ϵ" is the page's own.
 - "… in some of those tested... Clause 19.1 (18.1) Outcome or Risk Sharing Agreements" (ABPI Code of Practice, pp. 35–36): the model wrote "..." where the page has a full stop and a heading.
 
-The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote with an ellipsis part by part (ADR-0009).
+The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote with an ellipsis part by part (ADR-0009). `tests/eval/recordedCitations.test.ts` checks the run's Citations again, copied in `tests/fixtures/eval-citations-2026-10-07.json`, against the stored text of their pages, without asking the model again: no false "not found" in either language (English 0 of 12, 8 found; Chinese 0 of 7, 1 found), and the 9 quotes that aren't on their pages (paraphrased, or on other pages) are still "not found".
 
 `tests/eval/citations.test.ts` checks the Citation part through the core with a scripted model instead: found quotes, false "not found", wrong pages, coverage and rounds.
 
@@ -225,3 +227,4 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 - **Tests of the evaluation itself:** these run with `npm test`, without the model.
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
+  - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
