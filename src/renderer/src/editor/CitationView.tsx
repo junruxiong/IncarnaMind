@@ -92,6 +92,8 @@ export function CitationView({
 
   const onClick = () => {
     setOpen(true);
+    // "Check a Citation in the example", in Get started.
+    useAppStore.getState().updateGettingStarted({ citationChecked: true });
     if (state.check === "found") openCited(true);
     // A deleted Document: the viewer shows the stored quote with "Document removed".
     else if (state.reason === "document-removed") openCited(true);

@@ -14,6 +14,13 @@ describe("Settings", () => {
         openMinds: [],
         activeMind: null,
         chatSetupDismissed: false,
+        gettingStarted: {
+          started: false,
+          citationChecked: false,
+          indexed: false,
+          askedOwn: false,
+          hidden: false,
+        },
         skillScriptsEnabled: true,
         skillScriptTimeoutSeconds: 60,
       },
@@ -69,6 +76,13 @@ describe("Settings", () => {
       openMinds: [],
       activeMind: null,
       chatSetupDismissed: false,
+      gettingStarted: {
+        started: false,
+        citationChecked: false,
+        indexed: false,
+        askedOwn: false,
+        hidden: false,
+      },
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
     });
@@ -97,6 +111,13 @@ describe("Settings", () => {
       openMinds: ["mind-b", "mind-a"],
       activeMind: "mind-a",
       chatSetupDismissed: true,
+      gettingStarted: {
+        started: true,
+        citationChecked: true,
+        indexed: false,
+        askedOwn: false,
+        hidden: true,
+      },
       skillScriptsEnabled: false,
       skillScriptTimeoutSeconds: 15,
     };
@@ -122,6 +143,10 @@ describe("Settings", () => {
     { name: "open Minds that aren't a list", patch: { device: { openMinds: "mind-a" } } },
     { name: "an open Mind that isn't an ID", patch: { device: { openMinds: ["mind-a", 7] } } },
     { name: "a Mind open twice", patch: { device: { openMinds: ["mind-a", "mind-a"] } } },
+    {
+      name: "a checklist with a step missing",
+      patch: { device: { gettingStarted: { started: true, hidden: false } } },
+    },
     { name: "an active Mind that isn't an ID", patch: { device: { activeMind: "  " } } },
     {
       name: "a script switch that isn't true or false",

@@ -7,6 +7,7 @@ import type { TestHooks } from "../src/shared/testHooks";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  clickEmptyLine,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -162,7 +163,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   const answer = editor.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await citeMore(editor);
-  await editor.locator(":scope > p").last().click();
+  await clickEmptyLine(editor.locator(":scope > p").last());
   await window.keyboard.type(
     "So spring tides follow the Moon. Check whether the tables put numbers on how much higher they are.",
   );
@@ -420,7 +421,7 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
   // A Skill script: the same three sections; "Always run" warns in the last one.
-  await editor.locator(":scope > p").last().click();
+  await clickEmptyLine(editor.locator(":scope > p").last());
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Run greeter scripts/hello.js for Calais");
   await window.keyboard.press("Enter");
