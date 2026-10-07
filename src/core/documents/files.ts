@@ -19,6 +19,10 @@ export const DOCUMENT_EXTENSIONS: Readonly<Record<DocumentKind, readonly string[
   pdf: ["pdf"],
   text: ["txt"],
   markdown: ["md", "markdown"],
+  docx: ["docx"],
+  pptx: ["pptx"],
+  xlsx: ["xlsx"],
+  csv: ["csv"],
 };
 
 const KINDS: ReadonlyMap<string, DocumentKind> = new Map(
@@ -99,9 +103,10 @@ function globPattern(pattern: string): RegExp {
 /**
  * Whether a file or folder in a Linked folder is left out, given its path
  * relative to the Linked folder. Hidden files and folders (".git",
- * ".DS_Store"), node_modules, and anything matching one of the Linked
- * folder's extra patterns: a pattern with a "/" is matched against the whole
- * relative path, one without against each name in it.
+ * ".DS_Store"), Office's lock files ("~$Report.docx"), node_modules, and
+ * anything matching one of the Linked folder's extra patterns: a pattern with
+ * a "/" is matched against the whole relative path, one without against each
+ * name in it.
  */
 export function createIgnore(patterns: readonly string[] = []): (relative: string) => boolean {
   const whole = patterns.filter((pattern) => pattern.includes("/")).map(globPattern);
@@ -109,7 +114,8 @@ export function createIgnore(patterns: readonly string[] = []): (relative: strin
   return (relative) => {
     if (relative === "") return false;
     for (const name of relative.split("/")) {
-      if (name.startsWith(".") || ALWAYS_IGNORED.has(name)) return true;
+      // "~$Report.docx": the lock file Office keeps beside a file it has open.
+      if (name.startsWith(".") || name.startsWith("~$") || ALWAYS_IGNORED.has(name)) return true;
       if (names.some((pattern) => pattern.test(name))) return true;
     }
     return whole.some((pattern) => pattern.test(relative));

@@ -98,7 +98,8 @@ describe("opening a Document's file for the viewer", { timeout: 30_000 }, () => 
       documentId: document.id,
       contentHash: document.contentHash,
       fileStatus: "missing",
-      pages: [{ page: null, text: "Some text.\n" }],
+      // Plain text is kept as blocks of lines (ADR-0011).
+      pages: [{ page: 1, text: "Some text.", kind: "lines", label: { from: 1, to: 1 } }],
     });
     await expect(core.readDocumentText("no-such-document")).rejects.toThrow(NotFoundError);
   });

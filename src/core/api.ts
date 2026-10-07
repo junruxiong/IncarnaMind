@@ -7,6 +7,7 @@
  * This file must stay free of imports with side effects: the preload script and
  * the renderer import it.
  */
+import type { UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
 
 export interface Mind {
@@ -375,8 +376,11 @@ export interface SettingsPatch {
   device?: Partial<DeviceSettings>;
 }
 
-/** The kinds of file that can be added as Documents. */
-export type DocumentKind = "pdf" | "text" | "markdown";
+/**
+ * The kinds of file that can be added as Documents (ADR-0011): PDF, plain
+ * text, Markdown, Word (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV.
+ */
+export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text, then
@@ -399,7 +403,7 @@ export type DocumentStatus =
   | "no-text";
 
 export type DocumentFailureReason =
-  /** The file isn't a valid PDF, or a text file holds binary data. */
+  /** The file isn't valid (a broken PDF or Office file), or a text file holds binary data. */
   | "unreadable"
   | "password-protected"
   /**
@@ -537,14 +541,17 @@ export interface ListDocumentsOptions {
   linkedFolderId?: string | null;
 }
 
-/** The text IncarnaMind kept of a Document's current version, page by page. */
+/** The text IncarnaMind kept of a Document's current version, Unit by Unit. */
 export interface DocumentText {
   documentId: string;
   /** The version the text is of. */
   contentHash: string;
   fileStatus: DocumentFileStatus;
-  /** Pages from 1, in order; one page with `page` null for a Document without pages. Empty if no text is indexed. */
-  pages: { page: number | null; text: string }[];
+  /**
+   * Its Units (pages, slides, sections, blocks of rows or lines) in order,
+   * `page` being the Unit's number, from 1. Empty if no text is indexed.
+   */
+  pages: { page: number; text: string; kind: UnitKind; label: UnitLabel | null }[];
 }
 
 /**
@@ -713,9 +720,13 @@ export interface PassageSearchResult {
   passageId: string;
   documentId: string;
   documentName: string;
-  /** The first page the Passage covers, from 1. Null for Documents without pages (TXT, Markdown). */
+  /**
+   * The first Unit the Passage covers, from 1: a PDF's page, a deck's slide,
+   * otherwise a Unit's number (see src/shared/units.ts). Null only for
+   * Passages built before Units, of a TXT or Markdown file.
+   */
   pageFrom: number | null;
-  /** The last page the Passage covers. A Passage can cross a page break. */
+  /** The last Unit the Passage covers. A Passage can cross from one Unit to the next. */
   pageTo: number | null;
   /** The Passage's position in its Document, from 0. */
   position: number;

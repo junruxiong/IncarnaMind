@@ -220,8 +220,9 @@ describe("Documents", { timeout: 30_000 }, () => {
         passageId: expect.stringMatching(UUID_V4),
         documentId: english?.id,
         documentName: "Transformers",
-        pageFrom: null,
-        pageTo: null,
+        // Its first section (ADR-0011): Markdown is stored by heading.
+        pageFrom: 1,
+        pageTo: 1,
         position: 0,
         text: expect.stringContaining("relies entirely on self-attention"),
       },
@@ -318,10 +319,11 @@ describe("Documents", { timeout: 30_000 }, () => {
     ]);
   });
 
-  test("files that aren't PDF, TXT or Markdown, or can't be read, are skipped", async () => {
+  test("files of a kind IncarnaMind doesn't read, or that can't be read, are skipped", async () => {
     const sources = await createTempDataFolder();
     const core = startCore(await createTempDataFolder());
-    const word = await writeSourceFile(sources, "Letter.docx", "not supported");
+    // Word 97–2003: the second wave of formats (ADR-0011).
+    const word = await writeSourceFile(sources, "Letter.doc", "not supported");
     const missing = join(sources, "missing.txt");
 
     const result = await core.addDocuments([word, missing, sources]);

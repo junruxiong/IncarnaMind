@@ -58,13 +58,19 @@ function edgeLinesOf(lines: readonly string[], count: number): string[] {
  * edges of enough of the Document's pages. A page made only of such lines
  * keeps them. Documents without pages are returned as they are.
  */
-export function stripBoilerplate(
-  pages: readonly PageText[],
+export function stripBoilerplate<Page extends PageText>(
+  pages: readonly Page[],
   parameters: BoilerplateParameters = BOILERPLATE_PARAMETERS,
-): PageText[] {
+): Page[] {
   const { edgeLines, minPages, minShare, maxLineLength } = parameters;
   const copy = () => pages.map((page) => ({ ...page }));
-  if (pages.length < minPages || pages.some((page) => page.page === null)) return copy();
+  // Only a PDF's pages have running headers and footers; slides, sections and rows don't.
+  if (
+    pages.length < minPages ||
+    pages.some((page) => page.page === null || (page.kind ?? "page") !== "page")
+  ) {
+    return copy();
+  }
 
   const split = pages.map((page) => page.text.split("\n"));
   const withText = split.filter((lines) => lines.some((line) => line.trim() !== "")).length;
@@ -111,6 +117,6 @@ export function stripBoilerplate(
     }
     const text = lines.slice(start, end).join("\n").trim();
     // A page with nothing but such lines keeps them: they may be all it says ("Page 3 of 40").
-    return { page: page.page, text: text || page.text };
+    return { ...page, text: text || page.text };
   });
 }

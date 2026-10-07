@@ -3,6 +3,7 @@
  * worker and in tests.
  */
 import { CJK, isCjk } from "../../shared/text";
+import type { UnitText } from "../../shared/units";
 
 export interface PassageParameters {
   /** The most approximate tokens a Passage holds. */
@@ -29,12 +30,18 @@ export const PASSAGE_PARAMETERS: PassageParameters = {
   windowStep: 1,
 };
 
-/** A Document's text, page by page. */
-export interface PageText {
-  /** From 1, or null for Documents without pages (TXT, Markdown). */
-  page: number | null;
-  text: string;
-}
+/**
+ * A Document's text, Unit by Unit (pages, slides, sections, blocks of rows
+ * or lines; see src/shared/units.ts). `page` is the Unit's number, from 1.
+ */
+export type PageText = UnitText;
+
+/**
+ * Passages don't run from one sheet into the next: a Citation names Units
+ * of one sheet. Everything else runs on.
+ */
+const groupOf = (unit: PageText): string =>
+  unit.kind === "rows" ? `sheet:${unit.label?.sheet ?? ""}` : "";
 
 export interface BuiltPassage {
   /** From 0, in reading order. */
@@ -184,7 +191,36 @@ export function buildPassages(
   pages: readonly PageText[],
   parameters: PassageParameters = PASSAGE_PARAMETERS,
 ): BuiltPassage[] {
-  const { maxTokens, overlapTokens, windowSize, windowStep } = parameters;
+  const { windowSize, windowStep } = parameters;
+  // Runs of Units a Passage may cross: the whole Document, or one sheet.
+  const groups: PageText[][] = [];
+  for (const page of pages) {
+    const current = groups.at(-1);
+    if (current && groupOf(current[0] as PageText) === groupOf(page)) current.push(page);
+    else groups.push([page]);
+  }
+  const spans = groups.flatMap((group) => passageSpans(group, parameters));
+
+  // The old backend's sliding window: each Passage joins the window, and once
+  // it holds more than `windowSize` Passages the oldest `windowStep` leave.
+  const window: number[] = [];
+  return spans.map((span, position) => {
+    window.push(position);
+    if (window.length > windowSize) window.splice(0, windowStep);
+    return {
+      position,
+      ...span,
+      windowFrom: item(window, 0),
+      windowTo: position,
+    };
+  });
+}
+
+/** The Passages of a run of Units, before they are numbered and windowed. */
+function passageSpans(
+  pages: readonly PageText[],
+  { maxTokens, overlapTokens }: PassageParameters,
+): Pick<BuiltPassage, "pageFrom" | "pageTo" | "text">[] {
   const { text, pageAt } = layOut(pages);
   const pieces = toPieces(text, maxTokens);
   if (pieces.length === 0) return [];
@@ -206,20 +242,12 @@ export function buildPassages(
   });
   spans.push([from, pieces.length - 1]);
 
-  // The old backend's sliding window: each Passage joins the window, and once
-  // it holds more than `windowSize` Passages the oldest `windowStep` leave.
-  const window: number[] = [];
-  return spans.map(([first, last], position) => {
-    window.push(position);
-    if (window.length > windowSize) window.splice(0, windowStep);
+  return spans.map(([first, last]) => {
     const start = item(pieces, first).start;
     const end = item(pieces, last).end;
     return {
-      position,
       pageFrom: pageAt(start),
       pageTo: pageAt(end - 1),
-      windowFrom: item(window, 0),
-      windowTo: position,
       text: text.slice(start, end).trim(),
     };
   });
