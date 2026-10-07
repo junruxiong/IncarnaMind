@@ -334,6 +334,8 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean;
     /** The Skill the Question forces, loaded up front; null if none. */
     forcedSkill: string | null;
+    /** The User has yet to allow the chat flow to the model's service: they are asked first. */
+    consentNeeded: boolean;
   }): void {
     const { mindId, answerId, model, context, documentIds, forcedSkill } = input;
     const controller = new AbortController();
@@ -639,6 +641,28 @@ export function createAnswers(options: AnswersOptions) {
         finish({ status: "done" });
         return;
       }
+      // The phase the meta line shows: waiting for the User to allow the Question to go to the
+      // model's service, searching, the model loading (a local model, until Ollama has it
+      // loaded or it starts to answer), or writing.
+      let consenting = input.consentNeeded;
+      let activity: Extract<AnswerPhase, "searching" | "writing"> = "writing";
+      let loading = false;
+      let responded = false;
+      let shown: AnswerPhase | null = null;
+      const showPhase = () => {
+        const phase: AnswerPhase = consenting
+          ? "waiting-for-consent"
+          : activity === "searching"
+            ? activity
+            : loading && !responded
+              ? "loading"
+              : "writing";
+        if (finished || phase === shown) return;
+        shown = phase;
+        events.emit("answer.phase", { mindId, answerId, phase });
+      };
+      // Nothing is sent before the User says: the Answer waits for them.
+      if (consenting) showPhase();
       let prepared: PreparedChatModel;
       try {
         prepared = await options.prepareModel(model);
@@ -648,6 +672,10 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
+      if (consenting) {
+        consenting = false;
+        showPhase();
+      }
       if (!(await openSkills()) || !skills) return;
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
@@ -700,19 +728,6 @@ export function createAnswers(options: AnswersOptions) {
               }),
             }
           : null;
-      // The phase the meta line shows: searching, the model loading (a local model, until
-      // Ollama has it loaded or it starts to answer), or writing.
-      let activity: Exclude<AnswerPhase, "loading"> = "writing";
-      let loading = false;
-      let responded = false;
-      let shown: AnswerPhase | null = null;
-      const showPhase = () => {
-        const phase: AnswerPhase =
-          activity === "searching" ? activity : loading && !responded ? "loading" : "writing";
-        if (finished || phase === shown) return;
-        shown = phase;
-        events.emit("answer.phase", { mindId, answerId, phase });
-      };
       const watchLoading = async (loaded: () => Promise<boolean | null>) => {
         for (let first = true; !finished && !responded; first = false) {
           const ready = await loaded().catch(() => null);
@@ -925,7 +940,8 @@ export function createAnswers(options: AnswersOptions) {
     );
     if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
-    start({ mindId, questionId, model, ...written, forcedSkill });
+    const consentNeeded = readiness.consent === "needed";
+    start({ mindId, questionId, model, ...written, forcedSkill, consentNeeded });
     return { asked: true, answerId: written.answerId };
   }
 

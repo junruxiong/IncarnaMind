@@ -9,7 +9,7 @@ import {
   type SkillScriptApprovalRequest,
   type ToolApprovalRequest,
 } from "../../../core/api";
-import { AnswerPhaseText } from "../answerPhase";
+import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
@@ -114,15 +114,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
     );
   }
   if (streaming) {
-    const paused = approvals.length > 0;
-    meta.push(
-      <span
-        data-testid="answer-writing"
-        className={`answer-writing ${paused ? "answer-writing--waiting" : ""}`}
-      >
-        {paused ? t("approvals.answer.waiting") : <AnswerPhaseText answerId={answerId} />}
-      </span>,
-    );
+    meta.push(<AnswerWriting answerId={answerId} waitingForApproval={approvals.length > 0} />);
   } else if (status === "stopped") {
     meta.push(<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>);
   }
