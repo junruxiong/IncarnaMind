@@ -60,6 +60,17 @@ async function box(locator: Locator) {
   return found;
 }
 
+/** The editor's text column: its box reaches over the left margin, its padding keeps the text edge. */
+function textColumn(editor: Locator) {
+  return editor.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const left = Number.parseFloat(style.paddingLeft);
+    const right = Number.parseFloat(style.paddingRight);
+    return { x: rect.left + left, width: rect.width - left - right };
+  });
+}
+
 const middle = (rect: { y: number; height: number }) => rect.y + rect.height / 2;
 
 /** `actual` is within `tolerance` px of `expected` (a soft check: the test goes on). */
@@ -157,7 +168,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   );
 
   // One text edge: the title, a Note, a heading, a list item, a Question's text and an Answer's text.
-  const edge = (await box(editor)).x;
+  const edge = (await textColumn(editor)).x;
   const texts = {
     title: title,
     note: editor.locator(":scope > p").first(),
@@ -170,7 +181,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
     expectNear((await box(locator)).x, edge, 1, `the ${name} starts at the text edge`);
   }
   // The measure is 680px, with its margins inside the pane.
-  expectNear((await box(editor)).width, MEASURE, 1, "the measure");
+  expectNear((await textColumn(editor)).width, MEASURE, 1, "the measure");
 
   // The Ask button, the "Answer" label and the block handle sit in the left margin.
   const inLeftMargin = async (locator: Locator, name: string) => {
@@ -241,8 +252,8 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(window.getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
   await expect(answer.locator(".answer-label")).toBeVisible();
-  expectNear((await box(texts.note)).x, (await box(editor)).x, 1, "narrow: the Note's edge");
-  expectNear((await box(texts.answer)).x, (await box(editor)).x, 1, "narrow: the Answer's edge");
+  expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
+  expectNear((await box(texts.answer)).x, (await textColumn(editor)).x, 1, "narrow: the Answer's edge");
   await screenshot(window, "mind-narrow.png");
   await setViewer(window, false);
   await expect(window.getByTestId("margin-checks")).toBeVisible();
@@ -303,7 +314,7 @@ test("a quote, a highlight, a code block and a formula keep the text edge too; t
   await window.getByTestId("math-editor").press("Enter");
   await expect(editor.locator('[data-type="block-math"] .katex')).toBeVisible();
 
-  const edge = (await box(editor)).x;
+  const edge = (await textColumn(editor)).x;
   const quote = editor.locator(":scope > blockquote");
   expectNear((await box(quote.locator("p"))).x, edge, 1, "the quote's text");
   expect((await box(quote)).x, "the quote's rule hangs in the margin").toBeLessThan(edge - 8);

@@ -45,7 +45,9 @@ function handleAnchor(
       const gapName =
         block.node.type.name === QUESTION_BLOCK ? "--handle-gap-question" : "--handle-gap";
       const gap = Number.parseFloat(style.getPropertyValue(gapName)) || 0;
-      const x = view.dom.getBoundingClientRect().left - gap;
+      // The text edge: the editor's box reaches over the margin (styles.css, `--editor-gutter`).
+      const edge = view.dom.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft);
+      const x = edge - gap;
       let y: number;
       const textPos = firstTextPos(block.node, block.pos);
       if (textPos !== null) {

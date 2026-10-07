@@ -184,7 +184,15 @@
     --handle-gap: 28px;
     /* Clear of the Question band, which takes 52px of the margin. */
     --handle-gap-question: 56px;
+    /*
+     * The editor's box reaches over the left margin, past the block handle,
+     * while its text keeps the edge: Tiptap hides the handle once the pointer
+     * leaves the editor, so the pointer has to stay in it all the way there.
+     */
+    --editor-gutter: 80px;
 
+    margin-left: calc(-1 * var(--editor-gutter));
+    padding-left: var(--editor-gutter);
     min-height: 10rem;
     outline: none;
     font-family: var(--font-serif);
@@ -1604,6 +1612,8 @@
     .mind-editor {
       --handle-gap: 2px;
       --handle-gap-question: 2px;
+      /* The whole margin left of the measure. */
+      --editor-gutter: 24px;
     }
     .question-block {
       margin-inline: -12px;
