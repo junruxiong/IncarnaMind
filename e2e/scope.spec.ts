@@ -67,11 +67,11 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   await expect(picker.getByRole("group", { name: "Tags" })).toBeVisible();
   await expect(picker.getByRole("group", { name: "Documents" })).toBeVisible();
   const choices = picker.getByTestId("scope-choice");
-  // The Linked folder's own Folder, then its folders.
+  // The Linked folder's own Folder, then its folders, each with the path it is in.
   await expect(choices.first()).toHaveText("Notes");
   await expect(choices.first()).toHaveAttribute("aria-selected", "true");
   await window.keyboard.press("ArrowDown");
-  await expect(choices.nth(1)).toHaveText("Kitchen");
+  await expect(choices.nth(1)).toHaveText(/^Kitchen/);
   await expect(choices.nth(1)).toHaveAttribute("aria-selected", "true");
 
   // Typing filters; Enter adds the choice as a chip, and the "@" text goes.
