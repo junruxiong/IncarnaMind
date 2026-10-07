@@ -9,6 +9,15 @@ What the index keeps is enough for Citations without the file:
 - A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it.
 - A file that disappears leaves a missing Document whose text and Citations remain. Only the rendered page, which needs the file, is lost.
 
+Settled with the User on 2026-10-07:
+- **A Document is a file at a path.** The same content in two places is two Documents. Search shows each Passage once, preferring the copy inside the Search scope.
+- **Missing vs unavailable.** A file removed from a folder that is still there is a missing Document, and new searches leave it out. A Linked folder that can't be reached, such as an unplugged drive, makes its Documents unavailable. They are still searched from their stored text.
+- **Cloud drives.** Online-only placeholder files are never read, because reading downloads them. The Linked folder says how many it skipped, and offers to download and index them.
+- **Flat or nested.** A Linked folder can show its subfolders or a flat list. It starts flat when nearly every subfolder holds one file, which is Zotero's `storage/<key>/` layout.
+- **Big folders.** Linking says how many files and roughly how long before indexing starts. Indexing runs newest first, and can be paused and resumed.
+- **Read-only.** IncarnaMind never writes, renames or deletes anything in a Linked folder.
+- **Other Documents.** Files added on their own form the "Other Documents" group, below the Linked folders.
+
 This replaces the spec's original choice (issue #20, story 41: "copied into the app's data folder, so that moving or deleting the originals breaks nothing") and narrows ADR-0008: the data folder no longer holds Document files.
 
 ## Considered options
