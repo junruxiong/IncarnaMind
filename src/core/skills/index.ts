@@ -13,7 +13,8 @@
  * instructions, and loading the others' instructions and files on demand,
  * confined to their own folders. A session holds the Skills it may read, so a
  * Skill removed meanwhile keeps its folder until the session is released.
- * Scripts are listed but never run here (#41 adds that).
+ * It also finds the scripts an Answer may run (checked to be script files
+ * inside their Skill's folder); ./scripts runs them, once the User allows it.
  *
  * Built-in Skills (see ./builtIn) are installed at startup from the app's
  * copy, turned on and marked built-in (migration 19), and updated in place
@@ -90,16 +91,33 @@ export interface LoadedSkill {
   files: SkillFile[];
 }
 
+/** One of a Skill's scripts, found for running. */
+export interface SkillScript {
+  skillId: string;
+  skillName: string;
+  /** The Skill's folder in the data folder: absolute, links resolved. */
+  skillDir: string;
+  /** The script's path inside the Skill, "/" between folders, e.g. "scripts/convert.py". */
+  path: string;
+}
+
 /** What one Answer may use. Release it when the Answer ends. */
 export interface SkillSession {
   /** The enabled Skills other than the forced one, by name. */
   listed: SkillSummary[];
   /** The Skill the Question forces, loaded up front, or null. */
   forced: LoadedSkill | null;
+  /** Whether any Skill this Answer may use has scripts. */
+  hasScripts: boolean;
   /** A Skill's instructions (`use_skill`). Throws for a Skill this Answer can't use. */
   load(name: string): Promise<LoadedSkill>;
   /** One of a Skill's files, as text (`read_skill_file`). Throws for anything outside the Skill. */
   readFile(name: string, path: string): Promise<string>;
+  /**
+   * One of a Skill's scripts, to run (`run_skill_script`). Throws for a Skill
+   * this Answer can't use, or a path that isn't one of its scripts.
+   */
+  script(name: string, path: string): Promise<SkillScript>;
   release(): void;
 }
 
@@ -301,6 +319,31 @@ export function createSkills(options: SkillsOptions) {
     if (text === null) throw new Error(`${wanted} isn't a text file, so it can't be read.`);
     if (text.length <= MAX_SKILL_FILE_CHARS) return text;
     return `${text.slice(0, MAX_SKILL_FILE_CHARS)}\n\n[… cut: ${wanted} is ${text.length} characters long; this is the first ${MAX_SKILL_FILE_CHARS}.]`;
+  }
+
+  /** One of the Skill's scripts, checked to be a script file listed for it, inside its folder. */
+  async function scriptOf(row: SkillRow, path: unknown): Promise<SkillScript> {
+    const scripts = filesOf(row).filter((file) => file.script);
+    const listed = scripts.map((file) => file.path).join(", ") || "none";
+    const segments = typeof path === "string" ? insidePath(path) : null;
+    if (!segments || segments.length === 0) {
+      throw new Error(
+        `Give the path of a script inside the Skill "${row.name}". Its scripts: ${listed}.`,
+      );
+    }
+    const wanted = segments.join("/");
+    if (!scripts.some((file) => file.path === wanted)) {
+      throw new Error(`The Skill "${row.name}" has no script ${wanted}. Its scripts: ${listed}.`);
+    }
+    try {
+      const skillDir = await realpath(folderOf(row.id));
+      const real = await realpath(join(skillDir, ...segments));
+      // The folder holds no links, but a script run must never be outside it.
+      if (!isWithin(skillDir, real)) throw new Error("outside");
+      return { skillId: row.id, skillName: row.name, skillDir, path: wanted };
+    } catch {
+      throw new Error(`${wanted} can't be found in the Skill "${row.name}".`);
+    }
   }
 
   /**
@@ -667,6 +710,10 @@ export function createSkills(options: SkillsOptions) {
       });
     },
 
+    /** Whether a Skill that is on has scripts: Answers could then run them (unless turned off). */
+    anyEnabledWithScripts: (): boolean =>
+      rows(`${LIVE} AND enabled = 1`).some((row) => filesOf(row).some((file) => file.script)),
+
     /** Whether the Skill named `name` can be used now. */
     availability(name: string): SkillAvailability {
       const row = rowNamed(name);
@@ -726,8 +773,10 @@ export function createSkills(options: SkillsOptions) {
             .filter((row) => row !== forcedRow)
             .map((row) => ({ name: row.name, description: row.description })),
           forced: forcedRow ? await load(forcedRow) : null,
+          hasScripts: [...usable.values()].some((row) => filesOf(row).some((file) => file.script)),
           load: (name) => load(usableRow(name)),
           readFile: (name, path) => readSkillFile(usableRow(name), path),
+          script: (name, path) => scriptOf(usableRow(name), path),
           release,
         };
       } catch (error) {

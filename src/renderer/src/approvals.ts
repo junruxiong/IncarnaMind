@@ -1,24 +1,29 @@
 import { create } from "zustand";
-import type { ApprovalDecision, ApprovalRequest } from "../../core/api";
+import type { ApprovalDecision, ApprovalRequest, ApprovalResponseOptions } from "../../core/api";
 import { core } from "./core";
 import { useAppStore } from "./store";
 
 interface ApprovalsState {
   /**
-   * Tool calls waiting for the User's approval, by request id, in every
-   * window: from the core's events, and those raised before this window
-   * listened. A decision in any window takes the request away in all.
+   * Calls waiting for the User's approval (Connector Tools and Skill
+   * scripts), by request id, in every window: from the core's events, and
+   * those raised before this window listened. A decision in any window takes
+   * the request away in all.
    */
   waiting: Readonly<Record<string, ApprovalRequest>>;
-  respond(requestId: string, decision: ApprovalDecision): void;
+  /** `options.riskAccepted`: "always run" a Skill's scripts, once the User confirmed the warning. */
+  respond(requestId: string, decision: ApprovalDecision, options?: ApprovalResponseOptions): void;
 }
 
 export const useApprovals = create<ApprovalsState>()(() => ({
   waiting: {},
-  respond(requestId, decision) {
+  respond(requestId, decision, options) {
     // The card goes at once; the core's "approval.resolved" confirms it in every window.
+    const request = useApprovals.getState().waiting[requestId];
     remove(requestId);
-    core.respondToApproval(requestId, decision).catch((error: unknown) => {
+    core.respondToApproval(requestId, decision, options).catch((error: unknown) => {
+      // Refused, so it still waits: show it again.
+      if (request) add([request]);
       useAppStore.getState().reportError(error);
     });
   },

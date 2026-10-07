@@ -64,7 +64,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(files.nth(0)).toContainText("SKILL.md");
   await expect(files.nth(1)).toContainText("references/ports.md");
   await expect(files.nth(2)).toContainText("scripts/convert.py");
-  await expect(files.nth(2)).toContainText("script: can't run yet");
+  await expect(files.nth(2)).toContainText("script: runs only with your approval");
   await preview.getByTestId("skill-import-confirm").click();
 
   await expect(section.getByTestId("skill-item")).toHaveCount(4);
@@ -72,7 +72,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(item.getByTestId("skill-built-in")).toHaveCount(0);
   await expect(item.getByTestId("skill-enabled")).toBeChecked();
   await expect(item).toContainText(DESCRIPTION);
-  await expect(item).toContainText("Licence: MIT · 1 script, which can't run yet");
+  await expect(item).toContainText("Licence: MIT · 1 script");
   await expect(section.getByTestId("skill-preview")).toHaveCount(0);
   await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
 

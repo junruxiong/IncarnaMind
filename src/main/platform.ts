@@ -119,6 +119,10 @@ export function createElectronAdapters(): CoreAdapters {
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
     processes: loginShellProcesses,
+    // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.
+    scriptRuntimes: {
+      node: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } },
+    },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
     // The fake model has no files to download.
     ...(fakeEmbedder && { embeddingModelSource: { baseUrl: "http://localhost/", files: [] } }),
