@@ -106,7 +106,7 @@ The evaluation set is `retrieval/questions.json`: 40 gating Questions (20 Englis
   - contains the expected quote.
 
   The quote is matched as the Citation check matches quotes, with `findQuote`: both are normalised the same way and compared.
-- **Gate:** hybrid search, which is what the search Tool runs, with the built-in model must find at least 16 of 20, and at least 8 of 10 in each language.
+- **Gate:** hybrid search, which is what the search Tool runs, with the built-in model must find at least 80% of the gating Questions overall and in each language: 32 of 40, and 16 of 20 per language, with today's set.
 - **Reported, not gating:** keyword-only and vector-only search, the cross-lingual Questions, and a cloud embedding model if one is given.
 - **Per Question:** the report gives the rank of the first hit in each mode. A rank in brackets is a near miss, between 6 and 20. For each hybrid miss, it lists what the top 5 were and what each lacked.
 
