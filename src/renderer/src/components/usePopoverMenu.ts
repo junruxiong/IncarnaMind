@@ -29,7 +29,7 @@ function place(button: HTMLElement | null, menu: HTMLElement | null): void {
  * render its items only while `open`.
  *
  * Spread `buttonProps` on the button and `menuProps` on the menu's element,
- * which also takes `role="menu"` and an `aria-label`.
+ * which also takes `role="menu"`, an `aria-label` and `menuClass` (./ui).
  */
 export function usePopoverMenu() {
   const id = useId();
@@ -85,15 +85,3 @@ export function usePopoverMenu() {
     },
   };
 }
-
-/** The look of a menu popover's element. */
-export const menuClass =
-  "inset-auto m-0 max-h-[60vh] w-max max-w-72 min-w-44 overflow-y-auto rounded-[9px] border-0 bg-white p-1 text-sm text-gray-700 shadow-custom-focus";
-
-/** The look of a menu's small heading. */
-export const menuTitleClass =
-  "px-2 pt-1 pb-[2px] text-[11px] font-medium tracking-wide text-gray-400 uppercase";
-
-/** The look of a menu item. */
-export const menuItemClass =
-  "flex w-full items-center gap-[6px] rounded-[6px] py-[5px] pr-2 text-left outline-none hover:bg-gray-100 focus-visible:bg-gray-100";

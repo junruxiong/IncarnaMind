@@ -1,5 +1,6 @@
 import { type DragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import type { Folder } from "../../../core/api";
+import { create } from "zustand";
+import type { Document, Folder } from "../../../core/api";
 import {
   buildFolderTree,
   endSidebarDrag,
@@ -12,109 +13,174 @@ import {
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import {
-  AllDocumentsIcon,
-  ChevronIcon,
-  FolderIcon,
-  FolderPlusIcon,
-  PencilIcon,
-  TrashIcon,
-} from "./icons";
+  ChevronDownLineIcon,
+  ChevronRightLineIcon,
+  FolderLineIcon,
+  FolderPlusLineIcon,
+  PencilLineIcon,
+  TrashLineIcon,
+} from "./lineIcons";
+import {
+  rowActionButtonClass,
+  rowActionsClass,
+  rowButtonClass,
+  rowClass,
+  rowIconClass,
+  rowPadding,
+} from "./sidebarRows";
+import {
+  buttonClass,
+  dangerButtonClass,
+  dialogActionsClass,
+  dialogBodyClass,
+  dialogClass,
+  dialogTextClass,
+  dialogTitleClass,
+} from "./ui";
+import { useModal } from "./useModal";
 
 /** Where a new Folder is being named: in a Folder (its id), at the top level (null), or nowhere. */
 export type NewFolderPlace = string | null | undefined;
 
-const INDENT_PX = 12;
-/** Left padding of a row at `depth`. Rows start with a chevron column, so icons line up. */
-const indent = (depth: number) => ({ paddingLeft: 4 + depth * INDENT_PX });
-/** The chevron column's width plus the gap after it. */
-const CHEVRON_PX = 18;
-const actionButton = "rounded-[6px] p-[3px] text-gray-500 hover:bg-gray-200 hover:text-gray-700";
+interface FolderTreeState {
+  /** Folders the User folded. Every other Folder shows its contents. */
+  collapsed: ReadonlySet<string>;
+  toggle(folderId: string): void;
+  /** Unfolds a Folder and every Folder above it, e.g. after something is moved into it. */
+  reveal(folderId: string | null): void;
+}
+
+/** Which Folders are folded. Kept while the window is open. */
+export const useFolderTree = create<FolderTreeState>()((set) => ({
+  collapsed: new Set(),
+  toggle: (folderId) =>
+    set((state) => {
+      const collapsed = new Set(state.collapsed);
+      if (!collapsed.delete(folderId)) collapsed.add(folderId);
+      return { collapsed };
+    }),
+  reveal: (folderId) =>
+    set((state) => {
+      if (folderId === null) return state;
+      const parents = new Map(
+        useAppStore.getState().folders.map((folder) => [folder.id, folder.parentId]),
+      );
+      const collapsed = new Set(state.collapsed);
+      const seen = new Set<string>();
+      let current: string | null | undefined = folderId;
+      while (current && !seen.has(current)) {
+        seen.add(current);
+        collapsed.delete(current);
+        current = parents.get(current);
+      }
+      return { collapsed };
+    }),
+}));
 
 interface FolderTreeProps {
+  /** The Documents to show, already filtered. */
+  documents: readonly Document[];
+  /**
+   * While filtering (by Tag), Folders with none of `documents` below them are
+   * left out, and the rest show their contents.
+   */
+  filtering: boolean;
   /** Shows an input for naming a new Folder there. */
   newFolderIn: NewFolderPlace;
   onNewFolder(parentId: string | null): void;
   onNewFolderDone(): void;
+  /** A Document's row, at a depth: 0 at the top level. */
+  renderDocument(item: Document, depth: number): ReactNode;
 }
 
 /**
- * The Documents section's Folder tree: "All Documents", then the Folders,
- * nested. Clicking one shows only its Documents (sub-Folders included).
- * Documents, and Folders, are moved by dropping them on a Folder; dropping on
- * "All Documents" unfiles a Document or moves a Folder to the top level.
+ * The Documents section's tree: Folders, each with its sub-Folders and then
+ * its Documents one step deeper, and then the Documents in no Folder.
+ * Clicking a Folder folds or unfolds it. Documents and Folders are moved by
+ * dropping them on a Folder, or on the "Documents" label for the top level.
  */
-export function FolderTree({ newFolderIn, onNewFolder, onNewFolderDone }: FolderTreeProps) {
+export function FolderTree(props: FolderTreeProps) {
+  const { documents, filtering, newFolderIn, onNewFolder, onNewFolderDone, renderDocument } = props;
   const t = useT();
   const folders = useAppStore((state) => state.folders);
-  const folderFilter = useAppStore((state) => state.folderFilter);
-  const filterByFolder = useAppStore((state) => state.filterByFolder);
+  const collapsed = useFolderTree((state) => state.collapsed);
+  const reveal = useFolderTree((state) => state.reveal);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [deleting, setDeleting] = useState<Folder | null>(null);
 
-  // A new sub-Folder is named inside its parent, so open the parent.
+  // A new sub-Folder is named inside its parent, so unfold the parent.
   useEffect(() => {
-    if (typeof newFolderIn === "string") setExpanded((open) => new Set(open).add(newFolderIn));
-  }, [newFolderIn]);
+    if (typeof newFolderIn === "string") reveal(newFolderIn);
+  }, [newFolderIn, reveal]);
 
-  const toggle = (id: string) =>
-    setExpanded((open) => {
-      const next = new Set(open);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
+  /** Each Folder's Documents; a Document whose Folder isn't listed shows at the top level. */
+  const byFolder = useMemo(() => {
+    const known = new Set(folders.map((folder) => folder.id));
+    const grouped = new Map<string | null, Document[]>();
+    for (const item of documents) {
+      const folderId = item.folderId !== null && known.has(item.folderId) ? item.folderId : null;
+      const list = grouped.get(folderId) ?? [];
+      list.push(item);
+      grouped.set(folderId, list);
+    }
+    return grouped;
+  }, [documents, folders]);
 
-  if (folders.length === 0 && newFolderIn === undefined) return null;
+  /** While filtering: whether a Folder has a shown Document anywhere below it. */
+  const hasDocuments = (node: FolderNode): boolean =>
+    (byFolder.get(node.folder.id)?.length ?? 0) > 0 || node.children.some(hasDocuments);
 
-  const renderNodes = (
+  const renderLevel = (
     nodes: readonly FolderNode[],
     parentId: string | null,
     depth: number,
-  ): ReactNode => (
-    <ul>
-      {nodes.map((node) => (
-        <FolderItem
-          key={node.folder.id}
-          node={node}
-          expanded={expanded.has(node.folder.id)}
-          selected={folderFilter === node.folder.id}
-          onToggle={() => toggle(node.folder.id)}
-          onSelect={() => void filterByFolder(node.folder.id)}
-          onNewFolder={() => onNewFolder(node.folder.id)}
-          onDelete={() => setDeleting(node.folder)}
-        >
-          {renderNodes(node.children, node.folder.id, depth + 1)}
-        </FolderItem>
-      ))}
-      {newFolderIn === parentId && (
-        <li>
-          <NewFolderInput parentId={parentId} depth={depth} onDone={onNewFolderDone} />
-        </li>
-      )}
-    </ul>
-  );
+  ): ReactNode => {
+    const shown = filtering ? nodes.filter(hasDocuments) : nodes;
+    const items = byFolder.get(parentId) ?? [];
+    return (
+      <>
+        {shown.map((node) => (
+          <FolderItem
+            key={node.folder.id}
+            node={node}
+            expanded={filtering || !collapsed.has(node.folder.id)}
+            onNewFolder={() => onNewFolder(node.folder.id)}
+            onDelete={() => setDeleting(node.folder)}
+          >
+            {renderLevel(node.children, node.folder.id, depth + 1)}
+          </FolderItem>
+        ))}
+        {newFolderIn === parentId && (
+          <li>
+            <NewFolderInput parentId={parentId} depth={depth} onDone={onNewFolderDone} />
+          </li>
+        )}
+        {items.map((item) => renderDocument(item, depth))}
+      </>
+    );
+  };
 
   return (
-    <nav aria-label={t("folders.label")} className="mx-3 mb-1 border-b border-gray-200 pb-1">
-      <AllDocumentsItem
-        selected={folderFilter === null}
-        onSelect={() => void filterByFolder(null)}
-      />
-      {renderNodes(tree, null, 0)}
+    <>
+      <ul aria-label={t("folders.label")} data-testid="document-tree">
+        {renderLevel(tree, null, 0)}
+      </ul>
       <DeleteFolderDialog target={deleting} onClose={() => setDeleting(null)} />
-    </nav>
+    </>
   );
 }
 
 /**
- * Makes a row a drop target for Documents and Folders dragged within the
- * sidebar. `folderId` is where they go: a Folder, or null for "All Documents".
- * A Folder can't be dropped into itself or below itself.
+ * Makes an element a drop target for Documents and Folders dragged within
+ * the sidebar. `folderId` is where they go: a Folder, or null for the top
+ * level. A Folder can't be dropped into itself or below itself. What lands is
+ * shown: its Folder unfolds.
  */
-function useDropTarget(folderId: string | null) {
+export function useDropTarget(folderId: string | null) {
   const folders = useAppStore((state) => state.folders);
   const moveDocument = useAppStore((state) => state.moveDocument);
   const moveFolder = useAppStore((state) => state.moveFolder);
+  const reveal = useFolderTree((state) => state.reveal);
   const [over, setOver] = useState(false);
 
   const accepts = (drag: SidebarDrag) =>
@@ -141,6 +207,7 @@ function useDropTarget(folderId: string | null) {
         setOver(false);
         if (!drag || !accepts(drag)) return;
         event.preventDefault();
+        reveal(folderId);
         if (drag.kind === "document") void moveDocument(drag.id, folderId);
         else void moveFolder(drag.id, folderId);
       },
@@ -148,76 +215,40 @@ function useDropTarget(folderId: string | null) {
   };
 }
 
-const rowClass = (selected: boolean, over: boolean) =>
-  `group my-[1px] flex items-center gap-[2px] rounded-[9px] py-[3px] pr-1 text-sm ${
-    over ? "bg-sky-100 ring-1 ring-sky-400" : selected ? "bg-gray-200" : "hover:bg-gray-100"
-  }`;
-
-function AllDocumentsItem({ selected, onSelect }: { selected: boolean; onSelect(): void }) {
-  const t = useT();
-  const drop = useDropTarget(null);
-  return (
-    <div data-testid="all-documents" className={rowClass(selected, drop.over)} style={indent(0)}>
-      <button
-        type="button"
-        aria-current={selected ? "true" : undefined}
-        onClick={onSelect}
-        {...drop.handlers}
-        className="flex min-w-0 flex-1 items-center gap-[6px] py-[2px] text-left"
-        style={{ paddingLeft: CHEVRON_PX }}
-      >
-        <AllDocumentsIcon className="size-4 shrink-0" />
-        <span className="truncate text-gray-700">{t("folders.all")}</span>
-      </button>
-    </div>
-  );
-}
-
 interface FolderItemProps {
   node: FolderNode;
   expanded: boolean;
-  selected: boolean;
-  onToggle(): void;
-  onSelect(): void;
   onNewFolder(): void;
   onDelete(): void;
-  /** The sub-Folders' list, shown while expanded. */
+  /** What is inside: sub-Folders, then Documents, shown while unfolded. */
   children: ReactNode;
 }
 
-function FolderItem(props: FolderItemProps) {
-  const { node, expanded, selected, onToggle, onSelect, onNewFolder, onDelete, children } = props;
+/** A Folder's row (icon, name, a chevron at its end), and its contents one step deeper. */
+function FolderItem({ node, expanded, onNewFolder, onDelete, children }: FolderItemProps) {
   const { folder, depth } = node;
   const t = useT();
   const renameFolder = useAppStore((state) => state.renameFolder);
+  const toggle = useFolderTree((state) => state.toggle);
   const drop = useDropTarget(folder.id);
   const [renaming, setRenaming] = useState(false);
-  const hasChildren = node.children.length > 0;
+  const Chevron = expanded ? ChevronDownLineIcon : ChevronRightLineIcon;
 
   return (
     <li>
       <div
         data-testid="folder-item"
         data-folder-id={folder.id}
-        className={rowClass(selected, drop.over)}
-        style={indent(depth)}
+        data-depth={depth}
+        {...drop.handlers}
+        className={rowClass(false, "item", drop.over)}
       >
-        {hasChildren ? (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={t(expanded ? "folders.collapse" : "folders.expand", { name: folder.name })}
-            onClick={onToggle}
-            className="shrink-0 rounded-[6px] p-[2px] text-gray-400 hover:bg-gray-200 hover:text-gray-700"
-          >
-            <ChevronIcon className={`size-3 transition-transform ${expanded ? "rotate-90" : ""}`} />
-          </button>
-        ) : (
-          <span className="size-4 shrink-0" />
-        )}
         {renaming ? (
-          <div className="flex min-w-0 flex-1 items-center gap-[6px]">
-            <FolderIcon className="size-4 shrink-0" />
+          <div
+            className="flex h-full w-full min-w-0 items-center gap-2 pr-1"
+            style={rowPadding(depth)}
+          >
+            <FolderLineIcon className={rowIconClass(false)} />
             <FolderNameInput
               initial={folder.name}
               label={t("folders.renameLabel", { name: folder.name })}
@@ -230,41 +261,43 @@ function FolderItem(props: FolderItemProps) {
         ) : (
           <button
             type="button"
-            data-testid="folder-filter"
-            aria-current={selected ? "true" : undefined}
-            onClick={onSelect}
+            data-testid="folder-toggle"
+            aria-expanded={expanded}
+            title={folder.name}
+            onClick={() => toggle(folder.id)}
             draggable
             onDragStart={(event) => startSidebarDrag(event, { kind: "folder", id: folder.id })}
             onDragEnd={endSidebarDrag}
-            {...drop.handlers}
-            className="flex min-w-0 flex-1 items-center gap-[6px] py-[2px] text-left"
+            className={rowButtonClass}
+            style={rowPadding(depth)}
           >
-            <FolderIcon className="size-4 shrink-0" />
-            <span className="truncate text-gray-700" title={folder.name}>
+            <FolderLineIcon className={rowIconClass(false)} />
+            <span data-testid="row-text" className="min-w-0 flex-1 truncate">
               {folder.name}
             </span>
+            <Chevron className="size-3.5 shrink-0 text-ink-meta" />
           </button>
         )}
         {!renaming && (
-          <div className="flex shrink-0 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div className={rowActionsClass}>
             <button
               type="button"
               data-testid="new-subfolder"
               aria-label={t("folders.newInside", { name: folder.name })}
               title={t("folders.newInside", { name: folder.name })}
               onClick={onNewFolder}
-              className={actionButton}
+              className={rowActionButtonClass}
             >
-              <FolderPlusIcon className="size-[14px]" />
+              <FolderPlusLineIcon className="size-[15px]" />
             </button>
             <button
               type="button"
               aria-label={t("folders.rename", { name: folder.name })}
               title={t("folders.rename", { name: folder.name })}
               onClick={() => setRenaming(true)}
-              className={actionButton}
+              className={rowActionButtonClass}
             >
-              <PencilIcon className="size-[14px]" />
+              <PencilLineIcon className="size-[15px]" />
             </button>
             <button
               type="button"
@@ -272,14 +305,14 @@ function FolderItem(props: FolderItemProps) {
               aria-label={t("folders.delete", { name: folder.name })}
               title={t("folders.delete", { name: folder.name })}
               onClick={onDelete}
-              className={actionButton}
+              className={rowActionButtonClass}
             >
-              <TrashIcon className="size-[14px]" />
+              <TrashLineIcon className="size-[15px]" />
             </button>
           </div>
         )}
       </div>
-      {expanded && children}
+      {expanded && <ul>{children}</ul>}
     </li>
   );
 }
@@ -289,11 +322,8 @@ function NewFolderInput(props: { parentId: string | null; depth: number; onDone(
   const t = useT();
   const createFolder = useAppStore((state) => state.createFolder);
   return (
-    <div
-      className="my-[1px] flex items-center gap-[6px] py-[3px] pr-1"
-      style={{ paddingLeft: indent(depth).paddingLeft + CHEVRON_PX }}
-    >
-      <FolderIcon className="size-4 shrink-0" />
+    <div className="flex h-7 items-center gap-2 pr-1" style={rowPadding(depth)}>
+      <FolderLineIcon className={rowIconClass(false)} />
       <FolderNameInput
         initial=""
         label={t("folders.nameLabel")}
@@ -303,6 +333,10 @@ function NewFolderInput(props: { parentId: string | null; depth: number; onDone(
     </div>
   );
 }
+
+/** A name being typed in a row. */
+export const rowInputClass =
+  "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-accent";
 
 /** Enter or leaving the field submits a non-empty name; Esc cancels. */
 function FolderNameInput(props: {
@@ -343,23 +377,16 @@ function FolderNameInput(props: {
         }
       }}
       onBlur={() => finish(true)}
-      className="w-full min-w-0 rounded-[6px] border border-gray-300 bg-white px-1 text-sm text-gray-700 outline-none focus:border-gray-400"
+      className={rowInputClass}
     />
   );
 }
 
-/** Asks before deleting a Folder, and says its Documents are kept. A native modal <dialog>. */
+/** Asks before deleting a Folder, and says its Documents are kept. */
 function DeleteFolderDialog({ target, onClose }: { target: Folder | null; onClose(): void }) {
   const t = useT();
-  const dialog = useRef<HTMLDialogElement>(null);
+  const dialog = useModal(target !== null);
   const deleteFolder = useAppStore((state) => state.deleteFolder);
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (target && !element.open) element.showModal();
-    if (!target && element.open) element.close();
-  }, [target]);
 
   const confirm = () => {
     if (target) void deleteFolder(target.id);
@@ -371,30 +398,26 @@ function DeleteFolderDialog({ target, onClose }: { target: Folder | null; onClos
       ref={dialog}
       onClose={onClose}
       aria-labelledby="delete-folder-title"
-      className="m-auto w-96 rounded-[9px] bg-white p-4 text-gray-800 shadow-custom-focus backdrop:bg-black/20"
+      className={`${dialogClass} w-[26rem]`}
     >
-      <h2 id="delete-folder-title" className="text-lg font-semibold">
-        {t("folders.delete.title")}
-      </h2>
-      <p className="mt-2 text-sm break-words text-gray-600">
-        {t("folders.delete.body", { name: target?.name ?? "" })}
-      </p>
-      <div className="mt-4 flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-[9px] border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100"
-        >
-          {t("folders.delete.cancel")}
-        </button>
-        <button
-          type="button"
-          data-testid="confirm-delete-folder"
-          onClick={confirm}
-          className="rounded-[9px] bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
-        >
-          {t("folders.delete.confirm")}
-        </button>
+      <div className={dialogBodyClass}>
+        <h2 id="delete-folder-title" className={dialogTitleClass}>
+          {t("folders.delete.title")}
+        </h2>
+        <p className={dialogTextClass}>{t("folders.delete.body", { name: target?.name ?? "" })}</p>
+        <div className={dialogActionsClass}>
+          <button type="button" onClick={onClose} className={buttonClass}>
+            {t("folders.delete.cancel")}
+          </button>
+          <button
+            type="button"
+            data-testid="confirm-delete-folder"
+            onClick={confirm}
+            className={dangerButtonClass}
+          >
+            {t("folders.delete.confirm")}
+          </button>
+        </div>
       </div>
     </dialog>
   );

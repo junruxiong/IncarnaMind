@@ -17,8 +17,21 @@ import { core, files } from "./core";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
-/** The pages of the Settings dialog. */
-export type SettingsPage = "general" | "privacy";
+/** The pages of the Settings dialog, in the order its list shows them. */
+export const settingsPages = [
+  "general",
+  "chat-model",
+  "search",
+  "connectors",
+  "skills",
+  "approvals",
+  "privacy",
+] as const;
+
+export type SettingsPage = (typeof settingsPages)[number];
+
+const isSettingsPage = (page: unknown): page is SettingsPage =>
+  settingsPages.some((each) => each === page);
 
 /** What the Document viewer shows: one Document, opened at a location. */
 export interface ViewerTarget extends DocumentLocation {
@@ -53,13 +66,11 @@ interface AppState {
   settingsPage: SettingsPage;
   /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
   folders: Folder[];
-  /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
-  folderFilter: string | null;
   /** Every Tag, in name order. */
   tags: Tag[];
-  /** The Tag whose Documents the sidebar shows, within `folderFilter` if that is set too. Null: any. */
+  /** The Tag whose Documents the sidebar shows. Null: any. */
   tagFilter: string | null;
-  /** The Documents matching both filters, by id, as the core last listed them. Null until listed. */
+  /** The Documents with that Tag, by id, as the core last listed them. Null until listed. */
   filteredDocumentIds: ReadonlySet<string> | null;
   tagsDialogOpen: boolean;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
@@ -75,7 +86,10 @@ interface AppState {
   openViewer(): void;
   closeViewer(): void;
   toggleViewer(): void;
-  /** Opens Settings at a page: the general one unless asked otherwise, e.g. Privacy to allow a declined flow. */
+  /**
+   * Opens Settings at a page: the general one unless asked otherwise, e.g.
+   * Chat model to set one up, or Privacy to allow a declined flow.
+   */
   openSettings(page?: SettingsPage): void;
   closeSettings(): void;
   showSettingsPage(page: SettingsPage): void;
@@ -99,13 +113,11 @@ interface AppState {
   retryEmbedding(): Promise<void>;
   /** Files a Document in a Folder, or unfiles it with null. */
   moveDocument(documentId: string, folderId: string | null): Promise<void>;
-  /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
-  filterByFolder(folderId: string | null): Promise<void>;
   createFolder(name: string, parentId: string | null): Promise<void>;
   renameFolder(id: string, name: string): Promise<void>;
   moveFolder(id: string, parentId: string | null): Promise<void>;
   deleteFolder(id: string): Promise<void>;
-  /** Shows only the Documents with a Tag (in the filtered Folder, if any); null shows them whatever their Tags. */
+  /** Shows only the Documents with a Tag; null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
   removeDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -131,12 +143,10 @@ const upsert = (documents: Document[], item: Document) =>
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
 
-/** The Documents the sidebar lists: all of them, or those matching its Folder and Tag filters. */
+/** The Documents the sidebar lists: all of them, or those with the Tag it filters by. */
 export const selectVisibleDocuments = (state: AppState): Document[] => {
   const ids = state.filteredDocumentIds;
-  if ((state.folderFilter === null && state.tagFilter === null) || ids === null) {
-    return state.documents;
-  }
+  if (state.tagFilter === null || ids === null) return state.documents;
   return state.documents.filter((item) => ids.has(item.id));
 };
 
@@ -166,7 +176,6 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
-    folderFilter: null,
     tags: [],
     tagFilter: null,
     filteredDocumentIds: null,
@@ -275,7 +284,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     openSettings(page) {
       // Also a click handler: anything but a page name opens the general page.
-      set({ settingsOpen: true, settingsPage: page === "privacy" ? "privacy" : "general" });
+      set({ settingsOpen: true, settingsPage: isSettingsPage(page) ? page : "general" });
     },
 
     showSettingsPage(page) {
@@ -361,12 +370,6 @@ export const useAppStore = create<AppState>()((set, get) => {
         await core.moveDocument(documentId, folderId);
       }),
 
-    async filterByFolder(folderId) {
-      if (folderId === get().folderFilter) return;
-      set({ folderFilter: folderId, filteredDocumentIds: null });
-      await refreshFilter();
-    },
-
     createFolder: (name, parentId) =>
       attempt(async () => {
         await core.createFolder({ name, parentId });
@@ -443,45 +446,34 @@ export const useAppStore = create<AppState>()((set, get) => {
 /** Counts filter requests, so a slow answer to an old one never overwrites a newer one. */
 let filterRequests = 0;
 
-/** Asks the core which Documents match the filters: in the Folder (sub-Folders included), with the Tag. */
+/** Asks the core which Documents have the Tag the sidebar filters by. */
 async function refreshFilter(): Promise<void> {
   const request = ++filterRequests;
-  const { folderFilter: folderId, tagFilter: tagId } = useAppStore.getState();
-  if (folderId === null && tagId === null) {
+  const { tagFilter: tagId } = useAppStore.getState();
+  if (tagId === null) {
     useAppStore.setState({ filteredDocumentIds: null });
     return;
   }
   try {
-    const listed = await core.listDocuments({
-      ...(folderId !== null && { folderId, includeSubfolders: true }),
-      ...(tagId !== null && { tagId }),
-    });
+    const listed = await core.listDocuments({ tagId });
     if (request === filterRequests) {
       useAppStore.setState({ filteredDocumentIds: new Set(listed.map((item) => item.id)) });
     }
   } catch (error) {
     if (request !== filterRequests) return;
-    const { folders, tags } = useAppStore.getState();
-    const folderGone = folderId !== null && !folders.some((folder) => folder.id === folderId);
-    const tagGone = tagId !== null && !tags.some((tag) => tag.id === tagId);
-    // The Folder or Tag was deleted meanwhile: drop that filter. Anything else is a failure.
-    if (!folderGone && !tagGone) {
+    // The Tag was deleted meanwhile: drop the filter. Anything else is a failure.
+    if (useAppStore.getState().tags.some((tag) => tag.id === tagId)) {
       useAppStore.setState({ actionError: messageOf(error) });
       return;
     }
-    useAppStore.setState({
-      folderFilter: folderGone ? null : folderId,
-      tagFilter: tagGone ? null : tagId,
-      filteredDocumentIds: null,
-    });
-    void refreshFilter();
+    useAppStore.setState({ tagFilter: null, filteredDocumentIds: null });
+    filterRequests++; // nothing to filter by: an answer still to come is for an old filter
   }
 }
 
 /** Refreshes the filtered list, if the sidebar is filtered. */
 function refreshFilterIfAny(): void {
-  const { folderFilter, tagFilter } = useAppStore.getState();
-  if (folderFilter !== null || tagFilter !== null) void refreshFilter();
+  if (useAppStore.getState().tagFilter !== null) void refreshFilter();
   else filterRequests++; // nothing to filter by: an answer still to come is for an old filter
 }
 
@@ -509,24 +501,14 @@ core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embe
 // The embedding model can change in Settings or by local mode, and a rebuild reports its progress.
 core.on("embedding.changed", (embedding) => useAppStore.setState({ embedding }));
 
-// Folders change through this window or another: follow the list, and keep the filter right.
-core.on("folders.changed", (folders) => {
-  const { folderFilter } = useAppStore.getState();
-  useAppStore.setState({ folders });
-  if (folderFilter !== null && !folders.some((folder) => folder.id === folderFilter)) {
-    // The filtered Folder was deleted, perhaps with a parent: drop that filter.
-    useAppStore.setState({ folderFilter: null, filteredDocumentIds: null });
-  }
-  // Moving a Folder can change which Documents are below the filtered one.
-  refreshFilterIfAny();
-});
+// Folders change through this window or another: follow the list. The sidebar's tree follows it.
+core.on("folders.changed", (folders) => useAppStore.setState({ folders }));
 
 // Documents moved between Folders, or unfiled by a Folder's deletion.
 core.on("documents.moved", (moved) => {
   useAppStore.setState((state) => ({
     documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
   }));
-  refreshFilterIfAny();
 });
 
 // Tags change through this window or another: follow the list, and drop a filter by a deleted Tag.
