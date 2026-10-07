@@ -8,7 +8,13 @@ describe("Settings", () => {
 
     expect(await core.getSettings()).toEqual({
       user: { language: "system", chatModel: null },
-      device: { sidebarWidth: 270, viewerWidth: 420, chatSetupDismissed: false },
+      device: {
+        sidebarWidth: 270,
+        viewerWidth: 420,
+        chatSetupDismissed: false,
+        skillScriptsEnabled: true,
+        skillScriptTimeoutSeconds: 60,
+      },
       language: "en",
     });
   });
@@ -59,23 +65,29 @@ describe("Settings", () => {
       sidebarWidth: 320,
       viewerWidth: 420,
       chatSetupDismissed: false,
+      skillScriptsEnabled: true,
+      skillScriptTimeoutSeconds: 60,
     });
   });
 
   test("settings survive a restart", async () => {
     const dataDir = await createTempDataFolder();
     const before = startCore(dataDir);
-    await before.updateSettings({
-      user: { language: "zh-CN" },
-      device: { sidebarWidth: 300, viewerWidth: 500, chatSetupDismissed: true },
-    });
+    const device = {
+      sidebarWidth: 300,
+      viewerWidth: 500,
+      chatSetupDismissed: true,
+      skillScriptsEnabled: false,
+      skillScriptTimeoutSeconds: 15,
+    };
+    await before.updateSettings({ user: { language: "zh-CN" }, device });
     before.close();
 
     const after = startCore(dataDir);
 
     expect(await after.getSettings()).toEqual({
       user: { language: "zh-CN", chatModel: null },
-      device: { sidebarWidth: 300, viewerWidth: 500, chatSetupDismissed: true },
+      device,
       language: "zh-CN",
     });
   });
@@ -87,6 +99,19 @@ describe("Settings", () => {
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
     { name: "a width that isn't a number", patch: { device: { viewerWidth: "wide" } } },
+    {
+      name: "a script switch that isn't true or false",
+      patch: { device: { skillScriptsEnabled: 1 } },
+    },
+    { name: "a script timeout of 0", patch: { device: { skillScriptTimeoutSeconds: 0 } } },
+    {
+      name: "a script timeout over an hour",
+      patch: { device: { skillScriptTimeoutSeconds: 3601 } },
+    },
+    {
+      name: "a script timeout in part seconds",
+      patch: { device: { skillScriptTimeoutSeconds: 1.5 } },
+    },
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },

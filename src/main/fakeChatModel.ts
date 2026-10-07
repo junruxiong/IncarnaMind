@@ -18,6 +18,11 @@
  * gets it called once first, its required arguments set to the Question's
  * last word; the Answer then starts with what the call gave back.
  *
+ * With Skill scripts: a Question that names a listed Skill and one of its
+ * scripts by path (e.g. "greeter scripts/hello.js") gets it run once first
+ * with run_skill_script, with the Question's last word as its one argument;
+ * the Answer then starts with what the script printed (or why it didn't run).
+ *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  */
 import { MockLanguageModelV4 } from "ai/test";
@@ -172,6 +177,17 @@ function offeredTags(options: GenerateOptions): string[] {
 type OfferedTool = NonNullable<Parameters<MockLanguageModelV4["doStream"]>[0]["tools"]>[number];
 type Reply = { text: string } | { tool: string; input: unknown };
 
+/** The last word of a Question, without punctuation: what a scripted call passes on. */
+function lastWordOf(question: string): string {
+  return (
+    question
+      .split(/\s+/)
+      .filter(Boolean)
+      .at(-1)
+      ?.replace(/[^\p{L}\p{N}_-]/gu, "") ?? ""
+  );
+}
+
 /**
  * A Connector Tool the Question names by its own name (after the Connector's
  * prefix, e.g. "book_boat" for "tides__book_boat"), with every required
@@ -181,12 +197,7 @@ function connectorToolNamed(
   question: string,
   tools: readonly OfferedTool[],
 ): { tool: string; own: string; input: Record<string, string> } | null {
-  const lastWord =
-    question
-      .split(/\s+/)
-      .filter(Boolean)
-      .at(-1)
-      ?.replace(/[^\p{L}\p{N}_-]/gu, "") ?? "";
+  const lastWord = lastWordOf(question);
   for (const each of tools) {
     if (each.type !== "function") continue;
     const own = each.name.split("__")[1];
@@ -221,13 +232,34 @@ function lastResult(prompt: Prompt, tool: string): string | undefined {
   return found;
 }
 
+/** A Skill script the Question names, with a listed Skill: to run with run_skill_script. */
+function scriptNamed(
+  prompt: Prompt,
+  question: string,
+  tools: readonly string[],
+): { skill: string; script: string; args: string[] } | null {
+  if (!tools.includes("run_skill_script")) return null;
+  const script = /(\S+\.(?:js|mjs|cjs|py|sh))(?=\s|$)/.exec(question)?.[1];
+  const skill = skillNamed(prompt, question);
+  return script && skill ? { skill, script, args: [lastWordOf(question)] } : null;
+}
+
 /**
- * What the model does next. A Question that names a Connector Tool gets it
- * called once first, and the Answer starts with what it said (e.g. that the
- * User denied it).
+ * What the model does next. A Question that names a Skill script, or a
+ * Connector Tool, gets it called once first, and the Answer starts with what
+ * it said (e.g. that the User denied it).
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
+  const run = scriptNamed(prompt, lastQuestion(prompt), names);
+  if (run) {
+    const said = lastResult(prompt, "run_skill_script");
+    if (said === undefined) return { tool: "run_skill_script", input: run };
+    // What it printed, or the whole result when it didn't run.
+    const printed = /<stdout>\n([\s\S]*?)\n?<\/stdout>/.exec(said)?.[1] ?? said;
+    const reply = answerReply(prompt, names);
+    return "text" in reply ? { text: `${run.script} said: ${printed}\n\n${reply.text}` } : reply;
+  }
   const named = connectorToolNamed(lastQuestion(prompt), tools);
   if (!named) return answerReply(prompt, names);
   const said = lastResult(prompt, named.tool);

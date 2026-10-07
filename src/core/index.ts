@@ -13,6 +13,7 @@ export type {
   ModelFile,
   Paths,
   ProcessLauncher,
+  ScriptRuntimes,
   SpawnOptions,
 } from "./adapters";
 export type {

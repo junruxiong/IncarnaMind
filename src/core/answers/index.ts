@@ -13,6 +13,9 @@
  * Connector Tools that ask first (see ../approvals) pause the Answer inside
  * their call until the User decides; the call's card records the decision.
  * A denied call isn't made: the model is told so, and the Answer carries on.
+ * Skill scripts (`run_skill_script`, see ../skills/scripts) do the same,
+ * unless the User always runs that Skill's scripts; their card also keeps how
+ * the run ended and what it wrote. Stopping the Answer stops a running script.
  *
  * A Question with a Search scope searches only the Documents it covers,
  * resolved when the Question is asked (or its Answer regenerated). When the
@@ -37,6 +40,7 @@ import {
   QUESTION_BLOCK,
   type SearchScope,
   type SkillAvailability,
+  type SkillScriptRun,
   type ToolCallApproval,
 } from "../api";
 import type { ToolCallToApprove } from "../approvals";
@@ -46,7 +50,13 @@ import type { createEventHub } from "../events";
 import type { MindContent } from "../mindContent";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
-import type { SkillSession } from "../skills";
+import type { SkillScript, SkillSession } from "../skills";
+import {
+  parseScriptArgs,
+  type ScriptToRun,
+  scriptNotRun,
+  scriptResultText,
+} from "../skills/scripts";
 import {
   contentHash,
   createElement,
@@ -63,7 +73,14 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import type { AnswerEngine, AnswerSkillTools, AnswerTools, ExternalTool } from "./engine";
+import {
+  type AnswerEngine,
+  type AnswerSkillTools,
+  type AnswerTools,
+  type ExternalTool,
+  RUN_SKILL_SCRIPT_TOOL,
+  scriptCallInput,
+} from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -126,8 +143,10 @@ export interface AnswersOptions {
   connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
   /** The Connectors that are on but wait for the User to sign in: their Tools are skipped. */
   connectorsNeedingSignIn?(): { id: string; name: string }[];
-  /** Asking the User before a Connector Tool runs. */
+  /** Asking the User before a Connector Tool or a Skill script runs. */
   approvals: AnswerApprovals;
+  /** Running Skill scripts. */
+  scripts: AnswerScripts;
   reportError(error: unknown): void;
 }
 
@@ -135,8 +154,22 @@ export interface AnswersOptions {
 export interface AnswerApprovals {
   /** Whether a call of this Tool asks the User first: their policy for it, or else its read-only claim. */
   toolNeedsApproval(connectorId: string, tool: string, readOnly: boolean): boolean;
+  /** Whether a run of one of this Skill's scripts asks the User first: unless they always run. */
+  scriptNeedsApproval(skillId: string): boolean;
   /** Asks and waits: true if allowed, false if denied. Rejects if `signal` aborts first, withdrawing the request. */
   request(call: ToolCallToApprove, signal: AbortSignal): Promise<boolean>;
+}
+
+/** What Answers need to run Skill scripts (see ../skills/scripts). */
+export interface AnswerScripts {
+  /** Whether Skill scripts may run: the User's switch in Settings. */
+  enabled(): boolean;
+  /** How long a script may run now, in seconds. */
+  timeoutSeconds(): number;
+  /** Throws, saying why, for a script that can't run here (its kind), before the User is asked. */
+  check(script: string): void;
+  /** Runs it; rejects, saying why, when it can't start (e.g. its interpreter isn't installed). */
+  run(request: ScriptToRun): Promise<SkillScriptRun>;
 }
 
 /** What Answers need of Skills (see ../skills). */
@@ -153,6 +186,12 @@ const FORCED_SKILL_CALL = "forced-skill";
 /** What the model is told when the User denies a call: a Tool result, so the Answer carries on. */
 const deniedResult = (tool: ExternalTool) =>
   `The User denied this call of ${tool.source.tool} (from the Connector "${tool.source.connectorName}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
+
+/** What the model is told when the User denies running a Skill script. */
+const deniedScriptResult = (script: SkillScript) =>
+  `The User denied running ${script.path} of the Skill "${script.skillName}", so it didn't run. Carry on without it, don't run it again, and say what wasn't done.`;
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
  * What the core gives Answers from Documents: `AnswerDocuments`, counting and
@@ -386,8 +425,9 @@ export function createAnswers(options: AnswersOptions) {
     const callFinished = (id: string, ok: boolean, resultCount: number | null) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
-      // A denied call returned the model a result, but never ran.
-      call.status = ok && call.approval !== "denied" ? "done" : "failed";
+      // A denied call returned the model a result, but never ran; a script that didn't exit with 0 failed.
+      const ran = call.script === undefined || call.script.exitCode === 0;
+      call.status = ok && call.approval !== "denied" && ran ? "done" : "failed";
       call.resultCount = resultCount;
       events.emit("answer.toolCallFinished", { mindId, answerId, call: { ...call } });
       writeSoon();
@@ -396,6 +436,13 @@ export function createAnswers(options: AnswersOptions) {
       const call = toolCalls.find((each) => each.id === id);
       if (finished || !call) return;
       call.approval = approval;
+      writeSoon();
+    };
+    /** Keeps how a script's run went on its card. */
+    const setScriptRun = (id: string, run: SkillScriptRun) => {
+      const call = toolCalls.find((each) => each.id === id);
+      if (finished || !call) return;
+      call.script = run;
       writeSoon();
     };
 
@@ -431,6 +478,7 @@ export function createAnswers(options: AnswersOptions) {
             mindId,
             answerId,
             toolCallId,
+            subject: { kind: "tool", connectorId, tool: name },
             connector: { id: connectorId, name: connectorName },
             tool: name,
             title: tool.title ?? null,
@@ -443,6 +491,86 @@ export function createAnswers(options: AnswersOptions) {
         return allowed ? tool.call(input, signal, call) : deniedResult(tool);
       },
     });
+
+    /**
+     * `run_skill_script`: checks the script (a script file of a Skill this
+     * Answer may use, of a kind that can run here), asks the User unless the
+     * Skill's scripts always run, then runs it, stopping it if the Answer
+     * stops. Its card shows the Skill, the script and the arguments, then how
+     * the run went, or why it couldn't run. Like a Connector Tool that asks
+     * (see `withApproval`), it records its card itself, whichever comes first.
+     */
+    const runScript = async (
+      skills: SkillSession,
+      input: Record<string, unknown>,
+      signal: AbortSignal,
+      call: { toolCallId: string },
+    ): Promise<string> => {
+      const { toolCallId } = call;
+      const shown = scriptCallInput(input);
+      callStarted({
+        id: toolCallId,
+        tool: RUN_SKILL_SCRIPT_TOOL,
+        source: "skill",
+        input: shown,
+        status: "running",
+        resultCount: null,
+      });
+      /** It can't run: the card and the model say why. */
+      const cantRun = (error: unknown): never => {
+        const message = messageOf(error);
+        setScriptRun(toolCallId, scriptNotRun(message));
+        throw new Error(message);
+      };
+      let script: SkillScript;
+      let args: string[];
+      try {
+        args = parseScriptArgs(input.args);
+        script = await skills.script(shown.skill, shown.script);
+        options.scripts.check(script.path);
+      } catch (error) {
+        return cantRun(error);
+      }
+      const stopped = AbortSignal.any([signal, controller.signal]);
+      if (options.approvals.scriptNeedsApproval(script.skillId)) {
+        // Already reported by the engine, after all: it waits too.
+        setApproval(toolCallId, "waiting");
+        const allowed = await options.approvals.request(
+          {
+            mindId,
+            answerId,
+            toolCallId,
+            subject: { kind: "skill-script", skillId: script.skillId },
+            skill: { id: script.skillId, name: script.skillName },
+            tool: RUN_SKILL_SCRIPT_TOOL,
+            script: script.path,
+            args,
+          },
+          stopped,
+        );
+        setApproval(toolCallId, allowed ? "allowed" : "denied");
+        if (!allowed) return deniedScriptResult(script);
+      }
+      // Turned off since the Answer started.
+      if (!options.scripts.enabled()) {
+        return cantRun("Skill scripts are turned off in Settings, so the script didn't run.");
+      }
+      const timeoutSeconds = options.scripts.timeoutSeconds();
+      let run: SkillScriptRun;
+      try {
+        run = await options.scripts.run({
+          skillDir: script.skillDir,
+          script: script.path,
+          args,
+          timeoutMs: timeoutSeconds * 1000,
+          signal: stopped,
+        });
+      } catch (error) {
+        return cantRun(error);
+      }
+      setScriptRun(toolCallId, run);
+      return scriptResultText(script.path, run, timeoutSeconds);
+    };
 
     /** Opens the Answer's Skills, loading the forced one, shown as its Tool call; false if it failed. */
     const openSkills = async (): Promise<boolean> => {
@@ -537,13 +665,18 @@ export function createAnswers(options: AnswersOptions) {
         cite: (records) => session.tools.cite(records),
         external,
       };
+      // Scripts can run when a Skill has some, unless the User turned them off.
+      const scripts = opened.hasScripts && options.scripts.enabled();
       const skillTools: AnswerSkillTools | null =
         listed.length > 0 || (forced && forced.files.length > 1)
           ? {
               loadable: listed.length > 0,
               useSkill: async (name) =>
-                loadedSkillText(await opened.load(name), { withFiles: true }),
+                loadedSkillText(await opened.load(name), { withFiles: true, scripts }),
               readSkillFile: (skill, path) => opened.readFile(skill, path),
+              ...(scripts && {
+                runScript: (input, signal, call) => runScript(opened, input, signal, call),
+              }),
             }
           : null;
       let outcome: Outcome = { status: "stopped" };
@@ -555,7 +688,7 @@ export function createAnswers(options: AnswersOptions) {
           [
             base,
             documentInstructions(mode, tools.documentCount, passages, documentIds !== null),
-            skillInstructions(listed, forced, withSkillTools),
+            skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(external, mode === "no-documents") : "",
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
           ]

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   SKILL_LIMITS,
+  SKILL_SCRIPT_LIMITS,
   type Skill,
   type SkillImportError,
   type SkillImportPreview,
@@ -142,6 +143,73 @@ export function SkillsSettings() {
         <p className="mt-2 text-sm text-gray-500">{t("skills.import.reading")}</p>
       )}
       {error && <ImportError error={error} />}
+    </section>
+  );
+}
+
+/**
+ * Settings → Skill scripts: the switch that lets Skills run their scripts at
+ * all (each run still asks, unless the Skill's scripts always run), and how
+ * long a script may run before it is stopped. Both belong to this device.
+ */
+export function SkillScriptsSettings() {
+  const t = useT();
+  const enabled = useAppStore((state) => state.settings?.device.skillScriptsEnabled);
+  const timeout = useAppStore((state) => state.settings?.device.skillScriptTimeoutSeconds);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const [draft, setDraft] = useState<string | null>(null);
+  const timeoutId = useId();
+  if (enabled === undefined || timeout === undefined) return null;
+
+  const { minTimeoutSeconds: min, maxTimeoutSeconds: max } = SKILL_SCRIPT_LIMITS;
+  const commit = () => {
+    if (draft === null) return;
+    const seconds = Number(draft);
+    setDraft(null);
+    if (Number.isInteger(seconds) && seconds >= min && seconds <= max && seconds !== timeout) {
+      void updateSettings({ device: { skillScriptTimeoutSeconds: seconds } });
+    }
+  };
+
+  return (
+    <section data-testid="skill-scripts-settings">
+      <h3 className="mb-1 text-sm font-medium">{t("scripts.settings.title")}</h3>
+      <label className="flex items-center gap-2 py-1 text-sm">
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={enabled}
+          data-testid="skill-scripts-enabled"
+          checked={enabled}
+          onChange={(event) =>
+            void updateSettings({ device: { skillScriptsEnabled: event.target.checked } })
+          }
+        />
+        {t("scripts.settings.enabled")}
+      </label>
+      <p className="text-sm text-gray-600">{t("scripts.settings.body")}</p>
+      <div className="mt-2 flex items-center gap-2 text-sm">
+        <label htmlFor={timeoutId} className={enabled ? "" : "opacity-60"}>
+          {t("scripts.settings.timeout")}
+        </label>
+        <input
+          id={timeoutId}
+          type="number"
+          data-testid="skill-scripts-timeout"
+          min={min}
+          max={max}
+          step={1}
+          disabled={!enabled}
+          value={draft ?? String(timeout)}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commit();
+          }}
+          className="w-20 rounded-[6px] border border-gray-300 px-2 py-1 disabled:opacity-60"
+        />
+        <span className={enabled ? "" : "opacity-60"}>{t("scripts.settings.seconds")}</span>
+      </div>
     </section>
   );
 }
