@@ -1,22 +1,94 @@
 /**
- * A local Connector's configuration: checking what the User typed, and
- * reading the `mcpServers` JSON that Claude Desktop and Cursor keep theirs in:
+ * A Connector's configuration: checking what the User typed, and reading the
+ * `mcpServers` JSON that Claude Desktop and Cursor keep theirs in:
  *
- *   { "mcpServers": { "github": { "command": "npx", "args": ["-y", "…"], "env": { "GITHUB_TOKEN": "…" } } } }
+ *   { "mcpServers": {
+ *       "github": { "command": "npx", "args": ["-y", "…"], "env": { "GITHUB_TOKEN": "…" } },
+ *       "linear": { "type": "http", "url": "https://mcp.linear.app/mcp" } } }
  */
 import type { ConnectorImportEntry } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
+import { isLoopbackHost } from "../providers/kinds";
 
 const MAX_NAME_LENGTH = 100;
 const MAX_COMMAND_LENGTH = 4096;
 const MAX_ARGS = 200;
+const MAX_URL_LENGTH = 2048;
+const MAX_CLIENT_ID_LENGTH = 500;
 
 /** What starts a local Connector. `env` holds secrets: it goes to the keychain, never the database. */
 export interface LocalConnectorConfig {
+  transport: "stdio";
   name: string;
   command: string;
   args: string[];
   env: Record<string, string>;
+}
+
+/** An OAuth app the User registered with a service. The secret goes to the keychain. */
+export interface ClientCredentials {
+  clientId: string;
+  clientSecret: string | null;
+}
+
+/** Where a remote Connector is, and the OAuth app it signs in with if the User gave one. */
+export interface RemoteConnectorConfig {
+  transport: "http";
+  name: string;
+  url: string;
+  client: ClientCredentials | null;
+}
+
+export type ConnectorConfig = LocalConnectorConfig | RemoteConnectorConfig;
+
+/**
+ * A remote Connector's URL, checked: https, or http only to this computer,
+ * since its sign-in's tokens travel with every request. The fragment is
+ * dropped: an MCP endpoint (and an OAuth resource) never has one.
+ */
+export function parseRemoteUrl(value: unknown): string {
+  if (typeof value !== "string") throw new InvalidInputError("A Connector's URL must be text.");
+  const text = value.trim();
+  if (!text) throw new InvalidInputError("Enter the server's URL.");
+  if (text.length > MAX_URL_LENGTH) throw new InvalidInputError("That URL is too long.");
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new InvalidInputError(`"${text}" isn't a valid URL.`);
+  }
+  const local = isLoopbackHost(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
+    throw new InvalidInputError(
+      "A remote Connector's URL must start with https:// (http:// only for a server on this computer).",
+    );
+  }
+  if (url.username || url.password) {
+    throw new InvalidInputError(
+      "Leave the user name and password out of the URL: you sign in through your browser.",
+    );
+  }
+  url.hash = "";
+  return url.href;
+}
+
+/** The OAuth app the User entered, if any: a client ID, and a secret only if the service gave one. */
+export function parseClient(value: unknown): ClientCredentials | null {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) throw new InvalidInputError("A Connector's client must be an object.");
+  if (typeof value.clientId !== "string") throw new InvalidInputError("Enter the client ID.");
+  const clientId = value.clientId.trim();
+  if (!clientId) throw new InvalidInputError("Enter the client ID.");
+  if (clientId.length > MAX_CLIENT_ID_LENGTH || /\p{Cc}/u.test(clientId)) {
+    throw new InvalidInputError("That client ID isn't valid.");
+  }
+  const rawSecret = value.clientSecret;
+  if (rawSecret !== undefined && rawSecret !== null && typeof rawSecret !== "string") {
+    throw new InvalidInputError("A client secret must be text.");
+  }
+  const clientSecret = typeof rawSecret === "string" ? rawSecret.trim() : "";
+  if (clientSecret.includes("\0")) throw new InvalidInputError("That client secret isn't valid.");
+  return { clientId, clientSecret: clientSecret || null };
 }
 
 export function parseName(value: unknown): string {
@@ -80,9 +152,22 @@ function parseEnv(value: unknown): Record<string, string> {
   return env;
 }
 
-export function parseAddInput(input: unknown): LocalConnectorConfig {
+/** A local Connector by its command, or a remote one by its `url`. */
+export function parseAddInput(input: unknown): ConnectorConfig {
   if (!isRecord(input)) throw new InvalidInputError("addConnector expects an object.");
+  if (input.url !== undefined) {
+    if (input.command !== undefined) {
+      throw new InvalidInputError("A Connector has either a command or a URL, not both.");
+    }
+    return {
+      transport: "http",
+      name: parseName(input.name),
+      url: parseRemoteUrl(input.url),
+      client: parseClient(input.client),
+    };
+  }
   return {
+    transport: "stdio",
     name: parseName(input.name),
     command: parseCommand(input.command),
     args: parseArgs(input.args),
@@ -93,14 +178,39 @@ export function parseAddInput(input: unknown): LocalConnectorConfig {
 /** A server of an `mcpServers` configuration, and its configuration when it can be added. */
 export interface ImportCandidate {
   entry: ConnectorImportEntry;
-  config: LocalConnectorConfig | null;
+  config: ConnectorConfig | null;
 }
 
-/** Transports of remote servers, as Cursor and VS Code name them. */
-const REMOTE_TYPES = new Set(["sse", "http", "streamable-http", "streamablehttp"]);
+/** Streamable HTTP, as Cursor, VS Code and Claude Code name it. A URL without a type may be either. */
+const STREAMABLE_HTTP_TYPES = new Set(["http", "streamable-http", "streamablehttp"]);
 
 const looksLikeServer = (value: unknown) =>
   isRecord(value) && (typeof value.command === "string" || typeof value.url === "string");
+
+/**
+ * A remote server: added when it speaks Streamable HTTP. The older SSE
+ * transport (a "sse" type, or a URL ending in /sse with no type) and custom
+ * headers, usually an API key, aren't supported.
+ */
+function remoteCandidate(name: string, value: Record<string, unknown>): ImportCandidate {
+  const url = typeof value.url === "string" ? value.url.trim() : "";
+  const base = { name, command: null, args: [], env: [], ...(url ? { url } : {}) };
+  const type = typeof value.type === "string" ? value.type.toLowerCase() : "";
+  const sse = type === "sse" || (type === "" && /\/sse\/?$/i.test(url.split("?")[0] ?? ""));
+  const headers = isRecord(value.headers) && Object.keys(value.headers).length > 0;
+  if (sse || headers || (type !== "" && !STREAMABLE_HTTP_TYPES.has(type))) {
+    return { entry: { ...base, action: "remote" }, config: null };
+  }
+  try {
+    const parsed = parseRemoteUrl(url);
+    return {
+      entry: { ...base, url: parsed, action: "add" },
+      config: { transport: "http", name, url: parsed, client: null },
+    };
+  } catch {
+    return { entry: { ...base, action: "invalid" }, config: null };
+  }
+}
 
 /** The object that maps server names to servers, wherever the configuration keeps it. */
 function serversOf(parsed: unknown): Record<string, unknown> | null {
@@ -120,11 +230,12 @@ function candidate(key: string, value: unknown): ImportCandidate {
     return { entry: { ...base, action: "invalid" }, config: null };
   }
   const type = typeof value.type === "string" ? value.type.toLowerCase() : "";
-  if (typeof value.url === "string" || REMOTE_TYPES.has(type)) {
-    return { entry: { ...base, action: "remote" }, config: null };
+  if (typeof value.url === "string" || type === "sse" || STREAMABLE_HTTP_TYPES.has(type)) {
+    return remoteCandidate(name, value);
   }
   try {
-    const config = {
+    const config: LocalConnectorConfig = {
+      transport: "stdio",
       name,
       command: parseCommand(value.command),
       args: parseArgs(value.args),
@@ -146,7 +257,8 @@ function candidate(key: string, value: unknown): ImportCandidate {
 
 /**
  * Every server in an `mcpServers` configuration, in its order, marked "add"
- * unless it is remote or invalid. Whether a name is taken is for the caller.
+ * unless it is a remote server IncarnaMind can't connect to, or invalid.
+ * Whether a name is taken is for the caller.
  */
 export function readMcpServers(json: unknown): ImportCandidate[] {
   if (typeof json !== "string") throw new InvalidInputError("The configuration must be text.");

@@ -144,6 +144,11 @@ export interface CoreAdapters {
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
   /**
+   * How long a remote Connector's browser sign-in waits for the User.
+   * Defaults to five minutes; tests shorten it.
+   */
+  connectorSignInTimeoutMs?: number;
+  /**
    * Where requests to TypeSafe's hosted Jev go. Defaults to
    * https://api.typesafe.ai; tests point it at a local fake server. Consent
    * still treats them as going to TypeSafe.

@@ -133,6 +133,9 @@ export function ConnectorImport({ onDone }: { onDone(): void }) {
                     {commandLine(entry.command, entry.args)}
                   </p>
                 )}
+                {entry.url && (
+                  <p className="truncate font-mono text-xs text-gray-500">{entry.url}</p>
+                )}
                 {entry.env.length > 0 && (
                   <p className="text-xs text-gray-500">
                     {t("connectors.import.env", { names: entry.env.join(", ") })}
