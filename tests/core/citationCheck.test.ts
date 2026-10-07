@@ -7,10 +7,53 @@
  *
  * Each case is a Document's stored page text (as processing stores it, see
  * `pageTexts`), a Citation's pages and the pages of its Passage, and the quote.
+ *
+ * The letter case, reference mark and ellipsis cases come from the evaluation
+ * run of 2026-10-07 with Ollama's mistral, where the check said "not found"
+ * for three quotes that are on their pages: the page text is the stored text
+ * of the sample PDFs in data/, cut short.
  */
 import { describe, expect, test } from "vitest";
 import type { CitationCheckReason } from "../../src/core";
 import { type CheckResult, checkCitation } from "../../src/core/answers/citations";
+
+/** Gradient Descent The Ultimate Optimizer, p. 8, as stored. */
+const HYPEROPTIMIZERS = [
+  "with towers of hyperoptimizers of increasing heights, and with bottom-level step sizes ↵ initialized",
+  "across many orders of magnitude. In practice we find that if the initial hyper-step sizes are too large,",
+  "the computation diverges for networks larger than the MNIST MLP. So, we initialize each level’s",
+  "hyperparameter to be smaller than that of the previous level.",
+].join("\n");
+
+/** Attention Is All You Need, p. 8, as stored: "[36]" is a reference to the paper's bibliography. */
+const LABEL_SMOOTHING = [
+  "Pdrop = 0.1.",
+  "Label Smoothing During training, we employed label smoothing of value ϵls = 0.1 [36]. This",
+  "hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.",
+  "6 Results",
+].join("\n");
+
+/** ABPI Code of Practice for the Pharmaceutical Industry 2021, pp. 35 and 36, as stored. */
+const PACKAGE_DEALS = [
+  [
+    "Where the use of a medicine requires specific testing prior to",
+    "prescription, companies can arrange to provide such testing",
+    "as a package deal even when the outcome of the testing does",
+    "not support the use of the medicine in some of those tested.",
+    "Clause 19.1 (18.1) Outcome or Risk Sharing Agreements",
+    "Clause 19.1 does not preclude the use of outcome or",
+    "risk sharing agreements.",
+  ].join("\n"),
+  "medicine in a patient fails to meet certain criteria. That is\nto say, its therapeutic effect does not meet expectations.",
+];
+
+/** 维基百科-梯度下降法, p. 1, as stored: "[2]" is a reference, and "⾸" a Kangxi radical. */
+const CAUCHY =
+  "梯度下降法通常被认为是奧古斯丁-路易·柯西（法語：Augustin-Louis Cauchy）在 1847 年⾸次提出的。[2]雅克·所罗⻔·阿达⻢（法語：Jacques Solomon Hadamard）在 1907 年独⽴提出了⼀个类似的⽅法。[3]";
+
+/** 维基百科-可持续发展目标, as the Chinese fixture's pages read. */
+const POVERTY =
+  "到 2030 年，為所有地⽅的所有⼈消除極端貧窮，⽬前標準按照每天⽣活費不⾜ 1.25 美元計算。";
 
 interface Case {
   language: "en" | "zh";
@@ -54,6 +97,38 @@ const cases: Case[] = [
     topic: "hyphenation",
     name: "an English term split at a line end inside Chinese text is joined",
     pages: ["用梯度下降法优化 Rosen-\nbrock 函数时，收敛非常缓慢。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "用梯度下降法优化Rosenbrock函数时,收敛非常缓慢。",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "hyphenation",
+    name: "the quote keeps the line-end hyphen, with a space for the line break",
+    pages: [
+      "In practice we find that if the initial hyper-\nstep sizes are too large, it diverges.",
+    ],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "if the initial hyper- step sizes are too large",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "hyphenation",
+    name: "a soft hyphen at a line end joins the word, and one inside a line is ignored",
+    pages: ["Growth in inter\u00ad\nnational trade slowed in 20\u00ad22."],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "Growth in international trade slowed in 2022.",
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "hyphenation",
+    name: "an English term split by a soft hyphen at a line end inside Chinese text",
+    pages: ["用梯度下降法优化 Rosen\u00ad\nbrock 函数时，收敛非常缓慢。"],
     cited: [1, 1],
     passage: [1, 1],
     quote: "用梯度下降法优化Rosenbrock函数时,收敛非常缓慢。",
@@ -112,6 +187,235 @@ const cases: Case[] = [
     passage: [1, 1],
     quote: '注意力机制的灵活性来自于它的"软权重"特性(soft weights)',
     expected: "found",
+  },
+
+  // Quote marks, apostrophes and dashes
+  {
+    language: "en",
+    topic: "quote marks and dashes",
+    name: "curly and angle quotes, apostrophes and dashes match straight quotes and hyphens",
+    pages: ["The model’s “soft” weights — unlike its ‹fixed› ones – change; the teamʼs ⸺ result."],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "The model's \"soft\" weights - unlike its 'fixed' ones - change; the team's - result.",
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "quote marks and dashes",
+    name: "corner brackets and a double em dash match straight quotes and hyphens",
+    pages: ["注意力机制的「软权重」——可以在运行时改变。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: '注意力机制的"软权重"--可以在运行时改变',
+    expected: "found",
+  },
+
+  // Whitespace and line breaks
+  {
+    language: "en",
+    topic: "whitespace",
+    name: "line breaks, tabs, blank lines and non-breaking spaces count as one space",
+    pages: ["Revenue grew\n by\tten\u00a0percent\n\nin the third\u202fquarter."],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "Revenue grew by ten percent in the third quarter.",
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "whitespace",
+    name: "line breaks and spaces inside Chinese text are ignored",
+    pages: ["潮汐是海水的\n周期性 涨落。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "潮汐是海水的周期性涨落。",
+    expected: "found",
+  },
+
+  // Letter case
+  {
+    language: "en",
+    topic: "letter case",
+    name: "a quote that starts mid-sentence, given a capital (Gradient Descent The Ultimate Optimizer, p. 8)",
+    pages: [HYPEROPTIMIZERS],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote:
+      "If the initial hyper-step sizes are too large, the computation diverges for networks larger than the MNIST MLP.",
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "letter case",
+    name: "an English term inside Chinese text, in another letter case",
+    pages: ["梯度下降法（英語：Gradient descent）是一个一阶最优化算法。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "梯度下降法(英語:gradient Descent)是一个一阶最优化算法",
+    expected: "found",
+  },
+
+  // Greek letters
+  {
+    language: "en",
+    topic: "Greek letters",
+    name: "ε in the quote matches the lunate ϵ on the page, with its subscript run on",
+    pages: [LABEL_SMOOTHING],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "we employed label smoothing of value εls = 0.1 [36]. This hurts perplexity",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "Greek letters",
+    name: "a mathematical italic epsilon on the page matches ε",
+    pages: ["The step size 𝜖 is decayed by ϑ every epoch."],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "The step size ε is decayed by θ every epoch.",
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "Greek letters",
+    name: "ε in the quote matches ϵ in Chinese text",
+    pages: ["学习率 ϵ 通常取 0.001，动量 β 取 0.9。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "学习率ε通常取0.001,动量β取0.9",
+    expected: "found",
+  },
+
+  // Reference and footnote marks
+  {
+    language: "en",
+    topic: "reference marks",
+    name: "a reference [36] on the page, written [^36] in the quote (Attention Is All You Need, p. 8)",
+    pages: [LABEL_SMOOTHING],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote:
+      "During training, we employed label smoothing of value ϵls = 0.1 [^36]. This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "reference marks",
+    name: "a footnote [^1] on the page, written [1] in the quote",
+    pages: ["The trial ran for two years.[^1] It ended early."],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "The trial ran for two years.[1] It ended early.",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "reference marks",
+    name: "a reference with another number isn't found",
+    pages: [LABEL_SMOOTHING],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "we employed label smoothing of value ϵls = 0.1 [^37]. This hurts perplexity",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "zh",
+    topic: "reference marks",
+    name: "a reference [2] on the page, written [^2] in the quote",
+    pages: [CAUCHY],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote:
+      "梯度下降法通常被认为是奧古斯丁-路易·柯西（法語：Augustin-Louis Cauchy）在 1847 年首次提出的。[^2]",
+    expected: "found",
+  },
+
+  // An ellipsis marks words left out
+  {
+    language: "en",
+    topic: "ellipsis",
+    name: "an ellipsis where the page has a full stop and a heading (ABPI Code of Practice, pp. 35–36)",
+    pages: PACKAGE_DEALS,
+    cited: [1, 2],
+    passage: [1, 2],
+    quote:
+      "prescription, companies can arrange to provide such testing as a package deal even when the outcome of the testing does not support the use of the medicine in some of those tested... Clause 19.1 (18.1) Outcome or Risk Sharing Agreements",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "ellipsis",
+    name: "words left out between parts that are each on the pages, in order",
+    pages: PACKAGE_DEALS,
+    cited: [1, 2],
+    passage: [1, 2],
+    quote:
+      "Where the use of a medicine requires specific testing … the outcome of the testing does not support … its therapeutic effect does not meet expectations.",
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "ellipsis",
+    name: "a part shorter than three words isn't enough, though it is on the page",
+    pages: PACKAGE_DEALS,
+    cited: [1, 2],
+    passage: [1, 2],
+    quote: "Where the use of a medicine requires specific testing ... those tested.",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "en",
+    topic: "ellipsis",
+    name: "a part of three short words isn't enough either",
+    pages: PACKAGE_DEALS,
+    cited: [1, 2],
+    passage: [1, 2],
+    quote: "Where the use of a medicine requires specific testing ... the use of",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "en",
+    topic: "ellipsis",
+    name: "parts in another order than on the pages",
+    pages: PACKAGE_DEALS,
+    cited: [1, 2],
+    passage: [1, 2],
+    quote:
+      "Clause 19.1 (18.1) Outcome or Risk Sharing Agreements ... prescription, companies can arrange to provide such testing",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "en",
+    topic: "ellipsis",
+    name: "a reworded part",
+    pages: PACKAGE_DEALS,
+    cited: [1, 2],
+    passage: [1, 2],
+    quote:
+      "companies can arrange to provide such testing as a package deal ... the outcome of the tests does not back the use of the medicine",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "zh",
+    topic: "ellipsis",
+    name: "a Chinese ellipsis (……) between two parts on the page",
+    pages: [POVERTY],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "到 2030 年，為所有地⽅的所有⼈消除極端貧窮……⽬前標準按照每天⽣活費不⾜ 1.25 美元計算。",
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "ellipsis",
+    name: "a part shorter than 15 characters isn't enough",
+    pages: [POVERTY],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "到 2030 年，為所有地⽅的所有⼈消除極端貧窮……1.25 美元計算",
+    expected: "quote-not-on-pages",
   },
 
   // CJK text
@@ -253,6 +557,37 @@ const cases: Case[] = [
     cited: [1, 1],
     passage: [1, 1],
     quote: "优化过程以之字形缓慢地接近极小值",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "en",
+    topic: "exact match",
+    name: "a quote with one word changed isn't found, whatever its letter case and punctuation",
+    pages: [HYPEROPTIMIZERS],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote:
+      "If the initial hyper-step sizes are too big, the computation diverges for networks larger than the MNIST MLP.",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "en",
+    topic: "exact match",
+    name: "a quote from another page than the one cited isn't found",
+    pages: [HYPEROPTIMIZERS, LABEL_SMOOTHING],
+    cited: [1, 1],
+    passage: [1, 2],
+    quote: "During training, we employed label smoothing of value ϵls = 0.1 [36].",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "zh",
+    topic: "exact match",
+    name: "a quote from another page than the one cited isn't found",
+    pages: [CAUCHY, POVERTY],
+    cited: [1, 1],
+    passage: [1, 2],
+    quote: "到 2030 年，為所有地⽅的所有⼈消除極端貧窮",
     expected: "quote-not-on-pages",
   },
 ];

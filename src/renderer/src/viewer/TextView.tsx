@@ -14,9 +14,13 @@ type Loaded =
   | { kind: "missing" }
   | { kind: "failed"; message: string };
 
+/** Nothing to highlight. */
+const NO_HIGHLIGHT: readonly TextRange[] = [];
+
 /**
  * A TXT or Markdown Document, readable in the viewer. Opened with a quote, it
- * highlights the quote and scrolls to it; otherwise it opens at the top.
+ * highlights the quote (each part of a quote with an ellipsis) and scrolls to
+ * it; otherwise it opens at the top.
  */
 export function TextView({ document, target }: { document: Document; target: ViewerTarget }) {
   const t = useT();
@@ -63,7 +67,7 @@ function TextContent({
   const scroller = useRef<HTMLDivElement>(null);
   const appliedRequest = useRef<number | null>(null);
   const highlight = useMemo(
-    () => (target.quote ? findQuote(text, target.quote) : null),
+    () => (target.quote ? findQuote(text, target.quote) : null) ?? NO_HIGHLIGHT,
     [text, target.quote],
   );
   const blocks = useMemo(() => (markdown ? parseMarkdown(text) : null), [text, markdown]);
@@ -109,7 +113,7 @@ function TextContent({
   );
 }
 
-/** A span of the source, with the part inside `highlight` marked. */
+/** A span of the source, with the parts inside `highlight` (ranges in order) marked. */
 function Slice({
   source,
   start,
@@ -119,28 +123,32 @@ function Slice({
   source: string;
   start: number;
   end: number;
-  highlight: TextRange | null;
+  highlight: readonly TextRange[];
 }) {
-  if (!highlight || highlight.end <= start || highlight.start >= end) {
-    return source.slice(start, end);
-  }
-  const from = Math.max(start, highlight.start);
-  const to = Math.min(end, highlight.end);
-  return (
-    <>
-      {source.slice(start, from)}
-      <mark data-quote-highlight="" className="quote-highlight">
+  const inside = highlight.filter((range) => range.end > start && range.start < end);
+  if (inside.length === 0) return source.slice(start, end);
+  const parts: ReactNode[] = [];
+  let at = start;
+  for (const range of inside) {
+    const from = Math.max(at, range.start);
+    const to = Math.min(end, range.end);
+    if (from >= to) continue;
+    parts.push(source.slice(at, from));
+    parts.push(
+      <mark key={from} data-quote-highlight="" className="quote-highlight">
         {source.slice(from, to)}
-      </mark>
-      {source.slice(to, end)}
-    </>
-  );
+      </mark>,
+    );
+    at = to;
+  }
+  parts.push(source.slice(at, end));
+  return <>{parts}</>;
 }
 
 function renderInlines(
   inlines: readonly Inline[],
   source: string,
-  highlight: TextRange | null,
+  highlight: readonly TextRange[],
 ): ReactNode[] {
   return inlines.map((inline, index) => renderInline(inline, index, source, highlight));
 }
@@ -149,7 +157,7 @@ function renderInline(
   inline: Inline,
   key: number,
   source: string,
-  highlight: TextRange | null,
+  highlight: readonly TextRange[],
 ): ReactNode {
   switch (inline.kind) {
     case "text":
@@ -191,7 +199,7 @@ function MarkdownBlock({
 }: {
   block: Block;
   source: string;
-  highlight: TextRange | null;
+  highlight: readonly TextRange[];
 }) {
   switch (block.kind) {
     case "heading": {

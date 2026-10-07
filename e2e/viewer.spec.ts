@@ -227,6 +227,19 @@ test("opened at a page range with a quote, the viewer shows that page with the q
   await expect(highlights.first()).toBeInViewport();
   await expect(viewer.locator('[data-page-number="1"] [data-quote-highlight]')).toHaveCount(0);
 
+  // A quote with an ellipsis: each part is highlighted, and the words left out aren't.
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Report"),
+    pageFrom: 2,
+    pageTo: 2,
+    quote: "Revenue grew by ten percent … led by exports. Costs stayed flat.",
+  });
+  await expect(highlights).toHaveText([
+    "Revenue grew by ten percent",
+    "led by exports.",
+    "Costs stayed flat.",
+  ]);
+
   // A quote that isn't on those pages: the page opens, with nothing highlighted.
   await openDocumentAt(window, {
     documentId: await documentIdOf(window, "Report"),
@@ -244,6 +257,17 @@ test("opened at a page range with a quote, the viewer shows that page with the q
   const marks = window.getByTestId("viewer-text").locator("[data-quote-highlight]");
   await expect(marks.first()).toBeInViewport();
   expect((await marks.allTextContents()).join("")).toBe("attention\nspans shrink after lunch.");
+
+  // With an ellipsis, each part is highlighted.
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Field notes"),
+    quote: "Observation 119: nothing unusual today. ... Observation 120: nothing unusual today.",
+  });
+  await expect(marks).toHaveText([
+    "Observation 119: nothing unusual today.",
+    "Observation 120: nothing unusual today.",
+  ]);
+  await expect(marks.first()).toBeInViewport();
   await app.close();
 });
 
