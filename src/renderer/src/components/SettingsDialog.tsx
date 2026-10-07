@@ -5,6 +5,7 @@ import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, useAppStore } from "../store";
+import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
@@ -122,6 +123,7 @@ function GeneralSettings() {
       <RerankSettingsSection />
       <ConnectorsSettings />
       <SkillsSettings />
+      <ApprovalsSettings />
       <JevSettingsSection />
       <fieldset>
         <legend className="mb-1 text-sm font-medium">{t("settings.language")}</legend>

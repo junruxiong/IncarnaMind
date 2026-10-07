@@ -10,6 +10,10 @@
  * and the model loads one with `use_skill` when it needs it. A Skill the
  * Question forces is loaded up front, and shown as a Tool call too.
  *
+ * Connector Tools that ask first (see ../approvals) pause the Answer inside
+ * their call until the User decides; the call's card records the decision.
+ * A denied call isn't made: the model is told so, and the Answer carries on.
+ *
  * A Question with a Search scope searches only the Documents it covers,
  * resolved when the Question is asked (or its Answer regenerated). When the
  * scope covers no Document with Passages, the Answer says so, and nothing is
@@ -33,7 +37,9 @@ import {
   QUESTION_BLOCK,
   type SearchScope,
   type SkillAvailability,
+  type ToolCallApproval,
 } from "../api";
+import type { ToolCallToApprove } from "../approvals";
 import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
@@ -115,9 +121,19 @@ export interface AnswersOptions {
   emptyScopeAnswer(): string;
   /** The User's Skills. */
   skills: AnswerSkills;
-  /** The Connector Tools an Answer may call: the read-only Tools of every Connector that is on and ready. */
+  /** The Connector Tools an Answer may call: the Tools of every Connector that is on and ready. */
   connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
+  /** Asking the User before a Connector Tool runs. */
+  approvals: AnswerApprovals;
   reportError(error: unknown): void;
+}
+
+/** What Answers need of approvals (see ../approvals). */
+export interface AnswerApprovals {
+  /** Whether a call of this Tool asks the User first: their policy for it, or else its read-only claim. */
+  toolNeedsApproval(connectorId: string, tool: string, readOnly: boolean): boolean;
+  /** Asks and waits: true if allowed, false if denied. Rejects if `signal` aborts first, withdrawing the request. */
+  request(call: ToolCallToApprove, signal: AbortSignal): Promise<boolean>;
 }
 
 /** What Answers need of Skills (see ../skills). */
@@ -130,6 +146,10 @@ export interface AnswerSkills {
 
 /** The Tool call that shows a forced Skill: loaded by the core, up front. */
 const FORCED_SKILL_CALL = "forced-skill";
+
+/** What the model is told when the User denies a call: a Tool result, so the Answer carries on. */
+const deniedResult = (tool: ExternalTool) =>
+  `The User denied this call of ${tool.source.tool} (from the Connector "${tool.source.connectorName}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
 
 /**
  * What the core gives Answers from Documents: `AnswerDocuments`, counting and
@@ -315,9 +335,11 @@ export function createAnswers(options: AnswersOptions) {
       active.delete(answerId);
       controller.abort();
       skills?.release();
-      // A Tool call still running when the Answer stopped didn't finish.
+      // A Tool call still running when the Answer stopped didn't finish; one still waiting for
+      // the User never ran (aborting above withdrew its request).
       for (const call of toolCalls) {
         if (call.status === "running") call.status = "failed";
+        if (call.approval === "waiting") call.approval = "denied";
       }
       // The check runs once, now; its results are stored with each Citation.
       try {
@@ -352,6 +374,8 @@ export function createAnswers(options: AnswersOptions) {
 
     const base = answerInstructions(context.question);
     const callStarted = (call: AnswerToolCall) => {
+      // A call that asks the User first may already be there (see `withApproval`).
+      if (toolCalls.some((each) => each.id === call.id)) return;
       toolCalls.push(call);
       events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
       writeSoon();
@@ -359,11 +383,63 @@ export function createAnswers(options: AnswersOptions) {
     const callFinished = (id: string, ok: boolean, resultCount: number | null) => {
       const call = toolCalls.find((each) => each.id === id);
       if (!call) return;
-      call.status = ok ? "done" : "failed";
+      // A denied call returned the model a result, but never ran.
+      call.status = ok && call.approval !== "denied" ? "done" : "failed";
       call.resultCount = resultCount;
       events.emit("answer.toolCallFinished", { mindId, answerId, call: { ...call } });
       writeSoon();
     };
+    const setApproval = (id: string, approval: ToolCallApproval) => {
+      const call = toolCalls.find((each) => each.id === id);
+      if (finished || !call) return;
+      call.approval = approval;
+      writeSoon();
+    };
+
+    /**
+     * A Connector Tool that asks the User first (by their policy, or because
+     * its Connector doesn't say it only reads) waits for them inside its call,
+     * racing the Answer's own signal: stopping the Answer ends the wait at once.
+     * The model's call reaches here before the engine reports it, so its card
+     * is recorded here, waiting; the engine's report of it then changes nothing.
+     */
+    const withApproval = (tool: ExternalTool): ExternalTool => ({
+      ...tool,
+      async call(input, signal, call) {
+        const { connectorId, connectorName, tool: name } = tool.source;
+        if (!options.approvals.toolNeedsApproval(connectorId, name, tool.readOnly)) {
+          return tool.call(input, signal, call);
+        }
+        const toolCallId = call?.toolCallId ?? randomUUID();
+        callStarted({
+          id: toolCallId,
+          tool: name,
+          source: "connector",
+          connector: { id: connectorId, name: connectorName },
+          input,
+          status: "running",
+          resultCount: null,
+          approval: "waiting",
+        });
+        // Already reported by the engine, after all: it waits too.
+        setApproval(toolCallId, "waiting");
+        const allowed = await options.approvals.request(
+          {
+            mindId,
+            answerId,
+            toolCallId,
+            connector: { id: connectorId, name: connectorName },
+            tool: name,
+            title: tool.title ?? null,
+            input,
+            readOnly: tool.readOnly,
+          },
+          AbortSignal.any([signal, controller.signal]),
+        );
+        setApproval(toolCallId, allowed ? "allowed" : "denied");
+        return allowed ? tool.call(input, signal, call) : deniedResult(tool);
+      },
+    });
 
     /** Opens the Answer's Skills, loading the forced one, shown as its Tool call; false if it failed. */
     const openSkills = async (): Promise<boolean> => {
@@ -424,10 +500,10 @@ export function createAnswers(options: AnswersOptions) {
       if (!(await openSkills()) || !skills) return;
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
-      // The read-only Tools of the Connectors that are on, next to document search and the Skills.
+      // The Tools of the Connectors that are on, next to document search and the Skills.
       let external: ExternalTool[] = [];
       try {
-        external = await options.connectorTools(controller.signal);
+        external = (await options.connectorTools(controller.signal)).map(withApproval);
       } catch (error) {
         if (finished) return;
         options.reportError(error);

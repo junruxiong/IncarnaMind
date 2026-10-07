@@ -10,10 +10,10 @@
  *   if they haven't yet. A process that stops is started again, waiting
  *   longer after each failure. Turning one off, deleting it, or closing the
  *   core stops it.
- * - Answers: the Tools of each ready Connector that it marks read-only,
- *   namespaced by Connector. Tools that may change something wait for
- *   approvals (#38). Every call checks consent for the "connectors" flow
- *   first: even a server on this computer can reach the internet.
+ * - Answers: the Tools of each ready Connector, namespaced by Connector, each
+ *   with its read-only claim: Answers ask the User before a call that may
+ *   change something (see ../approvals). Every call checks consent for the
+ *   "connectors" flow first: even a server on this computer can reach the internet.
  */
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -571,6 +571,8 @@ export function createConnectors(options: ConnectorsOptions) {
       ),
       inputSchema: tool.inputSchema,
       source: { connectorId: row.id, connectorName: row.name, tool: tool.name },
+      title: tool.title,
+      readOnly: tool.readOnly,
       async call(input, signal) {
         try {
           await untilAborted(consent.ensure("connectors", service), signal);
@@ -679,9 +681,9 @@ export function createConnectors(options: ConnectorsOptions) {
     },
 
     /**
-     * The read-only Tools of every enabled Connector that is ready, for one
-     * Answer. Connectors not yet started start now; those still connecting
-     * are waited for, a little.
+     * The Tools of every enabled Connector that is ready, for one Answer.
+     * Connectors not yet started start now; those still connecting are
+     * waited for, a little.
      */
     async toolsForAnswer(signal: AbortSignal): Promise<ExternalTool[]> {
       const rows = liveRows().filter((row) => row.enabled === 1);
@@ -721,7 +723,6 @@ export function createConnectors(options: ConnectorsOptions) {
           prefix = `${slug(row.name, "connector").slice(0, 21)}_${n}`;
         prefixes.add(prefix);
         for (const tool of runtime.tools) {
-          if (!tool.readOnly) continue;
           tools.push(answerTool(row, tool, unique(`${prefix}__${slug(tool.name, "tool")}`)));
         }
       }

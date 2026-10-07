@@ -399,6 +399,33 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE skills ADD COLUMN built_in_digest TEXT;
     `,
   },
+  {
+    version: 20,
+    description: "Approval policies (#38)",
+    sql: `
+      -- What the User chose about asking before something runs, replacing the
+      -- default. subject_kind: 'tool' (one Tool of one Connector) or
+      -- 'skill-script' (the scripts of one Skill, #41), checked in code.
+      -- subject_id: for 'tool', the Connector's id and the Tool's name as the
+      -- Connector gives it, joined by ':' (a UUID has none); for
+      -- 'skill-script', the Skill's id. policy: 'always' (always allow, or
+      -- always run) or 'ask' (ask every time, even for a Tool its Connector
+      -- says only reads), checked in code. One live row per subject: changing
+      -- the policy updates it, revoking it marks it deleted. No foreign keys: a
+      -- later sync may deliver a policy before its Connector or Skill.
+      CREATE TABLE approval_policies (
+        id TEXT PRIMARY KEY NOT NULL,
+        subject_kind TEXT NOT NULL,
+        subject_id TEXT NOT NULL,
+        policy TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX approval_policies_by_subject ON approval_policies (subject_kind, subject_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
