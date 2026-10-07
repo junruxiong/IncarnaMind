@@ -424,8 +424,11 @@
     }
   }
 
-  /* A PDF page. Its text layer sizes itself from these (pdf.js's own viewer sets the same). */
-  .pdf-page {
+  /*
+   * Holds a PDF page's text layer, with the scale the layer was made at (`--scale-factor`, set
+   * with it). The layer sizes itself from these, as in pdf.js's own viewer.
+   */
+  .pdf-page-text {
     --user-unit: 1;
     --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
     --scale-round-x: 1px;
