@@ -1,15 +1,32 @@
+import { isMacOS } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { type Editor, useEditorState } from "@tiptap/react";
 import { BubbleMenu, type BubbleMenuProps } from "@tiptap/react/menus";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 
-type Mark = "bold" | "italic" | "strike";
+type Mark = "bold" | "italic" | "strike" | "highlight";
 
-const MARKS: readonly { mark: Mark; label: MessageKey; className: string }[] = [
-  { mark: "bold", label: "editor.format.bold", className: "font-bold" },
-  { mark: "italic", label: "editor.format.italic", className: "italic" },
-  { mark: "strike", label: "editor.format.strike", className: "line-through" },
+/** A shortcut as the menu shows it: ⌘⇧H on macOS, Ctrl+Shift+H elsewhere. */
+const shortcut = (key: string, shift = false) =>
+  isMacOS() ? `⌘${shift ? "⇧" : ""}${key}` : `Ctrl+${shift ? "Shift+" : ""}${key}`;
+
+/** Each mark's button, with the shortcut Tiptap binds it to. */
+const MARKS: readonly { mark: Mark; label: MessageKey; className: string; keys: string }[] = [
+  { mark: "bold", label: "editor.format.bold", className: "font-bold", keys: shortcut("B") },
+  { mark: "italic", label: "editor.format.italic", className: "italic", keys: shortcut("I") },
+  {
+    mark: "strike",
+    label: "editor.format.strike",
+    className: "line-through",
+    keys: shortcut("S", true),
+  },
+  {
+    mark: "highlight",
+    label: "editor.format.highlight",
+    className: "format-highlight",
+    keys: shortcut("H", true),
+  },
 ];
 
 /** Shown over selected text, not over code or a selected Block. */
@@ -27,7 +44,7 @@ const showOverText: NonNullable<BubbleMenuProps["shouldShow"]> = ({
   return view.hasFocus() || element.contains(document.activeElement);
 };
 
-/** The old editor's bubble menu: bold, italic and strikethrough for the selected text. */
+/** The old editor's bubble menu: bold, italic, strikethrough and highlight for the selected text. */
 export function FormatMenu({ editor }: { editor: Editor }) {
   const t = useT();
   const active = useEditorState({
@@ -36,6 +53,7 @@ export function FormatMenu({ editor }: { editor: Editor }) {
       bold: current.isActive("bold"),
       italic: current.isActive("italic"),
       strike: current.isActive("strike"),
+      highlight: current.isActive("highlight"),
     }),
   });
 
@@ -48,11 +66,13 @@ export function FormatMenu({ editor }: { editor: Editor }) {
       data-testid="format-menu"
       className="format-menu"
     >
-      {MARKS.map(({ mark, label, className }) => (
+      {MARKS.map(({ mark, label, className, keys }) => (
         <button
           key={mark}
           type="button"
           aria-pressed={active[mark]}
+          title={`${t(label)} (${keys})`}
+          data-testid={`format-${mark}`}
           // Keep the selection in the editor.
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => editor.chain().focus().toggleMark(mark).run()}

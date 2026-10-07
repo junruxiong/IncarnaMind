@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -127,4 +127,101 @@ test("a Block is deleted from its handle's menu, and with the keyboard", async (
   await window.keyboard.press("ControlOrMeta+Shift+Backspace");
   await expect(paragraphs).toHaveText(["Keep"]);
   await app.close();
+});
+
+/** The fonts Chromium drew an element's text with, by name, and whether each is bundled with the app. */
+async function fontsDrawing(window: Page, selector: string) {
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("DOM.enable");
+    await session.send("CSS.enable");
+    const { root } = await session.send("DOM.getDocument", { depth: -1 });
+    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    const { fonts } = await session.send("CSS.getPlatformFontsForNode", { nodeId });
+    return fonts
+      .map((font) => ({
+        family: font.familyName,
+        name: font.postScriptName,
+        bundled: font.isCustomFont,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } finally {
+    await session.detach();
+  }
+}
+
+test("Latin text is drawn in the bundled Roboto, and Chinese text in a system font", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type("Spring tides come ");
+  await window.keyboard.press("ControlOrMeta+I");
+  await window.keyboard.type("at new moon");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("大潮在新月和满月时出现。");
+  await expect(editor.locator("p")).toHaveText([
+    "Spring tides come at new moon",
+    "大潮在新月和满月时出现。",
+  ]);
+
+  const family = await editor
+    .locator("p")
+    .first()
+    .evaluate((paragraph) => getComputedStyle(paragraph).fontFamily);
+  expect(family).toMatch(/^"?Roboto"?,/);
+  // Upright and italic are both the bundled font, which the CSP (font-src 'self') lets load.
+  const paragraph = '[data-testid="mind-editor"] p';
+  expect(await fontsDrawing(window, paragraph)).toEqual([
+    { family: "Roboto", name: "Roboto-Italic", bundled: true },
+    { family: "Roboto", name: "Roboto-Regular", bundled: true },
+  ]);
+  // Chinese falls through to the system's Simplified Chinese font.
+  const chinese = await fontsDrawing(window, `${paragraph}:nth-child(2)`);
+  expect(chinese).not.toEqual([]);
+  expect(chinese.filter((font) => font.bundled)).toEqual([]);
+  if (process.platform === "darwin")
+    expect(chinese.map((font) => font.family)).toEqual(["PingFang SC"]);
+
+  // Lora is bundled too, though nothing uses it yet.
+  const lora = await window.evaluate(async () => {
+    const faces = await document.fonts.load("16px Lora");
+    return faces.map((face) => face.status);
+  });
+  expect(lora).toEqual(["loaded"]);
+  await app.close();
+});
+
+test("text highlighted with the keyboard stays highlighted after reopening the app", async () => {
+  const first = await launchApp(dataDir);
+  const { window } = first;
+  await dismissChatSetup(window);
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+
+  // Typing makes quotes curly and "--" a dash.
+  await window.keyboard.type('"Neap" tides -- the weakest');
+  await expect(editor.locator("p")).toHaveText("“Neap” tides — the weakest");
+
+  // Select "strongest" and press Cmd/Ctrl+Shift+H: it is highlighted, and the menu says so.
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Spring tides are the strongest");
+  for (const _ of "strongest") await window.keyboard.press("Shift+ArrowLeft");
+  await expect(window.getByTestId("format-menu")).toBeVisible();
+  await window.keyboard.press("ControlOrMeta+Shift+H");
+  await expect(editor.locator("p mark")).toHaveText("strongest");
+  await expect(window.getByTestId("format-highlight")).toHaveAttribute("aria-pressed", "true");
+  await first.app.close();
+
+  const second = await launchApp(dataDir);
+  await second.window.getByTestId("mind-list-item").click();
+  const reopened = second.window.getByTestId("mind-editor");
+  await expect(reopened.locator("p")).toHaveText([
+    "“Neap” tides — the weakest",
+    "Spring tides are the strongest",
+  ]);
+  await expect(reopened.locator("p").nth(1).locator("mark")).toHaveText("strongest");
+  await second.app.close();
 });

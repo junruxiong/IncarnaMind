@@ -45,6 +45,7 @@ export const zhCN = {
   "editor.format.bold": "加粗",
   "editor.format.italic": "斜体",
   "editor.format.strike": "删除线",
+  "editor.format.highlight": "高亮",
 
   "viewer.label": "文档查看器",
   "viewer.close": "关闭文档查看器",
