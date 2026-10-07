@@ -159,6 +159,12 @@ export async function openViewer(window: Page): Promise<void> {
     if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
     hooks.openViewer();
   });
+  // The viewer slides in; measure it once it has settled, not mid-animation.
+  await window.waitForFunction(() => {
+    const viewer = document.querySelector('[data-testid="viewer"]');
+    const animations = viewer?.getAnimations({ subtree: true });
+    return animations?.every((animation) => animation.playState !== "running") === true;
+  });
 }
 
 /** Opens a Document in the viewer at a location, as a Citation will, through the test hook. */
