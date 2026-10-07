@@ -146,6 +146,8 @@ export const en = {
   "documents.failure.processingError": "something went wrong while processing it",
   "documents.more": "More actions for {name}",
   "documents.renameAction": "Rename",
+  "documents.pick.title": "Add Documents",
+  "documents.pick.filter": "Documents",
   "documents.retryAction": "Retry",
   "documents.renameLabel": "New name for {name}",
   "documents.deleteAction": "Delete…",
