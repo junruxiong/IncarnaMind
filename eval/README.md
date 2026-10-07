@@ -232,3 +232,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
+
+## The grouping check
+
+`npm run eval:grouping` is the check before building the Library's grouping (#51): how Documents are grouped into Topics, on its own fixture set, with the same data folder setup and model. `npm run eval` doesn't run it. See `grouping/README.md`.
