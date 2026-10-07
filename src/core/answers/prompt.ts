@@ -1,5 +1,6 @@
 /** The instructions every Answer is written with. Kept short: every word is sent with every Question. */
-import type { CitationSupport } from "../api";
+import type { CitationSupport, SkillFile } from "../api";
+import type { LoadedSkill, SkillSummary } from "../skills";
 
 /** A language a Question is clearly written in, judged by its script alone. */
 function scriptLanguage(question: string): string | null {
@@ -70,4 +71,69 @@ export function documentInstructions(
         "If the Passages don't cover the Question, say so plainly, then answer from your own knowledge if you can.",
       ].join("\n");
   }
+}
+
+/** XML attribute text. */
+const attribute = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+/** A Skill's files besides SKILL.md, for the model to read when its instructions point to them. */
+function skillFiles(files: readonly SkillFile[]): string {
+  const others = files.filter((file) => file.path !== "SKILL.md");
+  if (others.length === 0) return "";
+  return [
+    "Its other files, which read_skill_file can read when the instructions point to them:",
+    ...others.map((file) =>
+      file.script
+        ? `- ${file.path} (a script: it can't be run here, but it can be read)`
+        : `- ${file.path}`,
+    ),
+  ].join("\n");
+}
+
+/** A Skill's instructions, as `use_skill` gives them, or as a forced Skill is loaded up front. */
+export function loadedSkillText(skill: LoadedSkill, { withFiles }: { withFiles: boolean }): string {
+  return [
+    `<skill name="${attribute(skill.name)}">`,
+    skill.instructions,
+    "</skill>",
+    ...(withFiles ? [skillFiles(skill.files)] : []),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * What the Answer may do with Skills. The enabled Skills are listed by name
+ * and description only, when the model can load them with `use_skill`; a
+ * forced Skill's instructions are there in full.
+ */
+export function skillInstructions(
+  listed: readonly SkillSummary[],
+  forced: LoadedSkill | null,
+  skillTools: boolean,
+): string {
+  const parts: string[] = [];
+  if (forced) {
+    parts.push(
+      `For this Question the User chose the Skill "${forced.name}": follow its instructions.`,
+      loadedSkillText(forced, { withFiles: skillTools }),
+    );
+  }
+  if (skillTools && listed.length > 0) {
+    parts.push(
+      [
+        forced
+          ? "Other Skills, each with a name and what it is for:"
+          : "Skills give instructions for particular tasks. Each has a name and what it is for:",
+        "<skills>",
+        ...listed.map(
+          (skill) => `<skill name="${attribute(skill.name)}">${skill.description}</skill>`,
+        ),
+        "</skills>",
+        "When the Question is one a Skill is for, call use_skill with its name before answering, then follow what it loads.",
+      ].join("\n"),
+    );
+  }
+  return parts.join("\n\n");
 }

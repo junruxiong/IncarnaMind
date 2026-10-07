@@ -23,6 +23,7 @@ import {
 } from "./providers/ollama";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
+import { createSkills } from "./skills";
 import { migrate, openDatabase } from "./storage";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
@@ -108,6 +109,16 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  let skills: ReturnType<typeof createSkills>;
+  try {
+    skills = createSkills({ db, dataDir, now, reportError: (error) => console.error(error) });
+  } catch (error) {
+    documents.close();
+    embeddingModel.close();
+    db.close();
+    throw error;
+  }
+  const skillsChanged = () => events.emit("skills.changed", skills.list());
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in) when the core closes. */
@@ -153,6 +164,10 @@ export function createCore(adapters: CoreAdapters): Core {
       search: (query, signal) => documents.searchTool(query, { signal, rerank: adapters.reranker }),
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
+    },
+    skills: {
+      availability: (name) => skills.availability(name),
+      openSession: (forced) => skills.openSession(forced),
     },
     reportError: (error) => console.error(error),
   });
@@ -449,6 +464,24 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     testJevConnection: (input) => jev.test(input),
 
+    listSkills: async () => skills.list(),
+    previewSkillImport: (path) => skills.preview(path),
+    importSkill: async (importId) => {
+      const skill = await skills.import(importId);
+      skillsChanged();
+      return skill;
+    },
+    cancelSkillImport: async (importId) => skills.cancel(importId),
+    setSkillEnabled: async (skillId, enabled) => {
+      const skill = skills.setEnabled(skillId, enabled);
+      skillsChanged();
+      return skill;
+    },
+    removeSkill: async (skillId) => {
+      await skills.remove(skillId);
+      skillsChanged();
+    },
+
     openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
@@ -461,6 +494,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Answers being written keep what they have, marked "stopped".
       answers.stopAll();
       tagger.close();
+      skills.close();
       consent.close();
       documents.close();
       embeddingModel.close();
