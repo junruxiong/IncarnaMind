@@ -1,6 +1,12 @@
 import { join, resolve } from "node:path";
 import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain } from "electron";
-import { type Core, coreApiMethods, createCore, resolveLanguage } from "../core";
+import {
+  type ChatModelFactory,
+  type Core,
+  coreApiMethods,
+  createCore,
+  resolveLanguage,
+} from "../core";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { createElectronAdapters, systemBrowser } from "./platform";
@@ -16,6 +22,19 @@ const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 
 /** Test-only launch flag: lets the smoke tests open UI that nothing else opens yet (the Document viewer). */
 const testHooks = process.env.INCARNAMIND_TEST_HOOKS === "1";
+
+/**
+ * The scripted chat model the smoke tests answer Questions with. Only a test
+ * build (`electron-vite build --mode test`) has it: in any other build this
+ * condition is false at build time, so the model isn't bundled at all.
+ */
+async function testChatModel(): Promise<ChatModelFactory | undefined> {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_FAKE_CHAT === "1") {
+    const { createFakeChatModel } = await import("./fakeChatModel");
+    return createFakeChatModel;
+  }
+  return undefined;
+}
 
 let core: Core | undefined;
 
@@ -89,9 +108,10 @@ function showStartupError(error: unknown): void {
   );
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const createChatModel = await testChatModel();
   try {
-    core = createCore(createElectronAdapters());
+    core = createCore({ ...createElectronAdapters(), ...(createChatModel && { createChatModel }) });
   } catch (error) {
     showStartupError(error);
     app.quit();

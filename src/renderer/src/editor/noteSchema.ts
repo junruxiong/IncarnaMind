@@ -36,8 +36,6 @@ export interface NoteSchemaOptions {
   questionView?: NodeViewRenderer;
   /** Draws Answers, e.g. with their status and a stop button. */
   answerView?: NodeViewRenderer;
-  /** Called with a Question's Block ID when Enter is pressed in it. */
-  onAsk?: (questionId: string) => void;
 }
 
 /**
@@ -53,7 +51,6 @@ export function noteExtensions({
   codeBlockView,
   questionView,
   answerView,
-  onAsk,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -76,7 +73,7 @@ export function noteExtensions({
     CodeBlock.configure({ lowlight }),
     BlockMath.configure({ katexOptions: { displayMode: true, throwOnError: false }, onClick }),
     InlineMath.configure({ katexOptions: { throwOnError: false }, onClick }),
-    Question.configure({ view: questionView ?? null, onAsk: onAsk ?? (() => undefined) }),
+    Question.configure({ view: questionView ?? null }),
     Answer.configure({ view: answerView ?? null }),
     QuestionContextFlag,
     UniqueID.configure({ attributeName: BLOCK_ID_ATTRIBUTE, types: [...BLOCK_TYPES] }),

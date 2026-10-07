@@ -1,8 +1,10 @@
 import { Extension, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import {
   ANSWER_BLOCK,
   type AnswerAttributes,
-  BLOCK_ID_ATTRIBUTE,
   INCLUDE_IN_CONTEXT_ATTRIBUTE,
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
@@ -28,11 +30,9 @@ const stored = (defaultValue: unknown = null) => ({ default: defaultValue, rende
 export interface QuestionOptions {
   /** Draws the Question, e.g. with its model picker. */
   view: NodeViewRenderer | null;
-  /** Called when the User presses Enter in a Question, with its Block ID. */
-  onAsk: (questionId: string) => void;
 }
 
-/** A Question: the User's text, asked with Enter. Shift+Enter breaks the line. */
+/** A Question: the User's text. The editor asks it with Enter (see `QuestionCommands`). */
 export const Question = Node.create<QuestionOptions>({
   name: QUESTION_BLOCK,
   group: MIND_BLOCK_GROUP,
@@ -40,11 +40,11 @@ export const Question = Node.create<QuestionOptions>({
   defining: true,
 
   addOptions() {
-    return { view: null, onAsk: () => undefined };
+    return { view: null };
   },
 
   addAttributes() {
-    const attributes: Record<Exclude<keyof QuestionAttributes, "id">, ReturnType<typeof stored>> = {
+    const attributes: Record<Exclude<keyof QuestionAttributes, "id">, object> = {
       providerId: stored(),
       modelId: stored(),
     };
@@ -61,20 +61,6 @@ export const Question = Node.create<QuestionOptions>({
 
   addNodeView() {
     return this.options.view;
-  },
-
-  addKeyboardShortcuts() {
-    return {
-      Enter: ({ editor }) => {
-        const { $from } = editor.state.selection;
-        if ($from.parent.type.name !== QUESTION_BLOCK) return false;
-        const id = $from.parent.attrs[BLOCK_ID_ATTRIBUTE];
-        if (typeof id === "string" && $from.parent.textContent.trim() !== "") {
-          this.options.onAsk(id);
-        }
-        return true;
-      },
-    };
   },
 });
 
@@ -129,9 +115,15 @@ export const Answer = Node.create<AnswerOptions>({
   },
 });
 
+/** Whether a top-level Block is a Note the User switched out of Question context. */
+export const isSwitchedOff = (node: ProseMirrorNode): boolean =>
+  node.attrs[INCLUDE_IN_CONTEXT_ATTRIBUTE] === false &&
+  (NOTE_BLOCK_TYPES as readonly string[]).includes(node.type.name);
+
 /**
  * Each Note's "include in Question context" flag: on by default; switched off,
- * the Note is left out of what Questions see and is drawn muted.
+ * the Note is left out of what Questions see and is drawn muted (the
+ * "context-off" class, which reaches Notes drawn by their own views too).
  */
 export const QuestionContextFlag = Extension.create({
   name: "questionContextFlag",
@@ -150,6 +142,27 @@ export const QuestionContextFlag = Extension.create({
           },
         },
       },
+    ];
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("questionContextFlag"),
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = [];
+            state.doc.forEach((node, pos) => {
+              if (isSwitchedOff(node)) {
+                decorations.push(
+                  Decoration.node(pos, pos + node.nodeSize, { class: "context-off" }),
+                );
+              }
+            });
+            return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : null;
+          },
+        },
+      }),
     ];
   },
 });

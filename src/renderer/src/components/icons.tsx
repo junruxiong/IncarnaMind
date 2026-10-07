@@ -229,3 +229,58 @@ export function CheckIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A triangle pointing right: ask a Question, like the old editor's run button. */
+export function AskIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M5.5 3.6v8.8a.6.6 0 0 0 .9.5l6.6-4.4a.6.6 0 0 0 0-1L6.4 3.1a.6.6 0 0 0-.9.5z" />
+    </svg>
+  );
+}
+
+/** A rounded square: stop writing. */
+export function StopIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" {...props}>
+      <rect x="4" y="4" width="8" height="8" rx="1.5" />
+    </svg>
+  );
+}
+
+/** A circular arrow: write it again. */
+export function RegenerateIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v2.4h-2.4" />
+    </svg>
+  );
+}
+
+/** A speech bubble with a question mark: a Question, in menus. */
+export function QuestionIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M8 13.5c3.3 0 6-2.3 6-5.2S11.3 3 8 3 2 5.4 2 8.3c0 1.3.5 2.4 1.4 3.3L3 14l2.6-1a6.8 6.8 0 0 0 2.4.5z" />
+      <path d="M6.6 6.9a1.5 1.5 0 1 1 2 1.4c-.4.2-.6.5-.6.9M8 10.6v.1" />
+    </svg>
+  );
+}

@@ -1,6 +1,7 @@
 import type { Editor, JSONContent, Range } from "@tiptap/core";
 import type { ReactNode } from "react";
 import type { MessageKey } from "../../../shared/i18n";
+import { QuestionIcon } from "../components/icons";
 
 /**
  * One entry of the slash menu. To add one (a Question, a Skill), add it to
@@ -107,6 +108,16 @@ export const noteSlashItems: readonly SlashItem[] = [
         .insertContent({ type: "inlineMath", attrs: { latex: "" } })
         .run();
       editor.commands.editMath(range.from);
+    },
+  },
+  {
+    id: "question",
+    label: "question.slash",
+    keywords: ["ask", "question", "ai", "chat", "prompt"],
+    icon: <QuestionIcon className="size-4" />,
+    // The line becomes a Question, keeping what was typed before the slash.
+    run(editor, range) {
+      editor.chain().focus().deleteRange(range).setQuestion().run();
     },
   },
 ];
