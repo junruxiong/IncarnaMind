@@ -96,9 +96,10 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
+  // A text file is cited by its lines (ADR-0011): the spring tides are on line 2.
   await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
     "aria-label",
-    /^Citation 1: Tide tables\. /,
+    /^Citation 1: Tide tables, line 2\. /,
   );
 
   // Once the folder is renamed on disk, its Folder is gone: its chip shows it, struck through,
