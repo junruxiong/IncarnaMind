@@ -4,7 +4,7 @@
  * (see ./vectors); hybrid search fuses the two by reciprocal rank fusion. The
  * search Tool (#30) and Search scopes (#36) build on these.
  */
-import type { PassageSearchResult } from "../api";
+import type { DocumentKind, PassageSearchResult } from "../api";
 import type { Database } from "../storage";
 import { keywordQuery } from "./keywords";
 
@@ -45,8 +45,20 @@ export function keywordSearch(
     .map((row) => row.seq);
 }
 
-/** Fuses ranked lists of `seq`s by reciprocal rank fusion: the best `limit`, best first. */
-export function fuseRankings(rankings: readonly (readonly number[])[], limit: number): number[] {
+/** A Passage's `seq` and its fused score: higher is better. */
+export interface ScoredSeq {
+  seq: number;
+  score: number;
+}
+
+/**
+ * Fuses ranked lists of `seq`s by reciprocal rank fusion: the best `limit`,
+ * best first, with their fused scores.
+ */
+export function fuseRankingScores(
+  rankings: readonly (readonly number[])[],
+  limit: number,
+): ScoredSeq[] {
   const scores = new Map<number, number>();
   for (const ranking of rankings) {
     ranking.forEach((seq, index) => {
@@ -57,7 +69,12 @@ export function fuseRankings(rankings: readonly (readonly number[])[], limit: nu
   return [...scores.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([seq]) => seq);
+    .map(([seq, score]) => ({ seq, score }));
+}
+
+/** Fuses ranked lists of `seq`s by reciprocal rank fusion: the best `limit`, best first. */
+export function fuseRankings(rankings: readonly (readonly number[])[], limit: number): number[] {
+  return fuseRankingScores(rankings, limit).map((hit) => hit.seq);
 }
 
 interface ResultRow {
@@ -99,4 +116,75 @@ export function passagesBySeq(db: Database, seqs: readonly number[]): PassageSea
         ]
       : [];
   });
+}
+
+/** A live Passage as the document-search Tool sees it: with its sliding window and its Document. */
+export interface WindowedPassage extends PassageSearchResult {
+  seq: number;
+  documentKind: DocumentKind;
+  /** Positions of the first and last Passage in this Passage's sliding window. */
+  windowFrom: number;
+  windowTo: number;
+}
+
+interface WindowedRow extends ResultRow {
+  document_kind: string;
+  window_from: number;
+  window_to: number;
+}
+
+const WINDOWED_COLUMNS = `p.seq, p.id AS passage_id, p.document_id, d.name AS document_name,
+  d.kind AS document_kind, p.page_from, p.page_to, p.position, p.window_from, p.window_to, p.text`;
+
+const toWindowed = (row: WindowedRow): WindowedPassage => ({
+  seq: row.seq,
+  passageId: row.passage_id,
+  documentId: row.document_id,
+  documentName: row.document_name,
+  documentKind: row.document_kind as DocumentKind,
+  pageFrom: row.page_from,
+  pageTo: row.page_to,
+  position: row.position,
+  windowFrom: row.window_from,
+  windowTo: row.window_to,
+  text: row.text,
+});
+
+/** The live Passages with these `seq`s, in the order given, with their windows. */
+export function windowedPassagesBySeq(db: Database, seqs: readonly number[]): WindowedPassage[] {
+  if (seqs.length === 0) return [];
+  const rows = db.all<WindowedRow>(
+    `SELECT ${WINDOWED_COLUMNS}
+     FROM passages p JOIN documents d ON d.id = p.document_id
+     WHERE p.seq IN (SELECT value FROM json_each(?))
+       AND p.deleted_at IS NULL AND d.deleted_at IS NULL`,
+    [JSON.stringify(seqs)],
+  );
+  const bySeq = new Map(rows.map((row) => [row.seq, row]));
+  return seqs.flatMap((seq) => {
+    const row = bySeq.get(seq);
+    return row ? [toWindowed(row)] : [];
+  });
+}
+
+/**
+ * The live Passages of one sliding window of a Document, in reading order:
+ * those whose own window range takes in `window`. With windows of 3 and step 1,
+ * window w holds the Passages at positions w, w + 1 and w + 2.
+ */
+export function passagesInWindow(
+  db: Database,
+  documentId: string,
+  window: number,
+): WindowedPassage[] {
+  return db
+    .all<WindowedRow>(
+      `SELECT ${WINDOWED_COLUMNS}
+       FROM passages p JOIN documents d ON d.id = p.document_id
+       WHERE p.document_id = ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL
+         AND p.window_from <= ? AND p.window_to >= ?
+       ORDER BY p.position`,
+      [documentId, BigInt(window), BigInt(window)],
+    )
+    .map(toWindowed);
 }

@@ -45,7 +45,7 @@ A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
 **Citation**:
-A reference from an Answer to a Passage it drew on.
+A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the page or two it cites, and a quote from the Passage that is checked against those pages. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
 _Avoid_: source, reference
 
 **Folder**:

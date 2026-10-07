@@ -16,7 +16,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import { BLOCK_ID_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../api";
+import { BLOCK_ID_ATTRIBUTE, CITATION_NODE, NOTE_BLOCK_TYPES } from "../api";
 
 /** A node as ProseMirror (and Tiptap) write it in JSON. */
 export interface NodeJSON {
@@ -329,7 +329,7 @@ function blockMarkdown(element: Y.XmlElement): string {
   }
 }
 
-const INLINE_TYPES = new Set(["inlineMath", "hardBreak"]);
+const INLINE_TYPES = new Set(["inlineMath", "hardBreak", CITATION_NODE]);
 const isBlock = (element: Y.XmlElement) => !INLINE_TYPES.has(element.nodeName);
 
 function listMarkdown(list: Y.XmlElement): string {
@@ -349,7 +349,10 @@ function listMarkdown(list: Y.XmlElement): string {
   return items.join("\n");
 }
 
-/** Inline content with marks as Markdown: **bold**, *italic*, ~~strike~~, `code`, [links](…), $math$. */
+/**
+ * Inline content with marks as Markdown: **bold**, *italic*, ~~strike~~,
+ * `code`, [links](…), $math$, and Citations as "[Document, p. 3]".
+ */
 function inlineMarkdown(element: Y.XmlElement): string {
   let markdown = "";
   for (const child of element.toArray()) {
@@ -360,10 +363,27 @@ function inlineMarkdown(element: Y.XmlElement): string {
     } else if (child instanceof Y.XmlElement) {
       if (child.nodeName === "inlineMath") markdown += `$${textAttribute(child, "latex") ?? ""}$`;
       else if (child.nodeName === "hardBreak") markdown += "\n";
+      else if (child.nodeName === CITATION_NODE) markdown += citationMarkdown(child);
       else markdown += blockMarkdown(child);
     }
   }
   return markdown;
+}
+
+/**
+ * A Citation as a plain reference to its source, e.g. "[Attention Is All You
+ * Need, p. 3]": how Question context shows the model Citations in Notes and
+ * earlier Answers, without making them markers it could reuse.
+ */
+function citationMarkdown(citation: Y.XmlElement): string {
+  const name = textAttribute(citation, "documentName");
+  if (!name) return "";
+  const from = citation.getAttribute("pageFrom");
+  const to = citation.getAttribute("pageTo");
+  if (typeof from !== "number") return `[${name}]`;
+  return typeof to === "number" && to !== from
+    ? `[${name}, pp. ${from}–${to}]`
+    : `[${name}, p. ${from}]`;
 }
 
 function markRun({ insert, attributes = {} }: Run): string {

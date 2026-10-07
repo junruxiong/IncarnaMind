@@ -54,10 +54,13 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
         apiKey: spec.apiKey ?? undefined,
       })(spec.modelId);
     case "ollama":
-      // Ollama serves the OpenAI chat API under /v1.
-      return createOpenAICompatible({ name: "ollama", baseURL: `${requireBaseUrl(spec)}/v1` })(
-        spec.modelId,
-      );
+      // Ollama serves the OpenAI chat API under /v1, and holds a reply to a JSON schema
+      // there, which Answers from models without Tools use for their Citations (#30).
+      return createOpenAICompatible({
+        name: "ollama",
+        baseURL: `${requireBaseUrl(spec)}/v1`,
+        supportsStructuredOutputs: true,
+      })(spec.modelId);
     case "chatgpt":
       if (!spec.credentials) throw new Error("A ChatGPT sign-in is required.");
       return createCodexChatModel({

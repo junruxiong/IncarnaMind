@@ -4,9 +4,10 @@
  */
 import { readFile } from "node:fs/promises";
 import type { DocumentFailureReason, DocumentKind } from "../api";
+import { stripBoilerplate } from "./boilerplate";
 import { ExtractionError, extractText } from "./extract";
 import { keywordText } from "./keywords";
-import { type BuiltPassage, buildPassages } from "./passages";
+import { type BuiltPassage, buildPassages, type PageText } from "./passages";
 
 /**
  * The version of this pipeline: text extraction, Passage building, text
@@ -14,9 +15,11 @@ import { type BuiltPassage, buildPassages } from "./passages";
  * Passages or the index: Documents processed by an older version are
  * processed again at startup, going through the usual statuses.
  * 1: #25 (400/200 Passages, trigram index). 2: ADR-0009 (500/200 Passages,
- * normalised text, segmented keyword index, embeddings).
+ * normalised text, segmented keyword index, embeddings). 3: #30 (running
+ * headers, footers and page numbers removed; page text stored for the
+ * Citation check).
  */
-export const PROCESSING_VERSION = 2;
+export const PROCESSING_VERSION = 3;
 
 export interface ProcessingJob {
   documentId: string;
@@ -37,7 +40,13 @@ export interface ProcessedPassage extends BuiltPassage {
 }
 
 export type ProcessingResult =
-  | { outcome: "ready"; pageCount: number | null; passages: ProcessedPassage[] }
+  | {
+      outcome: "ready";
+      pageCount: number | null;
+      passages: ProcessedPassage[];
+      /** The text of each page, as the Passages were built from it (see ./boilerplate). */
+      pages: PageText[];
+    }
   | { outcome: "no-text"; pageCount: number | null }
   | { outcome: "failed"; reason: DocumentFailureReason; message: string };
 
@@ -66,13 +75,15 @@ export async function processFile(job: ProcessingJob): Promise<ProcessingResult>
     };
   }
   try {
-    const { pageCount, pages } = await extractText(job.kind, bytes);
+    const extracted = await extractText(job.kind, bytes);
+    const pages = stripBoilerplate(extracted.pages);
+    const { pageCount } = extracted;
     const passages = buildPassages(pages).map((passage) => ({
       ...passage,
       keywords: keywordText(passage.text),
     }));
     if (passages.length === 0) return { outcome: "no-text", pageCount };
-    return { outcome: "ready", pageCount, passages };
+    return { outcome: "ready", pageCount, passages, pages };
   } catch (error) {
     if (error instanceof ExtractionError) {
       return { outcome: "failed", reason: error.reason, message: error.message };

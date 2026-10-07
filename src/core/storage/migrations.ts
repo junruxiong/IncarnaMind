@@ -237,6 +237,32 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 11,
+    description: "Each Document's page text, for the Citation check (#30)",
+    sql: `
+      -- The text of each page of a Document as its Passages were built from it:
+      -- extracted, with running headers, footers and page numbers removed. The
+      -- Citation check looks for a quote in the pages a Citation names, so it
+      -- needs the pages themselves, not the Passages, which overlap and don't
+      -- mark where a page ends. Stored rather than extracted again: the check
+      -- runs when an Answer finishes, and must see exactly this text. page is
+      -- 1-based, and NULL for the one row of a Document without pages (TXT,
+      -- Markdown). Like Passages, rows are replaced when the Document is
+      -- processed again, and deleted with it.
+      CREATE TABLE document_pages (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        page INTEGER,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX document_pages_by_document ON document_pages (document_id, page)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
     version: 12,
     description: "Tags, the Tags on each Document, and automatic tagging's state",
     sql: `
