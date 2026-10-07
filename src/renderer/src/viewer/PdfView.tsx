@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import type { Document } from "../../../core/api";
-import { findQuoteInPieces, type TextPiece } from "../../../shared/quoteMatch";
+import { findQuoteInPages, type TextPiece } from "../../../shared/quoteMatch";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -275,30 +275,29 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     const from = clamp(target.pageFrom ?? 1, 1, pageCount);
     const to = clamp(target.pageTo ?? from, from, Math.min(pageCount, from + MAX_QUOTE_PAGES - 1));
     void (async () => {
-      const pieces: TextPiece[] = [];
-      const runs: { page: number; item: number }[] = [];
+      // Each page's text runs, counted as its text layer counts them.
+      const pages: TextPiece[][] = [];
       for (let page = from; page <= to; page++) {
         const content = await (await pdf.getPage(page)).getTextContent();
-        let item = 0;
+        const pieces: TextPiece[] = [];
         for (const entry of content.items) {
-          // Text runs only, counted as the text layer counts them.
           if (!("str" in entry)) continue;
           pieces.push({ text: entry.str, breakAfter: entry.hasEOL });
-          runs.push({ page, item: item++ });
         }
         const last = pieces.at(-1);
         if (last) last.breakAfter = true;
+        pages.push(pieces);
       }
       if (cancelled) return;
-      const found = findQuoteInPieces(pieces, quote);
+      // Across a page break, running headers and footers may sit inside the quote.
+      const found = findQuoteInPages(pages, quote);
       if (!found) return;
       const byPage = new Map<number, RunHighlight[]>();
       for (const part of found) {
-        const run = runs[part.piece];
-        if (!run) continue;
-        const list = byPage.get(run.page) ?? [];
-        list.push({ item: run.item, start: part.start, end: part.end });
-        byPage.set(run.page, list);
+        const page = from + part.page;
+        const list = byPage.get(page) ?? [];
+        list.push({ item: part.piece, start: part.start, end: part.end });
+        byPage.set(page, list);
       }
       pendingHighlight.current = target.request;
       setHighlights(byPage);
