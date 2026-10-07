@@ -126,6 +126,7 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
       contentHash: documents[0]?.contentHash as string,
       pageFrom: 2,
       pageTo: 2,
+      location: { kind: "page", from: 2, to: 2 },
       quote: SPRING,
       check: "found",
       checkReason: null,
@@ -531,6 +532,7 @@ describe("The Citation check", { timeout: 30_000 }, () => {
       documentName: "笔记",
       pageFrom: 1,
       pageTo: 1,
+      location: { kind: "section" },
       check: "found",
     });
   });

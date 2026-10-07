@@ -59,7 +59,7 @@ const NOT_COVERED =
   "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
 
 const RECORD =
-  "the Passage's id, the page or two consecutive pages the quote is on (a Passage marks where each new page starts, like [p. 4]; leave pages out for a Passage without pages), and a short quote copied exactly from the Passage, without page marks";
+  'the Passage\'s id, where the quote is, and a short quote copied exactly from the Passage, without its marks. Where: the page, slide, section, or rows or lines the quote is in, or two in a row, written as the Passage names them (its pages or location, and marks where each new one starts, like [p. 4], [slide 4], [§ 2.1 Sensitivity], [Revenue, rows 2–41] or [lines 51–100]; name rows or lines more narrowly when you can, e.g. "Revenue, rows 12–14")';
 
 /** The Citation check finds a quote with an ellipsis only part by part (see ../../shared/quoteMatch): best avoided. */
 const UNBROKEN_QUOTE =
@@ -117,7 +117,7 @@ export function documentInstructions(
   scoped = false,
 ): string {
   const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
-  const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, text and Markdown files).`;
+  const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, Word, PowerPoint, Excel, CSV, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
       return "";
@@ -141,7 +141,7 @@ export function documentInstructions(
         "Passages found in the User's Documents for this Question:",
         passages,
         "",
-        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "pageFrom": 3, "pageTo": 3, "quote": "…"}]}.',
+        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "p. 3", "quote": "…"}]}.',
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,

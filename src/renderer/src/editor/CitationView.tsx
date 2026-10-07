@@ -2,12 +2,8 @@ import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, type CitationAttributes } from "../../../core/api";
-import {
-  badgeMessage,
-  type CitationState,
-  citationState,
-  citedPages,
-} from "../../../shared/citations";
+import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
+import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { useAnswers } from "../answers";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -59,8 +55,9 @@ export function CitationView({
   );
   const openDocument = useAppStore((state) => state.openDocument);
   const state = citationState(attributes, documents);
-  const pages = citedPages(attributes);
-  const badge = badgeMessage(state, attributes);
+  const location = citationLocation(attributes);
+  const where = location ? formatLocation(location, t) : null;
+  const badge = badgeMessage(state, attributes, t);
   const badgeText = t(badge.key, badge.params);
   const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
@@ -68,21 +65,26 @@ export function CitationView({
   const marker = useRef<HTMLButtonElement>(null);
 
   /**
-   * Opens the cited page (or the Document), with the quote to highlight if
-   * asked, and the Citation's check and number: the viewer colours the quote
-   * by the check (amber when opened anyway after "not found") and shows the
-   * check mark beside it.
+   * Opens the cited place (a page, slide, section, rows or lines), or the
+   * Document, with the quote to highlight if asked, and the Citation's
+   * check, number and label: the viewer colours the quote by the check
+   * (amber when opened anyway after "not found") and shows the check mark,
+   * with where it points, beside it.
    */
   const openCited = (withQuote: boolean) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
     openDocument({
       documentId,
-      // A Document without pages whose quote wasn't found opens at the top.
+      // A whole TXT or Markdown file cited before Locations, whose quote wasn't found, opens at the top.
       pageFrom: attributes.pageFrom ?? undefined,
       pageTo: attributes.pageTo ?? undefined,
       quote: withQuote && attributes.quote ? attributes.quote : undefined,
-      citation: { check: state.check, ...(number > 0 ? { number } : {}) },
+      citation: {
+        check: state.check,
+        ...(number > 0 ? { number } : {}),
+        ...(where ? { label: where } : {}),
+      },
     });
   };
 
@@ -94,10 +96,12 @@ export function CitationView({
     else if (state.check !== "not-found") openCited(false);
   };
 
-  // The number, the Document, the page and the check: the marker only shows the number.
+  // The number, the Document, where it points and the check: the marker only shows the number.
   const label = t("citation.label", {
     number,
-    document: pages ? t("citation.where.page", { document: documentName, pages }) : documentName,
+    document: where
+      ? t("citation.where", { document: documentName, location: where })
+      : documentName,
     badge: badgeText,
   });
 
@@ -190,16 +194,18 @@ function CitationCard({
   onRegenerate(): void;
 }) {
   const t = useT();
-  const pages = citedPages(attributes);
+  const location = citationLocation(attributes);
+  const where = location ? formatLocation(location, t) : null;
+  const opens = openKind(location);
   const name = attributes.documentName ?? "";
   const checked = state.check === "found" || state.check === "not-found";
-  // Once checked, the state line names the page, or the Document if it has no pages.
+  // Once checked, the state line names the place, or the Document if it names none.
   const source = checked
-    ? pages
+    ? where
       ? name
       : null
-    : pages
-      ? t("citation.where.page", { document: name, pages })
+    : where
+      ? t("citation.where", { document: name, location: where })
       : name;
   const reason =
     state.check === "checking"
@@ -241,7 +247,7 @@ function CitationCard({
               // With the quote: the viewer washes it amber wherever it does find it.
               onClick={() => onOpen(true)}
             >
-              {t(pages ? "citation.openAnyway.page" : "citation.openAnyway.document")}
+              {t(`citation.openAnyway.${opens}`)}
             </button>
             <button
               type="button"
@@ -270,7 +276,7 @@ function CitationCard({
               className="citation-card-action citation-card-action--primary"
               onClick={() => onOpen(state.check === "found")}
             >
-              {t(pages ? "citation.open.page" : "citation.open.document")}
+              {t(`citation.open.${opens}`)}
             </button>
           )
         )}

@@ -6,9 +6,11 @@
  * With no Documents (no Tools offered), every Question gets the same short
  * Markdown Answer, streamed a few words at a time. With Documents, it does
  * what a Tool-calling model does: it searches for the Question, cites the line
- * of the first Passage that shares a word with the Question (on the page that
- * line is on), then answers with a marker. A Question with "misquote" in it
- * gets a quote that isn't on the page.
+ * of the first Passage that shares a word with the Question (on the page, or
+ * at the Location, that line is on), then answers with a marker. A Question
+ * with "misquote" in it gets a quote that isn't on the page; one with "each"
+ * cites the first Passage of each Document found, with a marker for each; one
+ * with "rows" quotes two lines, so a sheet's Citation covers a range of rows.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -101,41 +103,115 @@ function skillNamed(prompt: Prompt, question: string): string | null {
   return listed.find((name) => name && question.toLowerCase().includes(name)) ?? null;
 }
 
+/** A Passage of a search result, as the model reads it. */
+interface ShownPassage {
+  id: string;
+  document: string;
+  /** A PDF's first page. */
+  page: number | null;
+  /** Any other kind's: where the Passage is, e.g. "slides 1–5" (ADR-0011). */
+  location: string | null;
+  text: string;
+}
+
+function passagesIn(result: string): ShownPassage[] {
+  const pattern =
+    /<passage id="([^"]+)" document="([^"]*)"(?: pages="(\d+)(?:-\d+)?")?(?: location="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+  return [...result.matchAll(pattern)].map((match) => ({
+    id: match[1] as string,
+    document: match[2] as string,
+    page: match[3] ? Number(match[3]) : null,
+    location: match[4] ?? null,
+    text: match[5] ?? "",
+  }));
+}
+
+/** A mark where a new Unit starts in a Passage: "[p. 4] ", "[slide 4] ", "[§ 2.1 Sensitivity] "… */
+const UNIT_MARK = /^\[(p\. \d+|slides? [^\]]+|§[^\]]*|[^\]]*rows? [\d–-]+|lines? [\d–-]+)\] /;
+/** Where a slide's speaker notes start in a Passage. */
+const NOTES_MARK = /^\[speaker notes\] /;
+
 /**
- * The record for the first Passage of a search result: its line that shares
- * a word with the Question, the page that line is on, and the line as the quote.
+ * The record for a Passage: its line that shares the most words with the
+ * Question, where that line is (the page, or the Unit a mark before it names,
+ * or else the Passage's own location), and the line as the quote. A Question
+ * that says "rows" quotes that line and the next, so it covers a range of rows.
  */
-function recordFor(result: string, question: string): Record<string, unknown> | null {
-  const match =
-    /<passage id="([^"]+)" document="[^"]*"(?: pages="(\d+)(?:-\d+)?")?>\n([\s\S]*?)\n<\/passage>/.exec(
-      result,
-    );
-  if (!match) return null;
-  const [, id, firstPage, text = ""] = match;
+function recordFor(
+  passage: ShownPassage,
+  question: string,
+  marker: number,
+): { record: Record<string, unknown>; shared: number } | null {
   const words = question
     .toLowerCase()
     .split(/\W+/)
     .filter((word) => word.length >= 4);
-  let page = firstPage ? Number(firstPage) : null;
-  let chosen: { line: string; page: number | null; shared: number } | null = null;
-  for (const raw of text.split("\n")) {
-    const mark = /^\[p\. (\d+)\] /.exec(raw);
-    if (mark) page = Number(mark[1]);
-    const line = raw.replace(/^\[p\. \d+\] /, "").trim();
-    if (!line) continue;
-    const shared = words.filter((word) => line.toLowerCase().includes(word)).length;
-    if (!chosen || shared > chosen.shared) chosen = { line, page, shared };
+  let page = passage.page;
+  let location = passage.location;
+  const lines: { line: string; page: number | null; location: string | null }[] = [];
+  for (const raw of passage.text.split("\n")) {
+    let rest = raw;
+    const mark = UNIT_MARK.exec(rest);
+    if (mark) {
+      const label = mark[1] as string;
+      if (label.startsWith("p. ")) page = Number(label.slice(3));
+      else location = label;
+      rest = rest.slice(mark[0].length);
+    }
+    rest = rest.replace(NOTES_MARK, "");
+    lines.push({ line: rest.trim(), page, location });
   }
-  if (!chosen) return null;
-  const quote = /misquote/i.test(question)
-    ? `${chosen.line.replace(/[.!?]$/, "")} and tomorrow.`
-    : chosen.line;
-  return {
-    marker: 1,
-    passage: id,
-    ...(chosen.page === null ? {} : { pageFrom: chosen.page, pageTo: chosen.page }),
+  let chosen = -1;
+  let best = -1;
+  lines.forEach(({ line }, index) => {
+    if (!line) return;
+    const shared = words.filter((word) => line.toLowerCase().includes(word)).length;
+    if (shared > best) {
+      best = shared;
+      chosen = index;
+    }
+  });
+  const picked = lines[chosen];
+  if (!picked) return null;
+  let quote = picked.line;
+  const next = lines[chosen + 1];
+  if (/\brows\b/i.test(question) && next?.line && next.location === picked.location) {
+    quote = `${quote}\n${next.line}`;
+  }
+  if (/misquote/i.test(question)) quote = `${quote.replace(/[.!?]$/, "")} and tomorrow.`;
+  const record = {
+    marker,
+    passage: passage.id,
+    ...(picked.page !== null
+      ? { pageFrom: picked.page, pageTo: picked.page }
+      : picked.location
+        ? { location: picked.location }
+        : {}),
     quote,
   };
+  return { record, shared: best };
+}
+
+/**
+ * The records for a search result: for the first Passage, or with "each" in
+ * the Question, for each Document found, its Passage with the line that
+ * shares the most words with the Question, numbered in the order found.
+ */
+function recordsFor(result: string, question: string): Record<string, unknown>[] {
+  const passages = passagesIn(result);
+  if (!/\beach\b/i.test(question)) {
+    const first = passages[0] && recordFor(passages[0], question, 1);
+    return first ? [first.record] : [];
+  }
+  const documents = [...new Set(passages.map((passage) => passage.document))];
+  return documents.flatMap((document, index) => {
+    let best: { record: Record<string, unknown>; shared: number } | null = null;
+    for (const passage of passages.filter((each) => each.document === document)) {
+      const found = recordFor(passage, question, index + 1);
+      if (found && (!best || found.shared > best.shared)) best = found;
+    }
+    return best ? [best.record] : [];
+  });
 }
 
 const USAGE = {
@@ -279,12 +355,20 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   if (!tools.includes("search_documents")) return { text: fakeAnswer(question, skill) };
   const searches = toolResults(prompt, "search_documents");
   if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
-  if (toolResults(prompt, "cite").length === 0) {
-    const record = recordFor(searches.at(-1) ?? "", question);
-    if (record) return { tool: "cite", input: { citations: [record] } };
+  const cites = toolResults(prompt, "cite");
+  if (cites.length === 0) {
+    const records = recordsFor(searches.at(-1) ?? "", question);
+    if (records.length > 0) return { tool: "cite", input: { citations: records } };
     return { text: fakeAnswer(question, skill) };
   }
-  return { text: skill ? `Following the Skill ${skill}.\n\n${CITED_ANSWER}` : CITED_ANSWER };
+  // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
+  const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
+  const recorded = [...new Set([...recordedLine.matchAll(/\[\^\d+\]/g)].map((match) => match[0]))];
+  const answer =
+    recorded.length > 1
+      ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
+      : CITED_ANSWER;
+  return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }
 
 export const createFakeChatModel: ChatModelFactory = (spec) =>

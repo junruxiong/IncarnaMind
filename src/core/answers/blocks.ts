@@ -16,6 +16,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import * as Y from "yjs";
+import { citationLocation, englishLocation } from "../../shared/locations";
 import { BLOCK_ID_ATTRIBUTE, CITATION_NODE, NOTE_BLOCK_TYPES } from "../api";
 
 /** A node as ProseMirror (and Tiptap) write it in JSON. */
@@ -380,10 +381,12 @@ function citationMarkdown(citation: Y.XmlElement): string {
   if (!name) return "";
   const from = citation.getAttribute("pageFrom");
   const to = citation.getAttribute("pageTo");
-  if (typeof from !== "number") return `[${name}]`;
-  return typeof to === "number" && to !== from
-    ? `[${name}, pp. ${from}–${to}]`
-    : `[${name}, p. ${from}]`;
+  const location = citationLocation({
+    location: citation.getAttribute("location"),
+    pageFrom: typeof from === "number" ? from : null,
+    pageTo: typeof to === "number" ? to : null,
+  });
+  return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
 }
 
 function markRun({ insert, attributes = {} }: Run): string {
