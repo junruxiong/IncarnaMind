@@ -1,30 +1,36 @@
 /**
  * Automatic tagging (spec #20, "Tagging"): once a Document is ready (embedded,
- * so already searchable), the default chat model chooses its Tags. One
- * Document at a time, in the order they became ready.
+ * so already searchable), its Tags are decided: by Jev when a Jev key is set
+ * up on this device, otherwise by the default chat model. One Document at a
+ * time, in the order they became ready.
  *
  * - Nothing is sent before the User accepts the "tagging" data flow to the
- *   chat model's service; a local model needs no consent.
- * - With no usable chat model (none set up, a missing key or sign-in, or the
- *   flow declined) Documents wait as "waiting-for-provider", and are picked up
- *   again whenever chat readiness changes.
+ *   tagger's service; a local model needs no consent.
+ * - With no usable tagger (no chat model set up, a missing key or sign-in, or
+ *   the flow declined) Documents wait as "waiting-for-provider", and are
+ *   picked up again whenever that may have changed.
  * - Only automatic links change: Tags the User added or removed on a
  *   Document stay as they are (see `TagsStore.applyAutomatic`).
  */
-import type { ChatReadiness, DocumentKind, ProviderError } from "../api";
+import type { DocumentKind, ProviderError } from "../api";
 import {
   ChatNotReadyError,
   ConsentDeclinedError,
   InvalidInputError,
   NotFoundError,
+  TaggingNotReadyError,
 } from "../errors";
-import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { Database } from "../storage";
-import { chooseTags, type DocumentExcerpt, excerptFromPassages } from "./classify";
+import {
+  type DocumentExcerpt,
+  excerptFromPassages,
+  type TagClassifier,
+  type TagDecision,
+} from "./classify";
 import type { TagsStore } from "./index";
 
-/** What the "tagging" flow sends to the chat model's service. */
+/** What the "tagging" flow sends to the tagger's service: the chat model's or Jev's. */
 export const TAGGING_FLOW_SENDS = ["tags", "document-excerpts"] as const;
 
 /** Tagging states as stored (`documents.tagging_status`); "skipped" is worked out from the status. */
@@ -42,15 +48,19 @@ export interface TaggerOptions {
   db: Database;
   now: () => string;
   tags: TagsStore;
-  /** Whether the default chat model can take a tagging request now. Asks the User nothing. */
-  readiness(): Promise<ChatReadiness>;
+  /** Whether the tagger in use can take a request now. Asks the User nothing. */
+  canRun(): Promise<boolean>;
   /**
    * A quick check, with no waiting: false when tagging certainly can't run
-   * (no default chat model, or the User declined the flow to its service).
+   * (no tagger set up, or the User declined the flow to its service).
    */
   mightBeReady(): boolean;
-  /** The default chat model, once the User has accepted the tagging flow to its service. */
-  prepareModel(): Promise<PreparedChatModel>;
+  /**
+   * The tagger in use, once the User has accepted the tagging flow to its
+   * service. Throws ChatNotReadyError, ConsentDeclinedError or
+   * TaggingNotReadyError when it can't be used: nothing is sent then.
+   */
+  prepare(): Promise<TagClassifier>;
   /** Pushes "documents.tagged" for these Documents. */
   announce(documentIds: readonly string[]): void;
   reportError(error: unknown): void;
@@ -117,7 +127,7 @@ export function createTagger(options: TaggerOptions) {
     if (changed.length > 0) announce(changed);
   };
 
-  /** No chat model can be used: every queued Document waits for one. */
+  /** No tagger can be used: every queued Document waits for one. */
   function park(): void {
     setStates(queue.splice(0), "waiting-for-provider");
   }
@@ -141,8 +151,8 @@ export function createTagger(options: TaggerOptions) {
   };
 
   /**
-   * Tags one ready Document. If no chat model can be used after all, it and
-   * the rest of the queue wait for one.
+   * Tags one ready Document. If no tagger can be used after all, it and the
+   * rest of the queue wait for one.
    */
   async function tagDocument(id: string): Promise<void> {
     const request = requests.get(id) ?? 0;
@@ -153,15 +163,19 @@ export function createTagger(options: TaggerOptions) {
     const definitions = tags.list();
     if (setState(id, "tagging")) announce([id]);
 
-    let chosen: string[] = [];
+    let decisions: TagDecision[] = [];
     if (definitions.length > 0) {
-      let prepared: PreparedChatModel;
+      let tagger: TagClassifier;
       try {
-        prepared = await options.prepareModel();
+        tagger = await options.prepare();
       } catch (error) {
         if (lifetime.signal.aborted) return;
-        if (error instanceof ChatNotReadyError || error instanceof ConsentDeclinedError) {
-          // Declined, or the model went away while this waited: this and the rest wait.
+        if (
+          error instanceof ChatNotReadyError ||
+          error instanceof ConsentDeclinedError ||
+          error instanceof TaggingNotReadyError
+        ) {
+          // Declined, or the tagger went away while this waited: this and the rest wait.
           if (setState(id, "waiting-for-provider")) announce([id]);
           park();
         } else {
@@ -171,8 +185,7 @@ export function createTagger(options: TaggerOptions) {
       }
       if (stale()) return;
       try {
-        chosen = await chooseTags({
-          model: prepared.model,
+        decisions = await tagger.decide({
           tags: definitions,
           excerpt: excerptOf(id, row),
           signal: lifetime.signal,
@@ -186,7 +199,7 @@ export function createTagger(options: TaggerOptions) {
 
     const changed = db.transaction(() => {
       if (rowOf(id)?.status !== "ready") return false; // deleted, or processed again, meanwhile
-      const tagsChanged = tags.applyAutomatic(id, chosen);
+      const tagsChanged = tags.applyAutomatic(id, decisions);
       return setState(id, "tagged") || tagsChanged;
     });
     if (changed) announce([id]);
@@ -197,9 +210,9 @@ export function createTagger(options: TaggerOptions) {
     running = true;
     try {
       while (queue.length > 0 && !lifetime.signal.aborted) {
-        const readiness = await options.readiness();
+        const ready = await options.canRun();
         if (lifetime.signal.aborted) return;
-        if (!readiness.ready) {
+        if (!ready) {
           park();
           break;
         }
@@ -236,7 +249,7 @@ export function createTagger(options: TaggerOptions) {
     void pump();
   }
 
-  /** Queues every ready Document that still needs tagging, or marks them waiting if no chat model can be used. */
+  /** Queues every ready Document that still needs tagging, or marks them waiting if no tagger can be used. */
   function resume(): void {
     if (lifetime.signal.aborted) return;
     const ids = db
@@ -267,7 +280,7 @@ export function createTagger(options: TaggerOptions) {
 
     /**
      * A Document just became ready. Called before its new status is pushed,
-     * so that event already says whether it waits for a chat model.
+     * so that event already says whether it waits for a tagger.
      */
     documentReady(id: string): void {
       const row = rowOf(id);
@@ -281,7 +294,7 @@ export function createTagger(options: TaggerOptions) {
       enqueue(id);
     },
 
-    /** Chat readiness may have changed: Documents waiting for a chat model, or failed, are tried again. */
+    /** The tagger, or whether it can run, may have changed: Documents waiting, or failed, are tried again. */
     resume,
 
     /**
