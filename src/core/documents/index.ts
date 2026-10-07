@@ -575,6 +575,24 @@ export function createDocuments(options: DocumentsOptions) {
     }
   }
 
+  /** SQL for the live Documents `d` with Passages to search: of all of them, or only of these. */
+  function searchable(documentIds: readonly string[] | undefined) {
+    return {
+      where: `d.deleted_at IS NULL
+        AND EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id AND p.deleted_at IS NULL)
+        ${documentIds ? "AND d.id IN (SELECT value FROM json_each(?))" : ""}`,
+      params: documentIds ? [JSON.stringify(documentIds)] : [],
+    };
+  }
+
+  function searchableCount(documentIds?: readonly string[]): number {
+    const { where, params } = searchable(documentIds);
+    return (
+      db.get<{ count: number }>(`SELECT count(*) AS count FROM documents d WHERE ${where}`, params)
+        ?.count ?? 0
+    );
+  }
+
   /** Hybrid search for the document-search Tool: the best `limit` live Passages, with fused scores. */
   async function candidates(
     query: string,
@@ -624,16 +642,25 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /** How many live Documents have Passages to search: of all of them, or only of these. */
-    searchableCount(documentIds?: readonly string[]): number {
-      return (
-        db.get<{ count: number }>(
-          `SELECT count(*) AS count FROM documents d
-           WHERE d.deleted_at IS NULL
-             AND EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id AND p.deleted_at IS NULL)
-             ${documentIds ? "AND d.id IN (SELECT value FROM json_each(?))" : ""}`,
-          documentIds ? [JSON.stringify(documentIds)] : [],
-        )?.count ?? 0
-      );
+    searchableCount,
+
+    /**
+     * How many live Documents have Passages to search (of all of them, or only
+     * of these), and the names of the `limit` most recently added, newest first.
+     */
+    searchableNames(
+      documentIds: readonly string[] | undefined,
+      limit: number,
+    ): { total: number; names: string[] } {
+      const { where, params } = searchable(documentIds);
+      const names = db
+        .all<{ name: string }>(
+          `SELECT d.name FROM documents d WHERE ${where}
+           ORDER BY d.created_at DESC, d.rowid DESC LIMIT ?`,
+          [...params, BigInt(limit)],
+        )
+        .map((row) => row.name);
+      return { total: searchableCount(documentIds), names };
     },
 
     /**

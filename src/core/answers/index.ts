@@ -18,9 +18,9 @@
  * the run ended and what it wrote. Stopping the Answer stops a running script.
  *
  * A Question with a Search scope searches only the Documents it covers,
- * resolved when the Question is asked (or its Answer regenerated). When the
- * scope covers no Document with Passages, the Answer says so, and nothing is
- * searched or sent.
+ * resolved when the Question is asked (or its Answer regenerated), and the
+ * instructions name only those. When the scope covers no Document with
+ * Passages, the Answer says so, and nothing is searched or sent.
  *
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
@@ -86,6 +86,8 @@ import {
   answerInstructions,
   connectorInstructions,
   documentInstructions,
+  LISTED_DOCUMENTS,
+  type ListedDocuments,
   loadedSkillText,
   signInNeededInstructions,
   skillInstructions,
@@ -194,12 +196,14 @@ const deniedScriptResult = (script: SkillScript) =>
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
- * What the core gives Answers from Documents: `AnswerDocuments`, counting and
- * searching only the Documents of a Search scope when given their ids (null:
- * every Document).
+ * What the core gives Answers from Documents: `AnswerDocuments`, counting,
+ * listing and searching only the Documents of a Search scope when given their
+ * ids (null: every Document).
  */
 export interface DocumentsForAnswers extends Pick<AnswerDocuments, "citationSource" | "pageTexts"> {
   searchableCount(documentIds: readonly string[] | null): number;
+  /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
+  searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
   search(
     query: string,
     documentIds: readonly string[] | null,
@@ -687,7 +691,14 @@ export function createAnswers(options: AnswersOptions) {
         ) =>
           [
             base,
-            documentInstructions(mode, tools.documentCount, passages, documentIds !== null),
+            mode === "no-documents"
+              ? ""
+              : documentInstructions(
+                  mode,
+                  options.documents.searchableNames(documentIds, LISTED_DOCUMENTS),
+                  passages,
+                  documentIds !== null,
+                ),
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(external, mode === "no-documents") : "",
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
