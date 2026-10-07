@@ -6,6 +6,47 @@ import { CHATGPT_SERVICE } from "./chatgpt/codexEndpoint";
 /** Ollama's default local address. 127.0.0.1 rather than localhost, which may resolve to IPv6 first. */
 export const OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434";
 
+/**
+ * The address in `OLLAMA_HOST`, read the way Ollama's own client reads it
+ * (`envconfig.Host`): without a scheme, http and port 11434; with "http://"
+ * or "https://" and no port, 80 or 443; a path is kept. The address a server
+ * listens on for every interface (0.0.0.0, ::) is reached on loopback. Null
+ * when it is unset or can't be read.
+ */
+export function ollamaHostUrl(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  const [scheme, rest] = raw.includes("://")
+    ? (raw.split("://", 2) as [string, string])
+    : ["", raw];
+  if (scheme && scheme !== "http" && scheme !== "https") return null;
+  const defaultPort = scheme === "https" ? "443" : scheme === "http" ? "80" : "11434";
+  const slash = rest.indexOf("/");
+  const hostPort = slash === -1 ? rest : rest.slice(0, slash);
+  const path = slash === -1 ? "" : rest.slice(slash).replace(/\/+$/, "");
+  const bracketed = /^\[([^\]]+)\](?::(\d*))?$/.exec(hostPort);
+  const plain = bracketed ? null : /^([^:]*)(?::(\d*))?$/.exec(hostPort);
+  let host = bracketed?.[1] ?? plain?.[1] ?? "";
+  let port = bracketed?.[2] ?? plain?.[2] ?? "";
+  // More than one colon and no brackets: a bare IPv6 address, without a port.
+  if (!bracketed && !plain) {
+    host = hostPort;
+    port = "";
+  }
+  if (!/^\d+$/.test(port) || Number(port) > 65535) port = defaultPort;
+  if (host === "" || host === "0.0.0.0" || host === "::") host = "127.0.0.1";
+  const shown = host.includes(":") ? `[${host}]` : host;
+  try {
+    return normalizeBaseUrl(`${scheme || "http"}://${shown}:${port}${path}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Where Ollama is when the User gave no URL: `OLLAMA_HOST` if set, else the default address. */
+export const defaultOllamaUrl = (env: NodeJS.ProcessEnv = process.env): string =>
+  ollamaHostUrl(env.OLLAMA_HOST) ?? OLLAMA_DEFAULT_URL;
+
 interface KindInfo {
   /** The hosted API, for kinds that don't take a base URL. */
   hosted?: ExternalService;
@@ -79,13 +120,14 @@ export function baseUrlFor(kind: ChatProviderKind, raw: unknown): string | null 
   }
   if (!given) {
     if (rule === "required") throw new InvalidInputError("Enter the server's URL.");
-    return OLLAMA_DEFAULT_URL;
+    return defaultOllamaUrl();
   }
   return normalizeBaseUrl(given);
 }
 
+/** Ollama's address: the URL the User gave, else `OLLAMA_HOST`, else the default. */
 export const ollamaBaseUrl = (raw: unknown): string =>
-  baseUrlFor("ollama", raw) ?? OLLAMA_DEFAULT_URL;
+  baseUrlFor("ollama", raw) ?? defaultOllamaUrl();
 
 /** Loopback addresses: data sent there stays on this computer. */
 export function isLoopbackHost(hostname: string): boolean {

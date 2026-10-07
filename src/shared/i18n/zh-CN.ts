@@ -336,6 +336,7 @@ export const zhCN = {
   "providers.test.network": "无法连接到服务器。请检查地址和网络连接。",
   "providers.test.provider": "服务商返回了错误。",
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
+  "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.unknown": "测试没有成功。",
 
   "providers.secrets.plainText.title": "没有正在运行的密钥环",
@@ -527,6 +528,8 @@ export const zhCN = {
   "answer.error.provider": "服务商出现了问题。请重试，或在问题上换一个模型。",
   "answer.error.consent-declined":
     "没有发送任何内容，因为你选择了不向这个服务发送数据。你可以在设置中允许。",
+  "answer.error.too-long":
+    "这个问题太长：即使不带上方的笔记，也放不进本地模型的上下文窗口。请缩短问题，或在问题上换一个模型。",
   "answer.error.unknown": "这个回答没能生成。请重试。",
   "answer.error.not-signed-in": "你还没有登录 ChatGPT。请在设置中重新登录。",
   "answer.error.plan-limit":

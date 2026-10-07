@@ -41,8 +41,15 @@ export type { EmbeddingModelFactory, EmbeddingModelSpec } from "./providers/embe
 export {
   type ChatModelFactory,
   type ChatModelSpec,
+  type ContextWindow,
   createAiSdkChatModel,
 } from "./providers/models";
 export { RECOMMENDED_OLLAMA_MODEL } from "./providers/ollama";
+export {
+  createOllamaModels,
+  type OllamaModelProfile,
+  type OllamaModelSettings,
+  type OllamaModels,
+} from "./providers/ollamaModels";
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
 export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";

@@ -11,6 +11,7 @@ import type {
   ChatProvider,
   ChatProviderKind,
   ChatReadiness,
+  CitationSupport,
   ConnectionTestResult,
   DataFlowId,
   ExternalService,
@@ -24,8 +25,13 @@ import { isChatGptPlanModel } from "./chatgpt/codexEndpoint";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import { acceptsApiKey, baseUrlFor, isChatProviderKind, requiresApiKey, serviceFor } from "./kinds";
 import { listProviderModels } from "./modelLists";
-import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec } from "./models";
-import { classifyProviderError } from "./providerErrors";
+import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
+import {
+  DEFAULT_OLLAMA_SETTINGS,
+  type OllamaModelProfile,
+  type OllamaModels,
+} from "./ollamaModels";
+import { classifyProviderError, LocalModelError } from "./providerErrors";
 
 /** How long a provider's model list is kept before it is asked again. */
 const MODEL_LIST_TTL_MS = 5 * 60_000;
@@ -55,6 +61,27 @@ export interface PreparedChatModel {
   model: ChatLanguageModel;
   provider: ChatProvider;
   modelId: string;
+  /** A local model's fixed context window, which each request must fit; none for a cloud model. */
+  window?: ContextWindow;
+  /** How the model gives Citations, known before the first request (from Ollama's capabilities). */
+  support?: CitationSupport;
+  /** Which build of the model this is (Ollama's digest), when known: what was learnt about it holds for this build. */
+  revision?: string;
+  /**
+   * For a local model: whether it is loaded and ready now, or a request would
+   * first wait for it to load; null when that can't be told.
+   */
+  loaded?: () => Promise<boolean | null>;
+}
+
+/** A model in Ollama that can't answer Questions, such as an embedding model, fails before anything is sent. */
+function checkCanChat(profile: OllamaModelProfile | null, modelId: string): void {
+  if (profile && !profile.chat) {
+    throw new LocalModelError(
+      "model",
+      `${modelId} can't answer Questions: Ollama lists it as ${profile.capabilities?.join(", ") || "not a chat model"}. Pick a chat model.`,
+    );
+  }
 }
 
 const keyName = (providerId: string) => `chat-provider:${providerId}:api-key`;
@@ -100,8 +127,14 @@ export function createChat(options: {
   consent: Consent;
   createModel: ChatModelFactory;
   chatGpt: ChatGptPlanAccess;
+  /** Looks up models in Ollama, for the settings their requests carry and how they cite. */
+  ollamaModels: OllamaModels;
 }) {
-  const { db, now, settings, secrets, consent, createModel, chatGpt } = options;
+  const { db, now, settings, secrets, consent, createModel, chatGpt, ollamaModels } = options;
+
+  /** What Ollama says about a model, for the "ollama" kind; null for other kinds, or when it can't say. */
+  const profileFor = (kind: ChatProviderKind, baseUrl: string | null, modelId: string) =>
+    kind === "ollama" && baseUrl ? ollamaModels.describe(baseUrl, modelId) : Promise.resolve(null);
 
   /** A ChatGPT plan provider counts only while the experimental switch is on. */
   const usable = (row: ProviderRow | undefined) =>
@@ -135,12 +168,17 @@ export function createChat(options: {
       )
       .filter((row) => isChatProviderKind(row.kind) && usable(row));
 
-  /** What the model factory needs; the ChatGPT plan signs with the sign-in instead of a key. */
+  /**
+   * What the model factory needs; the ChatGPT plan signs with the sign-in
+   * instead of a key, and a model in Ollama gets its fixed settings, the
+   * defaults when Ollama couldn't say.
+   */
   const specFor = (
     kind: ChatProviderKind,
     baseUrl: string | null,
     apiKey: string | null,
     modelId: string,
+    profile: OllamaModelProfile | null = null,
   ): ChatModelSpec =>
     kind === "chatgpt"
       ? {
@@ -150,7 +188,9 @@ export function createChat(options: {
           modelId,
           credentials: chatGpt.credentials,
         }
-      : { kind, baseUrl, apiKey, modelId };
+      : kind === "ollama"
+        ? { kind, baseUrl, apiKey, modelId, ollama: profile?.settings ?? DEFAULT_OLLAMA_SETTINGS }
+        : { kind, baseUrl, apiKey, modelId };
 
   /** The ChatGPT plan takes only the models its endpoint accepts, and only while it's turned on. */
   const checkChatGpt = (kind: ChatProviderKind, modelId: string) => {
@@ -402,7 +442,10 @@ export function createChat(options: {
       try {
         const service = serviceFor(server.kind, server.baseUrl);
         if (service) await consent.ensure("chat", service);
-        const model = createModel(specFor(server.kind, server.baseUrl, apiKey, modelId));
+        // A model in Ollama is tested with the settings Answers use, so it stays loaded for them.
+        const profile = await profileFor(server.kind, server.baseUrl, modelId);
+        checkCanChat(profile, modelId);
+        const model = createModel(specFor(server.kind, server.baseUrl, apiKey, modelId, profile));
         await generateText({
           model,
           prompt: "Reply with the word OK.",
@@ -431,8 +474,24 @@ export function createChat(options: {
       const { provider, modelId } = readiness;
       if (provider.service) await consent.ensure(flow, provider.service);
       const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
-      const model = createModel(specFor(provider.kind, provider.baseUrl, apiKey, modelId));
-      return { model, provider, modelId };
+      const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
+      checkCanChat(profile, modelId);
+      const spec = specFor(provider.kind, provider.baseUrl, apiKey, modelId, profile);
+      const model = createModel(spec);
+      const baseUrl = provider.baseUrl;
+      // Without Ollama's word on the model (it couldn't be asked, or doesn't have it), its
+      // request fails anyway: nothing is sized to a window that may not be its own.
+      if (!profile || !baseUrl) return { model, provider, modelId };
+      const { numCtx, outputTokens } = profile.settings;
+      return {
+        model,
+        provider,
+        modelId,
+        window: { tokens: numCtx, outputTokens },
+        ...(profile.support && { support: profile.support }),
+        ...(profile.digest && { revision: profile.digest }),
+        loaded: () => ollamaModels.loaded(baseUrl, modelId, numCtx),
+      };
     },
   };
 }

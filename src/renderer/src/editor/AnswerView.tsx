@@ -26,6 +26,8 @@ const errorKinds: Record<ProviderErrorKind, { fixInSettings: boolean }> = {
   "rate-limit": { fixInSettings: false },
   network: { fixInSettings: false },
   provider: { fixInSettings: false },
+  // A local model's context window.
+  "too-long": { fixInSettings: false },
   unknown: { fixInSettings: false },
   // The experimental ChatGPT plan provider.
   "not-signed-in": { fixInSettings: true },
