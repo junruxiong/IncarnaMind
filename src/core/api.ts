@@ -390,8 +390,11 @@ export interface UserSettings {
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
   sidebarWidth: number;
-  /** Width of the right Document viewer pane, in CSS pixels. */
-  viewerWidth: number;
+  /**
+   * Width of the right Document viewer pane, in CSS pixels, once the User
+   * has resized it. Null until then: it opens at about half the window.
+   */
+  viewerWidth: number | null;
   /**
    * The Minds open as tabs in the Mind pane, by ID, in their order, so they
    * open again after a restart. IDs of Minds deleted since are ignored.
