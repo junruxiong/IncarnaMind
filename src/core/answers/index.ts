@@ -42,18 +42,20 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import type { AnswerEngine } from "./engine";
+import type { AnswerEngine, AnswerTools, ExternalTool } from "./engine";
 import { markdownToBlocks } from "./markdown";
-import { answerInstructions, documentInstructions } from "./prompt";
+import { answerInstructions, connectorInstructions, documentInstructions } from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
 export type {
   AnswerEngine,
   AnswerEngineEvent,
   AnswerMessage,
+  AnswerMode,
   AnswerRequest,
   AnswerTools,
   CitationRecordInput,
+  ExternalTool,
 } from "./engine";
 export { createAiSdkAnswerEngine } from "./engine";
 
@@ -85,6 +87,8 @@ export interface AnswersOptions {
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: AnswerDocuments;
+  /** The Connector Tools an Answer may call: the read-only Tools of every Connector that is on and ready. */
+  connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
   reportError(error: unknown): void;
 }
 
@@ -279,11 +283,32 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
-      const { tools } = session;
+      let external: ExternalTool[] = [];
+      try {
+        external = await options.connectorTools(controller.signal);
+      } catch (error) {
+        if (finished) return;
+        options.reportError(error);
+      }
+      if (finished) return;
+      const tools: AnswerTools = {
+        get documentCount() {
+          return session.tools.documentCount;
+        },
+        searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
+        cite: (records) => session.tools.cite(records),
+        external,
+      };
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
         instructions: (mode, passages) =>
-          [base, documentInstructions(mode, tools.documentCount, passages)]
+          [
+            base,
+            mode === "connectors" ? "" : documentInstructions(mode, tools.documentCount, passages),
+            mode === "tools" || mode === "connectors"
+              ? connectorInstructions(external, mode === "connectors")
+              : "",
+          ]
             .filter(Boolean)
             .join("\n\n"),
         messages: context.messages,
@@ -310,14 +335,24 @@ export function createAnswers(options: AnswersOptions) {
             writeSoon();
             break;
           case "tool-call-started": {
-            const call: AnswerToolCall = {
-              id: event.id,
-              tool: event.tool,
-              source: "documents",
-              input: event.input,
-              status: "running",
-              resultCount: null,
-            };
+            const call: AnswerToolCall = event.source
+              ? {
+                  id: event.id,
+                  tool: event.tool,
+                  source: "connector",
+                  connector: { id: event.source.connectorId, name: event.source.connectorName },
+                  input: event.input,
+                  status: "running",
+                  resultCount: null,
+                }
+              : {
+                  id: event.id,
+                  tool: event.tool,
+                  source: "documents",
+                  input: event.input,
+                  status: "running",
+                  resultCount: null,
+                };
             toolCalls.push(call);
             events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
             writeSoon();

@@ -77,8 +77,8 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
       },
     },
     processes: {
-      spawn: () => {
-        throw new Error("Tests can't spawn processes.");
+      spawn: async () => {
+        throw new Error("This test didn't provide a process launcher.");
       },
     },
     createChatModel: () => {

@@ -16,6 +16,10 @@
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output.
+ *
+ * In the Tool-calling loop the model may also call external Tools (the
+ * read-only Tools of the User's Connectors). Their results aren't Passages,
+ * so they are never cited; the Answer shows each call as a Tool-call card.
  */
 import {
   APICallError,
@@ -61,23 +65,49 @@ export interface SearchResultForModel {
   passageCount: number;
 }
 
+/**
+ * A Tool from outside IncarnaMind, e.g. one of a Connector's: offered to the
+ * model as it is, next to document search. Its result isn't a Passage, so it
+ * can't be cited; the Answer shows the call as a Tool-call card instead.
+ */
+export interface ExternalTool {
+  /** The name the model calls it by: unique among the Answer's Tools, e.g. "github__search_issues". */
+  name: string;
+  description: string;
+  /** A JSON Schema for its arguments (an object). */
+  inputSchema: Record<string, unknown>;
+  /** Where it comes from, for the Tool-call card: the Connector, and the Tool's own name there. */
+  source: { connectorId: string; connectorName: string; tool: string };
+  /** Calls it; resolves with the text the model reads, rejects when it fails (the model is told why). */
+  call(input: Record<string, unknown>, signal: AbortSignal): Promise<string>;
+}
+
 /** The Tools' work, done by the core: the engine only connects them to the model. */
 export interface AnswerTools {
-  /** Documents with Passages to search. With none, the model gets no Tools. */
+  /** Documents with Passages to search. With none, there is no document search. */
   readonly documentCount: number;
   /** The document-search Tool. */
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
   cite(records: readonly CitationRecordInput[]): string;
+  /** Tools from the User's Connectors, offered to a model that can call Tools. */
+  readonly external?: readonly ExternalTool[];
 }
+
+/**
+ * How an Answer is written, for its instructions: a way of citing (see
+ * `CitationSupport`), "no-documents" when the User has no Documents to search,
+ * or "connectors" when there are none but Connector Tools are offered.
+ */
+export type AnswerMode = CitationSupport | "no-documents" | "connectors";
 
 export interface AnswerRequest {
   /**
-   * The instructions for a way of citing; for "structured-output" and "none",
-   * with the Passages the search found (formatted, or a sentence saying there
-   * are none). "no-documents": the User has no Documents to search.
+   * The instructions for a way of answering; for "structured-output" and
+   * "none", with the Passages the search found (formatted, or a sentence
+   * saying there are none).
    */
-  instructions(mode: CitationSupport | "no-documents", passages?: string): string;
+  instructions(mode: AnswerMode, passages?: string): string;
   /** The Question context, oldest first; the last message is the User's and ends with the Question. */
   messages: AnswerMessage[];
   /** The Question's own text: what a model that can't call Tools searches for. */
@@ -101,8 +131,18 @@ export type AnswerEngineEvent =
    * ("Let me look that up"), or are being replaced: remove them.
    */
   | { type: "text-retracted"; length: number }
-  /** A search of the Documents started: by the model, or by the engine for a model without Tools. */
-  | { type: "tool-call-started"; id: string; tool: "search_documents"; input: { query: string } }
+  /**
+   * A Tool call started: a search of the Documents (by the model, or by the
+   * engine for a model without Tools), or an external Tool's, with its
+   * `source` and the arguments the model sent.
+   */
+  | {
+      type: "tool-call-started";
+      id: string;
+      tool: string;
+      source?: ExternalTool["source"];
+      input: Record<string, unknown>;
+    }
   | { type: "tool-call-finished"; id: string; ok: boolean; resultCount: number | null }
   /** The Answer is complete. Nothing follows. */
   | { type: "finished" }
@@ -221,8 +261,21 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       });
       const { signal } = request;
 
-      // With no Documents there is nothing to search or cite: a plain Answer.
+      // With no Documents there is nothing to search or cite: Connector Tools
+      // if there are any and the model can call them, otherwise a plain Answer.
       if (request.tools.documentCount === 0) {
+        const external = request.tools.external?.length ?? 0;
+        if (external > 0 && (request.support ?? "tools") === "tools") {
+          let unsupported = false;
+          for await (const event of toolLoop(request, maxSteps)) {
+            if (event.type === "unsupported") {
+              unsupported = true;
+              break;
+            }
+            yield event;
+          }
+          if (!unsupported || signal.aborted) return;
+        }
         for await (const event of plain(request, request.instructions("no-documents"))) {
           if (event.type === "unsupported") return;
           yield event;
@@ -293,46 +346,33 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
   };
 }
 
-/** The Tool-calling loop: search, cite, answer. */
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * The Tool-calling loop: search, cite, answer, with external Tools where they
+ * help. With no Documents: the external Tools alone, and no Citations.
+ */
 async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
   const { signal } = request;
+  const documents = request.tools.documentCount > 0;
   /** Passages each search gave, by Tool call. */
   const results = new Map<string, number>();
-  const tools: ToolSet = {
-    [SEARCH_TOOL]: tool({
-      description:
-        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages.",
-      inputSchema: jsonSchema<{ query: string }>({
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "What to look for: words likely to be in the Passages, in their language.",
-          },
-        },
-        required: ["query"],
-      }),
-      execute: async ({ query }, { toolCallId, abortSignal }) => {
-        const result = await request.tools.searchDocuments(String(query ?? ""), abortSignal);
-        results.set(toolCallId, result.passageCount);
-        return result.text;
-      },
-    }),
-    [CITE_TOOL]: tool({
-      description:
-        "Record the Citations of your Answer: for each marker such as [^1], the Passage, the page or two consecutive pages its quote is on, and a short quote copied word for word from the Passage.",
-      inputSchema: jsonSchema<{ citations: unknown }>({
-        type: "object",
-        properties: { citations: recordsSchema },
-        required: ["citations"],
-      }),
-      execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
-    }),
-  };
+  /** External Tools, by the name the model calls them. */
+  const external = new Map((request.tools.external ?? []).map((each) => [each.name, each]));
+  const tools: ToolSet = documents ? documentTools(request, results) : {};
+  for (const each of external.values()) {
+    tools[each.name] = tool({
+      description: each.description,
+      inputSchema: jsonSchema<Record<string, unknown>>(each.inputSchema),
+      execute: (input, { abortSignal }) =>
+        each.call(isPlainObject(input) ? input : {}, abortSignal ?? signal),
+    });
+  }
 
   const result = streamText({
     model: request.model,
-    instructions: request.instructions("tools"),
+    instructions: request.instructions(documents ? "tools" : "connectors"),
     messages: request.messages,
     tools,
     stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
@@ -366,10 +406,11 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
           yield { type: "text-delta", text };
           break;
         }
-        case "tool-call":
+        case "tool-call": {
           produced = true;
           stepTools.push(part.toolName);
-          if (part.toolName === SEARCH_TOOL) {
+          const outside = external.get(part.toolName);
+          if (part.toolName === SEARCH_TOOL && documents) {
             const input = part.input as { query?: unknown };
             yield {
               type: "tool-call-started",
@@ -377,10 +418,19 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
               tool: SEARCH_TOOL,
               input: { query: String(input?.query ?? "") },
             };
+          } else if (outside) {
+            yield {
+              type: "tool-call-started",
+              id: part.toolCallId,
+              tool: outside.source.tool,
+              source: outside.source,
+              input: isPlainObject(part.input) ? part.input : {},
+            };
           }
           break;
+        }
         case "tool-result":
-          if (part.toolName === SEARCH_TOOL) {
+          if ((part.toolName === SEARCH_TOOL && documents) || external.has(part.toolName)) {
             yield {
               type: "tool-call-finished",
               id: part.toolCallId,
@@ -390,15 +440,17 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
           }
           break;
         case "tool-error":
-          if (part.toolName === SEARCH_TOOL) {
+          if (part.toolName === SEARCH_TOOL && documents) {
             if (!signal.aborted) console.error(part.error);
+            yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
+          } else if (external.has(part.toolName)) {
             yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
           }
           break;
         case "finish-step": {
-          // Text before a search, or before records with no marker in it, was a preamble.
+          // Text before a search or another Tool's call, or before records with no marker in it, was a preamble.
           const preamble =
-            stepTools.includes(SEARCH_TOOL) ||
+            stepTools.some((name) => name !== CITE_TOOL) ||
             (stepTools.includes(CITE_TOOL) && !MARKER.test(stepText));
           if (preamble && stepText) yield { type: "text-retracted", length: stepText.length };
           else keptText += stepText;
@@ -424,6 +476,41 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
     return;
   }
   if (!signal.aborted) yield { type: "finished" };
+}
+
+/** IncarnaMind's own Tools: document search, and `cite` for the records of Citations. */
+function documentTools(request: AnswerRequest, results: Map<string, number>): ToolSet {
+  return {
+    [SEARCH_TOOL]: tool({
+      description:
+        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages.",
+      inputSchema: jsonSchema<{ query: string }>({
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "What to look for: words likely to be in the Passages, in their language.",
+          },
+        },
+        required: ["query"],
+      }),
+      execute: async ({ query }, { toolCallId, abortSignal }) => {
+        const result = await request.tools.searchDocuments(String(query ?? ""), abortSignal);
+        results.set(toolCallId, result.passageCount);
+        return result.text;
+      },
+    }),
+    [CITE_TOOL]: tool({
+      description:
+        "Record the Citations of your Answer: for each marker such as [^1], the Passage, the page or two consecutive pages its quote is on, and a short quote copied word for word from the Passage.",
+      inputSchema: jsonSchema<{ citations: unknown }>({
+        type: "object",
+        properties: { citations: recordsSchema },
+        required: ["citations"],
+      }),
+      execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
+    }),
+  };
 }
 
 /** The Answer and its records as one JSON object, streamed: its `answer` text as it grows. */
