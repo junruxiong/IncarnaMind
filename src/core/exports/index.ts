@@ -11,6 +11,7 @@ import type {
   Document,
   ExportFormat,
   ExportMindOptions,
+  KeptCitationText,
   Mind,
   MindExport,
   MindExportPreview,
@@ -29,6 +30,8 @@ export interface ExportsDependencies {
   read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T;
   /** The live Documents: a Citation whose Document was deleted can't be checked. */
   liveDocuments(): Pick<Document, "id" | "contentHash">[];
+  /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
+  keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
   language(): Language;
   now(): string;
@@ -51,8 +54,9 @@ export function createExports(deps: ExportsDependencies) {
     const mind = deps.mind(mindId);
     const language = deps.language();
     const documents = deps.liveDocuments();
+    const kept = deps.keptCitationTexts();
     const footnote = (attributes: Record<string, unknown>): Footnote =>
-      footnoteOf(attributes as Partial<CitationAttributes>, documents, language);
+      footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
 
     const { blocks, questions } = deps.read(mind.id, (fragment) => ({
       blocks: readBlocks(fragment, { includeQuestions, footnote }),
@@ -115,6 +119,7 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
 function footnoteOf(
   attributes: Partial<CitationAttributes>,
   documents: readonly Pick<Document, "id" | "contentHash">[],
+  kept: readonly KeptCitationText[],
   language: Language,
 ): Footnote {
   const document = attributes.documentName || translate(language, "export.unnamedDocument");
@@ -123,6 +128,6 @@ function footnoteOf(
     source: location
       ? translate(language, "export.citation.location", { document, location })
       : translate(language, "export.citation.document", { document }),
-    unverified: citationState(attributes, documents).check !== "found",
+    unverified: citationState(attributes, documents, kept).check !== "found",
   };
 }

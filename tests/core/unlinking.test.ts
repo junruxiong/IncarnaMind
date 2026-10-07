@@ -110,13 +110,18 @@ async function citeThenUnlink() {
   if (!linked) throw new Error("Nothing was linked.");
 
   const changed = nextEvent(core, "keptCitationTexts.changed");
+  const events: string[] = [];
+  core.on("keptCitationTexts.changed", () => events.push("kept"));
+  core.on("documents.removed", () => events.push("removed"));
   await core.removeLinkedFolder(linked.id);
-  return { ...setup, library, linked, tides, rivers, answered, noted, kept: await changed };
+  const kept = await changed;
+  return { ...setup, library, linked, tides, rivers, answered, noted, kept, events };
 }
 
 describe("Unlinking a folder keeps the text its Citations quote", { timeout: 30_000 }, () => {
   test("its Documents leave the index, but the Units Citations point to are kept, so the Citations stay checkable", async () => {
-    const { core, dataDir, tides, rivers, answered, noted, kept } = await citeThenUnlink();
+    const { core, dataDir, mind, tides, rivers, answered, noted, kept, events } =
+      await citeThenUnlink();
 
     // Out of the sidebar, every search and every Search scope, as before.
     expect(await core.listDocuments()).toEqual([]);
@@ -139,6 +144,8 @@ describe("Unlinking a folder keeps the text its Citations quote", { timeout: 30_
     ].sort((a, b) => a.documentId.localeCompare(b.documentId));
     expect(kept).toEqual(keptTexts);
     expect(await core.listKeptCitationTexts()).toEqual(keptTexts);
+    // Said before the Documents go, so their Citations never show "can't check" in between.
+    expect(events).toEqual(["kept", "removed"]);
     const units = storedUnits(dataDir);
     expect(units.map((unit) => [unit.document_id, unit.content_hash, unit.page])).toEqual(
       keptTexts.flatMap((text) =>
@@ -165,6 +172,11 @@ describe("Unlinking a folder keeps the text its Citations quote", { timeout: 30_
     expect(citationState({ ...answered, pageFrom: 3, pageTo: 3 }, live, texts)).toMatchObject({
       check: "cant-check",
       reason: "document-removed",
+    });
+    // Exported, the Answer's Citation isn't marked unverified.
+    expect(await core.previewMindExport(mind.id, { format: "docx" })).toMatchObject({
+      citations: 1,
+      unverifiedCitations: 0,
     });
   });
 
