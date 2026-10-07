@@ -76,7 +76,8 @@ function ChatSetup() {
         includeChatGpt
       />
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Kept in view while the dialog scrolls, e.g. with the API key form open. */}
+      <div className="sticky bottom-0 -mx-8 -mb-6 flex flex-wrap items-center gap-2 bg-sheet px-8 pt-3 pb-6">
         <button
           type="button"
           data-testid="chat-setup-later"

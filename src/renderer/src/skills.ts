@@ -38,3 +38,22 @@ export function formatSize(
     size: megabytes < 10 ? megabytes.toFixed(1) : Math.round(megabytes),
   });
 }
+
+/** The Built-in Skills described in the interface's language (see `skillDescription`). */
+const BUILT_IN_DESCRIPTIONS: Readonly<Record<string, MessageKey>> = {
+  "literature-review": "skills.builtIn.literature-review",
+  "mind-to-report": "skills.builtIn.mind-to-report",
+  "summarise-document": "skills.builtIn.summarise-document",
+};
+
+/**
+ * What a Skill does, for people: a Built-in Skill's in the interface's
+ * language, any other's as its SKILL.md says (which is also what Answers read).
+ */
+export function skillDescription(
+  skill: { name: string; description: string; builtIn: boolean },
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string {
+  const key = skill.builtIn ? BUILT_IN_DESCRIPTIONS[skill.name] : undefined;
+  return key ? t(key) : skill.description;
+}

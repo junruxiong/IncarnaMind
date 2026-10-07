@@ -356,3 +356,41 @@ test("the application menu makes a new Mind, opens Settings and closes the tab, 
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
   await app.close();
 });
+
+test("a Mind is renamed from its sidebar row, and the Minds fold away", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  for (const name of ["Alpha notes", "Beta research"]) {
+    await window.getByTestId("new-mind").click();
+    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await window.keyboard.type(name);
+  }
+  const rows = window.getByTestId("mind-list-item");
+  const alpha = rows.filter({ hasText: "Alpha notes" });
+
+  // A double click types a new title in place; Enter saves it, and the tab follows.
+  await alpha.dblclick();
+  const field = window.getByTestId("mind-rename");
+  await expect(field).toBeFocused();
+  await field.fill("Alpha, revised");
+  await field.press("Enter");
+  await expect(rows.filter({ hasText: "Alpha, revised" })).toHaveCount(1);
+  await expect(titlesOf(window)).toContainText(["Alpha, revised"]);
+
+  // From the row's pencil, Esc changes nothing.
+  const beta = window.locator("li", { has: rows.filter({ hasText: "Beta research" }) });
+  await beta.hover();
+  await beta.getByTestId("rename-mind").click();
+  await field.fill("Not this");
+  await field.press("Escape");
+  await expect(rows.filter({ hasText: "Beta research" })).toHaveCount(1);
+
+  // Folded, the Minds give their room to the Documents, and the label counts them.
+  const toggle = window.getByRole("button", { name: /^Minds/ });
+  await toggle.click();
+  await expect(rows).toHaveCount(0);
+  await expect(toggle).toHaveText("Minds (2)");
+  await toggle.click();
+  await expect(rows).toHaveCount(2);
+  await app.close();
+});

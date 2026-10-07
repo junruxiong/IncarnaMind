@@ -131,13 +131,16 @@ export const noteSlashItems: readonly SlashItem[] = [
  * as they are. Choosing one forces the Skill on the Question the cursor is
  * in: in a Note, the line becomes that Question first.
  */
-export function skillSlashItems(skills: readonly Skill[]): SlashItem[] {
+export function skillSlashItems(
+  skills: readonly Skill[],
+  describe: (skill: Skill) => string = (skill) => skill.description,
+): SlashItem[] {
   return skills
     .filter((skill) => skill.enabled)
     .map((skill) => ({
       id: `skill-${skill.name}`,
       label: { text: skill.name },
-      hint: skill.description,
+      hint: describe(skill),
       keywords: ["skill"],
       icon: <SkillIcon className="size-3.5" />,
       run(editor, range) {

@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { DeleteMindDialog } from "./DeleteMindDialog";
 import { DocumentsSection } from "./DocumentsSection";
-import { AppMark, MindLineIcon, PlusLineIcon, SettingsLineIcon, TrashLineIcon } from "./lineIcons";
+import {
+  AppMark,
+  MindLineIcon,
+  PencilLineIcon,
+  PlusLineIcon,
+  SettingsLineIcon,
+  TrashLineIcon,
+} from "./lineIcons";
 import { SidebarStatus } from "./SidebarStatus";
 import {
   rowActionButtonClass,
@@ -13,6 +20,7 @@ import {
   rowButtonClass,
   rowClass,
   rowIconClass,
+  rowInputClass,
   SectionLabel,
 } from "./sidebarRows";
 
@@ -27,6 +35,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
   const minds = useAppStore((state) => state.minds);
   const createMind = useAppStore((state) => state.createMind);
   const [confirmingDelete, setConfirmingDelete] = useState<Mind | null>(null);
+  const [mindsFolded, setMindsFolded] = useRememberedFold("sidebar.minds.folded");
 
   return (
     <aside
@@ -45,7 +54,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
 
       <div
         data-testid="sidebar-tree"
-        className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2 pb-3"
+        className="thin-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2 pb-3"
       >
         <div className={rowClass(false)}>
           <button
@@ -59,18 +68,31 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
           </button>
         </div>
 
-        <SectionLabel id="minds-heading">{t("sidebar.minds")}</SectionLabel>
-        <nav aria-labelledby="minds-heading">
-          {minds.length === 0 ? (
-            <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("sidebar.noMinds")}</p>
-          ) : (
-            <ul>
-              {minds.map((mind) => (
-                <MindRow key={mind.id} mind={mind} onDelete={() => setConfirmingDelete(mind)} />
-              ))}
-            </ul>
-          )}
-        </nav>
+        <SectionLabel
+          id="minds-heading"
+          folded={mindsFolded}
+          onToggle={() => setMindsFolded(!mindsFolded)}
+          toggleLabel={mindsFolded ? t("sidebar.minds.unfold") : t("sidebar.minds.fold")}
+        >
+          {mindsFolded && minds.length > 0
+            ? t("sidebar.minds.count", { count: minds.length })
+            : t("sidebar.minds")}
+        </SectionLabel>
+        {!mindsFolded && (
+          <nav aria-labelledby="minds-heading">
+            {minds.length === 0 ? (
+              <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">
+                {t("sidebar.noMinds")}
+              </p>
+            ) : (
+              <ul>
+                {minds.map((mind) => (
+                  <MindRow key={mind.id} mind={mind} onDelete={() => setConfirmingDelete(mind)} />
+                ))}
+              </ul>
+            )}
+          </nav>
+        )}
         <DocumentsSection />
       </div>
 
@@ -100,6 +122,17 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
   const isOpen = useAppStore((state) => state.openMindId === mind.id);
   const openMind = useAppStore((state) => state.openMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
+  const [renaming, setRenaming] = useState(false);
+  if (renaming) {
+    return (
+      <li className={rowClass(isOpen)}>
+        <span className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
+          <MindLineIcon className={rowIconClass(isOpen)} />
+          <RenameMind mind={mind} onDone={() => setRenaming(false)} />
+        </span>
+      </li>
+    );
+  }
   return (
     <li className={rowClass(isOpen)}>
       <button
@@ -115,6 +148,7 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
         onAuxClick={(event) => {
           if (event.button === 1) openMind(mind.id, { newTab: true });
         }}
+        onDoubleClick={() => setRenaming(true)}
         className={rowButtonClass}
       >
         <MindLineIcon className={rowIconClass(isOpen)} />
@@ -137,6 +171,16 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
       <div className={rowActionsClass}>
         <button
           type="button"
+          data-testid="rename-mind"
+          aria-label={t("mind.rename")}
+          title={t("mind.rename")}
+          onClick={() => setRenaming(true)}
+          className={rowActionButtonClass}
+        >
+          <PencilLineIcon className="size-[15px]" />
+        </button>
+        <button
+          type="button"
           data-testid="delete-mind"
           aria-label={t("mind.delete")}
           title={t("mind.delete")}
@@ -148,4 +192,65 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
       </div>
     </li>
   );
+}
+
+/** A Mind's title typed in its row: Enter or leaving the field saves, Esc cancels. */
+function RenameMind({ mind, onDone }: { mind: Mind; onDone(): void }) {
+  const t = useT();
+  const renameMind = useAppStore((state) => state.renameMind);
+  const [value, setValue] = useState(mind.title);
+  const field = useRef<HTMLInputElement>(null);
+  const finished = useRef(false);
+
+  useEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+
+  const finish = (save: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    if (save && value.trim() !== mind.title) void renameMind(mind.id, value);
+    onDone();
+  };
+
+  return (
+    <input
+      ref={field}
+      value={value}
+      data-testid="mind-rename"
+      aria-label={t("mind.renameLabel", { title: mind.title || t("mind.untitled") })}
+      placeholder={t("mind.untitled")}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter" || event.key === "Escape") {
+          event.preventDefault();
+          finish(event.key === "Enter");
+        }
+      }}
+      onBlur={() => finish(true)}
+      className={rowInputClass}
+    />
+  );
+}
+
+/** A section folded away or not, remembered on this computer. */
+function useRememberedFold(key: string): [boolean, (folded: boolean) => void] {
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(`incarnamind.${key}`) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const set = (next: boolean) => {
+    setFolded(next);
+    try {
+      localStorage.setItem(`incarnamind.${key}`, String(next));
+    } catch {
+      // Not remembered, then: it unfolds again next time.
+    }
+  };
+  return [folded, set];
 }

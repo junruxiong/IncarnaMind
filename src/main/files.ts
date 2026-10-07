@@ -1,6 +1,6 @@
 /**
  * The main process's half of the renderer's file helpers (`FilesBridge`):
- * saving an exported Mind where the User chooses, showing the data and logs
+ * saving an exported Mind where the User chooses (and showing it there), showing the data and logs
  * folders, choosing a Skill folder or zip to import, choosing a folder to
  * link, opening a Document's file in another app or showing it in the file
  * manager, and logging the window's uncaught errors. The core makes the
@@ -54,6 +54,9 @@ export function serveFileActions(
     return window ? dialog.showSaveDialog(window, options) : dialog.showSaveDialog(options);
   };
 
+  /** The files exports wrote: the only paths the window may ask to show (a page can't name others). */
+  const exported = new Set<string>();
+
   /** Opens a folder in the system's file manager, or a file in its default app. */
   const openPath = async (path: string) => {
     const error = await shell.openPath(path);
@@ -77,9 +80,18 @@ export function serveFileActions(
       // Exported now, so the file has any edits made while the dialog was open.
       const { data } = await core.exportMind(mindId, options);
       await writeFile(filePath, data);
+      exported.add(filePath);
       return filePath;
     },
   );
+
+  ipcMain.handle(FILES_CHANNELS.showExportInFolder, async (event, path: unknown) => {
+    refuseUnknown(event);
+    if (typeof path !== "string" || !exported.has(path)) {
+      throw new Error("Only a file IncarnaMind exported can be shown.");
+    }
+    shell.showItemInFolder(path);
+  });
 
   ipcMain.handle(FILES_CHANNELS.openDataFolder, async (event) => {
     refuseUnknown(event);

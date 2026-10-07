@@ -204,15 +204,20 @@ function ServiceDecision({
   const revoke = () => run(() => core.revokeConsent(flow.id, flow.service.id));
   const allow = () => run(() => core.allowDataFlow(flow.id, flow.service.id));
 
-  const label = t(`consent.settings.status.${consent}`);
-  const decision = decidedAt
-    ? t("privacy.flows.decided", {
-        status: label,
-        date: new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(
-          new Date(decidedAt),
-        ),
-      })
-    : label;
+  // Allowed once, then the flow started sending more: it asks again, it wasn't never asked.
+  const sendsMore = consent === "not-asked" && decidedAt !== null;
+  const label = sendsMore
+    ? t("consent.settings.status.sendsMore")
+    : t(`consent.settings.status.${consent}`);
+  const decision =
+    decidedAt && !sendsMore
+      ? t("privacy.flows.decided", {
+          status: label,
+          date: new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(
+            new Date(decidedAt),
+          ),
+        })
+      : label;
 
   return (
     <div
