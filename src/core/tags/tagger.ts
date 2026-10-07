@@ -76,8 +76,6 @@ interface DocumentRow {
   tagging_error_message: string | null;
 }
 
-export type Tagger = ReturnType<typeof createTagger>;
-
 export function createTagger(options: TaggerOptions) {
   const { db, now, tags, announce } = options;
   const lifetime = new AbortController();

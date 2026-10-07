@@ -1,6 +1,6 @@
 /** Interface languages. Pure module: the renderer and the main process import it too. */
 
-export const languages = ["en", "zh-CN"] as const;
+const languages = ["en", "zh-CN"] as const;
 
 export type Language = (typeof languages)[number];
 

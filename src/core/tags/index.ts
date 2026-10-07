@@ -16,8 +16,6 @@ import type { Database } from "../storage";
 import type { TagDecision } from "./classify";
 import { PRESET_TAGS } from "./presets";
 
-export { PRESET_TAGS } from "./presets";
-
 const MAX_NAME_LENGTH = 100;
 const MAX_DESCRIPTION_LENGTH = 500;
 
@@ -52,7 +50,7 @@ const toTag = (row: TagRow): Tag => ({
 /** How names are compared: two names that differ only in case are the same Tag. */
 export const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-export function parseTagId(id: unknown): string {
+function parseTagId(id: unknown): string {
   if (typeof id !== "string" || id === "") {
     throw new InvalidInputError("A Tag id must be a non-empty string.");
   }

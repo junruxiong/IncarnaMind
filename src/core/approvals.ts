@@ -59,8 +59,6 @@ const RISK_NOT_ACCEPTED =
 const riskAccepted = (options: unknown): boolean =>
   isRecord(options) && options.riskAccepted === true;
 
-export type Approvals = ReturnType<typeof createApprovals>;
-
 interface PolicyRow {
   id: string;
   subject_kind: string;

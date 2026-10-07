@@ -25,7 +25,7 @@ import { systemBrowser } from "./platform";
 const RELEASES_PAGE = "https://github.com/junruxiong/IncarnaMind/releases";
 
 /** Where update checks go. */
-export const GITHUB_RELEASES: Readonly<ExternalService> = {
+const GITHUB_RELEASES: Readonly<ExternalService> = {
   id: "https://github.com",
   name: "GitHub Releases",
 };

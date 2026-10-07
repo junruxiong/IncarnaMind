@@ -301,7 +301,7 @@ const MARKER = /\[\^\d{1,4}\]/;
  * a server that rejects `response_format`, or OpenAI's "Unsupported parameter:
  * 'temperature'" for a reasoning model. Auth, rate limits and outages never count.
  */
-export function isUnsupportedFeature(
+function isUnsupportedFeature(
   error: unknown,
   feature: "tools" | "structured-output" | "temperature",
 ): boolean {

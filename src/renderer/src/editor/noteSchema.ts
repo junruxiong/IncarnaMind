@@ -24,7 +24,7 @@ export { BLOCK_ID_ATTRIBUTE };
  * tell top-level nodes from nested ones, so paragraphs inside lists, quotes
  * and Answers get an ID too; only top-level IDs name Blocks.
  */
-export const BLOCK_TYPES: readonly string[] = [...NOTE_BLOCK_TYPES, QUESTION_BLOCK, ANSWER_BLOCK];
+const BLOCK_TYPES: readonly string[] = [...NOTE_BLOCK_TYPES, QUESTION_BLOCK, ANSWER_BLOCK];
 
 /** The node types that hold a formula, written in LaTeX. */
 export const MATH_TYPES: readonly string[] = ["blockMath", "inlineMath"];

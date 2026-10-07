@@ -20,7 +20,7 @@ export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector
 export const GATING_MODE: SearchMode = "hybrid";
 
 /** The v1 design's bar: 16 of 20 overall, and 8 of 10 in each language. */
-export const RETRIEVAL_TARGET = { share: 0.8 } as const;
+const RETRIEVAL_TARGET = { share: 0.8 } as const;
 
 /** One retrieved Passage, against the expected one. */
 export interface RetrievedPassage {

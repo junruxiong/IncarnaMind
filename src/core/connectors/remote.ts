@@ -33,7 +33,7 @@ import {
 } from "./auth";
 
 /** The loopback redirect's path: http://127.0.0.1:<port>/callback. */
-export const CALLBACK_PATH = "/callback";
+const CALLBACK_PATH = "/callback";
 
 /** Consent is per server origin: two Connectors on one server are one service. */
 export function remoteService(url: string): ExternalService {

@@ -32,7 +32,7 @@ import { SKILL_SCRIPT_LIMITS, type SkillScriptRun } from "../api";
  * Why a script can't run, in plain language: for the model, and for the
  * Tool-call card. E.g. its interpreter isn't installed.
  */
-export class SkillScriptError extends Error {
+class SkillScriptError extends Error {
   override name = "SkillScriptError";
 }
 
@@ -89,7 +89,7 @@ function runtimesFrom(given: ScriptRuntimes = {}): Runtimes {
  * What runs the script at `path` (inside its Skill), by its extension.
  * Throws `SkillScriptError` for one that can't run here.
  */
-export function interpreterFor(path: string, given?: ScriptRuntimes): Interpreter {
+function interpreterFor(path: string, given?: ScriptRuntimes): Interpreter {
   const { node, platform } = runtimesFrom(given);
   const windows = platform === "win32";
   switch (extensionOf(path)) {
@@ -164,7 +164,7 @@ const commandName = (command: string) =>
  * on macOS and Linux (it was started as the group's leader), its process
  * tree on Windows. Best effort: one that has gone already is fine.
  */
-export function stopProcessTree(child: ChildProcess): void {
+function stopProcessTree(child: ChildProcess): void {
   const { pid } = child;
   if (pid === undefined) return;
   const killChild = () => {
@@ -270,8 +270,6 @@ export function scriptResultText(script: string, run: SkillScriptRun, timeoutSec
     ...stream("stderr", run.stderr, run.stderrTruncated, "last"),
   ].join("\n");
 }
-
-export type ScriptRunner = ReturnType<typeof createScriptRunner>;
 
 /** How long a stopped script's output may stay open before the run ends without it. */
 const STOP_GRACE_MS = 2000;

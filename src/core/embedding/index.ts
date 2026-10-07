@@ -10,7 +10,7 @@ import type { EmbeddingModelError, EmbeddingModelStatus } from "../api";
 import { downloadModel, isModelDownloaded, ModelDownloadError } from "./download";
 import type { EmbeddingModelDefinition } from "./model";
 
-export { BUILT_IN_EMBEDDING_MODEL, type EmbeddingModelDefinition } from "./model";
+export { BUILT_IN_EMBEDDING_MODEL } from "./model";
 
 /** Progress events are at most this often, apart from state changes. */
 const PROGRESS_INTERVAL_MS = 250;
@@ -59,7 +59,7 @@ export interface EmbeddingModelOptions {
 }
 
 /** The text the model reads for a Passage. The name goes here, not into the stored Passage, so renaming doesn't change Passages. */
-export function passageEmbeddingText(
+function passageEmbeddingText(
   definition: EmbeddingModelDefinition,
   documentName: string,
   text: string,

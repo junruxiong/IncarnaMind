@@ -40,7 +40,7 @@ export interface EvaluationSet {
   questions: EvalQuestion[];
 }
 
-export const EVALUATION_SET = "eval/retrieval/questions.json";
+const EVALUATION_SET = "eval/retrieval/questions.json";
 
 const LANGUAGES: readonly EvalLanguage[] = ["en", "zh"];
 

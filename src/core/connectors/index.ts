@@ -64,7 +64,7 @@ import {
 import { ChildProcessTransport } from "./transport";
 
 /** What the "connectors" flow sends to each Connector. */
-export const CONNECTORS_FLOW_SENDS = ["tool-arguments"] as const;
+const CONNECTORS_FLOW_SENDS = ["tool-arguments"] as const;
 
 export interface ConnectorTiming {
   /** How long a Connector may take to start and answer MCP's handshake: `npx -y` may download its package first. */
@@ -83,7 +83,7 @@ export interface ConnectorTiming {
   signInTimeoutMs: number;
 }
 
-export const CONNECTOR_TIMING: ConnectorTiming = {
+const CONNECTOR_TIMING: ConnectorTiming = {
   connectTimeoutMs: 60_000,
   callTimeoutMs: 120_000,
   readyWaitMs: 10_000,
@@ -174,8 +174,6 @@ export interface ConnectorsOptions {
   reportError(error: unknown): void;
   timing?: Partial<ConnectorTiming>;
 }
-
-export type Connectors = ReturnType<typeof createConnectors>;
 
 const COLUMNS = "id, name, transport, config, enabled, created_at, updated_at";
 const envSecret = (connectorId: string) => `connector:${connectorId}:env`;

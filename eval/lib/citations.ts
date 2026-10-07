@@ -182,7 +182,7 @@ export function sentencesOf<T>(
 }
 
 /** The Answer's sentences, with the Citations anchored in each. Headings and code are left out. */
-export function answerSentences(
+function answerSentences(
   answer: ProseMirrorNode,
   language: string,
 ): { text: string; citations: CitationAttributes[] }[] {
@@ -210,7 +210,7 @@ export function answerSentences(
  * and only letters and digits kept, so punctuation, spacing, hyphens and
  * quote marks can't stop a match.
  */
-export function looseText(text: string): string {
+function looseText(text: string): string {
   return normaliseText(text)
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
@@ -406,7 +406,7 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
 const percent = (value: number | null) => (value === null ? "–" : `${(value * 100).toFixed(1)}%`);
 
 /** Why a gating run misses the targets, per language. */
-export function citationFailures(
+function citationFailures(
   summary: Record<CitationGroup, GroupSummary>,
   minCitations: number,
 ): string[] {

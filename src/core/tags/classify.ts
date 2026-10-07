@@ -126,7 +126,7 @@ export const documentType = (excerpt: DocumentExcerpt) =>
     ? KIND_NAMES[excerpt.kind]
     : `${KIND_NAMES[excerpt.kind]}, ${excerpt.pageCount} ${excerpt.pageCount === 1 ? "page" : "pages"}`;
 
-export const TAGGING_INSTRUCTIONS = [
+const TAGGING_INSTRUCTIONS = [
   "You sort Documents with Tags. You get a list of Tags, each with a name and a description,",
   "and an excerpt of one Document: its name, its type and the beginning of its text.",
   "Choose every Tag whose description fits the Document as a whole, and only those.",
@@ -136,7 +136,7 @@ export const TAGGING_INSTRUCTIONS = [
 ].join(" ");
 
 /** The request's text: the Tags, then the Document's excerpt. */
-export function taggingPrompt(tags: readonly TagDefinition[], excerpt: DocumentExcerpt): string {
+function taggingPrompt(tags: readonly TagDefinition[], excerpt: DocumentExcerpt): string {
   return [
     "Tags:",
     ...tags.map((tag) =>
@@ -156,7 +156,7 @@ export function taggingPrompt(tags: readonly TagDefinition[], excerpt: DocumentE
  * Asks the model which Tags apply, and returns their ids. Names it returns
  * that aren't in the list are ignored. Throws what the provider throws.
  */
-export async function chooseTags(input: {
+async function chooseTags(input: {
   model: ChatLanguageModel;
   tags: readonly TagDefinition[];
   excerpt: DocumentExcerpt;

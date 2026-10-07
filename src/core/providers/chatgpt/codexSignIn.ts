@@ -38,14 +38,14 @@ import { ORIGINATOR } from "./codexEndpoint";
 import { ChatGptSignInRequiredError } from "./errors";
 
 /** The Codex CLI's OAuth client ID (`CLIENT_ID` in `codex-rs/login/src/auth/manager.rs`). */
-export const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 
 export const CODEX_AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 export const CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
 
 /** The only callback port the registration allows besides its fallback, 1457, so it can't change. */
 export const CODEX_CALLBACK_PORT = 1455;
-export const CODEX_CALLBACK_PATH = "/auth/callback";
+const CODEX_CALLBACK_PATH = "/auth/callback";
 
 /** What the Codex CLI asks for, minus its Connector scopes. `offline_access` brings a refresh token. */
 const SCOPE = "openid profile email offline_access";
@@ -165,8 +165,6 @@ const isRefusedRefresh = (error: unknown) =>
   error.status < 500 &&
   error.status !== 408 &&
   error.status !== 429;
-
-export type CodexSignIn = ReturnType<typeof createCodexSignIn>;
 
 export function createCodexSignIn(options: {
   endpoints: CodexSignInEndpoints;
