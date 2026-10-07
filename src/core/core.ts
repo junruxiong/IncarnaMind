@@ -352,6 +352,8 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      searchableNames: (documentIds, limit) =>
+        documents.searchableNames(documentIds ?? undefined, limit),
       search: (query, documentIds, signal) =>
         documents.searchTool(query, {
           signal,
