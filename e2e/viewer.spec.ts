@@ -114,6 +114,71 @@ test("clicking a PDF in the sidebar opens it in the viewer, and another Document
   await app.close();
 });
 
+test("a PDF's outline shows beside its pages, and an entry goes to its page", async () => {
+  const guide = join(sources, "Guide.pdf");
+  await writeFile(
+    guide,
+    buildPdf(
+      Array.from({ length: 6 }, (_, index) => ({ lines: [`Guide page ${index + 1}`] })),
+      {
+        outline: [
+          { title: "Getting started", page: 1 },
+          {
+            title: "Reference",
+            page: 3,
+            via: "named",
+            items: [
+              { title: "Settings", page: 4 },
+              { title: "Troubleshooting", page: 6, via: "action" },
+            ],
+          },
+        ],
+      },
+    ),
+  );
+  const { report } = await writeSources();
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await addDocuments(window, [guide, report]);
+  const viewer = window.getByTestId("viewer");
+  const items = window.getByTestId("document-list-item");
+  const pageNumber = window.getByTestId("pdf-page-number");
+
+  // A PDF without an outline has no outline button.
+  await items.filter({ hasText: "Report" }).getByTestId("open-document").click();
+  await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");
+  await expect(window.getByTestId("pdf-outline-button")).toHaveCount(0);
+
+  await items.filter({ hasText: "Guide" }).getByTestId("open-document").click();
+  const button = window.getByTestId("pdf-outline-button");
+  await expect(button).toHaveAttribute("aria-pressed", "false");
+  await expect(window.getByTestId("pdf-outline")).toHaveCount(0);
+
+  // Shown: the top-level entries, the nested ones once their entry is expanded.
+  await button.click();
+  const outline = window.getByTestId("pdf-outline");
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+  const entries = outline.getByTestId("pdf-outline-item");
+  await expect(entries).toHaveText(["Getting started", "Reference"]);
+  await outline.getByRole("button", { name: "Expand Reference" }).click();
+  await expect(entries).toHaveText(["Getting started", "Reference", "Settings", "Troubleshooting"]);
+
+  // Clicking an entry goes to its page.
+  await entries.filter({ hasText: "Troubleshooting" }).click();
+  await expect(pageNumber).toHaveValue("6");
+  await expect(viewer.locator('[data-page-number="6"] .textLayer')).toContainText("Guide page 6");
+  await entries.filter({ hasText: "Reference" }).click();
+  await expect(pageNumber).toHaveValue("3");
+  await expect(viewer.locator('[data-page-number="3"]')).toBeInViewport();
+
+  // Hidden again: the pages take the whole width back.
+  const narrower = await widthOf(window.getByTestId("pdf-scroller"));
+  await button.click();
+  await expect(outline).toHaveCount(0);
+  expect(await widthOf(window.getByTestId("pdf-scroller"))).toBeGreaterThan(narrower);
+  await app.close();
+});
+
 test("a long PDF draws only the pages near the view", async () => {
   const long = join(sources, "Long.pdf");
   await writeFile(

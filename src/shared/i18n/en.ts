@@ -67,6 +67,12 @@ export const en = {
   "viewer.zoom.out": "Zoom out",
   "viewer.zoom.fitWidth": "Fit width",
   "viewer.zoom.level": "Zoom: {percent}%",
+  "viewer.outline.show": "Show outline",
+  "viewer.outline.hide": "Hide outline",
+  "viewer.outline.label": "Outline",
+  "viewer.outline.expand": "Expand {title}",
+  "viewer.outline.collapse": "Collapse {title}",
+  "viewer.outline.untitled": "Untitled",
 
   "documents.title": "Documents",
   "documents.add": "Add Documents",

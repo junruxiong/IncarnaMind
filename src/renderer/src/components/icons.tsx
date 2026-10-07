@@ -191,6 +191,25 @@ export function FitWidthIcon(props: IconProps) {
   );
 }
 
+/** A page with a narrow column on its left: the PDF viewer's outline panel. */
+export function OutlineIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+      <path d="M6 2.5v11M3.3 5.2h1M3.3 7.4h1M3.3 9.6h1" />
+    </svg>
+  );
+}
+
 export function SettingsIcon(props: IconProps) {
   return (
     <svg
