@@ -28,6 +28,11 @@ export interface Paths {
    * Not given: no built-in Skills (tests that aren't about them).
    */
   builtInSkills?: string;
+  /**
+   * Where each Skill script run gets its own temporary working folder, removed
+   * when the run ends. Defaults to the OS's temporary folder.
+   */
+  tempDir?: string;
 }
 
 /**
@@ -61,13 +66,20 @@ export interface SpawnOptions {
   cwd?: string;
   /** Added to (and overriding) the login-shell environment. */
   env?: Readonly<Record<string, string>>;
+  /**
+   * On macOS and Linux, starts the process as the leader of a new process
+   * group, so it can be stopped together with every process it starts (see
+   * `stopProcessTree`). Windows has no process groups; there the tree is
+   * found by parent process instead.
+   */
+  processGroup?: boolean;
 }
 
 /**
  * Starts child processes with the User's login-shell environment, so `npx` and
  * `uvx` resolve even when the app was opened from the Dock or Start menu. The
- * command is looked up on that environment's PATH. Used by local Connectors,
- * and by Skill scripts in a later ticket.
+ * command is looked up on that environment's PATH. Used by local Connectors
+ * and by Skill scripts.
  */
 export interface ProcessLauncher {
   /**
@@ -76,6 +88,25 @@ export interface ProcessLauncher {
    * with an error whose `code` is "ENOENT".
    */
   spawn(command: string, args: readonly string[], options?: SpawnOptions): Promise<ChildProcess>;
+}
+
+/**
+ * What Skill scripts run with (see `src/core/skills/scripts.ts`). Python and
+ * bash come from the User's login-shell PATH; JavaScript runs on the app's
+ * own Node.js, so the User needn't install one.
+ */
+export interface ScriptRuntimes {
+  /**
+   * The Node.js that runs JavaScript scripts. Defaults to the one running the
+   * core (`process.execPath`) with `ELECTRON_RUN_AS_NODE=1`: in the desktop
+   * app that is Electron's bundled Node, running as plain Node.
+   */
+  node?: { command: string; env?: Readonly<Record<string, string>> };
+  /**
+   * The OS whose interpreters are used: `python` instead of `python3`, and no
+   * shell scripts, on Windows. Defaults to `process.platform`; tests pretend.
+   */
+  platform?: NodeJS.Platform;
 }
 
 /** The built-in embedding model's downloaded files, as the core hands them to an `Embedder`. */
@@ -142,6 +173,8 @@ export interface CoreAdapters {
   keychain: Keychain;
   browser: Browser;
   processes: ProcessLauncher;
+  /** What Skill scripts run with (see `ScriptRuntimes`); the defaults suit the desktop app. */
+  scriptRuntimes?: ScriptRuntimes;
   /** Runs the built-in embedding model (see `Embedder`). */
   embedder: Embedder;
   /**

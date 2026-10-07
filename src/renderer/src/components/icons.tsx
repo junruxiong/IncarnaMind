@@ -484,3 +484,22 @@ export function SkillIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A terminal prompt: a Skill script, run on this computer. */
+export function ScriptIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" />
+      <path d="M4.75 6.25l2 1.75-2 1.75M8.5 10h2.75" />
+    </svg>
+  );
+}

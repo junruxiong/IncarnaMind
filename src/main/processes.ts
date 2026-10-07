@@ -200,7 +200,9 @@ export function readLoginShellEnvironment(options: LoginShellOptions = {}): Prom
 /**
  * A `ProcessLauncher` that starts each process with `environment()` plus the
  * caller's variables, looking the command up on that environment's PATH. On
- * Windows, cross-spawn runs `.cmd` shims such as `npx.cmd`.
+ * Windows, cross-spawn runs `.cmd` shims such as `npx.cmd`. A process asked to
+ * lead its own process group is started detached, on macOS and Linux only:
+ * on Windows that would give it a console of its own.
  */
 export function createProcessLauncher(environment: () => Promise<Environment>): ProcessLauncher {
   return {
@@ -214,6 +216,7 @@ export function createProcessLauncher(environment: () => Promise<Environment>): 
             env,
             stdio: "pipe",
             windowsHide: true,
+            detached: options.processGroup === true && process.platform !== "win32",
           });
         } catch (error) {
           reject(error);

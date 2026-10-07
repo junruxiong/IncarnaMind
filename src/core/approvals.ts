@@ -6,8 +6,11 @@
  *   (MCP's `readOnlyHint`); IncarnaMind can't check that. Such a Tool runs
  *   without asking unless the User switched it to "ask"; every other Tool
  *   asks first, unless the User always allows it.
- * - Policies replace the default for one subject: a Connector's Tool, or (#41)
- *   a Skill's scripts. They are rows in SQLite, sync-ready (ADR-0003): UUIDs,
+ * - Skill scripts (#41) always ask, unless the User chose "always run" for
+ *   the Skill, which they must confirm after a risk warning (`riskAccepted`):
+ *   a script runs on this computer with no sandbox.
+ * - Policies replace the default for one subject: a Connector's Tool, or a
+ *   Skill's scripts. They are rows in SQLite, sync-ready (ADR-0003): UUIDs,
  *   timestamps, soft deletes, and no secrets.
  * - Requests: an Answer's call that asks raises "approval.requested" and waits
  *   for `respond`, racing the Answer's abort signal, so stopping the Answer
@@ -22,6 +25,8 @@ import type {
   ApprovalRequest,
   ApprovalSubject,
   ApprovalSubjectKind,
+  SkillScriptApprovalRequest,
+  ToolApprovalRequest,
 } from "./api";
 import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 import type { createEventHub } from "./events";
@@ -42,8 +47,17 @@ export interface ApprovalsOptions {
   owners: ApprovalOwners;
 }
 
-/** A Tool call that asks, as an Answer hands it over. */
-export type ToolCallToApprove = Omit<ApprovalRequest, "requestId" | "subject">;
+/** A call that asks, as an Answer hands it over: a Connector's Tool, or a Skill script. */
+export type ToolCallToApprove =
+  | Omit<ToolApprovalRequest, "requestId">
+  | Omit<SkillScriptApprovalRequest, "requestId">;
+
+const RISK_NOT_ACCEPTED =
+  "Always running a Skill's scripts needs the User to confirm the risk warning first (riskAccepted).";
+
+/** Whether options say the User confirmed the risk warning. */
+const riskAccepted = (options: unknown): boolean =>
+  isRecord(options) && options.riskAccepted === true;
 
 export type Approvals = ReturnType<typeof createApprovals>;
 
@@ -254,20 +268,21 @@ export function createApprovals(options: ApprovalsOptions) {
       return policy === "ask" || (policy !== "always" && !readOnly);
     },
 
+    /** Whether a run of one of a Skill's scripts must ask first: always, unless they always run. */
+    scriptNeedsApproval(skillId: string): boolean {
+      return policyOf({ kind: "skill-script", skillId }) !== "always";
+    },
+
     /**
-     * Asks the User about a Tool call, and waits: resolves true if they allow
-     * it, false if they deny it (or the core closed). If `signal` aborts first,
+     * Asks the User about a call, and waits: resolves true if they allow it,
+     * false if they deny it (or the core closed). If `signal` aborts first,
      * e.g. the User stopped the Answer, the request is withdrawn as denied and
      * the promise rejects with the signal's reason.
      */
     request(call: ToolCallToApprove, signal: AbortSignal): Promise<boolean> {
       if (signal.aborted) return Promise.reject(signal.reason);
       if (closed) return Promise.resolve(false);
-      const request: ApprovalRequest = {
-        ...call,
-        requestId: randomUUID(),
-        subject: { kind: "tool", connectorId: call.connector.id, tool: call.tool },
-      };
+      const request = { ...call, requestId: randomUUID() } as ApprovalRequest;
       return new Promise<boolean>((resolve, reject) => {
         const onAbort = () => {
           if (withdraw(request.requestId, "deny")) reject(signal.reason);
@@ -287,7 +302,7 @@ export function createApprovals(options: ApprovalsOptions) {
     /** Requests still waiting, oldest first. */
     requests: (): ApprovalRequest[] => [...pending.values()].map((entry) => entry.request),
 
-    respond(requestId: unknown, decision: unknown): void {
+    respond(requestId: unknown, decision: unknown, options?: unknown): void {
       if (typeof requestId !== "string") throw new InvalidInputError("requestId must be text.");
       if (!decisions.includes(decision as ApprovalDecision)) {
         throw new InvalidInputError('decision must be "allow-once", "always-allow" or "deny".');
@@ -300,6 +315,10 @@ export function createApprovals(options: ApprovalsOptions) {
         return;
       }
       const { subject } = entry.request;
+      // "Always run" a Skill's scripts only once the User has confirmed the warning; it keeps waiting.
+      if (subject.kind === "skill-script" && !riskAccepted(options)) {
+        throw new InvalidInputError(RISK_NOT_ACCEPTED);
+      }
       const stored = store(subject, "always");
       // Calls of the same Tool waiting elsewhere, e.g. in another Answer, are allowed too.
       for (const other of [...pending.values()]) {
@@ -324,6 +343,9 @@ export function createApprovals(options: ApprovalsOptions) {
           throw new NotFoundError("That Skill doesn't exist.");
         if (policy === "ask") {
           throw new InvalidInputError('A Skill\'s scripts always ask unless set to "always".');
+        }
+        if (policy === "always" && !riskAccepted(input)) {
+          throw new InvalidInputError(RISK_NOT_ACCEPTED);
         }
       }
       if (store(subject, policy)) changed();
@@ -355,18 +377,23 @@ export function createApprovals(options: ApprovalsOptions) {
      * new Connector), and calls of its Tools still waiting are denied.
      */
     forgetConnector(connectorId: string): void {
-      forget(
-        (subject) => subject.kind === "tool" && subject.connectorId === connectorId,
-        (request) => request.connector.id === connectorId,
-      );
+      const ofConnector = (subject: ApprovalSubject) =>
+        subject.kind === "tool" && subject.connectorId === connectorId;
+      forget(ofConnector, (request) => ofConnector(request.subject));
     },
 
-    /** A Skill was removed: its policy goes with it. */
+    /** A Skill was removed: its policy goes with it, and runs of its scripts still waiting are denied. */
     forgetSkill(skillId: string): void {
-      forget(
-        (subject) => subject.kind === "skill-script" && subject.skillId === skillId,
-        () => false,
-      );
+      const ofSkill = (subject: ApprovalSubject) =>
+        subject.kind === "skill-script" && subject.skillId === skillId;
+      forget(ofSkill, (request) => ofSkill(request.subject));
+    },
+
+    /** Skill scripts were turned off: every run still waiting is denied. Policies stay. */
+    denyScripts(): void {
+      for (const entry of [...pending.values()]) {
+        if (entry.request.subject.kind === "skill-script") settle(entry, "deny");
+      }
     },
 
     /** Denies every request still waiting, e.g. when the app quits. */

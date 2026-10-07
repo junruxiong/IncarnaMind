@@ -5,10 +5,20 @@ import {
   type ApprovalRequest,
   BLOCK_ID_ATTRIBUTE,
   type ProviderErrorKind,
+  SKILL_SCRIPT_LIMITS,
+  type SkillScriptApprovalRequest,
+  type ToolApprovalRequest,
 } from "../../../core/api";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
-import { PlugIcon, RegenerateIcon, SearchIcon, SkillIcon, StopIcon } from "../components/icons";
+import {
+  PlugIcon,
+  RegenerateIcon,
+  ScriptIcon,
+  SearchIcon,
+  SkillIcon,
+  StopIcon,
+} from "../components/icons";
 import { useT } from "../i18n";
 import { type SettingsPage, useAppStore } from "../store";
 import { useMindId } from "./mindContext";
@@ -222,11 +232,13 @@ function AnswerError({
   );
 }
 
+const RUN_SCRIPT = "run_skill_script";
+
 /**
- * The searches and Connector calls an Answer made: its searches as one line,
- * then a card for each Connector call. A call waiting for the User's approval
- * shows the approval card instead, in every window. Skills have their own
- * cards (`SkillCalls`).
+ * The searches, Connector calls and Skill script runs an Answer made: its
+ * searches as one line, then a card for each call. A call waiting for the
+ * User's approval shows the approval card instead, in every window. Skills
+ * have their own cards (`SkillCalls`).
  */
 function ToolCalls({
   calls,
@@ -236,22 +248,25 @@ function ToolCalls({
   approvals: ApprovalRequest[];
 }) {
   const searches = calls.filter((call) => call.tool === "search_documents");
-  const connectorCalls = calls.filter((call) => call.source === "connector");
+  const carded = calls.filter(
+    (call) => call.source === "connector" || (call.source === "skill" && call.tool === RUN_SCRIPT),
+  );
   const approvalFor = (call: AnswerToolCall) =>
     approvals.find((request) => request.toolCallId === call.id);
   // A request can arrive before its call is written into the Answer.
   const unmatched = approvals.filter((request) =>
-    connectorCalls.every((call) => call.id !== request.toolCallId),
+    carded.every((call) => call.id !== request.toolCallId),
   );
   return (
     <>
       {searches.length > 0 && <Searches searches={searches} />}
-      {connectorCalls.map((call) => {
+      {carded.map((call) => {
         const request = approvalFor(call);
-        return request ? (
-          <ApprovalCard key={call.id} request={request} />
-        ) : (
+        if (request) return <ApprovalCard key={call.id} request={request} />;
+        return call.source === "connector" ? (
           <ConnectorCall key={call.id} call={call} />
+        ) : (
+          <ScriptCall key={call.id} call={call} />
         );
       })}
       {unmatched.map((request) => (
@@ -261,12 +276,21 @@ function ToolCalls({
   );
 }
 
+/** The approval card for a request: a Connector's Tool, or a Skill script. */
+function ApprovalCard({ request }: { request: ApprovalRequest }) {
+  return request.subject.kind === "skill-script" ? (
+    <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
+  ) : (
+    <ToolApprovalCard request={request as ToolApprovalRequest} />
+  );
+}
+
 /**
  * A Tool call waiting for the User: which Tool of which Connector, whether it
  * may change something or the User asked to approve it every time, the
  * arguments it would send, and three choices. The Answer waits meanwhile.
  */
-function ApprovalCard({ request }: { request: ApprovalRequest }) {
+function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
   const titleId = useId();
@@ -322,6 +346,203 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
           {t("approvals.card.deny")}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A Skill script waiting for the User: which Skill, which of its scripts and
+ * with which arguments, that scripts run on this computer with no sandbox,
+ * and three choices. "Always run" first shows a warning that must be
+ * confirmed. The Answer waits meanwhile.
+ */
+function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
+  const t = useT();
+  const respond = useApprovals((state) => state.respond);
+  const [warning, setWarning] = useState(false);
+  const titleId = useId();
+  const warningId = useId();
+  const params = { skill: request.skill.name, script: request.script };
+  return (
+    <div
+      contentEditable={false}
+      role="alertdialog"
+      aria-labelledby={titleId}
+      data-testid="approval-card"
+      data-tool={request.tool}
+      data-kind="skill-script"
+      className="approval-card"
+    >
+      <p id={titleId} className="flex items-center gap-1.5 font-medium">
+        <ScriptIcon className="size-3.5 shrink-0" />
+        <span className="min-w-0">{t("scripts.card.title", params)}</span>
+      </p>
+      <dl data-testid="approval-script" className="approval-args mt-1.5">
+        <dt>{t("scripts.card.skill")}</dt>
+        <dd data-testid="approval-script-skill">{request.skill.name}</dd>
+        <dt>{t("scripts.card.script")}</dt>
+        <dd data-testid="approval-script-path" className="font-mono">
+          {request.script}
+        </dd>
+        <dt>{t("scripts.card.args")}</dt>
+        <dd>
+          {request.args.length === 0 ? (
+            <span className="text-amber-900/70">{t("scripts.card.noArgs")}</span>
+          ) : (
+            <ol className="list-none">
+              {request.args.map((arg, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: arguments are positional and may repeat.
+                <li key={index} data-testid="approval-argument" className="font-mono">
+                  {arg}
+                </li>
+              ))}
+            </ol>
+          )}
+        </dd>
+      </dl>
+      <p data-testid="approval-no-sandbox" className="mt-1.5 text-amber-900/80">
+        {t("scripts.card.noSandbox")}
+      </p>
+      {warning ? (
+        <div
+          role="alertdialog"
+          aria-labelledby={warningId}
+          data-testid="always-run-warning"
+          className="mt-2 rounded-[6px] border border-red-200 bg-red-50 px-2.5 py-2 text-red-950"
+        >
+          <p id={warningId} className="font-medium">
+            {t("scripts.alwaysRun.title", params)}
+          </p>
+          <p className="mt-0.5 text-custom-xs">{t("scripts.alwaysRun.body", params)}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              data-testid="always-run-confirm"
+              onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
+              className="approval-button border-red-300 text-red-900 hover:bg-red-100"
+            >
+              {t("scripts.alwaysRun.confirm", params)}
+            </button>
+            <button
+              type="button"
+              data-testid="always-run-cancel"
+              onClick={() => setWarning(false)}
+              className="approval-button"
+            >
+              {t("scripts.alwaysRun.cancel")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            data-testid="approval-allow-once"
+            onClick={() => respond(request.requestId, "allow-once")}
+            className="approval-button approval-button--primary"
+          >
+            {t("scripts.card.allowOnce")}
+          </button>
+          <button
+            type="button"
+            data-testid="approval-always-run"
+            title={t("scripts.card.alwaysRunHint", params)}
+            onClick={() => setWarning(true)}
+            className="approval-button"
+          >
+            {t("scripts.card.alwaysRun")}
+          </button>
+          <button
+            type="button"
+            data-testid="approval-deny"
+            onClick={() => respond(request.requestId, "deny")}
+            className="approval-button"
+          >
+            {t("scripts.card.deny")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A run of a Skill script: which script of which Skill, how it went, on one
+ * line that opens to show its arguments and what it wrote (what the model
+ * was given), or why it couldn't run.
+ */
+function ScriptCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const params = { skill: field(call, "skill"), script: field(call, "script") };
+  const args = Array.isArray(call.input.args) ? call.input.args.map(String) : [];
+  const run = call.script;
+  const running = call.status === "running";
+  const summary =
+    call.approval === "denied"
+      ? t("scripts.call.denied", params)
+      : running && call.approval === "waiting"
+        ? t("scripts.call.waiting", params)
+        : running
+          ? t("scripts.call.running", params)
+          : run?.error
+            ? t("scripts.call.cantRun", params)
+            : run?.timedOut
+              ? t("scripts.call.timedOut", params)
+              : run && run.exitCode !== null
+                ? t("scripts.call.exited", { ...params, code: run.exitCode })
+                : t("scripts.call.stopped", params);
+  const limit = SKILL_SCRIPT_LIMITS.maxOutputBytes;
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-script-call"
+      data-status={call.status}
+      data-approval={call.approval}
+      data-exit-code={run?.exitCode ?? undefined}
+      className="answer-tools"
+    >
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${summary}. ${t("scripts.call.details")}`}
+        onClick={() => setExpanded((open) => !open)}
+        className="answer-tools-summary max-w-full"
+      >
+        <ScriptIcon className={`size-3.5 shrink-0 ${running ? "animate-pulse" : ""}`} />
+        <span className="min-w-0 truncate">{summary}</span>
+      </button>
+      {expanded && (
+        <div className="answer-tool-args-full" data-testid="answer-script-details">
+          <div className="font-sans text-gray-400">{t("scripts.call.args")}</div>
+          <pre data-testid="answer-script-args">
+            {args.length > 0 ? args.join(" ") : t("scripts.card.noArgs")}
+          </pre>
+          {run?.error && (
+            <p data-testid="answer-script-error" className="mt-1 font-sans text-red-700">
+              {run.error}
+            </p>
+          )}
+          {run && !run.error && (
+            <>
+              <div className="mt-1 font-sans text-gray-400">{t("scripts.call.stdout")}</div>
+              <pre data-testid="answer-script-stdout">{run.stdout || "—"}</pre>
+              {run.stdoutTruncated && (
+                <p className="font-sans text-gray-400">
+                  {t("scripts.call.stdoutTruncated", { bytes: limit })}
+                </p>
+              )}
+              <div className="mt-1 font-sans text-gray-400">{t("scripts.call.stderr")}</div>
+              <pre data-testid="answer-script-stderr">{run.stderr || "—"}</pre>
+              {run.stderrTruncated && (
+                <p className="font-sans text-gray-400">
+                  {t("scripts.call.stderrTruncated", { bytes: limit })}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -428,7 +649,8 @@ function SkillCalls({ calls }: { calls: AnswerToolCall[] }) {
   const t = useT();
   const skills = new Map<string, { use: AnswerToolCall | null; reads: AnswerToolCall[] }>();
   for (const call of calls) {
-    if (call.source !== "skill") continue;
+    // Script runs have cards of their own (`ScriptCall`).
+    if (call.source !== "skill" || call.tool === RUN_SCRIPT) continue;
     const name = call.tool === "use_skill" ? field(call, "name") : field(call, "skill");
     const entry = skills.get(name) ?? { use: null, reads: [] };
     if (call.tool === "use_skill") entry.use ??= call;
