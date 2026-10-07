@@ -245,6 +245,25 @@ export function MoveToFolderIcon(props: IconProps) {
   );
 }
 
+/** A label tag with a hole: Tags. */
+export function TagIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M2.5 3.5a1 1 0 0 1 1-1h3.6l6.2 6.2a1 1 0 0 1 0 1.4l-3.2 3.2a1 1 0 0 1-1.4 0L2.5 7.1z" />
+      <circle cx="5.5" cy="5.5" r="1" />
+    </svg>
+  );
+}
+
 /** Points right; rotate it 90° to point down. */
 export function ChevronIcon(props: IconProps) {
   return (

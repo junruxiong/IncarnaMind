@@ -8,6 +8,7 @@ import type {
   Mind,
   Settings,
   SettingsPatch,
+  Tag,
 } from "../../core/api";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
@@ -45,8 +46,13 @@ interface AppState {
   folders: Folder[];
   /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
   folderFilter: string | null;
-  /** The Documents in `folderFilter`, by id, as the core last listed them. Null until listed. */
+  /** Every Tag, in name order. */
+  tags: Tag[];
+  /** The Tag whose Documents the sidebar shows, within `folderFilter` if that is set too. Null: any. */
+  tagFilter: string | null;
+  /** The Documents matching both filters, by id, as the core last listed them. Null until listed. */
   filteredDocumentIds: ReadonlySet<string> | null;
+  tagsDialogOpen: boolean;
 
   load(): Promise<void>;
   createMind(): Promise<void>;
@@ -84,6 +90,14 @@ interface AppState {
   renameFolder(id: string, name: string): Promise<void>;
   moveFolder(id: string, parentId: string | null): Promise<void>;
   deleteFolder(id: string): Promise<void>;
+  /** Shows only the Documents with a Tag (in the filtered Folder, if any); null shows them whatever their Tags. */
+  filterByTag(tagId: string | null): Promise<void>;
+  addDocumentTag(documentId: string, tagId: string): Promise<void>;
+  removeDocumentTag(documentId: string, tagId: string): Promise<void>;
+  /** Recomputes the automatic Tags of these Documents, or of all of them. */
+  retagDocuments(documentIds?: string[]): Promise<void>;
+  openTagsDialog(): void;
+  closeTagsDialog(): void;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -96,10 +110,12 @@ const upsert = (documents: Document[], item: Document) =>
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
 
-/** The Documents the sidebar lists: all of them, or those in the Folder it is filtered by. */
+/** The Documents the sidebar lists: all of them, or those matching its Folder and Tag filters. */
 export const selectVisibleDocuments = (state: AppState): Document[] => {
   const ids = state.filteredDocumentIds;
-  if (state.folderFilter === null || ids === null) return state.documents;
+  if ((state.folderFilter === null && state.tagFilter === null) || ids === null) {
+    return state.documents;
+  }
   return state.documents.filter((item) => ids.has(item.id));
 };
 
@@ -128,11 +144,14 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsOpen: false,
     folders: [],
     folderFilter: null,
+    tags: [],
+    tagFilter: null,
     filteredDocumentIds: null,
+    tagsDialogOpen: false,
 
     async load() {
       try {
-        const [minds, settings, documents, chatReadiness, folders, embeddingModel] =
+        const [minds, settings, documents, chatReadiness, folders, embeddingModel, tags] =
           await Promise.all([
             core.listMinds(),
             core.getSettings(),
@@ -140,6 +159,7 @@ export const useAppStore = create<AppState>()((set, get) => {
             core.getChatReadiness(),
             core.listFolders(),
             core.getEmbeddingModel(),
+            core.listTags(),
           ]);
         set({
           minds,
@@ -148,6 +168,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           chatReadiness,
           folders,
           embeddingModel,
+          tags,
           status: { kind: "ready" },
         });
       } catch (error) {
@@ -295,7 +316,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     async filterByFolder(folderId) {
       if (folderId === get().folderFilter) return;
       set({ folderFilter: folderId, filteredDocumentIds: null });
-      await refreshFolderFilter();
+      await refreshFilter();
     },
 
     createFolder: (name, parentId) =>
@@ -317,35 +338,82 @@ export const useAppStore = create<AppState>()((set, get) => {
       attempt(async () => {
         await core.deleteFolder(id);
       }),
+
+    async filterByTag(tagId) {
+      if (tagId === get().tagFilter) return;
+      set({ tagFilter: tagId, filteredDocumentIds: null });
+      await refreshFilter();
+    },
+
+    // The Documents follow the core's "documents.tagged" event, which arrives before these calls return.
+    addDocumentTag: (documentId, tagId) =>
+      attempt(async () => {
+        await core.addDocumentTag(documentId, tagId);
+      }),
+
+    removeDocumentTag: (documentId, tagId) =>
+      attempt(async () => {
+        await core.removeDocumentTag(documentId, tagId);
+      }),
+
+    retagDocuments: (documentIds) =>
+      attempt(async () => {
+        await core.retagDocuments(documentIds);
+      }),
+
+    openTagsDialog() {
+      set({ tagsDialogOpen: true });
+    },
+
+    closeTagsDialog() {
+      set({ tagsDialogOpen: false });
+    },
   };
 });
 
-/** Counts Folder-filter requests, so a slow answer to an old one never overwrites a newer one. */
+/** Counts filter requests, so a slow answer to an old one never overwrites a newer one. */
 let filterRequests = 0;
 
-/** Asks the core which Documents are in the filtered Folder, including its sub-Folders. */
-async function refreshFolderFilter(): Promise<void> {
+/** Asks the core which Documents match the filters: in the Folder (sub-Folders included), with the Tag. */
+async function refreshFilter(): Promise<void> {
   const request = ++filterRequests;
-  const folderId = useAppStore.getState().folderFilter;
-  if (folderId === null) {
+  const { folderFilter: folderId, tagFilter: tagId } = useAppStore.getState();
+  if (folderId === null && tagId === null) {
     useAppStore.setState({ filteredDocumentIds: null });
     return;
   }
   try {
-    const listed = await core.listDocuments({ folderId, includeSubfolders: true });
+    const listed = await core.listDocuments({
+      ...(folderId !== null && { folderId, includeSubfolders: true }),
+      ...(tagId !== null && { tagId }),
+    });
     if (request === filterRequests) {
       useAppStore.setState({ filteredDocumentIds: new Set(listed.map((item) => item.id)) });
     }
   } catch (error) {
     if (request !== filterRequests) return;
-    const { folders } = useAppStore.getState();
-    // The Folder was deleted meanwhile: show every Document again. Anything else is a failure.
-    if (folders.some((folder) => folder.id === folderId)) {
+    const { folders, tags } = useAppStore.getState();
+    const folderGone = folderId !== null && !folders.some((folder) => folder.id === folderId);
+    const tagGone = tagId !== null && !tags.some((tag) => tag.id === tagId);
+    // The Folder or Tag was deleted meanwhile: drop that filter. Anything else is a failure.
+    if (!folderGone && !tagGone) {
       useAppStore.setState({ actionError: messageOf(error) });
-    } else {
-      useAppStore.setState({ folderFilter: null, filteredDocumentIds: null });
+      return;
     }
+    useAppStore.setState({
+      folderFilter: folderGone ? null : folderId,
+      tagFilter: tagGone ? null : tagId,
+      filteredDocumentIds: null,
+    });
+    void refreshFilter();
   }
+}
+
+/** Refreshes the filtered list, if the sidebar is filtered. */
+function refreshFilterIfAny(): void {
+  const { folderFilter, tagFilter } = useAppStore.getState();
+  if (folderFilter !== null || tagFilter !== null) void refreshFilter();
+  else filterRequests++; // nothing to filter by: an answer still to come is for an old filter
 }
 
 // Settings can change outside this window (another window, or the core itself), so follow the core's event.
@@ -373,15 +441,12 @@ core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embe
 core.on("folders.changed", (folders) => {
   const { folderFilter } = useAppStore.getState();
   useAppStore.setState({ folders });
-  if (folderFilter === null) return;
-  if (folders.some((folder) => folder.id === folderFilter)) {
-    // Moving a Folder can change which Documents are below the filtered one.
-    void refreshFolderFilter();
-  } else {
-    // The filtered Folder was deleted, perhaps with a parent: show every Document again.
-    filterRequests++;
+  if (folderFilter !== null && !folders.some((folder) => folder.id === folderFilter)) {
+    // The filtered Folder was deleted, perhaps with a parent: drop that filter.
     useAppStore.setState({ folderFilter: null, filteredDocumentIds: null });
   }
+  // Moving a Folder can change which Documents are below the filtered one.
+  refreshFilterIfAny();
 });
 
 // Documents moved between Folders, or unfiled by a Folder's deletion.
@@ -389,5 +454,23 @@ core.on("documents.moved", (moved) => {
   useAppStore.setState((state) => ({
     documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
   }));
-  if (useAppStore.getState().folderFilter !== null) void refreshFolderFilter();
+  refreshFilterIfAny();
+});
+
+// Tags change through this window or another: follow the list, and drop a filter by a deleted Tag.
+core.on("tags.changed", (tags) => {
+  const { tagFilter } = useAppStore.getState();
+  useAppStore.setState({ tags });
+  if (tagFilter !== null && !tags.some((tag) => tag.id === tagFilter)) {
+    useAppStore.setState({ tagFilter: null, filteredDocumentIds: null });
+    refreshFilterIfAny();
+  }
+});
+
+// Documents' Tags, or their tagging, changed: by the User, by automatic tagging, or with a deleted Tag.
+core.on("documents.tagged", (tagged) => {
+  useAppStore.setState((state) => ({
+    documents: tagged.reduce((documents, item) => upsert(documents, item), state.documents),
+  }));
+  if (useAppStore.getState().tagFilter !== null) void refreshFilter();
 });
