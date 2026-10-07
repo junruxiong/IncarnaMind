@@ -1,6 +1,6 @@
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { expect, type Locator, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -10,12 +10,21 @@ import {
   documentIdOf,
   interceptOpenPath,
   launchApp,
+  linkFolderFromSidebar,
   openDocumentAt,
   openDocumentMenu,
   pathsOpened,
   removeDataFolder,
   widthOf,
 } from "./app";
+
+/** Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots of the viewer's states there. */
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+
+async function screenshot(target: Page | Locator, name: string): Promise<void> {
+  if (!SCREENSHOTS) return;
+  await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+}
 
 /** An element's box; it must be shown. */
 async function boxOf(locator: Locator) {
@@ -351,6 +360,113 @@ test("a Document deleted while it is open, or already deleted, shows Document re
   await expect(window.getByTestId("viewer-removed")).toContainText(
     "This Document has been deleted from IncarnaMind",
   );
+  await app.close();
+});
+
+test("the open viewer follows its file on disk: the new version once indexed, and the file back after it went missing", async () => {
+  const library = join(await realpath(sources), "Library");
+  await mkdir(library);
+  const notes = join(library, "Notes.md");
+  const report = join(library, "Report.pdf");
+  const SECOND_DRAFT = "# Notes\n\nThe second draft, rewritten.\n\nThe tide turns at noon.\n";
+  await writeFile(notes, "# Notes\n\nThe first draft.\n\nThe tide turns at noon.\n");
+  await writeFile(report, REPORT);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await linkFolderFromSidebar(app, window, library);
+  const items = window.getByTestId("document-list-item");
+  await expect(items).toHaveCount(2);
+  for (const item of await items.all()) await expect(item).toHaveAttribute("data-status", "ready");
+  const viewer = window.getByTestId("viewer");
+  const text = window.getByTestId("viewer-text");
+  const mark = viewer.getByTestId("viewer-quote-mark");
+  const notesItem = items.filter({ hasText: "Notes" });
+
+  // Opened at a Citation's quote.
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Notes"),
+    quote: "The tide turns at noon.",
+    citation: { check: "found", number: 1 },
+  });
+  await expect(text).toContainText("The first draft.");
+  const washed = text.locator("[data-quote-highlight]");
+  await expect(washed).toHaveText(["The tide turns at noon."]);
+
+  // Edited on disk: once the new version is indexed the viewer shows it, at the same quote.
+  await writeFile(notes, SECOND_DRAFT);
+  await expect(text).toContainText("The second draft, rewritten.", { timeout: 15_000 });
+  await expect(text).not.toContainText("The first draft.");
+  await expect(washed).toHaveText(["The tide turns at noon."]);
+  await expect(mark).toHaveText("1");
+  await screenshot(viewer, "viewer-new-version");
+
+  // Deleted on disk while open: what was read stays, but there is no file to open.
+  await rm(notes);
+  await expect(notesItem).toHaveAttribute("data-file-status", "missing", { timeout: 15_000 });
+  await expect(text).toContainText("The second draft, rewritten.");
+  await expect(viewer.getByTestId("viewer-open-externally")).toHaveCount(0);
+  // Opened again, it can't be shown: its file is missing, the Document isn't deleted...
+  await window.getByTestId("viewer-close").click();
+  await notesItem.getByTestId("open-document").click();
+  const gone = window.getByTestId("viewer-removed");
+  await expect(gone).toContainText("File missing");
+  await expect(gone).toContainText("It shows here again once the file is back.");
+  await expect(gone).not.toContainText("deleted");
+  await screenshot(viewer, "viewer-missing");
+  // ...until the file comes back: then the viewer shows it, by itself.
+  await writeFile(notes, SECOND_DRAFT);
+  await expect(notesItem).toHaveAttribute("data-file-status", "available", { timeout: 15_000 });
+  await expect(text).toContainText("The second draft, rewritten.");
+  await expect(window.getByTestId("viewer-removed")).toHaveCount(0);
+  await expect(viewer.getByTestId("viewer-open-externally")).toHaveCount(1);
+  await screenshot(viewer, "viewer-file-back");
+
+  // A PDF opened at a Citation's page keeps that page and its quote through a new version.
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Report"),
+    pageFrom: 2,
+    quote: "Revenue grew by ten percent in the third quarter",
+    citation: { check: "found", number: 2 },
+  });
+  const highlights = viewer.locator('[data-page-number="2"] [data-quote-highlight]');
+  await expect(highlights).toHaveCount(2);
+  await writeFile(
+    report,
+    buildPdf([
+      { lines: ["Annual report", "Prepared for the shareholders."] },
+      {
+        lines: [
+          "Results",
+          "Revenue grew by ten percent",
+          "in the third quarter, led by exports.",
+          "Costs stayed flat.",
+        ],
+      },
+      { lines: ["Outlook", "We expect steady growth next year."] },
+    ]),
+  );
+  await expect(viewer.locator('[data-page-number="1"] .textLayer')).toContainText("Annual report", {
+    timeout: 15_000,
+  });
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
+  await expect(highlights).toHaveCount(2);
+  await expect(highlights.first()).toBeInViewport();
+  await expect(mark).toHaveText("2");
+
+  // Opened from the sidebar, it comes back at the page and zoom it was left at.
+  await items.filter({ hasText: "Report" }).getByTestId("open-document").click();
+  await window.getByTestId("pdf-zoom-in").click();
+  const zoomLevel = await window.getByTestId("pdf-zoom-level").textContent();
+  await window.getByTestId("pdf-page-number").fill("3");
+  await window.getByTestId("pdf-page-number").press("Enter");
+  await writeFile(report, REPORT);
+  await expect(viewer.locator('[data-page-number="1"] .textLayer')).toContainText(
+    "Quarterly report",
+    { timeout: 15_000 },
+  );
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("3");
+  await expect(window.getByTestId("pdf-zoom-level")).toHaveText(zoomLevel ?? "");
+  await expect(window.getByTestId("pdf-fit-width")).toHaveAttribute("aria-pressed", "false");
   await app.close();
 });
 

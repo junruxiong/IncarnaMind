@@ -35,7 +35,10 @@ export function ViewerHeader({
 }: {
   leading?: ReactNode;
   children?: ReactNode;
-  /** False when the Document's file is missing, so there is nothing to open. */
+  /**
+   * False when the Document's file couldn't be read, so there is nothing to
+   * open. Nor is there while the Document says its file is missing or out of reach.
+   */
   openable?: boolean;
 }) {
   const t = useT();
@@ -65,7 +68,7 @@ export function ViewerHeader({
       )}
       {children}
       {children && <HeaderDivider />}
-      {document && openable && (
+      {document && openable && document.fileStatus === "available" && (
         <button
           type="button"
           data-testid="viewer-open-externally"

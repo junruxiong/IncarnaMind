@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useT } from "../i18n";
 import type { LoadedFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
-import { DocumentRemoved, ViewerMessage } from "./ViewerMessage";
+import { FileGone, ViewerMessage } from "./ViewerMessage";
 
 /**
  * A view while its file isn't ready to show: loading, gone (the quote is
@@ -30,7 +30,7 @@ export function FileStates<T>({
       return (
         <>
           <ViewerHeader openable={false} />
-          <DocumentRemoved quote={quote} />
+          <FileGone quote={quote} />
         </>
       );
     case "failed":

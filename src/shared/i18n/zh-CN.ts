@@ -68,8 +68,12 @@ export const zhCN = {
   "viewer.removed.unlinked":
     "这个文档所在的文件夹已取消关联。IncarnaMind 保留了你的引用所引的文字。",
   "viewer.removed.quote": "引用的文字：",
-  "viewer.file.missing": "文件已不在原来的文件夹中，这里显示的是 IncarnaMind 保留的文字。",
-  "viewer.file.unavailable": "暂时无法访问文件，这里显示的是 IncarnaMind 保留的文字。",
+  "viewer.file.missing.title": "文件丢失",
+  "viewer.file.missing":
+    "这个文档的文件已不在原来的文件夹中，因此无法显示。文件回来后会在这里重新显示。",
+  "viewer.file.unavailable.title": "暂时无法访问文件",
+  "viewer.file.unavailable":
+    "暂时无法访问这个文档的文件，例如所在的磁盘未连接。可以访问后会在这里重新显示。",
   "viewer.page.label": "第 {number} 页",
   "viewer.page.number": "页码",
   "viewer.page.count": "共 {count} 页",
