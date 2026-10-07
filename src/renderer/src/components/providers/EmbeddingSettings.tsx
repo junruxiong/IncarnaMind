@@ -248,6 +248,8 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   const unchanged =
     sameServer && apiKey.trim() === "" && (kind === "built-in" || modelId.trim() === saved.modelId);
   const cloudService = cloudServiceOf(kind, baseUrl, t);
+  // A server elsewhere, in local mode: said as the address is typed, not refused at the end.
+  const outsideLocalMode = current.localOnly && cloudService !== null;
 
   const choose = (next: EmbeddingProviderKind) => {
     // A key typed for one provider is never sent to another.
@@ -362,11 +364,17 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             spellCheck={false}
             className={inputClass}
           />
-          <span className={hintClass}>
-            {kind === "ollama"
-              ? t("embeddingProviders.form.ollamaHint")
-              : t("providers.form.baseUrlHint")}
-          </span>
+          {outsideLocalMode ? (
+            <span role="alert" data-testid="embedding-local-only" className={hintClass}>
+              {t("embeddingProviders.form.localOnlyServer")}
+            </span>
+          ) : (
+            <span className={hintClass}>
+              {kind === "ollama"
+                ? t("embeddingProviders.form.ollamaHint")
+                : t("providers.form.baseUrlHint")}
+            </span>
+          )}
         </label>
       )}
 
@@ -408,7 +416,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
         <button
           type="submit"
           data-testid="embedding-switch"
-          disabled={!complete || unchanged || keyBlocked || busy !== null}
+          disabled={!complete || unchanged || keyBlocked || outsideLocalMode || busy !== null}
           className={primaryButtonClass}
         >
           {busy === "saving" ? t("providers.form.saving") : t("embeddingProviders.form.switch")}
@@ -416,7 +424,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
         {kind !== "built-in" && (
           <button
             type="button"
-            disabled={!complete || busy !== null}
+            disabled={!complete || outsideLocalMode || busy !== null}
             onClick={() => void runTest()}
             className={buttonClass}
           >
@@ -434,7 +442,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             {t("embeddingProviders.test.ok", { dimensions: test.dimensions })}
           </p>
         ) : (
-          <TestResult result={test} />
+          <TestResult result={test} onRetry={() => void runTest()} />
         ))}
       {error && (
         <p role="alert" className={errorTextClass}>

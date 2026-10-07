@@ -24,6 +24,8 @@ export interface FilesBridge {
    * system save dialog. Resolves with the file's path, or null if they cancelled.
    */
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<string | null>;
+  /** Shows a file `saveMindExport` wrote, selected in the system's file manager. */
+  showExportInFolder(path: string): Promise<void>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
   /** Shows the data folder's `logs/` in the system's file manager, e.g. to attach the log to a bug report. */
@@ -78,6 +80,7 @@ export interface RendererErrorReport {
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
   saveMindExport: "files:saveMindExport",
+  showExportInFolder: "files:showExportInFolder",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",

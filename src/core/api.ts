@@ -2301,6 +2301,12 @@ export interface CoreApi {
    * "needs-sign-in": nothing opens in the browser until `signInToConnector`.
    */
   addConnector(input: AddConnectorInput): Promise<Connector>;
+  /**
+   * Changes a local Connector's name, command, arguments and environment (an
+   * empty `env` keeps the saved values), and starts it again with them. Its
+   * Tools' approvals and its data-flow decision stay.
+   */
+  editConnector(connectorId: string, input: AddLocalConnectorInput): Promise<Connector>;
   /** Turns a Connector on (starting it) or off (stopping its process, or disconnecting). */
   setConnectorEnabled(connectorId: string, enabled: boolean): Promise<Connector>;
   /** Starts a Connector that is on again, e.g. after an error. */
@@ -2615,6 +2621,7 @@ const methods: Record<CoreApiMethod, true> = {
   testJevConnection: true,
   listConnectors: true,
   addConnector: true,
+  editConnector: true,
   setConnectorEnabled: true,
   restartConnector: true,
   deleteConnector: true,

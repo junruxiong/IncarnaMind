@@ -9,6 +9,9 @@ export const en = {
   "sidebar.label": "Sidebar",
   "sidebar.newMind": "New Mind",
   "sidebar.minds": "Minds",
+  "sidebar.minds.count": "Minds ({count})",
+  "sidebar.minds.fold": "Fold the Minds away",
+  "sidebar.minds.unfold": "Show the Minds",
   "sidebar.noMinds": "No Minds yet",
   "sidebar.settings": "Settings",
   "sidebar.resize": "Resize the sidebar",
@@ -19,6 +22,8 @@ export const en = {
   "mind.title.label": "Mind title",
   "mind.editor.label": "Mind content",
   "mind.delete": "Delete Mind",
+  "mind.rename": "Rename",
+  "mind.renameLabel": "New title for {title}",
   "mind.delete.body": "“{title}” will be removed from your Minds.",
   "mind.delete.confirm": "Delete",
   "mind.delete.cancel": "Cancel",
@@ -272,6 +277,8 @@ export const en = {
   "embeddingProviders.form.label": "Embedding model",
   "embeddingProviders.form.localOnly":
     "Local mode is on, so only models on this computer can be chosen.",
+  "embeddingProviders.form.localOnlyServer":
+    'Local mode is on, and this server isn\'t on this computer: use one at localhost or 127.0.0.1, or turn off "Keep everything on this computer" above.',
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -310,6 +317,8 @@ export const en = {
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
   "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.localOnly":
+    'Local mode is on: reranking would send search matches to Cohere or Voyage AI. Turn off "Keep everything on this computer" to set it up.',
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Stop reranking",
   "rerank.kind.cohere": "Cohere",
@@ -822,6 +831,10 @@ export const en = {
   "export.saving": "Exporting…",
   "export.cancel": "Cancel",
   "export.failed": "The Mind couldn't be exported: {message}",
+  "export.done": "Exported to {name}.",
+  "export.showInFinder": "Show in Finder",
+  "export.showInFolder": "Show in folder",
+  "export.close": "Done",
   "export.dialog.title": "Export Mind",
   "export.dialog.filter.docx": "Word document",
   "export.dialog.filter.markdown": "Markdown",
@@ -898,6 +911,7 @@ export const en = {
   "connectors.state.error": "Error",
   "connectors.toggle": "Use {name}",
   "connectors.remove": "Remove {name}",
+  "connectors.edit": "Change {name}",
   "connectors.retry": "Try again",
   "connectors.restarting": "Restarting…",
   "connectors.details": "Details",
@@ -921,6 +935,7 @@ export const en = {
   "connectors.form.commandHint":
     "The program that starts the MCP server, e.g. npx or uvx. It's found the way your terminal finds it.",
   "connectors.form.args": "Arguments, one per line",
+  "connectors.form.argsMoved": "The rest of what you pasted went into Arguments, one per line.",
   "connectors.form.env": "Environment variables, NAME=value, one per line",
   "connectors.form.envHint":
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
@@ -928,6 +943,9 @@ export const en = {
   "connectors.form.add": "Add Connector",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
+  "connectors.form.save": "Save and restart",
+  "connectors.form.saving": "Saving…",
+  "connectors.form.envKeep": "Leave empty to keep the saved values of {names}.",
   "connectors.import.body":
     "Paste the mcpServers JSON from Claude Desktop (claude_desktop_config.json) or Cursor (mcp.json), or choose the file. You'll see what will be added first.",
   "connectors.import.json": "Configuration",

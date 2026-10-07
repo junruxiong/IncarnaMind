@@ -281,7 +281,7 @@ function JevForm({
         </button>
       </div>
 
-      {test && <TestResult result={test} />}
+      {test && <TestResult result={test} onRetry={() => void run("testing")} />}
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}

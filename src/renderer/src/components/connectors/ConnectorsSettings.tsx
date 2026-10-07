@@ -12,7 +12,7 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-import { TrashLineIcon } from "../lineIcons";
+import { PencilLineIcon, TrashLineIcon } from "../lineIcons";
 import {
   buttonClass,
   buttonStyle,
@@ -172,6 +172,7 @@ function ConnectorRow({
   const t = useT();
   const { id, name } = connector;
   const dot = stateDot[connector.state];
+  const [editing, setEditing] = useState(false);
   return (
     <li
       data-testid="connector"
@@ -200,6 +201,19 @@ function ConnectorRow({
             onChange={(event) => void act(() => core.setConnectorEnabled(id, event.target.checked))}
             className="switch"
           />
+          {connector.transport === "stdio" && (
+            <button
+              type="button"
+              data-testid="connector-edit"
+              aria-label={t("connectors.edit", { name })}
+              title={t("connectors.edit", { name })}
+              aria-expanded={editing}
+              onClick={() => setEditing((open) => !open)}
+              className={iconButtonClass}
+            >
+              <PencilLineIcon className="size-4" />
+            </button>
+          )}
           <button
             type="button"
             aria-label={t("connectors.remove", { name })}
@@ -218,6 +232,9 @@ function ConnectorRow({
       >
         {locationOf(connector)}
       </p>
+      {editing && connector.transport === "stdio" && (
+        <ConnectorForm editing={connector} onDone={() => setEditing(false)} />
+      )}
       {connector.state === "error" && connector.error && (
         <ErrorNotice
           error={connector.error}

@@ -104,6 +104,13 @@
   --color-scrim: rgb(23 25 28 / 0.32);
 }
 
+/* A thin, quiet scrollbar: the sidebar's tree shows that it scrolls without taking room from its rows. */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-strong) transparent;
+  overscroll-behavior: none;
+}
+
 @utility hide-scrollbar {
   scrollbar-width: none;
   overscroll-behavior: none;

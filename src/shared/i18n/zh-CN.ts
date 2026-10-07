@@ -7,6 +7,9 @@ export const zhCN = {
   "sidebar.label": "侧边栏",
   "sidebar.newMind": "新建 Mind",
   "sidebar.minds": "Minds",
+  "sidebar.minds.count": "Minds（{count}）",
+  "sidebar.minds.fold": "收起 Minds",
+  "sidebar.minds.unfold": "展开 Minds",
   "sidebar.noMinds": "还没有 Mind",
   "sidebar.settings": "设置",
   "sidebar.resize": "调整侧边栏宽度",
@@ -17,6 +20,8 @@ export const zhCN = {
   "mind.title.label": "Mind 标题",
   "mind.editor.label": "Mind 内容",
   "mind.delete": "删除 Mind",
+  "mind.rename": "重命名",
+  "mind.renameLabel": "{title} 的新标题",
   "mind.delete.body": "“{title}”将从你的 Minds 中移除。",
   "mind.delete.confirm": "删除",
   "mind.delete.cancel": "取消",
@@ -257,6 +262,8 @@ export const zhCN = {
   "embeddingProviders.kind.ollama": "Ollama",
   "embeddingProviders.form.label": "嵌入模型",
   "embeddingProviders.form.localOnly": "本地模式已开启，只能选择在这台电脑上运行的模型。",
+  "embeddingProviders.form.localOnlyServer":
+    "本地模式已开启，而此服务器不在这台电脑上：请使用 localhost 或 127.0.0.1 上的服务器，或在上方关闭“所有内容都留在这台电脑上”。",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small：约 135 MB，只需下载一次，在这台电脑上运行，支持中文和英文。",
   "embeddingProviders.form.ollamaUrl": "Ollama 地址（可选）",
@@ -291,6 +298,8 @@ export const zhCN = {
   "rerank.settings.keyMissing":
     "这台设备上读取不到 {service} 的密钥，因此不会重新排序。请重新输入密钥。",
   "rerank.settings.setUp": "添加重排序密钥…",
+  "rerank.settings.localOnly":
+    "本地模式已开启：重排序会把搜索结果发送到 Cohere 或 Voyage AI。要设置它，请关闭“所有内容都留在这台电脑上”。",
   "rerank.settings.change": "更改",
   "rerank.settings.remove": "停止重新排序",
   "rerank.kind.cohere": "Cohere",
@@ -778,6 +787,10 @@ export const zhCN = {
   "export.saving": "正在导出…",
   "export.cancel": "取消",
   "export.failed": "无法导出这个 Mind：{message}",
+  "export.done": "已导出到 {name}。",
+  "export.showInFinder": "在访达中显示",
+  "export.showInFolder": "在文件夹中显示",
+  "export.close": "完成",
   "export.dialog.title": "导出 Mind",
   "export.dialog.filter.docx": "Word 文档",
   "export.dialog.filter.markdown": "Markdown",
@@ -853,6 +866,7 @@ export const zhCN = {
   "connectors.state.error": "出错",
   "connectors.toggle": "使用 {name}",
   "connectors.remove": "移除 {name}",
+  "connectors.edit": "修改 {name}",
   "connectors.retry": "重试",
   "connectors.restarting": "正在重新启动…",
   "connectors.details": "详情",
@@ -873,6 +887,7 @@ export const zhCN = {
   "connectors.form.command": "命令",
   "connectors.form.commandHint": "启动 MCP 服务器的程序，例如 npx 或 uvx。查找方式与你的终端相同。",
   "connectors.form.args": "参数，每行一个",
+  "connectors.form.argsMoved": "粘贴内容的其余部分已移到“参数”，每行一个。",
   "connectors.form.env": "环境变量，NAME=value，每行一个",
   "connectors.form.envHint":
     "用于 API 密钥等。这些值保存在你的钥匙串中，绝不会存入 IncarnaMind 的数据库。",
@@ -880,6 +895,9 @@ export const zhCN = {
   "connectors.form.add": "添加连接器",
   "connectors.form.adding": "正在添加…",
   "connectors.form.cancel": "取消",
+  "connectors.form.save": "保存并重启",
+  "connectors.form.saving": "正在保存…",
+  "connectors.form.envKeep": "留空则保留已保存的 {names} 的值。",
   "connectors.import.body":
     "粘贴 Claude Desktop（claude_desktop_config.json）或 Cursor（mcp.json）中的 mcpServers JSON，或选择该文件。添加前会先显示将要添加的内容。",
   "connectors.import.json": "配置",
