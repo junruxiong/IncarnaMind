@@ -6,7 +6,9 @@
  * be used it waits as "waiting-for-model". Only the Document whose turn it is
  * is shown as embedding; the others stored as "embedding" wait their turn,
  * shown as queued (`isEmbedding`). Each batch of vectors is stored as it
- * comes, so a quit loses at most one batch's work.
+ * comes, so a quit loses at most one batch's work. A Document is only ready
+ * once every live Passage has its vector: a new version stored during its
+ * turn takes another.
  *
  * The model each Document's vectors come from is recorded with them
  * (documents.embedding_model, and their size in documents.embedding_dimensions).
@@ -95,6 +97,14 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       id,
       from,
     ]);
+
+  /** Whether any of the Document's live Passages has no vector yet. */
+  const unembedded = (id: string) =>
+    db.get(
+      `SELECT 1 FROM passages
+       WHERE document_id = ? AND deleted_at IS NULL AND embedding IS NULL LIMIT 1`,
+      [id],
+    ) !== undefined;
 
   /** The model can't be used: every Document being embedded waits for it again. */
   function park(): void {
@@ -197,26 +207,33 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
         );
         return "done";
       }
-      db.transaction(() => {
+      // Only live Passages get vectors: a new version may have replaced these meanwhile.
+      const stored = db.transaction(() => {
         if (dimensions === null) {
           db.run("UPDATE documents SET embedding_dimensions = ? WHERE id = ?", [BigInt(size), id]);
         }
-        batch.forEach((passage, index) => {
+        return batch.flatMap((passage, index) => {
           const vector = embedded[index] as Float32Array;
-          db.run("UPDATE passages SET embedding = ? WHERE seq = ? AND deleted_at IS NULL", [
-            encodeVector(vector),
-            BigInt(passage.seq),
-          ]);
+          const row = db.get<{ seq: number }>(
+            `UPDATE passages SET embedding = ? WHERE seq = ? AND deleted_at IS NULL
+             RETURNING seq`,
+            [encodeVector(vector), BigInt(passage.seq)],
+          );
+          return row ? [{ seq: row.seq, vector }] : [];
         });
       });
       dimensions = size;
-      batch.forEach((passage, index) => {
-        vectors.add(id, passage.seq, embedded[index] as Float32Array);
-      });
+      for (const { seq, vector } of stored) vectors.add(id, seq, vector);
       if (Date.now() - announced >= PROGRESS_INTERVAL_MS) {
         announced = Date.now();
         announce(id);
       }
+    }
+    // A new version, extracted during the last batch, has Passages still to embed: it isn't
+    // ready, and takes another turn, which reads what is stored now.
+    if (unembedded(id)) {
+      if (!queue.includes(id)) queue.push(id);
+      return "skipped";
     }
     setStatus(id, "ready", "embedding");
     if (stateOf(id)?.status === "ready") {
