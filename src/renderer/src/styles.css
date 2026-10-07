@@ -412,13 +412,10 @@
   .mind-tab[aria-selected="true"] .mind-tab-foot {
     display: block;
   }
-  /* The first tab, shown, meets the sidebar square: no left foot, its content inset 16px. */
+  /* The first tab, shown, starts at the sidebar: no left foot, its content inset 16px. */
   .mind-tab:first-child[aria-selected="true"] {
-    border-top-left-radius: 0;
-
     .mind-tab-inner {
       padding-left: 16px;
-      border-top-left-radius: 0;
     }
     .mind-tab-foot[data-side="left"] {
       display: none;
