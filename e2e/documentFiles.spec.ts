@@ -9,6 +9,7 @@ import {
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  openDocumentMenu,
   pathsOpened,
   pathsShown,
   removeDataFolder,
@@ -38,13 +39,18 @@ test("Open in default app and Show in folder use the file where the User keeps i
   const original = await realpath(join(sources, "Report.pdf"));
   const item = window.getByTestId("document-list-item");
 
-  await item.hover();
-  await item.getByTestId("document-file-menu").click();
+  // Renaming (from its menu) changes the Document's name, never its file.
+  await openDocumentMenu(item);
+  await window.getByRole("menuitem", { name: "Rename" }).click();
+  await window.getByRole("textbox", { name: "New name for Report" }).fill("Q3 report");
+  await window.keyboard.press("Enter");
+  await expect(item).toContainText("Q3 report");
+
+  await openDocumentMenu(item);
   await window.getByRole("menuitem", { name: "Open in default app" }).click();
   await expect.poll(() => pathsOpened(app)).toEqual([original]);
 
-  await item.hover();
-  await item.getByTestId("document-file-menu").click();
+  await openDocumentMenu(item);
   await window.getByRole("menuitem", { name: "Show in folder" }).click();
   await expect.poll(() => pathsShown(app)).toEqual([original]);
   await app.close();

@@ -10,7 +10,20 @@ import { features } from "../../../../shared/features";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
-import { buttonClass, inputClass, primaryButtonClass, testErrorKey } from "./shared";
+import {
+  buttonClass,
+  choiceListClass,
+  compactChoiceRadioClass,
+  compactChoiceRowClass,
+  errorTextClass,
+  fieldLabelClass,
+  hintClass,
+  inputClass,
+  noticeClass,
+  primaryButtonClass,
+  successTextClass,
+} from "../ui";
+import { testErrorKey } from "./shared";
 
 /** Providers set up with a key or a server URL. Ollama has its own one-click card. */
 const formKinds = [
@@ -129,31 +142,32 @@ export function ProviderForm({
   return (
     <form data-testid="provider-form" onSubmit={submit} className="flex flex-col gap-3">
       <fieldset>
-        <legend className="mb-1 text-sm text-gray-600">{t("providers.form.label")}</legend>
-        <div className="grid grid-cols-2 gap-2">
+        <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.label")}</legend>
+        <div className={`${choiceListClass} bg-sheet`}>
           {formKinds.map((option) => (
-            <label
-              key={option}
-              className={`flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-sm ${
-                kind === option ? "border-gray-800" : "border-gray-300 hover:bg-gray-50"
-              }`}
-            >
+            <label key={option} className={compactChoiceRowClass}>
               <input
                 type="radio"
                 name={`${id}-kind`}
                 value={option}
                 checked={kind === option}
                 onChange={() => choose(option)}
+                className={compactChoiceRadioClass}
               />
               {t(`providers.kind.${option}`)}
             </label>
           ))}
           {features.signInWithChatGpt && (
-            <label className="flex items-center gap-2 rounded-[9px] border border-gray-200 px-3 py-2 text-sm text-gray-400">
-              <input type="radio" name={`${id}-kind`} disabled />
-              <span>
+            <label className={compactChoiceRowClass}>
+              <input
+                type="radio"
+                name={`${id}-kind`}
+                disabled
+                className={compactChoiceRadioClass}
+              />
+              <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
                 {t("providers.kind.chatgpt")}
-                <span className="block text-xs">{t("providers.chatgpt.unavailable")}</span>
+                <span className="text-[12px]">{t("providers.chatgpt.unavailable")}</span>
               </span>
             </label>
           )}
@@ -163,7 +177,7 @@ export function ProviderForm({
       {kind && (
         <>
           {kind === "openai-compatible" && (
-            <label className="text-sm text-gray-600">
+            <label className={fieldLabelClass}>
               {t("providers.form.baseUrl")}
               <input
                 type="url"
@@ -174,13 +188,11 @@ export function ProviderForm({
                 spellCheck={false}
                 className={inputClass}
               />
-              <span className="mt-1 block text-xs text-gray-500">
-                {t("providers.form.baseUrlHint")}
-              </span>
+              <span className={hintClass}>{t("providers.form.baseUrlHint")}</span>
             </label>
           )}
 
-          <label className="text-sm text-gray-600">
+          <label className={fieldLabelClass}>
             {keyRequired ? t("providers.form.apiKey") : t("providers.form.apiKeyOptional")}
             <input
               type="password"
@@ -191,9 +203,7 @@ export function ProviderForm({
               className={inputClass}
             />
             {saved?.hasApiKey && (
-              <span className="mt-1 block text-xs text-gray-500">
-                {t("providers.form.apiKeySaved")}
-              </span>
+              <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
             )}
           </label>
 
@@ -201,7 +211,7 @@ export function ProviderForm({
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
           )}
 
-          <label className="text-sm text-gray-600">
+          <label className={fieldLabelClass}>
             {t("providers.form.model")}
             <input
               required
@@ -214,6 +224,13 @@ export function ProviderForm({
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="submit"
+              disabled={!complete || keyBlocked || busy !== null}
+              className={primaryButtonClass}
+            >
+              {busy === "saving" ? t("providers.form.saving") : t("providers.form.save")}
+            </button>
+            <button
               type="button"
               disabled={!complete || busy !== null}
               onClick={() => void run("testing")}
@@ -221,18 +238,11 @@ export function ProviderForm({
             >
               {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
             </button>
-            <button
-              type="submit"
-              disabled={!complete || keyBlocked || busy !== null}
-              className={primaryButtonClass}
-            >
-              {busy === "saving" ? t("providers.form.saving") : t("providers.form.save")}
-            </button>
           </div>
 
           {test && <TestResult result={test} />}
           {error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p role="alert" className={errorTextClass}>
               {error}
             </p>
           )}
@@ -246,17 +256,19 @@ export function TestResult({ result }: { result: ConnectionTestResult }) {
   const t = useT();
   if (result.ok) {
     return (
-      <p data-testid="connection-test" className="text-sm text-emerald-700">
+      <p data-testid="connection-test" className={successTextClass}>
         {t("providers.test.ok")}
       </p>
     );
   }
   return (
-    <div data-testid="connection-test" role="alert" className="text-sm text-red-700">
+    <div data-testid="connection-test" role="alert" className={errorTextClass}>
       <p>{t(testErrorKey(result.error.kind))}</p>
       {/* The provider's own words help with its errors; a declined consent needs none. */}
       {result.error.message && result.error.kind !== "consent-declined" && (
-        <p className="mt-1 text-xs break-words text-gray-500">{result.error.message}</p>
+        <p className="mt-1 text-[12px] leading-[18px] break-words text-ink-meta">
+          {result.error.message}
+        </p>
       )}
     </div>
   );
@@ -273,21 +285,22 @@ export function SecretStorageNotice({
   const t = useT();
   if (status.protection === "unavailable") {
     return (
-      <p role="alert" className="rounded-[9px] bg-amber-50 p-3 text-sm text-amber-900">
+      <p role="alert" className={noticeClass}>
         {t("providers.secrets.unavailable")}
       </p>
     );
   }
   return (
-    <div
-      role="alert"
-      data-testid="plain-text-secrets"
-      className="rounded-[9px] bg-amber-50 p-3 text-sm text-amber-900"
-    >
-      <p className="font-medium">{t("providers.secrets.plainText.title")}</p>
+    <div role="alert" data-testid="plain-text-secrets" className={noticeClass}>
+      <p className="font-semibold text-ink">{t("providers.secrets.plainText.title")}</p>
       <p className="mt-1">{t("providers.secrets.plainText.body")}</p>
       <label className="mt-2 flex items-start gap-2">
-        <input type="checkbox" checked={status.plainTextAccepted} onChange={onAccept} />
+        <input
+          type="checkbox"
+          checked={status.plainTextAccepted}
+          onChange={onAccept}
+          className="mt-[3px] size-4 shrink-0 accent-ink"
+        />
         <span>{t("providers.secrets.plainText.accept")}</span>
       </label>
     </div>

@@ -10,18 +10,28 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import {
+  buttonStyle,
+  pageIntroClass,
+  rowStatusClass,
+  rowTextClass,
+  rowTitleClass,
+  ruledListClass,
+  ruledRow,
+  ruledRowClass,
+  sectionNoteClass,
+  sectionTitleClass,
+} from "./ui";
 
 const reportError = (failure: unknown) =>
   useAppStore.setState({ actionError: errorMessage(failure) });
 
-const smallButtonClass =
-  "shrink-0 rounded-[9px] px-2 py-1 text-gray-700 hover:bg-gray-100 disabled:opacity-50";
-
 /**
  * Settings → Privacy: everything IncarnaMind sends from this computer, in one
- * place. Every registered data flow with its consent (revoke, allow), network
- * traffic that carries nothing of the User's (with the update-check switch),
- * what Skill scripts can do, and crash reports when this copy can send them.
+ * place, as rows split by rules with each status on the right. Every
+ * registered data flow with its consent (revoke, allow), network traffic that
+ * carries nothing of the User's (with the update-check switch), what Skill
+ * scripts can do, and crash reports when this copy can send them.
  */
 export function PrivacySettings() {
   const t = useT();
@@ -84,23 +94,23 @@ export function PrivacySettings() {
   };
 
   return (
-    <div data-testid="privacy-settings" className="flex flex-col gap-6">
-      <p className="text-sm text-gray-600">{t("privacy.intro")}</p>
+    <div data-testid="privacy-settings" className="flex flex-col gap-7">
+      <p className={pageIntroClass}>{t("privacy.intro")}</p>
 
-      <section data-testid="consent-settings">
-        <h3 className="mb-1 text-sm font-medium">{t("consent.settings.title")}</h3>
-        <p className="mb-2 text-xs text-gray-500">{t("privacy.flows.intro")}</p>
-        <ul className="flex flex-col gap-3">
+      <section data-testid="consent-settings" className="flex flex-col">
+        <h4 className={sectionTitleClass}>{t("consent.settings.title")}</h4>
+        <p className={sectionNoteClass}>{t("privacy.flows.intro")}</p>
+        <ul className={ruledListClass}>
           {flows?.map((flow) => (
             <DataFlowItem key={flow.id} flow={flow} />
           ))}
         </ul>
       </section>
 
-      <section data-testid="network-traffic">
-        <h3 className="mb-1 text-sm font-medium">{t("privacy.traffic.title")}</h3>
-        <p className="mb-2 text-xs text-gray-500">{t("privacy.traffic.intro")}</p>
-        <ul className="flex flex-col gap-3">
+      <section data-testid="network-traffic" className="flex flex-col">
+        <h4 className={sectionTitleClass}>{t("privacy.traffic.title")}</h4>
+        <p className={sectionNoteClass}>{t("privacy.traffic.intro")}</p>
+        <ul className={ruledListClass}>
           {traffic?.map((item) => (
             <TrafficItem
               key={`${item.id} ${item.service.id}`}
@@ -112,9 +122,9 @@ export function PrivacySettings() {
         </ul>
       </section>
 
-      <section data-testid="skill-scripts-note" role="note">
-        <h3 className="mb-1 text-sm font-medium">{t("privacy.skills.title")}</h3>
-        <p className="text-sm text-gray-600">{t("privacy.skills.body")}</p>
+      <section data-testid="skill-scripts-note" role="note" className="flex flex-col">
+        <h4 className={sectionTitleClass}>{t("privacy.skills.title")}</h4>
+        <p className={`mt-0.5 ${rowTextClass}`}>{t("privacy.skills.body")}</p>
       </section>
 
       {/* Only a copy built with a crash-report address can send reports, so only it offers them. */}
@@ -128,35 +138,54 @@ export function PrivacySettings() {
   );
 }
 
-/** A data flow, what it sends, and the User's decision for each service it goes to. */
+/**
+ * A data flow: a row for each service it goes to (what it sends, and the
+ * User's decision on the right), or one row saying it stays on this computer.
+ */
 function DataFlowItem({ flow }: { flow: RegisteredDataFlow }) {
   const t = useT();
+  const name = t(`consent.flow.${flow.id}`);
   return (
-    <li data-testid="data-flow" data-flow-id={flow.id} className="text-sm">
-      <p className="font-medium text-gray-800">{t(`consent.flow.${flow.id}`)}</p>
-      <p className="text-xs text-gray-500">{t("privacy.flows.sends")}</p>
-      <ul className="list-disc pl-5 text-xs text-gray-600">
-        {flow.sends.map((kind) => (
-          <li key={kind}>{t(`consent.data.${kind}`)}</li>
-        ))}
-      </ul>
+    <li
+      data-testid="data-flow"
+      data-flow-id={flow.id}
+      className="flex flex-col [&>*+*]:border-t [&>*+*]:border-rule"
+    >
       {flow.services.length === 0 ? (
-        <p data-testid="data-flow-not-in-use" className="mt-1 text-xs text-gray-500">
-          {t("privacy.flows.notInUse")}
-        </p>
+        <div className={ruledRow("center", true)}>
+          <span className="text-ui text-ink">{name}</span>
+          <span
+            data-testid="data-flow-not-in-use"
+            title={t("privacy.flows.notInUse")}
+            className={rowStatusClass}
+          >
+            {t("privacy.flows.local")}
+          </span>
+        </div>
       ) : (
-        <ul className="mt-1 flex flex-col gap-1">
-          {flow.services.map((status) => (
-            <ServiceDecision key={status.flow.service.id} status={status} />
-          ))}
-        </ul>
+        flow.services.map((status) => (
+          <ServiceDecision
+            key={status.flow.service.id}
+            name={name}
+            sends={flow.sends}
+            status={status}
+          />
+        ))
       )}
     </li>
   );
 }
 
-/** One service of a flow: the decision and when it was made, with revoke and allow. */
-function ServiceDecision({ status }: { status: DataFlowStatus }) {
+/** One service of a flow: what it sends, the decision and when it was made, with revoke and allow. */
+function ServiceDecision({
+  name,
+  sends,
+  status,
+}: {
+  name: string;
+  sends: RegisteredDataFlow["sends"];
+  status: DataFlowStatus;
+}) {
   const t = useT();
   const language = useLanguage();
   const [busy, setBusy] = useState(false);
@@ -186,51 +215,74 @@ function ServiceDecision({ status }: { status: DataFlowStatus }) {
     : label;
 
   return (
-    <li
+    <div
       data-testid="data-flow-service"
       data-service-id={flow.service.id}
       data-consent={consent}
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[9px] bg-gray-50 px-2 py-1"
+      className={ruledRowClass}
     >
-      <span className="min-w-0 flex-1 break-words">
-        {t("privacy.flows.service", { service: flow.service.name })}
-      </span>
-      <span data-testid="data-flow-decision" className="text-xs text-gray-500">
-        {decision}
-      </span>
-      {consent === "accepted" ? (
-        <button
-          type="button"
-          data-testid="data-flow-revoke"
-          disabled={busy}
-          onClick={() => void revoke()}
-          className={smallButtonClass}
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-ui break-words text-ink">
+          <span className="font-semibold">{name}</span>
+          <span className="text-ink-meta">
+            {" · "}
+            {t("privacy.flows.service", { service: flow.service.name })}
+          </span>
+        </p>
+        <ul
+          aria-label={t("privacy.flows.sends")}
+          className="list-disc pl-4 text-[13px] leading-5 text-ink-secondary"
         >
-          {t("consent.settings.revoke")}
-        </button>
-      ) : (
-        <button
-          type="button"
-          data-testid="data-flow-allow"
-          disabled={busy}
-          onClick={() => void allow()}
-          className={smallButtonClass}
+          {sends.map((kind) => (
+            <li key={kind}>{t(`consent.data.${kind}`)}</li>
+          ))}
+        </ul>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <span
+          data-testid="data-flow-decision"
+          className={`text-[13px] leading-5 ${
+            consent === "accepted" ? "font-semibold text-success" : "text-ink-meta"
+          }`}
         >
-          {t("privacy.flows.allow")}
-        </button>
-      )}
-      {consent === "declined" && (
-        <button
-          type="button"
-          data-testid="data-flow-ask-again"
-          disabled={busy}
-          onClick={() => void revoke()}
-          className={smallButtonClass}
-        >
-          {t("consent.settings.askAgain")}
-        </button>
-      )}
-    </li>
+          {decision}
+        </span>
+        <div className="flex flex-wrap justify-end gap-2">
+          {consent === "accepted" ? (
+            <button
+              type="button"
+              data-testid="data-flow-revoke"
+              disabled={busy}
+              onClick={() => void revoke()}
+              className={buttonStyle("secondary", "sm")}
+            >
+              {t("consent.settings.revoke")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="data-flow-allow"
+              disabled={busy}
+              onClick={() => void allow()}
+              className={buttonStyle("primary", "sm")}
+            >
+              {t("privacy.flows.allow")}
+            </button>
+          )}
+          {consent === "declined" && (
+            <button
+              type="button"
+              data-testid="data-flow-ask-again"
+              disabled={busy}
+              onClick={() => void revoke()}
+              className={buttonStyle("secondary", "sm")}
+            >
+              {t("consent.settings.askAgain")}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -246,38 +298,41 @@ function TrafficItem({
 }) {
   const t = useT();
   const id = useId();
+  const switchable = traffic.id === "update-check" && choices !== null;
   return (
     <li
       data-testid="network-traffic-item"
       data-traffic-id={traffic.id}
       data-enabled={traffic.enabled}
-      className="text-sm"
+      className={ruledRowClass}
     >
-      <p className="flex items-center gap-2">
-        <span className="flex-1 font-medium text-gray-800">
-          {t(`privacy.traffic.${traffic.id}`)}
-          <span className="font-normal text-gray-500"> · {traffic.service.name}</span>
-        </span>
-        <span className="text-xs text-gray-500">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="text-ui break-words text-ink">
+          <span id={`${id}-title`} className="font-semibold">
+            {t(`privacy.traffic.${traffic.id}`)}
+          </span>
+          <span className="text-ink-meta"> · {traffic.service.name}</span>
+        </p>
+        <p id={`${id}-description`} className={rowTextClass}>
+          {t(`privacy.traffic.${traffic.id}.description`)}
+        </p>
+      </div>
+      {switchable ? (
+        <input
+          type="checkbox"
+          role="switch"
+          data-testid="automatic-update-checks"
+          aria-label={t("privacy.traffic.update-check.toggle")}
+          aria-describedby={`${id}-description`}
+          checked={choices.automaticUpdateChecks}
+          aria-checked={choices.automaticUpdateChecks}
+          onChange={(event) => onChange({ automaticUpdateChecks: event.target.checked })}
+          className="switch"
+        />
+      ) : (
+        <span className={rowStatusClass}>
           {traffic.enabled ? t("privacy.traffic.on") : t("privacy.traffic.off")}
         </span>
-      </p>
-      <p id={`${id}-description`} className="text-xs text-gray-600">
-        {t(`privacy.traffic.${traffic.id}.description`)}
-      </p>
-      {traffic.id === "update-check" && choices && (
-        <label className="mt-1 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            role="switch"
-            data-testid="automatic-update-checks"
-            aria-describedby={`${id}-description`}
-            checked={choices.automaticUpdateChecks}
-            aria-checked={choices.automaticUpdateChecks}
-            onChange={(event) => onChange({ automaticUpdateChecks: event.target.checked })}
-          />
-          {t("privacy.traffic.update-check.toggle")}
-        </label>
       )}
     </li>
   );
@@ -293,26 +348,31 @@ function CrashReports({
   const t = useT();
   const id = useId();
   return (
-    <section data-testid="crash-reports">
-      <h3 className="mb-1 text-sm font-medium">{t("privacy.crashReports.title")}</h3>
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          role="switch"
-          data-testid="crash-reports-switch"
-          className="mt-1"
-          checked={enabled}
-          aria-checked={enabled}
-          aria-describedby={`${id}-description`}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <span>
-          {t("privacy.crashReports.toggle")}
-          <span id={`${id}-description`} className="block text-xs text-gray-500">
-            {t("privacy.crashReports.body")}
-          </span>
-        </span>
-      </label>
+    <section data-testid="crash-reports" className="flex flex-col">
+      <h4 className={`mb-2 ${sectionTitleClass}`}>{t("privacy.crashReports.title")}</h4>
+      <div className={ruledListClass}>
+        <div className={ruledRowClass}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <label htmlFor={id} className={rowTitleClass}>
+              {t("privacy.crashReports.toggle")}
+            </label>
+            <p id={`${id}-description`} className={rowTextClass}>
+              {t("privacy.crashReports.body")}
+            </p>
+          </div>
+          <input
+            id={id}
+            type="checkbox"
+            role="switch"
+            data-testid="crash-reports-switch"
+            className="switch"
+            checked={enabled}
+            aria-checked={enabled}
+            aria-describedby={`${id}-description`}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+        </div>
+      </div>
     </section>
   );
 }

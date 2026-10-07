@@ -11,6 +11,7 @@ import {
   interceptOpenPath,
   launchApp,
   openDocumentAt,
+  openDocumentMenu,
   pathsOpened,
   removeDataFolder,
   widthOf,
@@ -334,7 +335,7 @@ test("a Document deleted while it is open, or already deleted, shows Document re
   await item.getByTestId("open-document").click();
   await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");
 
-  await item.hover();
+  await openDocumentMenu(item);
   await item.getByTestId("delete-document").click();
   await window.getByTestId("confirm-delete-document").click();
   await expect(item).toHaveCount(0);

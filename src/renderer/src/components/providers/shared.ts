@@ -24,16 +24,7 @@ export function readinessKey(
     : `providers.readiness.${reason}`;
 }
 
-export const buttonClass =
-  "rounded-[9px] border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent";
-
-export const primaryButtonClass =
-  "rounded-[9px] bg-gray-800 px-4 py-2 text-sm text-white hover:bg-gray-700 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-gray-800";
-
-export const inputClass =
-  "mt-1 w-full rounded-[9px] border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-500";
-
-/** "OpenAI", "OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
+/** "OpenAI","OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
 export function providerLabel(provider: ChatProvider, t: Translate): string {
   if (provider.kind === "chatgpt") return t("codex.provider.name");
   const kind = t(`providers.kind.${provider.kind}`);

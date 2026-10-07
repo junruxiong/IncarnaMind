@@ -3,9 +3,12 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   addDocuments,
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
+  filterByTag,
   launchApp,
+  openDocumentTags,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -33,24 +36,27 @@ test("a new Document is tagged automatically, and a Tag the User removes stays r
   await addDocuments(window, [summary]);
 
   // The scripted model applies every Tag whose name is a word in the Document: "Report".
+  // Its row stays one line; its Tags menu shows its Tags.
   const item = window.getByTestId("document-list-item");
   await expect(item).toHaveAttribute("data-tagging", "tagged");
-  const chips = item.getByTestId("document-tag");
-  await expect(chips).toHaveText(["Report"]);
-  await expect(chips).toHaveAttribute("data-source", "automatic");
+  let tags = await openDocumentTags(item);
+  await expect(tags).toHaveText(["Report"]);
+  await expect(tags).toHaveAttribute("data-source", "automatic");
 
-  // The User takes it off, and adds another from the Document's Tags menu.
-  await chips.getByTestId("remove-document-tag").click();
-  await expect(chips).toHaveCount(0);
-  await item.getByTestId("document-tags-menu").click();
-  const invoice = window.getByRole("menuitemcheckbox", { name: "Invoice" });
+  // The User takes it off, and adds another, in the same menu.
+  await item.getByRole("menuitemcheckbox", { name: "Report", exact: true }).click();
+  await expect(tags).toHaveCount(0);
+  const invoice = item.getByRole("menuitemcheckbox", { name: "Invoice", exact: true });
   await invoice.click();
   await expect(invoice).toHaveAttribute("aria-checked", "true");
+  await expect(tags).toHaveText(["Invoice"]);
+  await expect(tags).toHaveAttribute("data-source", "user");
   await window.keyboard.press("Escape");
-  await expect(chips).toHaveText(["Invoice"]);
-  await expect(chips).toHaveAttribute("data-source", "user");
+  await expect(item.getByTestId("document-tags-popover")).toBeHidden();
 
-  // A new Tag, made in the Tags dialog, which re-tagging can apply.
+  // A new Tag, made in the Tags dialog (from the Documents label's Tags menu), which
+  // re-tagging can apply.
+  await window.getByTestId("tag-filter-menu").click();
   await window.getByTestId("manage-tags").click();
   const dialog = window.getByTestId("tags-dialog");
   await expect(dialog.getByTestId("tag-row")).toHaveCount(7);
@@ -62,25 +68,42 @@ test("a new Document is tagged automatically, and a Tag the User removes stays r
   await expect(dialog).toBeHidden();
 
   // Re-tagging the Document applies the new Tag; the removed one stays off, the added one on.
+  await item.hover();
   await item.getByTestId("document-tags-menu").click();
   await window.getByTestId("retag-document").click();
-  await expect(chips).toHaveText(["Invoice", "Quarterly"]);
   await expect(item).toHaveAttribute("data-tagging", "tagged");
+  tags = await openDocumentTags(item);
+  await expect(tags).toHaveText(["Invoice", "Quarterly"]);
+  await window.keyboard.press("Escape");
 
-  // The sidebar filters by Tag.
-  const filters = window.getByTestId("tag-filters").getByTestId("tag-filter");
-  await filters.filter({ hasText: "Report" }).click();
+  // The sidebar filters by Tag, and says which; choosing it again shows them all.
+  await filterByTag(window, "Report");
   await expect(item).toHaveCount(0);
-  await filters.filter({ hasText: "Quarterly" }).click();
+  await expect(window.getByTestId("tag-filter-active")).toContainText("Report");
+  await filterByTag(window, "Quarterly");
   await expect(item).toHaveCount(1);
-  await filters.filter({ hasText: "Quarterly" }).click();
-  await expect(filters.filter({ hasText: "Quarterly" })).toHaveAttribute("aria-pressed", "false");
+  await expect(window.getByTestId("tag-filter-active")).toContainText("Quarterly");
+  await filterByTag(window, "Quarterly");
+  await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
+  await window.getByTestId("tag-filter-menu").click();
+  await expect(
+    window
+      .getByTestId("tag-filters")
+      .getByRole("menuitemradio", { name: "Quarterly", exact: true }),
+  ).toHaveAttribute("aria-checked", "false");
+  await window.keyboard.press("Escape");
+  await expect(item).toHaveCount(1);
+  // The filter's row clears it too.
+  await filterByTag(window, "Report");
+  await expect(item).toHaveCount(0);
+  await window.getByTestId("tag-filter-clear").click();
   await expect(item).toHaveCount(1);
   await first.app.close();
 
   // Everything is still there after a restart.
   const second = await launchApp(dataDir, { fakeChat: true });
-  await expect(second.window.getByTestId("document-tag")).toHaveText(["Invoice", "Quarterly"]);
+  const restored = second.window.getByTestId("document-list-item");
+  await expect(await openDocumentTags(restored)).toHaveText(["Invoice", "Quarterly"]);
   await second.app.close();
 });
 
@@ -105,21 +128,25 @@ test("without a model, Documents are ready to search, and one notice, not one pe
     await expect(items.nth(index).getByTestId("document-status")).toHaveText("Ready");
     await expect(items.nth(index)).toHaveAttribute("data-tagging", "waiting-for-provider");
   }
-  // One notice at the top of the Documents section; no tagging line under any Document.
+  // One notice, in the sidebar's footer; no tagging line under any Document, and no Tags.
   const notice = window.getByTestId("tagging-waiting");
   await expect(notice).toHaveCount(1);
+  await expect(window.getByTestId("sidebar-footer").getByTestId("tagging-waiting")).toBeVisible();
   await expect(notice).toContainText("Automatic tagging is waiting for a model.");
   await expect(window.getByTestId("document-tagging")).toHaveCount(0);
-  await expect(items.getByTestId("document-tag")).toHaveCount(0);
+  for (let index = 0; index < 3; index++) {
+    await expect(await openDocumentTags(items.nth(index))).toHaveCount(0);
+    await window.keyboard.press("Escape");
+  }
 
-  // Its button opens Settings, where a chat model or a Jev key can be set up.
+  // Its button opens Settings on its Chat model page, where a chat model or a Jev key can be set up.
   await notice.getByTestId("tagging-waiting-setup").click();
   const settings = window.getByTestId("settings");
   await expect(settings).toBeVisible();
+  await expect(settings).toHaveAttribute("data-page", "chat-model");
   await expect(settings.getByTestId("chat-model-settings")).toBeVisible();
   await expect(settings.getByTestId("jev-settings")).toBeVisible();
-  await settings.getByRole("button", { name: "Done" }).click();
-  await expect(settings).toBeHidden();
+  await closeSettings(window);
 
   // Once a model is set up, the Documents are tagged and the notice goes.
   await useLocalChatModel(window);

@@ -1,105 +1,151 @@
 import { useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
+import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { DeleteMindDialog } from "./DeleteMindDialog";
 import { DocumentsSection } from "./DocumentsSection";
-import { GitHubIcon, LogoIcon, MindIcon, PlusIcon, SettingsIcon, TrashIcon } from "./icons";
+import { AppMark, MindLineIcon, PlusLineIcon, SettingsLineIcon, TrashLineIcon } from "./lineIcons";
+import { SidebarStatus } from "./SidebarStatus";
+import {
+  rowActionButtonClass,
+  rowActionsClass,
+  rowButtonClass,
+  rowClass,
+  rowIconClass,
+  SectionLabel,
+} from "./sidebarRows";
 
-const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
-
-const utilityButton =
-  "flex flex-col items-center rounded-[9px] px-[7px] py-[3px] text-gray-800 hover:bg-gray-100";
-
+/**
+ * The sidebar, on the frame: a 44px header like every pane's, then "New
+ * Mind", the Minds and the Documents in 28px rows, and a footer with the
+ * tagging and processing status above Settings. Every row puts its icon at
+ * x 16 and its text at x 40; section labels share the icon column.
+ */
 export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettings(): void }) {
   const t = useT();
   const minds = useAppStore((state) => state.minds);
-  const openMindId = useAppStore((state) => state.openMindId);
   const createMind = useAppStore((state) => state.createMind);
-  const openMind = useAppStore((state) => state.openMind);
   const [confirmingDelete, setConfirmingDelete] = useState<Mind | null>(null);
 
   return (
     <aside
       aria-label={t("sidebar.label")}
-      className="flex min-w-[165px] shrink flex-col bg-gray-50"
+      data-testid="sidebar"
+      className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
     >
-      <div className="mx-3 mt-3 mb-2 flex items-center gap-2">
-        <LogoIcon className="size-[30px] shrink-0" />
-        <span className="truncate font-medium text-gray-700">{t("app.name")}</span>
-      </div>
-
-      <button
-        type="button"
-        data-testid="new-mind"
-        onClick={() => void createMind()}
-        className="group mx-3 my-1 flex items-center gap-2 rounded-[9px] px-1 py-[5px] text-sm text-gray-600 hover:bg-gray-100"
+      <header
+        data-testid="sidebar-header"
+        className="flex h-11 shrink-0 items-center gap-2 border-b border-rule px-4"
       >
-        <PlusIcon className="size-4 shrink-0 text-gray-500" />
-        <span className="group-hover:text-gradient-mind">{t("sidebar.newMind")}</span>
-      </button>
+        <AppMark />
+        <span className="truncate text-ui font-semibold text-ink">{t("app.name")}</span>
+      </header>
 
-      <div className="hide-scrollbar flex-grow overflow-y-auto">
-        <h2 className="mx-4 mt-3 mb-1 text-[11px] font-medium tracking-wide text-gray-400 uppercase">
-          {t("sidebar.minds")}
-        </h2>
-        <nav aria-label={t("sidebar.minds")}>
+      <div
+        data-testid="sidebar-tree"
+        className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2 pb-3"
+      >
+        <div className={rowClass(false)}>
+          <button
+            type="button"
+            data-testid="new-mind"
+            onClick={() => void createMind()}
+            className={rowButtonClass}
+          >
+            <PlusLineIcon className="size-4 shrink-0" />
+            <span className="truncate">{t("sidebar.newMind")}</span>
+          </button>
+        </div>
+
+        <SectionLabel id="minds-heading">{t("sidebar.minds")}</SectionLabel>
+        <nav aria-labelledby="minds-heading">
           {minds.length === 0 ? (
-            <p className="mx-4 py-[5px] text-sm text-gray-400">{t("sidebar.noMinds")}</p>
+            <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("sidebar.noMinds")}</p>
           ) : (
-            <ul className="mx-3">
-              {minds.map((mind) => {
-                const isOpen = mind.id === openMindId;
-                return (
-                  <li key={mind.id} className="group relative">
-                    <button
-                      type="button"
-                      data-testid="mind-list-item"
-                      data-mind-id={mind.id}
-                      aria-current={isOpen ? "page" : undefined}
-                      onClick={() => openMind(mind.id)}
-                      className={`my-[1px] flex w-full items-center gap-[6px] rounded-[9px] py-[5px] pr-7 pl-1 text-left text-sm ${
-                        isOpen ? "bg-gray-200" : "hover:bg-gray-100"
-                      }`}
-                    >
-                      <MindIcon className="size-4 shrink-0" />
-                      <span
-                        className={`truncate ${mind.title ? "text-gray-700" : "text-gray-500"}`}
-                      >
-                        {mind.title || t("mind.untitled")}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="delete-mind"
-                      aria-label={t("mind.delete")}
-                      title={t("mind.delete")}
-                      onClick={() => setConfirmingDelete(mind)}
-                      className="absolute top-1/2 right-1 -translate-y-1/2 rounded-[9px] p-[3px] text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-gray-300 hover:text-gray-700 focus-visible:opacity-100"
-                    >
-                      <TrashIcon className="size-[14px]" />
-                    </button>
-                  </li>
-                );
-              })}
+            <ul>
+              {minds.map((mind) => (
+                <MindRow key={mind.id} mind={mind} onDelete={() => setConfirmingDelete(mind)} />
+              ))}
             </ul>
           )}
         </nav>
         <DocumentsSection />
       </div>
 
-      <footer className="mx-2 my-4 flex items-center">
-        <button type="button" onClick={onOpenSettings} className={utilityButton}>
-          <SettingsIcon className="size-[25px]" />
-          <span className="text-[11px]">{t("sidebar.settings")}</span>
-        </button>
-        <a href={REPOSITORY_URL} target="_blank" rel="noreferrer" className={utilityButton}>
-          <GitHubIcon className="size-[25px]" />
-          <span className="text-[11px]">{t("sidebar.github")}</span>
-        </a>
+      <footer
+        data-testid="sidebar-footer"
+        className="flex shrink-0 flex-col border-t border-rule p-2"
+      >
+        <SidebarStatus />
+        <div className={rowClass(false)}>
+          <button type="button" onClick={onOpenSettings} className={rowButtonClass}>
+            <SettingsLineIcon className={rowIconClass(false)} />
+            <span className="truncate">{t("sidebar.settings")}</span>
+          </button>
+        </div>
       </footer>
       <DeleteMindDialog mind={confirmingDelete} onClose={() => setConfirmingDelete(null)} />
     </aside>
+  );
+}
+
+/**
+ * A Mind: its title, and an amber dot while one of its Answers waits for the
+ * User's approval. Pointed at, it offers delete.
+ */
+function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
+  const t = useT();
+  const isOpen = useAppStore((state) => state.openMindId === mind.id);
+  const openMind = useAppStore((state) => state.openMind);
+  const waiting = useMindStatus(mind.id) === "waiting-for-approval";
+  return (
+    <li className={rowClass(isOpen)}>
+      <button
+        type="button"
+        data-testid="mind-list-item"
+        data-mind-id={mind.id}
+        aria-current={isOpen ? "page" : undefined}
+        // ⌘-click (Ctrl-click) or a middle click opens it in a new tab, as in a browser.
+        onClick={(event) => openMind(mind.id, { newTab: event.metaKey || event.ctrlKey })}
+        onMouseDown={(event) => {
+          if (event.button === 1) event.preventDefault(); // no autoscroll
+        }}
+        onAuxClick={(event) => {
+          if (event.button === 1) openMind(mind.id, { newTab: true });
+        }}
+        className={rowButtonClass}
+      >
+        <MindLineIcon className={rowIconClass(isOpen)} />
+        <span
+          data-testid="row-text"
+          className={`min-w-0 flex-1 truncate ${mind.title ? "" : "text-ink-meta"}`}
+        >
+          {mind.title || t("mind.untitled")}
+        </span>
+        {waiting && (
+          <span
+            role="img"
+            data-testid="mind-approval"
+            aria-label={t("approvals.answer.waiting")}
+            title={t("approvals.answer.waiting")}
+            className="size-1.5 shrink-0 rounded-full bg-attention"
+          />
+        )}
+      </button>
+      <div className={rowActionsClass}>
+        <button
+          type="button"
+          data-testid="delete-mind"
+          aria-label={t("mind.delete")}
+          title={t("mind.delete")}
+          onClick={onDelete}
+          className={rowActionButtonClass}
+        >
+          <TrashLineIcon className="size-[15px]" />
+        </button>
+      </div>
+    </li>
   );
 }

@@ -3,10 +3,13 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openSettings,
   removeDataFolder,
+  showSettingsPage,
   useLocalChatModel,
 } from "./app";
 
@@ -130,21 +133,23 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await expect(second).toContainText("scripts/hello.js said: Hello, Dover!");
   await expect(second.getByTestId("approval-card")).toHaveCount(0);
 
-  // Settings: the policy is listed under Approvals and can be revoked; the switch is on.
-  await window.getByRole("button", { name: "Settings" }).click();
+  // Settings: the policy is listed under Approvals and can be revoked; the switch, under
+  // Skills, is on.
+  await openSettings(window, "approvals");
   const policy = window.getByTestId("approvals-settings").getByTestId("approval-policy");
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Scripts of greeter");
   await expect(policy.getByTestId("approval-policy-value")).toHaveText("Always run");
   await policy.getByRole("button", { name: "Revoke the setting for Scripts of greeter" }).click();
   await expect(policy).toHaveCount(0);
+  await showSettingsPage(window, "skills");
   const scripts = window.getByTestId("skill-scripts-settings");
   const toggle = scripts.getByTestId("skill-scripts-enabled");
   await expect(toggle).toBeChecked();
   await expect(scripts.getByTestId("skill-scripts-timeout")).toHaveValue("60");
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();
-  await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
+  await closeSettings(window);
 
   // Off: the script isn't offered, so the Answer is written without running it.
   await editor.locator(":scope > p").last().click();

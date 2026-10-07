@@ -4,8 +4,22 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import {
+  buttonClass,
+  errorTextClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  inputClass,
+  noticeClass,
+  primaryButtonClass,
+  rowTextClass,
+  rowTitleClass,
+  ruledListClass,
+  ruledRowClass,
+  sectionTitleClass,
+  successTextClass,
+} from "../ui";
 import { TestResult } from "./ProviderForm";
-import { buttonClass, inputClass, primaryButtonClass } from "./shared";
 
 /** The ChatGPT plan provider's status, kept up to date with the core's event. */
 export function useChatGptPlan(): [ChatGptPlanStatus | null, (status: ChatGptPlanStatus) => void] {
@@ -90,45 +104,46 @@ export function ChatGptPlanSettings() {
     });
 
   return (
-    <section data-testid="experimental-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("codex.experimental.title")}</h3>
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={status?.enabled ?? false}
-          data-testid="codex-switch"
-          className="mt-1"
-          checked={status?.enabled ?? false}
-          disabled={status === null || busy === "switching"}
-          aria-describedby={`${id}-description`}
-          onChange={(event) => void toggle(event.target.checked)}
-        />
-        <span>
-          {t("codex.provider.name")}
-          <span id={`${id}-description`} className="block text-xs text-gray-500">
-            {t("codex.switch.description")}
-          </span>
-        </span>
-      </label>
+    <section data-testid="experimental-settings" className="flex flex-col">
+      <h4 className={`mb-2 ${sectionTitleClass}`}>{t("codex.experimental.title")}</h4>
+      <div className={ruledListClass}>
+        <div className={ruledRowClass}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <label htmlFor={id} className={rowTitleClass}>
+              {t("codex.provider.name")}
+            </label>
+            <span id={`${id}-description`} className={rowTextClass}>
+              {t("codex.switch.description")}
+            </span>
+          </div>
+          <input
+            id={id}
+            type="checkbox"
+            role="switch"
+            aria-checked={status?.enabled ?? false}
+            data-testid="codex-switch"
+            className="switch"
+            checked={status?.enabled ?? false}
+            disabled={status === null || busy === "switching"}
+            aria-describedby={`${id}-description`}
+            onChange={(event) => void toggle(event.target.checked)}
+          />
+        </div>
+      </div>
 
       {status?.enabled && (
         <div className="mt-3 flex flex-col gap-3">
-          <div
-            role="note"
-            data-testid="codex-warning"
-            className="rounded-[9px] bg-amber-50 p-3 text-sm text-amber-900"
-          >
-            <p className="font-medium">{t("codex.warning.title")}</p>
+          <div role="note" data-testid="codex-warning" className={noticeClass}>
+            <p className="font-semibold text-ink">{t("codex.warning.title")}</p>
             <p className="mt-1">{t("codex.warning.body")}</p>
           </div>
 
-          <p data-testid="codex-account" className="text-sm text-gray-700">
+          <p data-testid="codex-account" className="text-ui text-ink-secondary">
             <AccountLine account={status.account} />
           </p>
 
           {status.signingIn ? (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-ui text-ink-secondary">
               <span className="flex-1">{t("codex.signingIn")}</span>
               <button
                 type="button"
@@ -152,7 +167,7 @@ export function ChatGptPlanSettings() {
             </div>
           ) : (
             <>
-              <label className="text-sm text-gray-600">
+              <label className={fieldLabelClass}>
                 {t("codex.model")}
                 <select
                   data-testid="codex-model"
@@ -170,16 +185,8 @@ export function ChatGptPlanSettings() {
                   ))}
                 </select>
               </label>
-              {inUse && <p className="text-sm text-emerald-700">{t("codex.inUse")}</p>}
+              {inUse && <p className={successTextClass}>{t("codex.inUse")}</p>}
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={busy !== null || chosen === ""}
-                  onClick={() => void testConnection()}
-                  className={buttonClass}
-                >
-                  {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
-                </button>
                 <button
                   type="button"
                   data-testid="codex-use"
@@ -193,10 +200,18 @@ export function ChatGptPlanSettings() {
                 </button>
                 <button
                   type="button"
+                  disabled={busy !== null || chosen === ""}
+                  onClick={() => void testConnection()}
+                  className={buttonClass}
+                >
+                  {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
+                </button>
+                <button
+                  type="button"
                   data-testid="codex-sign-out"
                   disabled={busy !== null}
                   onClick={() => void signOut()}
-                  className={buttonClass}
+                  className={ghostButtonClass}
                 >
                   {t("codex.signOut")}
                 </button>
@@ -206,7 +221,7 @@ export function ChatGptPlanSettings() {
 
           {test && <TestResult result={test} />}
           {error && (
-            <p role="alert" data-testid="codex-error" className="text-sm break-words text-red-700">
+            <p role="alert" data-testid="codex-error" className={errorTextClass}>
               {error}
             </p>
           )}
@@ -224,7 +239,7 @@ function AccountLine({ account }: { account: ChatGptAccount }) {
   return (
     <>
       {t("codex.account.signedIn", { account: account.email ?? t("codex.account.unknown") })}
-      {plan && <span className="ml-2 text-gray-500">{t("codex.account.plan", { plan })}</span>}
+      {plan && <span className="ml-2 text-ink-meta">{t("codex.account.plan", { plan })}</span>}
     </>
   );
 }
