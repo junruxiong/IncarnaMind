@@ -46,8 +46,13 @@ const PAGE_GAP = 16;
 const PAGE_PADDING = 24;
 /** A canvas larger than this many pixels is drawn at a lower resolution, to bound memory. */
 const MAX_CANVAS_PIXELS = 2 ** 24;
-/** A zoom or resize re-renders visible pages once it settles, not at every step. */
+/**
+ * A zoom or resize draws the visible pages again once it settles, not at every
+ * step: a pinch changes the zoom at each of its events, many a second.
+ */
 const RERENDER_DELAY = 150;
+/** Zooms closer than this are the same: a wheel event that moves the zoom less does nothing. */
+const ZOOM_EPSILON = 1e-6;
 /** The most pages a quote is looked for across. */
 const MAX_QUOTE_PAGES = 10;
 
@@ -200,7 +205,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   /** The open request whose highlight the view should move to once it is drawn. */
   const pendingHighlight = useRef<number | null>(null);
   const frame = useRef(0);
-  /** The zoom shown, or about to be: a zoom by wheel goes on from it. */
+  /** The zoom shown, or about to be: a zoom by wheel or pinch goes on from it. */
   const shownZoom = useRef(1);
   /**
    * Where a zoom by wheel or pinch was centred: a point of a page, as
@@ -324,14 +329,14 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   }, [scale, sizes]);
 
   /**
-   * Zooms `steps` steps (positive: in), keeping the point of the page under
-   * the pointer (`clientX`, `clientY`) where it is.
+   * Zooms to `next`, keeping the point of the page under the pointer
+   * (`clientX`, `clientY`) where it is. During a pinch this runs for each of
+   * its events: the pages are resized at once, their drawings and text layers
+   * stretched to fit, and made again at the new zoom once it settles (`PdfPage`).
    */
-  const zoomAround = useCallback((steps: number, clientX: number, clientY: number) => {
+  const zoomAround = useCallback((next: number, clientX: number, clientY: number) => {
     const container = scroller.current;
-    const current = shownZoom.current;
-    const next = stepZoom(current, steps);
-    if (!container || Math.abs(next - current) < 0.0005) return;
+    if (!container || Math.abs(next - shownZoom.current) < ZOOM_EPSILON) return;
     const box = container.getBoundingClientRect();
     const left = clientX - box.left - container.clientLeft;
     const top = clientY - box.top - container.clientTop;
@@ -352,7 +357,8 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     setZoom({ fit: false, zoom: next });
   }, []);
 
-  // A pinch, or the wheel with Ctrl (or ⌘ on macOS) held, zooms the pages around the pointer.
+  // A pinch, or the wheel with Ctrl (or ⌘ on macOS) held, zooms the pages around the pointer:
+  // a pinch follows the fingers, the wheel goes a step per notch.
   // The gesture is theirs: nothing else scrolls or zooms with it.
   useEffect(() => {
     const container = scroller.current;
@@ -364,8 +370,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
       if (!gesture.isZoom(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      const steps = gesture.steps(event);
-      if (steps !== 0) zoomAround(steps, event.clientX, event.clientY);
+      zoomAround(gesture.zoom(event, shownZoom.current), event.clientX, event.clientY);
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKey);
@@ -967,13 +972,19 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
   const firstHighlight = useRef<HTMLElement | null>(null);
   const [drawn, setDrawn] = useState(false);
   const [textLayerVersion, setTextLayerVersion] = useState(0);
+  /** The scale the text layer was made at, if there is one. */
+  const [layerScale, setLayerScale] = useState<number | null>(null);
   const [place, setPlace] = useState<MarkPlace | null>(null);
   const hasDrawn = useRef(false);
+  /** The scale the page was last asked to draw at, near the view or not. */
+  const lastScale = useRef(scale);
 
   useEffect(() => {
     const canvasDiv = canvasHost.current;
     const textDiv = textHost.current;
     if (!canvasDiv || !textDiv) return;
+    const rescaled = scale !== lastScale.current;
+    lastScale.current = scale;
     if (!nearby) {
       if (!hasDrawn.current) return;
       hasDrawn.current = false;
@@ -981,6 +992,7 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       textDiv.replaceChildren();
       textLayer.current = null;
       setDrawn(false);
+      setLayerScale(null);
       pdf.getPage(page).then(
         (proxy) => proxy.cleanup(),
         () => undefined, // the PDF was closed meanwhile
@@ -1026,9 +1038,11 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       if (cancelled) return;
       textDiv.replaceChildren(container);
       textLayer.current = layer;
+      setLayerScale(scale);
       setTextLayerVersion((version) => version + 1);
     };
-    // The first draw is immediate; redraws for a new scale wait until it settles.
+    // The first draw is immediate; a draw for a new scale waits until it settles, so that
+    // a page coming into view during a pinch isn't started again at each of its events.
     const timer = setTimeout(
       () =>
         draw().catch((error: unknown) => {
@@ -1036,7 +1050,7 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
             console.error(error);
           }
         }),
-      hasDrawn.current ? RERENDER_DELAY : 0,
+      hasDrawn.current || rescaled ? RERENDER_DELAY : 0,
     );
     return () => {
       cancelled = true;
@@ -1110,7 +1124,14 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
 
   // The margin past the text: the mark shows its label only if the label fits there.
   const pageWidth = Math.floor(size.width * scale);
+  const pageHeight = Math.floor(size.height * scale);
   const room = place ? pageWidth * (1 - place.textRight) - MARK_GAP - 4 : undefined;
+  // The text layer keeps the size it was made at, scaled to fit the page, until it's made again
+  // at the new scale: through a zoom (a pinch's above all) its runs of text, which size and place
+  // themselves from `--scale-factor`, aren't laid out again at each step.
+  const textScale = layerScale ?? scale;
+  const textWidth = Math.floor(size.width * textScale);
+  const textHeight = Math.floor(size.height * textScale);
 
   return (
     <section
@@ -1121,17 +1142,25 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       data-page-number={page}
       data-drawn={drawn ? "true" : "false"}
       aria-label={t("viewer.page.label", { number: page })}
-      className="pdf-page viewer-page relative shrink-0"
-      style={
-        {
-          width: Math.floor(size.width * scale),
-          height: Math.floor(size.height * scale),
-          "--scale-factor": scale,
-        } as CSSProperties
-      }
+      className="viewer-page relative shrink-0"
+      style={{ width: pageWidth, height: pageHeight }}
     >
       <div ref={canvasHost} className="absolute inset-0" />
-      <div ref={textHost} className="absolute inset-0" />
+      <div
+        ref={textHost}
+        className="pdf-page-text absolute top-0 left-0 origin-top-left"
+        style={
+          {
+            width: textWidth,
+            height: textHeight,
+            "--scale-factor": textScale,
+            transform:
+              textScale === scale || textWidth === 0 || textHeight === 0
+                ? undefined
+                : `scale(${pageWidth / textWidth}, ${pageHeight / textHeight})`,
+          } as CSSProperties
+        }
+      />
       {mark && place && (
         <CitationMark
           mark={mark}

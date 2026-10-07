@@ -5,6 +5,7 @@ import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { DeleteMindDialog } from "./DeleteMindDialog";
 import { DocumentsSection } from "./DocumentsSection";
+import { ExampleChip, GetStartedCard, useIsExample } from "./GettingStarted";
 import {
   AppMark,
   MindLineIcon,
@@ -97,6 +98,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
         <DocumentsSection />
       </div>
 
+      <GetStartedCard />
       <footer
         data-testid="sidebar-footer"
         className="flex shrink-0 flex-col border-t border-rule p-2"
@@ -123,6 +125,7 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
   const isOpen = useAppStore((state) => state.openMindId === mind.id);
   const openMind = useAppStore((state) => state.openMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
+  const isExample = useIsExample(mind.id);
   const [renaming, setRenaming] = useState(false);
   if (renaming) {
     return (
@@ -159,6 +162,7 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
         >
           {mind.title || t("mind.untitled")}
         </span>
+        {isExample && <ExampleChip />}
         {waiting && (
           <span
             role="img"

@@ -339,7 +339,88 @@ const pinch = (scroller: Locator, x: number, y: number, deltas: number[]) =>
     { x, y, deltas },
   );
 
-test("a pinch, or the wheel with Ctrl held, zooms a PDF around the pointer through the zoom steps", async () => {
+/**
+ * A pinch over a page as a trackpad sends it: about a wheel event a frame.
+ * After each, once the page has changed size (if it does within a few
+ * frames): its width; whether it still shows the drawing and the text layer
+ * it had before the pinch, as they were made (its runs of text not laid out
+ * again); how far, in px, that text layer's box is off the page's; and
+ * whether the event was the viewer's alone.
+ */
+const pinchFrames = (page: Locator, x: number, y: number, deltas: number[]) =>
+  page.evaluate(
+    async (element, gesture) => {
+      const scroller = element.closest('[data-testid="pdf-scroller"]');
+      if (!scroller) throw new Error("The page isn't in the viewer.");
+      const drawing = element.querySelector("canvas");
+      const text = element.querySelector(".textLayer");
+      const madeAt = () => (text ? getComputedStyle(text).getPropertyValue("--scale-factor") : "");
+      const made = madeAt();
+      const widthNow = () => element.getBoundingClientRect().width;
+      const textOff = () => {
+        const pageBox = element.getBoundingClientRect();
+        const textBox = text?.getBoundingClientRect();
+        if (!textBox) return Number.POSITIVE_INFINITY;
+        return Math.max(
+          ...(["left", "top", "right", "bottom"] as const).map((side) =>
+            Math.abs(textBox[side] - pageBox[side]),
+          ),
+        );
+      };
+      // The next frame (or a moment, if the window isn't drawing frames).
+      const frame = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+          setTimeout(resolve, 20);
+        });
+      const frames: { width: number; sameDrawing: boolean; textOff: number; taken: boolean }[] = [];
+      for (const deltaY of gesture.deltas) {
+        const before = widthNow();
+        const taken = !scroller.dispatchEvent(
+          new WheelEvent("wheel", {
+            deltaY,
+            ctrlKey: true,
+            clientX: gesture.x,
+            clientY: gesture.y,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        for (let wait = 0; wait < 4 && widthNow() === before; wait++) await frame();
+        frames.push({
+          width: widthNow(),
+          sameDrawing:
+            element.querySelector("canvas") === drawing &&
+            element.querySelector(".textLayer") === text &&
+            madeAt() === made,
+          textOff: textOff(),
+          taken,
+        });
+      }
+      return frames;
+    },
+    { x, y, deltas },
+  );
+
+/** How sharp a page's drawing is: its canvas's pixels per CSS pixel of the page's width. */
+const sharpnessOf = (page: Locator) =>
+  page.evaluate((element) => {
+    const canvas = element.querySelector("canvas");
+    return canvas ? canvas.width / element.getBoundingClientRect().width / devicePixelRatio : 0;
+  });
+
+/**
+ * How a test PDF's page's text layer was made: the width, in CSS px, its
+ * scale (`--scale-factor`) gives a Letter page, against the page's as shown.
+ */
+const textLayerMadeFor = (page: Locator) =>
+  page.evaluate((element) => {
+    const text = element.querySelector(".textLayer");
+    const scale = text ? Number(getComputedStyle(text).getPropertyValue("--scale-factor")) : 0;
+    return Math.abs(Math.floor(612 * scale) - element.getBoundingClientRect().width);
+  });
+
+test("a pinch zooms a PDF smoothly around the pointer; the wheel with Ctrl held goes a step per notch", async () => {
   const long = join(sources, "Long.pdf");
   await writeFile(
     long,
@@ -357,40 +438,57 @@ test("a pinch, or the wheel with Ctrl held, zooms a PDF around the pointer throu
   await expect(page2).toHaveAttribute("data-drawn", "true");
   await window.getByTestId("pdf-page-number").fill("2");
   await window.getByTestId("pdf-page-number").press("Enter");
-  const fitted = Number.parseInt((await level.textContent()) ?? "", 10);
+  const percent = async () => Number.parseInt((await level.textContent()) ?? "", 10);
+  const fitted = await percent();
+  expect(fitted).toBeLessThan(50);
+  const fittedWidth = await widthOf(page2);
   const box = await boxOf(scroller);
   const x = box.x + box.width * 0.7;
   const y = box.y + 160;
   const before = await pointOnPage(page2, x, y);
 
-  // Pinching out: the page grows a step at a time, the point under the pointer staying put,
-  // and nothing else takes the gesture.
-  expect(await pinch(scroller, x, y, Array(8).fill(-3))).toEqual(Array(8).fill(true));
+  // Pinching open: the page grows with every event, as much as the fingers moved (Chromium
+  // sends a pinch by a scale s as deltaY = -100 ln s), not a step at a time. Meanwhile its
+  // drawing and its text layer are stretched to fit, and nothing else takes the gesture.
+  const opening = await pinchFrames(page2, x, y, Array(8).fill(-3));
+  expect(opening.map((frame) => frame.taken)).toEqual(Array(8).fill(true));
+  opening.forEach((frame, index) => {
+    expect(frame.width).toBeGreaterThan(opening[index - 1]?.width ?? fittedWidth);
+    expect(frame.textOff).toBeLessThanOrEqual(1);
+  });
+  expect(opening.map((frame) => frame.sameDrawing)).toEqual(Array(8).fill(true));
+  const pinched = await widthOf(page2);
+  expect(Math.abs(pinched / fittedWidth - Math.exp(0.24))).toBeLessThan(0.01);
   await expect(window.getByTestId("pdf-fit-width")).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(async () => Number.parseInt((await level.textContent()) ?? "", 10)).toBe(67);
-  expect(fitted).toBeLessThan(67);
-  await expect(async () => {
-    const after = await pointOnPage(page2, x, y);
-    expect(Math.abs(after.x - before.x)).toBeLessThan(0.01);
-    expect(Math.abs(after.y - before.y)).toBeLessThan(0.01);
-  }).toPass();
+  // The level shown follows, between the steps (rounded, as the fitted level was).
+  expect(Math.abs((await percent()) - fitted * Math.exp(0.24))).toBeLessThanOrEqual(1.5);
+  // The point under the pointer stays put.
+  const after = await pointOnPage(page2, x, y);
+  expect(Math.abs(after.x - before.x)).toBeLessThan(0.01);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(0.01);
+  // Once the pinch stops, the page is drawn again, sharp at its new size, and its text layer
+  // made again for that size.
+  await expect.poll(() => sharpnessOf(page2)).toBeCloseTo(1, 1);
+  await expect.poll(() => textLayerMadeFor(page2)).toBeLessThanOrEqual(1);
   await expect(page2).toHaveAttribute("data-drawn", "true");
   await screenshot(viewer, "viewer-pinch-zoomed");
-  // Pinching in goes back down the steps.
-  await pinch(scroller, x, y, Array(5).fill(3));
-  await expect(level).toHaveText("50%");
+  // Closing as far again brings it back to where it was.
+  await pinchFrames(page2, x, y, Array(8).fill(3));
+  expect(Math.abs((await widthOf(page2)) - fittedWidth)).toBeLessThanOrEqual(1);
+  await expect(level).toHaveText(`${fitted}%`);
 
-  // The wheel with Ctrl held: a step per notch, around the pointer too.
+  // The wheel with Ctrl held: a step per notch (here from the fitted zoom to the next step),
+  // around the pointer too.
   await window.mouse.move(x, y);
   const held = await pointOnPage(page2, x, y);
   await window.keyboard.down("Control");
   await window.mouse.wheel(0, -100);
   await window.keyboard.up("Control");
-  await expect(level).toHaveText("67%");
+  await expect(level).toHaveText("50%");
   await expect(async () => {
-    const after = await pointOnPage(page2, x, y);
-    expect(Math.abs(after.x - held.x)).toBeLessThan(0.01);
-    expect(Math.abs(after.y - held.y)).toBeLessThan(0.01);
+    const stepped = await pointOnPage(page2, x, y);
+    expect(Math.abs(stepped.x - held.x)).toBeLessThan(0.01);
+    expect(Math.abs(stepped.y - held.y)).toBeLessThan(0.01);
   }).toPass();
   // The window itself isn't zoomed.
   expect(
@@ -403,7 +501,7 @@ test("a pinch, or the wheel with Ctrl held, zooms a PDF around the pointer throu
   const top = await scroller.evaluate((element) => element.scrollTop);
   await window.mouse.wheel(0, 200);
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(top);
-  await expect(level).toHaveText("67%");
+  await expect(level).toHaveText("50%");
 
   // However far the pinch goes, the zoom stays within its limits.
   await pinch(scroller, x, y, Array(200).fill(-5));

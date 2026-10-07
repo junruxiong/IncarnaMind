@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  clickEmptyLine,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -126,7 +127,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await expect(first).toContainText("scripts/hello.js said: Hello, Calais!");
 
   // The next run doesn't ask.
-  await editor.locator(":scope > p").last().click();
+  await clickEmptyLine(editor.locator(":scope > p").last());
   await ask(window, "Run greeter scripts/hello.js for Dover");
   const second = editor.getByTestId("answer").nth(1);
   await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
@@ -152,7 +153,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await closeSettings(window);
 
   // Off: the script isn't offered, so the Answer is written without running it.
-  await editor.locator(":scope > p").last().click();
+  await clickEmptyLine(editor.locator(":scope > p").last());
   await ask(window, "Run greeter scripts/hello.js for Brest");
   const third = editor.getByTestId("answer").nth(2);
   await expect(third).toHaveAttribute("data-status", "done", { timeout: 15_000 });

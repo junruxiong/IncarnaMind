@@ -1,0 +1,15 @@
+The two example Documents in this folder are excerpts of Wikipedia articles:
+
+- "Tea · Wikipedia.md": from "Tea" on the English Wikipedia,
+  https://en.wikipedia.org/wiki/Tea (revision 1374563032 of 2026-09-12).
+- "茶 · 维基百科.md": from "茶" on the Chinese Wikipedia,
+  https://zh.wikipedia.org/wiki/茶 (revision 94321343 of 2026-09-12).
+
+By Wikipedia contributors. Each is licensed under the Creative Commons
+Attribution-ShareAlike 4.0 International licence (CC BY-SA 4.0):
+https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+Changes: each is an excerpt (the introduction and part of the history
+section), as plain text without references, images or tables. The excerpts
+are shared under the same licence. The rest of IncarnaMind is under its own
+licence (Apache-2.0); this folder's licence covers these two files only.

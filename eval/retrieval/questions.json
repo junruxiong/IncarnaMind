@@ -3,7 +3,7 @@
   "description": "Retrieval evaluation set for IncarnaMind v1 (issue #21), run by `npm run eval` (eval/README.md, issue #31).",
   "hitRule": "A question is a hit if one of the top 5 retrieved Passages (a) belongs to expected.document, (b) has a page range that covers expected.pages, and (c) contains expected.quote after both are normalised (src/shared/text.ts normaliseText, matched by src/shared/quoteMatch.ts findQuote: NFKC, CJK radical folding, unified quotes/dashes/full-width punctuation, end-of-line hyphenation removed, whitespace collapsed, whitespace next to CJK characters removed).",
   "pageNumbers": "Physical 1-based page index as pdf.js reports it, not the printed page label.",
-  "core": "The 20 questions without crossLingual: true (10 en, 10 zh) are the gating set. crossLingual questions are reported separately.",
+  "core": "The 40 questions without crossLingual: true (20 en, 20 zh) are the gating set. crossLingual questions (Chinese questions about English documents, and English questions about Chinese documents) are reported separately.",
   "documents": {
     "attention-is-all-you-need": "data/Attention Is All You Need.pdf",
     "language-models-are-few-shot-learners": "data/Language Models are Few-Shot Learners.pdf",
@@ -80,6 +80,66 @@
       "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [20, 20], "quote": "must pass it within two years of starting such employment" }
     },
     {
+      "id": "en-11",
+      "language": "en",
+      "question": "Why did the Transformer's authors keep fixed sine-wave position signals instead of learned ones?",
+      "expected": { "document": "attention-is-all-you-need", "pages": [6, 6], "quote": "We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training." }
+    },
+    {
+      "id": "en-12",
+      "language": "en",
+      "question": "What does \"few-shot\" mean in the GPT-3 paper?",
+      "expected": { "document": "language-models-are-few-shot-learners", "pages": [6, 6], "quote": "Few-Shot (FS) is the term we will use in this work to refer to the setting where the model is given a few demonstrations of the task at inference time as conditioning" }
+    },
+    {
+      "id": "en-13",
+      "language": "en",
+      "question": "Why might some benchmark test examples still be in GPT-3's training data?",
+      "expected": { "document": "language-models-are-few-shot-learners", "pages": [9, 9], "quote": "a bug in the filtering caused us to ignore some overlaps, and due to the cost of training it was not feasible to retrain the model" }
+    },
+    {
+      "id": "en-14",
+      "language": "en",
+      "question": "How many tokens are in GPT-2's vocabulary, and how long a context does it read?",
+      "expected": { "document": "language-models-are-unsupervised-multitask-learners", "pages": [4, 4], "quote": "The vocabulary is expanded to 50,257. We also increase the context size from 512 to 1024 tokens" }
+    },
+    {
+      "id": "en-15",
+      "language": "en",
+      "question": "What GPU were the hyperoptimizer experiments run on?",
+      "expected": { "document": "gradient-descent-the-ultimate-optimizer", "pages": [5, 5], "quote": "Each of these experiments was conducted on a single NVIDIA TITAN Xp GPU." }
+    },
+    {
+      "id": "en-16",
+      "language": "en",
+      "question": "Why does the hyperoptimizer cut the weights loose from the previous step's computation after every update?",
+      "expected": { "document": "gradient-descent-the-ultimate-optimizer", "pages": [3, 3], "quote": "because backpropagation is linear in the size of the graph, the overall training would become quadratic-time and intractable" }
+    },
+    {
+      "id": "en-17",
+      "language": "en",
+      "question": "When a medical representative offers to drop items off, what must the reply card tell the health professional, and why?",
+      "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [33, 34], "quote": "should explain that there is no obligation to grant the representative an interview when the items are delivered. This is to avoid the impression that there is such an obligation" }
+    },
+    {
+      "id": "en-18",
+      "language": "en",
+      "question": "By how much does JPMorgan Chase plan to cut the greenhouse gas emissions of its own operations, and by when?",
+      "expected": { "document": "jp-morgan-2022-environmental-social-governance-report", "pages": [20, 20], "quote": "reducing Scope 1 and 2 emissions by 40% by 2030" }
+    },
+    {
+      "id": "en-19",
+      "language": "en",
+      "question": "How much did JPMorgan Chase finance and facilitate toward its sustainable development target in 2022?",
+      "expected": { "document": "jp-morgan-2022-environmental-social-governance-report", "pages": [9, 9], "quote": "approximately $197 billion toward the Target; $70 billion toward green, $87 billion toward development" }
+    },
+    {
+      "id": "en-20",
+      "language": "en",
+      "question": "How many Security Council meetings did the UN Secretariat facilitate in 2021?",
+      "expected": { "document": "united-nations-2022-annual-report", "pages": [30, 30], "quote": "facilitating 164 public and private meetings, 67 informal consultations and 147 videoconferences" }
+    },
+    {
       "id": "zh-01",
       "language": "zh",
       "question": "可持续发展目标一共包含多少项具体目标？",
@@ -140,6 +200,66 @@
       "expected": { "document": "维基百科-可持续发展目标", "pages": [3, 3], "quote": "目前標準按照每天生活費不足 1.25 美元計算" }
     },
     {
+      "id": "zh-11",
+      "language": "zh",
+      "question": "OpenAI 当初为什么没有公开发布 GPT-2？",
+      "expected": { "document": "维基百科-大型语言模型", "pages": [2, 2], "quote": "无法公开发布，因为担心被恶意使用" }
+    },
+    {
+      "id": "zh-12",
+      "language": "zh",
+      "question": "想让大模型先查资料再回答，一般是怎么做的？",
+      "expected": { "document": "维基百科-大型语言模型", "pages": [5, 5], "quote": "给定一个查询，调用文档检索器来检索最相关的文档" }
+    },
+    {
+      "id": "zh-13",
+      "language": "zh",
+      "question": "现在训练深度神经网络最常用的基础优化算法是什么？",
+      "expected": { "document": "维基百科-梯度下降法", "pages": [1, 1], "quote": "作为梯度下降法的一个简单延展，是目前用于训练大多数深度学习结构" }
+    },
+    {
+      "id": "zh-14",
+      "language": "zh",
+      "question": "梯度下降法有哪些缺点？",
+      "expected": { "document": "维基百科-梯度下降法", "pages": [3, 3], "quote": "直線搜索可能會產生一些問題" }
+    },
+    {
+      "id": "zh-15",
+      "language": "zh",
+      "question": "可持续发展目标要求把移民汇款的手续费降到多少？",
+      "expected": { "document": "维基百科-可持续发展目标", "pages": [7, 7], "quote": "遷移者的匯款手續費減少到小於3%" }
+    },
+    {
+      "id": "zh-16",
+      "language": "zh",
+      "question": "银行在项目融资中用什么框架来评估环境和社会风险？",
+      "expected": { "document": "维基百科-环境-社会和公司治理", "pages": [9, 9], "quote": "赤道原則是金融機構採用的風險管理框架" }
+    },
+    {
+      "id": "zh-17",
+      "language": "zh",
+      "question": "在 CEO 是否兼任董事会主席这件事上，美国公司和英国、欧洲的大公司有什么不同？",
+      "expected": { "document": "维基百科-环境-社会和公司治理", "pages": [6, 6], "quote": "80%的美國公司都是執行長與董事會主席同為一人，而在英國和歐洲的公司中，90%的最大公司中的執行長和董事會主席分由不同的人擔任" }
+    },
+    {
+      "id": "zh-18",
+      "language": "zh",
+      "question": "类似注意力机制的架构最早是什么时候提出的？",
+      "expected": { "document": "维基百科-注意力机制", "pages": [1, 1], "quote": "类似于注意力机制的架构最早于1990年代提出" }
+    },
+    {
+      "id": "zh-19",
+      "language": "zh",
+      "question": "什么是注意力机制？",
+      "expected": { "document": "维基百科-注意力机制", "pages": [1, 1], "quote": "是人工神经网络中一种模仿认知注意力的技术" }
+    },
+    {
+      "id": "zh-20",
+      "language": "zh",
+      "question": "在注意力机制的英译法示例中，第一次通过解码器时有多少注意力权重落在“I”上？",
+      "expected": { "document": "维基百科-注意力机制", "pages": [3, 3], "quote": "94%的注意力权重在第一个英文单词" }
+    },
+    {
       "id": "xl-01",
       "language": "zh",
       "crossLingual": true,
@@ -173,6 +293,41 @@
       "crossLingual": true,
       "question": "2022 年联合国促成的黑海粮食倡议是由哪些国家签署的？",
       "expected": { "document": "united-nations-2022-annual-report", "pages": [26, 26], "quote": "signed by Ukraine, the Russian Federation and Türkiye" }
+    },
+    {
+      "id": "xl-06",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "GPT-3 的模型是在谁提供的计算集群上训练的？",
+      "expected": { "document": "language-models-are-few-shot-learners", "pages": [9, 9], "quote": "trained on V100 GPU’s on part of a high-bandwidth cluster provided by Microsoft" }
+    },
+    {
+      "id": "xl-07",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "每多加一层超优化器，运行时间大约增加多少？",
+      "expected": { "document": "gradient-descent-the-ultimate-optimizer", "pages": [9, 9], "quote": "each additional level costs only 1-2% in additional runtime above the non-hyperoptimized baseline" }
+    },
+    {
+      "id": "xl-08",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "制药公司披露的向医疗专业人员付款的信息至少要公开多长时间？",
+      "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [52, 52], "quote": "must remain in the public domain for at least three years from the time of first disclosure" }
+    },
+    {
+      "id": "xl-09",
+      "language": "en",
+      "crossLingual": true,
+      "question": "In what year did Haskell Curry first study the convergence of gradient descent on non-linear optimisation problems?",
+      "expected": { "document": "维基百科-梯度下降法", "pages": [1, 1], "quote": "在1944年首先研究了该方法对非线性优化问题的收敛性" }
+    },
+    {
+      "id": "xl-10",
+      "language": "en",
+      "crossLingual": true,
+      "question": "What share of coastal and marine areas do the Sustainable Development Goals aim to conserve by 2020?",
+      "expected": { "document": "维基百科-可持续发展目标", "pages": [9, 9], "quote": "保護至少10%的海岸與海洋區" }
     }
   ]
 }

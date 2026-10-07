@@ -12,6 +12,7 @@ import {
 import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
+import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { type SettingsPage, useAppStore } from "../store";
@@ -100,12 +101,17 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   if (searchesOpen && searches.length === 0) setSearchesOpen(false);
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
+  const isExample = useIsExampleAnswer(answerId);
 
   const writeAgain = (discardEdits = false) => {
     if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
   };
 
   const meta: ReactNode[] = [];
+  // Written in advance, by no model, until it is written again with the User's.
+  if (isExample && !modelId && !streaming) {
+    meta.push(<span data-testid="answer-example">{t("examples.answer")}</span>);
+  }
   if (modelId) {
     meta.push(
       <span data-testid="answer-model" className="answer-model">

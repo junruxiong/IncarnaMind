@@ -562,6 +562,20 @@ describe("Packaging", () => {
     const platform = await readFile(join(REPO_ROOT, "src/main/platform.ts"), "utf8");
     expect(platform).toMatch(/join\(process\.resourcesPath, BUILT_IN_SKILLS_PACKAGED\)/);
     expect(platform).toMatch(/join\(app\.getAppPath\(\), BUILT_IN_SKILLS_SOURCE\)/);
-    expect(platform).toMatch(/paths: \{ dataDir, builtInSkills: builtInSkillsFolder\(\) \}/);
+    expect(platform).toMatch(/paths: \{ dataDir, builtInSkills: builtInSkillsFolder\(\)(,| \})/);
+  });
+
+  test("electron-builder copies the example Documents into the app's resources, where the main process looks for them", async () => {
+    const config = await readFile(join(REPO_ROOT, "electron-builder.yml"), "utf8");
+    expect(extraResources(config)).toContainEqual({
+      from: "resources/examples",
+      to: "examples",
+      filter: ["**/*"],
+    });
+    expect(existsSync(join(REPO_ROOT, "resources/examples/LICENSE"))).toBe(true);
+    const platform = await readFile(join(REPO_ROOT, "src/main/platform.ts"), "utf8");
+    expect(platform).toMatch(/join\(process\.resourcesPath, "examples"\)/);
+    expect(platform).toMatch(/join\(app\.getAppPath\(\), "resources", "examples"\)/);
+    expect(platform).toMatch(/examples: examplesFolder\(\)/);
   });
 });
