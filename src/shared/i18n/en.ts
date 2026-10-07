@@ -526,8 +526,8 @@ export const en = {
   "answer.error.retry": "Try again",
   "answer.error.details": "Details",
 
-  "citation.label": "Citation: {document}. {badge}",
-  "citation.chip.page": "p. {pages}",
+  "citation.label": "Citation {number}: {document}. {badge}",
+  "citation.mark.label": "Citation {number}: {badge}",
   "citation.badge.checking": "checking…",
   "citation.badge.found.page": "Quote found on p. {pages}",
   "citation.badge.found.document": "Quote found in {document}",

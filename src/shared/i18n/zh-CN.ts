@@ -494,8 +494,8 @@ export const zhCN = {
   "answer.error.retry": "重试",
   "answer.error.details": "详情",
 
-  "citation.label": "引用：{document}。{badge}",
-  "citation.chip.page": "第 {pages} 页",
+  "citation.label": "引用 {number}：{document}。{badge}",
+  "citation.mark.label": "引用 {number}：{badge}",
   "citation.badge.checking": "核对中…",
   "citation.badge.found.page": "已在第 {pages} 页找到引文",
   "citation.badge.found.document": "已在《{document}》中找到引文",
