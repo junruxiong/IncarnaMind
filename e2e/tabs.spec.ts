@@ -247,3 +247,33 @@ test("the shown tab joins the Mind below with no edge under it, and long titles 
   await expect(longTab).toHaveAttribute("title", long);
   await app.close();
 });
+
+test("a new Mind's title has the focus, so typing names it instead of making more Minds", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const minds = window.getByTestId("mind-list-item");
+
+  // Clicked, the sidebar's New Mind keeps no focus: a space typed next is part of the title.
+  const button = await boxOf(window.getByTestId("new-mind"));
+  await window.mouse.move(button.x + button.width / 2, button.y + button.height / 2, {
+    steps: 5,
+  });
+  await window.mouse.down();
+  await window.mouse.up();
+  const title = window.getByTestId("mind-title");
+  await expect(title).toBeFocused();
+  await window.keyboard.type("Hello world");
+  await expect(minds).toHaveCount(1);
+  await expect(title).toHaveValue("Hello world");
+  await expect(titlesOf(window)).toHaveText(["Hello world"]);
+
+  // Enter moves on into the Mind's text; the tab strip's "+" does the same as New Mind.
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("mind-editor")).toBeFocused();
+  await window.getByTestId("new-tab").click();
+  await expect(title).toBeFocused();
+  await window.keyboard.type("Second one");
+  await expect(minds).toHaveCount(2);
+  await expect(titlesOf(window)).toHaveText(["Hello world", "Second one"]);
+  await app.close();
+});

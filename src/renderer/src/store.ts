@@ -47,6 +47,11 @@ interface AppState {
   tabs: string[];
   /** The Mind shown: the active tab, or null with no tab open. */
   openMindId: string | null;
+  /**
+   * A Mind just created, whose title takes the focus once it shows (see
+   * `MindTitle`), so typing names it instead of pressing the button again.
+   */
+  titleToFocus: string | null;
   /** Set once loaded. */
   settings: Settings | null;
   /** Whether Questions can be asked. Set once loaded, then follows the core's event. */
@@ -86,8 +91,10 @@ interface AppState {
   skills: Skill[];
 
   load(): Promise<void>;
-  /** Creates a Mind and opens it in a new tab, at the end. */
+  /** Creates a Mind and opens it in a new tab, at the end, with its title focused. */
   createMind(): Promise<void>;
+  /** Called once the new Mind's title has the focus. */
+  titleFocused(): void;
   /**
    * Shows a Mind: its tab if it is open; otherwise it opens in the current tab
    * or, with `newTab` (⌘-click, middle-click), in a new tab after the current one.
@@ -207,6 +214,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     minds: [],
     tabs: [],
     openMindId: null,
+    titleToFocus: null,
     settings: null,
     chatReadiness: null,
     actionError: null,
@@ -280,6 +288,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
+          titleToFocus: mind.id,
         }));
         const { tabs } = get();
         setTabs({
@@ -287,6 +296,8 @@ export const useAppStore = create<AppState>()((set, get) => {
           openMindId: mind.id,
         });
       }),
+
+    titleFocused: () => set({ titleToFocus: null }),
 
     openMind(id, options) {
       const { tabs, openMindId } = get();
