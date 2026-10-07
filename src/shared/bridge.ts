@@ -50,6 +50,12 @@ export interface FilesBridge {
    * the User cancelled.
    */
   pickLinkedFolder(): Promise<string | null>;
+  /**
+   * Shows a Linked folder selected in the system's file manager (Finder,
+   * Explorer). Rejects for an unknown Linked folder, or one that can't be
+   * reached.
+   */
+  showLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
   logError(report: RendererErrorReport): void;
 }
@@ -73,5 +79,6 @@ export const FILES_CHANNELS = {
   openDocumentExternally: "files:openDocumentExternally",
   showDocumentInFolder: "files:showDocumentInFolder",
   pickLinkedFolder: "files:pickLinkedFolder",
+  showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
 } as const;

@@ -87,7 +87,8 @@ export const en = {
 
   "documents.title": "Documents",
   "documents.add": "Add Documents",
-  "documents.none": "No Documents yet. Drop PDF, TXT or Markdown files here.",
+  "documents.none":
+    "No Documents yet. Link a folder to keep it in sync, or add files on their own.",
   "documents.drop": "Drop PDF, TXT or Markdown files to add them",
   "documents.status.queued": "Queued",
   "documents.status.extracting": "Extracting text…",
@@ -103,8 +104,14 @@ export const en = {
   "documents.failure.unreadable": "the file couldn't be read",
   "documents.failure.passwordProtected": "the PDF needs a password",
   "documents.failure.fileMissing": "its file is missing",
-  "documents.file.missing": "File missing",
-  "documents.file.unavailable": "File can't be reached",
+  "documents.file.missing":
+    "File missing: it was removed from its folder. Its text and Citations are kept; new searches leave it out.",
+  "documents.file.unavailable":
+    "File can't be reached right now, e.g. its drive is unplugged. It's still searched from its stored text.",
+  "documents.file.missingReason": "The file is missing from its folder.",
+  "documents.file.unavailableReason": "The file can't be reached right now.",
+  "documents.fileShort.missing": "Missing",
+  "documents.fileShort.unavailable": "Unavailable",
   "documents.failure.processingError": "something went wrong while processing it",
   "documents.more": "More actions for {name}",
   "documents.renameAction": "Rename",
@@ -115,6 +122,11 @@ export const en = {
     "“{name}” will be removed from IncarnaMind, along with its search index. Your original file isn't touched.",
   "documents.delete.cancel": "Cancel",
   "documents.delete.confirm": "Delete",
+  "documents.removeAction": "Remove from IncarnaMind…",
+  "documents.remove.title": "Remove this Document?",
+  "documents.remove.body":
+    "“{name}” is no longer in its folder. Removing it drops the text IncarnaMind kept of it, and Citations to it can't be checked any more.",
+  "documents.remove.confirm": "Remove",
   "documents.skipped": "Only PDF, TXT and Markdown files can be added. Skipped: {names}",
   "documents.copy.menuTitle": "Original file",
   "documents.copy.open": "Open in default app",
@@ -123,24 +135,87 @@ export const en = {
   "linkedFolders.add": "Add folder…",
   "linkedFolders.pick.title": "Choose a folder to link",
   "linkedFolders.pick.button": "Link folder",
-  "linkedFolders.preview":
-    "{files} files ({size}). Indexing takes about {time}. The folder is only read, never changed.",
-  "linkedFolders.preview.onlineOnly":
-    "{files} files are online only: they aren't downloaded unless you ask.",
-  "linkedFolders.status.scanning": "Checking for changes…",
-  "linkedFolders.status.watching": "Up to date",
-  "linkedFolders.status.paused": "Paused",
-  "linkedFolders.status.unavailable": "Can't be reached",
-  "linkedFolders.progress": "{indexed} of {files} indexed",
+  "linkedFolders.preview.title": "Link this folder?",
+  "linkedFolders.preview.counting": "Counting the files in it…",
+  "linkedFolders.preview.files.one": "1 supported file, {size}",
+  "linkedFolders.preview.files.other": "{count} supported files, {size}",
+  "linkedFolders.preview.noFiles":
+    "No supported files in it yet. Files added to it later are indexed then.",
+  "linkedFolders.preview.time":
+    "Indexing takes {time} on this computer, newest files first. You can pause it at any time.",
+  "linkedFolders.preview.onlineOnly.one":
+    "1 file is online only, so it's skipped for now. You can download and index it later.",
+  "linkedFolders.preview.onlineOnly.other":
+    "{count} files are online only, so they're skipped for now. You can download and index them later.",
+  "linkedFolders.preview.readOnly":
+    "IncarnaMind only reads the folder. It never changes, moves or deletes anything in it.",
+  "linkedFolders.preview.merge.one":
+    "“{names}”, linked already, is inside this folder: it merges into this one, and its Documents keep their Tags and Citations.",
+  "linkedFolders.preview.merge.other":
+    "{names}, linked already, are inside this folder: they merge into this one, and their Documents keep their Tags and Citations.",
+  "linkedFolders.preview.inside":
+    "This folder is inside “{name}”, which is linked already, so its files are in IncarnaMind. Linking it changes nothing.",
+  "linkedFolders.preview.layout": "Show it as",
+  "linkedFolders.preview.layout.tree": "Folders",
+  "linkedFolders.preview.layout.tree.hint": "Its subfolders, as they are on disk.",
+  "linkedFolders.preview.layout.flat": "A flat list",
+  "linkedFolders.preview.layout.flat.hint":
+    "Every Document in one list. Suits folders where most subfolders hold one file, like Zotero's storage.",
+  "linkedFolders.preview.suggested": "Suggested",
+  "linkedFolders.preview.failed": "Couldn't look in this folder: {message}",
+  "linkedFolders.preview.cancel": "Cancel",
+  "linkedFolders.preview.close": "Close",
+  "linkedFolders.preview.confirm": "Link folder",
+  "linkedFolders.state.indexing": "Indexing {indexed} of {files}",
+  "linkedFolders.state.indexing.compact": "{indexed} of {files}",
+  "linkedFolders.state.indexing.full": "Indexing {indexed} of {files} files, newest first",
+  "linkedFolders.state.checking": "Checking…",
+  "linkedFolders.state.checking.full": "Checking the folder for changes…",
+  "linkedFolders.state.paused": "Paused",
+  "linkedFolders.state.paused.full": "Indexing is paused",
+  "linkedFolders.state.paused.progress": "Indexing is paused: {indexed} of {files} files indexed",
+  "linkedFolders.state.unavailable": "Unavailable",
+  "linkedFolders.state.unavailable.full":
+    "The folder can't be reached right now, e.g. its drive is unplugged. Its Documents are still searched from their stored text.",
+  "linkedFolders.state.downloading": "Downloading…",
+  "linkedFolders.state.downloading.full.one": "Downloading 1 online-only file to index it",
+  "linkedFolders.state.downloading.full.other":
+    "Downloading {count} online-only files to index them",
+  "linkedFolders.state.onlineOnly": "{count} online-only",
+  "linkedFolders.state.onlineOnly.full.one":
+    "1 online-only file isn't downloaded, so it isn't indexed",
+  "linkedFolders.state.onlineOnly.full.other":
+    "{count} online-only files aren't downloaded, so they aren't indexed",
+  "linkedFolders.state.empty": "No supported files",
+  "linkedFolders.state.empty.compact": "No files",
+  "linkedFolders.state.empty.full": "No supported files in this folder yet",
+  "linkedFolders.more": "More actions for {name}",
   "linkedFolders.pause": "Pause indexing",
   "linkedFolders.resume": "Resume indexing",
-  "linkedFolders.onlineOnly": "{files} online-only files not indexed",
-  "linkedFolders.downloadOnlineOnly": "Download and index them",
-  "linkedFolders.layout.tree": "Show subfolders",
+  "linkedFolders.layout.tree": "Show as folders",
   "linkedFolders.layout.flat": "Show as a flat list",
-  "linkedFolders.remove": "Unlink {name}",
-  "linkedFolders.remove.body":
-    "IncarnaMind stops following “{name}” and removes its Documents from the index. The folder and its files aren't touched.",
+  "linkedFolders.downloadOnlineOnly.one": "Download and index 1 online-only file",
+  "linkedFolders.downloadOnlineOnly.other": "Download and index {count} online-only files",
+  "linkedFolders.reveal.mac": "Show in Finder",
+  "linkedFolders.reveal.windows": "Show in Explorer",
+  "linkedFolders.reveal.other": "Show in file manager",
+  "linkedFolders.reveal.unavailableReason": "The folder can't be reached right now.",
+  "linkedFolders.unlinkAction": "Unlink…",
+  "linkedFolders.unlink.title": "Unlink “{name}”?",
+  "linkedFolders.unlink.body":
+    "IncarnaMind stops following this folder and removes its Documents from the index. The folder and the files in it aren't touched.",
+  "linkedFolders.unlink.citations":
+    "Citations to its Documents stay in your Minds, with their quotes, but show “Can't check” until you link the folder again.",
+  "linkedFolders.unlink.cancel": "Cancel",
+  "linkedFolders.unlink.confirm": "Unlink",
+  "units.kb": "{size} KB",
+  "units.mb": "{size} MB",
+  "units.gb": "{size} GB",
+  "duration.underMinute": "under a minute",
+  "duration.minutes.one": "about a minute",
+  "duration.minutes.other": "about {count} minutes",
+  "duration.hours.one": "about an hour",
+  "duration.hours.other": "about {count} hours",
 
   "status.processing.one": "Processing 1 Document…",
   "status.processing.other": "Processing {count} Documents…",

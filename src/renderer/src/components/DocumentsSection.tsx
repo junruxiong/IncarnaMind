@@ -3,10 +3,12 @@ import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentFailureReason, DocumentStatus } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
+import { fileStatusLabel } from "../linkedFolders";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { DocumentFileMenu } from "./DocumentFileMenu";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
+import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
 import {
   rowActionButtonClass,
@@ -71,18 +73,22 @@ const isProcessing = (status: DocumentStatus) =>
  * "Add folder…" to link a folder and adding files), each Linked folder with
  * its Folders as on disk, then "Other Documents", the files added on their
  * own (see `FolderTree`). Each Document is one row: its name and, while it's
- * processed or if it failed, its status at the end. Its Tags are in its Tags
- * menu, and the Tags dialog; its "More" menu renames it, opens its file or
- * shows it in its folder, and deletes it. Dropping files anywhere on the
- * window adds them too (see `FileDrop`). Clicking a Document opens it in the
- * viewer.
+ * processed, if it failed, or if its file is missing or can't be reached,
+ * its status at the end. Its Tags are in its Tags menu, and the Tags dialog;
+ * its "More" menu renames it, opens its file or shows it in its folder, and
+ * deletes it. Dropping files anywhere on the window adds them too (see
+ * `FileDrop`). Clicking a Document opens it in the viewer. With nothing
+ * linked or added yet, the section says how to start: "Add folder…" (which
+ * asks first, see `LinkFolderDialog`) or "Add Documents".
  */
 export function DocumentsSection() {
   const t = useT();
   // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
   const documents = useAppStore(useShallow(selectVisibleDocuments));
   const filtering = useAppStore((state) => state.tagFilter !== null);
-  const hasFolders = useAppStore((state) => state.folders.length > 0);
+  const hasFolders = useAppStore(
+    (state) => state.folders.length > 0 || state.linkedFolders.length > 0,
+  );
   const addDocuments = useAppStore((state) => state.addDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
   const picker = useRef<HTMLInputElement>(null);
@@ -147,20 +153,56 @@ export function DocumentsSection() {
           <DocumentRow key={item.id} item={item} depth={depth} onDelete={() => setDeleting(item)} />
         )}
       />
-      {empty && (
-        <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">
-          {t(filtering ? "tags.filter.empty" : "documents.none")}
-        </p>
-      )}
+      {empty &&
+        (filtering ? (
+          <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
+        ) : (
+          <div data-testid="documents-empty">
+            <p className="px-2 pt-1 pb-1.5 text-[13px] leading-5 text-ink-meta">
+              {t("documents.none")}
+            </p>
+            <ul>
+              <li className={rowClass(false)}>
+                <button
+                  type="button"
+                  data-testid="empty-add-linked-folder"
+                  onClick={() => void addLinkedFolder()}
+                  className={rowButtonClass}
+                >
+                  <FolderPlusLineIcon className={rowIconClass(false)} />
+                  <span data-testid="row-text" className="truncate">
+                    {t("linkedFolders.add")}
+                  </span>
+                </button>
+              </li>
+              <li className={rowClass(false)}>
+                <button
+                  type="button"
+                  data-testid="empty-add-documents"
+                  onClick={() => picker.current?.click()}
+                  className={rowButtonClass}
+                >
+                  <PlusLineIcon className={rowIconClass(false)} />
+                  <span data-testid="row-text" className="truncate">
+                    {t("documents.add")}
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </div>
+        ))}
       <DeleteDocumentDialog target={deleting} onClose={() => setDeleting(null)} />
+      <LinkFolderDialog />
     </section>
   );
 }
 
 /**
  * A Document's row: its icon and name, and its status at the end while it's
- * processed or if it failed. Pointed at, it offers its Tags and a menu for
- * the rest. It is in the Folder its file is in, so there is no moving it here.
+ * processed, if it failed, or if its file is missing or can't be reached
+ * (then muted too; clicking still opens what IncarnaMind kept of it).
+ * Pointed at, it offers its Tags and a menu for the rest. It is in the
+ * Folder its file is in, so there is no moving it here.
  */
 function DocumentRow({
   item,
@@ -176,7 +218,7 @@ function DocumentRow({
   const isOpen = useAppStore(
     (state) => state.viewerOpen && state.viewerTarget?.documentId === item.id,
   );
-  const muted = !isOpen && isProcessing(item.status);
+  const muted = !isOpen && (isProcessing(item.status) || item.fileStatus !== "available");
 
   return (
     <li
@@ -231,12 +273,28 @@ function DocumentRow({
 }
 
 /**
- * The status at a row's end: "38%" while it's embedded, "Failed" if it
- * failed, nothing once it's ready. Its full words (and a failure's message)
- * are its tooltip, and what a screen reader reads.
+ * The status at a row's end: "Missing" or "Unavailable" when its file isn't
+ * where it was (that comes first: it's what the User can act on), "38%"
+ * while it's embedded, "Failed" if it failed, nothing once it's ready. Its
+ * full words (and a failure's message) are its tooltip, and what a screen
+ * reader reads.
  */
 function DocumentStatusLabel({ item }: { item: Document }) {
   const t = useT();
+  const fileState = fileStatusLabel(item.fileStatus);
+  if (fileState) {
+    return (
+      <span
+        data-testid="document-status"
+        data-file-status={item.fileStatus}
+        title={t(fileState.full)}
+        className="min-w-0 shrink truncate text-label font-semibold text-ink-meta"
+      >
+        <span aria-hidden="true">{t(fileState.short)}</span>
+        <span className="sr-only">{t(fileState.full)}</span>
+      </span>
+    );
+  }
   const percent = Math.floor((item.progress ?? 0) * 100);
   const full =
     item.status === "failed"
@@ -306,11 +364,14 @@ function RenameInput({ item, onDone }: { item: Document; onDone(): void }) {
   );
 }
 
-/** Asks before deleting a Document. */
+/** Asks before deleting a Document, or removing a missing one. */
 function DeleteDocumentDialog({ target, onClose }: { target: Document | null; onClose(): void }) {
   const t = useT();
   const dialog = useModal(target !== null);
   const deleteDocument = useAppStore((state) => state.deleteDocument);
+
+  // A missing Document's file is gone already: removing it drops what IncarnaMind kept of it.
+  const missing = target?.fileStatus === "missing";
 
   const confirm = () => {
     if (target) void deleteDocument(target.id);
@@ -321,15 +382,18 @@ function DeleteDocumentDialog({ target, onClose }: { target: Document | null; on
     <dialog
       ref={dialog}
       onClose={onClose}
+      data-testid="delete-document-dialog"
       aria-labelledby="delete-document-title"
       className={`${dialogClass} w-[26rem]`}
     >
       <div className={dialogBodyClass}>
         <h2 id="delete-document-title" className={dialogTitleClass}>
-          {t("documents.delete.title")}
+          {t(missing ? "documents.remove.title" : "documents.delete.title")}
         </h2>
         <p className={dialogTextClass}>
-          {t("documents.delete.body", { name: target?.name ?? "" })}
+          {t(missing ? "documents.remove.body" : "documents.delete.body", {
+            name: target?.name ?? "",
+          })}
         </p>
         <div className={dialogActionsClass}>
           <button type="button" onClick={onClose} className={buttonClass}>
@@ -341,7 +405,7 @@ function DeleteDocumentDialog({ target, onClose }: { target: Document | null; on
             onClick={confirm}
             className={dangerButtonClass}
           >
-            {t("documents.delete.confirm")}
+            {t(missing ? "documents.remove.confirm" : "documents.delete.confirm")}
           </button>
         </div>
       </div>

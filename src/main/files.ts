@@ -2,8 +2,8 @@
  * The main process's half of the renderer's file helpers (`FilesBridge`):
  * saving an exported Mind where the User chooses, showing the data and logs
  * folders, choosing a Skill folder or zip to import, choosing a folder to
- * link, opening a Document's file in another app or showing it in the file
- * manager, and logging the window's uncaught errors. The core makes the
+ * link, opening a Document's file in another app or showing it (or a Linked
+ * folder) in the file manager, and logging the window's uncaught errors. The core makes the
  * export's bytes, reads the Skill, and checks a Document is live and its
  * file there before it hands the file's path to the shell adapter; only
  * this side touches dialogs and paths the User picks.
@@ -137,6 +137,17 @@ export function serveFileActions(
       ? await dialog.showOpenDialog(window, openOptions)
       : await dialog.showOpenDialog(openOptions);
     return canceled ? null : (filePaths[0] ?? null);
+  });
+
+  // Only a folder the User linked: its path comes from the core's list, never from the page.
+  ipcMain.handle(FILES_CHANNELS.showLinkedFolder, async (event, linkedFolderId: unknown) => {
+    refuseUnknown(event);
+    const linked = (await core.listLinkedFolders()).find((each) => each.id === linkedFolderId);
+    if (!linked) throw new Error("There is no such Linked folder.");
+    if (linked.status === "unavailable") {
+      throw new Error("The Linked folder can't be reached right now.");
+    }
+    shell.showItemInFolder(linked.path);
   });
 
   ipcMain.on(FILES_CHANNELS.logError, (event, report: unknown) => {
