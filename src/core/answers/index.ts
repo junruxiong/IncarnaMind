@@ -64,6 +64,7 @@ import {
   connectorInstructions,
   documentInstructions,
   loadedSkillText,
+  signInNeededInstructions,
   skillInstructions,
 } from "./prompt";
 
@@ -117,6 +118,8 @@ export interface AnswersOptions {
   skills: AnswerSkills;
   /** The Connector Tools an Answer may call: the read-only Tools of every Connector that is on and ready. */
   connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
+  /** The names of Connectors that are on but wait for the User to sign in: their Tools are skipped. */
+  connectorsNeedingSignIn?(): string[];
   reportError(error: unknown): void;
 }
 
@@ -433,6 +436,8 @@ export function createAnswers(options: AnswersOptions) {
         options.reportError(error);
       }
       if (finished) return;
+      // Connectors waiting for a sign-in offer nothing: the model is told, so the Answer can say why.
+      const signInNeeded = options.connectorsNeedingSignIn?.() ?? [];
       const tools: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -461,6 +466,7 @@ export function createAnswers(options: AnswersOptions) {
             documentInstructions(mode, tools.documentCount, passages, documentIds !== null),
             skillInstructions(listed, forced, withSkillTools),
             connectorTools ? connectorInstructions(external, mode === "no-documents") : "",
+            signInNeededInstructions(signInNeeded),
           ]
             .filter(Boolean)
             .join("\n\n"),

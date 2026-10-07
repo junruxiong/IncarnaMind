@@ -5,6 +5,7 @@ import type {
   ConnectorState,
   ConnectorTool,
 } from "../../../../core/api";
+import type { MessageKey } from "../../../../shared/i18n";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -14,13 +15,27 @@ import { buttonClass } from "../providers/shared";
 import { ConnectorForm } from "./ConnectorForm";
 import { ConnectorImport } from "./ConnectorImport";
 import { commandLine } from "./commandLine";
+import { RemoteSignIn } from "./RemoteSignIn";
 
 const stateClass: Record<ConnectorState, string> = {
   off: "bg-gray-100 text-gray-500",
   connecting: "bg-blue-50 text-blue-700",
+  "signing-in": "bg-blue-50 text-blue-700",
+  "needs-sign-in": "bg-amber-50 text-amber-800",
   ready: "bg-green-50 text-green-700",
   error: "bg-red-50 text-red-700",
 };
+
+/** A state's name: remote Connectors' own states are under `remoteConnectors.`. */
+function stateKey(state: ConnectorState): MessageKey {
+  return state === "signing-in" || state === "needs-sign-in"
+    ? `remoteConnectors.state.${state}`
+    : `connectors.state.${state}`;
+}
+
+/** Where a Connector is: its command line, or its server's URL. */
+const locationOf = (connector: Connector) =>
+  connector.transport === "http" ? connector.url : commandLine(connector.command, connector.args);
 
 /**
  * Settings → Connectors: each Connector with its state, a switch to turn it
@@ -105,7 +120,7 @@ function ConnectorRow({ connector }: { connector: Connector }) {
           data-testid="connector-state"
           className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${stateClass[connector.state]}`}
         >
-          {t(`connectors.state.${connector.state}`)}
+          {t(stateKey(connector.state))}
         </span>
         <input
           type="checkbox"
@@ -128,16 +143,20 @@ function ConnectorRow({ connector }: { connector: Connector }) {
         </button>
       </div>
       <p
+        data-testid="connector-location"
         className="mt-0.5 truncate font-mono text-xs text-gray-500"
-        title={commandLine(connector.command, connector.args)}
+        title={locationOf(connector)}
       >
-        {commandLine(connector.command, connector.args)}
+        {locationOf(connector)}
       </p>
       {connector.state === "error" && connector.error && (
         <ErrorNotice
           error={connector.error}
           onRetry={() => void act(() => core.restartConnector(id))}
         />
+      )}
+      {connector.transport === "http" && connector.enabled && (
+        <RemoteSignIn connector={connector} />
       )}
       {connector.state === "ready" && connector.tools && <Tools tools={connector.tools} />}
     </li>
@@ -155,7 +174,9 @@ function ErrorNotice({ error, onRetry }: { error: ConnectorError; onRetry(): voi
             install: error.install,
           })
         : t("connectors.error.missing-command", { command: error.command ?? "" })
-      : t(`connectors.error.${error.kind}`);
+      : error.kind === "unreachable"
+        ? t("remoteConnectors.error.unreachable")
+        : t(`connectors.error.${error.kind}`);
   return (
     <div
       role="alert"
