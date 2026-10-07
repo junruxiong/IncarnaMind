@@ -63,8 +63,8 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
 /**
  * Starts the core on `dataDir` with test adapters: an English OS, an in-memory
  * keychain, no browser, shell or processes, the deterministic fake embedding
- * model, which has no files to download, and Linked folders that settle
- * quickly. Closed when the current test finishes; call `close()` yourself to
+ * model, which has no files to download, Linked folders that settle quickly,
+ * and no lookups of models in Ollama. Closed when the current test finishes; call `close()` yourself to
  * simulate quitting the app.
  */
 export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}): Core {
@@ -85,6 +85,8 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     createChatModel: () => {
       throw new Error("This test didn't provide a chat model.");
     },
+    // Nothing asks the Ollama on this computer: its models get the default settings.
+    ollamaModels: { describe: async () => null, loaded: async () => null },
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
     ...overrides,

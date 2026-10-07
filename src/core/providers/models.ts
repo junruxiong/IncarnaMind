@@ -10,6 +10,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
 import { type ChatGptCredentials, createCodexChatModel } from "./chatgpt/codexEndpoint";
+import { createOllamaChatModel } from "./ollamaChat";
+import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -23,6 +25,19 @@ export interface ChatModelSpec {
   modelId: string;
   /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
   credentials?: ChatGptCredentials;
+  /** "ollama" only: the settings every request to the model carries (see ./ollamaModels). */
+  ollama?: OllamaModelSettings;
+}
+
+/**
+ * A model's fixed context window, for a local model: what one request may
+ * hold, in tokens, output included, and how much of it is kept for the
+ * output. Its provider refuses a longer request rather than cut it, so the
+ * Answer engine keeps each request within it.
+ */
+export interface ContextWindow {
+  tokens: number;
+  outputTokens: number;
 }
 
 export type ChatModelFactory = (spec: ChatModelSpec) => ChatLanguageModel;
@@ -54,13 +69,14 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
         apiKey: spec.apiKey ?? undefined,
       })(spec.modelId);
     case "ollama":
-      // Ollama serves the OpenAI chat API under /v1, and holds a reply to a JSON schema
-      // there, which Answers from models without Tools use for their Citations (#30).
-      return createOpenAICompatible({
-        name: "ollama",
-        baseURL: `${requireBaseUrl(spec)}/v1`,
-        supportsStructuredOutputs: true,
-      })(spec.modelId);
+      // Ollama's own API, which sets the context window and refuses rather than cuts a
+      // longer request (see ./ollamaChat). It holds a reply to a JSON schema too, which
+      // Answers from models without Tools use for their Citations (#30).
+      return createOllamaChatModel({
+        baseUrl: requireBaseUrl(spec),
+        modelId: spec.modelId,
+        settings: spec.ollama ?? DEFAULT_OLLAMA_SETTINGS,
+      });
     case "chatgpt":
       if (!spec.credentials) throw new Error("A ChatGPT sign-in is required.");
       return createCodexChatModel({

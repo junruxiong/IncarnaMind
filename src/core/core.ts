@@ -41,6 +41,7 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
+import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -328,6 +329,7 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
+    ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
   });
 
   /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */

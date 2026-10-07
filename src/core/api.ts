@@ -1031,6 +1031,11 @@ export type ProviderErrorKind =
   | "plan-limit"
   /** ChatGPT plan: OpenAI refused a valid sign-in (401 or 403), e.g. it blocked this integration. */
   | "blocked"
+  /**
+   * A local model: the request doesn't fit its context window, even with the
+   * oldest Question context left out. Nothing is cut silently.
+   */
+  | "too-long"
   | "unknown";
 
 export interface ProviderError {
@@ -1137,6 +1142,22 @@ export interface AnswerDelta {
   text: string;
 }
 
+/**
+ * What an Answer being written is doing, for its meta line:
+ * "waiting-for-consent", the User is asked whether to send the Question to
+ * the model's service, and nothing is sent until they say; "loading", Ollama
+ * is loading the local model; "searching", the User's Documents are being
+ * searched; "writing", the model is at work.
+ */
+export type AnswerPhase = "waiting-for-consent" | "loading" | "searching" | "writing";
+
+/** An Answer being written moved to another phase. */
+export interface AnswerPhaseEvent {
+  mindId: string;
+  answerId: string;
+  phase: AnswerPhase;
+}
+
 /** A Tool call of an Answer started, or finished (see `call.status`). */
 export interface AnswerToolCallEvent {
   mindId: string;
@@ -1167,6 +1188,8 @@ export interface AnswerFinished {
   droppedMarkers: number;
   /** Records the model gave for no marker in the text, or naming no Passage it was given: dropped. */
   droppedRecords: number;
+  /** Markers the model left out of its text for records it gave, which the engine put in. */
+  placedMarkers: number;
   /** How the model could give Citations; null when there were no Documents to search. */
   citationSupport: CitationSupport | null;
 }
@@ -2563,6 +2586,8 @@ export interface CoreEvents {
    * for the evaluation.
    */
   "answer.started": AnswerStarted;
+  /** The Answer is loading its model, searching, or writing: its meta line says which. */
+  "answer.phase": AnswerPhaseEvent;
   "answer.delta": AnswerDelta;
   "answer.toolCallStarted": AnswerToolCallEvent;
   "answer.toolCallFinished": AnswerToolCallEvent;

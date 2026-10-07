@@ -45,9 +45,17 @@ async function fetchModels({ kind, baseUrl, apiKey }: ModelListSpec): Promise<st
     case "ollama": {
       const body = await getJson(`${baseUrl}/api/tags`, {});
       const models = isRecord(body) && Array.isArray(body.models) ? body.models : [];
-      return models
-        .map((model: unknown) => (isRecord(model) ? (model.name ?? model.model) : undefined))
-        .filter((name): name is string => typeof name === "string");
+      return (
+        models
+          .filter(isRecord)
+          // Ollama 0.40 lists each model's capabilities: one that can't complete (e.g. an embedding model) can't answer.
+          .filter(
+            (model) =>
+              !Array.isArray(model.capabilities) || model.capabilities.includes("completion"),
+          )
+          .map((model) => model.name ?? model.model)
+          .filter((name): name is string => typeof name === "string")
+      );
     }
     case "openai-compatible":
       return dataIds(await getJson(`${baseUrl}/models`, bearer));

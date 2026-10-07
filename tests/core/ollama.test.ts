@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { type OllamaPullProgress, RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
+import {
+  type OllamaPullProgress,
+  RECOMMENDED_OLLAMA_DOWNLOAD_GB,
+  RECOMMENDED_OLLAMA_MODEL,
+} from "../../src/core";
+import { translate } from "../../src/shared/i18n";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { startOllamaStub, unusedLocalUrl } from "../helpers/ollama";
 
@@ -88,6 +93,16 @@ describe("Ollama", () => {
     ).rejects.toThrow(/file does not exist/);
     expect(await core.listChatProviders()).toEqual([]);
     expect(await core.getChatReadiness()).toEqual({ ready: false, reason: "no-provider" });
+  });
+
+  test("one click offers Qwen3.5-4B, naming its download size in English and in Chinese", () => {
+    expect(RECOMMENDED_OLLAMA_MODEL).toBe("qwen3.5:4b");
+    const size = `${RECOMMENDED_OLLAMA_DOWNLOAD_GB} GB`;
+    for (const language of ["en", "zh-CN"] as const) {
+      const model = { model: RECOMMENDED_OLLAMA_MODEL };
+      expect(translate(language, "providers.ollama.use", model)).toContain(size);
+      expect(translate(language, "providers.ollama.pulling", model)).toContain(size);
+    }
   });
 
   test("one click fails clearly when Ollama isn't running", async () => {

@@ -41,7 +41,7 @@ function isWideChar(code: number): boolean {
  * An approximate token count, without a tokenizer: one per CJK character and
  * one per four other characters, close enough across providers for a budget.
  */
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
   let wide = 0;
   let other = 0;
   for (const char of text) {
@@ -103,14 +103,34 @@ export function buildQuestionContext(
   const question = children[index];
   if (!(question instanceof Y.XmlElement)) throw new Error("No Question at that index.");
   const questionText = toMarkdown(question);
+  /** What the Blocks above contribute, newest first, read only as far as the budget goes. */
+  const newestFirst = function* (): Generator<Piece> {
+    for (let at = index - 1; at >= 0; at--) {
+      const block = children[at];
+      const piece = block instanceof Y.XmlElement ? pieceOf(block) : null;
+      if (piece) yield piece;
+    }
+  };
+  return {
+    messages: withinBudget(newestFirst(), questionText, budget - estimateTokens(questionText)),
+    question: questionText,
+  };
+}
 
-  let remaining = budget - estimateTokens(questionText);
+/**
+ * The Question after the newest pieces above it that fit in `remaining`
+ * tokens, as messages: the oldest pieces are the ones left out, and the
+ * newest piece that doesn't fit whole keeps its end, marked as cut, when that
+ * is worth keeping.
+ */
+function withinBudget(
+  newestFirst: Iterable<Piece>,
+  question: string,
+  remaining: number,
+): AnswerMessage[] {
   const kept: Piece[] = [];
-  // Newest first, so the oldest are the ones left out.
-  for (let at = index - 1; at >= 0 && remaining > 0; at--) {
-    const block = children[at];
-    const piece = block instanceof Y.XmlElement ? pieceOf(block) : null;
-    if (!piece) continue;
+  for (const piece of newestFirst) {
+    if (remaining <= 0) break;
     const cost = estimateTokens(piece.text);
     if (cost <= remaining) {
       kept.push(piece);
@@ -121,7 +141,7 @@ export function buildQuestionContext(
     }
   }
   kept.reverse();
-  kept.push({ role: "user", text: questionText });
+  kept.push({ role: "user", text: question });
 
   // One message per run of the same role, as providers expect roles to alternate.
   const messages: AnswerMessage[] = [];
@@ -132,7 +152,37 @@ export function buildQuestionContext(
   }
   // A conversation starts with the User.
   while (messages[0]?.role === "assistant") messages.shift();
-  return { messages, question: questionText };
+  return messages;
+}
+
+/**
+ * The Question context cut down to about `budget` tokens (by `estimateTokens`)
+ * by the same rules as `buildQuestionContext`: the Question is always kept,
+ * the oldest content goes first, and the newest part that doesn't fit whole
+ * keeps its end. For a local model, whose context window is known only once
+ * the model is ready (see ./window). Null when the Question alone is over the budget.
+ */
+export function fitQuestionContext(
+  messages: readonly AnswerMessage[],
+  question: string,
+  budget: number,
+): AnswerMessage[] | null {
+  const above: Piece[] = messages.map((message) => ({ role: message.role, text: message.content }));
+  // The last message ends with the Question, after whatever Notes come right before it;
+  // if it doesn't, it is kept whole as the Question.
+  let asked = question;
+  const last = above.pop();
+  if (last?.role === "user" && last.text.endsWith(question)) {
+    const before = last.text.slice(0, last.text.length - question.length).trim();
+    if (before) above.push({ role: "user", text: before });
+  } else if (last?.role === "user") {
+    asked = last.text;
+  } else if (last) {
+    above.push(last);
+  }
+  const remaining = budget - estimateTokens(asked);
+  if (remaining < 0) return null;
+  return withinBudget(above.reverse(), asked, remaining);
 }
 
 /**

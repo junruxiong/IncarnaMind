@@ -9,6 +9,7 @@ import {
   type SkillScriptApprovalRequest,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
@@ -26,6 +27,8 @@ const errorKinds: Record<ProviderErrorKind, { fixInSettings: boolean }> = {
   "rate-limit": { fixInSettings: false },
   network: { fixInSettings: false },
   provider: { fixInSettings: false },
+  // A local model's context window.
+  "too-long": { fixInSettings: false },
   unknown: { fixInSettings: false },
   // The experimental ChatGPT plan provider.
   "not-signed-in": { fixInSettings: true },
@@ -111,15 +114,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
     );
   }
   if (streaming) {
-    const paused = approvals.length > 0;
-    meta.push(
-      <span
-        data-testid="answer-writing"
-        className={`answer-writing ${paused ? "answer-writing--waiting" : ""}`}
-      >
-        {paused ? t("approvals.answer.waiting") : t("answer.status.streaming")}
-      </span>,
-    );
+    meta.push(<AnswerWriting answerId={answerId} waitingForApproval={approvals.length > 0} />);
   } else if (status === "stopped") {
     meta.push(<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>);
   }

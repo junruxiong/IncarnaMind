@@ -30,6 +30,7 @@ import { searchScopeOf } from "../../shared/searchScope";
 import {
   ANSWER_BLOCK,
   type AnswerAttributes,
+  type AnswerPhase,
   type AnswerToolCall,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
@@ -255,6 +256,23 @@ function setAttributes(element: Y.XmlElement, attributes: Partial<AnswerAttribut
   }
 }
 
+/** How often, while a local model loads, Ollama is asked whether it is ready. */
+const LOAD_POLL_MS = 1_000;
+
+const CITING_ORDER: readonly CitationSupport[] = ["tools", "structured-output", "none"];
+
+/**
+ * How to start citing: what the model's capabilities say, unless an earlier
+ * Answer found its provider refuses that (the engine stepped down), which wins.
+ */
+function startingSupport(
+  known: CitationSupport | undefined,
+  learnt: CitationSupport | undefined,
+): CitationSupport | undefined {
+  if (!known || !learnt) return learnt ?? known;
+  return CITING_ORDER.indexOf(learnt) > CITING_ORDER.indexOf(known) ? learnt : known;
+}
+
 /** Why a model couldn't be prepared, as the kind of error the Answer shows. */
 function failureOf(error: unknown): ProviderError {
   if (error instanceof ChatNotReadyError) {
@@ -296,9 +314,13 @@ export function createAnswers(options: AnswersOptions) {
     });
   };
 
-  /** How each model gives Citations, learnt from its earlier Answers: by provider and model. */
+  /**
+   * How each model gives Citations, learnt from its earlier Answers: by
+   * provider, model and, for a local model, its build (a model pulled again may do more).
+   */
   const supportByModel = new Map<string, CitationSupport>();
-  const modelKey = (model: ChatModelChoice) => `${model.providerId}\n${model.modelId}`;
+  const modelKey = (model: ChatModelChoice, prepared: PreparedChatModel) =>
+    `${model.providerId}\n${model.modelId}\n${prepared.revision ?? ""}`;
 
   function start(input: {
     mindId: string;
@@ -312,6 +334,8 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean;
     /** The Skill the Question forces, loaded up front; null if none. */
     forcedSkill: string | null;
+    /** The User has yet to allow the chat flow to the model's service: they are asked first. */
+    consentNeeded: boolean;
   }): void {
     const { mindId, answerId, model, context, documentIds, forcedSkill } = input;
     const controller = new AbortController();
@@ -320,6 +344,8 @@ export function createAnswers(options: AnswersOptions) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
+    /** Markers the engine put in for records the model gave without them. */
+    let placedMarkers = 0;
     const toolCalls: AnswerToolCall[] = [];
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
@@ -393,6 +419,7 @@ export function createAnswers(options: AnswersOptions) {
           answerId,
           status: written ? outcome.status : "stopped",
           ...session.summary(),
+          placedMarkers,
           citationSupport: support,
         });
       }
@@ -614,6 +641,28 @@ export function createAnswers(options: AnswersOptions) {
         finish({ status: "done" });
         return;
       }
+      // The phase the meta line shows: waiting for the User to allow the Question to go to the
+      // model's service, searching, the model loading (a local model, until Ollama has it
+      // loaded or it starts to answer), or writing.
+      let consenting = input.consentNeeded;
+      let activity: Extract<AnswerPhase, "searching" | "writing"> = "writing";
+      let loading = false;
+      let responded = false;
+      let shown: AnswerPhase | null = null;
+      const showPhase = () => {
+        const phase: AnswerPhase = consenting
+          ? "waiting-for-consent"
+          : activity === "searching"
+            ? activity
+            : loading && !responded
+              ? "loading"
+              : "writing";
+        if (finished || phase === shown) return;
+        shown = phase;
+        events.emit("answer.phase", { mindId, answerId, phase });
+      };
+      // Nothing is sent before the User says: the Answer waits for them.
+      if (consenting) showPhase();
       let prepared: PreparedChatModel;
       try {
         prepared = await options.prepareModel(model);
@@ -623,6 +672,10 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
+      if (consenting) {
+        consenting = false;
+        showPhase();
+      }
       if (!(await openSkills()) || !skills) return;
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
@@ -658,6 +711,7 @@ export function createAnswers(options: AnswersOptions) {
         },
         searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
         cite: (records) => session.tools.cite(records),
+        hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         external,
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
@@ -674,6 +728,26 @@ export function createAnswers(options: AnswersOptions) {
               }),
             }
           : null;
+      const watchLoading = async (loaded: () => Promise<boolean | null>) => {
+        for (let first = true; !finished && !responded; first = false) {
+          const ready = await loaded().catch(() => null);
+          if (finished || responded) return;
+          if (ready !== false) {
+            loading = false;
+            showPhase();
+            return;
+          }
+          if (first) {
+            loading = true;
+            showPhase();
+          }
+          await new Promise((resolve) => setTimeout(resolve, LOAD_POLL_MS).unref?.());
+        }
+      };
+      // Until a phase is known, the meta line says "Writing…".
+      if (prepared.loaded) void watchLoading(prepared.loaded);
+
+      const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
         instructions: (
@@ -701,17 +775,30 @@ export function createAnswers(options: AnswersOptions) {
         model: prepared.model,
         tools,
         skills: skillTools,
-        support: supportByModel.get(modelKey(model)),
+        support: startingSupport(prepared.support, supportByModel.get(learntKey)),
+        window: prepared.window,
         signal: controller.signal,
       })) {
         if (finished) break;
         switch (event.type) {
           case "support":
             support = event.support;
-            supportByModel.set(modelKey(model), event.support);
+            supportByModel.set(learntKey, event.support);
+            // The model has begun to answer: it is loaded.
+            responded = true;
+            showPhase();
             writeSoon();
             break;
+          case "phase":
+            activity = event.phase;
+            showPhase();
+            break;
+          case "markers-placed":
+            placedMarkers += event.count;
+            break;
           case "text-delta":
+            responded = true;
+            showPhase();
             markdown += event.text;
             events.emit("answer.delta", { mindId, answerId, text: event.text });
             writeSoon();
@@ -853,7 +940,8 @@ export function createAnswers(options: AnswersOptions) {
     );
     if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
-    start({ mindId, questionId, model, ...written, forcedSkill });
+    const consentNeeded = readiness.consent === "needed";
+    start({ mindId, questionId, model, ...written, forcedSkill, consentNeeded });
     return { asked: true, answerId: written.answerId };
   }
 

@@ -16,7 +16,13 @@
  *   a search query that stands on its own (see `searchQuery`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
- * provider refuses Tools or structured output.
+ * provider refuses Tools or structured output. A model may give records but
+ * leave their markers out of its text: the engine then places them (see
+ * ./markerPlacement).
+ *
+ * For a local model with a fixed context window, every request is kept
+ * within it by IncarnaMind's own rules (see ./window), and one that can't fit
+ * fails as "too-long"; nothing is left to the server to cut.
  *
  * Answers are written at a low temperature (see `ANSWER_TEMPERATURE`), except
  * with models that reject one; a provider that refuses it gets the request
@@ -45,11 +51,13 @@ import {
   tool,
   UnsupportedFunctionalityError,
 } from "ai";
-import type { CitationSupport, ProviderError } from "../api";
-import type { ChatLanguageModel } from "../providers/models";
-import { classifyProviderError } from "../providers/providerErrors";
+import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
+import type { ChatLanguageModel, ContextWindow } from "../providers/models";
+import { classifyProviderError, contextOverflow } from "../providers/providerErrors";
 import { earlierContext } from "./context";
+import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import { SEARCH_QUERY_INSTRUCTIONS, searchQueryPrompt } from "./prompt";
+import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
 export interface AnswerMessage {
@@ -124,6 +132,8 @@ export interface AnswerTools {
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
   cite(records: readonly CitationRecordInput[]): string;
+  /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
+  hasRecord?(marker: number): boolean;
   /** Tools from the User's Connectors, offered to a model that can call Tools. */
   readonly external?: readonly ExternalTool[];
 }
@@ -194,8 +204,13 @@ export interface AnswerRequest {
   tools: AnswerTools;
   /** The Skill Tools, or null when there are no Skills to use. */
   skills: AnswerSkillTools | null;
-  /** How this model is known to cite, from earlier Answers. Unknown: try Tools first. */
+  /** How this model is known to cite, from its capabilities or earlier Answers. Unknown: try Tools first. */
   support?: CitationSupport;
+  /**
+   * A local model's context window: every request is kept within it (see
+   * ./window), and one that can't fit fails as "too-long". None for a cloud model.
+   */
+  window?: ContextWindow;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
   signal: AbortSignal;
 }
@@ -203,6 +218,10 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
+  /** What the Answer is doing now: searching the Documents, or the model's turn. */
+  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing"> }
+  /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
+  | { type: "markers-placed"; count: number }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */
   | { type: "text-delta"; text: string }
   /**
@@ -283,9 +302,17 @@ export function answerTemperature(model: Pick<ChatLanguageModel, "modelId">): nu
 type Unsupported = { type: "unsupported" };
 /** The provider refused the temperature: send the request again without one. Internal to the engine. */
 type TemperatureRefused = { type: "temperature-refused" };
-type Attempt = AsyncGenerator<AnswerEngineEvent | Unsupported | TemperatureRefused>;
+/**
+ * A local model refused the first request as longer than its window: our
+ * estimate was short. `promptTokens`: its real size, when Ollama said, where
+ * `estimated` were expected. Internal to the engine.
+ */
+type Overflow = { type: "overflow"; promptTokens: number | null; estimated: number };
+type Attempt = AsyncGenerator<AnswerEngineEvent | Unsupported | TemperatureRefused | Overflow>;
 /** An attempt that has dealt with a refused temperature itself. */
-type TemperedAttempt = AsyncGenerator<AnswerEngineEvent | Unsupported>;
+type TemperedAttempt = AsyncGenerator<AnswerEngineEvent | Unsupported | Overflow>;
+/** An attempt that has dealt with a refused temperature and a too-long first request itself. */
+type FittedAttempt = AsyncGenerator<AnswerEngineEvent | Unsupported>;
 
 const SEARCH_TOOL = "search_documents";
 const CITE_TOOL = "cite";
@@ -336,14 +363,20 @@ function isUnsupportedFeature(
 
 /**
  * What an attempt yields when its provider refused the request before anything
- * came back: the temperature, if one was sent, or else `feature`. Null for any
- * other failure.
+ * came back: the temperature, if one was sent, or else `feature`; or, for a
+ * request sized to a window (`estimated` tokens), that it was too long. Null
+ * for any other failure.
  */
 function refusalOf(
   error: unknown,
   feature: "tools" | "structured-output" | null,
   temperature: number | undefined,
-): Unsupported | TemperatureRefused | null {
+  estimated?: number,
+): Unsupported | TemperatureRefused | Overflow | null {
+  const overflow = estimated === undefined ? null : contextOverflow(error);
+  if (overflow && estimated !== undefined) {
+    return { type: "overflow", promptTokens: overflow.promptTokens, estimated };
+  }
   if (temperature !== undefined && isUnsupportedFeature(error, "temperature")) {
     return { type: "temperature-refused" };
   }
@@ -480,6 +513,8 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
   const maxSteps = options.maxSteps ?? MAX_STEPS;
   /** Models whose provider refused a temperature, by provider and model: they get none. */
   const refusedTemperature = new Set<string>();
+  /** What earlier Answers learnt of each local model's tokenizer (see ./window). */
+  const tokenFactors = new Map<string, number>();
 
   return {
     async *generate(request) {
@@ -491,6 +526,11 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       const modelKey = `${request.model.provider}\n${request.model.modelId}`;
       const temperature = () =>
         refusedTemperature.has(modelKey) ? undefined : answerTemperature(request.model);
+      const budget = request.window
+        ? createWindowBudget(request.window, tokenFactors.get(modelKey), (factor) =>
+            tokenFactors.set(modelKey, factor),
+          )
+        : null;
 
       /**
        * Runs a way of answering at the Answer temperature, and if the provider
@@ -515,14 +555,86 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         }
       }
 
+      /**
+       * Runs a way of answering sized to the window, and if the model refuses
+       * its first request as too long after all, once more with the estimate
+       * corrected by the model's own count; then the Answer fails as "too-long".
+       */
+      async function* fitted(make: () => TemperedAttempt): FittedAttempt {
+        for (let tries = 0; ; tries++) {
+          let overflow: Overflow | null = null;
+          for await (const event of make()) {
+            if (event.type === "overflow") {
+              overflow = event;
+              break;
+            }
+            yield event;
+          }
+          // Only a request sized to a window can overflow.
+          if (!overflow || !budget || signal.aborted) return;
+          if (tries === 0 && overflow.promptTokens) {
+            budget.learn(overflow.promptTokens, overflow.estimated);
+            continue;
+          }
+          yield { type: "failed", error: budget.tooLong(overflow.promptTokens) };
+          return;
+        }
+      }
+
+      /**
+       * A way of answering with the Passages (if any) in its instructions:
+       * structured output, or a plain Answer. Within a window, the Passages
+       * that fit beside the Question, then the Question context that fits beside them.
+       */
+      const onePass = (mode: CitationSupport | "no-documents", passages?: string) =>
+        fitted(async function* () {
+          if (!budget) {
+            const instructions = request.instructions(mode, { passages });
+            yield* tempered((sent) =>
+              mode === "structured-output"
+                ? structured(request, instructions, sent)
+                : plain(request, instructions, sent),
+            );
+            return;
+          }
+          const kept =
+            passages === undefined
+              ? undefined
+              : budget.fitPassages(
+                  passages,
+                  request.instructions(mode, { passages: "" }),
+                  request.question,
+                );
+          const instructions = request.instructions(mode, { passages: kept });
+          const fit = budget.fit({
+            instructions,
+            messages: request.messages,
+            question: request.question,
+          });
+          if (!fit.ok) {
+            yield { type: "failed", error: fit.error };
+            return;
+          }
+          const sized = { ...request, messages: fit.messages };
+          const window: Sized = {
+            estimated: fit.estimated,
+            learn: (actual) => budget.learn(actual, fit.estimated),
+          };
+          yield* tempered((sent) =>
+            mode === "structured-output"
+              ? structured(sized, instructions, sent, window)
+              : plain(sized, instructions, sent, window),
+          );
+        });
+
       // With no Documents there is nothing to search or cite: Skills and
       // Connector Tools alone, or a plain Answer.
       if (request.tools.documentCount === 0) {
         const external = request.tools.external?.length ?? 0;
         if ((request.skills || external > 0) && (request.support ?? "tools") === "tools") {
           let unsupported = false;
-          for await (const event of tempered((sent) =>
-            toolLoop(request, maxSteps, "no-documents", sent),
+          for await (const event of fitted(() =>
+            tempered((sent) => toolLoop(request, maxSteps, "no-documents", sent, budget)),
           )) {
             if (event.type === "unsupported") {
               unsupported = true;
@@ -532,8 +644,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
           }
           if (!unsupported || signal.aborted) return;
         }
-        const instructions = request.instructions("no-documents");
-        for await (const event of tempered((sent) => plain(request, instructions, sent))) {
+        for await (const event of onePass("no-documents")) {
           if (event.type === "unsupported") return;
           yield event;
         }
@@ -548,6 +659,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         const query = await searchQuery(request, temperature());
         signal.throwIfAborted();
         const id = "question-search";
+        yield { type: "phase", phase: "searching" };
         yield { type: "tool-call-started", id, tool: SEARCH_TOOL, input: { query } };
         try {
           const result = await request.tools.searchDocuments(query, signal);
@@ -559,25 +671,23 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
           yield { type: "tool-call-finished", id, ok: false, resultCount: null };
           searched = "The search of the User's Documents failed.";
         }
+        yield { type: "phase", phase: "writing" };
         return searched;
       }
 
       const order: CitationSupport[] = ["tools", "structured-output", "none"];
       for (let mode = order.indexOf(request.support ?? "tools"); mode < order.length; mode++) {
         const support = order[mode] as CitationSupport;
-        let attempt: TemperedAttempt;
+        let attempt: FittedAttempt;
         try {
           if (support === "tools") {
-            attempt = tempered((sent) => toolLoop(request, maxSteps, "tools", sent));
+            attempt = fitted(() =>
+              tempered((sent) => toolLoop(request, maxSteps, "tools", sent, budget)),
+            );
           } else {
             const passages: string = yield* searchOnce();
             if (signal.aborted) return;
-            const instructions = request.instructions(support, { passages });
-            attempt = tempered((sent) =>
-              support === "structured-output"
-                ? structured(request, instructions, sent)
-                : plain(request, instructions, sent),
-            );
+            attempt = onePass(support, passages);
           }
         } catch (error) {
           if (signal.aborted) return;
@@ -681,20 +791,45 @@ function externalTools(external: ReadonlyMap<string, ExternalTool>, signal: Abor
   return tools;
 }
 
+/** Within a window, the text a Tool returns is cut to the room left (search results are fitted by Passage). */
+function withResultsFitted(tools: ToolSet, cut: (text: string) => string): ToolSet {
+  const fitted: ToolSet = {};
+  for (const [name, each] of Object.entries(tools)) {
+    const run = each.execute;
+    fitted[name] =
+      !run || name === SEARCH_TOOL || name === CITE_TOOL
+        ? each
+        : {
+            ...each,
+            execute: async (input: unknown, options: Parameters<typeof run>[1]) => {
+              const result: unknown = await run(input, options);
+              return typeof result === "string" ? cut(result) : result;
+            },
+          };
+  }
+  return fitted;
+}
+
 /**
  * The Tool-calling loop: search, cite, answer; with Skills, load them as
  * needed; with Connectors, call their Tools where they help. "no-documents":
- * the Skill and Connector Tools alone, with nothing to cite.
+ * the Skill and Connector Tools alone, with nothing to cite. Within a
+ * window, its requests are kept within it (see ./window).
  */
 async function* toolLoop(
   request: AnswerRequest,
   maxSteps: number,
   mode: "tools" | "no-documents",
   temperature: number | undefined,
+  budget: WindowBudget | null = null,
 ): Attempt {
   const { signal } = request;
   /** Passages each search gave, by Tool call. */
   const results = new Map<string, number>();
+  /** The records the model gave, in order. */
+  const cited: CitationRecordInput[] = [];
+  /** The account of the window, once the first request is sized. */
+  let loop: ReturnType<WindowBudget["loop"]> | null = null;
   const documentTools: ToolSet = {
     [SEARCH_TOOL]: tool({
       description:
@@ -711,7 +846,8 @@ async function* toolLoop(
         required: ["query"],
       }),
       execute: async ({ query }, { toolCallId, abortSignal }) => {
-        const result = await request.tools.searchDocuments(String(query ?? ""), abortSignal);
+        const found = await request.tools.searchDocuments(String(query ?? ""), abortSignal);
+        const result = loop ? loop.passages(found.text, found.passageCount) : found;
         results.set(toolCallId, result.passageCount);
         return result.text;
       },
@@ -724,7 +860,11 @@ async function* toolLoop(
         properties: { citations: recordsSchema },
         required: ["citations"],
       }),
-      execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
+      execute: async ({ citations }) => {
+        const records = parseRecords(citations);
+        cited.push(...records);
+        return request.tools.cite(records);
+      },
     }),
   };
   /** External Tools, by the name the model calls them; never one of IncarnaMind's own names. */
@@ -733,24 +873,48 @@ async function* toolLoop(
       .filter((each) => !SHOWN_TOOLS.has(each.name) && each.name !== CITE_TOOL)
       .map((each) => [each.name, each]),
   );
-  const tools: ToolSet = {
+  const offered: ToolSet = {
     ...externalTools(external, signal),
     ...(mode === "tools" ? documentTools : {}),
     ...(request.skills ? skillTools(request.skills, signal) : {}),
   };
+  const instructions = request.instructions(mode, {
+    skillTools: request.skills !== null,
+    connectorTools: external.size > 0,
+  });
+
+  // Within a window: the Question context that fits beside the instructions, the Tools and a search.
+  let messages = request.messages;
+  let estimated: number | undefined;
+  if (budget) {
+    const fit = budget.fit({
+      instructions,
+      messages,
+      question: request.question,
+      tools: JSON.stringify(offered),
+      reserve: SEARCH_RESERVE_TOKENS,
+    });
+    if (!fit.ok) {
+      yield { type: "failed", error: fit.error };
+      return;
+    }
+    ({ messages, estimated } = fit);
+    loop = budget.loop(fit.estimated);
+  }
+  const tools = loop ? withResultsFitted(offered, (text) => loop?.result(text) ?? text) : offered;
 
   const result = streamText({
     model: request.model,
-    instructions: request.instructions(mode, {
-      skillTools: request.skills !== null,
-      connectorTools: external.size > 0,
-    }),
-    messages: request.messages,
+    instructions,
+    messages,
     tools,
     temperature,
     stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
-    // The last step must write the Answer.
-    prepareStep: ({ stepNumber }) => (stepNumber >= maxSteps - 1 ? { toolChoice: "none" } : {}),
+    // The last step must write the Answer; so must a step with no room left for a Tool's result.
+    prepareStep: ({ stepNumber }) =>
+      stepNumber >= maxSteps - 1 || (loop !== null && !loop.canCallTools())
+        ? { toolChoice: "none" }
+        : {},
     abortSignal: signal,
     // Errors arrive as stream parts; don't also log them.
     onError: () => undefined,
@@ -761,6 +925,8 @@ async function* toolLoop(
   let keptText = "";
   let stepTools: string[] = [];
   let produced = false;
+  /** Searches running now: the Answer is "searching" while there are any. */
+  let searching = 0;
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
@@ -783,6 +949,9 @@ async function* toolLoop(
           produced = true;
           stepTools.push(part.toolName);
           const outside = external.get(part.toolName);
+          if (part.toolName === SEARCH_TOOL && searching++ === 0) {
+            yield { type: "phase", phase: "searching" };
+          }
           if (SHOWN_TOOLS.has(part.toolName)) {
             yield {
               type: "tool-call-started",
@@ -810,6 +979,9 @@ async function* toolLoop(
               resultCount: results.get(part.toolCallId) ?? null,
             };
           }
+          if (part.toolName === SEARCH_TOOL && --searching === 0) {
+            yield { type: "phase", phase: "writing" };
+          }
           break;
         case "tool-error":
           if (SHOWN_TOOLS.has(part.toolName) || external.has(part.toolName)) {
@@ -818,8 +990,12 @@ async function* toolLoop(
             if (part.toolName === SEARCH_TOOL && !signal.aborted) console.error(part.error);
             yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
           }
+          if (part.toolName === SEARCH_TOOL && --searching === 0) {
+            yield { type: "phase", phase: "writing" };
+          }
           break;
         case "finish-step": {
+          loop?.stepFinished(part.usage);
           // Text before a search, a Skill or a Connector's Tool, or before records with no
           // marker in it, was a preamble.
           const preamble =
@@ -831,7 +1007,7 @@ async function* toolLoop(
           break;
         }
         case "error": {
-          const refused = produced ? null : refusalOf(part.error, "tools", temperature);
+          const refused = produced ? null : refusalOf(part.error, "tools", temperature, estimated);
           yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
           return;
         }
@@ -839,11 +1015,13 @@ async function* toolLoop(
     }
   } catch (error) {
     if (signal.aborted) return;
-    const refused = produced ? null : refusalOf(error, "tools", temperature);
+    const refused = produced ? null : refusalOf(error, "tools", temperature, estimated);
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
-  if (!signal.aborted) yield { type: "finished" };
+  if (signal.aborted) return;
+  yield* missingMarkerEvents(keptText, cited, request.tools);
+  yield { type: "finished" };
 }
 
 /** What a shown Tool call was asked, as text fields. */
@@ -859,11 +1037,21 @@ function shownInput(toolName: string, input: unknown): Record<string, unknown> {
   return { skill: text(fields.skill), path: text(fields.path) };
 }
 
+/**
+ * A request sized to a window: its estimated tokens, and what to learn from
+ * the model's own count of it (see ./window).
+ */
+interface Sized {
+  estimated: number;
+  learn(actual: number): void;
+}
+
 /** The Answer and its records as one JSON object, streamed: its `answer` text as it grows. */
 async function* structured(
   request: AnswerRequest,
   instructions: string,
   temperature: number | undefined,
+  sized?: Sized,
 ): Attempt {
   const { signal } = request;
   const result = streamText({
@@ -891,16 +1079,12 @@ async function* structured(
 
   let raw = "";
   let emitted = "";
-  const emit = async function* (value: unknown): AsyncGenerator<AnswerEngineEvent> {
+  const emit = function* (value: unknown): Generator<AnswerEngineEvent> {
     if (typeof value !== "string" || value === emitted) return;
-    if (value.startsWith(emitted)) {
-      yield { type: "text-delta", text: value.slice(emitted.length) };
-    } else {
-      if (emitted) yield { type: "text-retracted", length: emitted.length };
-      yield { type: "text-delta", text: value };
-    }
+    yield* textEdits(emitted, value);
     emitted = value;
   };
+  const estimated = sized?.estimated;
   try {
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
@@ -908,15 +1092,19 @@ async function* structured(
         raw += part.text;
         const { value } = await parseAnswerJson(raw);
         yield* emit((value as { answer?: unknown } | undefined)?.answer);
+      } else if (part.type === "finish-step" && part.usage.inputTokens) {
+        sized?.learn(part.usage.inputTokens);
       } else if (part.type === "error") {
-        const refused = emitted ? null : refusalOf(part.error, "structured-output", temperature);
+        const refused = emitted
+          ? null
+          : refusalOf(part.error, "structured-output", temperature, estimated);
         yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
         return;
       }
     }
   } catch (error) {
     if (signal.aborted) return;
-    const refused = emitted ? null : refusalOf(error, "structured-output", temperature);
+    const refused = emitted ? null : refusalOf(error, "structured-output", temperature, estimated);
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
@@ -928,12 +1116,15 @@ async function* structured(
     yield { type: "unsupported" };
     return;
   }
-  yield* emit(answer);
+  const records = parseRecords((value as { citations?: unknown } | undefined)?.citations);
   try {
-    request.tools.cite(parseRecords((value as { citations?: unknown } | undefined)?.citations));
+    request.tools.cite(records);
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
+  yield* emit(answer);
+  // A small model often gives the records but leaves their markers out.
+  if (typeof answer === "string") yield* missingMarkerEvents(emitted, records, request.tools);
   yield { type: "finished" };
 }
 
@@ -942,8 +1133,10 @@ async function* plain(
   request: AnswerRequest,
   instructions: string,
   temperature: number | undefined,
+  sized?: Sized,
 ): Attempt {
   const { signal } = request;
+  const estimated = sized?.estimated;
   let produced = false;
   try {
     const result = streamText({
@@ -960,15 +1153,17 @@ async function* plain(
         if (!part.text) continue;
         produced = true;
         yield { type: "text-delta", text: part.text };
+      } else if (part.type === "finish-step" && part.usage.inputTokens) {
+        sized?.learn(part.usage.inputTokens);
       } else if (part.type === "error") {
-        const refused = produced ? null : refusalOf(part.error, null, temperature);
+        const refused = produced ? null : refusalOf(part.error, null, temperature, estimated);
         yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
         return;
       }
     }
   } catch (error) {
     if (signal.aborted) return;
-    const refused = produced ? null : refusalOf(error, null, temperature);
+    const refused = produced ? null : refusalOf(error, null, temperature, estimated);
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
