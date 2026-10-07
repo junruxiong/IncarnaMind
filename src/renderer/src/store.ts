@@ -6,6 +6,7 @@ import type {
   EmbeddingModelStatus,
   EmbeddingSettings,
   Folder,
+  LinkedFolder,
   Mind,
   Settings,
   SettingsPatch,
@@ -53,6 +54,8 @@ interface AppState {
   settingsPage: SettingsPage;
   /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
   folders: Folder[];
+  /** The Linked folders, in path order. Set once loaded, then follows the core's event. */
+  linkedFolders: LinkedFolder[];
   /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
   folderFilter: string | null;
   /** Every Tag, in name order. */
@@ -99,6 +102,8 @@ interface AppState {
   retryEmbedding(): Promise<void>;
   /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
   filterByFolder(folderId: string | null): Promise<void>;
+  /** Asks for a folder with the system's folder picker, and links it. */
+  addLinkedFolder(): Promise<void>;
   /** Shows only the Documents with a Tag (in the filtered Folder, if any); null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -160,6 +165,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
+    linkedFolders: [],
     folderFilter: null,
     tags: [],
     tagFilter: null,
@@ -179,6 +185,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           tags,
           skills,
           embedding,
+          linkedFolders,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -189,8 +196,10 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listTags(),
           core.listSkills(),
           core.getEmbeddingSettings(),
+          core.listLinkedFolders(),
         ]);
         set({
+          linkedFolders,
           minds,
           settings,
           documents,
@@ -353,6 +362,13 @@ export const useAppStore = create<AppState>()((set, get) => {
       await refreshFilter();
     },
 
+    // Its Documents, Folders and progress arrive with the core's events.
+    addLinkedFolder: () =>
+      attempt(async () => {
+        const path = await files.pickLinkedFolder();
+        if (path) await core.addLinkedFolder(path);
+      }),
+
     async filterByTag(tagId) {
       if (tagId === get().tagFilter) return;
       set({ tagFilter: tagId, filteredDocumentIds: null });
@@ -486,6 +502,9 @@ core.on("folders.changed", (folders) => {
   // Moving a Folder can change which Documents are below the filtered one.
   refreshFilterIfAny();
 });
+
+// Linked folders added, removed, or scanning, paused, out of reach, or making progress.
+core.on("linkedFolders.changed", (linkedFolders) => useAppStore.setState({ linkedFolders }));
 
 // Documents removed from the index, e.g. with their Linked folder.
 core.on("documents.removed", (removed) => {

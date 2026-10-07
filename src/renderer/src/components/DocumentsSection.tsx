@@ -19,7 +19,15 @@ import {
   TaggingWaitingNotice,
 } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
-import { CloseIcon, DocumentIcon, PencilIcon, PlusIcon, TagIcon, TrashIcon } from "./icons";
+import {
+  CloseIcon,
+  DocumentIcon,
+  FolderPlusIcon,
+  PencilIcon,
+  PlusIcon,
+  TagIcon,
+  TrashIcon,
+} from "./icons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
 
@@ -55,8 +63,9 @@ const statusTones: Record<DocumentStatus, string> = {
 /**
  * The sidebar's Documents: a list with each Document's processing status, its
  * Tags and its tagging (with one notice above the list while tagging waits
- * for a model), an add button with a file picker, rename and delete, and a
- * menu to open its file or show it in its folder. Dropping files anywhere on the window adds them too
+ * for a model), an add button with a file picker, an "Add folder…" button
+ * that links a folder, rename and delete, and a menu to open its file or
+ * show it in its folder. Dropping files anywhere on the window adds them too
  * (see `FileDrop`). Above the list, the Folder tree (the Linked folders'
  * folders, as on disk) and the Tag chips filter it; Documents are tagged
  * from their Tags menu. Clicking a Document opens it in the viewer.
@@ -74,6 +83,7 @@ export function DocumentsSection() {
           : "documents.none",
   );
   const addDocuments = useAppStore((state) => state.addDocuments);
+  const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
   const openTagsDialog = useAppStore((state) => state.openTagsDialog);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
@@ -103,6 +113,16 @@ export function DocumentsSection() {
             className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
           >
             <TagIcon className="size-4" />
+          </button>
+          <button
+            type="button"
+            data-testid="add-linked-folder"
+            aria-label={t("linkedFolders.add")}
+            title={t("linkedFolders.add")}
+            onClick={() => void addLinkedFolder()}
+            className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+          >
+            <FolderPlusIcon className="size-4" />
           </button>
           <button
             type="button"
@@ -175,6 +195,7 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       data-document-id={item.id}
       data-folder-id={item.folderId ?? ""}
       data-status={item.status}
+      data-file-status={item.fileStatus}
       data-tagging={item.tagging}
       draggable={!renaming}
       onDragStart={(event) => startSidebarDrag(event, { kind: "document", id: item.id })}
