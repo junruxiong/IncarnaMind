@@ -6,7 +6,9 @@ import {
   dismissChatSetup,
   interceptOpenExternal,
   launchApp,
+  openSettings,
   removeDataFolder,
+  showSettingsPage,
   urlsOpened,
 } from "./app";
 
@@ -25,7 +27,7 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
 
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "connectors");
   const section = window.getByTestId("connectors-settings");
   await expect(section).toContainText("No Connectors yet.");
   await section.getByTestId("connector-add").click();
@@ -57,19 +59,24 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await expect(book.getByTestId("connector-tool-approval")).toHaveValue("ask");
 
   // The claim is only a hint: the read-only Tool can be switched to ask every time, which the
-  // approvals page lists, and revoking it there goes back to the default.
+  // Approvals page lists, and revoking it there goes back to the default.
   const approvals = window.getByTestId("approvals-settings");
+  await showSettingsPage(window, "approvals");
   await expect(approvals).toContainText("No Tool is set to always allow or to ask every time.");
+  await showSettingsPage(window, "connectors");
   await lookup
     .getByRole("combobox", { name: "When an Answer calls lookup_tide" })
     .selectOption("ask");
+  await expect(lookup).toHaveAttribute("data-asks", "true");
+  await showSettingsPage(window, "approvals");
   const policy = approvals.getByTestId("approval-policy");
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Tides · lookup_tide");
   await expect(policy.getByTestId("approval-policy-value")).toHaveText("Ask every time");
-  await expect(lookup).toHaveAttribute("data-asks", "true");
   await policy.getByRole("button", { name: "Revoke the setting for Tides · lookup_tide" }).click();
   await expect(policy).toHaveCount(0);
+  await showSettingsPage(window, "connectors");
+  await expect(lookup).toHaveAttribute("data-asks", "false");
   await expect(lookup.getByTestId("connector-tool-approval")).toHaveValue("always");
 
   // Off: its process stops, and it says so.
@@ -88,7 +95,7 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     // The system browser opens nothing: the test plays the User on the sign-in page.
     await interceptOpenExternal(app);
 
-    await window.getByRole("button", { name: "Settings" }).click();
+    await openSettings(window, "connectors");
     const section = window.getByTestId("connectors-settings");
     await section.getByTestId("connector-add").click();
     const form = section.getByTestId("connector-form");

@@ -4,9 +4,11 @@ import { expect, test } from "@playwright/test";
 import type { CoreBridge, EmbeddingSettings } from "../src/core/api";
 import {
   addDocuments,
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openSettings,
   removeDataFolder,
 } from "./app";
 
@@ -31,7 +33,7 @@ test("switching the embedding provider warns that every Document is processed ag
   await addDocuments(window, [path]);
 
   // Settings → Document search: the built-in model, on this computer.
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "search");
   const section = window.getByTestId("embedding-settings");
   const current = section.getByTestId("embedding-current");
   await expect(current).toHaveText("Embedding model: Built-in (multilingual-e5-small)");
@@ -77,7 +79,7 @@ test("switching the embedding provider warns that every Document is processed ag
     rebuild: null,
     error: null,
   });
-  await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
+  await closeSettings(window);
   await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready");
   await expect(window.getByTestId("embedding-rebuild-notice")).toHaveCount(0);
   await app.close();
