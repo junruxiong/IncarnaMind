@@ -53,6 +53,12 @@ export interface FilesBridge {
    */
   pickLinkedFolder(): Promise<string | null>;
   /**
+   * Shows the system's open dialog for Documents to add, as a sheet on the
+   * window, starting in the folder last picked from (else Downloads).
+   * Resolves with their absolute paths, or none if the User cancelled.
+   */
+  pickDocuments(): Promise<string[]>;
+  /**
    * Shows a Linked folder selected in the system's file manager (Finder,
    * Explorer). Rejects for an unknown Linked folder, or one that can't be
    * reached.
@@ -87,6 +93,7 @@ export const FILES_CHANNELS = {
   openDocumentExternally: "files:openDocumentExternally",
   showDocumentInFolder: "files:showDocumentInFolder",
   pickLinkedFolder: "files:pickLinkedFolder",
+  pickDocuments: "files:pickDocuments",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
   /** From the main process: a command chosen in the application menu. */

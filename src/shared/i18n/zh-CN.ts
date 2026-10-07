@@ -141,6 +141,8 @@ export const zhCN = {
   "documents.failure.processingError": "处理时出错",
   "documents.more": "{name} 的更多操作",
   "documents.renameAction": "重命名",
+  "documents.pick.title": "添加文档",
+  "documents.pick.filter": "文档",
   "documents.retryAction": "重试",
   "documents.renameLabel": "{name} 的新名称",
   "documents.deleteAction": "删除…",
