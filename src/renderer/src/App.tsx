@@ -94,9 +94,9 @@ function Workspace() {
   if (!device) return null;
   const { sidebarWidth } = device;
   const room = windowWidth - ROD_WIDTH - CENTRE_MIN;
-  // Until the User resizes it, the viewer opens at about half the window (DESIGN.md).
+  // Until the User resizes it, the viewer opens at half the room beside the sidebar (DESIGN.md).
   const preferredViewerWidth =
-    device.viewerWidth ?? Math.min(VIEWER.max, Math.round(windowWidth / 2));
+    device.viewerWidth ?? Math.min(VIEWER.max, Math.round((windowWidth - sidebarWidth) / 2));
   // In a window too narrow for the saved width, the viewer gives way to the
   // Mind (down to its own minimum); the saved width comes back as the window grows.
   const viewerWidth = Math.max(

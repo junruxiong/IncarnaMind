@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { CJK } from "../../shared/text";
 import type { TextUnit } from "../../shared/units";
 import type { DocumentKind } from "../api";
+import { isRecord } from "../errors";
 import { ExtractionError, extractUnits } from "./formats";
 
 export { ExtractionError };
@@ -57,6 +58,36 @@ function pageText(items: readonly object[]): string {
     if ("hasEOL" in item && item.hasEOL === true) text += "\n";
   }
   return text.replaceAll("\u0000", "").replace(/\r\n?/g, "\n").replace(CJK_LINE_WRAP, "$1").trim();
+}
+
+/** XMP's creation date, written as an element or as an attribute of its description. */
+const XMP_CREATE_DATE = /xmp:CreateDate\s*(?:=\s*(["'])([^"'<>]*)\1|>([^<]*)<)/i;
+
+/**
+ * A PDF's creation dates as written (#53): its document information
+ * dictionary's CreationDate, a PDF date string, and its XMP metadata's
+ * xmp:CreateDate, an ISO 8601 date. Null where there is none. Never its
+ * ModDate. Only the metadata is read, not the pages. Throws if the PDF
+ * can't be opened.
+ */
+export async function pdfCreationDates(
+  bytes: Uint8Array,
+): Promise<{ info: string | null; xmp: string | null }> {
+  const { getDocument } = await loadPdfJs();
+  // pdf.js may take ownership of the buffer, so give it a copy.
+  const task = getDocument({ data: new Uint8Array(bytes), verbosity: 0 });
+  try {
+    const document = await task.promise;
+    const { info, metadata } = await document.getMetadata();
+    const created = isRecord(info) ? info.CreationDate : undefined;
+    const xmp = metadata ? XMP_CREATE_DATE.exec(String(metadata.getRaw())) : null;
+    return {
+      info: typeof created === "string" ? created : null,
+      xmp: xmp ? (xmp[2] ?? xmp[3] ?? null) : null,
+    };
+  } finally {
+    await task.destroy();
+  }
 }
 
 async function extractPdf(bytes: Uint8Array): Promise<TextUnit[]> {

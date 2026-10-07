@@ -74,6 +74,8 @@ describe("Documents", { timeout: 30_000 }, () => {
         tags: [],
         tagging: "pending",
         taggingError: null,
+        // Read while it's processed.
+        creationDate: null,
         createdAt: "2026-10-06T12:00:00.000Z",
         updatedAt: "2026-10-06T12:00:00.000Z",
       },

@@ -1,16 +1,20 @@
 /**
- * Turns a Document's file into Passages: what the processing worker does with
- * each job. It reads the file where the User keeps it, once, and hashes what
- * it read, so the Passages are always of the version recorded with them, even
- * if the file changes meanwhile. It never touches the database; the core
- * writes the result.
+ * What the processing worker does with each job. A processing job turns a
+ * Document's file into Passages, and reads its creation date. A metadata job
+ * reads only its creation date: no text is extracted and nothing is
+ * embedded. Each reads the file where the User keeps it, once, and hashes
+ * what it read, so what it gives is always of the version recorded with it,
+ * even if the file changes meanwhile. It never touches the database; the
+ * core writes the result.
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { TextUnit } from "../../shared/units";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import { stripBoilerplate } from "./boilerplate";
-import { ExtractionError, extractText } from "./extract";
+import { creationDate, pdfDate, w3cDate } from "./creationDate";
+import { ExtractionError, extractText, pdfCreationDates } from "./extract";
+import { officeCreated } from "./formats/coreProperties";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
 
@@ -45,12 +49,40 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   csv: 5,
 };
 
+/**
+ * The version of the metadata read: what a Document's creation date is
+ * worked out from (see ./creationDate). A Document whose metadata was read
+ * by an older version, or not at all (`metadata_version` 0, as every
+ * Document from before migration 24 is), has it read again by a metadata
+ * job, in the background, without being processed or embedded again. When
+ * only the metadata read changes, bump this, not `PROCESSING_VERSION`.
+ * 1: #53 (creation dates).
+ */
+export const METADATA_VERSION = 1;
+
+/** Extracts a Document's text into Passages and Units, and reads its creation date. */
 export interface ProcessingJob {
+  task: "process";
   documentId: string;
   kind: DocumentKind;
   /** The Document's file, where the User keeps it. */
   file: string;
 }
+
+/** Reads only a Document's metadata (its creation date): nothing is extracted or embedded. */
+export interface MetadataJob {
+  task: "metadata";
+  documentId: string;
+  kind: DocumentKind;
+  /** The Document's file, where the User keeps it. */
+  file: string;
+  /** The version indexed: the metadata is read only if the file still is that version. */
+  contentHash: string;
+  /** That version's first Unit, as stored: where a year is looked for if the metadata has no date. */
+  firstUnit: string | null;
+}
+
+export type WorkerJob = ProcessingJob | MetadataJob;
 
 /** A Passage as the worker hands it over. */
 export interface ProcessedPassage extends BuiltPassage {
@@ -77,34 +109,62 @@ type Processed =
   | { outcome: "no-text"; pageCount: number | null }
   | { outcome: "failed"; reason: DocumentFailureReason; message: string };
 
+/** The file couldn't be read: it is gone (`gone`), or can't be read now. */
+interface FileUnreadable {
+  outcome: "file-unreadable";
+  gone: boolean;
+  message: string;
+}
+
+/** The worker stopped mid-job (a crash, or out of memory). */
+interface Crashed {
+  outcome: "crashed";
+  message: string;
+}
+
 export type ProcessingResult =
   | (Processed & {
       /** The version processed: the SHA-256 of the bytes read, hex. */
       contentHash: string;
       /** How many bytes were read. */
       size: number;
+      /** The version's creation date (see ./creationDate), or null. */
+      creationDate: string | null;
     })
-  /** The file couldn't be read: it is gone (`gone`), or can't be read now. Nothing was processed. */
-  | { outcome: "file-unreadable"; gone: boolean; message: string }
-  /** The worker stopped mid-job (a crash, or out of memory). */
-  | { outcome: "crashed"; message: string };
+  /** Nothing was processed. */
+  | FileUnreadable
+  | Crashed;
+
+export type MetadataResult =
+  /** The version's creation date (see ./creationDate), or null if nothing gives one. */
+  | { outcome: "read"; creationDate: string | null }
+  /** The file is no longer the version indexed: nothing was read. */
+  | { outcome: "changed" }
+  | FileUnreadable
+  | Crashed;
+
+export type WorkerResult = ProcessingResult | MetadataResult;
 
 /** Messages between the core and the worker. `id` pairs a result with its job. */
 export interface WorkerRequest {
   id: number;
-  job: ProcessingJob;
+  job: WorkerJob;
 }
 
 export interface WorkerResponse {
   id: number;
-  result: ProcessingResult;
+  result: WorkerResult;
 }
 
-/** Never throws: every problem becomes a "failed" result. */
-export async function processFile(job: ProcessingJob): Promise<ProcessingResult> {
-  let bytes: Uint8Array;
+/** Runs a job of either kind. Never throws. */
+export function runJob(job: WorkerJob): Promise<WorkerResult> {
+  return job.task === "process" ? processFile(job) : readMetadata(job);
+}
+
+/** The file's bytes, or why they couldn't be read. */
+async function readBytes(file: string): Promise<Uint8Array | FileUnreadable> {
   try {
-    bytes = await readFile(job.file);
+    return await readFile(file);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     return {
@@ -113,11 +173,66 @@ export async function processFile(job: ProcessingJob): Promise<ProcessingResult>
       message: messageOf(error),
     };
   }
-  const version = {
-    contentHash: createHash("sha256").update(bytes).digest("hex"),
-    size: bytes.byteLength,
+}
+
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+/** Never throws: every problem becomes a "failed" result. */
+export async function processFile(job: ProcessingJob): Promise<ProcessingResult> {
+  const bytes = await readBytes(job.file);
+  if (!(bytes instanceof Uint8Array)) return bytes;
+  const version = { contentHash: sha256(bytes), size: bytes.byteLength };
+  const processed = await processBytes(job.kind, bytes);
+  const firstUnit = processed.outcome === "ready" ? (processed.pages[0]?.text ?? null) : null;
+  return {
+    ...processed,
+    ...version,
+    creationDate: await readCreationDate(job.kind, bytes, firstUnit),
   };
-  return { ...(await processBytes(job.kind, bytes)), ...version };
+}
+
+/** A metadata job: the creation date of the version indexed, read from the file. Never throws. */
+export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
+  // Text, Markdown and CSV files have no metadata: only the stored first Unit is read.
+  if (!hasMetadata(job.kind)) {
+    return { outcome: "read", creationDate: creationDate([], job.firstUnit, thisYear()) };
+  }
+  const bytes = await readBytes(job.file);
+  if (!(bytes instanceof Uint8Array)) return bytes;
+  if (sha256(bytes) !== job.contentHash) return { outcome: "changed" };
+  return { outcome: "read", creationDate: await readCreationDate(job.kind, bytes, job.firstUnit) };
+}
+
+const hasMetadata = (kind: DocumentKind) =>
+  kind === "pdf" || kind === "docx" || kind === "pptx" || kind === "xlsx";
+
+/** The local calendar year now: no later creation date is plausible. */
+const thisYear = () => new Date().getFullYear();
+
+/**
+ * A version's creation date (see ./creationDate): the metadata's (a PDF's
+ * Info dictionary, then its XMP; an Office file's core properties), or else
+ * the latest year written in its first Unit. Never throws: metadata that
+ * can't be read is no metadata, and never fails the Document.
+ */
+async function readCreationDate(
+  kind: DocumentKind,
+  bytes: Uint8Array,
+  firstUnit: string | null,
+): Promise<string | null> {
+  let fromMetadata: (string | null)[] = [];
+  try {
+    if (kind === "pdf") {
+      const { info, xmp } = await pdfCreationDates(bytes);
+      fromMetadata = [info === null ? null : pdfDate(info), xmp === null ? null : w3cDate(xmp)];
+    } else if (hasMetadata(kind)) {
+      const created = await officeCreated(bytes);
+      fromMetadata = [created === null ? null : w3cDate(created)];
+    }
+  } catch {
+    // Unusual or malformed: the year comes from the first Unit.
+  }
+  return creationDate(fromMetadata, firstUnit, thisYear());
 }
 
 async function processBytes(kind: DocumentKind, bytes: Uint8Array): Promise<Processed> {
