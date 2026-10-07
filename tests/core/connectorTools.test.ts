@@ -1,7 +1,13 @@
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import type { AnswerToolCall, Connector, Core, CoreEvents } from "../../src/core";
-import { answerEnded, askAndFinish, askNew, citationsIn } from "../helpers/citations";
+import {
+  answerEnded,
+  askAndFinish,
+  askNew,
+  citationsIn,
+  setUpWithDocuments,
+} from "../helpers/citations";
 import {
   logFileIn,
   serverLog,
@@ -13,6 +19,7 @@ import { createMemoryKeychain, createTempDataFolder, nextEvent, startCore } from
 import { connectToMind } from "../helpers/mindClient";
 import { answerIn, answerText } from "../helpers/minds";
 import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
+import { importSkill, simpleSkillMd, writeFolder } from "../helpers/skills";
 
 const LOOKUP = "tides__lookup_tide";
 
@@ -215,24 +222,60 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     expect(system).not.toMatch(/Connectors/);
   });
 
-  test("with Documents too, the model gets document search, cite and the read-only Connector Tools", async () => {
-    const { setUpWithDocuments } = await import("../helpers/citations");
-    const model = scriptedModel(() => ({ text: "Twice a day." }));
+  test("document search, the Skill Tools and the Connector Tools are offered together, and each call's card says where it came from", async () => {
+    const model = scriptedModel((call: ModelCall) =>
+      call.results.length === 0
+        ? {
+            calls: [
+              { tool: "search_documents", input: { query: "high tide" } },
+              { tool: "use_skill", input: { name: "tide-tables" } },
+              { tool: LOOKUP, input: { place: "Dover" } },
+            ],
+          }
+        : { text: "Twice a day." },
+    );
     const { core, mind, client } = await setUpWithDocuments(
       model,
       [{ name: "Tides.txt", contents: "High water comes twice a day." }],
       { processes: testProcesses() },
     );
-    const dataDir = await createTempDataFolder();
-    const connector: Connector = await core.addConnector(tideServer(logFileIn(dataDir)));
+    const sources = await createTempDataFolder();
+    await importSkill(
+      core,
+      await writeFolder(sources, "tide-tables", {
+        "SKILL.md": simpleSkillMd("tide-tables", "Read tide tables."),
+      }),
+    );
+    const connector: Connector = await core.addConnector(tideServer(logFileIn(sources)));
     await waitForState(core, connector.id, "ready");
 
-    await askAndFinish(core, client, mind.id, "How often is high tide?");
+    const consent = answerConsent(core, true);
+    const { answerId } = await askAndFinish(core, client, mind.id, "How often is high tide?");
+    await consent;
 
     expect(model.doStreamCalls[0]?.tools?.map((each) => each.name).sort()).toEqual([
       "cite",
+      "read_skill_file",
       "search_documents",
       LOOKUP,
+      "use_skill",
+    ]);
+    const system = String(
+      model.doStreamCalls[0]?.prompt.find((message) => message.role === "system")?.content,
+    );
+    expect(system).toMatch(/search_documents/);
+    expect(system).toMatch(/tide-tables/);
+    expect(system).toMatch(/also call Tools from the User's Connectors \("Tides"\)/);
+    expect(
+      toolCalls(answerIn(client, answerId).attrs.toolCalls).map(({ tool, source, status }) => ({
+        tool,
+        source,
+        status,
+      })),
+    ).toEqual([
+      { tool: "search_documents", source: "documents", status: "done" },
+      { tool: "use_skill", source: "skill", status: "done" },
+      { tool: "lookup_tide", source: "connector", status: "done" },
     ]);
   });
 });
@@ -260,5 +303,29 @@ describe("The chat flow with Connectors", { timeout: 30_000 }, () => {
     // Off again, chat sends what the User accepted.
     await core.setConnectorEnabled(connector.id, false);
     expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
+  });
+
+  test("Skills alone don't make it ask again: their Tools return only the Skills' own text", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, {
+      createChatModel: scriptedModels(scriptedModel(() => ({ text: "OK" }))).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-5.4-mini" });
+    const first = nextEvent(core, "consent.requested");
+    const tested = core.testChatConnection({ kind: "openai", modelId: "gpt-5.4-mini" });
+    await core.respondToConsent((await first).requestId, true);
+    await tested;
+
+    const sources = await createTempDataFolder();
+    await importSkill(
+      core,
+      await writeFolder(sources, "tide-tables", {
+        "SKILL.md": simpleSkillMd("tide-tables", "Read tide tables."),
+      }),
+    );
+
+    expect(await core.getChatReadiness()).toMatchObject({ ready: true, consent: "accepted" });
+    const chat = (await core.listDataFlows()).find((status) => status.flow.id === "chat");
+    expect(chat?.flow.sends).toEqual(["blocks", "passages"]);
   });
 });

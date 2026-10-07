@@ -18,7 +18,6 @@ export type {
   AnswerEngine,
   AnswerEngineEvent,
   AnswerMessage,
-  AnswerMode,
   AnswerRequest,
   ExternalTool,
 } from "./answers/engine";
