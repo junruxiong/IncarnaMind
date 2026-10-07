@@ -1,6 +1,7 @@
-import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -17,6 +18,9 @@ import {
   removeDataFolder,
   widthOf,
 } from "./app";
+
+/** Office files to view (see tests/core/formats.test.ts). */
+const FORMATS = join(__dirname, "..", "tests", "fixtures", "formats");
 
 /** Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots of the viewer's states there. */
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -237,6 +241,67 @@ test("a PDF's outline shows beside its pages, and an entry goes to its page", as
   await button.click();
   await expect(outline).toHaveCount(0);
   expect(await widthOf(window.getByTestId("pdf-scroller"))).toBeGreaterThan(narrower);
+  await app.close();
+});
+
+/**
+ * Whether a page fits across its scroller: nothing to scroll sideways, and
+ * the page's edges inside the scroller's, with the backdrop showing on both sides.
+ */
+const fitsAcross = async (scroller: Locator, page: Locator) =>
+  scroller.evaluate(
+    (element, pageElement) => {
+      if (!pageElement) return false;
+      const box = element.getBoundingClientRect();
+      const sheet = pageElement.getBoundingClientRect();
+      return (
+        element.scrollWidth <= element.clientWidth &&
+        sheet.left > box.left &&
+        sheet.right < box.left + element.clientWidth
+      );
+    },
+    await page.elementHandle(),
+  );
+
+test("in a narrow viewer with the outline open, Fit width fits the page in the width beside the outline", async () => {
+  const guide = join(sources, "Guide.pdf");
+  const word = join(sources, "Coastal Flood Risk Review.docx");
+  await writeFile(guide, GUIDE);
+  await copyFile(join(FORMATS, "Coastal Flood Risk Review.docx"), word);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ device: { viewerWidth: 420 } });
+  });
+  await addDocuments(window, [guide, word]);
+  const viewer = window.getByTestId("viewer");
+  const items = window.getByTestId("document-list-item");
+
+  // A PDF: zoomed, then fitted again with the outline beside it.
+  await items.filter({ hasText: "Guide" }).getByTestId("open-document").click();
+  await expect.poll(() => widthOf(viewer)).toBe(420);
+  const page1 = viewer.locator('[data-page-number="1"]');
+  await expect(page1).toHaveAttribute("data-drawn", "true");
+  await window.getByTestId("pdf-outline-button").click();
+  await expect(window.getByTestId("pdf-outline")).toBeVisible();
+  await window.getByTestId("pdf-zoom-in").click();
+  await window.getByTestId("pdf-fit-width").click();
+  await expect(window.getByTestId("pdf-fit-width")).toHaveAttribute("aria-pressed", "true");
+  const scroller = window.getByTestId("pdf-scroller");
+  await expect.poll(() => fitsAcross(scroller, page1)).toBe(true);
+  // The page fills the width beside the outline, less the backdrop's margins.
+  expect(await widthOf(page1)).toBeGreaterThan((await widthOf(scroller)) - 2 * 24 - 2);
+  await screenshot(viewer, "viewer-fit-width-outline");
+
+  // A Word file's pages fit beside its outline too.
+  await items.filter({ hasText: "Coastal Flood Risk Review" }).getByTestId("open-document").click();
+  const docx = viewer.getByTestId("viewer-docx");
+  await expect(docx).toHaveAttribute("data-rendered", "yes");
+  await viewer.getByTestId("viewer-outline-button").click();
+  await expect(viewer.getByTestId("viewer-outline")).toBeVisible();
+  await expect.poll(() => fitsAcross(docx, docx.locator("section.docx").first())).toBe(true);
+  await screenshot(viewer, "viewer-docx-outline");
   await app.close();
 });
 
