@@ -30,9 +30,31 @@ export interface Paths {
   builtInSkills?: string;
   /**
    * Where each Skill script run gets its own temporary working folder, removed
-   * when the run ends. Defaults to the OS's temporary folder.
+   * when the run ends, and where Documents are copied to be opened in another
+   * app. Defaults to the OS's temporary folder.
    */
   tempDir?: string;
+}
+
+/** A value in a log entry. */
+export type LogValue = string | number | boolean | null;
+
+/** What a log entry says about its event. Undefined fields are left out. */
+export type LogFields = Readonly<Record<string, LogValue | undefined>>;
+
+/**
+ * IncarnaMind's log, for working out what went wrong on the User's computer.
+ * The desktop app writes it to `logs/` in the data folder (src/main/log.ts).
+ *
+ * The core logs what happened, never what the User wrote or keeps secret:
+ * ids, statuses, kinds and counts. Never Document text or names, Mind
+ * content, Questions, Answers, providers' messages, API keys or tokens.
+ */
+export interface Logger {
+  /** `event` is a short dotted name, e.g. "document.status". */
+  info(event: string, fields?: LogFields): void;
+  warn(event: string, fields?: LogFields): void;
+  error(event: string, fields?: LogFields): void;
 }
 
 /**
@@ -234,4 +256,6 @@ export interface CoreAdapters {
    * when this copy can't send any: Settings then doesn't offer them.
    */
   crashReporter?: CrashReporter;
+  /** Where the core logs what happens (see `Logger`). None by default. */
+  log?: Logger;
 }

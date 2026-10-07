@@ -10,6 +10,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import { endSidebarDrag, startSidebarDrag } from "../folders";
 import { useT } from "../i18n";
 import { selectVisibleDocuments, useAppStore } from "../store";
+import { DocumentFileMenu } from "./DocumentFileMenu";
 import {
   DocumentTagChips,
   DocumentTagMenu,
@@ -63,8 +64,8 @@ const statusTones: Record<DocumentStatus, string> = {
 /**
  * The sidebar's Documents: a list with each Document's processing status, its
  * Tags and its tagging (with one notice above the list while tagging waits
- * for a model), an add button with a file picker, and rename and
- * delete. Dropping files anywhere on the window adds them too (see
+ * for a model), an add button with a file picker, rename and delete, and a
+ * menu to open or save a copy of its original file. Dropping files anywhere on the window adds them too (see
  * `FileDrop`). Above the list, the Folder tree and the Tag chips filter it;
  * Documents are filed by dragging them onto a Folder or with "Move to…", and
  * tagged from their Tags menu. Clicking a Document opens it in the viewer.
@@ -260,6 +261,7 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
           >
             <TrashIcon className="size-[14px]" />
           </button>
+          <DocumentFileMenu item={item} buttonClassName={actionButton} />
         </div>
       )}
     </li>

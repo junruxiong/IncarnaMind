@@ -2,13 +2,16 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { translate } from "../shared/i18n";
+import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type {
   ChatModelChoice,
   CoreApi,
   CoreEventSource,
+  Document,
   EmbeddingSettings,
+  ProviderError,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
@@ -59,6 +62,27 @@ export interface Core extends CoreApi, CoreEventSource {
    * or if its file is missing from the data folder.
    */
   openDocumentFile(documentId: string): Promise<DocumentFile>;
+  /**
+   * A live Document, and the file name a copy of its file gets: the
+   * Document's name, without characters file systems refuse, and the
+   * extension of its kind, never its content hash. Throws NotFoundError for
+   * an unknown or deleted Document.
+   */
+  documentCopyName(documentId: string): Promise<{ document: Document; fileName: string }>;
+  /**
+   * Saves a copy of a live Document's file at `path`, an absolute path the
+   * host got from the User (e.g. from a save dialog), replacing any file
+   * there. Throws NotFoundError for an unknown or deleted Document, or if its
+   * file is missing from the data folder, before anything is written.
+   */
+  saveDocumentCopy(documentId: string, path: string): Promise<void>;
+  /**
+   * Copies a live Document's file into a new folder in the temporary folder,
+   * named as `documentCopyName` says, for the host to open in another app,
+   * and resolves with its path. Throws as `saveDocumentCopy` does. Copies are
+   * removed at a later start, a day on.
+   */
+  temporaryDocumentCopy(documentId: string): Promise<string>;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -95,6 +119,18 @@ export function createCore(adapters: CoreAdapters): Core {
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   const events = createEventHub();
+  // Logs what happens from here on, from the events: never the User's content.
+  const activity = logActivity(events, adapters.log ?? silentLogger);
+  /** Logs a failed test of a provider's settings, by the kind of error. */
+  const loggingTest =
+    (what: Parameters<typeof activity.testFailed>[0]) =>
+    async <R extends { ok: true } | { ok: false; error: ProviderError }>(
+      test: Promise<R>,
+    ): Promise<R> => {
+      const result = await test;
+      if (!result.ok) activity.testFailed(what, result.error.kind);
+      return result;
+    };
   const minds = createMinds(db, now);
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   const content = createMindContent(db, now, (mindId, update) => {
@@ -141,6 +177,7 @@ export function createCore(adapters: CoreAdapters): Core {
     documents = createDocuments({
       db,
       dataDir,
+      tempDir: adapters.paths.tempDir ?? tmpdir(),
       now,
       model: embedding.model,
       emitStatus: (document) => {
@@ -580,7 +617,10 @@ export function createCore(adapters: CoreAdapters): Core {
       });
     },
     renameDocument: async (id, name) => documents.rename(id, name),
-    deleteDocument: (id) => documents.delete(id),
+    deleteDocument: async (id) => {
+      await documents.delete(id);
+      activity.documentDeleted(id as string);
+    },
     searchPassages: (query, options) => documents.search(query, options),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
@@ -590,7 +630,7 @@ export function createCore(adapters: CoreAdapters): Core {
       await embedding.save(input);
       return embeddingSettings();
     },
-    testEmbeddingConnection: (input) => embedding.test(input),
+    testEmbeddingConnection: (input) => loggingTest("embedding")(embedding.test(input)),
     retryEmbedding: async () => {
       embedding.retry();
       return embeddingSettings();
@@ -606,7 +646,7 @@ export function createCore(adapters: CoreAdapters): Core {
       await rerank.remove();
       return rerankChanged();
     },
-    testRerankConnection: (input) => rerank.test(input),
+    testRerankConnection: (input) => loggingTest("rerank")(rerank.test(input)),
 
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
@@ -620,7 +660,7 @@ export function createCore(adapters: CoreAdapters): Core {
       settingsChanged();
       await readinessChanged();
     },
-    testChatConnection: (input) => chat.test(input),
+    testChatConnection: (input) => loggingTest("chat")(chat.test(input)),
     getChatReadiness: () => chat.readiness(),
     listChatModels: () => chat.listModels(),
 
@@ -778,7 +818,7 @@ export function createCore(adapters: CoreAdapters): Core {
       await jev.remove();
       return jevChanged();
     },
-    testJevConnection: (input) => jev.test(input),
+    testJevConnection: (input) => loggingTest("jev")(jev.test(input)),
 
     listConnectors: async () => connectors.list(),
     addConnector: (input) => connectors.add(input),
@@ -838,6 +878,9 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
+    documentCopyName: async (documentId) => documents.copyName(documentId),
+    saveDocumentCopy: (documentId, path) => documents.saveCopy(documentId, path),
+    temporaryDocumentCopy: (documentId) => documents.openableCopy(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
@@ -858,6 +901,7 @@ export function createCore(adapters: CoreAdapters): Core {
       consent.close();
       documents.close();
       embeddingModel.close();
+      activity.stop();
       events.clear();
       content.closeAll();
       db.close();

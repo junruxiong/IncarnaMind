@@ -5,7 +5,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream, createWriteStream, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { access, rename, rm } from "node:fs/promises";
+import { access, copyFile, rename, rm } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -102,6 +102,15 @@ export function createDocumentFiles(dataDir: string) {
       }
       return Readable.toWeb(stream) as ReadableStream<Uint8Array>;
     },
+
+    /** Whether a stored file is there. */
+    has: (contentHash: string) => exists(pathFor(contentHash)),
+
+    /**
+     * Copies a stored file to `destination`, replacing any file there. Rejects
+     * with ENOENT if the stored file is missing (or the destination's folder).
+     */
+    copy: (contentHash: string, destination: string) => copyFile(pathFor(contentHash), destination),
 
     /** Removes a stored file. A failure (e.g. Windows locks it) leaves it for `prepare` next time. */
     async remove(contentHash: string): Promise<void> {

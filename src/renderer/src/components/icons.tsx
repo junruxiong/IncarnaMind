@@ -133,6 +133,17 @@ export function ExportIcon(props: IconProps) {
   );
 }
 
+/** Three dots in a row: more actions, in a menu. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" {...props}>
+      <circle cx="3.5" cy="8" r="1.25" />
+      <circle cx="8" cy="8" r="1.25" />
+      <circle cx="12.5" cy="8" r="1.25" />
+    </svg>
+  );
+}
+
 /** Six dots: the handle a Block is dragged by, like the old editor's "holder". */
 export function GripIcon(props: IconProps) {
   return (
@@ -187,6 +198,25 @@ export function FitWidthIcon(props: IconProps) {
       {...props}
     >
       <path d="M2 3v10M14 3v10M5 8h6M6.5 6L5 8l1.5 2M9.5 6L11 8l-1.5 2" />
+    </svg>
+  );
+}
+
+/** A page with a narrow column on its left: the PDF viewer's outline panel. */
+export function OutlineIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+      <path d="M6 2.5v11M3.3 5.2h1M3.3 7.4h1M3.3 9.6h1" />
     </svg>
   );
 }

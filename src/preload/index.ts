@@ -63,7 +63,12 @@ const files: FilesBridge = {
   saveMindExport: (mindId, options) =>
     ipcRenderer.invoke(FILES_CHANNELS.saveMindExport, mindId, options),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
+  openLogsFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openLogsFolder),
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),
+  openDocumentExternally: (documentId) =>
+    ipcRenderer.invoke(FILES_CHANNELS.openDocumentExternally, documentId),
+  saveDocumentCopy: (documentId) => ipcRenderer.invoke(FILES_CHANNELS.saveDocumentCopy, documentId),
+  logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),
 };
 
 contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);

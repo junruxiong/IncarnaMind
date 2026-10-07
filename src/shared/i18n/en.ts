@@ -68,6 +68,12 @@ export const en = {
   "viewer.zoom.out": "Zoom out",
   "viewer.zoom.fitWidth": "Fit width",
   "viewer.zoom.level": "Zoom: {percent}%",
+  "viewer.outline.show": "Show outline",
+  "viewer.outline.hide": "Hide outline",
+  "viewer.outline.label": "Outline",
+  "viewer.outline.expand": "Expand {title}",
+  "viewer.outline.collapse": "Collapse {title}",
+  "viewer.outline.untitled": "Untitled",
 
   "documents.title": "Documents",
   "documents.add": "Add Documents",
@@ -91,6 +97,14 @@ export const en = {
   "documents.delete.cancel": "Cancel",
   "documents.delete.confirm": "Delete",
   "documents.skipped": "Only PDF, TXT and Markdown files can be added. Skipped: {names}",
+  "documents.copy.menu": "Original file of {name}",
+  "documents.copy.menuTitle": "Original file",
+  "documents.copy.open": "Open in default app",
+  "documents.copy.save": "Save a copy…",
+  "documents.copy.dialogTitle": "Save a copy of the Document",
+  "documents.copy.filter.pdf": "PDF document",
+  "documents.copy.filter.text": "Text file",
+  "documents.copy.filter.markdown": "Markdown",
   "embedding.status.waiting": "Waiting for the model",
   "embedding.status.embedding": "Embedding… {percent}%",
   "embedding.model.downloading": "Downloading the search model: {downloaded} of {total} MB",
@@ -688,6 +702,9 @@ export const en = {
   "export.dataFolder.body":
     "Your Minds, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
   "export.dataFolder.open": "Open data folder",
+  "export.dataFolder.openLogs": "Open logs folder",
+  "export.dataFolder.logs":
+    "The logs folder records what IncarnaMind did, such as Documents processed and errors, to help with a problem. It never holds your Documents' text, your Minds, Questions or Answers, or your keys.",
 
   "error.load": "IncarnaMind couldn't load your data: {message}",
   "error.action": "That didn't work: {message}",

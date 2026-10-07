@@ -66,6 +66,12 @@ export const zhCN = {
   "viewer.zoom.out": "缩小",
   "viewer.zoom.fitWidth": "适合宽度",
   "viewer.zoom.level": "缩放：{percent}%",
+  "viewer.outline.show": "显示目录",
+  "viewer.outline.hide": "隐藏目录",
+  "viewer.outline.label": "目录",
+  "viewer.outline.expand": "展开 {title}",
+  "viewer.outline.collapse": "收起 {title}",
+  "viewer.outline.untitled": "无标题",
 
   "documents.title": "文档",
   "documents.add": "添加文档",
@@ -88,6 +94,14 @@ export const zhCN = {
   "documents.delete.cancel": "取消",
   "documents.delete.confirm": "删除",
   "documents.skipped": "只能添加 PDF、TXT 和 Markdown 文件。已跳过：{names}",
+  "documents.copy.menu": "{name} 的原始文件",
+  "documents.copy.menuTitle": "原始文件",
+  "documents.copy.open": "用默认应用打开",
+  "documents.copy.save": "另存副本…",
+  "documents.copy.dialogTitle": "保存文档副本",
+  "documents.copy.filter.pdf": "PDF 文档",
+  "documents.copy.filter.text": "文本文件",
+  "documents.copy.filter.markdown": "Markdown",
   "embedding.status.waiting": "等待模型",
   "embedding.status.embedding": "正在嵌入… {percent}%",
   "embedding.model.downloading": "正在下载搜索模型：{downloaded} / {total} MB",
@@ -651,6 +665,9 @@ export const zhCN = {
   "export.dataFolder.body":
     "你的 Minds、文档和设置都保存在这台电脑上的一个文件夹里。要备份它们，请在关闭 IncarnaMind 后复制这个文件夹。",
   "export.dataFolder.open": "打开数据文件夹",
+  "export.dataFolder.openLogs": "打开日志文件夹",
+  "export.dataFolder.logs":
+    "日志文件夹记录 IncarnaMind 做了什么，例如处理了哪些文档、出了哪些错误，便于排查问题。其中不会有你的文档内容、Minds、问题、回答或密钥。",
 
   "error.load": "IncarnaMind 无法载入你的数据：{message}",
   "error.action": "操作没有成功：{message}",
