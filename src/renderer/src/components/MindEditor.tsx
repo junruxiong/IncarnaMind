@@ -17,6 +17,7 @@ import { MindIdContext } from "../editor/mindContext";
 import { noteExtensions } from "../editor/noteSchema";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QUESTION_SHORTCUT_LABEL, QuestionCommands } from "../editor/questionCommands";
+import { ScopePicker } from "../editor/ScopePicker";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems } from "../editor/slashItems";
 import { useT } from "../i18n";
@@ -86,8 +87,8 @@ const editorPropsFor = (label: string, emptyFormula: string) => ({
 
 /**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
- * document, with the slash menu, the drag handle, the formatting menu and the
- * LaTeX field.
+ * document, with the slash menu, the "@" picker of a Question's Search scope,
+ * the drag handle, the formatting menu and the LaTeX field.
  */
 function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
   const t = useT();
@@ -126,6 +127,7 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
         SlashMenu.configure({ items: () => noteSlashItems }),
+        ScopePicker,
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
         QuestionCommands.configure({
