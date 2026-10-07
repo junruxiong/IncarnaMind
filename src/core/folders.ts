@@ -1,31 +1,46 @@
-import { randomUUID } from "node:crypto";
+/**
+ * Folders (CONTEXT.md): the folders inside Linked folders, as they are on
+ * disk. Each Linked folder has a Folder for itself, and one for each folder
+ * inside it that holds a Document at some depth. The User doesn't create,
+ * rename or move them: they follow the disk, at each scan. A file added on
+ * its own is in no Folder.
+ *
+ * A Folder's id is derived from its Linked folder's id and its path relative
+ * to it, so a scan always gives the same folder the same id, and a Search
+ * scope naming it keeps working. A folder renamed on disk is a new Folder.
+ */
+import { createHash } from "node:crypto";
+import { basename } from "node:path";
 import type { Folder } from "./api";
-import { InvalidInputError, isRecord, NotFoundError } from "./errors";
+import { InvalidInputError, NotFoundError } from "./errors";
 import type { Database } from "./storage";
-
-const MAX_NAME_LENGTH = 500;
 
 interface FolderRow {
   id: string;
   parent_id: string | null;
   name: string;
+  linked_folder_id: string;
+  relative_path: string;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
 }
 
-const COLUMNS = "id, parent_id, name, created_at, updated_at";
+const COLUMNS = "id, parent_id, name, linked_folder_id, relative_path, created_at, updated_at";
 
 const toFolder = (row: FolderRow): Folder => ({
   id: row.id,
   name: row.name,
   parentId: row.parent_id,
+  linkedFolderId: row.linked_folder_id,
+  relativePath: row.relative_path,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
 /**
  * A Folder and every Folder below it, at any depth. UNION rather than UNION ALL,
- * so a cycle (which moves refuse, but a later sync could bring) still ends.
+ * so a cycle (which a later sync could bring) still ends.
  */
 const SUBTREE = `
   WITH RECURSIVE subtree (id) AS (
@@ -43,27 +58,33 @@ export function parseFolderId(id: unknown): string {
   return id;
 }
 
-/** A parent Folder: an id, or null for the top level. */
-function parseParentId(parentId: unknown): string | null {
-  return parentId === null || parentId === undefined ? null : parseFolderId(parentId);
+/**
+ * The id of the Folder at `relative` ("" for the Linked folder itself, "/"
+ * between names) in a Linked folder: the same at every scan. Shaped like a
+ * UUID (version 8, RFC 9562: custom), from the SHA-256 of both.
+ */
+export function folderIdFor(linkedFolderId: string, relative: string): string {
+  const hex = createHash("sha256").update(`${linkedFolderId}\n${relative}`).digest("hex");
+  const variant = ((Number.parseInt(hex[16] as string, 16) & 0x3) | 0x8).toString(16);
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `8${hex.slice(13, 16)}`,
+    `${variant}${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
 }
 
-function parseName(name: unknown): string {
-  if (typeof name !== "string") throw new InvalidInputError("A Folder's name must be text.");
-  const trimmed = name.trim();
-  if (!trimmed) throw new InvalidInputError("A Folder's name can't be empty.");
-  if (trimmed.length > MAX_NAME_LENGTH) {
-    throw new InvalidInputError(
-      `A Folder's name can't be longer than ${MAX_NAME_LENGTH} characters.`,
-    );
-  }
-  return trimmed;
+/** The relative paths of `relative`'s ancestors and itself: "a/b" gives "", "a", "a/b". */
+function withAncestors(relative: string): string[] {
+  const paths = [""];
+  if (relative === "") return paths;
+  const names = relative.split("/");
+  for (let at = 1; at <= names.length; at++) paths.push(names.slice(0, at).join("/"));
+  return paths;
 }
 
-function parseCreateInput(input: unknown): { name: string; parentId: string | null } {
-  if (!isRecord(input)) throw new InvalidInputError("createFolder expects an object.");
-  return { name: parseName(input.name), parentId: parseParentId(input.parentId) };
-}
+export type Folders = ReturnType<typeof createFolders>;
 
 export function createFolders(db: Database, now: () => string) {
   const get = (folderId: unknown): Folder => {
@@ -83,20 +104,6 @@ export function createFolders(db: Database, now: () => string) {
     get,
     subtree,
 
-    create(input: unknown): Folder {
-      const { name, parentId } = parseCreateInput(input);
-      return db.transaction(() => {
-        if (parentId !== null) get(parentId);
-        const id = randomUUID();
-        const at = now();
-        db.run(
-          "INSERT INTO folders (id, parent_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-          [id, parentId, name, at, at],
-        );
-        return { id, name, parentId, createdAt: at, updatedAt: at };
-      });
-    },
-
     list(): Folder[] {
       return db
         .all<FolderRow>(
@@ -106,52 +113,81 @@ export function createFolders(db: Database, now: () => string) {
         .map(toFolder);
     },
 
-    rename(folderId: unknown, nameInput: unknown): Folder {
-      const folder = get(folderId);
-      const name = parseName(nameInput);
-      const at = now();
-      db.run("UPDATE folders SET name = ?, updated_at = ? WHERE id = ?", [name, at, folder.id]);
-      return { ...folder, name, updatedAt: at };
-    },
-
-    /** Reparents a Folder. Refuses a move into itself or below itself, which would make a cycle. */
-    move(folderId: unknown, parentInput: unknown): Folder {
-      const parentId = parseParentId(parentInput);
+    /**
+     * Makes a Linked folder's Folders those at `relatives` (folders holding a
+     * Document, relative to the Linked folder) and their ancestors, plus the
+     * Linked folder's own Folder: missing ones are created (or brought back),
+     * the others marked deleted. Returns whether anything changed.
+     */
+    sync(linkedFolderId: string, rootPath: string, relatives: Iterable<string>): boolean {
+      const wanted = new Map<string, string>(); // id -> relative path
+      for (const relative of relatives) {
+        for (const path of withAncestors(relative)) {
+          wanted.set(folderIdFor(linkedFolderId, path), path);
+        }
+      }
+      wanted.set(folderIdFor(linkedFolderId, ""), "");
       return db.transaction(() => {
-        const folder = get(folderId);
-        if (parentId !== null) {
-          get(parentId);
-          if (subtree(folder.id).includes(parentId)) {
-            throw new InvalidInputError(
-              "A Folder can't be moved into itself or into one of its own sub-Folders.",
+        const at = now();
+        const rows = new Map(
+          db
+            .all<FolderRow>(
+              `SELECT ${COLUMNS}, deleted_at FROM folders WHERE linked_folder_id = ?`,
+              [linkedFolderId],
+            )
+            .map((row) => [row.id, row]),
+        );
+        let changed = false;
+        for (const [id, relative] of wanted) {
+          const name = relative === "" ? basename(rootPath) || rootPath : basename(relative);
+          const parentId =
+            relative === ""
+              ? null
+              : folderIdFor(
+                  linkedFolderId,
+                  relative.includes("/") ? relative.slice(0, relative.lastIndexOf("/")) : "",
+                );
+          const row = rows.get(id);
+          if (!row) {
+            db.run(
+              `INSERT INTO folders (id, parent_id, name, linked_folder_id, relative_path, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [id, parentId, name, linkedFolderId, relative, at, at],
             );
+            changed = true;
+          } else if (row.deleted_at || row.name !== name || row.parent_id !== parentId) {
+            db.run(
+              `UPDATE folders SET deleted_at = NULL, name = ?, parent_id = ?, updated_at = ? WHERE id = ?`,
+              [name, parentId, at, id],
+            );
+            changed = true;
           }
         }
-        if (parentId === folder.parentId) return folder;
-        const at = now();
-        db.run("UPDATE folders SET parent_id = ?, updated_at = ? WHERE id = ?", [
-          parentId,
-          at,
-          folder.id,
-        ]);
-        return { ...folder, parentId, updatedAt: at };
+        for (const row of rows.values()) {
+          if (row.deleted_at || wanted.has(row.id)) continue;
+          db.run("UPDATE folders SET deleted_at = ?, updated_at = ? WHERE id = ?", [
+            at,
+            at,
+            row.id,
+          ]);
+          changed = true;
+        }
+        return changed;
       });
     },
 
-    /**
-     * Marks a Folder and all its sub-Folders deleted at `at`, and returns their
-     * ids. The Documents filed in them are the caller's to unfile.
-     */
-    delete(folderId: unknown, at: string): string[] {
-      return db.transaction(() => {
-        const ids = subtree(get(folderId).id);
-        db.run(
-          `UPDATE folders SET deleted_at = ?, updated_at = ?
-           WHERE id IN (SELECT value FROM json_each(?))`,
-          [at, at, JSON.stringify(ids)],
-        );
-        return ids;
-      });
+    /** Marks every Folder of a Linked folder deleted at `at`, e.g. when it is removed. */
+    removeAll(linkedFolderId: string, at: string): boolean {
+      const before = db.get<{ count: number }>(
+        "SELECT count(*) AS count FROM folders WHERE linked_folder_id = ? AND deleted_at IS NULL",
+        [linkedFolderId],
+      );
+      db.run(
+        `UPDATE folders SET deleted_at = ?, updated_at = ?
+         WHERE linked_folder_id = ? AND deleted_at IS NULL`,
+        [at, at, linkedFolderId],
+      );
+      return (before?.count ?? 0) > 0;
     },
   };
 }

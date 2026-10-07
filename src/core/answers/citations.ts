@@ -24,6 +24,7 @@ import {
   type CitationAttributes,
   type CitationCheck,
   type CitationCheckReason,
+  type CitationRecheck,
   MAX_CITED_PAGES,
 } from "../api";
 import type { CitationSource } from "../documents";
@@ -147,8 +148,108 @@ export interface AnswerDocuments {
   search(query: string, signal?: AbortSignal): Promise<WindowedPassage[]>;
   /** A Passage and its Document, deleted or not; null if unknown. */
   citationSource(passageId: string): CitationSource | null;
-  /** The stored text of a live Document's pages (see `pageTexts` in ../documents). */
-  pageTexts(documentId: string, from: number | null, to: number | null): PageText[];
+  /** The stored text of one version of a live Document's pages (see `pageTexts` in ../documents). */
+  pageTexts(
+    documentId: string,
+    contentHash: string,
+    from: number | null,
+    to: number | null,
+  ): PageText[];
+}
+
+/** What re-checking a Citation against the current version needs from Documents. */
+export interface RecheckDocuments {
+  /** The current version of a live Document; null if it was deleted. */
+  currentVersion(documentId: string): string | null;
+  pageTexts: AnswerDocuments["pageTexts"];
+  /** The live Passages of the current version covering these pages, in reading order. */
+  passagesCovering(
+    documentId: string,
+    from: number | null,
+    to: number | null,
+  ): { id: string; text: string }[];
+}
+
+/**
+ * Checks a Citation again against its Document's current version (see
+ * `CoreApi.recheckCitation`): on the cited pages first, then on each page,
+ * and each two consecutive pages, of the current version, in order. The
+ * Passage given is one of the current version that holds the pages,
+ * preferably one whose text holds the quote too.
+ */
+export function recheckCitation(
+  documents: RecheckDocuments,
+  input: { documentId: string; quote: string; pageFrom: number | null; pageTo: number | null },
+): CitationRecheck {
+  const cited = { pageFrom: input.pageFrom, pageTo: input.pageTo };
+  const contentHash = documents.currentVersion(input.documentId);
+  if (contentHash === null) {
+    return {
+      check: "cant-check",
+      checkReason: "document-removed",
+      contentHash: null,
+      passageId: null,
+      ...cited,
+    };
+  }
+  const quote = cleanQuote(input.quote);
+  const pages = documents.pageTexts(input.documentId, contentHash, null, null);
+  const passageFor = (range: PageRange): string | null => {
+    const covering = documents.passagesCovering(input.documentId, range.pageFrom, range.pageTo);
+    return (
+      covering.find((passage) => quote !== "" && findQuote(passage.text, quote))?.id ??
+      covering[0]?.id ??
+      null
+    );
+  };
+  const result = (check: CheckResult, range: PageRange): CitationRecheck => ({
+    ...check,
+    contentHash,
+    passageId: passageFor(range),
+    ...range,
+  });
+  if (pages.every((page) => page.text.trim() === "")) {
+    return result({ check: "cant-check", checkReason: "no-text" }, cited);
+  }
+  const text = (from: number | null, to: number | null) =>
+    pages
+      .filter(
+        (page) =>
+          from === null ||
+          to === null ||
+          (page.page !== null && page.page >= from && page.page <= to),
+      )
+      .map((page) => page.text)
+      .join("\n");
+  const found = (from: number | null, to: number | null) =>
+    quote !== "" && findQuote(text(from, to), quote);
+  // A Document without pages (TXT, Markdown) is checked as one text.
+  if (pages[0]?.page === null) {
+    const whole = { pageFrom: null, pageTo: null };
+    return found(null, null)
+      ? result({ check: "found", checkReason: null }, whole)
+      : result({ check: "not-found", checkReason: "quote-not-on-pages" }, whole);
+  }
+  if (
+    cited.pageFrom !== null &&
+    cited.pageTo !== null &&
+    cited.pageTo - cited.pageFrom + 1 <= MAX_CITED_PAGES &&
+    found(cited.pageFrom, cited.pageTo)
+  ) {
+    return result({ check: "found", checkReason: null }, cited);
+  }
+  const numbers = pages.flatMap((page) => (page.page === null ? [] : [page.page]));
+  for (const page of numbers) {
+    if (found(page, page)) {
+      return result({ check: "found", checkReason: null }, { pageFrom: page, pageTo: page });
+    }
+  }
+  for (const page of numbers) {
+    if (numbers.includes(page + 1) && found(page, page + 1)) {
+      return result({ check: "found", checkReason: null }, { pageFrom: page, pageTo: page + 1 });
+    }
+  }
+  return result({ check: "not-found", checkReason: "quote-not-on-pages" }, cited);
 }
 
 const pagesLabel = ({ pageFrom, pageTo }: PageRange) =>
@@ -288,7 +389,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     return null;
   };
 
-  /** The check, with the Document as it is now: it may have been deleted since the record. */
+  /**
+   * The check, with the Document as it is now: it may have been deleted since
+   * the record. The text read is that of the version the Passage was built
+   * from, which the Citation records: the Document may have a newer one by now.
+   */
   const check = (record: Accepted) => {
     const now = documents.citationSource(record.source.passageId);
     return checkCitation({
@@ -298,6 +403,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       documentDeleted: !now || now.documentDeleted,
       pages: documents.pageTexts(
         record.source.documentId,
+        record.source.contentHash,
         record.range.pageFrom,
         record.range.pageTo,
       ),
@@ -383,7 +489,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         const range = { pageFrom: passage.pageFrom, pageTo: passage.pageTo };
         const pages =
           passage.pageFrom !== null && passage.pageTo !== null && passage.pageFrom < passage.pageTo
-            ? documents.pageTexts(passage.documentId, passage.pageFrom + 1, passage.pageTo)
+            ? documents.pageTexts(
+                passage.documentId,
+                passage.contentHash,
+                passage.pageFrom + 1,
+                passage.pageTo,
+              )
             : [];
         return {
           id: handleFor(passage.passageId),

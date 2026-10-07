@@ -45,6 +45,48 @@ export function keywordSearch(
     .map((row) => row.seq);
 }
 
+/**
+ * The same file at two paths is two Documents with the same Passages (ADR-0010).
+ * Search shows each Passage once: every `seq` in the rankings is replaced by
+ * that of one copy, and each ranking keeps a Passage's first place. The copy
+ * kept is in a Document whose file can be opened, if one is, else the
+ * earliest added. Search is limited to the Search scope beforehand, so the
+ * copy kept is always one inside it.
+ */
+export function distinctPassages(
+  db: Database,
+  rankings: readonly (readonly number[])[],
+): number[][] {
+  const seqs = [...new Set(rankings.flat())];
+  if (seqs.length < 2) return rankings.map((ranking) => [...ranking]);
+  const rows = db.all<{ seq: number; key: string }>(
+    `SELECT p.seq,
+       coalesce(p.content_hash, 'seq:' || p.seq) || ':' || p.position || ':' || length(p.text) AS key
+     FROM passages p JOIN documents d ON d.id = p.document_id
+     WHERE p.seq IN (SELECT value FROM json_each(?))
+     ORDER BY d.file_status <> 'available', d.created_at, d.rowid`,
+    [JSON.stringify(seqs)],
+  );
+  const kept = new Map<string, number>();
+  const keyOf = new Map<number, string>();
+  for (const row of rows) {
+    keyOf.set(row.seq, row.key);
+    if (!kept.has(row.key)) kept.set(row.key, row.seq);
+  }
+  return rankings.map((ranking) => {
+    const seen = new Set<number>();
+    const distinct: number[] = [];
+    for (const seq of ranking) {
+      const key = keyOf.get(seq);
+      const canonical = key === undefined ? seq : (kept.get(key) ?? seq);
+      if (seen.has(canonical)) continue;
+      seen.add(canonical);
+      distinct.push(canonical);
+    }
+    return distinct;
+  });
+}
+
 /** A Passage's `seq` and its fused score: higher is better. */
 export interface ScoredSeq {
   seq: number;
@@ -122,6 +164,8 @@ export function passagesBySeq(db: Database, seqs: readonly number[]): PassageSea
 export interface WindowedPassage extends PassageSearchResult {
   seq: number;
   documentKind: DocumentKind;
+  /** The version of the Document the Passage was built from. */
+  contentHash: string;
   /** Positions of the first and last Passage in this Passage's sliding window. */
   windowFrom: number;
   windowTo: number;
@@ -129,12 +173,14 @@ export interface WindowedPassage extends PassageSearchResult {
 
 interface WindowedRow extends ResultRow {
   document_kind: string;
+  content_hash: string | null;
   window_from: number;
   window_to: number;
 }
 
 const WINDOWED_COLUMNS = `p.seq, p.id AS passage_id, p.document_id, d.name AS document_name,
-  d.kind AS document_kind, p.page_from, p.page_to, p.position, p.window_from, p.window_to, p.text`;
+  d.kind AS document_kind, coalesce(p.content_hash, d.content_hash) AS content_hash,
+  p.page_from, p.page_to, p.position, p.window_from, p.window_to, p.text`;
 
 const toWindowed = (row: WindowedRow): WindowedPassage => ({
   seq: row.seq,
@@ -142,6 +188,7 @@ const toWindowed = (row: WindowedRow): WindowedPassage => ({
   documentId: row.document_id,
   documentName: row.document_name,
   documentKind: row.document_kind as DocumentKind,
+  contentHash: row.content_hash ?? "",
   pageFrom: row.page_from,
   pageTo: row.page_to,
   position: row.position,

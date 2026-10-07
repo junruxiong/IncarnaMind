@@ -1,14 +1,15 @@
 /**
  * The main process's half of the renderer's file helpers (`FilesBridge`):
  * saving an exported Mind where the User chooses, showing the data and logs
- * folders, choosing a Skill folder or zip to import, getting a Document's
- * original back (opened in another app, or saved where the User chooses),
- * and logging the window's uncaught errors. The core makes the export's
- * bytes, reads the Skill and copies Documents' files, and only for live
- * Documents; only this side touches dialogs, the shell and paths the User picks.
+ * folders, choosing a Skill folder or zip to import, choosing a folder to
+ * link, opening a Document's file in another app or showing it in the file
+ * manager, and logging the window's uncaught errors. The core makes the
+ * export's bytes, reads the Skill, and checks a Document is live and its
+ * file there before it hands the file's path to the shell adapter; only
+ * this side touches dialogs and paths the User picks.
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -20,7 +21,7 @@ import {
   type SaveDialogOptions,
   shell,
 } from "electron";
-import type { Core, DocumentKind, ExportFormat, ExportMindOptions } from "../core";
+import type { Core, ExportFormat, ExportMindOptions } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
@@ -28,12 +29,6 @@ import { type FileLogger, logsFolder, logWindowError } from "./log";
 const FILE_TYPES: Readonly<Record<ExportFormat, { name: MessageKey; extension: string }>> = {
   docx: { name: "export.dialog.filter.docx", extension: "docx" },
   markdown: { name: "export.dialog.filter.markdown", extension: "md" },
-};
-
-const DOCUMENT_FILE_TYPES: Readonly<Record<DocumentKind, MessageKey>> = {
-  pdf: "documents.copy.filter.pdf",
-  text: "documents.copy.filter.text",
-  markdown: "documents.copy.filter.markdown",
 };
 
 export interface FileActionsOptions {
@@ -118,35 +113,31 @@ export function serveFileActions(
     return canceled ? null : (filePaths[0] ?? null);
   });
 
-  // A copy named after the Document, so the app it opens in shows its name, not the stored file's hash.
+  // The core checks the Document is live and its file there, then opens it through the shell adapter.
   ipcMain.handle(FILES_CHANNELS.openDocumentExternally, async (event, documentId: unknown) => {
     refuseUnknown(event);
-    await openPath(await core.temporaryDocumentCopy(documentId as string));
+    await core.openDocumentInApp(documentId as string);
   });
 
-  ipcMain.handle(
-    FILES_CHANNELS.saveDocumentCopy,
-    async (event, documentId: unknown): Promise<string | null> => {
-      refuseUnknown(event);
-      // The core checks the Document is live, and names the copy.
-      const { document, fileName } = await core.documentCopyName(documentId as string);
-      const { language } = await core.getSettings();
-      const { canceled, filePath } = await showSaveDialog(event, {
-        title: translate(language, "documents.copy.dialogTitle"),
-        defaultPath: join(app.getPath("documents"), fileName),
-        filters: [
-          {
-            name: translate(language, DOCUMENT_FILE_TYPES[document.kind]),
-            extensions: [extname(fileName).slice(1)],
-          },
-        ],
-      });
-      if (canceled || !filePath) return null;
-      // Checked again: the Document may have been deleted while the dialog was open.
-      await core.saveDocumentCopy(document.id, filePath);
-      return filePath;
-    },
-  );
+  ipcMain.handle(FILES_CHANNELS.showDocumentInFolder, async (event, documentId: unknown) => {
+    refuseUnknown(event);
+    await core.showDocumentInFolder(documentId as string);
+  });
+
+  ipcMain.handle(FILES_CHANNELS.pickLinkedFolder, async (event): Promise<string | null> => {
+    refuseUnknown(event);
+    const { language } = await core.getSettings();
+    const openOptions: OpenDialogOptions = {
+      title: translate(language, "linkedFolders.pick.title"),
+      buttonLabel: translate(language, "linkedFolders.pick.button"),
+      properties: ["openDirectory"],
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+    return canceled ? null : (filePaths[0] ?? null);
+  });
 
   ipcMain.on(FILES_CHANNELS.logError, (event, report: unknown) => {
     if (trusted(event)) logWindowError(logger, report);
