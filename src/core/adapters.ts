@@ -10,7 +10,9 @@ import type { AnswerEngine } from "./answers/engine";
 import type { SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
+import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
+import type { RerankingModelFactory } from "./providers/rerank";
 
 export interface Paths {
   /**
@@ -148,8 +150,20 @@ export interface CoreAdapters {
    */
   answerEngine?: AnswerEngine;
   /**
+   * Builds embedding models for the providers the User can choose instead of
+   * the built-in model. Defaults to the AI SDK providers; tests pass AI SDK
+   * mock models.
+   */
+  createEmbeddingModel?: EmbeddingModelFactory;
+  /**
+   * Builds Cohere and Voyage reranking models. Defaults to the AI SDK
+   * providers; tests pass AI SDK mock models.
+   */
+  createRerankingModel?: RerankingModelFactory;
+  /**
    * Reorders the document-search Tool's hybrid hits before they are grouped,
-   * e.g. with a Cohere or Voyage reranking model. None by default.
+   * replacing the rerank the User sets up with a Cohere or Voyage key (an
+   * alternative search layer plugs in here). None by default.
    */
   reranker?: Reranker;
 }
