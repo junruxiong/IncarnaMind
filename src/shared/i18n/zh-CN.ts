@@ -318,7 +318,7 @@ export const zhCN = {
   "consent.settings.askAgain": "重新询问",
 
   "question.slash": "提问",
-  "question.placeholder": "提一个问题…",
+  "question.placeholder": "提一个问题…（输入 @ 选择搜索范围）",
   "question.ask": "提问",
   "question.askHint": "提问（Enter）",
   "question.setUp": "去设置",
@@ -328,6 +328,24 @@ export const zhCN = {
   "question.mind.placeholder": "开始写作，或按 {shortcut} 提问…",
   "question.followUp.placeholder": "继续写作，或按 {shortcut} 继续提问",
   "question.context.include": "提问时包含此笔记",
+
+  "scope.picker.label": "搜索范围",
+  "scope.picker.folders": "文件夹",
+  "scope.picker.tags": "标签",
+  "scope.picker.documents": "文档",
+  "scope.picker.empty": "没有匹配的文件夹、标签或文档",
+  "scope.picker.none": "添加文档、文件夹或标签后，就能选择问题搜索的范围。",
+  "scope.label": "仅搜索",
+  "scope.chip.folder": "文件夹“{name}”，包括其中的子文件夹",
+  "scope.chip.tag": "带有标签“{name}”的文档",
+  "scope.chip.document": "文档“{name}”",
+  "scope.chip.deleted.folder": "已删除的文件夹",
+  "scope.chip.deleted.tag": "已删除的标签",
+  "scope.chip.deleted.document": "已删除的文档",
+  "scope.chip.deleted": "它已被删除，搜索时会忽略它。",
+  "scope.chip.remove": "从搜索范围中移除 {name}",
+  "scope.answer.empty":
+    "这个问题的搜索范围里没有可搜索的文档，所以没有进行搜索。请在其中的文件夹或标签里添加文档，或者移除搜索范围以搜索你的全部文档。",
 
   "answer.label": "回答",
   "answer.status.streaming": "正在回答…",

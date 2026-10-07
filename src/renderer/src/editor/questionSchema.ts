@@ -32,7 +32,10 @@ export interface QuestionOptions {
   view: NodeViewRenderer | null;
 }
 
-/** A Question: the User's text. The editor asks it with Enter (see `QuestionCommands`). */
+/**
+ * A Question: the User's text. The editor asks it with Enter (see
+ * `QuestionCommands`); typing "@" in it chooses its Search scope (see `ScopePicker`).
+ */
 export const Question = Node.create<QuestionOptions>({
   name: QUESTION_BLOCK,
   group: MIND_BLOCK_GROUP,
@@ -47,6 +50,10 @@ export const Question = Node.create<QuestionOptions>({
     const attributes: Record<Exclude<keyof QuestionAttributes, "id">, object> = {
       providerId: stored(),
       modelId: stored(),
+      // Lists of ids: the Search scope (see `searchScopeOf`).
+      scopeFolderIds: stored(),
+      scopeTagIds: stored(),
+      scopeDocumentIds: stored(),
     };
     return attributes;
   },
