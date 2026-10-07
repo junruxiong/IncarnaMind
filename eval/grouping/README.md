@@ -24,7 +24,7 @@ It is part of the evaluation harness (`eval/README.md`): the same temporary data
 npm run eval:grouping
 ```
 
-It needs no keys and no network once the model is cached (it shares `npm run eval`'s cache, `~/.cache/incarnamind-eval/models/`). A run adds 47 Documents (about 1,400 Passages), embeds their Passages a second time for the name-free variant, and writes a generated database of about 330 MB to the system's temporary folder for the timing, which it deletes. Expect a few minutes.
+It needs no keys and no network once the model is cached (it shares `npm run eval`'s cache, `~/.cache/incarnamind-eval/models/`). A run adds 47 Documents (1,380 Passages), embeds their Passages a second time for the name-free variant, and writes a generated database of about 420 MB to the system's temporary folder for the timing, which it deletes. It takes about 2 minutes on an Apple M2 Max.
 
 The command fails (exit code 1) when a held-out bar is missed, or when a Regroup loses one of the User's changes.
 
@@ -137,6 +137,32 @@ Each run writes `eval/results/grouping-<start time>/` (gitignored), or `grouping
 - `report.md`: the recommendation; the three variants on both sets, with how many Topics hold both languages; the same at the design's own k (5 for 47 Documents), a diagnostic that isn't a bar; the shared-name rows; the held-out bars with every case and why it missed; the chosen variant's Topics by subject; the incremental cases; the classifier fallback; the timings; the founder's procedure; the fixture table.
 - `report.json`: everything.
 - `founder-sample.csv`: the founder's sheet.
+
+## Results
+
+Measured on 2026-10-08 at commit `02a5216`, on an Apple M2 Max (12 cores) with Node v25.5.0, with the built-in model. Two runs gave the same groupings; the timings differed by a few percent. No classifier was given, and the founder's sample is still to do.
+
+**The bars fail.** With every Document vector, 0 of the 5 held-out pairs land in one Topic (the bar is 4). Decks and spreadsheets pass with the chosen variant, 4 of 5 (the bar is 3).
+
+| Document vector | Choosing: pairs | Choosing: decks | Held-out: pairs | Held-out: decks | Purity | Topics (not grouped yet) | Topics with both languages |
+|---|---|---|---|---|---|---|---|
+| **Names included (chosen)** | 0/6 | 3/5 | **0/5** | **4/5** | 35% | 6 (10) | 0 |
+| Name's direction removed | 0/6 | 2/5 | 0/5 | 2/5 | 32% | 6 (9) | 0 |
+| Name-free | 0/6 | 2/5 | 0/5 | 3/5 | 28% | 5 (11) | 0 |
+
+Names included is chosen with 3 of 11 choosing cases, within a case of the others and the cheapest. Re-embedding every Passage without its name took 48 s for 1,380 Passages; the names took 0.1 s.
+
+**Why: the Topics follow the language.** No Topic of any variant holds both English and Chinese Documents. At the design's own k (5 for 47 Documents, a diagnostic) it is the same: 0 pairs of 5 in either set, and still no Topic with both languages, though decks and spreadsheets rise to 5 of 5 with names included. Every pair misses because its two Documents are in two Topics of one language each, or one isn't grouped. ADR-0009 found the same bias in search: the built-in model favours Documents in the Question's language.
+
+**Names aren't the cause (R3).** Of the 130 pairs of "维基百科-…" Documents on different subjects, 54 share a Topic with names included and 54 with name-free embeddings: they are together for being Chinese, not for their prefix. Removing the name's direction cuts that to 23, but puts all 12 "… · Wikipedia" English Documents in one Topic (63 of 63 pairs, against 5 and 6).
+
+**Incremental cases.** 5 of 8 late arrivals were placed as expected: the 3 pharmaceutical Documents, a new subject, stayed in Not grouped yet, and 2 of 5 others joined their subject. The other 3 missed their Topic's threshold by a little (0.873 to 0.928 against 0.927 to 0.952): every late arrival's similarity to its nearest Topic's centre fell between 0.87 and 0.98, so a 10th-percentile threshold leaves little room. All 7 of the User's changes survived the Regroup: a renamed Topic, a Topic a Document was moved into, a Topic the User made, and 4 moved Documents.
+
+**Timing.**
+- k-means at 5,000 Documents (k = 40, 3 runs) took 1.7 to 2.0 s on one thread, on generated vectors that converged in 4 or 5 iterations; real libraries may need more. It belongs on the grouping worker (R1).
+- Loading the index and computing the means at 100,000 Passages took 476 ms (median of 472, 476 and 496 ms; 481 ms in the first run), over the 300 ms bar. The means alone, with the index loaded, took 41 ms. So O5's named fallback applies: the grouping worker reads the vectors itself, through its own read-only connection.
+
+**Recommendation.** Don't build the grouping as designed. As the design says, revise its grouping section and review it again before the build. Because the split is by language, the design's first fallback (clustering Passage vectors, from the same model) is unlikely to fix it. R0's classifier fallback doesn't depend on the embedding model's languages, and is the next thing to measure: run this check with a chat model, and with Clef-Flash or Jev if available. Two untested options for the review: an embedding model that aligns languages better (bge-m3 found 4 of 5 cross-lingual Questions in ADR-0009, against 2 for the built-in model), or removing a language direction from the means the way the names' direction is removed here.
 
 ## Files
 
