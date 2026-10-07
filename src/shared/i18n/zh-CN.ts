@@ -65,6 +65,12 @@ export const zhCN = {
   "viewer.zoom.out": "缩小",
   "viewer.zoom.fitWidth": "适合宽度",
   "viewer.zoom.level": "缩放：{percent}%",
+  "viewer.outline.show": "显示目录",
+  "viewer.outline.hide": "隐藏目录",
+  "viewer.outline.label": "目录",
+  "viewer.outline.expand": "展开 {title}",
+  "viewer.outline.collapse": "收起 {title}",
+  "viewer.outline.untitled": "无标题",
 
   "documents.title": "文档",
   "documents.add": "添加文档",
