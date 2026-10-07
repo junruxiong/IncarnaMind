@@ -135,6 +135,18 @@ export async function openDocumentAt(window: Page, location: DocumentLocation): 
   }, location);
 }
 
+/**
+ * The next Skill import in Settings gets this path instead of the system's
+ * open dialog, which a test can't drive, through the test hook.
+ */
+export async function interceptSkillPicker(window: Page, path: string): Promise<void> {
+  await window.evaluate((picked) => {
+    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
+    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
+    hooks.interceptSkillPicker(picked);
+  }, path);
+}
+
 /** Adds files through the sidebar's file picker and waits until each is processed and ready. */
 export async function addDocuments(window: Page, paths: string[]): Promise<void> {
   await window.getByTestId("add-documents-input").setInputFiles(paths);
