@@ -195,6 +195,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       emitMoved: (moved) => events.emit("documents.moved", moved),
       emitRemoved: (ids) => events.emit("documents.removed", ids),
+      emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
       linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
       onReady: (documentId) => documentReady(documentId),
@@ -485,6 +486,7 @@ export function createCore(adapters: CoreAdapters): Core {
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
+    keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
     now,
   });
@@ -683,10 +685,7 @@ export function createCore(adapters: CoreAdapters): Core {
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: (path) => documents.linkedFolders.add(path),
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    removeLinkedFolder: async (linkedFolderId) => {
-      documents.linkedFolders.remove(linkedFolderId);
-      events.emit("keptCitationTexts.changed", documents.keptCitationTexts());
-    },
+    removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     setLinkedFolderLayout: async (linkedFolderId, layout) =>
       documents.linkedFolders.setLayout(linkedFolderId, layout),

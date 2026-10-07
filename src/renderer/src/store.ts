@@ -6,6 +6,7 @@ import type {
   EmbeddingModelStatus,
   EmbeddingSettings,
   Folder,
+  KeptCitationText,
   LinkedFolder,
   LinkedFolderLayout,
   LinkedFolderPreview,
@@ -76,6 +77,11 @@ interface AppState {
   viewerTarget: ViewerTarget | null;
   /** Most recently added first. */
   documents: Document[];
+  /**
+   * The text kept of Documents unlinked with their Linked folder, so the
+   * Citations that quote it can still be checked. Set once loaded, then follows the core's event.
+   */
+  keptCitationTexts: KeptCitationText[];
   /** Names of the files the last add couldn't take, shown until dismissed. */
   skippedFiles: string[];
   /** Names of the files the last add found in IncarnaMind already, shown until dismissed. */
@@ -363,6 +369,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     viewerOpen: false,
     viewerTarget: null,
     documents: [],
+    keptCitationTexts: [],
     skippedFiles: [],
     alreadyAdded: [],
     embeddingModel: null,
@@ -392,6 +399,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           skills,
           embedding,
           linkedFolders,
+          keptCitationTexts,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -403,6 +411,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listSkills(),
           core.getEmbeddingSettings(),
           core.listLinkedFolders(),
+          core.listKeptCitationTexts(),
         ]);
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
@@ -414,6 +423,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           openMindId: active !== null && tabs.includes(active) ? active : (tabs[0] ?? null),
           settings,
           documents,
+          keptCitationTexts,
           chatReadiness,
           folders,
           embeddingModel,
@@ -777,6 +787,11 @@ core.on("folders.changed", (folders) => useAppStore.setState({ folders }));
 
 // Linked folders added, removed, or scanning, paused, out of reach, or making progress.
 core.on("linkedFolders.changed", (linkedFolders) => useAppStore.setState({ linkedFolders }));
+
+// A Linked folder was unlinked: the text its Citations quote is kept, so they can still be checked.
+core.on("keptCitationTexts.changed", (keptCitationTexts) =>
+  useAppStore.setState({ keptCitationTexts }),
+);
 
 // Documents removed from the index, e.g. with their Linked folder.
 core.on("documents.removed", (removed) => {

@@ -53,8 +53,9 @@ export function CitationView({
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
+  const kept = useAppStore((state) => state.keptCitationTexts);
   const openDocument = useAppStore((state) => state.openDocument);
-  const state = citationState(attributes, documents);
+  const state = citationState(attributes, documents, kept);
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
   const badge = badgeMessage(state, attributes, t);

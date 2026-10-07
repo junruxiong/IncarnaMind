@@ -65,9 +65,10 @@ export function MarginChecks({ editor }: { editor: Editor }) {
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
+  const kept = useAppStore((state) => state.keptCitationTexts);
   const layer = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<readonly Mark[]>([]);
-  const inputs = useRef({ t, documents });
+  const inputs = useRef({ t, documents, kept });
   /** Each Citation's check as last drawn: a change from "checking" is its Answer finishing. */
   const seen = useRef(new Map<string, CitationCheck>());
   /** The entrance delays of the marks that appeared that way, by key and check. */
@@ -81,7 +82,7 @@ export function MarginChecks({ editor }: { editor: Editor }) {
       const column = layer.current;
       if (!column || editor.isDestroyed) return;
       const origin = column.getBoundingClientRect().top;
-      const { t: translate, documents: live } = inputs.current;
+      const { t: translate, documents: live, kept: keptTexts } = inputs.current;
       const next: Mark[] = [];
       const revealed: Mark[] = [];
       for (const citation of numberCitations(editor.state.doc)) {
@@ -91,7 +92,7 @@ export function MarginChecks({ editor }: { editor: Editor }) {
         if (!marker) continue;
         const rect = marker.getBoundingClientRect();
         if (rect.height === 0) continue;
-        const state = citationState(citation.attributes, live);
+        const state = citationState(citation.attributes, live, keptTexts);
         const badge = badgeMessage(state, citation.attributes, translate);
         const mark: Mark = {
           key: citation.key,
@@ -159,11 +160,12 @@ export function MarginChecks({ editor }: { editor: Editor }) {
     };
   }, [editor]);
 
-  // The interface language and the Documents (one deleted can't be checked) change marks too.
+  // The interface language, the Documents (one deleted can't be checked) and the text kept of
+  // unlinked ones change marks too.
   useEffect(() => {
-    inputs.current = { t, documents };
+    inputs.current = { t, documents, kept };
     remeasure.current();
-  }, [t, documents]);
+  }, [t, documents, kept]);
 
   return (
     <div ref={layer} className="margin-checks" data-testid="margin-checks">

@@ -280,6 +280,8 @@ export interface DocumentsOptions {
   emitMoved(documents: Document[]): void;
   /** Pushes the "documents.removed" event. */
   emitRemoved(documentIds: string[]): void;
+  /** Pushes the "keptCitationTexts.changed" event: a Linked folder was unlinked. */
+  emitKept?: (kept: KeptCitationText[]) => void;
   /** Folders changed: push "folders.changed". */
   foldersChanged(): void;
   /** Pushes "linkedFolders.changed". */
@@ -653,10 +655,40 @@ export function createDocuments(options: DocumentsOptions) {
   }
 
   /**
-   * Soft-deletes Documents, their Passages, Tags and page text, at `at`,
-   * except the Units Citations point to in `keep`.
+   * The text kept of Documents unlinked with their Linked folder (see
+   * `CoreApi.listKeptCitationTexts`): by Document and version, in that order.
    */
-  function removeFromIndex(ids: readonly string[], at: string, keep: readonly CitedUnits[] = []) {
+  function keptCitationTexts(): KeptCitationText[] {
+    // From the Documents (CROSS JOIN keeps that order): every live one's text isn't scanned.
+    const rows = db.all<{ document_id: string; content_hash: string; page: number }>(
+      `SELECT dp.document_id, dp.content_hash, dp.page FROM documents d
+       CROSS JOIN document_pages dp ON dp.document_id = d.id
+       WHERE d.deleted_at IS NOT NULL AND dp.deleted_at IS NULL
+         AND dp.content_hash IS NOT NULL AND dp.page IS NOT NULL
+       ORDER BY dp.document_id, dp.content_hash, dp.page`,
+    );
+    const kept: KeptCitationText[] = [];
+    for (const row of rows) {
+      const last = kept.at(-1);
+      if (last?.documentId === row.document_id && last.contentHash === row.content_hash) {
+        last.units.push(row.page);
+      } else {
+        kept.push({
+          documentId: row.document_id,
+          contentHash: row.content_hash,
+          units: [row.page],
+        });
+      }
+    }
+    return kept;
+  }
+
+  /**
+   * Soft-deletes Documents, their Passages, Tags and page text, at `at`.
+   * Unlinking with their Linked folder, the Units Citations point to are
+   * given in `keep`: they stay, and the text kept is pushed.
+   */
+  function removeFromIndex(ids: readonly string[], at: string, keep?: readonly CitedUnits[]) {
     if (ids.length === 0) return;
     const list = JSON.stringify(ids);
     db.transaction(() => {
@@ -679,13 +711,15 @@ export function createDocuments(options: DocumentsOptions) {
         `UPDATE document_pages SET deleted_at = ?, updated_at = ?
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
            AND id NOT IN (SELECT value FROM json_each(?))`,
-        [at, at, list, JSON.stringify(unitsToKeep(keep))],
+        [at, at, list, JSON.stringify(unitsToKeep(keep ?? []))],
       );
     });
     for (const id of ids) {
       vectors.removeDocument(id);
       processor.cancel(id);
     }
+    // Pushed first, so a Citation quoting what is kept never shows "can't check" meanwhile.
+    if (keep) options.emitKept?.(keptCitationTexts());
     options.emitRemoved([...ids]);
   }
 
@@ -1090,34 +1124,7 @@ export function createDocuments(options: DocumentsOptions) {
         .map(toUnitText);
     },
 
-    /**
-     * The text kept of Documents unlinked with their Linked folder (see
-     * `CoreApi.listKeptCitationTexts`): by Document and version, in that order.
-     */
-    keptCitationTexts(): KeptCitationText[] {
-      // From the Documents (CROSS JOIN keeps that order): every live one's text isn't scanned.
-      const rows = db.all<{ document_id: string; content_hash: string; page: number }>(
-        `SELECT dp.document_id, dp.content_hash, dp.page FROM documents d
-         CROSS JOIN document_pages dp ON dp.document_id = d.id
-         WHERE d.deleted_at IS NOT NULL AND dp.deleted_at IS NULL
-           AND dp.content_hash IS NOT NULL AND dp.page IS NOT NULL
-         ORDER BY dp.document_id, dp.content_hash, dp.page`,
-      );
-      const kept: KeptCitationText[] = [];
-      for (const row of rows) {
-        const last = kept.at(-1);
-        if (last?.documentId === row.document_id && last.contentHash === row.content_hash) {
-          last.units.push(row.page);
-        } else {
-          kept.push({
-            documentId: row.document_id,
-            contentHash: row.content_hash,
-            units: [row.page],
-          });
-        }
-      }
-      return kept;
-    },
+    keptCitationTexts,
 
     /** The current version of a live Document, or null if it was deleted. */
     currentVersion(documentId: string): string | null {
