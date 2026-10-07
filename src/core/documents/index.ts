@@ -52,6 +52,7 @@ import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
+  METADATA_VERSION,
   PROCESSING_VERSION,
   type ProcessedPassage,
   type ProcessingJob,
@@ -96,6 +97,7 @@ interface DocumentRow {
   path: string;
   linked_folder_id: string | null;
   file_status: string;
+  creation_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -130,7 +132,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  created_at, updated_at`;
+  creation_date, created_at, updated_at`;
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -390,6 +392,7 @@ export function createDocuments(options: DocumentsOptions) {
               message: row.tagging_error_message ?? "",
             }
           : null,
+      creationDate: row.creation_date,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -411,6 +414,7 @@ export function createDocuments(options: DocumentsOptions) {
   };
 
   const jobFor = (row: Pick<DocumentRow, "id" | "kind" | "path">): ProcessingJob => ({
+    task: "process",
     documentId: row.id,
     kind: row.kind as DocumentKind,
     file: row.path,
@@ -538,13 +542,14 @@ export function createDocuments(options: DocumentsOptions) {
   /**
    * Writes a job's result: the version read replaces the Passages of an
    * earlier processing, and its pages replace those of the same version;
-   * other versions' pages stay for their Citations. A version that can't be
-   * processed (a file a sync client has only half written, a corrupt one)
-   * replaces nothing: the last good version stays indexed and searched, and
-   * the failure is recorded with it (see `failedNow`), until a later version
-   * or a retry is read. Only a Document with no version indexed fails
-   * outright. Nothing is written if the Document was deleted or queued again
-   * meanwhile. Returns what it wrote, if it did.
+   * other versions' pages stay for their Citations, and its creation date
+   * replaces the Document's. A version that can't be processed (a file a
+   * sync client has only half written, a corrupt one) replaces nothing,
+   * creation date included: the last good version stays indexed and
+   * searched, and the failure is recorded with it (see `failedNow`), until
+   * a later version or a retry is read. Only a Document with no version
+   * indexed fails outright. Nothing is written if the Document was deleted
+   * or queued again meanwhile. Returns what it wrote, if it did.
    */
   function record(job: ProcessingJob, result: ProcessingResult): Recorded | undefined {
     return db.transaction(() => {
@@ -610,7 +615,8 @@ export function createDocuments(options: DocumentsOptions) {
       db.run(
         `UPDATE documents SET status = ?, page_count = ?, failure_reason = ?, failure_message = ?,
            processing_version = ?, embedding_model = ?, embedding_dimensions = NULL,
-           content_hash = ?, size = ?, file_status = 'available', updated_at = ?
+           content_hash = ?, size = ?, file_status = 'available', creation_date = ?,
+           metadata_version = ?, updated_at = ?
          WHERE id = ?`,
         [
           status,
@@ -623,6 +629,8 @@ export function createDocuments(options: DocumentsOptions) {
           status === "embedding" ? model.id : null,
           result.contentHash,
           result.size,
+          result.creationDate,
+          BigInt(METADATA_VERSION),
           at,
           job.documentId,
         ],
@@ -669,7 +677,81 @@ export function createDocuments(options: DocumentsOptions) {
       }
       if (status === "waiting-for-model") model.ensure();
     },
+    onMetadata(job, result) {
+      metadataQueued = false;
+      if (result.outcome === "read") {
+        // Only for the version read, and unless processing it again read it meanwhile.
+        const written = db.get<{ id: string }>(
+          `UPDATE documents SET creation_date = ?, metadata_version = ?, updated_at = ?
+           WHERE id = ? AND content_hash = ? AND metadata_version < ? AND deleted_at IS NULL
+           RETURNING id`,
+          [
+            result.creationDate,
+            BigInt(METADATA_VERSION),
+            now(),
+            job.documentId,
+            job.contentHash,
+            BigInt(METADATA_VERSION),
+          ],
+        );
+        const row = written && result.creationDate !== null ? find(job.documentId) : undefined;
+        if (row) emitStatus(toDocument(row));
+      } else {
+        // The file changed (processing the new version reads its date), can't
+        // be read now, or stopped the worker: tried again at the next start.
+        metadataSkipped.add(job.documentId);
+      }
+      readNextMetadata();
+    },
   });
+
+  /** Documents whose metadata job didn't read their metadata this session (see `readNextMetadata`). */
+  const metadataSkipped = new Set<string>();
+  /** Whether a metadata job is queued or under way: there is at most one. */
+  let metadataQueued = false;
+  let closed = false;
+
+  /**
+   * The one-time fill of creation dates (#53): queues a metadata job for the
+   * next Document whose metadata this version hasn't read (see
+   * `METADATA_VERSION`; every Document from before migration 24), most
+   * recently added first. Its text isn't extracted again and nothing is
+   * embedded: the job reads the creation date in the file's metadata, and
+   * the year written in the stored first Unit. One job at a time, each
+   * queued when the last is done, so processing jobs queued meanwhile go
+   * first. Documents being processed (which reads their date), in a paused
+   * Linked folder, whose file isn't there, or skipped this session wait for
+   * a later turn: at the next start, or when their folder is resumed.
+   */
+  function readNextMetadata(): void {
+    if (closed || metadataQueued) return;
+    const row = db.get<Pick<DocumentRow, "id" | "kind" | "path" | "content_hash">>(
+      `SELECT d.id, d.kind, d.path, d.content_hash FROM documents d
+       WHERE d.deleted_at IS NULL AND d.metadata_version < ?
+         AND d.status NOT IN ('queued', 'extracting') AND d.file_status = 'available'
+         AND d.id NOT IN (SELECT value FROM json_each(?))
+         AND NOT EXISTS (SELECT 1 FROM linked_folders l
+                         WHERE l.id = d.linked_folder_id AND l.paused = 1 AND l.deleted_at IS NULL)
+       ORDER BY d.created_at DESC, d.rowid DESC LIMIT 1`,
+      [BigInt(METADATA_VERSION), JSON.stringify([...metadataSkipped])],
+    );
+    if (!row) return;
+    const firstUnit = db.get<{ text: string }>(
+      `SELECT text FROM document_pages
+       WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL
+       ORDER BY page LIMIT 1`,
+      [row.id, row.content_hash],
+    );
+    metadataQueued = true;
+    processor.enqueue({
+      task: "metadata",
+      documentId: row.id,
+      kind: row.kind as DocumentKind,
+      file: row.path,
+      contentHash: row.content_hash,
+      firstUnit: firstUnit?.text ?? null,
+    });
+  }
 
   /**
    * Queues a Document for processing, replacing a job not yet started. A
@@ -856,6 +938,8 @@ export function createDocuments(options: DocumentsOptions) {
             processor.enqueue(jobFor(row));
           }
         }
+        // Its Documents' metadata, if any is still to read, can be read again.
+        if (!paused) readNextMetadata();
       },
       foldersChanged: options.foldersChanged,
       linkedFoldersChanged: options.linkedFoldersChanged,
@@ -1075,8 +1159,15 @@ export function createDocuments(options: DocumentsOptions) {
   }
 
   return {
-    /** Starts watching Linked folders, and reconciles the index with the disk. */
-    start: () => library.start(),
+    /**
+     * Starts watching Linked folders, and reconciles the index with the disk.
+     * The creation dates of Documents from before they were read are read
+     * in the background (see `readNextMetadata`).
+     */
+    start(): void {
+      library.start();
+      readNextMetadata();
+    },
 
     /**
      * The document-search Tool (see ./searchTool): hybrid search, grouped by
@@ -1448,6 +1539,7 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     close(): void {
+      closed = true;
       library.close();
       embedding.close();
       processor.close();
