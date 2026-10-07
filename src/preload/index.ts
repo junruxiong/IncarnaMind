@@ -63,6 +63,7 @@ const files: FilesBridge = {
   pathForFile: (file) => webUtils.getPathForFile(file),
   saveMindExport: (mindId, options) =>
     ipcRenderer.invoke(FILES_CHANNELS.saveMindExport, mindId, options),
+  showExportInFolder: (path) => ipcRenderer.invoke(FILES_CHANNELS.showExportInFolder, path),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
   openLogsFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openLogsFolder),
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),

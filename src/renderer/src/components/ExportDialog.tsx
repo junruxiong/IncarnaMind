@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ExportFormat, Mind, MindExportPreview } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { core, files } from "../core";
@@ -62,6 +62,8 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const [preview, setPreview] = useState<MindExportPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Where the export was saved, once it is. */
+  const [saved, setSaved] = useState<string | null>(null);
   // Markdown is the archive, so it always keeps the Questions.
   const includeQuestions = format === "markdown" || questionsWanted;
 
@@ -88,7 +90,7 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     try {
       const path = await files.saveMindExport(mind.id, { format, includeQuestions });
       // Null: the User cancelled the save dialog, so this one stays open.
-      if (path) onDone();
+      if (path) setSaved(path);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -97,6 +99,8 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   };
 
   const leftOut = preview && !includeQuestions ? preview.questions : 0;
+
+  if (saved) return <Exported path={saved} onDone={onDone} />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -165,6 +169,57 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
           className={primaryButtonClass}
         >
           {saving ? t("export.saving") : t("export.save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Where the export went, with a way to see it there. */
+function Exported({ path, onDone }: { path: string; onDone(): void }) {
+  const t = useT();
+  const [error, setError] = useState<string | null>(null);
+  const done = useRef<HTMLButtonElement>(null);
+  // The Export button that had the focus is gone: Done takes it.
+  useEffect(() => done.current?.focus(), []);
+  const name = path.split(/[\\/]/).at(-1) ?? path;
+  const show = async () => {
+    try {
+      await files.showExportInFolder(path);
+      onDone();
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
+  };
+  return (
+    <div className="flex flex-col gap-4">
+      <p data-testid="export-done" className="text-ui text-ink" title={path}>
+        {t("export.done", { name })}
+      </p>
+      {error && (
+        <p role="alert" className={errorTextClass}>
+          {t("export.failed", { message: error })}
+        </p>
+      )}
+      <div className={dialogActionsClass}>
+        <button
+          type="button"
+          data-testid="export-show"
+          onClick={() => void show()}
+          className={buttonClass}
+        >
+          {navigator.userAgent.includes("Mac")
+            ? t("export.showInFinder")
+            : t("export.showInFolder")}
+        </button>
+        <button
+          type="button"
+          ref={done}
+          data-testid="export-close"
+          onClick={onDone}
+          className={primaryButtonClass}
+        >
+          {t("export.close")}
         </button>
       </div>
     </div>
