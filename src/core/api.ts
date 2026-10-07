@@ -563,8 +563,9 @@ export interface CoreApi {
   getChatReadiness(): Promise<ChatReadiness>;
   /**
    * The models a Question's model picker offers: for each saved provider, the
-   * models it lists (asking it, without sending any User content) and its
-   * default model. A provider that can't be reached offers only what is known.
+   * models it lists and its default model. Providers are asked without sending
+   * any User content, and a cloud one only once the User has allowed the chat
+   * flow to it. A provider that isn't asked, or can't be reached, offers its default.
    */
   listChatModels(): Promise<ChatModelGroup[]>;
 

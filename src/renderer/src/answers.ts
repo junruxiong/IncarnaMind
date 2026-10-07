@@ -71,7 +71,9 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
     try {
       settle(questionId, await core.regenerateAnswer({ mindId, answerId, discardEdits }));
     } catch (error) {
-      settle(questionId, null, error);
+      // E.g. its Question was deleted: there may be no Question to show this, so the app does.
+      settle(questionId, null);
+      useAppStore.getState().reportError(error);
     }
   },
 

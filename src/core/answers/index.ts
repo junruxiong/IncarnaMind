@@ -221,6 +221,8 @@ export function createAnswers(options: AnswersOptions) {
         finish({ status: "failed", error: failureOf(error) });
         return;
       }
+      // Stopped while waiting, e.g. for consent: send nothing.
+      if (finished) return;
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
         system: answerInstructions(context.question),
