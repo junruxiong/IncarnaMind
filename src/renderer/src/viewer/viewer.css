@@ -140,8 +140,8 @@
     @apply px-6 pt-6 pb-12;
   }
   .viewer-text-page {
-    /* A 680px measure, with a right margin wide enough for the Citation's mark. */
-    @apply mx-auto max-w-[776px] px-12 pt-10 pb-14;
+    /* A 680px measure, with a right margin wide enough for the Citation's mark and its label. */
+    @apply mx-auto max-w-[840px] pt-10 pr-[112px] pb-14 pl-12;
   }
   @container viewer (width < 520px) {
     .viewer-text-backdrop {
@@ -253,6 +253,167 @@
   .quote-mark--not-found {
     @apply bg-warning-wash text-warning;
   }
+  /* Where the Citation points ("slide 4"), after its number. */
+  .quote-mark-label {
+    @apply ml-[3px] border-l border-current/25 pl-[5px] font-semibold whitespace-nowrap;
+  }
+  /* Measured but not shown: there is no room for it beside the page's text. */
+  .quote-mark-label--measured {
+    @apply pointer-events-none invisible absolute;
+  }
+
+  /* A deck's or a document's outline: a slide's number before its title. */
+  .viewer-outline-prefix {
+    @apply mr-2 inline-block min-w-4 text-right text-ink-meta tabular-nums;
+  }
+
+  /* A PowerPoint deck as an outline: each slide a sheet, like a page. */
+  .viewer-slides-backdrop {
+    @apply flex flex-col items-center gap-4 px-6 pt-6 pb-12;
+  }
+  .viewer-slide {
+    /* A 680px measure, with a right margin wide enough for the Citation's mark and its label. */
+    @apply w-full max-w-[840px] shrink-0 pt-6 pr-[112px] pb-7 pl-12;
+  }
+  .viewer-slide--hidden {
+    @apply bg-frame;
+  }
+  .viewer-slide-number {
+    @apply text-label text-ink-meta;
+  }
+  .viewer-slide-title {
+    @apply mt-1 font-serif text-heading font-semibold text-ink;
+  }
+  .viewer-slide-body {
+    @apply mt-3 font-serif text-[16px] leading-[26px] whitespace-pre-line text-ink;
+
+    > * + * {
+      margin-top: 12px;
+    }
+    ul {
+      @apply list-disc pl-6;
+    }
+    li + li {
+      margin-top: 4px;
+    }
+  }
+  .viewer-slide-table {
+    @apply w-full border-collapse font-sans text-ui;
+  }
+  .viewer-slide-cell {
+    @apply border border-rule px-2 py-1 align-top;
+  }
+  .viewer-slide-row--head {
+    @apply bg-frame font-semibold;
+  }
+  .viewer-slide-chart {
+    @apply font-sans text-ui text-ink-secondary;
+
+    figcaption {
+      @apply text-label text-ink-meta;
+    }
+    p {
+      @apply mt-1;
+    }
+  }
+  .viewer-slide-image {
+    @apply max-h-[320px] max-w-full rounded-sm;
+    box-shadow: 0 0 0 1px var(--color-rule);
+  }
+  .viewer-slide-notes {
+    @apply mt-5 border-t border-rule pt-3 font-sans text-ui whitespace-pre-line text-ink-secondary;
+
+    h3 {
+      @apply mb-1 text-label text-ink-meta;
+    }
+    p + p {
+      margin-top: 4px;
+    }
+  }
+  @container viewer (width < 520px) {
+    .viewer-slides-backdrop {
+      @apply px-4 pt-4 pb-8;
+    }
+    .viewer-slide {
+      @apply pt-5 pr-[72px] pb-6 pl-6;
+    }
+  }
+
+  /* A sheet: a plain grid, its headers on frame, Excel's sheet tabs at the bottom. */
+  .viewer-sheet {
+    @apply bg-sheet;
+  }
+  .viewer-grid-scroll {
+    @apply bg-sheet;
+  }
+  .viewer-grid {
+    @apply border-separate border-spacing-0 font-sans text-[13px] leading-5 text-ink;
+    table-layout: fixed;
+    width: var(--grid-width);
+
+    th {
+      @apply sticky bg-frame px-1.5 text-label font-normal text-ink-meta tabular-nums;
+      box-shadow:
+        inset -1px 0 0 var(--color-rule),
+        inset 0 -1px 0 var(--color-rule);
+    }
+    thead th {
+      @apply top-0 z-[2] h-6 text-center;
+    }
+    thead th:first-child {
+      @apply left-0 z-[3];
+    }
+    tbody th {
+      @apply left-0 z-[1] text-right;
+    }
+    tbody th.viewer-row--cited {
+      @apply font-semibold text-ink;
+    }
+    td {
+      @apply overflow-hidden px-2 text-ellipsis whitespace-nowrap;
+      box-shadow:
+        inset -1px 0 0 var(--color-rule),
+        inset 0 -1px 0 var(--color-rule);
+    }
+    td.viewer-cell--number {
+      @apply text-right tabular-nums;
+    }
+    td.viewer-cell--quote {
+      background: var(--quote-wash);
+    }
+    td.viewer-grid-corner {
+      @apply sticky top-0 left-0 z-[3] bg-frame p-0;
+    }
+    td.viewer-grid-spacer {
+      @apply p-0;
+      box-shadow: none;
+    }
+  }
+  .viewer-sheet-empty {
+    @apply flex flex-1 items-center justify-center px-6 text-center text-ui text-ink-meta;
+  }
+  .viewer-sheet-notice {
+    @apply shrink-0 border-t border-rule bg-frame px-3 py-1.5 text-[12px] leading-5 text-ink-meta;
+  }
+  .viewer-sheet-tabs {
+    @apply flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-rule bg-frame px-2;
+    scrollbar-width: none;
+  }
+  .viewer-sheet-tab {
+    @apply h-7 max-w-[200px] shrink-0 truncate rounded-md px-3 text-[13px] leading-5 text-ink-secondary;
+
+    &:hover {
+      @apply bg-hover;
+    }
+    &[aria-selected="true"] {
+      @apply bg-sheet font-semibold text-ink;
+      box-shadow: inset 0 0 0 1px var(--color-rule);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
 
   /* A PDF page. Its text layer sizes itself from these (pdf.js's own viewer sets the same). */
   .pdf-page {
@@ -340,4 +501,26 @@
     cursor: default;
     user-select: none;
   }
+}
+
+/*
+ * A Word Document, drawn by docx-preview: its pages on the viewer's backdrop,
+ * sheets with a hairline edge like a PDF's, not its grey wrapper and heavy
+ * shadow. Unlayered, as docx-preview's own styles are, so these win.
+ */
+.docx-view .docx-wrapper {
+  background: transparent;
+  padding: 24px 24px 48px;
+  gap: 16px;
+}
+.docx-view .docx-wrapper > section.docx {
+  margin-bottom: 0;
+  box-shadow:
+    0 0 0 1px var(--color-rule),
+    0 1px 2px rgb(23 25 28 / 0.06);
+}
+.docx-view a[href] {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

@@ -1,10 +1,32 @@
 import { useEffect, useMemo } from "react";
+import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
+import { useAppStore, type ViewerTarget } from "../store";
+import { DocxView } from "../viewer/DocxView";
 import { PdfView } from "../viewer/PdfView";
+import { SheetView } from "../viewer/SheetView";
+import { SlidesView } from "../viewer/SlidesView";
 import { TextView } from "../viewer/TextView";
 import { type ViewerFrame, ViewerFrameContext, ViewerHeader } from "../viewer/ViewerHeader";
 import { DocumentRemoved, ViewerMessage } from "../viewer/ViewerMessage";
+
+/** The view for a kind of Document (ADR-0011). */
+function DocumentView({ document, target }: { document: Document; target: ViewerTarget }) {
+  switch (document.kind) {
+    case "pdf":
+      return <PdfView document={document} target={target} />;
+    case "text":
+    case "markdown":
+      return <TextView document={document} target={target} />;
+    case "docx":
+      return <DocxView document={document} target={target} />;
+    case "pptx":
+      return <SlidesView document={document} target={target} />;
+    case "xlsx":
+    case "csv":
+      return <SheetView document={document} target={target} />;
+  }
+}
 
 /**
  * The Document viewer: a panel on the right that is closed by default, like an
@@ -53,11 +75,9 @@ export function ViewerPanel({ width, onClose }: { width: number; onClose(): void
             <ViewerHeader />
             <DocumentRemoved quote={target.quote} />
           </>
-        ) : document.kind === "pdf" ? (
-          // Keyed, so another Document starts afresh.
-          <PdfView key={document.id} document={document} target={target} />
         ) : (
-          <TextView key={document.id} document={document} target={target} />
+          // Keyed, so another Document starts afresh.
+          <DocumentView key={document.id} document={document} target={target} />
         )}
       </ViewerFrameContext.Provider>
     </section>

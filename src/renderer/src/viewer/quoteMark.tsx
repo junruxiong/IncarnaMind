@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import type { ViewerCitation } from "../../../shared/documentViewer";
 import { useT } from "../i18n";
 import { ExclamationIcon, TickIcon } from "./icons";
@@ -16,16 +16,25 @@ export const quoteTone = (citation: ViewerCitation | undefined): QuoteTone =>
 export interface QuoteMark {
   tone: QuoteTone;
   number: number;
+  /** Where the Citation points, e.g. "slide 4" (ADR-0011): shown after the number. */
+  label?: string;
 }
 
 export function quoteMarkOf(citation: ViewerCitation | undefined): QuoteMark | null {
   if (citation?.number === undefined) return null;
   if (citation.check !== "found" && citation.check !== "not-found") return null;
-  return { tone: citation.check, number: citation.number };
+  return {
+    tone: citation.check,
+    number: citation.number,
+    ...(citation.label ? { label: citation.label } : {}),
+  };
 }
 
 /** The mark's height, as in the Mind's margin. */
 const MARK_HEIGHT = 18;
+
+/** The space the label takes beside the number: its margin, border and padding. */
+const LABEL_SPACING = 3;
 
 /**
  * Where the mark's top goes, inside `container`, to centre it on the first line
@@ -36,25 +45,83 @@ export function markTopFor(highlight: Element, container: Element): number {
   return line.top - container.getBoundingClientRect().top + line.height / 2 - MARK_HEIGHT / 2;
 }
 
-/** The Citation's check mark (its icon and number), in the page's margin beside its quote. */
-export function CitationMark({ mark, style }: { mark: QuoteMark; style: CSSProperties }) {
+/**
+ * The room for a mark set 12px past a text `column`, before the edge of the
+ * page around it (its parent), in CSS pixels.
+ */
+export function marginRoom(column: Element): number {
+  const page = column.parentElement?.getBoundingClientRect();
+  return page ? page.right - column.getBoundingClientRect().right - 12 - 4 : 0;
+}
+
+/**
+ * The Citation's check mark (its icon and number, then where it points), in
+ * the page's margin beside its quote. Given the `room` the margin has, in CSS
+ * pixels, it drops the label when the label doesn't fit there, keeping it in
+ * its accessible name and tooltip, so it never covers the page's text.
+ */
+export function CitationMark({
+  mark,
+  style,
+  room,
+  onWidth,
+}: {
+  mark: QuoteMark;
+  style: CSSProperties;
+  room?: number;
+  /** Told the mark's width as shown, e.g. to keep it inside the page. */
+  onWidth?: (width: number) => void;
+}) {
   const t = useT();
-  const label = t(mark.tone === "found" ? "viewer.mark.found" : "viewer.mark.notFound", {
-    number: mark.number,
-  });
+  const own = useRef<HTMLSpanElement>(null);
+  const labelElement = useRef<HTMLSpanElement>(null);
+  const [fits, setFits] = useState(true);
+  const label = mark.label
+    ? t(mark.tone === "found" ? "viewer.mark.found.at" : "viewer.mark.notFound.at", {
+        number: mark.number,
+        location: mark.label,
+      })
+    : t(mark.tone === "found" ? "viewer.mark.found" : "viewer.mark.notFound", {
+        number: mark.number,
+      });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measured again as the room changes
+  useLayoutEffect(() => {
+    const element = own.current;
+    const shown = labelElement.current;
+    if (!element) return;
+    const labelWidth = shown ? shown.offsetWidth + LABEL_SPACING : 0;
+    const base = element.offsetWidth - (fits && shown ? labelWidth : 0);
+    const next = room === undefined || !shown || base + labelWidth <= room;
+    if (next !== fits) setFits(next);
+    else onWidth?.(element.offsetWidth);
+  }, [room, mark.label, fits]);
+
   const Icon = mark.tone === "found" ? TickIcon : ExclamationIcon;
   return (
     <span
+      ref={own}
       role="img"
       aria-label={label}
       title={label}
       data-testid="viewer-quote-mark"
       data-check={mark.tone}
+      data-label-shown={mark.label ? String(fits) : undefined}
       className={`quote-mark quote-mark--${mark.tone}`}
       style={style}
     >
       <Icon className="size-[11px] shrink-0" />
-      {mark.number}
+      <span data-testid="viewer-quote-mark-number">{mark.number}</span>
+      {mark.label && (
+        <span
+          ref={labelElement}
+          data-testid="viewer-quote-mark-label"
+          aria-hidden={!fits}
+          className={`quote-mark-label ${fits ? "" : "quote-mark-label--measured"}`}
+        >
+          {mark.label}
+        </span>
+      )}
     </span>
   );
 }
