@@ -1,6 +1,7 @@
 /** What each kind of chat provider needs, and where its data goes. */
 import { type ChatProviderKind, chatProviderKinds, type ExternalService } from "../api";
 import { InvalidInputError } from "../errors";
+import { CHATGPT_SERVICE } from "./chatgpt/codexEndpoint";
 
 /** Ollama's default local address. 127.0.0.1 rather than localhost, which may resolve to IPv6 first. */
 export const OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434";
@@ -30,6 +31,8 @@ const kinds: Record<ChatProviderKind, KindInfo> = {
   },
   "openai-compatible": { baseUrl: "required", apiKey: "optional" },
   ollama: { baseUrl: "optional", apiKey: "none" },
+  // Signs in instead of taking a key (see ./chatgpt).
+  chatgpt: { hosted: CHATGPT_SERVICE, baseUrl: "none", apiKey: "none" },
 };
 
 export function isChatProviderKind(value: unknown): value is ChatProviderKind {

@@ -9,6 +9,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { ChatProviderKind } from "../api";
+import { type ChatGptCredentials, createCodexChatModel } from "./chatgpt/codexEndpoint";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -16,10 +17,12 @@ export type ChatLanguageModel = Exclude<LanguageModel, string>;
 /** Everything needed to build a chat model. */
 export interface ChatModelSpec {
   kind: ChatProviderKind;
-  /** Set for "openai-compatible" and "ollama". */
+  /** Set for "openai-compatible" and "ollama", and for "chatgpt" (its model endpoint). */
   baseUrl: string | null;
   apiKey: string | null;
   modelId: string;
+  /** "chatgpt" only: the User's ChatGPT sign-in, which signs (and refreshes) every request. */
+  credentials?: ChatGptCredentials;
 }
 
 export type ChatModelFactory = (spec: ChatModelSpec) => ChatLanguageModel;
@@ -55,5 +58,12 @@ export const createAiSdkChatModel: ChatModelFactory = (spec) => {
       return createOpenAICompatible({ name: "ollama", baseURL: `${requireBaseUrl(spec)}/v1` })(
         spec.modelId,
       );
+    case "chatgpt":
+      if (!spec.credentials) throw new Error("A ChatGPT sign-in is required.");
+      return createCodexChatModel({
+        baseUrl: requireBaseUrl(spec),
+        modelId: spec.modelId,
+        credentials: spec.credentials,
+      });
   }
 };

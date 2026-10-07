@@ -23,7 +23,15 @@ export {
 } from "./errors";
 export * from "./language";
 export type { PreparedChatModel } from "./providers/chat";
+export type { ChatGptCredentials } from "./providers/chatgpt/codexEndpoint";
+export { ChatGptPlanError, ChatGptSignInRequiredError } from "./providers/chatgpt/errors";
+export type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 export { OLLAMA_DEFAULT_URL } from "./providers/kinds";
-export type { ChatLanguageModel, ChatModelFactory, ChatModelSpec } from "./providers/models";
+export {
+  type ChatLanguageModel,
+  type ChatModelFactory,
+  type ChatModelSpec,
+  createAiSdkChatModel,
+} from "./providers/models";
 export { RECOMMENDED_OLLAMA_MODEL } from "./providers/ollama";
 export { classifyProviderError } from "./providers/providerErrors";
