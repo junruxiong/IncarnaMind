@@ -25,7 +25,7 @@ export interface BoilerplateParameters {
  * Not tuned by an evaluation yet: chosen on the sample PDFs, whose running
  * headers repeat on most pages and whose page numbers are a line of their own.
  */
-export const BOILERPLATE_PARAMETERS: BoilerplateParameters = {
+const BOILERPLATE_PARAMETERS: BoilerplateParameters = {
   edgeLines: 4,
   minPages: 3,
   minShare: 0.3,

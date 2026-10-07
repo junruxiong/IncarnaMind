@@ -36,7 +36,7 @@ function commandName(command: string): string {
   return name.replace(/\.(exe|cmd|bat|ps1)$/i, "");
 }
 
-export function missingCommand(command: string): ConnectorError {
+function missingCommand(command: string): ConnectorError {
   const name = commandName(command);
   const install = RUNTIMES[name.toLowerCase()] ?? null;
   return {

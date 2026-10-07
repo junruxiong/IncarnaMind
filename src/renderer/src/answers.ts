@@ -5,7 +5,7 @@ import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
 
 /** Why asking a Question didn't go ahead, shown with it until the next try. */
-export type AskBlock =
+type AskBlock =
   /** Questions can't be asked yet: the Question explains why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** The User edited the Answer: the Answer asks before replacing it. */

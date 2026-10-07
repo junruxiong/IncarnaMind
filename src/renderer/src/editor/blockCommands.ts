@@ -16,7 +16,7 @@ declare module "@tiptap/core" {
 }
 
 /** Deletes the Block the cursor is in. Shown in the Block menu. */
-export const DELETE_BLOCK_SHORTCUT = "Mod-Shift-Backspace";
+const DELETE_BLOCK_SHORTCUT = "Mod-Shift-Backspace";
 
 interface Range {
   from: number;

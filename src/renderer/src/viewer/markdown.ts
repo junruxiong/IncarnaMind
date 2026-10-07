@@ -211,7 +211,7 @@ function closingDelimiter(source: string, delimiter: string, from: number, end: 
 }
 
 /** Parses the inline Markdown in `source` from `start` to `end`. */
-export function parseInlines(source: string, start: number, end: number): Inline[] {
+function parseInlines(source: string, start: number, end: number): Inline[] {
   const inlines: Inline[] = [];
   let textStart = start;
   let at = start;

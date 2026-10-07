@@ -116,7 +116,7 @@ export class OAuthTokenError extends Error {
 const base64Url = (bytes: Buffer) => bytes.toString("base64url");
 
 /** A PKCE verifier and its S256 challenge (RFC 7636). */
-export function createPkcePair(): { verifier: string; challenge: string } {
+function createPkcePair(): { verifier: string; challenge: string } {
   const verifier = base64Url(randomBytes(32));
   const challenge = base64Url(createHash("sha256").update(verifier).digest());
   return { verifier, challenge };

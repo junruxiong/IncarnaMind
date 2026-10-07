@@ -31,10 +31,10 @@ import type { NodeJSON } from "./blocks";
 import type { AnswerTools, CitationRecordInput, SearchResultForModel } from "./engine";
 
 /** How many times one Answer may search; later searches are refused, so the model answers. */
-export const MAX_SEARCHES_PER_ANSWER = 5;
+const MAX_SEARCHES_PER_ANSWER = 5;
 
 /** A Citation marker as the model writes it in the text: "[^1]". */
-export const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
+const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
 
 /** Where a new page starts inside a Passage given to the model, e.g. "[p. 4]". */
 const PAGE_MARK = /\[p\.\s*\d+\]/gi;
@@ -53,7 +53,7 @@ const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
  * The quote as the model meant it: without page marks, without the ellipses
  * and quotation marks models put around a quote. Its words are left alone.
  */
-export function cleanQuote(raw: string): string {
+function cleanQuote(raw: string): string {
   let quote = raw.replace(PAGE_MARK, " ").trim();
   for (;;) {
     const before = quote;
@@ -83,7 +83,7 @@ const asPage = (value: unknown): number | null =>
  * The pages a record cites, in order. A record that names no page cites the
  * Passage's own pages; a Document without pages has none.
  */
-export function citedPages(
+function citedPages(
   record: Pick<CitationRecordInput, "pageFrom" | "pageTo">,
   passage: PageRange,
 ): PageRange {
@@ -101,7 +101,7 @@ export function citedPages(
  * pages, and be one page or two consecutive ones. Returns why they break it,
  * or null.
  */
-export function pageRangeProblem(range: PageRange, passage: PageRange): CitationCheckReason | null {
+function pageRangeProblem(range: PageRange, passage: PageRange): CitationCheckReason | null {
   if (range.pageFrom === null || range.pageTo === null) return null;
   if (passage.pageFrom === null || passage.pageTo === null) return null;
   if (range.pageFrom < passage.pageFrom || range.pageTo > passage.pageTo) {
@@ -162,7 +162,7 @@ const pagesLabel = ({ pageFrom, pageTo }: PageRange) =>
  * each page's stored text after a paragraph break, which is how pages were
  * laid out when the Passages were built.
  */
-export function withPageMarks(text: string, range: PageRange, pages: readonly PageText[]): string {
+function withPageMarks(text: string, range: PageRange, pages: readonly PageText[]): string {
   if (range.pageFrom === null || range.pageTo === null || range.pageFrom === range.pageTo) {
     return text;
   }
@@ -188,7 +188,7 @@ export function withPageMarks(text: string, range: PageRange, pages: readonly Pa
 const attribute = (value: string) => value.replace(/"/g, "'").replace(/\s+/g, " ");
 
 /** Passages as the model sees them, each with its short id, Document and pages. */
-export function formatPassages(
+function formatPassages(
   passages: readonly { id: string; documentName: string; range: PageRange; text: string }[],
 ): string {
   return passages
@@ -439,8 +439,6 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     },
   };
 }
-
-export type CitationSession = ReturnType<typeof createCitationSession>;
 
 /**
  * Turns the markers in an Answer's text into Citation nodes: `node` gives a

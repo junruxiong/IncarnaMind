@@ -24,12 +24,12 @@ import type { RendererErrorReport } from "../shared/bridge";
 import type { Scrubber } from "./crashScrubber";
 
 /** The log's folder, in the data folder. */
-export const LOGS_FOLDER = "logs";
+const LOGS_FOLDER = "logs";
 export const logsFolder = (dataDir: string) => join(dataDir, LOGS_FOLDER);
 export const LOG_FILE = "incarnamind.log";
-export const MAX_LOG_BYTES = 5 * 1024 * 1024;
+const MAX_LOG_BYTES = 5 * 1024 * 1024;
 /** The current file and the rotated ones. */
-export const MAX_LOG_FILES = 3;
+const MAX_LOG_FILES = 3;
 
 /** The longest entry written, in characters; longer ones are cut. */
 const MAX_ENTRY_LENGTH = 16 * 1024;

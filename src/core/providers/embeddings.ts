@@ -60,13 +60,12 @@ const kinds: Record<ApiEmbeddingProviderKind, KindInfo> = {
   ollama: { baseUrl: "optional", apiKey: "none" },
 };
 
-export const isEmbeddingProviderKind = (value: unknown): value is EmbeddingProviderKind =>
+const isEmbeddingProviderKind = (value: unknown): value is EmbeddingProviderKind =>
   embeddingProviderKinds.some((kind) => kind === value);
 
 export const embeddingKeyRequired = (kind: ApiEmbeddingProviderKind) =>
   kinds[kind].apiKey === "required";
-export const embeddingKeyAccepted = (kind: ApiEmbeddingProviderKind) =>
-  kinds[kind].apiKey !== "none";
+const embeddingKeyAccepted = (kind: ApiEmbeddingProviderKind) => kinds[kind].apiKey !== "none";
 
 /** Where a provider's requests go, or null when the server runs on this computer. */
 export function embeddingServiceFor(

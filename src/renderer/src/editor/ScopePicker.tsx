@@ -43,7 +43,7 @@ function scopeAt(state: EditorState, pos: number): SearchScope {
  * Adds a Folder, Tag or Document to the Search scope of the Question the "@"
  * was typed in, and removes the "@" and what was typed after it (`range`).
  */
-export function addToScope(editor: Editor, range: Range, choice: ScopeChoice): void {
+function addToScope(editor: Editor, range: Range, choice: ScopeChoice): void {
   editor
     .chain()
     .focus()

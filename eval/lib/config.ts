@@ -16,7 +16,7 @@ export interface ChatSettings {
   baseUrl: string | null;
 }
 
-export const cloudEmbeddingKinds = ["openai", "google"] as const;
+const cloudEmbeddingKinds = ["openai", "google"] as const;
 export type CloudEmbeddingKind = (typeof cloudEmbeddingKinds)[number];
 
 /** A cloud embedding model, reported next to the built-in one (never gating). */

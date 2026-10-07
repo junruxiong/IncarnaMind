@@ -12,7 +12,7 @@ import { safeFileName } from "../fileNames";
 export const OPEN_COPIES_FOLDER = "incarnamind-documents";
 
 /** At startup, copies to open older than this are removed; newer ones may still be open. */
-export const OPEN_COPY_LIFETIME_MS = 24 * 60 * 60 * 1000;
+const OPEN_COPY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 /** Each kind's extensions, the one a copy gets first. */
 const EXTENSIONS: Readonly<Record<DocumentKind, readonly string[]>> = {
@@ -22,7 +22,7 @@ const EXTENSIONS: Readonly<Record<DocumentKind, readonly string[]>> = {
 };
 
 /** The extension a copy of a Document of this kind gets, without the dot. */
-export const copyExtension = (kind: DocumentKind): string => EXTENSIONS[kind][0] ?? kind;
+const copyExtension = (kind: DocumentKind): string => EXTENSIONS[kind][0] ?? kind;
 
 /**
  * The file name a copy of a Document gets: its name, without characters file

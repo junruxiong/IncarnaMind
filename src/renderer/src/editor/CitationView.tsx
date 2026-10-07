@@ -32,7 +32,7 @@ const ICONS: Record<CitationCheck, typeof QuoteFoundIcon> = {
   "cant-check": CantCheckIcon,
 };
 
-export function BadgeIcon({ check, className }: { check: CitationCheck; className?: string }) {
+function BadgeIcon({ check, className }: { check: CitationCheck; className?: string }) {
   const Icon = ICONS[check];
   return <Icon className={className} />;
 }

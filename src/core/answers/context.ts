@@ -10,13 +10,13 @@ import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks"
 import type { AnswerMessage } from "./engine";
 
 /** About 12k tokens, the old app's budget for what precedes a Question. */
-export const QUESTION_CONTEXT_TOKEN_BUDGET = 12_000;
+const QUESTION_CONTEXT_TOKEN_BUDGET = 12_000;
 
 /**
  * About 2k tokens: how much of the Question context a Question is rewritten
  * into a search query from, the old backend's budget for its condense step.
  */
-export const SEARCH_QUERY_CONTEXT_TOKEN_BUDGET = 2_000;
+const SEARCH_QUERY_CONTEXT_TOKEN_BUDGET = 2_000;
 
 /** A Block's share of the budget that is too small to be worth keeping the tail of. */
 const MIN_TAIL_TOKENS = 64;
@@ -41,7 +41,7 @@ function isWideChar(code: number): boolean {
  * An approximate token count, without a tokenizer: one per CJK character and
  * one per four other characters, close enough across providers for a budget.
  */
-export function estimateTokens(text: string): number {
+function estimateTokens(text: string): number {
   let wide = 0;
   let other = 0;
   for (const char of text) {
