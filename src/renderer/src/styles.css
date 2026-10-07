@@ -1,11 +1,22 @@
 @import "tailwindcss";
 
-/* Design tokens carried over from the old frontend's tailwind.config.ts. */
+/*
+ * Design tokens carried over from the old frontend's tailwind.config.ts.
+ *
+ * Roboto and Lora are bundled (fonts.css) and cover Latin text. Chinese text
+ * falls through to the system's Simplified Chinese fonts, named before the
+ * generic system font so that a system font with Japanese-style Han glyphs
+ * (Windows in Japanese) isn't picked for it: PingFang SC and Hiragino Sans GB
+ * on macOS, Microsoft YaHei on Windows, Noto Sans CJK SC (Source Han Sans SC)
+ * on Linux.
+ */
 @theme {
   --font-sans:
-    "Roboto", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-lora: "Lora", ui-serif, Georgia, serif;
+    "Roboto", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-lora:
+    "Lora", "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC", ui-serif,
+    Georgia, serif;
 
   --color-dark-50: #191919;
   --color-dark-100: #151515;
