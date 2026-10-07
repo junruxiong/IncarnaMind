@@ -582,7 +582,20 @@ export interface Document {
   tagging: TaggingState;
   /** Set when `tagging` is "failed". */
   taggingError: ProviderError | null;
-  /** ISO 8601, UTC. */
+  /**
+   * When the Document itself was created, as its file tells, for the
+   * Library's year: the creation date in its metadata (a PDF's Info
+   * dictionary or XMP, the core properties of a Word, PowerPoint or Excel
+   * file), or else the latest year written in its first Unit. Never a
+   * modification date. ISO 8601 at the precision the file gives, with the
+   * offset from UTC it gives, so its first four characters are the year:
+   * "2019-03-04T10:30:00+01:00", "2019-03-04", or "2019" from text. Null if
+   * nothing gives one from 1900 to this year, or until it is read: as the
+   * Document is processed, or for one indexed before dates were read, once,
+   * in the background. Not to be confused with `createdAt`.
+   */
+  creationDate: string | null;
+  /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
@@ -2536,7 +2549,10 @@ export interface CoreEvents {
   "minds.changed": Mind[];
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
-  /** A Document was added or its processing status (or embedding progress) changed. Carries the whole Document. */
+  /**
+   * A Document was added, or its processing status (or embedding progress)
+   * changed, or its creation date was read in the background. Carries the whole Document.
+   */
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;

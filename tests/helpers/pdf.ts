@@ -34,6 +34,16 @@ export interface PdfOutlineEntry {
 
 export interface PdfOptions {
   outline?: readonly PdfOutlineEntry[];
+  /**
+   * The document information dictionary (the trailer's /Info), each entry
+   * written as a literal string: `{ CreationDate: "D:20190304103000Z" }`.
+   * Latin-1 characters only.
+   */
+  info?: Readonly<Record<string, string>>;
+  /** The /Info object as written, in place of `info`: for malformed files. */
+  rawInfo?: string;
+  /** An XMP metadata stream, as written, for the catalog's /Metadata. ASCII only. */
+  xmp?: string;
 }
 
 const LINE_HEIGHT = 14;
@@ -124,7 +134,7 @@ function addOutline(
   return ` /Outlines ${rootId} 0 R /PageMode /UseOutlines${dests}`;
 }
 
-/** Returns the bytes of a PDF with one page per entry, and the outline given. */
+/** Returns the bytes of a PDF with one page per entry, and the outline and metadata given. */
 export function buildPdf(pages: readonly PdfPage[], options: PdfOptions = {}): Uint8Array {
   // Objects 1–5 are fixed; each page then adds a page object and a content stream.
   const objects: string[] = [];
@@ -137,7 +147,27 @@ export function buildPdf(pages: readonly PdfPage[], options: PdfOptions = {}): U
           return `${id} 0 R`;
         })
       : "";
-  objects[1] = `<< /Type /Catalog /Pages 2 0 R${outline} >>`;
+  // The metadata, if any, after every other object.
+  let nextId = Math.max(objects.length, 6 + pages.length * 2);
+  let info = "";
+  if (options.info || options.rawInfo !== undefined) {
+    const id = nextId++;
+    objects[id] =
+      options.rawInfo ??
+      `<< ${Object.entries(options.info ?? {})
+        .map(([key, value]) => `/${key} (${escapeLatin(value)})`)
+        .join(" ")} >>`;
+    info = ` /Info ${id} 0 R`;
+  }
+  let metadata = "";
+  if (options.xmp !== undefined) {
+    const id = nextId++;
+    objects[id] =
+      `<< /Type /Metadata /Subtype /XML /Length ${options.xmp.length} >>\n` +
+      `stream\n${options.xmp}\nendstream`;
+    metadata = ` /Metadata ${id} 0 R`;
+  }
+  objects[1] = `<< /Type /Catalog /Pages 2 0 R${outline}${metadata} >>`;
   objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`;
   objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
   objects[4] =
@@ -168,6 +198,6 @@ export function buildPdf(pages: readonly PdfPage[], options: PdfOptions = {}): U
   for (let id = 1; id < objects.length; id++) {
     pdf += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
   }
-  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R${info} >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   return Uint8Array.from(Buffer.from(pdf, "latin1"));
 }
