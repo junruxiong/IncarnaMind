@@ -11,3 +11,11 @@ The old backend used a fixed pipeline: split the question into sub-questions, pi
 ## Consequences
 
 Models that can't call tools (some small local models) instead get a single search using the Question's text, with the results added to the Question context. When there are Blocks above the Question, that model first makes one short call to rewrite the Question into a self-contained search query from them, like the old CLI's condense step but producing one query, so a follow-up such as "what about its limitations?" searches for what "its" means; with nothing above the Question, or if the rewrite fails, the Question's own text is searched.
+
+## The loop's library: AI SDK 7, not pi
+
+Confirmed by the User on 2026-10-07, after the spike on `prototype/pi-agent` (its README has the evidence). The loop is built on AI SDK 7's `ToolLoopAgent`, with the official MCP SDK for Connectors and our own small `SKILL.md` loader. We don't adopt `pi-coding-agent`, nor `pi-agent-core` with `pi-ai`. The reasons:
+- **pi-coding-agent is a coding-agent product, not a library.** It reads and writes `~/.pi`, discovers its own Skills and `AGENTS.md` files, and can't be fully isolated. It keeps Connector tokens in a plain JSON file, which breaks the keychain requirement.
+- **It doesn't load in our CommonJS main process.** It is ESM-only.
+- **It is heavy.** It adds 98 packages and 153 MB, plus a second set of provider SDKs.
+- **It saves no code.** The same tested behaviour took about 380 lines on pi and 231 on AI SDK 7.
