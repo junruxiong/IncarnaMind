@@ -42,7 +42,8 @@ class SourceError extends Error {
 const fail = (kind: SkillImportErrorKind, path: string | null, message: string) =>
   new SourceError({ kind, path, field: null, message });
 
-const isJunk = (segments: readonly string[]) =>
+/** Whether a path inside a Skill is junk an operating system or version control left behind. */
+export const isJunk = (segments: readonly string[]) =>
   segments.some((segment) => JUNK_FOLDERS.has(segment)) || JUNK_FILES.has(segments.at(-1) ?? "");
 
 /**

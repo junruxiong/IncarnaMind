@@ -21,6 +21,13 @@ export interface Paths {
    * Backing up means copying this one folder.
    */
   dataDir: string;
+  /**
+   * The built-in Skills the app ships, one SKILL.md folder each, named like
+   * the Skill: `resources/skills/` in the repository, copied into the packaged
+   * app's resources. The core installs them into the data folder at startup.
+   * Not given: no built-in Skills (tests that aren't about them).
+   */
+  builtInSkills?: string;
 }
 
 /**

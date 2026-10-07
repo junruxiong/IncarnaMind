@@ -384,6 +384,21 @@ export const migrations: readonly Migration[] = [
         WHERE embedding_model = 'multilingual-e5-small-int8';
     `,
   },
+  {
+    version: 19,
+    description: "Built-in Skills (#42)",
+    sql: `
+      -- Skills that ship with the app. built_in is 1 for one the core
+      -- installed from the app's copy at startup, 0 for one the User imported
+      -- or duplicated. built_in_digest is the SHA-256 of the app's files it was
+      -- installed from: a start with other files (a newer version of the app)
+      -- updates it in place, keeping its id and whether it's on. Removing one
+      -- marks the row deleted, like any Skill; a deleted built-in row of a name
+      -- is how later starts know the User removed it, so it isn't installed again.
+      ALTER TABLE skills ADD COLUMN built_in INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE skills ADD COLUMN built_in_digest TEXT;
+    `,
+  },
 ];
 
 /**

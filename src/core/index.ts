@@ -62,3 +62,4 @@ export {
   type RerankingModelFactory,
   type RerankingModelSpec,
 } from "./providers/rerank";
+export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";
