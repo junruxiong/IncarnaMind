@@ -934,6 +934,48 @@ export interface TestJevConnectionInput {
 }
 
 // ---------------------------------------------------------------------------
+// Export
+
+/** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
+export type ExportFormat = "markdown" | "docx";
+
+export interface ExportMindOptions {
+  format: ExportFormat;
+  /**
+   * Whether Questions are exported, marked as Questions. Defaults to true for
+   * Markdown, an archive of everything, and to false for .docx: the deliverable
+   * leaves the working material out.
+   */
+  includeQuestions?: boolean;
+}
+
+/** What exporting a Mind will write, for the User to see before the file is written. */
+export interface MindExportPreview {
+  /** A file name for the export, from the Mind's title, e.g. "Tides.docx". */
+  fileName: string;
+  /**
+   * The Citations in the exported text. Each becomes its own footnote, even
+   * when several cite the same page.
+   */
+  citations: number;
+  /**
+   * Of those, the ones not shown as "Quote found": the quote wasn't found on
+   * the cited pages, or it can't be checked (the pages have no text, or the
+   * Document was deleted), or it is still being checked. Their footnotes carry
+   * an "[unverified]" marker.
+   */
+  unverifiedCitations: number;
+  /** The Question Blocks in the Mind, whether the export includes them or not. */
+  questions: number;
+}
+
+/** A Mind exported as a file, for the host to save where the User chooses. */
+export interface MindExport extends MindExportPreview {
+  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx. */
+  data: Uint8Array;
+}
+
+// ---------------------------------------------------------------------------
 
 export interface CoreApi {
   createMind(input?: CreateMindInput): Promise<Mind>;
@@ -1146,6 +1188,21 @@ export interface CoreApi {
    * consent first.
    */
   testJevConnection(input?: TestJevConnectionInput): Promise<ConnectionTestResult>;
+
+  /**
+   * What `exportMind` will write with these options: the file name, and how
+   * many of the exported Citations are unverified, so the User sees that
+   * before the file is written.
+   */
+  previewMindExport(mindId: string, options: ExportMindOptions): Promise<MindExportPreview>;
+  /**
+   * Exports a Mind as a file, which the host saves: its title, its Notes
+   * (those switched out of Question context too), its Answers and, if
+   * included, its Questions, in order. Each Citation becomes its own footnote
+   * naming its Document and pages, e.g. "Tides, p. 12–13", marked
+   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   */
+  exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
 }
 
 /**
@@ -1280,6 +1337,8 @@ const methods: Record<CoreApiMethod, true> = {
   saveJevSettings: true,
   removeJevSettings: true,
   testJevConnection: true,
+  previewMindExport: true,
+  exportMind: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */
