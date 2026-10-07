@@ -7,6 +7,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # onnxruntime-node's install script downloads its CUDA libraries on Linux x64. The app runs
+  # the embedding model on the CPU, so skip them.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

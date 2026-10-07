@@ -5,6 +5,7 @@ import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
+import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createFolders, parseFolderId } from "./folders";
@@ -75,15 +76,24 @@ export function createCore(adapters: CoreAdapters): Core {
   const settings = createSettings(db, now, adapters.systemLanguages);
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
+  const embeddingModel = createEmbeddingModel({
+    definition: BUILT_IN_EMBEDDING_MODEL,
+    source: adapters.embeddingModelSource,
+    dataDir,
+    embedder: adapters.embedder,
+    emitStatus: (status) => events.emit("embeddingModel.status", status),
+  });
   let documents: ReturnType<typeof createDocuments>;
   try {
     documents = createDocuments({
       db,
       dataDir,
       now,
+      model: embeddingModel,
       emitStatus: (document) => events.emit("document.status", document),
     });
   } catch (error) {
+    embeddingModel.close();
     db.close();
     throw error;
   }
@@ -210,7 +220,9 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     renameDocument: async (id, name) => documents.rename(id, name),
     deleteDocument: (id) => documents.delete(id),
-    searchPassages: async (query, limit) => documents.search(query, limit),
+    searchPassages: (query, options) => documents.search(query, options),
+    getEmbeddingModel: async () => embeddingModel.status(),
+    downloadEmbeddingModel: async () => embeddingModel.retry(),
 
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
@@ -329,6 +341,7 @@ export function createCore(adapters: CoreAdapters): Core {
       answers.stopAll();
       consent.close();
       documents.close();
+      embeddingModel.close();
       events.clear();
       content.closeAll();
       db.close();

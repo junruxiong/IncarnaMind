@@ -196,6 +196,46 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX documents_by_folder ON documents (folder_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 10,
+    description: "Segmented keyword index, Passage embeddings and processing versions (ADR-0009)",
+    sql: `
+      -- The keyword index holds each live Passage's words as segmented by
+      -- Intl.Segmenter (the Document's name, then the Passage's text), joined
+      -- by spaces for the default unicode61 tokenizer. The core writes the rows,
+      -- since the segmenting happens in JavaScript; rowid is passages.seq. Only
+      -- the index is stored (content = ''), and the triggers remove a Passage's
+      -- row when it is deleted. It replaces migration 3's provisional trigram index.
+      DROP TRIGGER passages_fts_insert;
+      DROP TRIGGER passages_fts_soft_delete;
+      DROP TRIGGER passages_fts_delete;
+      DROP TABLE passages_fts;
+      CREATE VIRTUAL TABLE passages_fts USING fts5 (
+        text,
+        content = '',
+        contentless_delete = 1,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE TRIGGER passages_fts_soft_delete AFTER UPDATE OF deleted_at ON passages
+      WHEN old.deleted_at IS NULL AND new.deleted_at IS NOT NULL BEGIN
+        DELETE FROM passages_fts WHERE rowid = old.seq;
+      END;
+      CREATE TRIGGER passages_fts_delete AFTER DELETE ON passages WHEN old.deleted_at IS NULL BEGIN
+        DELETE FROM passages_fts WHERE rowid = old.seq;
+      END;
+
+      -- The Passage's vector from the embedding model in documents.embedding_model:
+      -- little-endian float32s, L2-normalised. NULL until it is embedded.
+      ALTER TABLE passages ADD COLUMN embedding BLOB;
+
+      -- Which version of the processing pipeline (text normalisation, Passage
+      -- sizes, keyword indexing) built a Document's Passages. Documents from an
+      -- older version are processed again at startup. Version 1 is #25's.
+      ALTER TABLE documents ADD COLUMN processing_version INTEGER NOT NULL DEFAULT 1;
+      -- The embedding model the Document's Passage vectors come from, once embedding starts.
+      ALTER TABLE documents ADD COLUMN embedding_model TEXT;
+    `,
+  },
 ];
 
 /**
