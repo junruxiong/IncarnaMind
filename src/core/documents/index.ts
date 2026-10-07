@@ -1340,6 +1340,28 @@ export function createDocuments(options: DocumentsOptions) {
       return collected;
     },
 
+    /**
+     * Lets go of the text kept of unlinked Documents (`keptCitationTexts`):
+     * each version's, unless `isCited` says a Citation still quotes it. It is
+     * deleted as their other text was. Returns how many versions went.
+     */
+    releaseKeptText(isCited: (documentId: string, contentHash: string) => boolean): number {
+      const at = now();
+      let released = 0;
+      db.transaction(() => {
+        for (const { documentId, contentHash } of keptCitationTexts()) {
+          if (isCited(documentId, contentHash)) continue;
+          db.run(
+            `UPDATE document_pages SET deleted_at = ?, updated_at = ?
+             WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL`,
+            [at, at, documentId, contentHash],
+          );
+          released++;
+        }
+      });
+      return released;
+    },
+
     /** Whether any live Document has text of a version other than its current one. */
     hasOldVersions(): boolean {
       return (
