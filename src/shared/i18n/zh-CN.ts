@@ -7,6 +7,9 @@ export const zhCN = {
   "sidebar.label": "侧边栏",
   "sidebar.newMind": "新建 Mind",
   "sidebar.minds": "Minds",
+  "sidebar.minds.count": "Minds（{count}）",
+  "sidebar.minds.fold": "收起 Minds",
+  "sidebar.minds.unfold": "展开 Minds",
   "sidebar.noMinds": "还没有 Mind",
   "sidebar.settings": "设置",
   "sidebar.resize": "调整侧边栏宽度",
@@ -17,6 +20,8 @@ export const zhCN = {
   "mind.title.label": "Mind 标题",
   "mind.editor.label": "Mind 内容",
   "mind.delete": "删除 Mind",
+  "mind.rename": "重命名",
+  "mind.renameLabel": "{title} 的新标题",
   "mind.delete.body": "“{title}”将从你的 Minds 中移除。",
   "mind.delete.confirm": "删除",
   "mind.delete.cancel": "取消",
@@ -469,6 +474,7 @@ export const zhCN = {
   "consent.settings.status.accepted": "已允许",
   "consent.settings.status.declined": "未允许",
   "consent.settings.status.not-asked": "尚未询问",
+  "consent.settings.status.sendsMore": "会再次询问：它现在发送的内容更多",
   "consent.settings.revoke": "撤销",
   "consent.settings.askAgain": "重新询问",
 
@@ -628,6 +634,13 @@ export const zhCN = {
   "skills.settings.scripts.one": "1 个脚本",
   "skills.settings.scripts": "{count} 个脚本",
   "skills.settings.builtIn": "内置",
+  // The Built-in Skills, as Settings and the slash menu describe them; their SKILL.md, which Answers read, stays as written.
+  "skills.builtIn.literature-review":
+    "围绕问题的主题，跨你的文档撰写文献综述：按主题综合，而不是逐篇罗列，写出各文档的一致与分歧以及遗漏之处，每个论断都附引用。",
+  "skills.builtIn.mind-to-report":
+    "把这个 Mind（问题上方的笔记、问题和回答）整理成结构化的报告草稿，包括标题、摘要、章节和结论，保留其中的引用，不虚构来源。",
+  "skills.builtIn.summarise-document":
+    "为一篇文档（或问题搜索范围内的每篇文档）撰写结构化摘要：主要论点（各附引用）、方法、局限以及尚待回答的问题。",
   "skills.settings.builtIn.hint":
     "随 IncarnaMind 提供，并随应用一起更新。想修改它，请复制为你自己的技能。",
   "skills.settings.duplicate": "复制为我的技能",
@@ -740,6 +753,10 @@ export const zhCN = {
   "export.saving": "正在导出…",
   "export.cancel": "取消",
   "export.failed": "无法导出这个 Mind：{message}",
+  "export.done": "已导出到 {name}。",
+  "export.showInFinder": "在访达中显示",
+  "export.showInFolder": "在文件夹中显示",
+  "export.close": "完成",
   "export.dialog.title": "导出 Mind",
   "export.dialog.filter.docx": "Word 文档",
   "export.dialog.filter.markdown": "Markdown",
@@ -904,8 +921,7 @@ export const zhCN = {
   "remoteConnectors.signIn.error.failed": "登录没有成功。",
   "remoteConnectors.error.unreachable": "无法访问它的服务器。请检查 URL 和网络连接。",
   "remoteConnectors.consent.note": "工具的参数会通过网络发送到这个服务器。",
-  "remoteConnectors.answer.signInRequired":
-    "未使用：{connector} 需要你重新登录（在“设置 → 连接器”中）",
+  "remoteConnectors.answer.signInRequired": "未使用：{connector} 需要你登录（在“设置 → 连接器”中）",
   "remoteConnectors.page.success.title": "已登录 {name}",
   "remoteConnectors.page.success.body": "你可以关闭此标签页，返回 IncarnaMind。",
   "remoteConnectors.page.failure.title": "登录 {name} 没有成功",

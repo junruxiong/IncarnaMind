@@ -9,8 +9,10 @@ import {
   dismissChatSetup,
   interceptOpenPath,
   interceptSaveDialog,
+  interceptShowItemInFolder,
   launchApp,
   pathsOpened,
+  pathsShown,
   removeDataFolder,
   saveDialogsAsked,
   useLocalChatModel,
@@ -66,8 +68,14 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first, 
   // The system save dialog is answered by the test hook.
   const target = join(sources, "Exported.docx");
   await interceptSaveDialog(app, target);
+  await interceptShowItemInFolder(app);
   await dialog.getByTestId("export-save").click();
+  // Saved: the dialog says where, and shows the file in the file manager.
+  await expect(dialog.getByTestId("export-done")).toHaveText("Exported to Exported.docx.");
+  await expect(dialog.getByTestId("export-close")).toBeFocused();
+  await dialog.getByTestId("export-show").click();
   await expect(dialog).toBeHidden();
+  expect(await pathsShown(app)).toEqual([target]);
   const [asked] = await saveDialogsAsked(app);
   expect(basename(asked?.defaultPath ?? "")).toBe("Tides.docx");
   expect(asked?.filters).toEqual([{ name: "Word document", extensions: ["docx"] }]);

@@ -104,6 +104,13 @@
   --color-scrim: rgb(23 25 28 / 0.32);
 }
 
+/* A thin, quiet scrollbar: the sidebar's tree shows that it scrolls without taking room from its rows. */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-strong) transparent;
+  overscroll-behavior: none;
+}
+
 @utility hide-scrollbar {
   scrollbar-width: none;
   overscroll-behavior: none;
@@ -524,13 +531,17 @@
   .mind-title {
     margin: 0 0 24px;
 
-    > input {
+    /* A text area that grows with the title, so a long one wraps instead of being cut off. */
+    > textarea {
       display: block;
       width: 100%;
       padding: 0;
       border: 0;
       background: transparent;
       outline: none;
+      field-sizing: content;
+      resize: none;
+      overflow: hidden;
       font-family: var(--font-serif);
       font-size: var(--text-display);
       line-height: var(--text-display--line-height);
@@ -538,7 +549,6 @@
       font-variation-settings: "opsz" 48;
       letter-spacing: -0.01em;
       color: var(--color-ink);
-      text-overflow: ellipsis;
 
       &::placeholder {
         color: var(--color-ink-placeholder);

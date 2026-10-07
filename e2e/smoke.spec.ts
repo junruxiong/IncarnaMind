@@ -278,6 +278,38 @@ test('after "Don\'t allow", a connection test offers to ask again, and asks befo
   await app.close();
 });
 
+test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 600));
+  const setup = window.getByTestId("chat-setup");
+  await setup.getByTestId("chat-choice-api-key").check();
+  await setup
+    .getByTestId("provider-form")
+    .getByRole("radio", { name: "OpenAI-compatible server" })
+    .check();
+  // The form makes the dialog scroll, and "Set up later" stays in view.
+  await expect(setup.getByTestId("chat-setup-later")).toBeInViewport();
+  await setup.getByTestId("chat-setup-later").click();
+
+  await window.getByTestId("new-mind").click();
+  const title = window.getByTestId("mind-title");
+  await expect(title).toBeFocused();
+  const long = "Reading notes on spring and neap tides, harbour tables and the Moon's pull";
+  await window.keyboard.type(long);
+  // Long, the title wraps instead of being cut off.
+  await expect(title).toHaveValue(long);
+  const titleBox = await title.boundingBox();
+  if (!titleBox) throw new Error("The title isn't visible.");
+  expect(titleBox.height).toBeGreaterThan(70);
+
+  // The notice's box reaches into the margin; its text starts where the title's does.
+  const notice = window.getByTestId("chat-readiness").locator("span").first();
+  const noticeBox = await notice.boundingBox();
+  if (!noticeBox) throw new Error("The notice isn't visible.");
+  expect(Math.abs(noticeBox.x - titleBox.x)).toBeLessThan(1);
+  await app.close();
+});
+
 test("the window opens at the size and place it was left at", async () => {
   const first = await launchApp(dataDir);
   await first.app.evaluate(({ BrowserWindow }) =>

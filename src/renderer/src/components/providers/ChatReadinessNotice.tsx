@@ -32,7 +32,8 @@ export function ChatReadinessNotice() {
   return (
     <p
       data-testid="chat-readiness"
-      className="mx-3 flex items-center gap-3 rounded-lg bg-frame py-1.5 pr-1.5 pl-3 text-[13px] leading-5 text-ink-secondary"
+      // The box reaches 12px into the margins, so its text keeps the Mind's text edge.
+      className="-mx-3 flex items-center gap-3 rounded-lg bg-frame py-1.5 pr-1.5 pl-3 text-[13px] leading-5 text-ink-secondary"
     >
       <span className="flex-1">
         <ReadinessExplanation readiness={readiness} />
