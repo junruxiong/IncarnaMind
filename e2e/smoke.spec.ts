@@ -233,6 +233,8 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   // The notice opens Settings, where a provider can be set up.
   await second.window.getByTestId("chat-readiness").getByRole("button").click();
   await expect(second.window.getByTestId("chat-model-settings")).toBeVisible();
+  // What is sent to other services lives on the Privacy page.
+  await second.window.getByTestId("settings-tab-privacy").click();
   await expect(second.window.getByTestId("consent-settings")).toBeVisible();
   await second.app.close();
 });

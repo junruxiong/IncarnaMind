@@ -61,7 +61,7 @@ export function TaggingWaitingNotice() {
       <button
         type="button"
         data-testid="tagging-waiting-setup"
-        onClick={openSettings}
+        onClick={() => openSettings()}
         className="shrink-0 rounded-[6px] px-1 font-medium text-gray-700 hover:bg-gray-200"
       >
         {t("jev.waiting.setUp")}
