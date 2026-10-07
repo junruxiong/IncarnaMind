@@ -36,7 +36,11 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const { core } = await startWithExamples();
 
     const made = await core.offerExamples();
-    expect(made).toMatchObject({ available: true, mindId: expect.any(String) });
+    expect(made).toMatchObject({
+      available: true,
+      mindId: expect.any(String),
+      answerId: expect.any(String),
+    });
     // Offered once only, even after the example Mind is gone.
     expect(await core.offerExamples()).toBeNull();
 
@@ -100,6 +104,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       available: true,
       mindId: null,
       linkedFolderId: null,
+      answerId: null,
     });
     expect(await core.listMinds()).toEqual([]);
     expect(await core.listLinkedFolders()).toEqual([]);
@@ -107,6 +112,26 @@ describe("the example Mind", { timeout: 30_000 }, () => {
 
     const again = await core.createExamples();
     expect(again.mindId).not.toBe(made.mindId);
+    expect(await core.listMinds()).toHaveLength(1);
+  });
+
+  test("deleting the example Mind on its own leaves its Linked folder marked, and making them again starts afresh", async () => {
+    const { core } = await startWithExamples();
+    const made = await core.createExamples();
+    await core.deleteMind(made.mindId as string);
+    expect(await core.getExamples()).toEqual({
+      available: true,
+      mindId: null,
+      linkedFolderId: made.linkedFolderId,
+      answerId: null,
+    });
+
+    const again = await core.createExamples();
+    expect(again.mindId).not.toBe(made.mindId);
+    expect(again.linkedFolderId).not.toBe(made.linkedFolderId);
+    expect((await core.listLinkedFolders()).map((linked) => linked.id)).toEqual([
+      again.linkedFolderId,
+    ]);
     expect(await core.listMinds()).toHaveLength(1);
   });
 
@@ -123,6 +148,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
       available: false,
       mindId: null,
       linkedFolderId: null,
+      answerId: null,
     });
   });
 });

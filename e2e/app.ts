@@ -31,6 +31,11 @@ export interface LaunchOptions {
    * ignores the DSN a real build is made with. Point it at a local server.
    */
   sentryDsn?: string;
+  /**
+   * The app ships its examples (`resources/examples`), so a first run opens
+   * on the example Mind with "Get started". Without, a test build ships none.
+   */
+  examples?: boolean;
 }
 
 /**
@@ -39,7 +44,7 @@ export interface LaunchOptions {
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false, sentryDsn }: LaunchOptions = {},
+  { fakeChat = false, sentryDsn, examples = false }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -47,6 +52,8 @@ export async function launchApp(
   }
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
+  delete env.INCARNAMIND_TEST_EXAMPLES;
+  if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
@@ -419,6 +426,15 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
   await window.mouse.down();
   await window.mouse.move(x, to.y + 4, { steps: 12 });
   await window.mouse.up();
+}
+
+/**
+ * Puts the cursor on an empty line as a person does, clicking where its text
+ * would start: further along, the hint over the line after an Answer has its
+ * "press ⌘J…" link, which starts a Question once the cursor is on the line.
+ */
+export async function clickEmptyLine(line: Locator): Promise<void> {
+  await line.click({ position: { x: 4, y: 14 } });
 }
 
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */

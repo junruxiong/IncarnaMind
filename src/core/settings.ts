@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   type ChatModelChoice,
   type DeviceSettings,
+  type GettingStarted,
   type Settings,
   SKILL_SCRIPT_LIMITS,
   type UserSettings,
@@ -58,6 +59,13 @@ const userScope: Scope<UserSettings> = {
   },
 };
 
+const GETTING_STARTED_STEPS = ["started", "citationChecked", "indexed", "askedOwn", "hidden"];
+
+const isGettingStarted = (value: unknown): value is GettingStarted =>
+  isRecord(value) &&
+  Object.keys(value).length === GETTING_STARTED_STEPS.length &&
+  GETTING_STARTED_STEPS.every((key) => isBoolean(value[key]));
+
 const isScriptTimeout = (value: unknown): value is number =>
   typeof value === "number" &&
   Number.isInteger(value) &&
@@ -74,6 +82,13 @@ const deviceScope: Scope<DeviceSettings> = {
     openMinds: [],
     activeMind: null,
     chatSetupDismissed: false,
+    gettingStarted: {
+      started: false,
+      citationChecked: false,
+      indexed: false,
+      askedOwn: false,
+      hidden: false,
+    },
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
   },
@@ -83,6 +98,7 @@ const deviceScope: Scope<DeviceSettings> = {
     openMinds: isMindIdList,
     activeMind: (value): value is string | null => value === null || isMindId(value),
     chatSetupDismissed: isBoolean,
+    gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
   },
