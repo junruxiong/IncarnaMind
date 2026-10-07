@@ -1004,6 +1004,10 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
     setPlace(mark && element && first && runs ? markPlace(first, element, runs) : null);
   }, [textLayerVersion, highlights, mark]);
 
+  // The margin past the text: the mark shows its label only if the label fits there.
+  const pageWidth = Math.floor(size.width * scale);
+  const room = place ? pageWidth * (1 - place.textRight) - MARK_GAP - 4 : undefined;
+
   return (
     <section
       ref={(element) => {
@@ -1027,6 +1031,7 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       {mark && place && (
         <CitationMark
           mark={mark}
+          room={room}
           style={{
             top: `calc(${place.lineMiddle * 100}% - 9px)`,
             left: `min(calc(${place.textRight * 100}% + ${MARK_GAP}px), calc(100% - ${MARK_ROOM}px))`,
