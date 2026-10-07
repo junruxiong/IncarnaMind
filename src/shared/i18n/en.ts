@@ -294,7 +294,6 @@ export const en = {
   "settings.language.system": "Same as system",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
-  "settings.done": "Done",
   "settings.close": "Close Settings",
   "settings.about.title": "About",
   "settings.about.body": "IncarnaMind is open source, under the Apache 2.0 licence.",
@@ -303,7 +302,6 @@ export const en = {
   "providers.setup.title": "Where should Answers come from?",
   "providers.setup.body":
     "Asking Questions needs a chat model. Notes and Documents work without one, and you can change this later in Settings.",
-  "providers.setup.orApiKey": "Or use an API key",
   "providers.setup.later": "Set up later",
   "providers.choice.label": "Chat model",
   "providers.choice.local": "Stays on this computer",

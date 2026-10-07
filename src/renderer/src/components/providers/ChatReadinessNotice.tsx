@@ -1,12 +1,13 @@
 import type { ChatReadiness } from "../../../../core/api";
 import { useT } from "../../i18n";
 import { type SettingsPage, useAppStore } from "../../store";
+import { buttonStyle } from "../ui";
 import { readinessKey, serviceName } from "./shared";
 
-/** Where to fix it: a declined data flow is allowed again on the Privacy page. */
+/** Where to fix it: a declined data flow is allowed again on the Privacy page, the rest under Chat model. */
 export const settingsPageFor = (
   readiness: Extract<ChatReadiness, { ready: false }>,
-): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "general");
+): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "chat-model");
 
 /** What to configure before Questions can be asked. */
 export function ReadinessExplanation({
@@ -31,7 +32,7 @@ export function ChatReadinessNotice() {
   return (
     <p
       data-testid="chat-readiness"
-      className="mx-3 flex items-center gap-3 rounded-[9px] bg-gray-50 px-3 py-2 text-sm text-gray-600"
+      className="mx-3 flex items-center gap-3 rounded-lg bg-frame py-1.5 pr-1.5 pl-3 text-[13px] leading-5 text-ink-secondary"
     >
       <span className="flex-1">
         <ReadinessExplanation readiness={readiness} />
@@ -39,7 +40,7 @@ export function ChatReadinessNotice() {
       <button
         type="button"
         onClick={() => openSettings(settingsPageFor(readiness))}
-        className="shrink-0 rounded-[9px] px-2 py-1 text-gray-700 hover:bg-gray-200"
+        className={buttonStyle("secondary", "sm")}
       >
         {t("providers.readiness.setUp")}
       </button>

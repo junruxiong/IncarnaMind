@@ -4,10 +4,11 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-import { inputClass } from "../providers/shared";
+import { buttonStyle, fieldLabelClass, hintClass, inputClass, noticeClass } from "../ui";
 
-const smallButton =
-  "rounded-[6px] border border-current/20 px-2 py-0.5 hover:bg-white/60 disabled:opacity-50";
+/** A text button inside a line, e.g. "Sign out". */
+const linkButtonClass =
+  "text-accent underline-offset-2 outline-none hover:text-accent-strong hover:underline focus-visible:underline";
 
 /** Runs an action; a failure shows in the app's error banner. */
 async function act(action: () => Promise<unknown>) {
@@ -33,14 +34,14 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
     return (
       <div
         data-testid="connector-signing-in"
-        className="mt-1.5 flex flex-wrap items-center gap-2 rounded-[6px] bg-blue-50 px-2 py-1.5 text-sm text-blue-900"
+        className={`mt-1 flex flex-wrap items-center gap-2 ${noticeClass}`}
       >
         <span className="flex-1">{t("remoteConnectors.signingIn")}</span>
         <button
           type="button"
           data-testid="connector-sign-in-cancel"
           onClick={() => void act(() => core.cancelConnectorSignIn(id))}
-          className={`${smallButton} text-xs`}
+          className={buttonStyle("secondary", "sm")}
         >
           {t("remoteConnectors.cancel")}
         </button>
@@ -49,12 +50,12 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
   }
 
   const clientLine = clientId && (
-    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+    <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px] leading-[18px] text-ink-meta">
       <span>{t("remoteConnectors.client.using", { clientId })}</span>
       <button
         type="button"
         onClick={() => void act(() => core.setConnectorClient(id, null))}
-        className="underline hover:text-gray-800"
+        className={linkButtonClass}
       >
         {t("remoteConnectors.client.forget")}
       </button>
@@ -63,17 +64,14 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
 
   if (state === "needs-sign-in") {
     return (
-      <div
-        data-testid="connector-sign-in-notice"
-        className="mt-1.5 rounded-[6px] bg-amber-50 px-2 py-1.5 text-sm text-amber-950"
-      >
+      <div data-testid="connector-sign-in-notice" className={`mt-1 ${noticeClass}`}>
         <p>
           {signIn.expired
             ? t("remoteConnectors.signIn.expired")
             : t("remoteConnectors.signIn.required")}
         </p>
         {signIn.error && (
-          <p role="alert" data-testid="connector-sign-in-error" className="mt-1 text-amber-900">
+          <p role="alert" data-testid="connector-sign-in-error" className="mt-1 text-danger">
             {t(`remoteConnectors.signIn.error.${signIn.error.kind}`)}
           </p>
         )}
@@ -84,12 +82,12 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
             cancellable={!needsClient}
           />
         ) : (
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
               type="button"
               data-testid="connector-sign-in"
               onClick={() => void act(() => core.signInToConnector(id))}
-              className={smallButton}
+              className={buttonStyle("primary", "sm")}
             >
               {signIn.expired ? t("remoteConnectors.signInAgain") : t("remoteConnectors.signIn")}
             </button>
@@ -97,7 +95,7 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
               <button
                 type="button"
                 onClick={() => setEditingClient(true)}
-                className="underline hover:text-amber-700"
+                className={`text-[12px] ${linkButtonClass}`}
               >
                 {t("remoteConnectors.form.client")}
               </button>
@@ -111,7 +109,7 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
 
   if (!signIn.signedIn && !clientId) return null;
   return (
-    <div className="mt-1 text-xs text-gray-500">
+    <div className="text-[12px] leading-[18px] text-ink-meta">
       {signIn.signedIn && (
         <p className="flex flex-wrap items-center gap-2">
           <span>{t("remoteConnectors.signedIn")}</span>
@@ -119,7 +117,7 @@ export function RemoteSignIn({ connector }: { connector: RemoteConnector }) {
             type="button"
             data-testid="connector-sign-out"
             onClick={() => void act(() => core.signOutOfConnector(id))}
-            className="underline hover:text-gray-800"
+            className={linkButtonClass}
           >
             {t("remoteConnectors.signOut")}
           </button>
@@ -169,10 +167,10 @@ function ClientForm({
     <form
       data-testid="connector-client-form"
       onSubmit={(event) => void submit(event)}
-      className="mt-1.5 flex flex-col gap-2"
+      className="mt-2 flex flex-col gap-2"
     >
-      <p className="text-xs text-amber-900">{t("remoteConnectors.client.hint")}</p>
-      <label className="text-xs text-gray-700">
+      <p className={hintClass}>{t("remoteConnectors.client.hint")}</p>
+      <label className={fieldLabelClass}>
         {t("remoteConnectors.client.id")}
         <input
           required
@@ -180,32 +178,36 @@ function ClientForm({
           onChange={(event) => setClientId(event.target.value)}
           spellCheck={false}
           autoComplete="off"
-          className={`${inputClass} bg-white font-mono`}
+          className={`${inputClass} font-mono`}
         />
       </label>
-      <label className="text-xs text-gray-700">
+      <label className={fieldLabelClass}>
         {t("remoteConnectors.client.secret")}
         <input
           type="password"
           value={clientSecret}
           onChange={(event) => setClientSecret(event.target.value)}
           autoComplete="off"
-          className={`${inputClass} bg-white font-mono`}
+          className={`${inputClass} font-mono`}
         />
-        <span className="mt-1 block text-gray-500">{t("remoteConnectors.client.secretHint")}</span>
+        <span className={hintClass}>{t("remoteConnectors.client.secretHint")}</span>
       </label>
-      <div className="flex flex-wrap gap-2 text-xs">
-        <button type="submit" disabled={busy || !clientId.trim()} className={smallButton}>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="submit"
+          disabled={busy || !clientId.trim()}
+          className={buttonStyle("primary", "sm")}
+        >
           {t("remoteConnectors.client.save")}
         </button>
         {cancellable && (
-          <button type="button" onClick={onDone} className={smallButton}>
+          <button type="button" onClick={onDone} className={buttonStyle("ghost", "sm")}>
             {t("remoteConnectors.cancel")}
           </button>
         )}
       </div>
       {error && (
-        <p role="alert" className="text-xs text-red-700">
+        <p role="alert" className="text-[12px] leading-[18px] text-danger">
           {error}
         </p>
       )}

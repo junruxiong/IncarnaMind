@@ -277,7 +277,6 @@ export const zhCN = {
   "settings.language.system": "跟随系统",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
-  "settings.done": "完成",
   "settings.close": "关闭设置",
   "settings.about.title": "关于",
   "settings.about.body": "IncarnaMind 是开源软件，采用 Apache 2.0 许可证。",
@@ -286,7 +285,6 @@ export const zhCN = {
   "providers.setup.title": "回答从哪里来？",
   "providers.setup.body":
     "提问需要一个对话模型。笔记和文档不需要模型也能使用，你也可以稍后在设置中更改。",
-  "providers.setup.orApiKey": "或使用 API 密钥",
   "providers.setup.later": "稍后设置",
   "providers.choice.label": "对话模型",
   "providers.choice.local": "留在这台电脑上",

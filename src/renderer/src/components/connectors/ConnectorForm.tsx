@@ -4,7 +4,17 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { SecretStorageNotice } from "../providers/ProviderForm";
-import { buttonClass, inputClass, primaryButtonClass } from "../providers/shared";
+import {
+  choiceListClass,
+  compactChoiceRadioClass,
+  compactChoiceRowClass,
+  errorTextClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  hintClass,
+  inputClass,
+  primaryButtonClass,
+} from "../ui";
 
 /** Non-empty lines, trimmed. */
 const lines = (text: string) =>
@@ -91,27 +101,27 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
     <form
       data-testid="connector-form"
       onSubmit={(event) => void submit(event)}
-      className="mt-3 flex flex-col gap-3"
+      className="flex flex-col gap-3"
     >
-      <fieldset className="text-sm text-gray-600">
-        <legend>{t("remoteConnectors.form.kind")}</legend>
-        <div className="mt-1 flex flex-wrap gap-4">
+      <fieldset>
+        <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("remoteConnectors.form.kind")}</legend>
+        <div className={choiceListClass}>
           {(["local", "remote"] as const).map((each) => (
-            <label key={each} className="flex items-center gap-1.5 text-gray-800">
+            <label key={each} className={compactChoiceRowClass}>
               <input
                 type="radio"
                 name="connector-kind"
                 value={each}
                 checked={kind === each}
                 onChange={() => setKind(each)}
-                className="accent-gray-800"
+                className={compactChoiceRadioClass}
               />
               {t(`remoteConnectors.form.kind.${each}`)}
             </label>
           ))}
         </div>
       </fieldset>
-      <label className="text-sm text-gray-600">
+      <label className={fieldLabelClass}>
         {t("connectors.form.name")}
         <input
           required
@@ -123,7 +133,7 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
       </label>
       {remote ? (
         <>
-          <label className="text-sm text-gray-600">
+          <label className={fieldLabelClass}>
             {t("remoteConnectors.form.url")}
             <input
               required
@@ -134,16 +144,14 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
               spellCheck={false}
               className={`${inputClass} font-mono`}
             />
-            <span className="mt-1 block text-xs text-gray-500">
-              {t("remoteConnectors.form.urlHint")}
-            </span>
+            <span className={hintClass}>{t("remoteConnectors.form.urlHint")}</span>
           </label>
-          <details className="text-sm text-gray-600">
-            <summary className="cursor-pointer select-none">
+          <details className="text-[13px] leading-5 text-ink-secondary">
+            <summary className="cursor-pointer select-none hover:text-ink">
               {t("remoteConnectors.form.client")}
             </summary>
-            <p className="mt-1 text-xs text-gray-500">{t("remoteConnectors.client.hint")}</p>
-            <label className="mt-2 block">
+            <p className={hintClass}>{t("remoteConnectors.client.hint")}</p>
+            <label className={`mt-2 ${fieldLabelClass}`}>
               {t("remoteConnectors.client.id")}
               <input
                 value={clientId}
@@ -153,7 +161,7 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
                 className={`${inputClass} font-mono`}
               />
             </label>
-            <label className="mt-2 block">
+            <label className={`mt-2 ${fieldLabelClass}`}>
               {t("remoteConnectors.client.secret")}
               <input
                 type="password"
@@ -162,9 +170,7 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
                 autoComplete="off"
                 className={`${inputClass} font-mono`}
               />
-              <span className="mt-1 block text-xs text-gray-500">
-                {t("remoteConnectors.client.secretHint")}
-              </span>
+              <span className={hintClass}>{t("remoteConnectors.client.secretHint")}</span>
             </label>
           </details>
         </>
@@ -188,12 +194,12 @@ export function ConnectorForm({ onDone }: { onDone(): void }) {
         <button type="submit" disabled={busy || invalid || blocked} className={primaryButtonClass}>
           {busy ? t("connectors.form.adding") : t("connectors.form.add")}
         </button>
-        <button type="button" onClick={onDone} className={buttonClass}>
+        <button type="button" onClick={onDone} className={ghostButtonClass}>
           {t("connectors.form.cancel")}
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}
@@ -215,7 +221,7 @@ function LocalFields(props: {
   const { command, setCommand, args, setArgs, env, setEnv } = props;
   return (
     <>
-      <label className="text-sm text-gray-600">
+      <label className={fieldLabelClass}>
         {t("connectors.form.command")}
         <input
           required
@@ -225,9 +231,9 @@ function LocalFields(props: {
           spellCheck={false}
           className={`${inputClass} font-mono`}
         />
-        <span className="mt-1 block text-xs text-gray-500">{t("connectors.form.commandHint")}</span>
+        <span className={hintClass}>{t("connectors.form.commandHint")}</span>
       </label>
-      <label className="text-sm text-gray-600">
+      <label className={fieldLabelClass}>
         {t("connectors.form.args")}
         <textarea
           value={args}
@@ -238,7 +244,7 @@ function LocalFields(props: {
           className={`${inputClass} font-mono`}
         />
       </label>
-      <label className="text-sm text-gray-600">
+      <label className={fieldLabelClass}>
         {t("connectors.form.env")}
         <textarea
           value={env}
@@ -249,9 +255,9 @@ function LocalFields(props: {
           autoComplete="off"
           className={`${inputClass} font-mono`}
         />
-        <span className="mt-1 block text-xs text-gray-500">{t("connectors.form.envHint")}</span>
+        <span className={hintClass}>{t("connectors.form.envHint")}</span>
         {props.envInvalid && (
-          <span role="alert" className="mt-1 block text-xs text-red-700">
+          <span role="alert" className="mt-1 block text-[12px] leading-[18px] text-danger">
             {t("connectors.form.envInvalid")}
           </span>
         )}
