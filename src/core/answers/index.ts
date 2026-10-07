@@ -57,10 +57,11 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import type { AnswerEngine, AnswerSkillTools } from "./engine";
+import type { AnswerEngine, AnswerSkillTools, AnswerTools, ExternalTool } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
+  connectorInstructions,
   documentInstructions,
   loadedSkillText,
   skillInstructions,
@@ -75,6 +76,7 @@ export type {
   AnswerSkillTools,
   AnswerTools,
   CitationRecordInput,
+  ExternalTool,
   InstructionOptions,
 } from "./engine";
 export { createAiSdkAnswerEngine } from "./engine";
@@ -113,6 +115,8 @@ export interface AnswersOptions {
   emptyScopeAnswer(): string;
   /** The User's Skills. */
   skills: AnswerSkills;
+  /** The Connector Tools an Answer may call: the read-only Tools of every Connector that is on and ready. */
+  connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
   reportError(error: unknown): void;
 }
 
@@ -420,7 +424,23 @@ export function createAnswers(options: AnswersOptions) {
       if (!(await openSkills()) || !skills) return;
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
-      const { tools } = session;
+      // The read-only Tools of the Connectors that are on, next to document search and the Skills.
+      let external: ExternalTool[] = [];
+      try {
+        external = await options.connectorTools(controller.signal);
+      } catch (error) {
+        if (finished) return;
+        options.reportError(error);
+      }
+      if (finished) return;
+      const tools: AnswerTools = {
+        get documentCount() {
+          return session.tools.documentCount;
+        },
+        searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
+        cite: (records) => session.tools.cite(records),
+        external,
+      };
       const skillTools: AnswerSkillTools | null =
         listed.length > 0 || (forced && forced.files.length > 1)
           ? {
@@ -432,11 +452,15 @@ export function createAnswers(options: AnswersOptions) {
           : null;
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
-        instructions: (mode, { passages, skillTools: withSkillTools = false } = {}) =>
+        instructions: (
+          mode,
+          { passages, skillTools: withSkillTools = false, connectorTools = false } = {},
+        ) =>
           [
             base,
             documentInstructions(mode, tools.documentCount, passages, documentIds !== null),
             skillInstructions(listed, forced, withSkillTools),
+            connectorTools ? connectorInstructions(external, mode === "no-documents") : "",
           ]
             .filter(Boolean)
             .join("\n\n"),
@@ -465,14 +489,26 @@ export function createAnswers(options: AnswersOptions) {
             writeSoon();
             break;
           case "tool-call-started":
-            callStarted({
-              id: event.id,
-              tool: event.tool,
-              source: event.tool === "search_documents" ? "documents" : "skill",
-              input: event.input,
-              status: "running",
-              resultCount: null,
-            });
+            callStarted(
+              event.source
+                ? {
+                    id: event.id,
+                    tool: event.tool,
+                    source: "connector",
+                    connector: { id: event.source.connectorId, name: event.source.connectorName },
+                    input: event.input,
+                    status: "running",
+                    resultCount: null,
+                  }
+                : {
+                    id: event.id,
+                    tool: event.tool,
+                    source: event.tool === "search_documents" ? "documents" : "skill",
+                    input: event.input,
+                    status: "running",
+                    resultCount: null,
+                  },
+            );
             break;
           case "tool-call-finished":
             callFinished(event.id, event.ok, event.resultCount);

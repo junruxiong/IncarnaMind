@@ -4,6 +4,7 @@ import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { ConsentSettings } from "./providers/ConsentSettings";
@@ -65,6 +66,7 @@ export function SettingsDialog() {
       {open && (
         <div className="mt-4 flex flex-col gap-6">
           <ChatModelSettings />
+          <ConnectorsSettings />
           <SkillsSettings />
           <JevSettingsSection />
           <fieldset>

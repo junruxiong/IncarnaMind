@@ -19,6 +19,7 @@ export type {
   AnswerEngineEvent,
   AnswerMessage,
   AnswerRequest,
+  ExternalTool,
 } from "./answers/engine";
 export * from "./api";
 export type { DataFlowDefinition, DataFlowRegistry } from "./consent";

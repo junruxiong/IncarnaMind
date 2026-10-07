@@ -24,6 +24,24 @@ export function answerInstructions(question: string): string {
   ].join("\n");
 }
 
+/**
+ * What to do with the Tools of the User's Connectors, if any are offered.
+ * Their results aren't Passages: they are never cited with markers. `alone`:
+ * there are no Documents, so these are the only Tools.
+ */
+export function connectorInstructions(
+  tools: readonly { source: { connectorName: string } }[],
+  alone: boolean,
+): string {
+  if (tools.length === 0) return "";
+  const names = [...new Set(tools.map((each) => `"${each.source.connectorName}"`))].join(", ");
+  return [
+    `You can ${alone ? "" : "also "}call Tools from the User's Connectors (${names}): other services the User has connected. Each Tool's name starts with its Connector's. Use them to look things up when the Question needs what they have.`,
+    "- What they return isn't from the User's Documents: never put a citation marker on it. Say in words where it came from when that helps.",
+    ...(alone ? ["- Write nothing before your Tool calls: only the Answer, after them."] : []),
+  ].join("\n");
+}
+
 const NOT_COVERED =
   "If the Documents don't cover the Question, say so plainly, then answer from your own knowledge if you can, without markers.";
 
