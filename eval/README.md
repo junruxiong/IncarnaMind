@@ -40,7 +40,7 @@ npm run eval
 - **Gating:** a cloud model (`anthropic`, `openai`, `google`, or `openai-compatible` with a server elsewhere) is the gating model. Its name is recorded in the report. Use one named model for runs you compare, such as the current Claude Sonnet.
 - **Local models:** an Ollama model, or an `openai-compatible` server on this computer, is reported but never gates. For example: `INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=llama3.2 npm run eval`.
 - **Consent:** setting the variables is the consent to send Questions and Passages to the chat model. The run declines automatic tagging's consent request, so no Document excerpts are sent for tagging. A local model has no consent step, so it also tags the Documents while the run asks its Questions, which slows the run.
-- **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 25. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 25 and 65 Answers, each with up to 5 searches.
+- **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 50. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 50 and 130 Answers, each with up to 5 searches.
 
 ### Cloud embeddings
 
@@ -94,7 +94,11 @@ The terminal summary at the end gives the same headline numbers.
 
 ### Retrieval
 
-The evaluation set is `retrieval/questions.json`: 20 gating Questions (10 English, 10 Chinese) and 5 cross-lingual ones (Chinese Questions about English Documents).
+The evaluation set is `retrieval/questions.json`: 40 gating Questions (20 English, 20 Chinese) and 10 cross-lingual ones (8 Chinese Questions about English Documents, 2 English Questions about Chinese Documents).
+
+- **Kinds:** fact lookups, numbers, definitions, Questions worded unlike their Document, and answers in two parts. One English answer runs across a page break (en-17, pages 33–34).
+- **Checked against the stored text:** each quote was checked with `findQuote` against the page text the core stores, and against the Passages it builds. Each is on its expected pages, inside at least one Passage that covers them, and on no other page of its Document.
+- **No Chinese quote crosses a page:** in the Chinese fixtures, pdf.js puts a page's section headings at the end of its text, so no sentence reads across a page break there.
 
 - **Hit rule (ADR-0009):** a Question is a hit when one of the top 5 Passages from `searchPassages`:
   - belongs to the expected Document;
