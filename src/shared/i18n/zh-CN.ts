@@ -21,6 +21,11 @@ export const zhCN = {
   "mind.delete.confirm": "删除",
   "mind.delete.cancel": "取消",
 
+  "tabs.label": "打开的 Mind",
+  "tabs.new": "新建 Mind（{shortcut}）",
+  "tabs.close": "关闭 {title}",
+  "tabs.writing": "正在写回答",
+
   "editor.placeholder": "输入 / 插入标题、代码、公式或问题",
   "editor.slash.label": "插入",
   "editor.slash.empty": "没有匹配项",

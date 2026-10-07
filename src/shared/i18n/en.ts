@@ -23,6 +23,11 @@ export const en = {
   "mind.delete.confirm": "Delete",
   "mind.delete.cancel": "Cancel",
 
+  "tabs.label": "Open Minds",
+  "tabs.new": "New Mind ({shortcut})",
+  "tabs.close": "Close {title}",
+  "tabs.writing": "An Answer is being written",
+
   "editor.placeholder": "Type / for headings, code, math and Questions",
   "editor.slash.label": "Insert",
   "editor.slash.empty": "No matches",

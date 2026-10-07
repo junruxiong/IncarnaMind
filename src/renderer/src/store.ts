@@ -42,6 +42,9 @@ export interface ViewerTarget extends DocumentLocation {
 interface AppState {
   status: Status;
   minds: Mind[];
+  /** The Minds open as tabs in the Mind pane, by ID, in order. Kept per device across restarts. */
+  tabs: string[];
+  /** The Mind shown: the active tab, or null with no tab open. */
   openMindId: string | null;
   /** Set once loaded. */
   settings: Settings | null;
@@ -77,8 +80,17 @@ interface AppState {
   skills: Skill[];
 
   load(): Promise<void>;
+  /** Creates a Mind and opens it in a new tab, at the end. */
   createMind(): Promise<void>;
-  openMind(id: string): void;
+  /**
+   * Shows a Mind: its tab if it is open; otherwise it opens in the current tab
+   * or, with `newTab` (⌘-click, middle-click), in a new tab after the current one.
+   */
+  openMind(id: string, options?: { newTab?: boolean }): void;
+  /** Closes a Mind's tab; if it was shown, the tab after it (or else before it) is shown. */
+  closeTab(id: string): void;
+  /** Moves a tab to a place among the tabs (0 is first). */
+  moveTab(id: string, index: number): void;
   renameMind(id: string, title: string): Promise<void>;
   deleteMind(id: string): Promise<void>;
   /** Shows a failure that happened outside a store action, e.g. while saving an edit. */
@@ -143,6 +155,26 @@ const upsert = (documents: Document[], item: Document) =>
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
 
+/** Open tabs and the shown one, after `id`'s tab closes: the one after it is shown, or else before. */
+function withoutTab(
+  tabs: readonly string[],
+  openMindId: string | null,
+  id: string,
+): { tabs: string[]; openMindId: string | null } {
+  const index = tabs.indexOf(id);
+  if (index === -1) return { tabs: [...tabs], openMindId };
+  const rest = tabs.filter((each) => each !== id);
+  if (openMindId !== id) return { tabs: rest, openMindId };
+  return { tabs: rest, openMindId: rest[Math.min(index, rest.length - 1)] ?? null };
+}
+
+/** Saves the open tabs, their order and the shown one, for this device. A failure only loses that. */
+function saveTabs(tabs: readonly string[], openMindId: string | null): void {
+  core
+    .updateSettings({ device: { openMinds: [...tabs], activeMind: openMindId } })
+    .catch(() => undefined);
+}
+
 /** The Documents the sidebar lists: all of them, or those with the Tag it filters by. */
 export const selectVisibleDocuments = (state: AppState): Document[] => {
   const ids = state.filteredDocumentIds;
@@ -160,9 +192,18 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
 
+  /** Changes the tabs, and saves them if they changed. */
+  const setTabs = (next: { tabs: string[]; openMindId: string | null }) => {
+    const { tabs, openMindId } = get();
+    if (next.openMindId === openMindId && next.tabs.join("\n") === tabs.join("\n")) return;
+    set(next);
+    saveTabs(next.tabs, next.openMindId);
+  };
+
   return {
     status: { kind: "loading" },
     minds: [],
+    tabs: [],
     openMindId: null,
     settings: null,
     chatReadiness: null,
@@ -205,8 +246,13 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listSkills(),
           core.getEmbeddingSettings(),
         ]);
+        // The tabs open at the last quit come back, without Minds deleted since.
+        const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
+        const active = settings.device.activeMind;
         set({
           minds,
+          tabs,
+          openMindId: active !== null && tabs.includes(active) ? active : (tabs[0] ?? null),
           settings,
           documents,
           chatReadiness,
@@ -228,12 +274,39 @@ export const useAppStore = create<AppState>()((set, get) => {
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          openMindId: mind.id,
         }));
+        const { tabs } = get();
+        setTabs({
+          tabs: [...tabs.filter((each) => each !== mind.id), mind.id],
+          openMindId: mind.id,
+        });
       }),
 
-    openMind(id) {
-      set({ openMindId: id });
+    openMind(id, options) {
+      const { tabs, openMindId } = get();
+      if (tabs.includes(id)) {
+        setTabs({ tabs: [...tabs], openMindId: id });
+        return;
+      }
+      const current = openMindId === null ? -1 : tabs.indexOf(openMindId);
+      const next = [...tabs];
+      if (current === -1) next.push(id);
+      else if (options?.newTab) next.splice(current + 1, 0, id);
+      else next[current] = id;
+      setTabs({ tabs: next, openMindId: id });
+    },
+
+    closeTab(id) {
+      const { tabs, openMindId } = get();
+      setTabs(withoutTab(tabs, openMindId, id));
+    },
+
+    moveTab(id, index) {
+      const { tabs, openMindId } = get();
+      if (!tabs.includes(id)) return;
+      const next = tabs.filter((each) => each !== id);
+      next.splice(Math.max(0, Math.min(index, next.length)), 0, id);
+      setTabs({ tabs: next, openMindId });
     },
 
     // The list follows the core's "minds.changed" event, which arrives before these calls return.
@@ -481,12 +554,21 @@ function refreshFilterIfAny(): void {
 core.on("settings.changed", (settings) => useAppStore.setState({ settings }));
 
 // The same for the list of Minds: created, renamed, deleted, or reordered by an edit.
-core.on("minds.changed", (minds) =>
-  useAppStore.setState((state) => ({
-    minds,
-    openMindId: minds.some((mind) => mind.id === state.openMindId) ? state.openMindId : null,
-  })),
-);
+// A deleted Mind's tab closes, as if closed by hand.
+core.on("minds.changed", (minds) => {
+  const { tabs, openMindId, status } = useAppStore.getState();
+  useAppStore.setState({ minds });
+  // Before loading, the tabs aren't known yet: loading filters them.
+  if (status.kind !== "ready") return;
+  let next = { tabs, openMindId };
+  for (const id of tabs) {
+    if (!minds.some((mind) => mind.id === id)) next = withoutTab(next.tabs, next.openMindId, id);
+  }
+  if (next.tabs.length !== tabs.length) {
+    useAppStore.setState(next);
+    saveTabs(next.tabs, next.openMindId);
+  }
+});
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) =>

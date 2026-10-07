@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Mind } from "../../../core/api";
-import { useApprovals } from "../approvals";
 import { useT } from "../i18n";
+import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { DeleteMindDialog } from "./DeleteMindDialog";
 import { DocumentsSection } from "./DocumentsSection";
@@ -99,9 +99,7 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
   const t = useT();
   const isOpen = useAppStore((state) => state.openMindId === mind.id);
   const openMind = useAppStore((state) => state.openMind);
-  const waiting = useApprovals((state) =>
-    Object.values(state.waiting).some((request) => request.mindId === mind.id),
-  );
+  const waiting = useMindStatus(mind.id) === "waiting-for-approval";
   return (
     <li className={rowClass(isOpen)}>
       <button
@@ -109,7 +107,14 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
         data-testid="mind-list-item"
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
-        onClick={() => openMind(mind.id)}
+        // ⌘-click (Ctrl-click) or a middle click opens it in a new tab, as in a browser.
+        onClick={(event) => openMind(mind.id, { newTab: event.metaKey || event.ctrlKey })}
+        onMouseDown={(event) => {
+          if (event.button === 1) event.preventDefault(); // no autoscroll
+        }}
+        onAuxClick={(event) => {
+          if (event.button === 1) openMind(mind.id, { newTab: true });
+        }}
         className={rowButtonClass}
       >
         <MindLineIcon className={rowIconClass(isOpen)} />

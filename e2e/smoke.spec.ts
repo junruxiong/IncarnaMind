@@ -92,13 +92,16 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   await window.keyboard.type("An edit");
   await expect(items).toHaveText(["Older", "Newer"]);
 
-  // Deleting it asks first, then removes it from the sidebar and closes it.
+  // Deleting it asks first, then removes it from the sidebar and closes its tab: the
+  // other open Mind shows instead.
+  const olderId = await items.filter({ hasText: "Older" }).getAttribute("data-mind-id");
   const older = window.getByRole("listitem").filter({ hasText: "Older" });
   await older.hover();
   await older.getByTestId("delete-mind").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
-  await expect(window.getByTestId("mind-pane")).toHaveCount(0);
+  await expect(window.getByTestId("mind-tab-title")).toHaveText(["Newer"]);
+  await expect(window.getByTestId("mind-pane")).not.toHaveAttribute("data-mind-id", `${olderId}`);
   await first.app.close();
 
   // It stays deleted after a restart.

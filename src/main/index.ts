@@ -19,6 +19,7 @@ import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
+import { installAppMenu } from "./menu";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 
@@ -144,6 +145,7 @@ app.whenReady().then(async () => {
     logger,
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
+  installAppMenu();
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);

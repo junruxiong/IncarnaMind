@@ -11,6 +11,8 @@ describe("Settings", () => {
       device: {
         sidebarWidth: 248,
         viewerWidth: 420,
+        openMinds: [],
+        activeMind: null,
         chatSetupDismissed: false,
         skillScriptsEnabled: true,
         skillScriptTimeoutSeconds: 60,
@@ -64,6 +66,8 @@ describe("Settings", () => {
     expect(settings.device).toEqual({
       sidebarWidth: 320,
       viewerWidth: 420,
+      openMinds: [],
+      activeMind: null,
       chatSetupDismissed: false,
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
@@ -76,6 +80,8 @@ describe("Settings", () => {
     const device = {
       sidebarWidth: 300,
       viewerWidth: 500,
+      openMinds: ["mind-b", "mind-a"],
+      activeMind: "mind-a",
       chatSetupDismissed: true,
       skillScriptsEnabled: false,
       skillScriptTimeoutSeconds: 15,
@@ -99,6 +105,10 @@ describe("Settings", () => {
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
     { name: "a width that isn't a number", patch: { device: { viewerWidth: "wide" } } },
+    { name: "open Minds that aren't a list", patch: { device: { openMinds: "mind-a" } } },
+    { name: "an open Mind that isn't an ID", patch: { device: { openMinds: ["mind-a", 7] } } },
+    { name: "a Mind open twice", patch: { device: { openMinds: ["mind-a", "mind-a"] } } },
+    { name: "an active Mind that isn't an ID", patch: { device: { activeMind: "  " } } },
     {
       name: "a script switch that isn't true or false",
       patch: { device: { skillScriptsEnabled: 1 } },
