@@ -118,7 +118,7 @@ export const noteSlashItems: readonly SlashItem[] = [
     id: "question",
     label: "question.slash",
     keywords: ["ask", "question", "ai", "chat", "prompt"],
-    icon: <QuestionIcon className="size-4" />,
+    icon: <QuestionIcon className="size-3.5" />,
     // The line becomes a Question, keeping what was typed before the slash.
     run(editor, range) {
       editor.chain().focus().deleteRange(range).setQuestion().run();
@@ -139,7 +139,7 @@ export function skillSlashItems(skills: readonly Skill[]): SlashItem[] {
       label: { text: skill.name },
       hint: skill.description,
       keywords: ["skill"],
-      icon: <SkillIcon className="size-4 text-violet-600" />,
+      icon: <SkillIcon className="size-3.5" />,
       run(editor, range) {
         editor
           .chain()

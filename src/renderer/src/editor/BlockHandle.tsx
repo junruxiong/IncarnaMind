@@ -1,21 +1,66 @@
-import { type ComputePositionConfig, offset } from "@floating-ui/dom";
+import type { ComputePositionConfig, VirtualElement } from "@floating-ui/dom";
 import { isMacOS } from "@tiptap/core";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
-import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../../../core/api";
+import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { findBlock } from "./blockCommands";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 import { Popover } from "./Popover";
 
-/** Left of the Block's first line, clear of its focus outline. */
-const HANDLE_POSITION: ComputePositionConfig = {
-  placement: "left-start",
-  middleware: [offset({ mainAxis: 10, crossAxis: 2 })],
-};
+/** Centred on the point `handleAnchor` gives, to its left. */
+const HANDLE_POSITION: ComputePositionConfig = { placement: "left", middleware: [] };
+
+/** The position just inside a node's first textblock, if it has one. */
+function firstTextPos(node: ProseMirrorNode, pos: number): number | null {
+  if (node.isTextblock) return pos + 1;
+  let found: number | null = null;
+  node.descendants((child, offset) => {
+    if (found !== null) return false;
+    if (child.isTextblock) found = pos + 1 + offset + 1;
+    return found === null;
+  });
+  return found;
+}
+
+/**
+ * Where the handle goes: in the left margin, a fixed gap left of the Mind's
+ * text edge (the CSS sets `--handle-gap`, wider for a Question, whose band
+ * and Ask button take the margin), level with the Block's first line of text.
+ * An Answer's first line is its first paragraph, under the "Answer" label.
+ */
+function handleAnchor(
+  editor: Editor,
+  block: { node: ProseMirrorNode; pos: number } | null,
+): VirtualElement | null {
+  if (!block || editor.isDestroyed) return null;
+  const { view } = editor;
+  return {
+    contextElement: view.dom,
+    getBoundingClientRect: () => {
+      const style = getComputedStyle(view.dom);
+      const gapName =
+        block.node.type.name === QUESTION_BLOCK ? "--handle-gap-question" : "--handle-gap";
+      const gap = Number.parseFloat(style.getPropertyValue(gapName)) || 0;
+      const x = view.dom.getBoundingClientRect().left - gap;
+      let y: number;
+      const textPos = firstTextPos(block.node, block.pos);
+      if (textPos !== null) {
+        const line = view.coordsAtPos(textPos);
+        y = (line.top + line.bottom) / 2;
+      } else {
+        // A formula or a rule: the middle of its first line.
+        const dom = view.nodeDOM(block.pos);
+        const rect = dom instanceof Element ? dom.getBoundingClientRect() : new DOMRect();
+        y = rect.top + Math.min(rect.height, Number.parseFloat(style.lineHeight) || 28) / 2;
+      }
+      return new DOMRect(x, y, 0, 0);
+    },
+  };
+}
 
 const DELETE_SHORTCUT_LABEL = isMacOS() ? "⌘⇧⌫" : "Ctrl+Shift+Backspace";
 
@@ -98,6 +143,7 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         editor={editor}
         className="block-handle"
         computePositionConfig={HANDLE_POSITION}
+        getReferencedVirtualElement={() => handleAnchor(editor, hovered.current)}
         onNodeChange={({ node, pos }) => {
           hovered.current = node ? { node, pos } : null;
         }}
@@ -112,7 +158,7 @@ export function BlockHandle({ editor }: { editor: Editor }) {
           aria-expanded={menuFor !== null}
           onClick={openMenu}
         >
-          <GripIcon className="size-5" />
+          <GripIcon className="size-4" />
         </button>
       </DragHandle>
       {menuFor && grip.current && (
@@ -159,7 +205,7 @@ function BlockMenu({
         event.preventDefault();
         onClose(true);
       }}
-      className="editor-menu w-[260px]"
+      className="editor-menu w-[240px]"
     >
       {included !== null && (
         <button
@@ -187,7 +233,7 @@ function BlockMenu({
           <TrashIcon className="size-4" />
         </span>
         <span className="flex-1">{t("editor.block.delete")}</span>
-        <kbd className="font-sans text-custom-xs text-gray-400">{DELETE_SHORTCUT_LABEL}</kbd>
+        <kbd className="editor-menu-shortcut">{DELETE_SHORTCUT_LABEL}</kbd>
       </button>
     </Popover>
   );

@@ -193,7 +193,7 @@ export function MathEditor({
       anchor={anchor}
       onDismiss={() => finish(latex, false)}
       aria-label={t("editor.math.label")}
-      className="editor-menu w-96 max-w-[90vw] p-2"
+      className="editor-menu math-editor"
     >
       <textarea
         ref={field}
@@ -219,7 +219,7 @@ export function MathEditor({
         }}
         className="math-input"
       />
-      <p className="mt-1 px-1 text-custom-xs text-gray-500">{t("editor.math.hint")}</p>
+      <p className="math-hint">{t("editor.math.hint")}</p>
     </Popover>
   );
 }
