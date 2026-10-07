@@ -108,6 +108,30 @@ export function documentInstructions(
   }
 }
 
+/**
+ * For a model that can't call Tools, before its one search: rewriting the
+ * Question into a search query that stands on its own, from the notebook
+ * above it (see `searchQuery` in ./engine).
+ */
+export const SEARCH_QUERY_INSTRUCTIONS = [
+  "You turn a Question from the User's notebook into one query for searching the User's Documents. The search sees only the query.",
+  '- Use the notebook text above the Question to work out what the Question refers to, and name it in the query: replace words such as "it", "they", "this paper" or "the second one" with what they mean.',
+  "- Keep the Question's own key words, in its language. If the Question already stands on its own, give it back unchanged.",
+  "- Reply with the query alone, on one line. Don't answer the Question or explain.",
+].join("\n");
+
+/** The request to rewrite `question` into a search query, with the notebook text above it. */
+export function searchQueryPrompt(earlier: string, question: string): string {
+  return [
+    "The notebook text above the Question:",
+    "<notebook>",
+    earlier,
+    "</notebook>",
+    "",
+    `The Question: ${question}`,
+  ].join("\n");
+}
+
 /** XML attribute text. */
 const attribute = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");

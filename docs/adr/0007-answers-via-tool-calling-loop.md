@@ -10,4 +10,4 @@ The old backend used a fixed pipeline: split the question into sub-questions, pi
 
 ## Consequences
 
-Models that can't call tools (some small local models) instead get a single search using the Question's text, with the results added to the Question context.
+Models that can't call tools (some small local models) instead get a single search using the Question's text, with the results added to the Question context. When there are Blocks above the Question, that model first makes one short call to rewrite the Question into a self-contained search query from them, like the old CLI's condense step but producing one query, so a follow-up such as "what about its limitations?" searches for what "its" means; with nothing above the Question, or if the rewrite fails, the Question's own text is searched.

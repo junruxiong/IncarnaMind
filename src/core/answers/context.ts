@@ -12,6 +12,12 @@ import type { AnswerMessage } from "./engine";
 /** About 12k tokens, the old app's budget for what precedes a Question. */
 export const QUESTION_CONTEXT_TOKEN_BUDGET = 12_000;
 
+/**
+ * About 2k tokens: how much of the Question context a Question is rewritten
+ * into a search query from, the old backend's budget for its condense step.
+ */
+export const SEARCH_QUERY_CONTEXT_TOKEN_BUDGET = 2_000;
+
 /** A Block's share of the budget that is too small to be worth keeping the tail of. */
 const MIN_TAIL_TOKENS = 64;
 
@@ -127,4 +133,43 @@ export function buildQuestionContext(
   // A conversation starts with the User.
   while (messages[0]?.role === "assistant") messages.shift();
   return { messages, question: questionText };
+}
+
+/**
+ * The Question context above the Question, as text to rewrite the Question
+ * into a search query from: the newest of it, within about `budget` tokens,
+ * each part labelled as the User's or an Answer. Empty when there is nothing
+ * above the Question.
+ */
+export function earlierContext(
+  messages: readonly AnswerMessage[],
+  question: string,
+  budget = SEARCH_QUERY_CONTEXT_TOKEN_BUDGET,
+): string {
+  const pieces: Piece[] = messages.map((message) => ({
+    role: message.role,
+    text: message.content,
+  }));
+  // The last message ends with the Question, after whatever Notes come right before it.
+  const last = pieces.at(-1);
+  if (last?.role === "user" && last.text.endsWith(question)) {
+    last.text = last.text.slice(0, last.text.length - question.length).trim();
+  }
+  const kept: string[] = [];
+  let remaining = budget;
+  // Newest first, so the oldest are the ones left out.
+  for (let at = pieces.length - 1; at >= 0 && remaining > 0; at--) {
+    const piece = pieces[at] as Piece;
+    if (!piece.text) continue;
+    const label = piece.role === "user" ? "User" : "Answer";
+    const cost = estimateTokens(piece.text);
+    if (cost <= remaining) {
+      kept.push(`${label}: ${piece.text}`);
+      remaining -= cost;
+    } else {
+      if (remaining >= MIN_TAIL_TOKENS) kept.push(`${label}: ${tail(piece.text, remaining)}`);
+      remaining = 0;
+    }
+  }
+  return kept.reverse().join("\n\n");
 }
