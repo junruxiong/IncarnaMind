@@ -1,5 +1,6 @@
 import type { Extensions, NodeViewRenderer } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Highlight from "@tiptap/extension-highlight";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import UniqueID from "@tiptap/extension-unique-id";
 import StarterKit from "@tiptap/starter-kit";
@@ -43,12 +44,12 @@ export interface NoteSchemaOptions {
 
 /**
  * What a Mind can hold, and how it is stored. Notes: headings, bold, italic,
- * strikethrough, lists, code blocks highlighted by lowlight, and inline and
- * block math rendered by KaTeX, each with an "include in Question context"
- * flag. Questions and Answers, top-level only. Citations, inline in Answers
- * and in whatever they are copied into. Every Block has a UUID. The
- * editor adds its interface on top (collaboration, menus, the drag handle);
- * tests use this alone.
+ * strikethrough, highlight, lists, code blocks highlighted by lowlight, and
+ * inline and block math rendered by KaTeX, each with an "include in Question
+ * context" flag. Questions and Answers, top-level only. Citations, inline in
+ * Answers and in whatever they are copied into. Every Block has a UUID. The
+ * editor adds its interface on top (collaboration, menus, the drag handle,
+ * smart typography); tests use this alone.
  */
 export function noteExtensions({
   onEditMath,
@@ -75,6 +76,8 @@ export function noteExtensions({
       dropcursor: { color: "rgb(14 165 233)", width: 2 },
     }),
     MindDocument,
+    // One colour: a `highlight` mark with no attributes. Mod-Shift-H, or `==text==` typed or pasted.
+    Highlight,
     CodeBlock.configure({ lowlight }),
     BlockMath.configure({ katexOptions: { displayMode: true, throwOnError: false }, onClick }),
     InlineMath.configure({ katexOptions: { throwOnError: false }, onClick }),

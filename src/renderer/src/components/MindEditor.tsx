@@ -20,6 +20,7 @@ import { askInEditor, QUESTION_SHORTCUT_LABEL, QuestionCommands } from "../edito
 import { ScopePicker } from "../editor/ScopePicker";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
+import { SmartTypography } from "../editor/typography";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 
@@ -88,7 +89,7 @@ const editorPropsFor = (label: string, emptyFormula: string) => ({
 /**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
- * the drag handle, the formatting menu and the LaTeX field.
+ * the drag handle, the formatting menu, smart typography and the LaTeX field.
  */
 function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
   const t = useT();
@@ -126,6 +127,7 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
           },
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
+        SmartTypography,
         SlashMenu.configure({
           items: (place) => {
             const skills = skillSlashItems(useAppStore.getState().skills);

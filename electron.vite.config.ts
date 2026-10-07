@@ -57,11 +57,38 @@ function pdfjsData(): Plugin {
   };
 }
 
+/**
+ * The licences of the fonts the renderer bundles (src/renderer/src/fonts.css).
+ * Both are the SIL Open Font License 1.1, which asks that every copy of a font
+ * comes with it.
+ */
+const FONT_LICENCES: Readonly<Record<string, string>> = {
+  "Roboto-OFL.txt": "@fontsource-variable/roboto/LICENSE",
+  "Lora-OFL.txt": "@fontsource/lora/LICENSE",
+};
+
+/** Copies the bundled fonts' licences into a build, under licenses/. */
+function fontLicences(): Plugin {
+  const require = createRequire(import.meta.url);
+  return {
+    name: "incarnamind:font-licences",
+    generateBundle() {
+      for (const [fileName, licence] of Object.entries(FONT_LICENCES)) {
+        this.emitFile({
+          type: "asset",
+          fileName: `licenses/${fileName}`,
+          source: readFileSync(require.resolve(licence)),
+        });
+      }
+    },
+  };
+}
+
 // Entry points follow electron-vite's defaults: src/main, src/preload and src/renderer.
 export default defineConfig({
   main: {},
   preload: {},
   renderer: {
-    plugins: [react(), tailwindcss(), pdfjsData()],
+    plugins: [react(), tailwindcss(), pdfjsData(), fontLicences()],
   },
 });

@@ -16,6 +16,7 @@ export interface Marks {
   italic: boolean;
   strike: boolean;
   underline: boolean;
+  highlight: boolean;
   code: boolean;
   /** The link's target, or null. */
   link: string | null;
@@ -214,6 +215,7 @@ const NO_MARKS: Marks = {
   italic: false,
   strike: false,
   underline: false,
+  highlight: false,
   code: false,
   link: null,
 };
@@ -225,6 +227,7 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
     italic: Object.hasOwn(attributes, "italic"),
     strike: Object.hasOwn(attributes, "strike"),
     underline: Object.hasOwn(attributes, "underline"),
+    highlight: Object.hasOwn(attributes, "highlight"),
     code: Object.hasOwn(attributes, "code"),
     link: link && typeof link.href === "string" && link.href !== "" ? link.href : null,
   };
