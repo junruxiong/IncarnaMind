@@ -249,3 +249,51 @@ test("the drop overlay hides what is under it", async () => {
   await screenshot(window, "drop-overlay");
   await app.close();
 });
+
+test("Add Documents opens a sheet on the window in a folder on this computer, then where the User last picked from", async () => {
+  const notes = join(sources, "Notes.txt");
+  const plan = join(sources, "Plan.md");
+  await writeFile(notes, "Notes about tides.");
+  await writeFile(plan, "# Plan\n\nRead the tide tables.");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  // The system's open dialog, answered by the test: it records how it was opened.
+  await app.evaluate(
+    ({ dialog }, picked) => {
+      const asked: { sheet: boolean; options: Electron.OpenDialogOptions }[] = [];
+      (globalThis as { openDialogsAsked?: unknown }).openDialogsAsked = asked;
+      dialog.showOpenDialog = (async (...args: unknown[]) => {
+        asked.push({
+          sheet: args.length === 2,
+          options: args.at(-1) as Electron.OpenDialogOptions,
+        });
+        return { canceled: false, filePaths: picked };
+      }) as typeof dialog.showOpenDialog;
+    },
+    [notes, plan],
+  );
+  const asked = () =>
+    app.evaluate(
+      () =>
+        (
+          globalThis as {
+            openDialogsAsked?: { sheet: boolean; options: Electron.OpenDialogOptions }[];
+          }
+        ).openDialogsAsked ?? [],
+    );
+
+  await window.getByTestId("empty-add-documents").click();
+  const items = window.getByTestId("document-list-item");
+  await expect(items).toHaveCount(2);
+  const downloads = await app.evaluate(({ app: electron }) => electron.getPath("downloads"));
+  const [first] = await asked();
+  expect(first?.sheet).toBe(true);
+  expect(first?.options.defaultPath).toBe(downloads);
+  expect(first?.options.properties).toEqual(["openFile", "multiSelections"]);
+
+  // Next time it starts where those came from.
+  await window.getByTestId("add-documents").click();
+  await expect.poll(async () => (await asked()).length).toBe(2);
+  expect((await asked())[1]?.options.defaultPath).toBe(sources);
+  await app.close();
+});
