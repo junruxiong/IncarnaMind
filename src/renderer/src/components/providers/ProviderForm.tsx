@@ -10,7 +10,7 @@ import { features } from "../../../../shared/features";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
-import { buttonClass, inputClass, primaryButtonClass } from "./shared";
+import { buttonClass, inputClass, primaryButtonClass, testErrorKey } from "./shared";
 
 /** Providers set up with a key or a server URL. Ollama has its own one-click card. */
 const formKinds = [
@@ -242,7 +242,7 @@ export function ProviderForm({
   );
 }
 
-function TestResult({ result }: { result: ConnectionTestResult }) {
+export function TestResult({ result }: { result: ConnectionTestResult }) {
   const t = useT();
   if (result.ok) {
     return (
@@ -253,7 +253,7 @@ function TestResult({ result }: { result: ConnectionTestResult }) {
   }
   return (
     <div data-testid="connection-test" role="alert" className="text-sm text-red-700">
-      <p>{t(`providers.test.${result.error.kind}`)}</p>
+      <p>{t(testErrorKey(result.error.kind))}</p>
       {/* The provider's own words help with its errors; a declined consent needs none. */}
       {result.error.message && result.error.kind !== "consent-declined" && (
         <p className="mt-1 text-xs break-words text-gray-500">{result.error.message}</p>

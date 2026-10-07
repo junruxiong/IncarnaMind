@@ -18,8 +18,10 @@ import { ChatNotReadyError, InvalidInputError, isRecord } from "../errors";
 import type { Secrets } from "../secrets";
 import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
+import { isChatGptPlanModel } from "./chatgpt/codexEndpoint";
+import type { ChatGptPlan } from "./chatgpt/plan";
 import { acceptsApiKey, baseUrlFor, isChatProviderKind, requiresApiKey, serviceFor } from "./kinds";
-import type { ChatLanguageModel, ChatModelFactory } from "./models";
+import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec } from "./models";
 import { classifyProviderError } from "./providerErrors";
 
 /**
@@ -77,6 +79,12 @@ function parseApiKey(value: unknown, kind: ChatProviderKind): string | null | un
 const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
   serviceFor(kind, baseUrl)?.name ?? baseUrl ?? kind;
 
+/** What chat providers need from the experimental ChatGPT plan provider. */
+export type ChatGptPlanAccess = Pick<
+  ChatGptPlan,
+  "enabled" | "hasSignIn" | "credentials" | "codexBaseUrl"
+>;
+
 export function createChat(options: {
   db: Database;
   now: () => string;
@@ -84,20 +92,29 @@ export function createChat(options: {
   secrets: Secrets;
   consent: Consent;
   createModel: ChatModelFactory;
+  chatGpt: ChatGptPlanAccess;
 }) {
-  const { db, now, settings, secrets, consent, createModel } = options;
+  const { db, now, settings, secrets, consent, createModel, chatGpt } = options;
+
+  /** A ChatGPT plan provider counts only while the experimental switch is on. */
+  const usable = (row: ProviderRow | undefined) =>
+    row && (row.kind !== "chatgpt" || chatGpt.enabled()) ? row : undefined;
 
   const rowById = (id: string) =>
-    db.get<ProviderRow>(
-      "SELECT id, kind, base_url FROM chat_providers WHERE id = ? AND deleted_at IS NULL",
-      [id],
+    usable(
+      db.get<ProviderRow>(
+        "SELECT id, kind, base_url FROM chat_providers WHERE id = ? AND deleted_at IS NULL",
+        [id],
+      ),
     );
 
   const rowByServer = ({ kind, baseUrl }: ParsedServer) =>
-    db.get<ProviderRow>(
-      `SELECT id, kind, base_url FROM chat_providers
-       WHERE kind = ? AND coalesce(base_url, '') = ? AND deleted_at IS NULL`,
-      [kind, baseUrl ?? ""],
+    usable(
+      db.get<ProviderRow>(
+        `SELECT id, kind, base_url FROM chat_providers
+         WHERE kind = ? AND coalesce(base_url, '') = ? AND deleted_at IS NULL`,
+        [kind, baseUrl ?? ""],
+      ),
     );
 
   /** Rows of a kind this version knows; rows from a newer version are left alone. */
@@ -107,7 +124,35 @@ export function createChat(options: {
         `SELECT id, kind, base_url FROM chat_providers WHERE deleted_at IS NULL
          ORDER BY created_at, rowid`,
       )
-      .filter((row) => isChatProviderKind(row.kind));
+      .filter((row) => isChatProviderKind(row.kind) && usable(row));
+
+  /** What the model factory needs; the ChatGPT plan signs with the sign-in instead of a key. */
+  const specFor = (
+    kind: ChatProviderKind,
+    baseUrl: string | null,
+    apiKey: string | null,
+    modelId: string,
+  ): ChatModelSpec =>
+    kind === "chatgpt"
+      ? {
+          kind,
+          baseUrl: chatGpt.codexBaseUrl,
+          apiKey: null,
+          modelId,
+          credentials: chatGpt.credentials,
+        }
+      : { kind, baseUrl, apiKey, modelId };
+
+  /** The ChatGPT plan takes only the models its endpoint accepts, and only while it's turned on. */
+  const checkChatGpt = (kind: ChatProviderKind, modelId: string) => {
+    if (kind !== "chatgpt") return;
+    if (!chatGpt.enabled()) {
+      throw new InvalidInputError("Turn on the ChatGPT plan provider in Settings first.");
+    }
+    if (!isChatGptPlanModel(modelId)) {
+      throw new InvalidInputError(`The ChatGPT plan doesn't offer the model "${modelId}".`);
+    }
+  };
 
   const toProvider = async (row: ProviderRow): Promise<ChatProvider> => {
     const kind = row.kind as ChatProviderKind;
@@ -144,6 +189,9 @@ export function createChat(options: {
     if (requiresApiKey(provider.kind) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }
+    if (provider.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
+      return { ready: false, reason: "sign-in-required", provider, modelId };
+    }
     if (!provider.service) return { ready: true, provider, modelId, consent: "not-required" };
     const decision = consent.status("chat", provider.service);
     if (decision === "declined") {
@@ -168,6 +216,7 @@ export function createChat(options: {
       const server = parseServer(input);
       const apiKey = parseApiKey(input.apiKey, server.kind);
       const modelId = parseModelId(input.modelId);
+      checkChatGpt(server.kind, modelId);
 
       const existing = rowByServer(server);
       const id = existing?.id ?? randomUUID();
@@ -220,6 +269,28 @@ export function createChat(options: {
       await secrets.delete(keyName(id));
     },
 
+    /** Removes every provider of a kind (e.g. when the ChatGPT plan is turned off), keys included. */
+    async deleteKind(kind: ChatProviderKind): Promise<void> {
+      const rows = db.all<{ id: string }>(
+        "SELECT id FROM chat_providers WHERE kind = ? AND deleted_at IS NULL",
+        [kind],
+      );
+      const at = now();
+      db.transaction(() => {
+        for (const { id } of rows) {
+          db.run("UPDATE chat_providers SET deleted_at = ?, updated_at = ? WHERE id = ?", [
+            at,
+            at,
+            id,
+          ]);
+          if (settings.get().user.chatModel?.providerId === id) {
+            settings.update({ user: { chatModel: null } });
+          }
+        }
+      });
+      for (const { id } of rows) await secrets.delete(keyName(id));
+    },
+
     exists: (id: string) => rowById(id) !== undefined,
 
     readiness: () => readinessFor(settings.get().user.chatModel),
@@ -243,11 +314,18 @@ export function createChat(options: {
           `Enter an API key for ${displayName(server.kind, server.baseUrl)}.`,
         );
       }
+      checkChatGpt(server.kind, modelId);
+      if (server.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
+        return {
+          ok: false,
+          error: { kind: "not-signed-in", message: "Sign in to ChatGPT first." },
+        };
+      }
 
       try {
         const service = serviceFor(server.kind, server.baseUrl);
         if (service) await consent.ensure("chat", service);
-        const model = createModel({ ...server, apiKey, modelId });
+        const model = createModel(specFor(server.kind, server.baseUrl, apiKey, modelId));
         await generateText({
           model,
           prompt: "Reply with the word OK.",
@@ -272,12 +350,7 @@ export function createChat(options: {
       const { provider, modelId } = readiness;
       if (provider.service) await consent.ensure("chat", provider.service);
       const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
-      const model = createModel({
-        kind: provider.kind,
-        baseUrl: provider.baseUrl,
-        apiKey,
-        modelId,
-      });
+      const model = createModel(specFor(provider.kind, provider.baseUrl, apiKey, modelId));
       return { model, provider, modelId };
     },
   };

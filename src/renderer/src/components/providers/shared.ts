@@ -1,7 +1,28 @@
-import type { ChatProvider } from "../../../../core/api";
+import type { ChatProvider, ChatReadiness, ProviderErrorKind } from "../../../../core/api";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
+
+/** What a failed connection test means, in words. The ChatGPT plan's own kinds live under `codex.`. */
+export function testErrorKey(kind: ProviderErrorKind): MessageKey {
+  switch (kind) {
+    case "not-signed-in":
+    case "plan-limit":
+    case "blocked":
+      return `codex.test.${kind}`;
+    default:
+      return `providers.test.${kind}`;
+  }
+}
+
+/** What to configure before Questions can be asked, in words. */
+export function readinessKey(
+  reason: Extract<ChatReadiness, { ready: false }>["reason"],
+): MessageKey {
+  return reason === "sign-in-required"
+    ? "codex.readiness.sign-in-required"
+    : `providers.readiness.${reason}`;
+}
 
 export const buttonClass =
   "rounded-[9px] border border-gray-300 px-4 py-2 text-sm hover:bg-gray-100 disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent";
@@ -14,6 +35,7 @@ export const inputClass =
 
 /** "OpenAI", "OpenAI-compatible server · api.deepseek.com", "Ollama · on this computer". */
 export function providerLabel(provider: ChatProvider, t: Translate): string {
+  if (provider.kind === "chatgpt") return t("codex.provider.name");
   const kind = t(`providers.kind.${provider.kind}`);
   if (provider.kind === "openai" || provider.kind === "anthropic" || provider.kind === "google") {
     return kind;
