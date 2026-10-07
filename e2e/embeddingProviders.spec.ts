@@ -84,3 +84,32 @@ test("switching the embedding provider warns that every Document is processed ag
   await expect(window.getByTestId("embedding-rebuild-notice")).toHaveCount(0);
   await app.close();
 });
+
+test("in local mode, a server elsewhere and reranking are turned down as they're chosen, saying why", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await openSettings(window, "search");
+  const section = window.getByTestId("embedding-settings");
+  await section.getByTestId("local-only").check();
+
+  await section.getByTestId("embedding-change").click();
+  const form = section.getByTestId("embedding-form");
+  await expect(form.getByLabel("OpenAI", { exact: true })).toBeDisabled();
+  await form.getByLabel("OpenAI-compatible server").check();
+  const server = form.getByLabel("Server URL");
+  const why = form.getByTestId("embedding-local-only");
+  await server.fill("https://api.deepseek.com/v1");
+  await form.getByLabel("Embedding model name").fill("embed-small");
+  await expect(why).toBeVisible();
+  await expect(form.getByTestId("embedding-switch")).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Test connection" })).toBeDisabled();
+  // A server on this computer is fine.
+  await server.fill("http://127.0.0.1:1234/v1");
+  await expect(why).toBeHidden();
+  await expect(form.getByTestId("embedding-switch")).toBeEnabled();
+
+  const rerank = window.getByTestId("rerank-settings");
+  await expect(rerank.getByTestId("rerank-set-up")).toBeDisabled();
+  await expect(rerank.getByTestId("rerank-local-only")).toBeVisible();
+  await app.close();
+});
