@@ -30,12 +30,12 @@ import { PlaceMemoryContext } from "./place";
 import { CitationMark, type QuoteMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import { HeaderDivider, ViewerHeader } from "./ViewerHeader";
 import { FileGone, ViewerMessage } from "./ViewerMessage";
+import { createWheelZoom, MAX_ZOOM, MIN_ZOOM, stepZoom } from "./zoom";
 
 /** CSS pixels per PDF point: at 100% a page shows at its printed size. */
 const CSS_UNITS = 96 / 72;
-const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
-const MIN_ZOOM = ZOOM_STEPS[0] as number;
-const MAX_ZOOM = ZOOM_STEPS.at(-1) as number;
+/** On macOS ⌘ with the wheel zooms too, as Ctrl does. */
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 /**
  * Fitted to the width, a page may be smaller than the smallest step, e.g. in
  * a narrow viewer with the outline beside it: it fits what width there is.
@@ -73,6 +73,19 @@ type Loaded =
   | { kind: "failed"; message: string };
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+/** The first of the pages (in order, top to bottom) whose bottom edge is below `y`, by its index. */
+function pageIndexAt(elements: readonly (HTMLElement | null)[], y: number): number {
+  let low = 0;
+  let high = elements.length - 1;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    const element = elements[middle];
+    if (element && element.offsetTop + element.offsetHeight <= y) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
 
 /**
  * A PDF Document, rendered with pdf.js: pages are drawn only while near the
@@ -187,6 +200,19 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   /** The open request whose highlight the view should move to once it is drawn. */
   const pendingHighlight = useRef<number | null>(null);
   const frame = useRef(0);
+  /** The zoom shown, or about to be: a zoom by wheel goes on from it. */
+  const shownZoom = useRef(1);
+  /**
+   * Where a zoom by wheel or pinch was centred: a point of a page, as
+   * fractions of its size, and where the pointer was in the view.
+   */
+  const zoomOrigin = useRef<{
+    page: number;
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
 
   const scale =
     zoom.fit && viewportWidth > 0
@@ -228,14 +254,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     const { scrollTop, clientHeight } = container;
     const elements = pageElements.current;
     // The first page whose bottom is below the top of the view.
-    let low = 0;
-    let high = elements.length - 1;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      const element = elements[middle];
-      if (element && element.offsetTop + element.offsetHeight <= scrollTop) low = middle + 1;
-      else high = middle;
-    }
+    const low = pageIndexAt(elements, scrollTop);
     const top = elements[low];
     if (!top) return;
     anchor.current = {
@@ -282,15 +301,83 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     return () => observer.disconnect();
   }, []);
 
-  // When pages change size (a zoom, a resize, a page's real size arriving), keep the same place in view.
+  // When pages change size (a zoom, a resize, a page's real size arriving), keep the same place in view:
+  // the point under the pointer after a zoom by wheel or pinch, else the top of the view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs because the layout changed
   useLayoutEffect(() => {
+    shownZoom.current = scale / CSS_UNITS;
     const container = scroller.current;
+    if (!container) return;
+    const origin = zoomOrigin.current;
+    zoomOrigin.current = null;
+    const around = origin && pageElement(origin.page);
+    if (origin && around) {
+      container.scrollLeft = around.offsetLeft + origin.x * around.offsetWidth - origin.left;
+      container.scrollTop = around.offsetTop + origin.y * around.offsetHeight - origin.top;
+      measure();
+      return;
+    }
     const element = pageElement(anchor.current.page);
-    if (!container || !element) return;
+    if (!element) return;
     container.scrollTop = element.offsetTop + anchor.current.fraction * element.offsetHeight;
     if (placed.current) placed.current.scrollTop = container.scrollTop;
   }, [scale, sizes]);
+
+  /**
+   * Zooms `steps` steps (positive: in), keeping the point of the page under
+   * the pointer (`clientX`, `clientY`) where it is.
+   */
+  const zoomAround = useCallback((steps: number, clientX: number, clientY: number) => {
+    const container = scroller.current;
+    const current = shownZoom.current;
+    const next = stepZoom(current, steps);
+    if (!container || Math.abs(next - current) < 0.0005) return;
+    const box = container.getBoundingClientRect();
+    const left = clientX - box.left - container.clientLeft;
+    const top = clientY - box.top - container.clientTop;
+    const y = container.scrollTop + top;
+    const index = pageIndexAt(pageElements.current, y);
+    const element = pageElements.current[index];
+    if (element) {
+      zoomOrigin.current = {
+        page: index + 1,
+        x: (container.scrollLeft + left - element.offsetLeft) / element.offsetWidth,
+        y: (y - element.offsetTop) / element.offsetHeight,
+        left,
+        top,
+      };
+    }
+    // Another event may come before the zoom is drawn: it goes on from this one.
+    shownZoom.current = next;
+    setZoom({ fit: false, zoom: next });
+  }, []);
+
+  // A pinch, or the wheel with Ctrl (or ⌘ on macOS) held, zooms the pages around the pointer.
+  // The gesture is theirs: nothing else scrolls or zooms with it.
+  useEffect(() => {
+    const container = scroller.current;
+    if (!container) return;
+    const gesture = createWheelZoom({ mac: IS_MAC });
+    const onKey = (event: globalThis.KeyboardEvent) => gesture.keyChanged(event);
+    const onBlur = () => gesture.blur();
+    const onWheel = (event: WheelEvent) => {
+      if (!gesture.isZoom(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const steps = gesture.steps(event);
+      if (steps !== 0) zoomAround(steps, event.clientX, event.clientY);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", onBlur);
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+      window.removeEventListener("blur", onBlur);
+      container.removeEventListener("wheel", onWheel);
+    };
+  }, [zoomAround]);
 
   // Each open request goes to the first page of its range (a plain reopen keeps the place).
   // Read again, the file opens there too, or else where the view was.
@@ -420,9 +507,10 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   }, []);
 
   const currentZoom = scale / CSS_UNITS;
-  const zoomTo = (next: number) => {
+  /** A step in (1) or out (-1), keeping the top of the view in place. */
+  const zoomStep = (steps: number) => {
     measure(); // so the anchor is current
-    setZoom({ fit: false, zoom: clamp(next, MIN_ZOOM, MAX_ZOOM) });
+    setZoom({ fit: false, zoom: stepZoom(currentZoom, steps) });
   };
 
   const hasOutline = outline.length > 0;
@@ -449,10 +537,8 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
         <ZoomControls
           percent={zoomPercent}
           fitWidth={zoom.fit}
-          onZoomIn={() => zoomTo(ZOOM_STEPS.find((step) => step > currentZoom + 0.001) ?? MAX_ZOOM)}
-          onZoomOut={() =>
-            zoomTo(ZOOM_STEPS.findLast((step) => step < currentZoom - 0.001) ?? MIN_ZOOM)
-          }
+          onZoomIn={() => zoomStep(1)}
+          onZoomOut={() => zoomStep(-1)}
           onFitWidth={() => {
             measure();
             setZoom({ fit: true });
