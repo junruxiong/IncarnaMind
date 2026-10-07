@@ -188,7 +188,7 @@
 
     &:hover,
     &:active {
-      background: var(--color-rule-strong);
+      background-color: var(--color-rule-strong);
     }
     &:hover::before,
     &:active::before,
@@ -196,8 +196,18 @@
       opacity: 1;
     }
     &:focus-visible {
-      background: var(--color-accent);
+      background-color: var(--color-accent);
     }
+  }
+  /*
+   * The divider before the Document viewer starts below the 44px band the
+   * Mind's tab strip and the viewer's toolbar share, so the band runs across
+   * unbroken and the rule meets it in a T, not a cross.
+   */
+  .pane-divider--below-band {
+    background-image: linear-gradient(var(--color-tab-strip), var(--color-tab-strip));
+    background-size: 100% 44px;
+    background-repeat: no-repeat;
   }
 
   /*
@@ -260,14 +270,18 @@
     padding-right: 8px;
     background: var(--color-tab-strip);
   }
-  /* The strip's 16px left padding is the list's, so the first tab's foot isn't clipped. */
+  /*
+   * The tabs start flush against the sidebar: the shown first tab has no left
+   * foot and a square top-left corner (below). The 10px end padding is room
+   * for the last tab's right foot.
+   */
   .mind-tabs-list {
     display: flex;
     flex: 0 1 auto;
     align-items: flex-end;
     align-self: stretch;
     min-width: 0;
-    padding: 0 10px 0 16px;
+    padding: 0 10px 0 0;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -397,6 +411,22 @@
   }
   .mind-tab[aria-selected="true"] .mind-tab-foot {
     display: block;
+  }
+  /* The first tab, shown, meets the sidebar square: no left foot, its content inset 16px. */
+  .mind-tab:first-child[aria-selected="true"] {
+    border-top-left-radius: 0;
+
+    .mind-tab-inner {
+      padding-left: 16px;
+      border-top-left-radius: 0;
+    }
+    .mind-tab-foot[data-side="left"] {
+      display: none;
+    }
+  }
+  /* Before the first tab, the drop line stays inside the strip. */
+  .mind-tab:first-child[data-drop="before"]::before {
+    left: 0;
   }
   /* The Mind icon, or in its place what the Mind is busy with. */
   .mind-tab-icon {

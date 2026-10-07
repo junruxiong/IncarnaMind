@@ -119,6 +119,7 @@ function Workspace() {
         <>
           <ResizeRod
             testId="viewer-resize"
+            belowBand
             label={t("viewer.resize")}
             width={viewerWidth}
             min={VIEWER.min}

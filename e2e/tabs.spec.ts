@@ -1,6 +1,6 @@
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
+import { createDataFolder, dismissChatSetup, launchApp, openViewer, removeDataFolder } from "./app";
 
 /*
  * The Mind tabs (DESIGN.md, Components: Mind tabs): several Minds open at
@@ -392,5 +392,45 @@ test("a Mind is renamed from its sidebar row, and the Minds fold away", async ()
   await expect(toggle).toHaveText("Minds (2)");
   await toggle.click();
   await expect(rows).toHaveCount(2);
+  await app.close();
+});
+
+test("the 44px band runs unbroken: tabs start at the sidebar, the viewer's toolbar sits on it, and the dividers meet it in Ts", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  for (const name of ["First", "Second"]) {
+    await window.getByTestId("new-mind").click();
+    await expect(window.getByTestId("mind-title")).toBeFocused();
+    await window.keyboard.type(name);
+  }
+  await tabsOf(window).first().click();
+  await openViewer(window);
+
+  // The first tab, shown, meets the sidebar square: flush, with no left foot.
+  const sidebar = await boxOf(window.getByTestId("sidebar"));
+  const first = tabsOf(window).first();
+  expect((await boxOf(first)).x).toBeCloseTo(sidebar.x + sidebar.width + 1, 0);
+  expect(await first.evaluate((tab) => getComputedStyle(tab).borderTopLeftRadius)).toBe("0px");
+  await expect(first.locator('.mind-tab-foot[data-side="left"]')).toBeHidden();
+  // The sidebar's header has no bottom rule.
+  const header = window.getByTestId("sidebar-header");
+  expect(await header.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe(
+    "0px",
+  );
+
+  // The viewer's toolbar is on the band, with no rule under it; its divider starts below the band.
+  const band = await window
+    .getByTestId("mind-header")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  const toolbar = window.getByTestId("viewer-header");
+  expect(await toolbar.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(band);
+  expect(await toolbar.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe(
+    "0px",
+  );
+  expect(
+    await window
+      .getByTestId("viewer-resize")
+      .evaluate((element) => getComputedStyle(element).backgroundImage),
+  ).toContain("linear-gradient");
   await app.close();
 });

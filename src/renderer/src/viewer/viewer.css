@@ -21,10 +21,19 @@
     }
   }
 
-  /* The one 44px header, like every pane's. Too narrow for its controls, it scrolls sideways. */
+  /*
+   * The one 44px header, on the band the Mind's tab strip continues across
+   * (tab-strip, no bottom rule): the divider before the viewer starts below
+   * it. Too narrow for its controls, it scrolls sideways.
+   */
   .viewer-header {
-    @apply flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-b border-rule bg-sheet px-2 text-[13px] leading-5 text-ink-secondary;
+    @apply flex h-11 shrink-0 items-center gap-1 overflow-x-auto bg-tab-strip px-2 text-[13px] leading-5 text-ink-secondary;
     scrollbar-width: none;
+
+    /* On the band, a pointed-at button takes the tab strip's hover. */
+    .viewer-icon-button:hover:not(:disabled) {
+      @apply bg-tab-hover;
+    }
   }
   .viewer-title {
     @apply min-w-12 flex-1 truncate text-ui font-semibold text-ink-secondary;
