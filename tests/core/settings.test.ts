@@ -9,7 +9,7 @@ describe("Settings", () => {
     expect(await core.getSettings()).toEqual({
       user: { language: "system", chatModel: null },
       device: {
-        sidebarWidth: 270,
+        sidebarWidth: 248,
         viewerWidth: 420,
         chatSetupDismissed: false,
         skillScriptsEnabled: true,

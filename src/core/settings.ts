@@ -57,7 +57,8 @@ const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
   defaults: {
-    sidebarWidth: 270,
+    // DESIGN.md: the sidebar is 248px by default.
+    sidebarWidth: 248,
     viewerWidth: 420,
     chatSetupDismissed: false,
     skillScriptsEnabled: true,

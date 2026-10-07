@@ -85,16 +85,19 @@
   --shadow-custom-unfocus: 0 0 10px rgba(0, 0, 0, 0.12);
 }
 
-/* The old "New Mind" hover effect: gradient text. */
-@utility text-gradient-mind {
-  background-image: linear-gradient(
-    to right,
-    var(--color-indigo-500) 10%,
-    var(--color-sky-500) 30%,
-    var(--color-emerald-500) 90%
-  );
-  background-clip: text;
-  color: transparent;
+/*
+ * The app's chrome (sidebar, pane headers, dialogs, Settings), from the
+ * approved mockups: values they use that DESIGN.md's palette doesn't name.
+ */
+@theme {
+  /* Names in the sidebar and pane titles, secondary buttons' text, and a primary button's hover. */
+  --color-ink-strong: #2e3238;
+  /* A switch that is off. */
+  --color-control-off: #c9cdd3;
+  /* A chosen row in a list of choices, and its hover. */
+  --color-wash: #f7f8fa;
+  /* Behind a dialog. */
+  --color-scrim: rgb(23 25 28 / 0.32);
 }
 
 @utility hide-scrollbar {
@@ -112,21 +115,118 @@
     height: 100%;
   }
 
+  /* Panes sit on the sheet; the sidebar paints its own frame. */
   body {
-    @apply bg-gray-200 font-sans text-gray-800 antialiased;
+    @apply bg-sheet font-sans text-ink antialiased;
+  }
+
+  /* Reached by keyboard, a radio or checkbox gets the blue focus outline, not the system's. */
+  input:is([type="radio"], [type="checkbox"]):focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
 
 @layer components {
-  /* The pane divider's grip: three dots stacked vertically. */
-  .three-dots::before {
-    content: "•\A•\A•";
-    white-space: pre;
-    text-align: center;
-    line-height: 0.8;
-    display: block;
-    font-size: 7px;
-    color: var(--color-gray-500);
+  /*
+   * The divider between panes: a 1px rule, with a wider invisible strip to
+   * grab. Its grip of three dots shows only while it is pointed at, dragged
+   * or focused.
+   */
+  .pane-divider {
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    align-self: stretch;
+    width: 1px;
+    height: auto;
+    margin: 0;
+    border: 0;
+    background: var(--color-rule);
+    cursor: col-resize;
+    outline: none;
+    transition: background-color 80ms ease-out;
+
+    /* The strip to grab: 4px either side of the rule. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0 -4px;
+    }
+
+    &::before {
+      content: "•\A•\A•";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      translate: -50% -50%;
+      padding: 3px 1px;
+      border-radius: 4px;
+      background: var(--color-sheet);
+      box-shadow: 0 0 0 1px var(--color-rule-strong);
+      color: var(--color-ink-meta);
+      font-size: 7px;
+      line-height: 0.8;
+      text-align: center;
+      white-space: pre;
+      opacity: 0;
+      transition: opacity 80ms ease-out;
+    }
+
+    &:hover,
+    &:active {
+      background: var(--color-rule-strong);
+    }
+    &:hover::before,
+    &:active::before,
+    &:focus-visible::before {
+      opacity: 1;
+    }
+    &:focus-visible {
+      background: var(--color-accent);
+    }
+  }
+
+  /*
+   * A switch: a native checkbox (role="switch"), so it is checked, focused
+   * and labelled like one. The knob is a background, moved when checked.
+   */
+  .switch {
+    appearance: none;
+    flex-shrink: 0;
+    width: 36px;
+    height: 20px;
+    margin: 0;
+    border-radius: 9999px;
+    background: var(--color-control-off)
+      radial-gradient(circle at center, var(--color-sheet) 7.5px, transparent 8px) no-repeat;
+    background-size: 20px 20px;
+    background-position: 0 0;
+    cursor: pointer;
+    transition:
+      background-color 120ms ease-out,
+      background-position 120ms ease-out;
+
+    &:checked {
+      background-color: var(--color-ink);
+      background-position: 16px 0;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    &:disabled {
+      cursor: default;
+      opacity: 0.5;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pane-divider,
+    .pane-divider::before,
+    .switch {
+      transition: none;
+    }
   }
 
   /*

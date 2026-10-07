@@ -7,13 +7,14 @@ import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TagsDialog } from "./components/TagsDialog";
+import { buttonStyle } from "./components/ui";
 import { ViewerPanel } from "./components/ViewerPanel";
 import { useLanguage, useT } from "./i18n";
 import { useAppStore } from "./store";
 import { useDevViewerShortcut } from "./viewerControls";
 
-// Pane limits, from the old frontend's layout store.
-const ROD_WIDTH = 3;
+// Pane limits, from the old frontend's layout store. A divider is a 1px rule.
+const ROD_WIDTH = 1;
 const SIDEBAR = { min: 165, max: 480 };
 const VIEWER = { min: 220, max: 900 };
 const CENTRE_MIN = 300;
@@ -41,7 +42,7 @@ export function App() {
   if (status.kind === "loading") return null;
   if (status.kind === "failed") {
     return (
-      <p role="alert" className="p-6 text-sm text-red-700">
+      <p role="alert" className="p-6 text-ui text-danger">
         {t("error.load", { message: status.message })}
       </p>
     );
@@ -50,9 +51,10 @@ export function App() {
 }
 
 /**
- * Sidebar with Minds and Documents on the left and the open Mind filling the
- * rest. The Document viewer panel appears on the right only while open,
- * narrowing the Mind area. Files dropped anywhere are added as Documents.
+ * Sidebar with Minds and Documents on the left, on the frame, and the open
+ * Mind filling the rest, on the sheet; 1px rules divide them. The Document
+ * viewer panel appears on the right only while open, narrowing the Mind area.
+ * Files dropped anywhere are added as Documents.
  */
 function Workspace() {
   const t = useT();
@@ -73,7 +75,7 @@ function Workspace() {
   const room = windowWidth - ROD_WIDTH - CENTRE_MIN;
 
   return (
-    <div className="relative flex h-screen overflow-hidden" {...fileDrop.handlers}>
+    <div className="relative flex h-screen overflow-hidden bg-sheet" {...fileDrop.handlers}>
       <Sidebar width={sidebarWidth} onOpenSettings={openSettings} />
       <ResizeRod
         label={t("sidebar.resize")}
@@ -119,14 +121,10 @@ function ActionError() {
   return (
     <div
       role="alert"
-      className="fixed right-4 bottom-4 flex max-w-sm items-start gap-3 rounded-[9px] bg-white px-4 py-3 text-sm text-red-700 shadow-custom-focus"
+      className="fixed right-4 bottom-4 z-20 flex max-w-sm items-start gap-3 rounded-lg bg-sheet py-2.5 pr-2.5 pl-4 text-[13px] leading-5 text-danger shadow-popover"
     >
-      <p>{t("error.action", { message })}</p>
-      <button
-        type="button"
-        onClick={dismiss}
-        className="shrink-0 rounded-[9px] px-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-      >
+      <p className="min-w-0 flex-1 py-1 break-words">{t("error.action", { message })}</p>
+      <button type="button" onClick={dismiss} className={buttonStyle("ghost", "sm")}>
         {t("error.dismiss")}
       </button>
     </div>
