@@ -263,7 +263,7 @@ export function TestResult({ result }: { result: ConnectionTestResult }) {
 }
 
 /** Linux without a keyring (safeStorage "basic_text"), or no encryption at all. */
-function SecretStorageNotice({
+export function SecretStorageNotice({
   status,
   onAccept,
 }: {

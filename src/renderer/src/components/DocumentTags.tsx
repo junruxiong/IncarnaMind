@@ -1,14 +1,17 @@
-import type { Document, TaggingState } from "../../../core/api";
+import type { Document, DocumentTag, Tag, TaggingState } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { CheckIcon, CloseIcon, TagIcon } from "./icons";
 import { menuClass, menuItemClass, menuTitleClass, usePopoverMenu } from "./usePopoverMenu";
 
-/** What a ready Document's tagging line says; nothing once it is tagged. */
+/**
+ * What a ready Document's tagging line says; nothing once it is tagged.
+ * Waiting for a model says nothing either: the Documents section shows one
+ * notice for every Document waiting (`TaggingWaitingNotice`).
+ */
 const taggingMessages: Partial<Record<TaggingState, MessageKey>> = {
   pending: "tags.state.pending",
-  "waiting-for-provider": "tags.state.waiting-for-provider",
   tagging: "tags.state.tagging",
   failed: "tags.state.failed",
 };
@@ -35,12 +38,56 @@ export function TaggingStatus({ item }: { item: Document }) {
 }
 
 /**
+ * One notice at the top of the Documents section while any ready Document
+ * waits for a model to tag it, instead of a line under each: they all wait
+ * for the same thing. Its button opens Settings.
+ */
+export function TaggingWaitingNotice() {
+  const t = useT();
+  const waiting = useAppStore((state) =>
+    state.documents.some(
+      (item) => item.status === "ready" && item.tagging === "waiting-for-provider",
+    ),
+  );
+  const openSettings = useAppStore((state) => state.openSettings);
+  if (!waiting) return null;
+  return (
+    <div
+      role="status"
+      data-testid="tagging-waiting"
+      className="mx-3 mb-1 flex items-start gap-2 rounded-[9px] bg-gray-100 px-2 py-[5px] text-[12px] text-gray-600"
+    >
+      <p className="min-w-0 flex-1">{t("jev.waiting.notice")}</p>
+      <button
+        type="button"
+        data-testid="tagging-waiting-setup"
+        onClick={openSettings}
+        className="shrink-0 rounded-[6px] px-1 font-medium text-gray-700 hover:bg-gray-200"
+      >
+        {t("jev.waiting.setUp")}
+      </button>
+    </div>
+  );
+}
+
+/** A chip's tooltip: who added the Tag and, with Jev, how likely it is. */
+function chipTitle(link: DocumentTag, tag: Tag, t: ReturnType<typeof useT>): string {
+  if (link.source === "user") return t("tags.chip.user", { tag: tag.name });
+  if (link.confidence === null) return t("tags.chip.automatic", { tag: tag.name });
+  const percent = Math.round(link.confidence * 100);
+  return t(link.needsReview ? "jev.chip.review" : "jev.chip.likely", { tag: tag.name, percent });
+}
+
+/**
  * A Document's Tags, as chips. Tags the User added are tinted; each chip's ×
- * takes the Tag off, and automatic tagging then leaves it off.
+ * takes the Tag off, and automatic tagging then leaves it off. A Tag Jev
+ * wasn't sure about is marked "needs review", with a ✓ to confirm it (it
+ * becomes the User's).
  */
 export function DocumentTagChips({ item }: { item: Document }) {
   const t = useT();
   const tags = useAppStore((state) => state.tags);
+  const addDocumentTag = useAppStore((state) => state.addDocumentTag);
   const removeDocumentTag = useAppStore((state) => state.removeDocumentTag);
   const byId = new Map(tags.map((tag) => [tag.id, tag]));
   const shown = item.tags.flatMap((link) => {
@@ -48,6 +95,8 @@ export function DocumentTagChips({ item }: { item: Document }) {
     return tag ? [{ link, tag }] : [];
   });
   if (shown.length === 0) return null;
+  const chipButton =
+    "shrink-0 rounded-full p-[1px] opacity-50 hover:bg-black/10 hover:opacity-100 focus-visible:opacity-100";
   return (
     // Indented to line up with the Document's name, past its icon.
     <ul aria-label={t("tags.title")} className="mt-[3px] ml-[22px] flex flex-wrap gap-[3px]">
@@ -57,21 +106,44 @@ export function DocumentTagChips({ item }: { item: Document }) {
           data-testid="document-tag"
           data-tag-id={tag.id}
           data-source={link.source}
-          title={t(link.source === "user" ? "tags.chip.user" : "tags.chip.automatic", {
-            tag: tag.name,
-          })}
+          data-needs-review={link.needsReview ? "true" : undefined}
+          title={chipTitle(link, tag, t)}
           className={`inline-flex max-w-full items-center gap-[1px] rounded-full py-[1px] pr-[2px] pl-[6px] text-[11px] leading-4 ${
-            link.source === "user" ? "bg-indigo-50 text-indigo-700" : "bg-gray-100 text-gray-600"
-          } ${link.needsReview ? "ring-1 ring-amber-400" : ""}`}
+            link.source === "user"
+              ? "bg-indigo-50 text-indigo-700"
+              : link.needsReview
+                ? "bg-amber-50 text-amber-800 ring-1 ring-amber-400"
+                : "bg-gray-100 text-gray-600"
+          }`}
         >
+          {link.needsReview && (
+            <span aria-hidden="true" className="font-semibold">
+              ?
+            </span>
+          )}
           <span className="truncate">{tag.name}</span>
+          {link.needsReview && (
+            <>
+              <span className="sr-only">{t("jev.chip.needsReview")}</span>
+              <button
+                type="button"
+                data-testid="confirm-document-tag"
+                aria-label={t("jev.chip.confirm", { tag: tag.name, name: item.name })}
+                title={t("jev.chip.confirm", { tag: tag.name, name: item.name })}
+                onClick={() => void addDocumentTag(item.id, tag.id)}
+                className={chipButton}
+              >
+                <CheckIcon className="size-[10px]" />
+              </button>
+            </>
+          )}
           <button
             type="button"
             data-testid="remove-document-tag"
             aria-label={t("tags.chip.remove", { tag: tag.name, name: item.name })}
             title={t("tags.chip.remove", { tag: tag.name, name: item.name })}
             onClick={() => void removeDocumentTag(item.id, tag.id)}
-            className="shrink-0 rounded-full p-[1px] opacity-50 hover:bg-black/10 hover:opacity-100 focus-visible:opacity-100"
+            className={chipButton}
           >
             <CloseIcon className="size-[10px]" />
           </button>

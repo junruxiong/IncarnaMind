@@ -99,11 +99,15 @@ export function isLoopbackHost(hostname: string): boolean {
   );
 }
 
+/** The service a server URL sends data to, or null when the server runs on this computer. */
+export function serviceForUrl(baseUrl: string): ExternalService | null {
+  const url = new URL(baseUrl);
+  return isLoopbackHost(url.hostname) ? null : { id: url.origin, name: url.host };
+}
+
 /** Where a provider's requests go, or null when the server runs on this computer. */
 export function serviceFor(kind: ChatProviderKind, baseUrl: string | null): ExternalService | null {
   const hosted = kinds[kind].hosted;
   if (hosted) return hosted;
-  if (!baseUrl) return null;
-  const url = new URL(baseUrl);
-  return isLoopbackHost(url.hostname) ? null : { id: url.origin, name: url.host };
+  return baseUrl ? serviceForUrl(baseUrl) : null;
 }

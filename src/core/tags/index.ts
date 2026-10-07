@@ -13,6 +13,7 @@ import type { DocumentTag, Tag, TagSource } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Language } from "../language";
 import type { Database } from "../storage";
+import type { TagDecision } from "./classify";
 import { PRESET_TAGS } from "./presets";
 
 export { PRESET_TAGS } from "./presets";
@@ -33,6 +34,8 @@ interface LinkRow {
   id: string;
   tag_id: string;
   source: TagSource;
+  confidence: number | null;
+  needs_review: number;
 }
 
 const COLUMNS = "id, name, description, preset, created_at, updated_at";
@@ -127,7 +130,7 @@ export function createTags(db: Database, now: () => string) {
 
   const liveLink = (documentId: string, tagId: string) =>
     db.get<LinkRow>(
-      `SELECT id, tag_id, source FROM document_tags
+      `SELECT id, tag_id, source, confidence, needs_review FROM document_tags
        WHERE document_id = ? AND tag_id = ? AND deleted_at IS NULL`,
       [documentId, tagId],
     );
@@ -138,12 +141,26 @@ export function createTags(db: Database, now: () => string) {
     source: TagSource,
     at: string,
     deletedAt: string | null = null,
+    decision: Pick<TagDecision, "confidence" | "needsReview"> = {
+      confidence: null,
+      needsReview: false,
+    },
   ) =>
     db.run(
       `INSERT INTO document_tags
          (id, document_id, tag_id, source, confidence, needs_review, created_at, updated_at, deleted_at)
-       VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)`,
-      [randomUUID(), documentId, tagId, source, at, at, deletedAt],
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        randomUUID(),
+        documentId,
+        tagId,
+        source,
+        decision.confidence,
+        decision.needsReview ? 1 : 0,
+        at,
+        at,
+        deletedAt,
+      ],
     );
 
   return {
@@ -240,7 +257,8 @@ export function createTags(db: Database, now: () => string) {
 
     /**
      * The User puts a Tag on a Document (the caller checks the Document).
-     * An automatic link becomes theirs. Returns whether anything changed.
+     * An automatic link becomes theirs: that is how the User confirms a Tag
+     * marked "needs review". Returns whether anything changed.
      */
     addToDocument(documentId: string, tagIdInput: unknown): boolean {
       return db.transaction(() => {
@@ -290,12 +308,13 @@ export function createTags(db: Database, now: () => string) {
     },
 
     /**
-     * Sets a Document's automatic Tags to `tagIds`: automatic links not chosen
-     * are taken off, chosen Tags not on it are added. Tags the User added or
-     * removed on the Document, and deleted Tags, are left alone. Returns
-     * whether the Document's Tags changed. Run it in the caller's transaction.
+     * Sets a Document's automatic Tags to those in `decisions`: automatic
+     * links not decided on are taken off, decided Tags not on it are added,
+     * and those kept take the new confidence and review mark. Tags the User
+     * added or removed on the Document, and deleted Tags, are left alone.
+     * Returns whether the Document's Tags changed. Run it in the caller's transaction.
      */
-    applyAutomatic(documentId: string, tagIds: readonly string[]): boolean {
+    applyAutomatic(documentId: string, decisions: readonly TagDecision[]): boolean {
       return db.transaction(() => {
         const owned = new Set(
           db
@@ -306,25 +325,43 @@ export function createTags(db: Database, now: () => string) {
             .map((row) => row.tag_id),
         );
         const live = new Set(list().map((tag) => tag.id));
-        const wanted = new Set(tagIds.filter((id) => live.has(id) && !owned.has(id)));
+        const wanted = new Map(
+          decisions
+            .filter((decision) => live.has(decision.tagId) && !owned.has(decision.tagId))
+            .map((decision) => [decision.tagId, decision]),
+        );
         const links = db.all<LinkRow>(
-          `SELECT id, tag_id, source FROM document_tags
+          `SELECT id, tag_id, source, confidence, needs_review FROM document_tags
            WHERE document_id = ? AND deleted_at IS NULL AND source = 'automatic'`,
           [documentId],
         );
         const at = now();
         let changed = false;
         for (const link of links) {
-          if (wanted.delete(link.tag_id)) continue; // still applies: kept as it is
-          db.run("UPDATE document_tags SET deleted_at = ?, updated_at = ? WHERE id = ?", [
-            at,
-            at,
-            link.id,
-          ]);
-          changed = true;
+          const decision = wanted.get(link.tag_id);
+          wanted.delete(link.tag_id);
+          if (!decision) {
+            db.run("UPDATE document_tags SET deleted_at = ?, updated_at = ? WHERE id = ?", [
+              at,
+              at,
+              link.id,
+            ]);
+            changed = true;
+          } else if (
+            link.confidence !== decision.confidence ||
+            (link.needs_review !== 0) !== decision.needsReview
+          ) {
+            // Still applies, decided afresh: e.g. Jev's probability moved on a re-tag.
+            db.run(
+              `UPDATE document_tags SET confidence = ?, needs_review = ?, updated_at = ?
+               WHERE id = ?`,
+              [decision.confidence, decision.needsReview ? 1 : 0, at, link.id],
+            );
+            changed = true;
+          }
         }
-        for (const tagId of wanted) {
-          insertLink(documentId, tagId, "automatic", at);
+        for (const [tagId, decision] of wanted) {
+          insertLink(documentId, tagId, "automatic", at, null, decision);
           changed = true;
         }
         return changed;
