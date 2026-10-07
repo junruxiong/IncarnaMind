@@ -588,6 +588,45 @@
     position: relative;
   }
 
+  /*
+   * The hint drawn over an empty Mind's line or the empty line after an
+   * Answer (EndHint): placeholder grey, in the writing's type. Once the
+   * cursor is on the line, its "press ⌘J…" part is underlined and takes the
+   * pointer, to start a Question there; before, a click is for the line.
+   */
+  .end-hint {
+    position: absolute;
+    margin: 0;
+    pointer-events: none;
+    font-family: var(--font-serif);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    color: var(--color-ink-placeholder);
+  }
+  .end-hint-ask {
+    padding: 0;
+    border-radius: 2px;
+    color: inherit;
+    text-underline-offset: 4px;
+    outline: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+  }
+  .end-hint-ask--armed {
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-strong);
+    cursor: pointer;
+    pointer-events: auto;
+
+    &:hover {
+      color: var(--color-ink-meta);
+      text-decoration-color: currentColor;
+    }
+  }
+
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */
   .mind-editor {
     /* How far left of the text edge the block handle sits (see BlockHandle). */
@@ -796,8 +835,7 @@
       opacity: 0.45;
     }
 
-    /* The placeholder of an empty Mind, and the hint on the empty line being written in. */
-    p.is-editor-empty:first-child::before,
+    /* The hint on the empty line being written in. An empty Mind's has its own (.end-hint). */
     &.ProseMirror-focused > p.is-empty:not(.is-editor-empty)::before {
       content: attr(data-placeholder);
       float: left;
@@ -805,6 +843,10 @@
       pointer-events: none;
       color: var(--color-ink-placeholder);
     }
+  }
+  /* An empty Mind showing the three steps under its line: no room kept for writing between them. */
+  .mind-editor-frame--guide .mind-editor {
+    min-height: 0;
   }
 
   /* A code block's language picker, top right. */

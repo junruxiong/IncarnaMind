@@ -615,8 +615,6 @@ export const zhCN = {
   "question.model.label": "回答这个问题的模型",
   "question.model.default": "默认模型（{model}）",
   "question.model.defaultUnset": "默认模型",
-  "question.mind.placeholder": "开始写作，或按 {shortcut} 提问…",
-  "question.followUp.placeholder": "继续写作，或按 {shortcut} 继续提问",
   "question.context.include": "提问时包含此笔记",
 
   "scope.picker.label": "搜索范围",
@@ -1052,4 +1050,44 @@ export const zhCN = {
   "approvals.policy.always": "始终允许",
   "approvals.policy.ask": "每次询问",
   "approvals.policy.alwaysRun": "始终运行",
+  // Onboarding: the example Mind, the "Get started" checklist and the three steps.
+  "editor.hint.empty": "开始写作，或{ask}",
+  "editor.hint.empty.ask": "按 {shortcut} 提问…",
+  "editor.hint.afterAnswer": "继续写作，或{ask}",
+  "editor.hint.afterAnswer.ask": "按 {shortcut} 继续提问",
+  "editor.hint.example": "试一试：在这里写一行，或{ask}",
+  "editor.hint.example.ask": "按 {shortcut} 提出你自己的问题",
+  "examples.chip": "示例",
+  "examples.banner.label": "关于这个示例",
+  "examples.banner.title": "这是一个示例 Mind。",
+  "examples.banner.body":
+    "你可以像在任何文档里一样在这里写作，就你的文档提问；回答中的每个论断都链接到它出自的那一页。点击绿色的勾即可查看引文。",
+  "examples.banner.addOwn": "添加你的文档或应用",
+  "examples.banner.remove": "移除示例",
+  "examples.answer": "示例回答，预先写好：无需模型即可试用",
+  "gettingStarted.title": "开始使用",
+  "gettingStarted.count": "· {done}/{total}",
+  "gettingStarted.hide": "隐藏“开始使用”",
+  "gettingStarted.done": "已完成：",
+  "gettingStarted.step.citation": "在示例中核对一条引用",
+  "gettingStarted.step.documents": "索引你的文档或连接应用",
+  "gettingStarted.step.question": "提出你自己的问题",
+  "startGuide.title": "三步开始",
+  "startGuide.documents.title": "添加你的文档，或连接你的应用",
+  "startGuide.documents.body":
+    "支持 PDF、Word、PowerPoint、Excel、Markdown 和文本文件。文件留在原处，IncarnaMind 只读取它们。同步到这台电脑的 Google Drive 或 OneDrive 文件夹也可以。",
+  "startGuide.documents.linkFolder": "关联文件夹…",
+  "startGuide.documents.addFiles": "添加文件",
+  "startGuide.documents.connectApp": "连接应用…",
+  "startGuide.documents.apps":
+    "连接 Notion、Google Drive 或任何提供 MCP 服务器的应用后，回答也能在其中查找资料。只有你的文档会得到可核对的引用。",
+  "startGuide.ask.title": "提一个问题",
+  "startGuide.ask.body":
+    "在 Mind 中任意位置按 {shortcut}，然后输入问题。回答会根据你的文档写在下方。",
+  "startGuide.ask.example": "例如：这些报告对第三季度营收是怎么说的？",
+  "startGuide.check.title": "核对每个论断的出处",
+  "startGuide.check.body":
+    "每个论断旁的页边都有一个标记：在你的文档中找到引文时显示 {mark}。点击它即可打开那一页。",
+  "startGuide.example.lead": "想先看看效果？",
+  "startGuide.example.open": "打开示例 Mind",
 } satisfies Dictionary;
