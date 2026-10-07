@@ -21,12 +21,19 @@ function place(button: HTMLElement | null, menu: HTMLElement | null): void {
       : `${below}px`;
 }
 
+/** The checked item, or the first. */
+function focusFirst(menu: HTMLElement | null): void {
+  const all = itemsOf(menu);
+  (all.find((each) => each.getAttribute("aria-checked") === "true") ?? all[0])?.focus();
+}
+
 /**
  * A menu that opens from a button as a popover, so it sits above everything
- * and a click outside or Esc closes it. It shows below the button, or above
- * it if the window is too short; opening focuses the checked item (or the
- * first), and the arrow keys, Home and End move between items. The menu may
- * render its items only while `open`.
+ * and a click outside or Esc closes it (Esc closes only the menu, not the
+ * Document viewer too). It shows below the button, or above it if the window
+ * is too short; opening focuses the checked item (or the first), and the
+ * arrow keys, Home and End move between items. The menu may render its items
+ * only while `open`.
  *
  * Spread `buttonProps` on the button and `menuProps` on the menu's element,
  * which also takes `role="menu"`, an `aria-label` and `menuClass` (./ui).
@@ -37,15 +44,23 @@ export function usePopoverMenu() {
   const menu = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
 
-  // Once open and rendered: placed again, now its height is known, and focused.
+  // Once rendered with its items: placed again and focused, if it shows by
+  // then. A popover that hasn't opened yet has no height, and takes no focus;
+  // its `toggle` event (below) does both once it has.
   useEffect(() => {
-    if (!open) return;
+    if (!open || !menu.current?.matches(":popover-open")) return;
     place(button.current, menu.current);
-    const all = itemsOf(menu.current);
-    (all.find((each) => each.getAttribute("aria-checked") === "true") ?? all[0])?.focus();
+    focusFirst(menu.current);
   }, [open]);
 
-  const moveFocus = (event: KeyboardEvent) => {
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      // Handled here, so the Document viewer's Esc doesn't close it too.
+      event.preventDefault();
+      menu.current?.hidePopover();
+      button.current?.focus();
+      return;
+    }
     const all = itemsOf(menu.current);
     const index = all.indexOf(document.activeElement as HTMLElement);
     const next =
@@ -81,7 +96,13 @@ export function usePopoverMenu() {
         if (event.newState === "open") place(button.current, menu.current);
         setOpen(event.newState === "open");
       },
-      onKeyDown: moveFocus,
+      // Now it shows: its real height decides above or below, and it can take the focus.
+      onToggle: (event: ToggleEvent<HTMLDivElement>) => {
+        if (event.newState !== "open") return;
+        place(button.current, menu.current);
+        focusFirst(menu.current);
+      },
+      onKeyDown,
     },
   };
 }

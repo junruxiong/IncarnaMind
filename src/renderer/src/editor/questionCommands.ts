@@ -99,19 +99,30 @@ export async function askInEditor(editor: Editor, mindId: string, questionId: st
   if (result?.asked) moveBelowAnswer(editor, result.answerId);
 }
 
-/** Puts the cursor in the Block after an Answer, to go on writing or ask the next Question. */
+/**
+ * Puts the cursor on an empty line right after an Answer, to go on writing or
+ * ask the next Question, adding the line unless one is there already. Never
+ * left in the Question, where the next words typed would change it.
+ */
 function moveBelowAnswer(editor: Editor, answerId: string): void {
   if (editor.isDestroyed) return;
   const answer = findBlock(editor.state.doc, answerId);
   if (!answer) return;
   const after = answer.pos + answer.node.nodeSize;
   const next = editor.state.doc.nodeAt(after);
-  if (next?.isTextblock) {
-    editor
-      .chain()
-      .focus()
-      .setTextSelection(after + 1)
-      .scrollIntoView()
-      .run();
-  }
+  const emptyLine = next?.type.name === "paragraph" && next.content.size === 0;
+  editor
+    .chain()
+    .focus()
+    .command(({ tr, state }) => {
+      if (!emptyLine) {
+        const paragraph = state.schema.nodes.paragraph?.create();
+        if (!paragraph) return false;
+        tr.insert(after, paragraph);
+      }
+      tr.setSelection(TextSelection.create(tr.doc, after + 1));
+      return true;
+    })
+    .scrollIntoView()
+    .run();
 }

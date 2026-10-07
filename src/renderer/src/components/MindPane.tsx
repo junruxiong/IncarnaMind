@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -88,6 +88,15 @@ function MindTitle({ mind }: { mind: Mind }) {
   const t = useT();
   const renameMind = useAppStore((state) => state.renameMind);
   const [draft, setDraft] = useState<string | null>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const focusNow = useAppStore((state) => state.titleToFocus === mind.id);
+
+  // A Mind just created: its title takes the focus from the button that made it.
+  useEffect(() => {
+    if (!focusNow) return;
+    field.current?.focus();
+    useAppStore.getState().titleFocused();
+  }, [focusNow]);
 
   const moveIntoContent = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
@@ -98,6 +107,7 @@ function MindTitle({ mind }: { mind: Mind }) {
   return (
     <h1 className="mind-title">
       <input
+        ref={field}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
         placeholder={t("mind.untitled")}

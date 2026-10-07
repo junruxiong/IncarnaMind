@@ -58,7 +58,12 @@ export interface FilesBridge {
   showLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
   logError(report: RendererErrorReport): void;
+  /** Calls `listener` with each command chosen in the application menu. Returns how to stop. */
+  onMenuCommand(listener: (command: MenuCommand) => void): () => void;
 }
+
+/** What the application menu asks the window to do (see src/main/menu.ts). */
+export type MenuCommand = "new-mind" | "close-tab" | "open-settings";
 
 export type SkillPickKind = "folder" | "zip";
 
@@ -81,4 +86,6 @@ export const FILES_CHANNELS = {
   pickLinkedFolder: "files:pickLinkedFolder",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
+  /** From the main process: a command chosen in the application menu. */
+  menuCommand: "app:menuCommand",
 } as const;
