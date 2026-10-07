@@ -1,6 +1,6 @@
 import { updateYFragment } from "@tiptap/y-tiptap";
 import type { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type * as Y from "yjs";
 import type { Core, CoreEvents } from "../../src/core";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
@@ -569,6 +569,32 @@ describe("When Questions can't be answered", () => {
     expect(model.doStreamCalls).toEqual([]);
   });
 
+  test("an Answer stopped while consent is being asked sends nothing, even once it is given", async () => {
+    const model = streamingModel("Unused.");
+    const models = scriptedModels(model);
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: models.createChatModel,
+    });
+    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-test" });
+    const requested = nextEvent(core, "consent.requested");
+    const mind = await core.createMind();
+    const writer = await connectToMind(core, mind.id);
+    const asked = question("Wait for me?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    const request = await requested;
+    await core.stopAnswer({ mindId: mind.id, answerId });
+    expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
+
+    await core.respondToConsent(request.requestId, true);
+    await vi.waitFor(() => expect(models.specs).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(model.doStreamCalls).toEqual([]);
+    expect(answerIn(writer, answerId).attrs.status).toBe("stopped");
+  });
+
   test("declining to send data to the provider fails the Answer and sends nothing", async () => {
     const model = streamingModel("Unused.");
     const models = scriptedModels(model);
@@ -667,6 +693,20 @@ describe("Choosing the model", () => {
       { provider: compatible, models: ["deepseek-chat", "deepseek-reasoner"] },
     ]);
     expect(server.authorizations).toEqual(["Bearer sk-local"]);
+  });
+
+  test("a cloud provider isn't asked for its models before the User allows the chat flow to it", async () => {
+    const core = startCore(await createTempDataFolder());
+    const provider = await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-test",
+      modelId: "gpt-test",
+    });
+    const fetch = vi.spyOn(globalThis, "fetch");
+    onTestFinished(() => fetch.mockRestore());
+
+    expect(await core.listChatModels()).toEqual([{ provider, models: ["gpt-test"] }]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   test("a provider that can't be reached offers only its default model", async () => {

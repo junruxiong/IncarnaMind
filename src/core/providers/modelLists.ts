@@ -1,9 +1,9 @@
 /**
  * The models each kind of chat provider offers, from its own model-list
  * endpoint, for a Question's model picker. Asking for the list sends the API
- * key and nothing of the User's, so, like pulling an Ollama model, it isn't a
- * consented data flow. Any failure gives an empty list: the picker still has
- * the default model.
+ * key and nothing of the User's; still, like the connection test, the caller
+ * asks a cloud service only once the User has allowed the chat flow to it.
+ * Any failure gives an empty list: the picker still has the default model.
  */
 import type { ChatProviderKind } from "../api";
 import { isRecord } from "../errors";

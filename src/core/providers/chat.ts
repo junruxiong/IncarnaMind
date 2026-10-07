@@ -241,9 +241,13 @@ export function createChat(options: {
       return Promise.all(
         knownRows().map(async (row) => {
           const provider = await toProvider(row);
+          // Like the connection test, a cloud service isn't contacted before the User allows the chat flow to it.
+          const mayAsk =
+            !provider.service || consent.status("chat", provider.service) === "accepted";
           const cacheKey = `${row.id}\n${row.base_url ?? ""}`;
           const cached = modelLists.get(cacheKey);
           let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
+          if (!listed && !mayAsk) listed = [];
           if (!listed) {
             const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
             listed = await listProviderModels({
