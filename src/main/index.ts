@@ -22,6 +22,7 @@ import { startLogging } from "./logging";
 import { installAppMenu } from "./menu";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
+import { keepWindowPlace, windowPlace } from "./windowState";
 
 // Points the app at another data folder: the smoke test uses a temporary one.
 // Set before anything reads `userData`, so Chromium's own data moves there too.
@@ -78,9 +79,12 @@ function exposeCore(core: Core): void {
 }
 
 function createWindow(): BrowserWindow {
+  const dataDir = app.getPath("userData");
+  const place = windowPlace(dataDir, { width: 1280, height: 800 }, { width: 900, height: 560 });
   const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    ...(place.x !== undefined && place.y !== undefined ? { x: place.x, y: place.y } : {}),
+    width: place.width,
+    height: place.height,
     minWidth: 900,
     minHeight: 560,
     show: false,
@@ -93,7 +97,11 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   });
-  window.once("ready-to-show", () => window.show());
+  window.once("ready-to-show", () => {
+    if (place.maximized) window.maximize();
+    window.show();
+  });
+  keepWindowPlace(window, dataDir);
 
   // Links open in the User's browser, never inside the app.
   window.webContents.setWindowOpenHandler(({ url }) => {
