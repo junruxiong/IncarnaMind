@@ -547,7 +547,7 @@ export const en = {
 
   "connectors.settings.title": "Connectors",
   "connectors.settings.body":
-    "Connectors let Answers look things up in your other tools. Add an MCP server that runs on this computer, or import the ones you set up in Claude Desktop or Cursor.",
+    "Connectors let Answers look things up in your other tools, and make changes there once you approve them. Add an MCP server that runs on this computer, or import the ones you set up in Claude Desktop or Cursor.",
   "connectors.settings.empty": "No Connectors yet.",
   "connectors.settings.add": "Add Connector…",
   "connectors.settings.import": "Import from Claude Desktop or Cursor…",
@@ -571,10 +571,10 @@ export const en = {
   "connectors.tools.count": "{count} Tools",
   "connectors.tools.count.one": "1 Tool",
   "connectors.tools.none": "No Tools",
-  "connectors.tools.readOnly": "read-only",
-  "connectors.tools.changes": "may change things, not used yet",
+  "connectors.tools.readOnly": "claims to be read-only",
+  "connectors.tools.changes": "may change things",
   "connectors.tools.note":
-    "Answers use only the Tools a Connector says are read-only. That is the Connector's claim: IncarnaMind can't check it.",
+    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here.",
   "connectors.form.name": "Name",
   "connectors.form.command": "Command",
   "connectors.form.commandHint":
@@ -608,4 +608,38 @@ export const en = {
   "connectors.call.failed": "Asking {connector} failed: {tool}",
   "connectors.call.arguments": "Arguments sent",
   "connectors.call.details": "What was sent",
+
+  "approvals.answer.waiting": "Waiting for your approval",
+  "approvals.card.title": "{connector} wants to run {tool}",
+  "approvals.card.changes":
+    "This Tool may change something in {connector}. Nothing is sent until you choose.",
+  "approvals.card.readOnly":
+    "{connector} says this Tool only reads. You chose to approve it every time.",
+  "approvals.card.arguments": "It would send:",
+  "approvals.card.noArguments": "No arguments.",
+  "approvals.card.allowOnce": "Allow once",
+  "approvals.card.alwaysAllow": "Always allow",
+  "approvals.card.alwaysAllowHint":
+    "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
+  "approvals.card.deny": "Deny",
+  "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
+  "approvals.call.denied": "Not allowed: {connector}: {tool}",
+  "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
+  "approvals.call.notSent": "Not sent",
+  "approvals.tools.readOnly.count": "{count} claim to be read-only",
+  "approvals.tools.readOnly.one": "1 claims to be read-only",
+  "approvals.tools.readOnly.none": "none claims to be read-only",
+  "approvals.tools.select": "When an Answer calls {tool}",
+  "approvals.tools.ask": "Ask every time",
+  "approvals.tools.always": "Always allow",
+  "approvals.settings.title": "Approvals",
+  "approvals.settings.body":
+    "Tools that may change something ask before each call. Here is every Tool you always allow, and every Tool you set to ask every time. Revoke one to go back to the default.",
+  "approvals.settings.empty": "No Tool is set to always allow or to ask every time.",
+  "approvals.settings.revoke": "Revoke",
+  "approvals.settings.revokeLabel": "Revoke the setting for {name}",
+  "approvals.settings.skillScripts": "Scripts of {skill}",
+  "approvals.policy.always": "Always allow",
+  "approvals.policy.ask": "Ask every time",
+  "approvals.policy.alwaysRun": "Always run",
 } as const satisfies Record<string, string>;
