@@ -32,7 +32,7 @@ import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
 
 /** What the file picker offers. The core decides what it takes. */
-const ACCEPTED_FILES = ".pdf,.txt,.md,.markdown";
+const ACCEPTED_FILES = ".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.markdown";
 
 const statusMessages: Record<Exclude<DocumentStatus, "failed">, MessageKey> = {
   queued: "documents.status.queued",

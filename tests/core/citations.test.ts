@@ -513,7 +513,7 @@ describe("The Citation check", { timeout: 30_000 }, () => {
     expect(answerText(client, answerId)).toBe("月球引力形成两个潮汐隆起。");
   });
 
-  test("a Chinese quote is found in text that has radical look-alikes; without pages, the whole Document is searched", async () => {
+  test("a Chinese quote is found in text that has radical look-alikes; in Markdown, the section it is under is cited", async () => {
     const model = citingModel({
       query: "大型语言模型",
       records: (passages) => [
@@ -529,8 +529,8 @@ describe("The Citation check", { timeout: 30_000 }, () => {
 
     expect(onlyCitation(client, answerId)).toMatchObject({
       documentName: "笔记",
-      pageFrom: null,
-      pageTo: null,
+      pageFrom: 1,
+      pageTo: 1,
       check: "found",
     });
   });

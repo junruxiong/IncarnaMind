@@ -116,6 +116,10 @@ const KIND_NAMES: Record<DocumentKind, string> = {
   pdf: "PDF",
   text: "plain text",
   markdown: "Markdown",
+  docx: "Word document",
+  pptx: "PowerPoint deck",
+  xlsx: "Excel workbook",
+  csv: "CSV table",
 };
 
 export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();

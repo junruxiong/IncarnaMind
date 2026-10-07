@@ -333,7 +333,7 @@ describe("While the app runs, a Linked folder is watched", { timeout: 30_000 }, 
       await core.searchPassages("silt", { mode: "keyword", documentIds: [before.rivers.id] }),
     ).toEqual([]);
     expect((await core.readDocumentText(before.rivers.id)).pages).toEqual([
-      { page: null, text: RIVERS },
+      { page: 1, text: RIVERS.trim(), kind: "section", label: { path: [] } },
     ]);
     await expect(core.openDocumentFile(before.rivers.id)).rejects.toThrow(NotFoundError);
     // Back with the same content: not missing any more.

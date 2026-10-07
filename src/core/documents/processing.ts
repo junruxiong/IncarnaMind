@@ -7,11 +7,12 @@
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import type { TextUnit } from "../../shared/units";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import { stripBoilerplate } from "./boilerplate";
 import { ExtractionError, extractText } from "./extract";
 import { keywordText } from "./keywords";
-import { type BuiltPassage, buildPassages, type PageText } from "./passages";
+import { type BuiltPassage, buildPassages } from "./passages";
 
 /**
  * The version of this pipeline: text extraction, Passage building, text
@@ -22,9 +23,27 @@ import { type BuiltPassage, buildPassages, type PageText } from "./passages";
  * normalised text, segmented keyword index, embeddings). 3: #30 (running
  * headers, footers and page numbers removed; page text stored for the
  * Citation check). 4: #31 (Passages built from whole lines, as the retrieval
- * prototype built them).
+ * prototype built them). 5: ADR-0011 (text stored as Units: Markdown by
+ * section, plain text by blocks of lines; Word, PowerPoint, Excel and CSV
+ * read).
  */
-export const PROCESSING_VERSION = 4;
+export const PROCESSING_VERSION = 5;
+
+/**
+ * Per kind, the oldest version whose Passages and Units are still what this
+ * version would build: a Document processed by an older one is processed
+ * again at startup. Version 5 changed nothing for PDFs, whose Passages
+ * (and embeddings) stay as they are.
+ */
+export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
+  pdf: 4,
+  text: 5,
+  markdown: 5,
+  docx: 5,
+  pptx: 5,
+  xlsx: 5,
+  csv: 5,
+};
 
 export interface ProcessingJob {
   documentId: string;
@@ -49,8 +68,11 @@ type Processed =
       outcome: "ready";
       pageCount: number | null;
       passages: ProcessedPassage[];
-      /** The text of each page, as the Passages were built from it (see ./boilerplate). */
-      pages: PageText[];
+      /**
+       * The text of each Unit (page, slide, section, block of rows or lines),
+       * as the Passages were built from it (see ./boilerplate), with its label and anchors.
+       */
+      pages: TextUnit[];
     }
   | { outcome: "no-text"; pageCount: number | null }
   | { outcome: "failed"; reason: DocumentFailureReason; message: string };
@@ -101,7 +123,7 @@ export async function processFile(job: ProcessingJob): Promise<ProcessingResult>
 async function processBytes(kind: DocumentKind, bytes: Uint8Array): Promise<Processed> {
   try {
     const extracted = await extractText(kind, bytes);
-    const pages = stripBoilerplate(extracted.pages);
+    const pages = kind === "pdf" ? stripBoilerplate(extracted.units) : extracted.units;
     const { pageCount } = extracted;
     const passages = buildPassages(pages).map((passage) => ({
       ...passage,

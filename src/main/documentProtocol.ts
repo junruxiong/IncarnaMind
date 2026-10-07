@@ -14,6 +14,11 @@ const CONTENT_TYPES: Readonly<Record<DocumentKind, string>> = {
   // The viewer decodes text itself, the way processing does (UTF-8, UTF-16 or GB18030).
   text: "text/plain",
   markdown: "text/markdown",
+  // The viewer reads these packages itself, with the code that indexed them (ADR-0011).
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  csv: "text/csv",
 };
 
 /** Must run before the app is ready. */

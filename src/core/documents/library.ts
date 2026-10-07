@@ -90,13 +90,18 @@ const PROCESSED = "('ready', 'no-text', 'failed')";
  * A rough guess at indexing speed with the built-in model on a laptop CPU
  * (ADR-0009: about 25 Passages a second): a PDF holds about 3 seconds of work
  * per megabyte, plain text, which is much denser, about 30, and every file
- * costs a little on top.
+ * costs a little on top. Office files are zipped, with images: a guess from
+ * the samples' text per megabyte (unmeasured).
  */
 const SECONDS_PER_FILE = 0.2;
 const SECONDS_PER_MEGABYTE: Readonly<Record<DocumentKind, number>> = {
   pdf: 3,
   text: 30,
   markdown: 30,
+  docx: 10,
+  pptx: 2,
+  xlsx: 20,
+  csv: 30,
 };
 
 /** A folder is laid out flat when this share of its folders with files hold exactly one. */

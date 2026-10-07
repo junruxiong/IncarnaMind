@@ -1,40 +1,29 @@
 /**
- * Extracts a Document's text, page by page. Runs in the processing worker:
- * parsing a large PDF takes seconds.
+ * Extracts a Document's text as Units (ADR-0011): a PDF's pages with pdf.js,
+ * every other kind with our own readers (./formats). Runs in the processing
+ * worker: parsing a large PDF takes seconds.
  */
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { CJK } from "../../shared/text";
-import type { DocumentFailureReason, DocumentKind } from "../api";
-import { decodeText } from "./decode";
-import type { PageText } from "./passages";
+import type { TextUnit } from "../../shared/units";
+import type { DocumentKind } from "../api";
+import { ExtractionError, extractUnits } from "./formats";
 
-/** Why a file's text couldn't be extracted. */
-export class ExtractionError extends Error {
-  override name = "ExtractionError";
-  constructor(
-    readonly reason: DocumentFailureReason,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { ExtractionError };
 
 export interface ExtractedText {
   /** PDFs only. */
   pageCount: number | null;
-  pages: PageText[];
+  units: TextUnit[];
 }
 
 export async function extractText(kind: DocumentKind, bytes: Uint8Array): Promise<ExtractedText> {
   if (kind === "pdf") {
-    const pages = await extractPdf(bytes);
-    return { pageCount: pages.length, pages };
+    const units = await extractPdf(bytes);
+    return { pageCount: units.length, units };
   }
-  const text = decodeText(bytes);
-  if (text === null)
-    throw new ExtractionError("unreadable", "The file holds binary data, not text.");
-  return { pageCount: null, pages: [{ page: null, text }] };
+  return { pageCount: null, units: await extractUnits(kind, bytes) };
 }
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -70,7 +59,7 @@ function pageText(items: readonly object[]): string {
   return text.replaceAll("\u0000", "").replace(/\r\n?/g, "\n").replace(CJK_LINE_WRAP, "$1").trim();
 }
 
-async function extractPdf(bytes: Uint8Array): Promise<PageText[]> {
+async function extractPdf(bytes: Uint8Array): Promise<TextUnit[]> {
   const { getDocument } = await loadPdfJs();
   const task = getDocument({
     // pdf.js may take ownership of the buffer, so give it a copy.
@@ -83,11 +72,17 @@ async function extractPdf(bytes: Uint8Array): Promise<PageText[]> {
   });
   try {
     const document = await task.promise;
-    const pages: PageText[] = [];
+    const pages: TextUnit[] = [];
     for (let number = 1; number <= document.numPages; number++) {
       const page = await document.getPage(number);
       const content = await page.getTextContent();
-      pages.push({ page: number, text: pageText(content.items) });
+      pages.push({
+        page: number,
+        kind: "page",
+        label: null,
+        text: pageText(content.items),
+        anchors: null,
+      });
       page.cleanup();
     }
     return pages;

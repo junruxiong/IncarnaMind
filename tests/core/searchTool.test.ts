@@ -87,7 +87,10 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
     const all = (await core.searchPassages("weather", { mode: "keyword", limit: 200 })).filter(
       (passage) => passage.documentName === "Coast",
     );
-    const positionOf = (text: string) => all.find((passage) => passage.text === text)?.position;
+    // The model sees where each new section starts, e.g. "[§ Section 3]" (ADR-0011).
+    const unmarked = (text: string) => text.replace(/\n\n\[(?:§[^\]\n]*|p\. \d+)\] /g, "\n\n");
+    const positionOf = (text: string) =>
+      all.find((passage) => passage.text === unmarked(text))?.position;
 
     await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
 

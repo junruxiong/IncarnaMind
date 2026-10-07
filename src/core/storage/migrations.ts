@@ -504,6 +504,30 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 22,
+    description: "Each Document's text as Units: pages, slides, sections, rows, lines (ADR-0011)",
+    sql: `
+      -- Each row of document_pages is now one Unit of a version's text: a
+      -- PDF's page, a deck's slide (its speaker notes included), a section of
+      -- a Word or Markdown file, a block of rows of one sheet of a spreadsheet
+      -- or CSV, or a block of lines of a plain-text file. page is the Unit's
+      -- number, from 1: a PDF's page, a deck's slide. kind says which:
+      -- 'page' | 'slide' | 'section' | 'rows' | 'lines' | 'text', checked in
+      -- code. label is JSON (UnitLabel in src/shared/units.ts: a section's
+      -- heading path, a block's sheet and rows…), NULL for pages. anchors is
+      -- a JSON array of { start, end, target } mapping spans of the text to a
+      -- slide's shapes and notes or a section's paragraphs, NULL where none
+      -- are stored (pages; rows work theirs out from the text). A TXT or
+      -- Markdown file stored as one text, with page NULL, becomes Unit 1 of
+      -- kind 'text': the current versions are processed again into sections
+      -- and lines, and the old versions Citations quote keep their one text.
+      ALTER TABLE document_pages ADD COLUMN kind TEXT NOT NULL DEFAULT 'page';
+      ALTER TABLE document_pages ADD COLUMN label TEXT;
+      ALTER TABLE document_pages ADD COLUMN anchors TEXT;
+      UPDATE document_pages SET kind = 'text', page = 1 WHERE page IS NULL;
+    `,
+  },
 ];
 
 /**

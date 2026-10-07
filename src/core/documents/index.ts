@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import type { Anchor, UnitKind, UnitLabel } from "../../shared/units";
 import type {
   AddDocumentsResult,
   Document,
@@ -42,6 +43,7 @@ import { keywordText } from "./keywords";
 import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
+  CURRENT_SINCE,
   PROCESSING_VERSION,
   type ProcessedPassage,
   type ProcessingJob,
@@ -89,6 +91,33 @@ interface DocumentRow {
   created_at: string;
   updated_at: string;
 }
+
+/** A stored Unit (a `document_pages` row), as read for the check and the viewer. */
+interface UnitRow {
+  page: number | null;
+  text: string;
+  kind: string;
+  label: string | null;
+  anchors: string | null;
+}
+
+/** JSON stored by this app; null if it doesn't parse. */
+function parseJson<T>(json: string | null): T | null {
+  if (json === null) return null;
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
+const toUnitText = (row: UnitRow): PageText => ({
+  page: row.page,
+  text: row.text,
+  kind: row.kind as UnitKind,
+  label: parseJson<UnitLabel>(row.label),
+  anchors: parseJson<Anchor[]>(row.anchors),
+});
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
@@ -384,14 +413,30 @@ export function createDocuments(options: DocumentsOptions) {
     }
   }
 
-  /** Stores the text of a version's pages, for the Citation check. Run in a transaction. */
+  /**
+   * Stores the text of a version's Units (pages, slides, sections, rows,
+   * lines), with their labels and anchors, for the Citation check and the
+   * viewer. Run in a transaction.
+   */
   function insertPages(documentId: string, contentHash: string, pages: readonly PageText[]): void {
     const at = now();
-    for (const { page, text } of pages) {
+    for (const { page, text, kind, label, anchors } of pages) {
       db.run(
-        `INSERT INTO document_pages (id, document_id, content_hash, page, text, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), documentId, contentHash, page === null ? null : BigInt(page), text, at, at],
+        `INSERT INTO document_pages (id, document_id, content_hash, page, kind, label, anchors,
+           text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          randomUUID(),
+          documentId,
+          contentHash,
+          page === null ? null : BigInt(page),
+          kind ?? "page",
+          label ? JSON.stringify(label) : null,
+          anchors && anchors.length > 0 ? JSON.stringify(anchors) : null,
+          text,
+          at,
+          at,
+        ],
       );
     }
   }
@@ -674,12 +719,14 @@ export function createDocuments(options: DocumentsOptions) {
     library.check([path]).catch(reportError);
   };
 
-  // Documents processed by an older pipeline are processed again, through the usual statuses.
+  // Documents processed by an older pipeline are processed again, through the usual
+  // statuses: those whose kind it changed for (see `CURRENT_SINCE`).
   db.run(
     `UPDATE documents SET status = 'queued', updated_at = ?
-     WHERE deleted_at IS NULL AND processing_version < ?
+     WHERE deleted_at IS NULL
+       AND processing_version < coalesce(json_extract(?, '$.' || kind), ?)
        AND status IN ('ready', 'embedding', 'waiting-for-model')`,
-    [now(), BigInt(PROCESSING_VERSION)],
+    [now(), JSON.stringify(CURRENT_SINCE), BigInt(PROCESSING_VERSION)],
   );
   // Pick up work a quit interrupted, in the order it was queued (newest files first).
   const unfinished = db.all<DocumentRow>(
@@ -969,10 +1016,11 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * The stored text of one version of a live Document, pages `from` to
-     * `to`, in order, as its Passages were built from it. With both null,
-     * every page: the one "page" of a Document without pages. Empty if the
-     * Document was deleted, or that version's text is gone.
+     * The stored text of one version of a live Document, Units (pages,
+     * slides, sections, rows, lines) `from` to `to`, in order, as its
+     * Passages were built from it, with their kinds, labels and anchors. With
+     * both null, every Unit. Empty if the Document was deleted, or that
+     * version's text is gone.
      */
     pageTexts(
       documentId: string,
@@ -983,15 +1031,15 @@ export function createDocuments(options: DocumentsOptions) {
       const range = from === null || to === null ? "" : "AND dp.page BETWEEN ? AND ?";
       const params = from === null || to === null ? [] : [BigInt(from), BigInt(to)];
       return db
-        .all<{ page: number | null; text: string }>(
-          `SELECT dp.page, dp.text FROM document_pages dp
+        .all<UnitRow>(
+          `SELECT dp.page, dp.text, dp.kind, dp.label, dp.anchors FROM document_pages dp
            JOIN documents d ON d.id = dp.document_id
            WHERE dp.document_id = ? AND dp.content_hash = ? AND dp.deleted_at IS NULL
              AND d.deleted_at IS NULL ${range}
            ORDER BY dp.page`,
           [documentId, contentHash, ...params],
         )
-        .map((row) => ({ page: row.page, text: row.text }));
+        .map(toUnitText);
     },
 
     /** The current version of a live Document, or null if it was deleted. */
@@ -1023,8 +1071,8 @@ export function createDocuments(options: DocumentsOptions) {
     readText(idInput: unknown): DocumentText {
       const row = find(parseId(idInput));
       if (!row) throw new NotFoundError("There is no such Document.");
-      const pages = db.all<{ page: number | null; text: string }>(
-        `SELECT page, text FROM document_pages
+      const pages = db.all<UnitRow>(
+        `SELECT page, text, kind, label, anchors FROM document_pages
          WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL ORDER BY page`,
         [row.id, row.content_hash],
       );
@@ -1032,7 +1080,12 @@ export function createDocuments(options: DocumentsOptions) {
         documentId: row.id,
         contentHash: row.content_hash,
         fileStatus: row.file_status as DocumentFileStatus,
-        pages: pages.map((page) => ({ page: page.page, text: page.text })),
+        pages: pages.map(toUnitText).map((unit) => ({
+          page: unit.page ?? 1,
+          text: unit.text,
+          kind: unit.kind ?? "page",
+          label: unit.label ?? null,
+        })),
       };
     },
 
