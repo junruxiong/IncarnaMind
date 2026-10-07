@@ -269,11 +269,29 @@
       display: none;
     }
   }
+  /* Fades out on a side where tabs are scrolled out of sight. */
+  .mind-tabs-list[data-hidden-before] {
+    mask-image: linear-gradient(to right, transparent, #000 32px);
+  }
+  .mind-tabs-list[data-hidden-after] {
+    mask-image: linear-gradient(to left, transparent, #000 32px);
+  }
+  .mind-tabs-list[data-hidden-before][data-hidden-after] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 32px,
+      #000 calc(100% - 32px),
+      transparent
+    );
+  }
   .mind-tab {
     position: relative;
     display: flex;
     flex: 0 1 220px;
     align-items: center;
+    /* As well as the basis: the strip sizes to its tabs' widths, which would otherwise be their text's. */
+    width: 220px;
     min-width: 64px;
     height: 34px;
     color: var(--color-ink-secondary);
