@@ -814,6 +814,7 @@ export const en = {
   "connectors.state.error": "Error",
   "connectors.toggle": "Use {name}",
   "connectors.remove": "Remove {name}",
+  "connectors.edit": "Change {name}",
   "connectors.retry": "Try again",
   "connectors.restarting": "Restarting…",
   "connectors.details": "Details",
@@ -837,6 +838,7 @@ export const en = {
   "connectors.form.commandHint":
     "The program that starts the MCP server, e.g. npx or uvx. It's found the way your terminal finds it.",
   "connectors.form.args": "Arguments, one per line",
+  "connectors.form.argsMoved": "The rest of what you pasted went into Arguments, one per line.",
   "connectors.form.env": "Environment variables, NAME=value, one per line",
   "connectors.form.envHint":
     "For API keys and the like. The values are kept in your keychain, never in IncarnaMind's database.",
@@ -844,6 +846,9 @@ export const en = {
   "connectors.form.add": "Add Connector",
   "connectors.form.adding": "Adding…",
   "connectors.form.cancel": "Cancel",
+  "connectors.form.save": "Save and restart",
+  "connectors.form.saving": "Saving…",
+  "connectors.form.envKeep": "Leave empty to keep the saved values of {names}.",
   "connectors.import.body":
     "Paste the mcpServers JSON from Claude Desktop (claude_desktop_config.json) or Cursor (mcp.json), or choose the file. You'll see what will be added first.",
   "connectors.import.json": "Configuration",
