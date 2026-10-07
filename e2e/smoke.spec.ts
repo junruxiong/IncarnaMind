@@ -8,8 +8,11 @@ import {
   dismissChatSetup,
   dragBy,
   launchApp,
+  openDocumentMenu,
+  openSettings,
   openViewer,
   removeDataFolder,
+  showSettingsPage,
   widthOf,
 } from "./app";
 
@@ -167,11 +170,13 @@ test("added files are processed, show as ready in the sidebar, and can be delete
     await expect(notesItem.getByTestId("document-status")).toHaveText("Ready");
     await first.app.close();
 
-    // After a restart both are still there. Deleting one asks first, then removes it.
+    // After a restart both are still there. Deleting one (from its menu) asks first, then removes it.
     const second = await launchApp(dataDir);
     const restored = second.window.getByTestId("document-list-item");
     await expect(restored).toHaveCount(2);
-    await restored.filter({ hasText: "Reading notes" }).getByTestId("delete-document").click();
+    const doomed = restored.filter({ hasText: "Reading notes" });
+    await openDocumentMenu(doomed);
+    await doomed.getByTestId("delete-document").click();
     await second.window.getByTestId("confirm-delete-document").click();
     await expect(restored).toHaveCount(1);
     await expect(restored).toHaveAttribute("data-status", "ready");
@@ -184,7 +189,7 @@ test("added files are processed, show as ready in the sidebar, and can be delete
 test("the experimental ChatGPT plan is off by default, and turning it on shows the warning and the sign-in", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "chat-model");
 
   const experimental = window.getByTestId("experimental-settings");
   const toggle = experimental.getByTestId("codex-switch");
@@ -209,12 +214,19 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   const first = await launchApp(dataDir);
   const { window } = first;
 
-  // No provider is preselected, and no key is needed to get past this screen.
+  // No provider is preselected, and no key is needed to get past this screen. Where
+  // Answers come from is one choice: local models, an API key, or the ChatGPT plan.
   const setup = window.getByTestId("chat-setup");
   await expect(setup).toBeVisible();
+  await expect(setup.getByTestId("chat-provider-choices").getByRole("radio")).toHaveCount(3);
+  await expect(setup.getByRole("radio", { checked: true })).toHaveCount(0);
+  // Choosing an API key offers the four kinds of provider, none chosen yet.
+  await setup.getByTestId("chat-choice-api-key").check();
   const providerChoices = setup.getByTestId("provider-form").getByRole("radio");
   await expect(providerChoices).toHaveCount(4);
-  await expect(setup.getByRole("radio", { checked: true })).toHaveCount(0);
+  await expect(
+    setup.getByTestId("provider-form").getByRole("radio", { checked: true }),
+  ).toHaveCount(0);
 
   await setup.getByTestId("chat-setup-later").click();
   await expect(setup).toBeHidden();
@@ -231,16 +243,17 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await expect(second.window.getByTestId("chat-readiness")).toBeVisible();
   await expect(second.window.getByTestId("chat-setup")).toBeHidden();
 
-  // The notice opens Settings, where a provider can be set up.
+  // The notice opens Settings on its Chat model page, where a provider can be set up.
   await second.window.getByTestId("chat-readiness").getByRole("button").click();
+  await expect(second.window.getByTestId("settings")).toHaveAttribute("data-page", "chat-model");
   await expect(second.window.getByTestId("chat-model-settings")).toBeVisible();
   // What is sent to other services lives on the Privacy page.
-  await second.window.getByTestId("settings-tab-privacy").click();
+  await showSettingsPage(second.window, "privacy");
   await expect(second.window.getByTestId("consent-settings")).toBeVisible();
   await second.app.close();
 });
 
-test("Documents are filed in nested Folders, filtered by Folder, and kept when their Folder is deleted", async () => {
+test("Documents are filed in nested Folders, shown inside them, and kept when their Folder is deleted", async () => {
   const sources = await createDataFolder();
   try {
     const paper = join(sources, "Paper.txt");
@@ -250,9 +263,8 @@ test("Documents are filed in nested Folders, filtered by Folder, and kept when t
 
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
-    // Wait until both are ready, as the User would see. Until then the sidebar still moves:
-    // the first ready one brings the "tagging waits for a model" notice above the Folders,
-    // which pushes the tree and the list down under a drag already started.
+    // Wait until both are ready, as the User would see. (The "tagging waits for a model"
+    // notice that then appears sits in the sidebar's footer, so it no longer moves the tree.)
     await addDocuments(window, [paper, notes]);
     const documents = window.getByTestId("document-list-item");
     const paperItem = documents.filter({ hasText: "Paper" });
@@ -277,26 +289,33 @@ test("Documents are filed in nested Folders, filtered by Folder, and kept when t
     await paperItem.getByTestId("move-document").click();
     await window.getByRole("menuitemradio", { name: "2026" }).click();
     await expect(paperItem).toHaveAttribute("data-folder-id", `${yearId}`);
-    await notesItem.dragTo(projects.getByTestId("folder-filter"));
+    await notesItem.dragTo(projects.getByTestId("folder-toggle"));
     await expect(notesItem).toHaveAttribute("data-folder-id", `${projectsId}`);
 
-    // The sub-Folder shows only the paper; its parent shows the paper too, from the sub-Folder.
-    await year.getByTestId("folder-filter").click();
-    await expect(documents).toHaveCount(1);
-    await expect(documents).toContainText("Paper");
-    await projects.getByTestId("folder-filter").click();
-    await expect(documents).toHaveCount(2);
-    await window.getByTestId("all-documents").getByRole("button").click();
+    // Each shows inside its Folder, one step deeper: the notes in Projects, the paper in
+    // 2026 inside Projects.
+    await expect(projects).toHaveAttribute("data-depth", "0");
+    await expect(year).toHaveAttribute("data-depth", "1");
+    await expect(notesItem).toHaveAttribute("data-depth", "1");
+    await expect(paperItem).toHaveAttribute("data-depth", "2");
+    // Folding the parent hides what's inside it, its sub-Folder's too; unfolding shows it again.
+    const toggle = projects.getByTestId("folder-toggle");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(year).toHaveCount(0);
+    await expect(documents).toHaveCount(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(documents).toHaveCount(2);
 
-    // Deleting the parent asks first. Both Documents stay listed, unfiled.
-    await projects.getByTestId("folder-filter").click();
+    // Deleting the parent asks first. Both Documents stay listed, unfiled, at the top level.
     await projects.getByTestId("delete-folder").click();
     await window.getByTestId("confirm-delete-folder").click();
     await expect(folders).toHaveCount(0);
     await expect(documents).toHaveCount(2);
     await expect(paperItem).toHaveAttribute("data-folder-id", "");
     await expect(notesItem).toHaveAttribute("data-folder-id", "");
+    await expect(paperItem).toHaveAttribute("data-depth", "0");
     await app.close();
   } finally {
     await removeDataFolder(sources);

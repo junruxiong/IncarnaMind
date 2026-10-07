@@ -9,6 +9,7 @@ import {
   interceptOpenPath,
   interceptSaveDialog,
   launchApp,
+  openDocumentMenu,
   pathsOpened,
   removeDataFolder,
   saveDialogsAsked,
@@ -36,9 +37,9 @@ test("Save a copy… writes a Document's original where the User chose, under it
   await addDocuments(window, [join(sources, "Report.pdf"), join(sources, "Field notes.markdown")]);
   const item = window.getByTestId("document-list-item").filter({ hasText: "Report" });
 
-  // Renamed, the Document's name is what the copy is called.
-  await item.hover();
-  await item.getByRole("button", { name: "Rename Report" }).click();
+  // Renamed (from its menu), the Document's name is what the copy is called.
+  await openDocumentMenu(item);
+  await window.getByRole("menuitem", { name: "Rename" }).click();
   await window.getByRole("textbox", { name: "New name for Report" }).fill("Q3 report");
   await window.keyboard.press("Enter");
   await expect(item).toContainText("Q3 report");
@@ -46,8 +47,7 @@ test("Save a copy… writes a Document's original where the User chose, under it
   // The system save dialog is answered by the test hook.
   const target = join(sources, "Saved copy.pdf");
   await interceptSaveDialog(app, target);
-  await item.hover();
-  await item.getByTestId("document-file-menu").click();
+  await openDocumentMenu(item);
   await window.getByRole("menuitem", { name: "Save a copy…" }).click();
 
   await expect.poll(() => readFile(target).catch(() => null)).not.toBeNull();
@@ -60,8 +60,7 @@ test("Save a copy… writes a Document's original where the User chose, under it
   const notesTarget = join(sources, "Notes copy.md");
   await interceptSaveDialog(app, notesTarget);
   const notes = window.getByTestId("document-list-item").filter({ hasText: "Field notes" });
-  await notes.hover();
-  await notes.getByTestId("document-file-menu").click();
+  await openDocumentMenu(notes);
   await window.getByRole("menuitem", { name: "Save a copy…" }).click();
   await expect.poll(() => readFile(notesTarget, "utf8").catch(() => null)).toBe(NOTES);
   const [notesAsked] = await saveDialogsAsked(app);
@@ -78,8 +77,7 @@ test("Open in default app opens a copy named after the Document, not its stored 
   await interceptOpenPath(app);
   const item = window.getByTestId("document-list-item");
 
-  await item.hover();
-  await item.getByTestId("document-file-menu").click();
+  await openDocumentMenu(item);
   await window.getByRole("menuitem", { name: "Open in default app" }).click();
 
   await expect.poll(() => pathsOpened(app)).toHaveLength(1);
