@@ -12,20 +12,29 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-import { TrashIcon } from "../icons";
-import { buttonClass } from "../providers/shared";
+import { TrashLineIcon } from "../lineIcons";
+import {
+  buttonClass,
+  buttonStyle,
+  iconButtonClass,
+  pageIntroClass,
+  rowStatusClass,
+  rowTitleClass,
+  ruledListClass,
+} from "../ui";
 import { ConnectorForm } from "./ConnectorForm";
 import { ConnectorImport } from "./ConnectorImport";
 import { commandLine } from "./commandLine";
 import { RemoteSignIn } from "./RemoteSignIn";
 
-const stateClass: Record<ConnectorState, string> = {
-  off: "bg-gray-100 text-gray-500",
-  connecting: "bg-blue-50 text-blue-700",
-  "signing-in": "bg-blue-50 text-blue-700",
-  "needs-sign-in": "bg-amber-50 text-amber-800",
-  ready: "bg-green-50 text-green-700",
-  error: "bg-red-50 text-red-700",
+/** A state's dot: working (blue), waiting for the User (amber), ready (green), failed (red). */
+const stateDot: Record<ConnectorState, string | null> = {
+  off: null,
+  connecting: "bg-accent",
+  "signing-in": "bg-accent",
+  "needs-sign-in": "bg-attention",
+  ready: "bg-success",
+  error: "bg-danger",
 };
 
 /** A state's name: remote Connectors' own states are under `remoteConnectors.`. */
@@ -95,15 +104,16 @@ export function ConnectorsSettings() {
 
   if (!connectors) return null;
   return (
-    <section data-testid="connectors-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("connectors.settings.title")}</h3>
-      <p className="text-sm text-gray-600">{t("connectors.settings.body")}</p>
+    <section data-testid="connectors-settings" className="flex flex-col gap-4">
+      <p className={pageIntroClass}>{t("connectors.settings.body")}</p>
 
       {connectors.length === 0 && mode === "list" && (
-        <p className="mt-2 text-sm text-gray-500">{t("connectors.settings.empty")}</p>
+        <p className={`${rowStatusClass} border-y border-rule py-3.5`}>
+          {t("connectors.settings.empty")}
+        </p>
       )}
       {connectors.length > 0 && (
-        <ul className="mt-2 flex flex-col gap-2">
+        <ul className={ruledListClass}>
           {connectors.map((connector) => (
             <ConnectorRow
               key={connector.id}
@@ -116,7 +126,7 @@ export function ConnectorsSettings() {
       )}
 
       {mode === "list" && (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             data-testid="connector-add"
@@ -161,44 +171,49 @@ function ConnectorRow({
 }) {
   const t = useT();
   const { id, name } = connector;
+  const dot = stateDot[connector.state];
   return (
     <li
       data-testid="connector"
       data-connector-id={id}
       data-state={connector.state}
-      className="rounded-[9px] border border-gray-200 px-3 py-2"
+      className="flex flex-col gap-1 py-3.5"
     >
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
-        <span
-          data-testid="connector-state"
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${stateClass[connector.state]}`}
-        >
-          {t(stateKey(connector.state))}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
+        <span className={`min-w-0 truncate ${rowTitleClass}`}>{name}</span>
+        <span className="flex items-center gap-3">
+          <span
+            className={`flex items-center gap-1.5 text-[13px] leading-5 ${
+              connector.state === "error" ? "text-danger" : "text-ink-meta"
+            }`}
+          >
+            {dot && <span aria-hidden="true" className={`size-1.5 rounded-full ${dot}`} />}
+            <span data-testid="connector-state">{t(stateKey(connector.state))}</span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            aria-checked={connector.enabled}
+            data-testid="connector-toggle"
+            aria-label={t("connectors.toggle", { name })}
+            checked={connector.enabled}
+            onChange={(event) => void act(() => core.setConnectorEnabled(id, event.target.checked))}
+            className="switch"
+          />
+          <button
+            type="button"
+            aria-label={t("connectors.remove", { name })}
+            title={t("connectors.remove", { name })}
+            onClick={() => void act(() => core.deleteConnector(id))}
+            className={iconButtonClass}
+          >
+            <TrashLineIcon className="size-4" />
+          </button>
         </span>
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={connector.enabled}
-          data-testid="connector-toggle"
-          aria-label={t("connectors.toggle", { name })}
-          checked={connector.enabled}
-          onChange={(event) => void act(() => core.setConnectorEnabled(id, event.target.checked))}
-          className="size-4 shrink-0 accent-gray-800"
-        />
-        <button
-          type="button"
-          aria-label={t("connectors.remove", { name })}
-          title={t("connectors.remove", { name })}
-          onClick={() => void act(() => core.deleteConnector(id))}
-          className="shrink-0 rounded-[6px] p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-        >
-          <TrashIcon className="size-4" />
-        </button>
       </div>
       <p
         data-testid="connector-location"
-        className="mt-0.5 truncate font-mono text-xs text-gray-500"
+        className="truncate font-mono text-[12px] leading-[18px] text-ink-meta"
         title={locationOf(connector)}
       >
         {locationOf(connector)}
@@ -245,23 +260,19 @@ function ErrorNotice({ error, onRetry }: { error: ConnectorError; onRetry(): voi
       role="alert"
       data-testid="connector-error"
       data-error-kind={error.kind}
-      className="mt-1.5 rounded-[6px] bg-red-50 px-2 py-1.5 text-sm text-red-900"
+      className="mt-1 flex flex-col gap-1.5 text-[13px] leading-5 text-danger"
     >
-      <p>{message}</p>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+      <p className="break-words">{message}</p>
+      <div className="flex flex-wrap items-center gap-2 text-[12px]">
         {error.retrying ? (
-          <span className="text-red-800/80">{t("connectors.restarting")}</span>
+          <span className="text-ink-meta">{t("connectors.restarting")}</span>
         ) : (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="rounded-[6px] border border-current/20 px-2 py-0.5 hover:bg-white/60"
-          >
+          <button type="button" onClick={onRetry} className={buttonStyle("secondary", "sm")}>
             {t("connectors.retry")}
           </button>
         )}
         {error.kind !== "missing-command" && error.message && (
-          <details className="min-w-0 text-red-800/80">
+          <details className="min-w-0 text-ink-meta">
             <summary className="cursor-pointer">{t("connectors.details")}</summary>
             <pre className="mt-1 max-h-32 overflow-auto font-mono whitespace-pre-wrap break-words">
               {error.message}
@@ -304,7 +315,9 @@ function Tools({
       : tools.length === 1
         ? t("connectors.tools.count.one")
         : t("connectors.tools.count", { count: tools.length });
-  if (tools.length === 0) return <p className="mt-1 text-xs text-gray-500">{count}</p>;
+  if (tools.length === 0) {
+    return <p className="text-[12px] leading-[18px] text-ink-meta">{count}</p>;
+  }
   const readOnly = tools.filter((tool) => tool.readOnly).length;
   const claims =
     readOnly === 0
@@ -331,11 +344,15 @@ function Tools({
     );
   };
   return (
-    <details open={unfolded} data-testid="connector-tools" className="mt-1 text-xs text-gray-600">
-      <summary className="cursor-pointer select-none">
+    <details
+      open={unfolded}
+      data-testid="connector-tools"
+      className="text-[12px] leading-5 text-ink-secondary"
+    >
+      <summary className="cursor-pointer select-none hover:text-ink">
         {count} · {claims}
       </summary>
-      <ul className="mt-1 flex flex-col gap-1">
+      <ul className="mt-1 flex flex-col gap-1 border-l border-rule pl-3">
         {tools.map((tool) => {
           const ask = asksFirst(tool, policyOf(tool));
           return (
@@ -351,10 +368,7 @@ function Tools({
                 <span data-testid="connector-tool-name" className="font-mono">
                   {tool.name}
                 </span>
-                <span
-                  data-testid="connector-tool-claim"
-                  className={tool.readOnly ? "text-green-700" : "text-gray-400"}
-                >
+                <span data-testid="connector-tool-claim" className="text-ink-meta">
                   {" · "}
                   {tool.readOnly ? t("connectors.tools.readOnly") : t("connectors.tools.changes")}
                 </span>
@@ -364,7 +378,7 @@ function Tools({
                 aria-label={t("approvals.tools.select", { tool: tool.name })}
                 value={ask ? "ask" : "always"}
                 onChange={(event) => choose(tool, event.target.value === "ask")}
-                className="shrink-0 rounded-[6px] border border-gray-300 bg-white px-1 py-0.5 text-xs"
+                className="h-7 shrink-0 rounded-sm border border-rule-strong bg-sheet px-1.5 text-[12px] text-ink outline-none focus:border-accent focus:outline-1 focus:outline-accent"
               >
                 <option value="ask">{t("approvals.tools.ask")}</option>
                 <option value="always">{t("approvals.tools.always")}</option>
@@ -373,7 +387,7 @@ function Tools({
           );
         })}
       </ul>
-      <p className="mt-1 text-gray-500">{t("connectors.tools.note")}</p>
+      <p className="mt-1 text-ink-meta">{t("connectors.tools.note")}</p>
     </details>
   );
 }

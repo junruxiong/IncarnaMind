@@ -14,9 +14,34 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import {
+  buttonClass,
+  choiceListClass,
+  compactChoiceRadioClass,
+  compactChoiceRowClass,
+  dialogActionsClass,
+  dialogBodyClass,
+  dialogClass,
+  dialogTextClass,
+  dialogTitleClass,
+  errorTextClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  hintClass,
+  inputClass,
+  noticeClass,
+  pageIntroClass,
+  primaryButtonClass,
+  rowButtonsClass,
+  rowTextClass,
+  rowTitleClass,
+  ruledListClass,
+  ruledRowClass,
+  successTextClass,
+} from "../ui";
 import { useModal } from "../useModal";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
-import { buttonClass, inputClass, primaryButtonClass, testErrorKey } from "./shared";
+import { testErrorKey } from "./shared";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -82,56 +107,57 @@ export function EmbeddingSettingsSection() {
   if (!embedding) return null;
   const { provider, error, rebuild } = embedding;
   return (
-    <section data-testid="embedding-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("embeddingProviders.settings.title")}</h3>
-      <p className="text-sm text-gray-600">{t("embeddingProviders.settings.body")}</p>
+    <section data-testid="embedding-settings" className="flex flex-col gap-4">
+      <p className={pageIntroClass}>{t("embeddingProviders.settings.body")}</p>
 
-      <div className="mt-2 flex flex-col gap-1">
-        <p data-testid="embedding-current" className="text-sm">
-          <span className="text-gray-600">{t("embeddingProviders.settings.current")}</span>
-          {embeddingProviderLabel(provider, t)}
-        </p>
-        <p className="text-xs text-gray-500">
-          {provider.service
-            ? t("embeddingProviders.settings.sendsTo", { service: provider.service.name })
-            : t("embeddingProviders.settings.local")}
-        </p>
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-[9px] bg-amber-50 p-2 text-sm text-amber-900"
-          >
-            <p className="min-w-0 flex-1 break-words" title={error.message}>
-              {t("embeddingProviders.settings.error", {
-                reason: t(testErrorKey(error.kind)),
-              })}
+      <div className={ruledListClass}>
+        <div className={ruledRowClass}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <p data-testid="embedding-current" className="text-ui text-ink">
+              <span className="font-semibold">{t("embeddingProviders.settings.current")}</span>
+              {embeddingProviderLabel(provider, t)}
             </p>
-            <button type="button" onClick={() => void retry()} className="shrink-0 font-medium">
-              {t("embeddingProviders.settings.retry")}
-            </button>
+            <p className={rowTextClass}>
+              {provider.service
+                ? t("embeddingProviders.settings.sendsTo", { service: provider.service.name })
+                : t("embeddingProviders.settings.local")}
+            </p>
+            {rebuild && (
+              <p data-testid="embedding-rebuild" className={rowTextClass}>
+                {t("embeddingProviders.rebuild.title", {
+                  done: rebuild.done,
+                  total: rebuild.total,
+                })}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className={`mt-1 ${errorTextClass}`} title={error.message}>
+                {t("embeddingProviders.settings.error", { reason: t(testErrorKey(error.kind)) })}
+              </p>
+            )}
           </div>
-        )}
-        {rebuild && (
-          <p data-testid="embedding-rebuild" className="text-sm text-gray-600">
-            {t("embeddingProviders.rebuild.title", { done: rebuild.done, total: rebuild.total })}
-          </p>
-        )}
+          <div className={rowButtonsClass}>
+            {error && (
+              <button type="button" onClick={() => void retry()} className={buttonClass}>
+                {t("embeddingProviders.settings.retry")}
+              </button>
+            )}
+            {!editing && (
+              <button
+                type="button"
+                data-testid="embedding-change"
+                onClick={() => setEditing(true)}
+                className={buttonClass}
+              >
+                {t("embeddingProviders.settings.change")}
+              </button>
+            )}
+          </div>
+        </div>
+        <LocalOnlySetting localOnly={embedding.localOnly} />
       </div>
 
-      {editing ? (
-        <EmbeddingForm current={embedding} onDone={() => setEditing(false)} />
-      ) : (
-        <button
-          type="button"
-          data-testid="embedding-change"
-          onClick={() => setEditing(true)}
-          className={`${buttonClass} mt-2`}
-        >
-          {t("embeddingProviders.settings.change")}
-        </button>
-      )}
-
-      <LocalOnlySetting localOnly={embedding.localOnly} />
+      {editing && <EmbeddingForm current={embedding} onDone={() => setEditing(false)} />}
     </section>
   );
 }
@@ -139,6 +165,7 @@ export function EmbeddingSettingsSection() {
 /** "Keep everything on this computer", and what it doesn't cover. */
 function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
   const t = useT();
+  const id = useId();
   const readiness = useAppStore((state) => state.chatReadiness);
   const [busy, setBusy] = useState(false);
   const chatService = readiness && "provider" in readiness ? readiness.provider.service : null;
@@ -155,28 +182,32 @@ function LocalOnlySetting({ localOnly }: { localOnly: boolean }) {
   };
 
   return (
-    <div className="mt-3">
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          data-testid="local-only"
-          checked={localOnly}
-          disabled={busy}
-          onChange={(event) => void change(event.target.checked)}
-          className="mt-[3px]"
-        />
-        <span>
-          <span className="font-medium">{t("embeddingProviders.localOnly.label")}</span>
-          <span className="block text-xs text-gray-500">
-            {t("embeddingProviders.localOnly.body")}
-          </span>
-        </span>
-      </label>
-      {localOnly && chatService && (
-        <p className="mt-1 rounded-[9px] bg-amber-50 p-2 text-xs text-amber-900">
-          {t("embeddingProviders.localOnly.cloudChat", { service: chatService.name })}
+    <div className={ruledRowClass}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <label htmlFor={id} className={rowTitleClass}>
+          {t("embeddingProviders.localOnly.label")}
+        </label>
+        <p id={`${id}-description`} className={rowTextClass}>
+          {t("embeddingProviders.localOnly.body")}
         </p>
-      )}
+        {localOnly && chatService && (
+          <p className={`mt-1.5 ${noticeClass}`}>
+            {t("embeddingProviders.localOnly.cloudChat", { service: chatService.name })}
+          </p>
+        )}
+      </div>
+      <input
+        id={id}
+        type="checkbox"
+        role="switch"
+        data-testid="local-only"
+        aria-describedby={`${id}-description`}
+        checked={localOnly}
+        aria-checked={localOnly}
+        disabled={busy}
+        onChange={(event) => void change(event.target.checked)}
+        className="switch"
+      />
     </div>
   );
 }
@@ -285,47 +316,38 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   };
 
   return (
-    <form data-testid="embedding-form" onSubmit={submit} className="mt-3 flex flex-col gap-3">
+    <form data-testid="embedding-form" onSubmit={submit} className="flex flex-col gap-3">
       <fieldset>
-        <legend className="mb-1 text-sm text-gray-600">{t("embeddingProviders.form.label")}</legend>
-        <div className="grid grid-cols-2 gap-2">
-          {embeddingProviderKinds.map((option) => {
-            const blocked = current.localOnly && CLOUD_KINDS.has(option);
-            return (
-              <label
-                key={option}
-                className={`flex items-center gap-2 rounded-[9px] border px-3 py-2 text-sm ${
-                  blocked
-                    ? "cursor-default border-gray-200 text-gray-400"
-                    : kind === option
-                      ? "cursor-pointer border-gray-800"
-                      : "cursor-pointer border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={`${id}-kind`}
-                  value={option}
-                  checked={kind === option}
-                  disabled={blocked}
-                  onChange={() => choose(option)}
-                />
-                {t(`embeddingProviders.kind.${option}`)}
-              </label>
-            );
-          })}
+        <legend className={`mb-1.5 ${fieldLabelClass}`}>
+          {t("embeddingProviders.form.label")}
+        </legend>
+        <div className={choiceListClass}>
+          {embeddingProviderKinds.map((option) => (
+            <label key={option} className={compactChoiceRowClass}>
+              <input
+                type="radio"
+                name={`${id}-kind`}
+                value={option}
+                checked={kind === option}
+                disabled={current.localOnly && CLOUD_KINDS.has(option)}
+                onChange={() => choose(option)}
+                className={compactChoiceRadioClass}
+              />
+              {t(`embeddingProviders.kind.${option}`)}
+            </label>
+          ))}
         </div>
-        {current.localOnly && (
-          <p className="mt-1 text-xs text-gray-500">{t("embeddingProviders.form.localOnly")}</p>
-        )}
+        {current.localOnly && <p className={hintClass}>{t("embeddingProviders.form.localOnly")}</p>}
       </fieldset>
 
       {kind === "built-in" && (
-        <p className="text-sm text-gray-600">{t("embeddingProviders.form.builtInHint")}</p>
+        <p className="text-[13px] leading-5 text-ink-secondary">
+          {t("embeddingProviders.form.builtInHint")}
+        </p>
       )}
 
       {(kind === "openai-compatible" || kind === "ollama") && (
-        <label className="text-sm text-gray-600">
+        <label className={fieldLabelClass}>
           {kind === "ollama" ? t("embeddingProviders.form.ollamaUrl") : t("providers.form.baseUrl")}
           <input
             type="url"
@@ -336,7 +358,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             spellCheck={false}
             className={inputClass}
           />
-          <span className="mt-1 block text-xs text-gray-500">
+          <span className={hintClass}>
             {kind === "ollama"
               ? t("embeddingProviders.form.ollamaHint")
               : t("providers.form.baseUrlHint")}
@@ -345,7 +367,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       )}
 
       {takesKey && (
-        <label className="text-sm text-gray-600">
+        <label className={fieldLabelClass}>
           {keyRequired ? t("providers.form.apiKey") : t("providers.form.apiKeyOptional")}
           <input
             type="password"
@@ -356,9 +378,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             className={inputClass}
           />
           {sameServer && saved.hasApiKey && (
-            <span className="mt-1 block text-xs text-gray-500">
-              {t("providers.form.apiKeySaved")}
-            </span>
+            <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
           )}
         </label>
       )}
@@ -368,7 +388,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       )}
 
       {kind !== "built-in" && (
-        <label className="text-sm text-gray-600">
+        <label className={fieldLabelClass}>
           {t("embeddingProviders.form.model")}
           <input
             required
@@ -381,6 +401,14 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          data-testid="embedding-switch"
+          disabled={!complete || unchanged || keyBlocked || busy !== null}
+          className={primaryButtonClass}
+        >
+          {busy === "saving" ? t("providers.form.saving") : t("embeddingProviders.form.switch")}
+        </button>
         {kind !== "built-in" && (
           <button
             type="button"
@@ -391,29 +419,21 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
           </button>
         )}
-        <button
-          type="submit"
-          data-testid="embedding-switch"
-          disabled={!complete || unchanged || keyBlocked || busy !== null}
-          className={primaryButtonClass}
-        >
-          {busy === "saving" ? t("providers.form.saving") : t("embeddingProviders.form.switch")}
-        </button>
-        <button type="button" onClick={onDone} className={buttonClass}>
+        <button type="button" onClick={onDone} className={ghostButtonClass}>
           {t("providers.settings.cancel")}
         </button>
       </div>
 
       {test &&
         (test.ok ? (
-          <p data-testid="connection-test" className="text-sm text-emerald-700">
+          <p data-testid="connection-test" className={successTextClass}>
             {t("embeddingProviders.test.ok", { dimensions: test.dimensions })}
           </p>
         ) : (
           <TestResult result={test} />
         ))}
       {error && (
-        <p role="alert" className="text-sm break-words text-red-700">
+        <p role="alert" className={errorTextClass}>
           {error}
         </p>
       )}
@@ -463,27 +483,27 @@ function SwitchConfirmation({
         event.stopPropagation();
         onCancel();
       }}
-      className="m-auto w-[30rem] max-w-[calc(100vw-2rem)] rounded-[9px] bg-white p-5 text-gray-800 shadow-custom-focus backdrop:bg-black/30"
+      className={`${dialogClass} w-[30rem]`}
     >
       {open && (
-        <>
-          <h2 id="embedding-confirm-title" className="text-lg font-semibold">
+        <div className={dialogBodyClass}>
+          <h2 id="embedding-confirm-title" className={dialogTitleClass}>
             {t("embeddingProviders.confirm.title", { provider })}
           </h2>
-          <p className="mt-2 text-sm text-gray-700">
+          <p className={dialogTextClass}>
             {t("embeddingProviders.confirm.reprocess", { count: documentCount })}
           </p>
           {cloudService ? (
             <p
               data-testid="embedding-confirm-cloud"
-              className="mt-2 text-sm font-medium text-amber-900"
+              className="rounded-lg border border-rule bg-frame px-3 py-2 text-ui font-semibold text-ink"
             >
               {t("embeddingProviders.confirm.cloud", { service: cloudService })}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-gray-700">{t("embeddingProviders.confirm.local")}</p>
+            <p className={dialogTextClass}>{t("embeddingProviders.confirm.local")}</p>
           )}
-          <div className="mt-4 flex justify-end gap-2">
+          <div className={dialogActionsClass}>
             <button
               type="button"
               data-testid="embedding-confirm-cancel"
@@ -501,7 +521,7 @@ function SwitchConfirmation({
               {t("embeddingProviders.confirm.switch")}
             </button>
           </div>
-        </>
+        </div>
       )}
     </dialog>
   );

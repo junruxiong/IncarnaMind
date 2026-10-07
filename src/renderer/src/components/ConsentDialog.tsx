@@ -4,7 +4,17 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { buttonClass, primaryButtonClass } from "./providers/shared";
+import {
+  buttonClass,
+  dialogActionsClass,
+  dialogBodyClass,
+  dialogClass,
+  dialogTextClass,
+  dialogTitleClass,
+  hintClass,
+  primaryButtonClass,
+  ruledListClass,
+} from "./ui";
 import { useModal } from "./useModal";
 
 /**
@@ -59,34 +69,39 @@ export function ConsentDialog() {
       data-testid="consent-dialog"
       aria-labelledby="consent-title"
       onCancel={(event) => event.preventDefault()}
-      className="m-auto w-[30rem] max-w-[calc(100vw-2rem)] rounded-[9px] bg-white p-5 text-gray-800 shadow-custom-focus backdrop:bg-black/30"
+      className={`${dialogClass} w-[30rem]`}
     >
       {request && (
-        <>
-          <h2 id="consent-title" className="text-lg font-semibold">
+        <div className={dialogBodyClass}>
+          <h2 id="consent-title" className={dialogTitleClass}>
             {t("consent.dialog.title", { service })}
           </h2>
-          <p className="mt-2 text-sm text-gray-700">
-            {t(isFirstAsk ? "consent.dialog.body" : "consent.dialog.bodyMore", {
-              purpose,
-              service,
-            })}
-          </p>
-          <ul className="mt-2 list-disc pl-5 text-sm text-gray-700">
-            {request.newKinds.map((kind) => (
-              <li key={kind}>{t(`consent.data.${kind}`)}</li>
-            ))}
-          </ul>
+          <div className="flex flex-col gap-2">
+            <p className={dialogTextClass}>
+              {t(isFirstAsk ? "consent.dialog.body" : "consent.dialog.bodyMore", {
+                purpose,
+                service,
+              })}
+            </p>
+            {/* What it sends: rows split by rules. */}
+            <ul className={ruledListClass}>
+              {request.newKinds.map((kind) => (
+                <li key={kind} className="py-2 text-ui text-ink">
+                  {t(`consent.data.${kind}`)}
+                </li>
+              ))}
+            </ul>
+          </div>
           {request.flow.id === "connectors" && (
-            <p className="mt-3 text-sm text-gray-700">
+            <p className={dialogTextClass}>
               {/* A local Connector's service is "connector:<id>"; a remote one's is its server's origin. */}
               {request.flow.service.id.startsWith("connector:")
                 ? t("connectors.consent.note")
                 : t("remoteConnectors.consent.note")}
             </p>
           )}
-          <p className="mt-3 text-xs text-gray-500">{t("consent.dialog.note")}</p>
-          <div className="mt-4 flex justify-end gap-2">
+          <p className={hintClass}>{t("consent.dialog.note")}</p>
+          <div className={dialogActionsClass}>
             <button
               type="button"
               data-testid="consent-decline"
@@ -104,7 +119,7 @@ export function ConsentDialog() {
               {t("consent.dialog.allow")}
             </button>
           </div>
-        </>
+        </div>
       )}
     </dialog>
   );
