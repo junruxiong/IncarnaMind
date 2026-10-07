@@ -242,7 +242,7 @@ export const en = {
   "linkedFolders.unlink.body":
     "The folder and the files in it aren't touched. IncarnaMind stops following it and removes its index of them.",
   "linkedFolders.unlink.citations":
-    "It keeps only the few pages your Citations quote, so they can still be checked.",
+    "It keeps only the text your Citations quote, so they can still be checked.",
   "linkedFolders.unlink.cancel": "Cancel",
   "linkedFolders.unlink.confirm": "Unlink",
   "units.kb": "{size} KB",
