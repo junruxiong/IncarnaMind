@@ -92,6 +92,8 @@ export function DocumentsSection() {
   );
   const addDocuments = useAppStore((state) => state.addDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
+  const pickDocuments = useAppStore((state) => state.pickDocuments);
+  const picking = useAppStore((state) => state.pickingDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
 
@@ -130,12 +132,14 @@ export function DocumentsSection() {
             data-testid="add-documents"
             aria-label={t("documents.add")}
             title={t("documents.add")}
-            onClick={() => picker.current?.click()}
+            disabled={picking}
+            onClick={() => void pickDocuments()}
             className={rowActionButtonClass}
           >
             <PlusLineIcon className="size-4" />
           </button>
         </div>
+        {/* Files given straight to the page arrive here, as from the dialog: the smoke tests add them so. */}
         <input
           ref={picker}
           type="file"
@@ -180,7 +184,8 @@ export function DocumentsSection() {
               <button
                 type="button"
                 data-testid="empty-add-documents"
-                onClick={() => picker.current?.click()}
+                disabled={picking}
+                onClick={() => void pickDocuments()}
                 className={rowButtonClass}
               >
                 <PlusLineIcon className={rowIconClass(false)} />

@@ -25,6 +25,10 @@ import type { Core, ExportFormat, ExportMindOptions } from "../core";
 import { FILES_CHANNELS } from "../shared/bridge";
 import { type MessageKey, translate } from "../shared/i18n";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
+import { rememberPick, startFolder } from "./pickerFolders";
+
+/** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
+const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "markdown"];
 
 const FILE_TYPES: Readonly<Record<ExportFormat, { name: MessageKey; extension: string }>> = {
   docx: { name: "export.dialog.filter.docx", extension: "docx" },
@@ -143,12 +147,37 @@ export function serveFileActions(
       title: translate(language, "linkedFolders.pick.title"),
       buttonLabel: translate(language, "linkedFolders.pick.button"),
       properties: ["openDirectory"],
+      defaultPath: startFolder(dataDir, "folders", app.getPath("home")),
     };
     const window = BrowserWindow.fromWebContents(event.sender);
     const { canceled, filePaths } = window
       ? await dialog.showOpenDialog(window, openOptions)
       : await dialog.showOpenDialog(openOptions);
-    return canceled ? null : (filePaths[0] ?? null);
+    const picked = canceled ? null : (filePaths[0] ?? null);
+    if (picked) rememberPick(dataDir, "folders", picked);
+    return picked;
+  });
+
+  // A sheet on the window that starts in a folder on this computer (see pickerFolders.ts),
+  // instead of the web file input, which starts wherever macOS last was, often iCloud.
+  ipcMain.handle(FILES_CHANNELS.pickDocuments, async (event): Promise<string[]> => {
+    refuseUnknown(event);
+    const { language } = await core.getSettings();
+    const openOptions: OpenDialogOptions = {
+      title: translate(language, "documents.pick.title"),
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        { name: translate(language, "documents.pick.filter"), extensions: DOCUMENT_EXTENSIONS },
+      ],
+      defaultPath: startFolder(dataDir, "documents", app.getPath("downloads")),
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+    if (canceled) return [];
+    if (filePaths[0]) rememberPick(dataDir, "documents", filePaths[0]);
+    return filePaths;
   });
 
   // Only a folder the User linked: its path comes from the core's list, never from the page.

@@ -167,6 +167,10 @@ interface AppState {
    * offered for linking. For the smoke tests, which can't drop a folder.
    */
   addPaths(paths: readonly string[]): Promise<void>;
+  /** "Add Documents": the system's open dialog (see `FilesBridge.pickDocuments`), then the files picked are added. */
+  pickDocuments(): Promise<void>;
+  /** While that dialog is open: the buttons that open it wait, so it isn't opened twice. */
+  pickingDocuments: boolean;
   renameDocument(id: string, name: string): Promise<void>;
   deleteDocument(id: string): Promise<void>;
   /** Processes a Document that failed again, from its file. */
@@ -363,6 +367,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     tabs: [],
     openMindId: null,
     titleToFocus: null,
+    pickingDocuments: false,
     settings: null,
     chatReadiness: null,
     actionError: null,
@@ -569,6 +574,18 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     addPaths: (paths) => attempt(() => addByPath(paths, [], [])),
+
+    pickDocuments: () =>
+      attempt(async () => {
+        if (get().pickingDocuments) return;
+        set({ pickingDocuments: true });
+        try {
+          const paths = await files.pickDocuments();
+          if (paths.length > 0) await addByPath(paths, [], []);
+        } finally {
+          set({ pickingDocuments: false });
+        }
+      }),
 
     renameDocument: (id, name) =>
       attempt(async () => {
