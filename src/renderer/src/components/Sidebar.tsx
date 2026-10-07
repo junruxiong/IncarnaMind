@@ -46,8 +46,8 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
     >
       <header
         data-testid="sidebar-header"
-        // No bottom rule: the sidebar's edge meets only the tab strip's, in a T.
-        className="flex h-11 shrink-0 items-center gap-2 px-4"
+        // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
+        className="relative flex h-11 shrink-0 items-center gap-2 px-4 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
       >
         <AppMark />
         <span className="truncate text-ui font-semibold text-ink">{t("app.name")}</span>

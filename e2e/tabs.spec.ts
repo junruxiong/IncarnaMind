@@ -395,7 +395,7 @@ test("a Mind is renamed from its sidebar row, and the Minds fold away", async ()
   await app.close();
 });
 
-test("the 44px band runs unbroken: tabs start at the sidebar, the viewer's toolbar sits on it, and the dividers meet it in Ts", async () => {
+test("the 44px band runs unbroken: tabs start at the sidebar, the viewer's toolbar sits on it, and no line crosses another", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const name of ["First", "Second"]) {
@@ -406,17 +406,18 @@ test("the 44px band runs unbroken: tabs start at the sidebar, the viewer's toolb
   await tabsOf(window).first().click();
   await openViewer(window);
 
-  // The first tab, shown, meets the sidebar square: flush, with no left foot.
+  // The first tab, shown, starts flush at the sidebar, rounded at the top, with no left foot.
   const sidebar = await boxOf(window.getByTestId("sidebar"));
   const first = tabsOf(window).first();
   expect((await boxOf(first)).x).toBeCloseTo(sidebar.x + sidebar.width + 1, 0);
-  expect(await first.evaluate((tab) => getComputedStyle(tab).borderTopLeftRadius)).toBe("0px");
+  expect(await first.evaluate((tab) => getComputedStyle(tab).borderTopLeftRadius)).toBe("10px");
   await expect(first.locator('.mind-tab-foot[data-side="left"]')).toBeHidden();
-  // The sidebar's header has no bottom rule.
-  const header = window.getByTestId("sidebar-header");
-  expect(await header.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe(
-    "0px",
-  );
+  // The sidebar header's rule is inset 8px each side, so it never meets the sidebar's edge.
+  const rule = await window.getByTestId("sidebar-header").evaluate((element) => {
+    const after = getComputedStyle(element, "::after");
+    return { left: after.left, right: after.right, height: after.height };
+  });
+  expect(rule).toEqual({ left: "8px", right: "8px", height: "1px" });
 
   // The viewer's toolbar is on the band, with no rule under it; its divider starts below the band.
   const band = await window
