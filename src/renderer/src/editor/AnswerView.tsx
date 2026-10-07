@@ -1,5 +1,5 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { useId, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
 import {
   type AnswerToolCall,
   type ApprovalRequest,
@@ -11,16 +11,10 @@ import {
 } from "../../../core/api";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
-import {
-  PlugIcon,
-  RegenerateIcon,
-  ScriptIcon,
-  SearchIcon,
-  SkillIcon,
-  StopIcon,
-} from "../components/icons";
+import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { type SettingsPage, useAppStore } from "../store";
+import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
@@ -58,10 +52,28 @@ function toolCallsOf(value: unknown): AnswerToolCall[] {
   }
 }
 
+const RUN_SCRIPT = "run_skill_script";
+const SEARCH = "search_documents";
+
+/** Items of the meta line, with a dot between each two. */
+function Dotted({ items }: { items: ReactNode[] }) {
+  return items.map((item, index) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: the items are fixed slots of the meta line.
+    <Fragment key={index}>
+      {index > 0 && <span aria-hidden="true">·</span>}
+      {item}
+    </Fragment>
+  ));
+}
+
 /**
- * An Answer: which model wrote it, whether it is still being written (with a
- * stop button) or was stopped, a way to write it again, and, when it failed,
- * what went wrong and how to fix it. Its text is ordinary, editable Blocks.
+ * An Answer: no box, its text at the Mind's text edge with the "Answer" label
+ * in the left margin. Its meta line says which model wrote it, whether it is
+ * still being written (a pulsing dot, and a stop button) or was stopped, what
+ * it searched (it opens to the list), and offers to write it again. Under it,
+ * ruled rows for the Skills, Connector calls and Skill scripts it used; when
+ * it failed, what went wrong and how to fix it; then its text, ordinary
+ * editable Blocks; and the approval cards of calls waiting for the User.
  */
 export function AnswerView({ node }: ReactNodeViewProps) {
   const t = useT();
@@ -79,12 +91,47 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const { regenerate, stop, dismiss } = useAnswers.getState();
   const openSettings = useAppStore((state) => state.openSettings);
   const toolCalls = toolCallsOf(node.attrs.toolCalls);
+  const searches = toolCalls.filter((call) => call.tool === SEARCH);
+  const [searchesOpen, setSearchesOpen] = useState(false);
+  // Written again, it starts with its searches closed.
+  if (searchesOpen && searches.length === 0) setSearchesOpen(false);
   const waiting = useApprovals((state) => state.waiting);
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
 
   const writeAgain = (discardEdits = false) => {
     if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
   };
+
+  const meta: ReactNode[] = [];
+  if (modelId) {
+    meta.push(
+      <span data-testid="answer-model" className="answer-model">
+        {modelId}
+      </span>,
+    );
+  }
+  if (streaming) {
+    const paused = approvals.length > 0;
+    meta.push(
+      <span
+        data-testid="answer-writing"
+        className={`answer-writing ${paused ? "answer-writing--waiting" : ""}`}
+      >
+        {paused ? t("approvals.answer.waiting") : t("answer.status.streaming")}
+      </span>,
+    );
+  } else if (status === "stopped") {
+    meta.push(<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>);
+  }
+  if (searches.length > 0) {
+    meta.push(
+      <SearchesSummary
+        searches={searches}
+        open={searchesOpen}
+        onToggle={() => setSearchesOpen((open) => !open)}
+      />,
+    );
+  }
 
   return (
     <NodeViewWrapper
@@ -93,50 +140,37 @@ export function AnswerView({ node }: ReactNodeViewProps) {
       data-status={streaming ? "streaming" : status}
       data-answer-id={answerId ?? undefined}
     >
-      <div contentEditable={false} className="answer-header">
-        <span className="font-medium text-gray-500">{t("answer.label")}</span>
-        {modelId && (
-          <span data-testid="answer-model" className="truncate">
-            · {modelId}
-          </span>
-        )}
-        {streaming && (
-          <span className="answer-writing" data-testid="answer-writing">
-            {approvals.length > 0 ? t("approvals.answer.waiting") : t("answer.status.streaming")}
-          </span>
-        )}
-        {!streaming && status === "stopped" && (
-          <span data-testid="answer-stopped">· {t("answer.status.stopped")}</span>
-        )}
-        <span className="flex-1" />
-        {streaming && answerId && (
-          <button
-            type="button"
-            data-testid="answer-stop"
-            onClick={() => stop(mindId, answerId)}
-            className="answer-action"
-          >
-            <StopIcon className="size-3.5" />
-            {t("answer.stop")}
-          </button>
-        )}
-        {!streaming && questionId && (
-          <button
-            type="button"
-            data-testid="answer-regenerate"
-            onClick={() => writeAgain()}
-            className="answer-action answer-action--on-hover"
-          >
-            <RegenerateIcon className="size-3.5" />
-            {t("answer.regenerate")}
-          </button>
-        )}
+      <div contentEditable={false} className="answer-head">
+        <div className="answer-meta">
+          <span className="answer-label">{t("answer.label")}</span>
+          <Dotted items={meta} />
+          {streaming && answerId && (
+            <button
+              type="button"
+              data-testid="answer-stop"
+              onClick={() => stop(mindId, answerId)}
+              className="answer-action"
+            >
+              <StopIcon className="size-3" />
+              {t("answer.stop")}
+            </button>
+          )}
+          {!streaming && questionId && (
+            <button
+              type="button"
+              data-testid="answer-regenerate"
+              onClick={() => writeAgain()}
+              className="answer-action"
+            >
+              <RegenerateSmallIcon className="size-3" />
+              {t("answer.regenerate")}
+            </button>
+          )}
+        </div>
+        {searchesOpen && <SearchList searches={searches} />}
       </div>
 
-      {toolCalls.length > 0 && <SkillCalls calls={toolCalls} />}
-      {(toolCalls.length > 0 || approvals.length > 0) && (
-        <ToolCalls calls={toolCalls} approvals={approvals} />
-      )}
+      <CallRows calls={toolCalls} approvals={approvals} />
 
       {text(node.attrs.citationSupport) === "none" && (
         <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
@@ -151,7 +185,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
           data-testid="answer-confirm"
           className="answer-notice"
         >
-          <span className="flex-1">{t("answer.edited.body")}</span>
+          <span className="answer-notice-text">{t("answer.edited.body")}</span>
           <button
             type="button"
             data-testid="answer-confirm-replace"
@@ -180,6 +214,15 @@ export function AnswerView({ node }: ReactNodeViewProps) {
       )}
 
       <NodeViewContent className="answer-content" />
+
+      {approvals.length > 0 && (
+        <div contentEditable={false} className="answer-approvals">
+          {/* Keyed by request, so a card keeps its state (the "Always run" warning) as its call comes in. */}
+          {approvals.map((request) => (
+            <ApprovalCard key={request.requestId} request={request} />
+          ))}
+        </div>
+      )}
     </NodeViewWrapper>
   );
 }
@@ -204,8 +247,8 @@ function AnswerError({
       data-error-kind={kind}
       className="answer-error"
     >
-      <p>{t(`answer.error.${kind}`)}</p>
-      <div className="mt-1 flex flex-wrap items-center gap-2">
+      <p className="answer-error-text">{t(`answer.error.${kind}`)}</p>
+      <div className="answer-error-actions">
         {errorKinds[kind].fixInSettings && (
           <button
             type="button"
@@ -222,9 +265,9 @@ function AnswerError({
           </button>
         )}
         {details && (
-          <details className="text-custom-xs text-red-800/80">
-            <summary className="cursor-pointer">{t("answer.error.details")}</summary>
-            <p className="mt-1 break-words">{details}</p>
+          <details className="answer-error-details">
+            <summary>{t("answer.error.details")}</summary>
+            <p>{details}</p>
           </details>
         )}
       </div>
@@ -232,53 +275,35 @@ function AnswerError({
   );
 }
 
-const RUN_SCRIPT = "run_skill_script";
-
 /**
- * The searches, Connector calls and Skill script runs an Answer made: its
- * searches as one line, then a card for each call. A call waiting for the
- * User's approval shows the approval card instead, in every window. Skills
- * have their own cards (`SkillCalls`).
+ * The Skills, Connector calls and Skill script runs an Answer made, as ruled
+ * rows, Skills first. A call waiting for the User's approval has no row: its
+ * approval card shows instead, after the Answer's text.
  */
-function ToolCalls({
-  calls,
-  approvals,
-}: {
-  calls: AnswerToolCall[];
-  approvals: ApprovalRequest[];
-}) {
-  const searches = calls.filter((call) => call.tool === "search_documents");
-  const carded = calls.filter(
-    (call) => call.source === "connector" || (call.source === "skill" && call.tool === RUN_SCRIPT),
-  );
-  const approvalFor = (call: AnswerToolCall) =>
-    approvals.find((request) => request.toolCallId === call.id);
-  // A request can arrive before its call is written into the Answer.
-  const unmatched = approvals.filter((request) =>
-    carded.every((call) => call.id !== request.toolCallId),
-  );
-  const approvalCard = (request: ApprovalRequest) => (
-    <ApprovalCard key={`approval:${request.requestId}`} request={request} />
-  );
-  // One list, with an approval card keyed by its request wherever it is, so
-  // the card keeps its state (the "Always run" warning) when its call comes in.
-  const cards = [
-    ...carded.map((call) => {
-      const request = approvalFor(call);
-      if (request) return approvalCard(request);
-      return call.source === "connector" ? (
-        <ConnectorCall key={`call:${call.id}`} call={call} />
+function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: ApprovalRequest[] }) {
+  const waitingIds = new Set(approvals.map((request) => request.toolCallId));
+  const rows = calls
+    .filter(
+      (call) =>
+        !waitingIds.has(call.id) &&
+        (call.source === "connector" || (call.source === "skill" && call.tool === RUN_SCRIPT)),
+    )
+    .map((call) =>
+      call.source === "connector" ? (
+        <ConnectorCall key={call.id} call={call} />
       ) : (
-        <ScriptCall key={`call:${call.id}`} call={call} />
-      );
-    }),
-    ...unmatched.map(approvalCard),
-  ];
+        <ScriptCall key={call.id} call={call} />
+      ),
+    );
+  const skills = skillRows(calls);
+  if (skills.length === 0 && rows.length === 0) return null;
   return (
-    <>
-      {searches.length > 0 && <Searches searches={searches} />}
-      {cards}
-    </>
+    <div contentEditable={false} className="answer-calls">
+      {skills.map(({ name, use, reads }) => (
+        <SkillRow key={name} name={name} use={use} reads={reads} />
+      ))}
+      {rows}
+    </div>
   );
 }
 
@@ -291,10 +316,26 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
   );
 }
 
+/** Stands for the name in a title, which is then drawn in mono (see `TitleWithCode`). */
+const NAME_SLOT = "\u0000";
+
+/** A title with a Tool or script name in it, the name in mono. */
+function TitleWithCode({ title, code }: { title: string; code: string }) {
+  const [before, after = ""] = title.split(NAME_SLOT);
+  return (
+    <span className="approval-title-text">
+      {before}
+      <code>{code}</code>
+      {after}
+    </span>
+  );
+}
+
 /**
- * A Tool call waiting for the User: which Tool of which Connector, whether it
- * may change something or the User asked to approve it every time, the
- * arguments it would send, and three choices. The Answer waits meanwhile.
+ * A Tool call waiting for the User: a ruled block in three sections. Which
+ * Tool of which Connector, and whether it may change something or the User
+ * asked to approve it every time; the arguments it would send; and three
+ * choices. The Answer waits meanwhile.
  */
 function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
   const t = useT();
@@ -312,20 +353,25 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
       data-read-only={request.readOnly}
       className="approval-card"
     >
-      <p id={titleId} className="flex items-center gap-1.5 font-medium">
-        <PlugIcon className="size-3.5 shrink-0" />
-        <span className="min-w-0">{t("approvals.card.title", params)}</span>
-      </p>
-      {request.title && request.title !== request.tool && (
-        <p className="mt-0.5 text-amber-900/80">{request.title}</p>
-      )}
-      <p className="mt-0.5 text-amber-900/80">
-        {request.readOnly
-          ? t("approvals.card.readOnly", params)
-          : t("approvals.card.changes", params)}
-      </p>
+      <div className="approval-head">
+        <p id={titleId} className="approval-title">
+          <span aria-hidden="true" className="approval-dot" />
+          <TitleWithCode
+            title={t("approvals.card.title", { ...params, tool: NAME_SLOT })}
+            code={request.tool}
+          />
+        </p>
+        {request.title && request.title !== request.tool && (
+          <p className="approval-explanation">{request.title}</p>
+        )}
+        <p className="approval-explanation">
+          {request.readOnly
+            ? t("approvals.card.readOnly", params)
+            : t("approvals.card.changes", params)}
+        </p>
+      </div>
       <ApprovalArguments input={request.input} />
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="approval-actions">
         <button
           type="button"
           data-testid="approval-allow-once"
@@ -347,7 +393,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
           type="button"
           data-testid="approval-deny"
           onClick={() => decide("deny")}
-          className="approval-button"
+          className="approval-button approval-button--ghost"
         >
           {t("approvals.card.deny")}
         </button>
@@ -357,10 +403,11 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
 }
 
 /**
- * A Skill script waiting for the User: which Skill, which of its scripts and
- * with which arguments, that scripts run on this computer with no sandbox,
- * and three choices. "Always run" first shows a warning that must be
- * confirmed. The Answer waits meanwhile.
+ * A Skill script waiting for the User, in the same three sections: which
+ * script of which Skill, and that scripts run on this computer with no
+ * sandbox; the Skill, script and arguments it would run with; and three
+ * choices. "Always run" first shows a warning in the last section, which must
+ * be confirmed. The Answer waits meanwhile.
  */
 function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
   const t = useT();
@@ -379,53 +426,61 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
       data-kind="skill-script"
       className="approval-card"
     >
-      <p id={titleId} className="flex items-center gap-1.5 font-medium">
-        <ScriptIcon className="size-3.5 shrink-0" />
-        <span className="min-w-0">{t("scripts.card.title", params)}</span>
-      </p>
-      <dl data-testid="approval-script" className="approval-args mt-1.5">
-        <dt>{t("scripts.card.skill")}</dt>
-        <dd data-testid="approval-script-skill">{request.skill.name}</dd>
-        <dt>{t("scripts.card.script")}</dt>
-        <dd data-testid="approval-script-path" className="font-mono">
-          {request.script}
-        </dd>
-        <dt>{t("scripts.card.args")}</dt>
-        <dd>
-          {request.args.length === 0 ? (
-            <span className="text-amber-900/70">{t("scripts.card.noArgs")}</span>
-          ) : (
-            <ol className="list-none">
-              {request.args.map((arg, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: arguments are positional and may repeat.
-                <li key={index} data-testid="approval-argument" className="font-mono">
-                  {arg}
-                </li>
-              ))}
-            </ol>
-          )}
-        </dd>
-      </dl>
-      <p data-testid="approval-no-sandbox" className="mt-1.5 text-amber-900/80">
-        {t("scripts.card.noSandbox")}
-      </p>
+      <div className="approval-head">
+        <p id={titleId} className="approval-title">
+          <span aria-hidden="true" className="approval-dot" />
+          <TitleWithCode
+            title={t("scripts.card.title", { ...params, script: NAME_SLOT })}
+            code={request.script}
+          />
+        </p>
+        <p data-testid="approval-no-sandbox" className="approval-explanation">
+          {t("scripts.card.noSandbox")}
+        </p>
+      </div>
+      <div className="approval-details">
+        <p className="approval-label">{t("scripts.card.wouldRun")}</p>
+        <dl data-testid="approval-script" className="approval-args">
+          <dt>{t("scripts.card.skill")}</dt>
+          <dd data-testid="approval-script-skill">{request.skill.name}</dd>
+          <dt>{t("scripts.card.script")}</dt>
+          <dd data-testid="approval-script-path" className="font-mono">
+            {request.script}
+          </dd>
+          <dt>{t("scripts.card.args")}</dt>
+          <dd>
+            {request.args.length === 0 ? (
+              <span className="approval-empty">{t("scripts.card.noArgs")}</span>
+            ) : (
+              <ol className="list-none">
+                {request.args.map((arg, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: arguments are positional and may repeat.
+                  <li key={index} data-testid="approval-argument" className="font-mono">
+                    {arg}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </dd>
+        </dl>
+      </div>
       {warning ? (
         <div
           role="alertdialog"
           aria-labelledby={warningId}
           data-testid="always-run-warning"
-          className="mt-2 rounded-[6px] border border-red-200 bg-red-50 px-2.5 py-2 text-red-950"
+          className="approval-actions approval-warning"
         >
-          <p id={warningId} className="font-medium">
+          <p id={warningId} className="approval-warning-title">
             {t("scripts.alwaysRun.title", params)}
           </p>
-          <p className="mt-0.5 text-custom-xs">{t("scripts.alwaysRun.body", params)}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <p className="approval-warning-body">{t("scripts.alwaysRun.body", params)}</p>
+          <div className="approval-buttons">
             <button
               type="button"
               data-testid="always-run-confirm"
               onClick={() => respond(request.requestId, "always-allow", { riskAccepted: true })}
-              className="approval-button border-red-300 text-red-900 hover:bg-red-100"
+              className="approval-button approval-button--danger"
             >
               {t("scripts.alwaysRun.confirm", params)}
             </button>
@@ -433,14 +488,14 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
               type="button"
               data-testid="always-run-cancel"
               onClick={() => setWarning(false)}
-              className="approval-button"
+              className="approval-button approval-button--ghost"
             >
               {t("scripts.alwaysRun.cancel")}
             </button>
           </div>
         </div>
       ) : (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="approval-actions">
           <button
             type="button"
             data-testid="approval-allow-once"
@@ -462,7 +517,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
             type="button"
             data-testid="approval-deny"
             onClick={() => respond(request.requestId, "deny")}
-            className="approval-button"
+            className="approval-button approval-button--ghost"
           >
             {t("scripts.card.deny")}
           </button>
@@ -473,8 +528,40 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
 }
 
 /**
+ * The arguments a call would send, readably: a key/value grid with the names
+ * in mono, text as text (line breaks kept), anything else as indented JSON.
+ */
+function ApprovalArguments({ input }: { input: Record<string, unknown> }) {
+  const t = useT();
+  const entries = Object.entries(input);
+  return (
+    <div data-testid="approval-arguments" className="approval-details">
+      <p className="approval-label">{t("approvals.card.arguments")}</p>
+      {entries.length === 0 ? (
+        <p className="approval-empty">{t("approvals.card.noArguments")}</p>
+      ) : (
+        <dl className="approval-args">
+          {entries.map(([name, value]) => (
+            <div key={name} data-testid="approval-argument" className="contents">
+              <dt>{name}</dt>
+              <dd>
+                {typeof value === "string" ? (
+                  value
+                ) : (
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
+/**
  * A run of a Skill script: which script of which Skill, how it went, on one
- * line that opens to show its arguments and what it wrote (what the model
+ * row that opens to show its arguments and what it wrote (what the model
  * was given), or why it couldn't run.
  */
 function ScriptCall({ call }: { call: AnswerToolCall }) {
@@ -506,42 +593,42 @@ function ScriptCall({ call }: { call: AnswerToolCall }) {
       data-status={call.status}
       data-approval={call.approval}
       data-exit-code={run?.exitCode ?? undefined}
-      className="answer-tools"
+      className="answer-call"
     >
       <button
         type="button"
         aria-expanded={expanded}
         aria-label={`${summary}. ${t("scripts.call.details")}`}
         onClick={() => setExpanded((open) => !open)}
-        className="answer-tools-summary max-w-full"
+        className="answer-call-summary"
       >
-        <ScriptIcon className={`size-3.5 shrink-0 ${running ? "animate-pulse" : ""}`} />
-        <span className="min-w-0 truncate">{summary}</span>
+        <ScriptIcon className={`answer-call-icon ${running ? "animate-pulse" : ""}`} />
+        <span className="answer-call-text">{summary}</span>
       </button>
       {expanded && (
-        <div className="answer-tool-args-full" data-testid="answer-script-details">
-          <div className="font-sans text-gray-400">{t("scripts.call.args")}</div>
+        <div className="answer-call-details" data-testid="answer-script-details">
+          <div className="answer-call-detail-label">{t("scripts.call.args")}</div>
           <pre data-testid="answer-script-args">
             {args.length > 0 ? args.join(" ") : t("scripts.card.noArgs")}
           </pre>
           {run?.error && (
-            <p data-testid="answer-script-error" className="mt-1 font-sans text-red-700">
+            <p data-testid="answer-script-error" className="answer-call-error">
               {run.error}
             </p>
           )}
           {run && !run.error && (
             <>
-              <div className="mt-1 font-sans text-gray-400">{t("scripts.call.stdout")}</div>
+              <div className="answer-call-detail-label">{t("scripts.call.stdout")}</div>
               <pre data-testid="answer-script-stdout">{run.stdout || "—"}</pre>
               {run.stdoutTruncated && (
-                <p className="font-sans text-gray-400">
+                <p className="answer-call-detail-label">
                   {t("scripts.call.stdoutTruncated", { bytes: limit })}
                 </p>
               )}
-              <div className="mt-1 font-sans text-gray-400">{t("scripts.call.stderr")}</div>
+              <div className="answer-call-detail-label">{t("scripts.call.stderr")}</div>
               <pre data-testid="answer-script-stderr">{run.stderr || "—"}</pre>
               {run.stderrTruncated && (
-                <p className="font-sans text-gray-400">
+                <p className="answer-call-detail-label">
                   {t("scripts.call.stderrTruncated", { bytes: limit })}
                 </p>
               )}
@@ -554,40 +641,8 @@ function ScriptCall({ call }: { call: AnswerToolCall }) {
 }
 
 /**
- * The arguments a call would send, readably: each argument on its own row,
- * text as text (line breaks kept), anything else as indented JSON.
- */
-function ApprovalArguments({ input }: { input: Record<string, unknown> }) {
-  const t = useT();
-  const entries = Object.entries(input);
-  return (
-    <div data-testid="approval-arguments" className="mt-1.5">
-      <p className="text-custom-xs text-amber-900/70">{t("approvals.card.arguments")}</p>
-      {entries.length === 0 ? (
-        <p className="text-custom-xs text-amber-900/70">{t("approvals.card.noArguments")}</p>
-      ) : (
-        <dl className="approval-args">
-          {entries.map(([name, value]) => (
-            <div key={name} data-testid="approval-argument" className="contents">
-              <dt>{name}</dt>
-              <dd>
-                {typeof value === "string" ? (
-                  value
-                ) : (
-                  <pre className="whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
-  );
-}
-
-/**
  * A call an Answer made through a Connector: which Connector and Tool, and
- * the arguments it sent, on one line that opens to show them in full. What
+ * the arguments it sent, on one row that opens to show them in full. What
  * came back went to the model; it isn't a Passage, so it is never a Citation.
  */
 function ConnectorCall({ call }: { call: AnswerToolCall }) {
@@ -615,22 +670,22 @@ function ConnectorCall({ call }: { call: AnswerToolCall }) {
       data-testid="answer-connector-call"
       data-status={call.status}
       data-approval={call.approval}
-      className="answer-tools"
+      className="answer-call"
     >
       <button
         type="button"
         aria-expanded={expanded}
         aria-label={`${summary}. ${t("connectors.call.details")}`}
         onClick={() => setExpanded((open) => !open)}
-        className="answer-tools-summary max-w-full"
+        className="answer-call-summary"
       >
-        <PlugIcon className={`size-3.5 shrink-0 ${running ? "animate-pulse" : ""}`} />
-        <span className="shrink-0">{summary}</span>
-        {!expanded && compact !== "{}" && <code className="answer-tool-args">{compact}</code>}
+        <PlugIcon className={`answer-call-icon ${running ? "animate-pulse" : ""}`} />
+        <span className="answer-call-text shrink-0">{summary}</span>
+        {!expanded && compact !== "{}" && <code className="answer-call-args">{compact}</code>}
       </button>
       {expanded && (
-        <div className="answer-tool-args-full">
-          <div className="mb-0.5 font-sans text-gray-400">
+        <div className="answer-call-details">
+          <div className="answer-call-detail-label">
             {call.approval === "denied"
               ? t("approvals.call.notSent")
               : t("connectors.call.arguments")}
@@ -646,10 +701,12 @@ function ConnectorCall({ call }: { call: AnswerToolCall }) {
 function SignInRequired({ connector }: { connector: string }) {
   const t = useT();
   return (
-    <div contentEditable={false} data-testid="answer-sign-in-required" className="answer-tools">
-      <span className="answer-tools-summary max-w-full">
-        <PlugIcon className="size-3.5 shrink-0" />
-        <span>{t("remoteConnectors.answer.signInRequired", { connector })}</span>
+    <div contentEditable={false} data-testid="answer-sign-in-required" className="answer-call">
+      <span className="answer-call-summary answer-call-summary--static">
+        <PlugIcon className="answer-call-icon" />
+        <span className="answer-call-text">
+          {t("remoteConnectors.answer.signInRequired", { connector })}
+        </span>
       </span>
     </div>
   );
@@ -661,79 +718,102 @@ function field(call: AnswerToolCall, name: string): string {
   return typeof value === "string" ? value : "";
 }
 
-/**
- * The Skills an Answer used, one card each: loaded by the model or chosen
- * for the Question, and the Skill's files it read.
- */
-function SkillCalls({ calls }: { calls: AnswerToolCall[] }) {
-  const t = useT();
-  const skills = new Map<string, { use: AnswerToolCall | null; reads: AnswerToolCall[] }>();
+interface SkillUse {
+  name: string;
+  /** How it was loaded: by the model, or chosen for the Question. */
+  use: AnswerToolCall | null;
+  /** The Skill's files it read. */
+  reads: AnswerToolCall[];
+}
+
+/** The Skills an Answer used, in the order it first used them. */
+function skillRows(calls: AnswerToolCall[]): SkillUse[] {
+  const skills = new Map<string, SkillUse>();
   for (const call of calls) {
-    // Script runs have cards of their own (`ScriptCall`).
+    // Script runs have rows of their own (`ScriptCall`).
     if (call.source !== "skill" || call.tool === RUN_SCRIPT) continue;
     const name = call.tool === "use_skill" ? field(call, "name") : field(call, "skill");
-    const entry = skills.get(name) ?? { use: null, reads: [] };
+    const entry = skills.get(name) ?? { name, use: null, reads: [] };
     if (call.tool === "use_skill") entry.use ??= call;
     else entry.reads.push(call);
     skills.set(name, entry);
   }
-  if (skills.size === 0) return null;
+  return [...skills.values()];
+}
+
+/** A Skill an Answer used, loaded by the model or chosen for the Question, with the files it read. */
+function SkillRow({ name, use, reads }: SkillUse) {
+  const t = useT();
+  const status = use?.status ?? "done";
+  const summary =
+    status === "running"
+      ? t("skills.answer.loading", { name })
+      : status === "failed"
+        ? t("skills.answer.failed", { name })
+        : t("skills.answer.used", { name });
   return (
-    <div contentEditable={false} className="answer-skills">
-      {[...skills].map(([name, { use, reads }]) => {
-        const status = use?.status ?? "done";
-        const summary =
-          status === "running"
-            ? t("skills.answer.loading", { name })
-            : status === "failed"
-              ? t("skills.answer.failed", { name })
-              : t("skills.answer.used", { name });
-        return (
-          <div
-            key={name}
-            data-testid="answer-skill"
-            data-skill-name={name}
-            data-status={status}
-            data-forced={use?.forced === true}
-            className={`answer-skill ${status === "failed" ? "answer-skill--failed" : ""}`}
-          >
-            <p className="flex items-center gap-1">
-              <SkillIcon
-                className={`size-3.5 shrink-0 ${status === "running" ? "animate-pulse" : ""}`}
-              />
-              <span className="truncate">{summary}</span>
-              {use?.forced && (
-                <span className="shrink-0 text-gray-400"> · {t("skills.answer.forced")}</span>
-              )}
-            </p>
-            {reads.length > 0 && (
-              <ul className="answer-skill-files">
-                {reads.map((read) => (
-                  <li key={read.id} data-testid="answer-skill-file" data-status={read.status}>
-                    {read.status === "failed"
-                      ? t("skills.answer.readFailed", { path: field(read, "path") })
-                      : t("skills.answer.read", { path: field(read, "path") })}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
+    <div
+      data-testid="answer-skill"
+      data-skill-name={name}
+      data-status={status}
+      data-forced={use?.forced === true}
+      className={`answer-call ${status === "failed" ? "answer-call--failed" : ""}`}
+    >
+      <p className="answer-call-summary answer-call-summary--static">
+        <SkillIcon className={`answer-call-icon ${status === "running" ? "animate-pulse" : ""}`} />
+        <span className="answer-call-text">{summary}</span>
+        {use?.forced && <span className="answer-call-note"> · {t("skills.answer.forced")}</span>}
+      </p>
+      {reads.length > 0 && (
+        <ul className="answer-call-files">
+          {reads.map((read) => (
+            <li key={read.id} data-testid="answer-skill-file" data-status={read.status}>
+              {read.status === "failed"
+                ? t("skills.answer.readFailed", { path: field(read, "path") })
+                : t("skills.answer.read", { path: field(read, "path") })}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-/**
- * The searches an Answer ran, small and out of the way: one line saying it
- * searched the User's Documents, which opens to show what it searched for.
- */
-function Searches({ searches }: { searches: AnswerToolCall[] }) {
+/** The searches an Answer ran, summed up on its meta line; it opens the list. */
+function SearchesSummary({
+  searches,
+  open,
+  onToggle,
+}: {
+  searches: AnswerToolCall[];
+  open: boolean;
+  onToggle(): void;
+}) {
   const t = useT();
-  const [expanded, setExpanded] = useState(false);
   const running = searches.some((call) => call.status === "running");
   const failed = searches.every((call) => call.status === "failed");
   const summary = running ? t("search.running") : failed ? t("search.failed") : t("search.done");
+  return (
+    <span data-testid="answer-tools" className="answer-searches">
+      <button
+        type="button"
+        data-testid="answer-tools-toggle"
+        aria-expanded={open}
+        aria-label={`${summary}. ${t("search.details")}`}
+        onClick={onToggle}
+        className={`answer-meta-button ${running ? "animate-pulse" : ""}`}
+      >
+        <span>{summary}</span>
+        {searches.length > 1 && <span>· {t("search.count", { count: searches.length })}</span>}
+        <ChevronRightSmallIcon className="answer-meta-chevron" />
+      </button>
+    </span>
+  );
+}
+
+/** What each search was for, and what it found. */
+function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+  const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"
       ? t("search.failed")
@@ -745,33 +825,17 @@ function Searches({ searches }: { searches: AnswerToolCall[] }) {
             ? t("search.results.one")
             : t("search.results", { count: call.resultCount });
   return (
-    <div contentEditable={false} data-testid="answer-tools" className="answer-tools">
-      <button
-        type="button"
-        data-testid="answer-tools-toggle"
-        aria-expanded={expanded}
-        aria-label={`${summary}. ${t("search.details")}`}
-        onClick={() => setExpanded((open) => !open)}
-        className="answer-tools-summary"
-      >
-        <SearchIcon className={`size-3.5 ${running ? "animate-pulse" : ""}`} />
-        <span>{summary}</span>
-        {searches.length > 1 && <span>· {t("search.count", { count: searches.length })}</span>}
-      </button>
-      {expanded && (
-        <ul className="answer-tools-list">
-          {searches.map((call) => {
-            const query = typeof call.input.query === "string" ? call.input.query : "";
-            const found = results(call);
-            return (
-              <li key={call.id} data-testid="answer-tool-call" data-status={call.status}>
-                {t("search.query", { query })}
-                {found && <span className="text-gray-400"> · {found}</span>}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+    <ul className="answer-searches-list">
+      {searches.map((call) => {
+        const query = typeof call.input.query === "string" ? call.input.query : "";
+        const found = results(call);
+        return (
+          <li key={call.id} data-testid="answer-tool-call" data-status={call.status}>
+            {t("search.query", { query })}
+            {found && <span className="answer-searches-found"> · {found}</span>}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
