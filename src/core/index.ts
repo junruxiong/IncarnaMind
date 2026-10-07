@@ -6,6 +6,7 @@ export type {
   Browser,
   CoreAdapters,
   CrashReporter,
+  CrossEncoder,
   Embedder,
   EmbeddingModelFiles,
   EmbeddingModelSource,
@@ -18,6 +19,7 @@ export type {
   ModelFile,
   Paths,
   ProcessLauncher,
+  RerankingModelFiles,
   ScriptRuntimes,
   SpawnOptions,
 } from "./adapters";
@@ -52,4 +54,10 @@ export {
   type OllamaModels,
 } from "./providers/ollamaModels";
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
+export {
+  BUILT_IN_RERANKING_MODEL,
+  downloadSize,
+  RERANKING_MODEL_CANDIDATES,
+  type RerankingModelDefinition,
+} from "./reranking";
 export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";

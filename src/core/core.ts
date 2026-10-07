@@ -51,6 +51,7 @@ import {
 } from "./providers/ollama";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
@@ -308,12 +309,23 @@ export function createCore(adapters: CoreAdapters): Core {
     embeddingChanged();
   };
 
-  // Rerank, with a Cohere or Voyage key: paused in local mode.
+  /** Reports rerank's settings again; set once rerank exists. */
+  let reportRerank = () => {};
+  // The built-in reranking model: downloaded and run only once the User turns it on.
+  const rerankingModel = createRerankingModel({
+    definition: BUILT_IN_RERANKING_MODEL,
+    source: adapters.rerankingModelSource,
+    dataDir,
+    crossEncoder: adapters.crossEncoder,
+    emitStatus: () => reportRerank(),
+  });
+  // Rerank: off, the built-in model, or a Cohere or Voyage key (paused in local mode).
   const rerank = createRerank({
     settings,
     secrets,
     consent,
     createModel: adapters.createRerankingModel ?? createAiSdkRerankingModel,
+    builtIn: rerankingModel,
     localOnly: () => embedding.localOnly(),
     signal: lifetime.signal,
   });
@@ -321,6 +333,13 @@ export function createCore(adapters: CoreAdapters): Core {
     const status = await rerank.status();
     if (!lifetime.signal.aborted) events.emit("rerank.changed", status);
     return status;
+  };
+  reportRerank = () => {
+    if (!rerank.usesBuiltIn()) return;
+    rerankChanged().catch((error: unknown) => {
+      // Reading the keychain is async, so the core may have closed meanwhile.
+      if (!lifetime.signal.aborted) console.error(error);
+    });
   };
   /** Local mode on or off: embeddings may switch back to the built-in model, and rerank pauses. */
   const setLocalOnly = async (enabled: unknown) => {
@@ -455,7 +474,7 @@ export function createCore(adapters: CoreAdapters): Core {
       search: (query, documentIds, signal) =>
         documents.searchTool(query, {
           signal,
-          rerank: adapters.reranker ?? rerank.reranker,
+          rerank: adapters.reranker ?? rerank.active(),
           documentIds: documentIds ?? undefined,
         }),
       citationSource: (passageId) => documents.citationSource(passageId),
@@ -586,6 +605,17 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     // A model with no files to download (the tests' fake) makes no traffic.
     listed: () => modelSource.files.length > 0,
+  });
+  const rerankingSource = adapters.rerankingModelSource ?? BUILT_IN_RERANKING_MODEL.source;
+  const rerankingHost = new URL(rerankingSource.baseUrl);
+  privacy.traffic.register({
+    id: "reranking-model",
+    service: {
+      id: rerankingHost.origin,
+      name: rerankingHost.host === "huggingface.co" ? "Hugging Face" : rerankingHost.host,
+    },
+    // Only once the User turns the built-in reranking model on.
+    listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
@@ -1013,6 +1043,7 @@ export function createCore(adapters: CoreAdapters): Core {
       consent.close();
       documents.close();
       embeddingModel.close();
+      rerankingModel.close();
       activity.stop();
       events.clear();
       content.closeAll();

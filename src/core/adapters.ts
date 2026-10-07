@@ -200,6 +200,26 @@ export interface Embedder {
   close(): void;
 }
 
+/** The built-in reranking model's downloaded files: the same kinds as the embedding model's. */
+export type RerankingModelFiles = EmbeddingModelFiles;
+
+/**
+ * Runs the built-in reranking model, a cross-encoder, off the core's thread:
+ * the desktop app runs it in an Electron utility process of its own, and tests
+ * pass a deterministic fake. The core downloads and checks the files first.
+ */
+export interface CrossEncoder {
+  /** Loads the model, if it isn't loaded already. Rejects if the model can't start. */
+  load(files: RerankingModelFiles): Promise<void>;
+  /**
+   * How well each text answers the query, in the order given: the model's own
+   * scores, higher is better. Rejects if the model isn't loaded or fails.
+   */
+  score(query: string, texts: readonly string[]): Promise<number[]>;
+  /** Stops the model and frees its memory. Loading again starts it afresh. */
+  close(): void;
+}
+
 /** One file of the built-in embedding model, as recorded when the app was built. */
 export interface ModelFile {
   /** Relative to the source's base URL, and to the model's folder in the data folder. */
@@ -251,6 +271,13 @@ export interface CoreAdapters {
    * files for a fake embedder that needs none.
    */
   embeddingModelSource?: EmbeddingModelSource;
+  /** Runs the built-in reranking model (see `CrossEncoder`), when the User turns it on. */
+  crossEncoder: CrossEncoder;
+  /**
+   * Where the built-in reranking model's files come from. Defaults to the
+   * pinned Hugging Face revision; tests give no files for a fake that needs none.
+   */
+  rerankingModelSource?: EmbeddingModelSource;
   /** Defaults to the system clock. Tests may pass a fake one. */
   now?: () => Date;
   /**
@@ -299,8 +326,8 @@ export interface CoreAdapters {
   createRerankingModel?: RerankingModelFactory;
   /**
    * Reorders the document-search Tool's hybrid hits before they are grouped,
-   * replacing the rerank the User sets up with a Cohere or Voyage key (an
-   * alternative search layer plugs in here). None by default.
+   * replacing the rerank the User sets up, built in or with a Cohere or
+   * Voyage key (an alternative search layer plugs in here). None by default.
    */
   reranker?: Reranker;
   /**
