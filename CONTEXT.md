@@ -37,12 +37,24 @@ _Avoid_: filter, context
 ### Documents
 
 **Document**:
-A file on the User's computer that IncarnaMind has indexed for Answers to draw on. The file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Document whose file has gone is missing: its text, and the Citations that quote it, remain.
+A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on. The file stays where the User keeps it; IncarnaMind keeps the text it read from it. The same file in two places is two Documents.
 _Avoid_: file, doc, source
 
+**Missing Document**:
+A Document whose file was removed while its folder is still there. New searches leave it out; its text, and the Citations that quote it, remain.
+_Avoid_: deleted, broken
+
+**Unavailable Document**:
+A Document whose Linked folder can't be reached for now, such as on an unplugged drive. It is still searched, from its stored text; only its file can't be opened.
+_Avoid_: offline, missing
+
 **Linked folder**:
-A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up.
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes anything in it. Files a cloud drive keeps online only are indexed when the User asks.
 _Avoid_: workspace, vault, library, source
+
+**Other Documents**:
+The Documents added on their own, outside any Linked folder.
+_Avoid_: loose files, imports
 
 **Passage**:
 A short span of a Document that can be retrieved and cited.
