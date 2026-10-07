@@ -240,9 +240,9 @@ export const en = {
   "linkedFolders.unlinkAction": "Unlink…",
   "linkedFolders.unlink.title": "Unlink “{name}”?",
   "linkedFolders.unlink.body":
-    "IncarnaMind stops following this folder and removes its Documents from the index. The folder and the files in it aren't touched.",
+    "The folder and the files in it aren't touched. IncarnaMind stops following it and removes its index of them.",
   "linkedFolders.unlink.citations":
-    "Citations to its Documents stay in your Minds, with their quotes, but show “Can't check” until you link the folder again.",
+    "It keeps only the few pages your Citations quote, so they can still be checked.",
   "linkedFolders.unlink.cancel": "Cancel",
   "linkedFolders.unlink.confirm": "Unlink",
   "units.kb": "{size} KB",
