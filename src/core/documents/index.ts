@@ -71,11 +71,16 @@ import {
   windowedPassagesBySeq,
 } from "./search";
 import { type SearchCandidate, type SearchToolOptions, searchDocumentsTool } from "./searchTool";
+import { detectLanguage, languageList, type TextLanguage } from "./textLanguage";
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
+
+/** A Document's language is told from the start of its first few Passages: a few thousand characters. */
+const LANGUAGE_SAMPLE_PASSAGES = 4;
+const LANGUAGE_SAMPLE_CHARACTERS = 1000;
 const MAX_NAME_LENGTH = 500;
 const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
@@ -1114,6 +1119,25 @@ export function createDocuments(options: DocumentsOptions) {
     };
   }
 
+  /** Each Document's language, by its version: told once from its first Passages (see ./textLanguage). */
+  const languages = new Map<string, { contentHash: string; language: TextLanguage | null }>();
+
+  function documentLanguage(id: string, contentHash: string): TextLanguage | null {
+    const known = languages.get(id);
+    if (known?.contentHash === contentHash) return known.language;
+    const sample = db
+      .all<{ text: string }>(
+        `SELECT substr(text, 1, ?) AS text FROM passages
+         WHERE document_id = ? AND deleted_at IS NULL ORDER BY position LIMIT ?`,
+        [BigInt(LANGUAGE_SAMPLE_CHARACTERS), id, BigInt(LANGUAGE_SAMPLE_PASSAGES)],
+      )
+      .map((row) => row.text)
+      .join("\n");
+    const language = detectLanguage(sample);
+    languages.set(id, { contentHash, language });
+    return language;
+  }
+
   function searchableCount(documentIds?: readonly string[]): number {
     const { where, params } = searchable(documentIds);
     return (
@@ -1217,6 +1241,27 @@ export function createDocuments(options: DocumentsOptions) {
         )
         .map((row) => row.name);
       return { total: searchableCount(documentIds), names };
+    },
+
+    /**
+     * The languages the live Documents with Passages to search are in (of all
+     * of them, or only of these), the most common first, with how many
+     * Documents are in each. A Document whose language can't be told isn't counted.
+     */
+    searchableLanguages(
+      documentIds: readonly string[] | undefined,
+    ): { language: TextLanguage; documents: number }[] {
+      const { where, params } = searchable(documentIds);
+      const rows = db.all<{ id: string; content_hash: string }>(
+        `SELECT d.id, d.content_hash FROM documents d WHERE ${where}`,
+        params,
+      );
+      if (!documentIds) {
+        // Every searchable Document is here: forget the others.
+        const live = new Set(rows.map((row) => row.id));
+        for (const id of languages.keys()) if (!live.has(id)) languages.delete(id);
+      }
+      return languageList(rows.map((row) => documentLanguage(row.id, row.content_hash)));
     },
 
     /**
