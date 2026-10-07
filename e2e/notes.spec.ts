@@ -150,7 +150,7 @@ async function fontsDrawing(window: Page, selector: string) {
   }
 }
 
-test("Latin text is drawn in the bundled Roboto, and Chinese text in a system font", async () => {
+test("Latin text is drawn in the bundled Source Serif 4, and Chinese text in a system serif", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await window.getByTestId("new-mind").click();
@@ -170,26 +170,28 @@ test("Latin text is drawn in the bundled Roboto, and Chinese text in a system fo
     .locator("p")
     .first()
     .evaluate((paragraph) => getComputedStyle(paragraph).fontFamily);
-  expect(family).toMatch(/^"?Roboto"?,/);
+  expect(family).toMatch(/^"?Source Serif 4"?,/);
   // Upright and italic are both the bundled font, which the CSP (font-src 'self') lets load.
   const paragraph = '[data-testid="mind-editor"] p';
-  expect(await fontsDrawing(window, paragraph)).toEqual([
-    { family: "Roboto", name: "Roboto-Italic", bundled: true },
-    { family: "Roboto", name: "Roboto-Regular", bundled: true },
-  ]);
-  // Chinese falls through to the system's Simplified Chinese font.
+  const latin = await fontsDrawing(window, paragraph);
+  expect(latin).toHaveLength(2);
+  expect(latin.every((font) => font.family === "Source Serif 4" && font.bundled)).toBe(true);
+  // Chinese falls through to the system's Simplified Chinese serif.
   const chinese = await fontsDrawing(window, `${paragraph}:nth-child(2)`);
   expect(chinese).not.toEqual([]);
   expect(chinese.filter((font) => font.bundled)).toEqual([]);
   if (process.platform === "darwin")
-    expect(chinese.map((font) => font.family)).toEqual(["PingFang SC"]);
+    expect(chinese.map((font) => font.family)).toEqual(["Songti SC"]);
 
-  // Lora is bundled too, though nothing uses it yet.
-  const lora = await window.evaluate(async () => {
-    const faces = await document.fonts.load("16px Lora");
-    return faces.map((face) => face.status);
-  });
-  expect(lora).toEqual(["loaded"]);
+  // The interface and code fonts are bundled too.
+  const others = await window.evaluate(async () =>
+    Promise.all(
+      ["16px 'Source Sans 3'", "13px 'JetBrains Mono'"].map(async (font) =>
+        (await document.fonts.load(font)).map((face) => face.status),
+      ),
+    ),
+  );
+  expect(others).toEqual([["loaded"], ["loaded"]]);
   await app.close();
 });
 
