@@ -4,7 +4,7 @@ import { type AnswerToolCall, BLOCK_ID_ATTRIBUTE, type ProviderErrorKind } from 
 import { useAnswers } from "../answers";
 import { RegenerateIcon, SearchIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
+import { type SettingsPage, useAppStore } from "../store";
 import { useMindId } from "./mindContext";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
@@ -168,7 +168,7 @@ function AnswerError({
   kind: ProviderErrorKind;
   details: string | null;
   onRetry?: () => void;
-  onOpenSettings(): void;
+  onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
   return (
@@ -182,7 +182,12 @@ function AnswerError({
       <p>{t(`answer.error.${kind}`)}</p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {errorKinds[kind].fixInSettings && (
-          <button type="button" onClick={onOpenSettings} className="answer-notice-action">
+          <button
+            type="button"
+            // A declined data flow is allowed again on the Privacy page.
+            onClick={() => onOpenSettings(kind === "consent-declined" ? "privacy" : "general")}
+            className="answer-notice-action"
+          >
             {t("answer.error.openSettings")}
           </button>
         )}

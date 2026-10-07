@@ -310,12 +310,49 @@ export const zhCN = {
   "consent.data.document-excerpts": "每个要打标签的文档的名称、类型，以及开头的一小段摘录",
 
   "consent.settings.title": "发送给其他服务的数据",
-  "consent.settings.empty": "没有向其他服务发送任何数据。",
   "consent.settings.status.accepted": "已允许",
   "consent.settings.status.declined": "未允许",
   "consent.settings.status.not-asked": "尚未询问",
   "consent.settings.revoke": "撤销",
   "consent.settings.askAgain": "重新询问",
+
+  "privacy.tabs.label": "设置页面",
+  "privacy.tabs.general": "通用",
+  "privacy.tabs.privacy": "隐私",
+  "privacy.intro":
+    "IncarnaMind 不收集任何使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
+  "privacy.flows.intro":
+    "以下数据流会把你的内容发送到这台电脑以外的服务。在你允许之前，不会发送任何内容。",
+  "privacy.flows.service": "发送到 {service}",
+  "privacy.flows.sends": "发送：",
+  "privacy.flows.notInUse": "未使用：所有内容都留在这台电脑上。",
+  "privacy.flows.decided": "{date}{status}",
+  "privacy.flows.allow": "允许",
+  "privacy.traffic.title": "其他网络连接",
+  "privacy.traffic.intro":
+    "IncarnaMind 还会连接以下服务。它们不会收到你的任何内容：没有文档、Mind、问题或回答。",
+  "privacy.traffic.on": "开",
+  "privacy.traffic.off": "关",
+  "privacy.traffic.update-check": "检查更新",
+  "privacy.traffic.update-check.description":
+    "IncarnaMind 启动时会向 GitHub Releases 查询是否有新版本。请求中包含你使用的版本和操作系统。",
+  "privacy.traffic.update-check.toggle": "自动检查更新",
+  "privacy.traffic.embedding-model": "下载搜索模型",
+  "privacy.traffic.embedding-model.description":
+    "内置搜索模型只下载一次，在第一次有文档需要它时下载。",
+  "privacy.traffic.ollama-pull": "下载本地模型",
+  "privacy.traffic.ollama-pull.description":
+    "当你选择本地模型时，Ollama 会从它的模型库下载该模型。",
+  "privacy.traffic.chatgpt-sign-in": "ChatGPT 登录",
+  "privacy.traffic.chatgpt-sign-in.description":
+    "实验性的 ChatGPT 订阅会通过 OpenAI 登录，并定期续期登录。用它提出的问题属于上面的对话数据流。",
+  "privacy.skills.title": "技能脚本",
+  "privacy.skills.body":
+    "技能脚本在这台电脑上运行，可以自行发起网络请求，发送它能读取的任何内容。本页的设置管不到它们：控制它们的是每次运行前你给出的批准。",
+  "privacy.crashReports.title": "崩溃报告",
+  "privacy.crashReports.toggle": "发送崩溃报告",
+  "privacy.crashReports.body":
+    "除非你开启，否则不会发送。IncarnaMind 崩溃或出错时，会通过 Sentry 向开发者发送一份报告：错误内容、出错的代码位置、应用版本和你的操作系统。文件路径、文档文本、Mind、问题和回答都会先被移除，也不会保存 IP 地址。",
 
   "question.slash": "提问",
   "question.placeholder": "提一个问题…（输入 @ 选择搜索范围）",

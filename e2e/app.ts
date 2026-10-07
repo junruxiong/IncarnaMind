@@ -26,6 +26,11 @@ export interface LaunchOptions {
    * (`npm run test:smoke` makes one).
    */
   fakeChat?: boolean;
+  /**
+   * Where crash reports go: a test build offers them only with this, and
+   * ignores the DSN a real build is made with. Point it at a local server.
+   */
+  sentryDsn?: string;
 }
 
 /**
@@ -34,13 +39,15 @@ export interface LaunchOptions {
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false }: LaunchOptions = {},
+  { fakeChat = false, sentryDsn }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
     if (value !== undefined) env[name] = value;
   }
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.INCARNAMIND_TEST_SENTRY_DSN;
+  if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -71,6 +78,15 @@ export async function useLocalChatModel(window: Page, modelId = "fake-model"): P
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.saveChatProvider({ kind: "ollama", modelId: model });
   }, modelId);
+}
+
+/** Opens Settings from the sidebar, on its Privacy page. */
+export async function openPrivacySettings(window: Page): Promise<Locator> {
+  await window.getByRole("button", { name: "Settings" }).click();
+  await window.getByTestId("settings-tab-privacy").click();
+  const privacy = window.getByTestId("privacy-settings");
+  await privacy.waitFor();
+  return privacy;
 }
 
 /** Opens the empty Document viewer panel through the test hook. */
