@@ -22,6 +22,7 @@ import type {
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
+import { createBackgroundQueue } from "./backgroundQueue";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
@@ -426,6 +427,10 @@ export function createCore(adapters: CoreAdapters): Core {
     },
   });
 
+  // Background model work (automatic tagging; Topic naming later): one call at a time,
+  // giving way to Answers.
+  const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
+
   const answers = createAnswers({
     content,
     events,
@@ -480,6 +485,7 @@ export function createCore(adapters: CoreAdapters): Core {
         documentIds: (filter) => documents.ids(filter),
       }),
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
+    onWritingChange: (writing) => background.setAnswering(writing),
     reportError: (error) => console.error(error),
   });
 
@@ -521,12 +527,15 @@ export function createCore(adapters: CoreAdapters): Core {
     canRun: async () =>
       jev.enabled() ? jev.canRun() : (await chat.readiness(undefined, "tagging")).ready,
     mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
-    prepare: async () =>
-      jev.enabled()
-        ? jev.prepare()
-        : chatClassifier((await chat.prepareModel(undefined, "tagging")).model),
+    prepare: async () => {
+      if (jev.enabled()) return jev.prepare();
+      const prepared = await chat.prepareModel(undefined, "tagging");
+      // No service to send to: the model runs on a server on this computer.
+      return chatClassifier(prepared.model, { local: prepared.provider.service === null });
+    },
     announce: announceTagged,
     reportError: (error) => console.error(error),
+    background,
   });
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
@@ -954,6 +963,8 @@ export function createCore(adapters: CoreAdapters): Core {
     close: () => {
       if (lifetime.signal.aborted) return;
       lifetime.abort();
+      // First, so stopping the Answers below starts no background work.
+      background.close();
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.

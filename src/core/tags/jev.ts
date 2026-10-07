@@ -253,6 +253,8 @@ export function createJevTagging(options: {
       const service = serviceOf(jev.endpoint);
       if (service) await consent.ensure("tagging", service);
       return {
+        // No service to send to: a Jev-compatible server on this computer.
+        local: service === null,
         async decide({ tags, excerpt, signal: stop }) {
           const probabilities = await askJev({
             baseUrl: baseUrlOf(jev.endpoint),

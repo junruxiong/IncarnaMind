@@ -140,6 +140,12 @@ export interface AnswersOptions {
   approvals: AnswerApprovals;
   /** Running Skill scripts. */
   scripts: AnswerScripts;
+  /**
+   * Hears whether any Answer is being written, each time that changes: from
+   * when the first one starts until none is left. Background model work gives
+   * way to Answers (see ../backgroundQueue).
+   */
+  onWritingChange?(writing: boolean): void;
   reportError(error: unknown): void;
 }
 
@@ -396,6 +402,7 @@ export function createAnswers(options: AnswersOptions) {
       finished = true;
       if (timer) clearTimeout(timer);
       active.delete(answerId);
+      if (active.size === 0) options.onWritingChange?.(false);
       controller.abort();
       skills?.release();
       // A Tool call still running when the Answer stopped didn't finish; one still waiting for
@@ -434,6 +441,7 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     active.set(answerId, { mindId, finish });
+    if (active.size === 1) options.onWritingChange?.(true);
     events.emit("answer.started", { mindId, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions(context.question);
