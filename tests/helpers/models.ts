@@ -214,6 +214,18 @@ export interface ModelCall {
   options: CallOptions;
 }
 
+/** A request that isn't streamed (e.g. rewriting a Question into a search query), as its script sees it. */
+export interface GenerateCall {
+  /** The system prompt. */
+  system: string;
+  /** The text of the other messages, in order. */
+  prompt: string;
+  options: Parameters<MockLanguageModelV4["doGenerate"]>[0];
+}
+
+/** What a scripted model replies to a request that isn't streamed: text, or an HTTP error. */
+export type GeneratedReply = { text: string } | { error: { status: number; message: string } };
+
 /** What a scripted model replies to one request. */
 export type ScriptedReply =
   | {
@@ -244,41 +256,80 @@ function resultsOf(options: CallOptions): ModelCall["results"] {
   return results;
 }
 
+type Prompt = CallOptions["prompt"];
+
+const systemOf = (prompt: Prompt) =>
+  prompt
+    .filter((message) => message.role === "system")
+    .map((message) => (typeof message.content === "string" ? message.content : ""))
+    .join("\n");
+
+/** The provider's refusal of a request, as an HTTP error. */
+const providerError = ({ status, message }: { status: number; message: string }) =>
+  new APICallError({
+    message,
+    url: "http://127.0.0.1:11434/v1/chat/completions",
+    requestBodyValues: {},
+    statusCode: status,
+    responseBody: JSON.stringify({ error: { message } }),
+    isRetryable: false,
+  });
+
 /**
  * A chat model whose every reply comes from `script`, given the request: text
  * (streamed in chunks of `chunkSize`), Tool calls, or a provider error. For
- * scripting the Tool-calling loop: search, cite, then answer.
+ * scripting the Tool-calling loop: search, cite, then answer. Requests that
+ * aren't streamed get `generate`'s reply; without it, they fail. `modelId`:
+ * the id the model reports.
  */
 export function scriptedModel(
   script: (call: ModelCall) => ScriptedReply,
-  { chunkSize = 8 }: { chunkSize?: number } = {},
+  {
+    chunkSize = 8,
+    modelId,
+    generate,
+  }: {
+    chunkSize?: number;
+    modelId?: string;
+    generate?: (call: GenerateCall) => GeneratedReply;
+  } = {},
 ): MockLanguageModelV4 {
   let index = 0;
   return new MockLanguageModelV4({
+    modelId,
+    doGenerate: async (options) => {
+      if (!generate) throw new Error("This scripted model only streams.");
+      const reply = generate({
+        system: systemOf(options.prompt),
+        prompt: options.prompt
+          .filter((message) => message.role !== "system")
+          .map((message) =>
+            typeof message.content === "string"
+              ? message.content
+              : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
+          )
+          .join("\n\n"),
+        options,
+      });
+      if ("error" in reply) throw providerError(reply.error);
+      return {
+        content: [{ type: "text", text: reply.text }],
+        finishReason: { unified: "stop", raw: undefined },
+        usage: STREAM_USAGE,
+        warnings: [],
+      };
+    },
     doStream: async (options) => {
-      const system = options.prompt
-        .filter((message) => message.role === "system")
-        .map((message) => (typeof message.content === "string" ? message.content : ""))
-        .join("\n");
       const call: ModelCall = {
         index: index++,
         tools: (options.tools ?? []).map((each) => each.name),
         json: options.responseFormat?.type === "json",
-        system,
+        system: systemOf(options.prompt),
         results: resultsOf(options),
         options,
       };
       const reply = script(call);
-      if ("error" in reply) {
-        throw new APICallError({
-          message: reply.error.message,
-          url: "http://127.0.0.1:11434/v1/chat/completions",
-          requestBodyValues: {},
-          statusCode: reply.error.status,
-          responseBody: JSON.stringify({ error: { message: reply.error.message } }),
-          isRetryable: false,
-        });
-      }
+      if ("error" in reply) throw providerError(reply.error);
       const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
       const text = reply.text ?? "";
       if (text) {

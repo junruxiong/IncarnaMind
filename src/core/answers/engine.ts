@@ -10,12 +10,17 @@
  * - "tools": a Tool-calling loop (ADR-0007). The model searches the Documents
  *   with `search_documents` as often as it needs, and gives the records of its
  *   Citation markers with `cite`.
- * - "structured-output": for a model that can't call Tools, one search with the
- *   Question's text, its Passages in the instructions, and the Answer and its
- *   records returned as one JSON object.
+ * - "structured-output": for a model that can't call Tools, one search, its
+ *   Passages in the instructions, and the Answer and its records returned as
+ *   one JSON object. A follow-up Question is first rewritten by the model into
+ *   a search query that stands on its own (see `searchQuery`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output.
+ *
+ * Answers are written at a low temperature (see `ANSWER_TEMPERATURE`), except
+ * with models that reject one; a provider that refuses it gets the request
+ * again without, and that model gets none from then on.
  *
  * Skills add Tools to the loop: `use_skill` loads a Skill's instructions,
  * `read_skill_file` one of its files, and `run_skill_script` runs one of its
@@ -28,6 +33,7 @@
  */
 import {
   APICallError,
+  generateText,
   jsonSchema,
   Output,
   parsePartialJson,
@@ -42,6 +48,8 @@ import {
 import type { CitationSupport, ProviderError } from "../api";
 import type { ChatLanguageModel } from "../providers/models";
 import { classifyProviderError } from "../providers/providerErrors";
+import { earlierContext } from "./context";
+import { SEARCH_QUERY_INSTRUCTIONS, searchQueryPrompt } from "./prompt";
 
 /** One message of Question context. */
 export interface AnswerMessage {
@@ -171,7 +179,10 @@ export interface AnswerRequest {
   instructions(mode: CitationSupport | "no-documents", options?: InstructionOptions): string;
   /** The Question context, oldest first; the last message is the User's and ends with the Question. */
   messages: AnswerMessage[];
-  /** The Question's own text: what a model that can't call Tools searches for. */
+  /**
+   * The Question's own text: what a model that can't call Tools searches for,
+   * once it has rewritten it into a query that stands on its own.
+   */
   question: string;
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
@@ -226,8 +237,50 @@ export interface AiSdkAnswerEngineOptions {
 /** Model calls per Answer: a few searches, the records, and the Answer, with room to spare. */
 const MAX_STEPS = 10;
 
+/**
+ * The temperature Answers are written at. Providers default to about 1, which
+ * samples freely: a model then tends to paraphrase the quotes of its
+ * Citations, and a quote is checked word for word against the pages it cites,
+ * so a paraphrase fails the check. A low temperature keeps the model to its
+ * likeliest wording, which for a quote is the Passage's own, and keeps the
+ * Answer close to the Passages. Not 0, greedy decoding: that makes some
+ * models, small local ones especially, repeat themselves in long Answers. (The
+ * old CLI used 0, the old backend 0.5.)
+ */
+export const ANSWER_TEMPERATURE = 0.2;
+
+/** The part of a model id after a provider's prefix ("openai/o3" → "o3"), lowercased. */
+const modelName = (modelId: string) => (modelId.split("/").at(-1) ?? "").toLowerCase();
+
+/**
+ * The temperature to send `model`, or undefined for a model that rejects one
+ * or should run at its default:
+ * - OpenAI's reasoning models (o1, o3, o4-mini…, and GPT-5 and later, except
+ *   their "chat" models) reject a temperature. The AI SDK's OpenAI provider
+ *   leaves it out for them, but an OpenAI-compatible server passes it on.
+ * - Google wants Gemini 3 and later run at their default: lower makes them
+ *   loop or reason worse.
+ * Claude models that reject one (Opus 4.7 and later…) are left to the AI
+ * SDK's Anthropic provider, which leaves it out for them. A provider that
+ * refuses it for any other model gets the request again without (`generate`).
+ */
+export function answerTemperature(model: Pick<ChatLanguageModel, "modelId">): number | undefined {
+  const name = modelName(model.modelId);
+  if (/^o\d+(?:$|[-.])/.test(name)) return undefined;
+  const gpt = /^gpt-(\d+)/.exec(name);
+  if (gpt && Number(gpt[1]) >= 5 && !name.includes("chat")) return undefined;
+  const gemini = /^gemini-(\d+)/.exec(name);
+  if (gemini && Number(gemini[1]) >= 3) return undefined;
+  return ANSWER_TEMPERATURE;
+}
+
 /** The provider refused this way of answering: try the next one. Internal to the engine. */
-type Attempt = AsyncGenerator<AnswerEngineEvent | { type: "unsupported" }>;
+type Unsupported = { type: "unsupported" };
+/** The provider refused the temperature: send the request again without one. Internal to the engine. */
+type TemperatureRefused = { type: "temperature-refused" };
+type Attempt = AsyncGenerator<AnswerEngineEvent | Unsupported | TemperatureRefused>;
+/** An attempt that has dealt with a refused temperature itself. */
+type TemperedAttempt = AsyncGenerator<AnswerEngineEvent | Unsupported>;
 
 const SEARCH_TOOL = "search_documents";
 const CITE_TOOL = "cite";
@@ -245,17 +298,20 @@ const MARKER = /\[\^\d{1,4}\]/;
 /**
  * Whether a provider refused a request because the model can't use `feature`:
  * e.g. Ollama's "model does not support tools", vLLM's "--enable-auto-tool-choice",
- * or a server that rejects `response_format`. Auth, rate limits and outages never count.
+ * a server that rejects `response_format`, or OpenAI's "Unsupported parameter:
+ * 'temperature'" for a reasoning model. Auth, rate limits and outages never count.
  */
 export function isUnsupportedFeature(
   error: unknown,
-  feature: "tools" | "structured-output",
+  feature: "tools" | "structured-output" | "temperature",
 ): boolean {
   const cause = RetryError.isInstance(error) ? error.lastError : error;
   const subject =
     feature === "tools"
       ? /tool|function/i
-      : /response_format|response format|json_schema|json schema|json mode|json_object|structured output|format/i;
+      : feature === "temperature"
+        ? /temperature/i
+        : /response_format|response format|json_schema|json schema|json mode|json_object|structured output|format/i;
   if (UnsupportedFunctionalityError.isInstance(cause)) return subject.test(cause.functionality);
   if (!APICallError.isInstance(cause)) return false;
   const status = cause.statusCode;
@@ -265,7 +321,29 @@ export function isUnsupportedFeature(
   const text = `${cause.message} ${cause.responseBody ?? ""}`;
   const refusal =
     /not support|unsupported|doesn't support|does not support|not enabled|not available|isn't available|requires --|requires the --|not allowed|is invalid|invalid value|unknown (?:field|parameter|argument)|unrecognized/i;
-  return subject.test(text) && refusal.test(text);
+  // A temperature is also refused as deprecated, or as other than the default.
+  const temperatureRefusal = /deprecated|only the default/i;
+  return (
+    subject.test(text) &&
+    (refusal.test(text) || (feature === "temperature" && temperatureRefusal.test(text)))
+  );
+}
+
+/**
+ * What an attempt yields when its provider refused the request before anything
+ * came back: the temperature, if one was sent, or else `feature`. Null for any
+ * other failure.
+ */
+function refusalOf(
+  error: unknown,
+  feature: "tools" | "structured-output" | null,
+  temperature: number | undefined,
+): Unsupported | TemperatureRefused | null {
+  if (temperature !== undefined && isUnsupportedFeature(error, "temperature")) {
+    return { type: "temperature-refused" };
+  }
+  if (feature && isUnsupportedFeature(error, feature)) return { type: "unsupported" };
+  return null;
 }
 
 const recordsSchema = {
@@ -322,9 +400,66 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 const parseAnswerJson = (raw: string) =>
   parsePartialJson(raw.replace(/^\s*```(?:json)?[ \t]*\n?/i, "").replace(/\n?```\s*$/, ""));
 
+/** The longest search query a rewrite may give, in characters: a query, not an Answer. */
+const MAX_QUERY_LENGTH = 300;
+
+/** The search query in a model's rewrite: its first line, without its thinking, a label or quotes. */
+function queryIn(reply: string): string {
+  const line =
+    reply
+      // An unclosed block was cut off mid-thought.
+      .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "")
+      .split("\n")
+      .map((each) => each.trim())
+      .find(Boolean) ?? "";
+  return line
+    .replace(/^(?:search )?query:\s*/i, "")
+    .replace(/^["'“”`]+|["'“”`]+$/g, "")
+    .trim()
+    .slice(0, MAX_QUERY_LENGTH);
+}
+
+/**
+ * What a model that can't call Tools searches for: the Question, rewritten by
+ * the model into one query that stands on its own, from the Question context
+ * above it. So "What about its limitations?" searches for what "it" is, as
+ * the old CLI's condense step did, but as one query: there is still one
+ * search (ADR-0007). With nothing above the Question, the Question is the
+ * query; and it is the query when the rewrite fails or comes back empty.
+ */
+async function searchQuery(
+  request: AnswerRequest,
+  temperature: number | undefined,
+): Promise<string> {
+  const { question, signal } = request;
+  const earlier = earlierContext(request.messages, question);
+  if (!earlier) return question;
+  try {
+    const { text } = await generateText({
+      model: request.model,
+      instructions: SEARCH_QUERY_INSTRUCTIONS,
+      prompt: searchQueryPrompt(earlier, question),
+      temperature,
+      // A short query; a cut-off reply falls back to the Question.
+      maxOutputTokens: 256,
+      // A failure falls back to the Question at once; the Answer's own request still retries.
+      maxRetries: 0,
+      abortSignal: signal,
+    });
+    return queryIn(text) || question;
+  } catch (error) {
+    if (!signal.aborted) {
+      console.error(`The Question couldn't be rewritten for search: ${messageOf(error)}`);
+    }
+    return question;
+  }
+}
+
 /** The engine on the Vercel AI SDK. */
 export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
   const maxSteps = options.maxSteps ?? MAX_STEPS;
+  /** Models whose provider refused a temperature, by provider and model: they get none. */
+  const refusedTemperature = new Set<string>();
 
   return {
     async *generate(request) {
@@ -333,6 +468,32 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         error: classifyProviderError(error),
       });
       const { signal } = request;
+      const modelKey = `${request.model.provider}\n${request.model.modelId}`;
+      const temperature = () =>
+        refusedTemperature.has(modelKey) ? undefined : answerTemperature(request.model);
+
+      /**
+       * Runs a way of answering at the Answer temperature, and if the provider
+       * refuses it, again without one: the model gets none from then on.
+       */
+      async function* tempered(run: (temperature: number | undefined) => Attempt): TemperedAttempt {
+        const sent = temperature();
+        if (sent !== undefined) {
+          let refused = false;
+          for await (const event of run(sent)) {
+            if (event.type === "temperature-refused") {
+              refused = true;
+              break;
+            }
+            yield event;
+          }
+          if (!refused || signal.aborted) return;
+          refusedTemperature.add(modelKey);
+        }
+        for await (const event of run(undefined)) {
+          if (event.type !== "temperature-refused") yield event;
+        }
+      }
 
       // With no Documents there is nothing to search or cite: Skills and
       // Connector Tools alone, or a plain Answer.
@@ -340,7 +501,9 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         const external = request.tools.external?.length ?? 0;
         if ((request.skills || external > 0) && (request.support ?? "tools") === "tools") {
           let unsupported = false;
-          for await (const event of toolLoop(request, maxSteps, "no-documents")) {
+          for await (const event of tempered((sent) =>
+            toolLoop(request, maxSteps, "no-documents", sent),
+          )) {
             if (event.type === "unsupported") {
               unsupported = true;
               break;
@@ -349,27 +512,25 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
           }
           if (!unsupported || signal.aborted) return;
         }
-        for await (const event of plain(request, request.instructions("no-documents"))) {
+        const instructions = request.instructions("no-documents");
+        for await (const event of tempered((sent) => plain(request, instructions, sent))) {
           if (event.type === "unsupported") return;
           yield event;
         }
         return;
       }
 
-      // A model without Tools searches once, with the Question's text; the result is kept
-      // for the next way of answering if the provider refuses this one.
+      // A model without Tools searches once, for the Question rewritten to stand on its own;
+      // the result is kept for the next way of answering if the provider refuses this one.
       let searched: string | undefined;
       async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, string> {
         if (searched !== undefined) return searched;
+        const query = await searchQuery(request, temperature());
+        signal.throwIfAborted();
         const id = "question-search";
-        yield {
-          type: "tool-call-started",
-          id,
-          tool: SEARCH_TOOL,
-          input: { query: request.question },
-        };
+        yield { type: "tool-call-started", id, tool: SEARCH_TOOL, input: { query } };
         try {
-          const result = await request.tools.searchDocuments(request.question, signal);
+          const result = await request.tools.searchDocuments(query, signal);
           yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
           searched = result.text;
         } catch (error) {
@@ -384,16 +545,19 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       const order: CitationSupport[] = ["tools", "structured-output", "none"];
       for (let mode = order.indexOf(request.support ?? "tools"); mode < order.length; mode++) {
         const support = order[mode] as CitationSupport;
-        let attempt: Attempt;
+        let attempt: TemperedAttempt;
         try {
-          if (support === "tools") attempt = toolLoop(request, maxSteps, "tools");
-          else {
+          if (support === "tools") {
+            attempt = tempered((sent) => toolLoop(request, maxSteps, "tools", sent));
+          } else {
             const passages: string = yield* searchOnce();
             if (signal.aborted) return;
-            attempt =
+            const instructions = request.instructions(support, { passages });
+            attempt = tempered((sent) =>
               support === "structured-output"
-                ? structured(request, request.instructions(support, { passages }))
-                : plain(request, request.instructions(support, { passages }));
+                ? structured(request, instructions, sent)
+                : plain(request, instructions, sent),
+            );
           }
         } catch (error) {
           if (signal.aborted) return;
@@ -506,6 +670,7 @@ async function* toolLoop(
   request: AnswerRequest,
   maxSteps: number,
   mode: "tools" | "no-documents",
+  temperature: number | undefined,
 ): Attempt {
   const { signal } = request;
   /** Passages each search gave, by Tool call. */
@@ -513,13 +678,14 @@ async function* toolLoop(
   const documentTools: ToolSet = {
     [SEARCH_TOOL]: tool({
       description:
-        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages.",
+        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages. The search sees only the query, not the conversation: write it to stand on its own.",
       inputSchema: jsonSchema<{ query: string }>({
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "What to look for: words likely to be in the Passages, in their language.",
+            description:
+              'What to look for: words likely to be in the Passages, in their language. Name what the Question refers to instead of pronouns or words that point back, such as "it", "they" or "that paper".',
           },
         },
         required: ["query"],
@@ -561,6 +727,7 @@ async function* toolLoop(
     }),
     messages: request.messages,
     tools,
+    temperature,
     stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
     // The last step must write the Answer.
     prepareStep: ({ stepNumber }) => (stepNumber >= maxSteps - 1 ? { toolChoice: "none" } : {}),
@@ -643,22 +810,17 @@ async function* toolLoop(
           stepText = "";
           break;
         }
-        case "error":
-          if (!produced && isUnsupportedFeature(part.error, "tools")) {
-            yield { type: "unsupported" };
-            return;
-          }
-          yield { type: "failed", error: classifyProviderError(part.error) };
+        case "error": {
+          const refused = produced ? null : refusalOf(part.error, "tools", temperature);
+          yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
           return;
+        }
       }
     }
   } catch (error) {
     if (signal.aborted) return;
-    if (!produced && isUnsupportedFeature(error, "tools")) {
-      yield { type: "unsupported" };
-      return;
-    }
-    yield { type: "failed", error: classifyProviderError(error) };
+    const refused = produced ? null : refusalOf(error, "tools", temperature);
+    yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
   if (!signal.aborted) yield { type: "finished" };
@@ -678,12 +840,17 @@ function shownInput(toolName: string, input: unknown): Record<string, unknown> {
 }
 
 /** The Answer and its records as one JSON object, streamed: its `answer` text as it grows. */
-async function* structured(request: AnswerRequest, instructions: string): Attempt {
+async function* structured(
+  request: AnswerRequest,
+  instructions: string,
+  temperature: number | undefined,
+): Attempt {
   const { signal } = request;
   const result = streamText({
     model: request.model,
     instructions,
     messages: request.messages,
+    temperature,
     output: Output.object({
       schema: jsonSchema<{ answer: string; citations: unknown }>({
         type: "object",
@@ -722,21 +889,15 @@ async function* structured(request: AnswerRequest, instructions: string): Attemp
         const { value } = await parseAnswerJson(raw);
         yield* emit((value as { answer?: unknown } | undefined)?.answer);
       } else if (part.type === "error") {
-        if (!emitted && isUnsupportedFeature(part.error, "structured-output")) {
-          yield { type: "unsupported" };
-          return;
-        }
-        yield { type: "failed", error: classifyProviderError(part.error) };
+        const refused = emitted ? null : refusalOf(part.error, "structured-output", temperature);
+        yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
         return;
       }
     }
   } catch (error) {
     if (signal.aborted) return;
-    if (!emitted && isUnsupportedFeature(error, "structured-output")) {
-      yield { type: "unsupported" };
-      return;
-    }
-    yield { type: "failed", error: classifyProviderError(error) };
+    const refused = emitted ? null : refusalOf(error, "structured-output", temperature);
+    yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
   if (signal.aborted) return;
@@ -757,28 +918,38 @@ async function* structured(request: AnswerRequest, instructions: string): Attemp
 }
 
 /** A plain streamed Answer, with no Tools and no Citations. */
-async function* plain(request: AnswerRequest, instructions: string): Attempt {
+async function* plain(
+  request: AnswerRequest,
+  instructions: string,
+  temperature: number | undefined,
+): Attempt {
   const { signal } = request;
+  let produced = false;
   try {
     const result = streamText({
       model: request.model,
       instructions,
       messages: request.messages,
+      temperature,
       abortSignal: signal,
       onError: () => undefined,
     });
     for await (const part of result.fullStream) {
       if (signal.aborted || part.type === "abort") return;
       if (part.type === "text-delta") {
-        if (part.text) yield { type: "text-delta", text: part.text };
+        if (!part.text) continue;
+        produced = true;
+        yield { type: "text-delta", text: part.text };
       } else if (part.type === "error") {
-        yield { type: "failed", error: classifyProviderError(part.error) };
+        const refused = produced ? null : refusalOf(part.error, null, temperature);
+        yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
         return;
       }
     }
   } catch (error) {
     if (signal.aborted) return;
-    yield { type: "failed", error: classifyProviderError(error) };
+    const refused = produced ? null : refusalOf(error, null, temperature);
+    yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
   if (!signal.aborted) yield { type: "finished" };

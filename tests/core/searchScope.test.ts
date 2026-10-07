@@ -349,3 +349,115 @@ describe("A Question's Search scope", { timeout: 30_000 }, () => {
     expect(searches).toEqual([["Delta"], ALL]);
   });
 });
+
+/** The Document names a model's instructions list, in order, and the line that counts the rest, if any. */
+function listedNames(system: string): string[] {
+  const lines = system.split("\n");
+  const from = lines.findIndex((line) =>
+    /^(?:Its name|Their names, newest first|The names of the \d+ added most recently):$/.test(line),
+  );
+  if (from < 0) return [];
+  const names: string[] = [];
+  for (const line of lines.slice(from + 1)) {
+    if (!line.startsWith("- ")) break;
+    names.push(line.slice(2));
+  }
+  return names;
+}
+
+/** The text of a request's last user message, which ends with the Question. */
+function questionOf(call: ModelCall): string {
+  const last = call.options.prompt.filter((message) => message.role === "user").at(-1);
+  return (last?.content ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
+}
+
+/**
+ * A model that knows the User's Documents from its instructions alone: asked
+ * which Documents there are, it lists the names it was given; asked to
+ * compare some, it searches for each one the Question names, then answers.
+ */
+function namesModel(): MockLanguageModelV4 {
+  return scriptedModel((call) => {
+    const names = listedNames(call.system);
+    const asked = questionOf(call);
+    if (/which documents/i.test(asked)) return { text: `You have ${names.join(", ")}.` };
+    const named = names.filter((name) => asked.includes(name));
+    const searched = call.results.filter((result) => result.tool === "search_documents").length;
+    const next = named[searched];
+    if (next) return { calls: [{ tool: "search_documents", input: { query: next } }] };
+    return { text: `Compared ${named.join(" and ")}.` };
+  });
+}
+
+describe("The Documents an Answer is told about", { timeout: 60_000 }, () => {
+  test("are named in its instructions, newest first, so a model can say which there are; with a Search scope, only the scope's", async () => {
+    const model = namesModel();
+    const { core, client, mind, folders } = await setUpLibrary(model);
+
+    const all = await askScoped(core, client, mind.id, {}, "Which documents do I have?");
+    expect(answerText(client, all.answerId)).toBe(
+      "You have Recipes, Almanac, Moon, Delta, Estuary, Harbour.",
+    );
+
+    const rivers = await askScoped(
+      core,
+      client,
+      mind.id,
+      { folderIds: [folders.rivers.id] },
+      "Which documents do I have?",
+    );
+    expect(answerText(client, rivers.answerId)).toBe("You have Delta, Estuary.");
+    // No Document outside the scope is named.
+    const scoped = promptOf(model, 1)[0]?.text ?? "";
+    expect(scoped).toContain("limited this Question to 2 Documents");
+    for (const name of ["Harbour", "Moon", "Almanac", "Recipes"]) {
+      expect(scoped).not.toContain(name);
+    }
+  });
+
+  test("a model can compare two Documents the Question names: it finds them by name and searches each", async () => {
+    const model = namesModel();
+    const { core, client, mind } = await setUpLibrary(model);
+
+    const { answerId } = await askScoped(
+      core,
+      client,
+      mind.id,
+      {},
+      "Compare Harbour with Estuary.",
+    );
+
+    expect(answerText(client, answerId)).toBe("Compared Estuary and Harbour.");
+    const calls = JSON.parse(answerIn(client, answerId).attrs.toolCalls as string) as {
+      input: { query: string };
+    }[];
+    expect(calls.map((call) => call.input.query)).toEqual(["Estuary", "Harbour"]);
+    expect(shownDocuments(model)).toEqual(expect.arrayContaining(["Estuary", "Harbour"]));
+  });
+
+  test("past 50, the 50 added most recently are named and the rest counted; a scope's are all named", async () => {
+    const files = Array.from({ length: 52 }, (_, at) => {
+      const number = String(at + 1).padStart(2, "0");
+      return { name: `Log ${number}.txt`, contents: `Log ${number}: the tide turned.\n` };
+    });
+    const model = namesModel();
+    const { core, client, mind, documents } = await setUpWithDocuments(model, files);
+
+    await askAndFinish(core, client, mind.id, "Which documents do I have?");
+
+    const system = promptOf(model)[0]?.text ?? "";
+    expect(system).toContain("The User has added 52 Documents");
+    const names = listedNames(system);
+    expect(names).toHaveLength(51);
+    expect(names.slice(0, 2)).toEqual(["Log 52", "Log 51"]);
+    expect(names.slice(-2)).toEqual(["Log 03", "…and 2 more"]);
+
+    // The two oldest and one more, by hand: all three named, and nothing else.
+    const picked = [0, 1, 29].map((at) => documents[at]?.id as string);
+    await askScoped(core, client, mind.id, { documentIds: picked }, "Which documents do I have?");
+
+    const scoped = promptOf(model, 1)[0]?.text ?? "";
+    expect(scoped).toContain("limited this Question to 3 Documents");
+    expect(listedNames(scoped)).toEqual(["Log 30", "Log 02", "Log 01"]);
+  });
+});
