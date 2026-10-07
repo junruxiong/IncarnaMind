@@ -664,6 +664,9 @@ export const zhCN = {
   "export.dataFolder.body":
     "你的 Minds、文档和设置都保存在这台电脑上的一个文件夹里。要备份它们，请在关闭 IncarnaMind 后复制这个文件夹。",
   "export.dataFolder.open": "打开数据文件夹",
+  "export.dataFolder.openLogs": "打开日志文件夹",
+  "export.dataFolder.logs":
+    "日志文件夹记录 IncarnaMind 做了什么，例如处理了哪些文档、出了哪些错误，便于排查问题。其中不会有你的文档内容、Minds、问题、回答或密钥。",
 
   "error.load": "IncarnaMind 无法载入你的数据：{message}",
   "error.action": "操作没有成功：{message}",

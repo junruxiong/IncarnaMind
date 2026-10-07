@@ -701,6 +701,9 @@ export const en = {
   "export.dataFolder.body":
     "Your Minds, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
   "export.dataFolder.open": "Open data folder",
+  "export.dataFolder.openLogs": "Open logs folder",
+  "export.dataFolder.logs":
+    "The logs folder records what IncarnaMind did, such as Documents processed and errors, to help with a problem. It never holds your Documents' text, your Minds, Questions or Answers, or your keys.",
 
   "error.load": "IncarnaMind couldn't load your data: {message}",
   "error.action": "That didn't work: {message}",

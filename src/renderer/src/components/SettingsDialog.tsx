@@ -147,25 +147,39 @@ function GeneralSettings() {
   );
 }
 
-/** Settings → Data folder: where everything is kept, opened in the file manager for a backup. */
+/**
+ * Settings → Data folder: where everything is kept, opened in the file
+ * manager for a backup, and its logs folder, e.g. for a bug report.
+ */
 function DataFolderSettings() {
   const t = useT();
-  const open = () =>
-    files.openDataFolder().catch((failure: unknown) => {
+  const open = (folder: Promise<void>) =>
+    folder.catch((failure: unknown) => {
       useAppStore.setState({ actionError: errorMessage(failure) });
     });
   return (
     <section>
       <h3 className="mb-1 text-sm font-medium">{t("export.dataFolder.title")}</h3>
       <p className="mb-2 text-sm text-gray-600">{t("export.dataFolder.body")}</p>
-      <button
-        type="button"
-        data-testid="open-data-folder"
-        onClick={() => void open()}
-        className={buttonClass}
-      >
-        {t("export.dataFolder.open")}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          data-testid="open-data-folder"
+          onClick={() => void open(files.openDataFolder())}
+          className={buttonClass}
+        >
+          {t("export.dataFolder.open")}
+        </button>
+        <button
+          type="button"
+          data-testid="open-logs-folder"
+          onClick={() => void open(files.openLogsFolder())}
+          className={buttonClass}
+        >
+          {t("export.dataFolder.openLogs")}
+        </button>
+      </div>
+      <p className="mt-2 text-[12px] text-gray-500">{t("export.dataFolder.logs")}</p>
     </section>
   );
 }
