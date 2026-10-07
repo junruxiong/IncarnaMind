@@ -1,17 +1,46 @@
 /**
- * Finding a quote in a Document's text, so the viewer can highlight it. The
- * Citation check (#30) uses the same matching.
+ * Finding a quote in a Document's text: the Citation check (#30) decides with
+ * it whether a quote is on its cited pages, and the viewer highlights what it
+ * finds, so the badge and the highlight always agree.
  *
- * Both texts are normalised with the shared normaliser (`normaliseText` in
- * ./text: NFKC, CJK radical look-alikes folded, quote marks and dashes
- * unified, line-break hyphenation handled, whitespace next to CJK removed and
- * the rest collapsed), then matched as an exact substring, so line breaks and
- * PDF layout don't stop a match. One tolerance: a hyphen that ended a line
- * between two letters may be in the quote or not ("inter-\nnational" matches
- * both "international" and "inter-national"), because the normaliser can only
- * guess whether it was a real hyphen.
+ * The quote and the text are normalised the same way, then matched as an
+ * exact substring. First the shared normaliser (`normaliseWithOffsets` in
+ * ./text): NFKC, which also turns ligatures ("ﬁ") and Greek letter variants
+ * ("ϵ", "𝜖") into plain letters, CJK radical look-alikes folded, invisible
+ * characters such as soft hyphens dropped, quote marks and dashes unified,
+ * line-break hyphenation handled, whitespace next to CJK removed and the rest
+ * collapsed. Then, for matching only, so indexing and embeddings keep the
+ * shared normaliser's text:
+ *
+ * - letters are compared in lower case, with the final sigma "ς" as "σ": a
+ *   quote that starts mid-sentence is often given a capital;
+ * - the quote marks and dashes the shared normaliser leaves alone ("‹", "›",
+ *   "ʼ", "⸺", "⸻") are unified too;
+ * - a reference or footnote mark "[^36]" reads "[36]": models write a paper's
+ *   reference "[36]" in the syntax of our own Citation markers. Only matching
+ *   reads it so: the markers in an Answer's text are never touched;
+ * - a soft hyphen that ends a line is read as a hyphen, so the word split
+ *   there is joined like any other ("inter\u00ad\nnational").
+ *
+ * The match itself has two tolerances:
+ *
+ * - A hyphen that ended a line between two letters may be in the quote or
+ *   not ("inter-\nnational" matches "international" and "inter-national"), or
+ *   be followed by a space ("inter- national"): the normaliser can only guess
+ *   whether it was a real hyphen, and a model may copy the line break as a
+ *   space.
+ * - An ellipsis ("..." or "…") inside a quote that isn't in the text as it is
+ *   marks words left out. The quote is found when each part is in the text,
+ *   in order, and every part has at least `MIN_PART_WORDS` words and
+ *   `MIN_PART_CHARACTERS` letters or digits: a shorter part would be found
+ *   almost anywhere, and "found" must keep meaning that these words are on the
+ *   page. Each part is returned, for the viewer to highlight. An ellipsis at
+ *   the start or the end of a quote leaves nothing out of it.
+ *
+ * Nothing else is forgiven: a quote with a word changed, added or dropped
+ * isn't found.
  */
-import { type NormalisedUnit, normaliseText, normaliseWithOffsets } from "./text";
+import { type NormalisedUnit, normaliseWithOffsets } from "./text";
 
 /** A span of the original text, in UTF-16 offsets; `end` is exclusive. */
 export interface TextRange {
@@ -31,6 +60,64 @@ export interface TextPiece {
   breakAfter?: boolean;
 }
 
+/** The fewest words each part of a quote with an ellipsis must have. */
+export const MIN_PART_WORDS = 3;
+
+/** The fewest letters or digits each part of a quote with an ellipsis must have. */
+export const MIN_PART_CHARACTERS = 15;
+
+/** Matching only: the quote marks and dashes `normaliseText` leaves alone, and the final sigma. */
+const FOLDED: Readonly<Record<string, string>> = {
+  "‹": "'",
+  "›": "'",
+  ʼ: "'",
+  "⸺": "-",
+  "⸻": "-",
+  ς: "σ",
+};
+
+/** A soft hyphen at the end of a line: read as a hyphen, so rule 5 of the normaliser joins the word. */
+const SOFT_HYPHEN_AT_LINE_END =
+  /\u00ad(?=[^\S\n\r\v\f\u0085\u2028\u2029]*[\n\r\v\f\u0085\u2028\u2029])/gu;
+
+/** An ellipsis in a normalised quote (NFKC has turned "…" into "..."), with the space around it. */
+const ELLIPSIS = / ?\.{3,} ?/;
+
+const DIGIT = /^[0-9]$/;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
+
+/** A letter in lower case, folded as `FOLDED` says. Stays one UTF-16 code unit, so offsets hold. */
+function fold(char: string): string {
+  const lower = char.toLowerCase();
+  const one = lower.length === 1 ? lower : char;
+  return FOLDED[one] ?? one;
+}
+
+/**
+ * The text normalised for matching: the shared normaliser's units, folded,
+ * with the caret of each "[^N]" marked `removed`.
+ */
+function matchUnits(text: string): NormalisedUnit[] {
+  // Same length, so the offsets of the units still point into `text`.
+  const { units } = normaliseWithOffsets(text.replace(SOFT_HYPHEN_AT_LINE_END, "-"));
+  const folded = units.map((unit) => ({ ...unit, char: fold(unit.char) }));
+  for (let at = 0; at + 3 < folded.length; at++) {
+    if (folded[at]?.char !== "[" || folded[at + 1]?.char !== "^") continue;
+    let end = at + 2;
+    while (DIGIT.test(folded[end]?.char ?? "")) end++;
+    if (end > at + 2 && folded[end]?.char === "]")
+      (folded[at + 1] as NormalisedUnit).removed = true;
+  }
+  return folded;
+}
+
+/** The quote normalised for matching, as a string: what is looked for in the text's units. */
+const needleOf = (quote: string) =>
+  matchUnits(quote)
+    .filter((unit) => !unit.removed)
+    .map((unit) => unit.char)
+    .join("");
+
 /** The index of the last unit of a match of `needle` starting at `first`, or -1. */
 function matchAt(units: readonly NormalisedUnit[], needle: string, first: number): number {
   let at = first;
@@ -44,27 +131,74 @@ function matchAt(units: readonly NormalisedUnit[], needle: string, first: number
     if (unit.char !== needle[index]) return -1;
     last = at - 1;
     index++;
+    // The line break after a line-end hyphen, copied as a space ("inter- national").
+    if (unit.optional && needle[index] === " ") index++;
   }
   return last;
 }
 
-/** Where `quote` first appears in `text` after both are normalised, or null if it doesn't. */
-export function findQuote(text: string, quote: string): TextRange | null {
-  const needle = normaliseText(quote);
-  if (!needle) return null;
-  const { units } = normaliseWithOffsets(text);
-  for (let first = 0; first < units.length; first++) {
+/** The first match of `needle` in `units` starting at or after unit `from`, as unit indices. */
+function findFrom(
+  units: readonly NormalisedUnit[],
+  needle: string,
+  from: number,
+): { first: number; last: number } | null {
+  for (let first = from; first < units.length; first++) {
     const unit = units[first] as NormalisedUnit;
     if (unit.removed || unit.char !== needle[0]) continue;
     const last = matchAt(units, needle, first);
-    if (last >= 0) return { start: unit.start, end: (units[last] as NormalisedUnit).end };
+    if (last >= 0) return { first, last };
   }
   return null;
 }
 
+const wordSegmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+
+/** Whether a part of a quote with an ellipsis is long enough to count. */
+function longEnough(part: string): boolean {
+  if ((part.match(LETTER_OR_DIGIT)?.length ?? 0) < MIN_PART_CHARACTERS) return false;
+  let words = 0;
+  for (const segment of wordSegmenter.segment(part)) if (segment.isWordLike) words++;
+  return words >= MIN_PART_WORDS;
+}
+
+/**
+ * Where `quote` is in `text` after both are normalised, or null if it isn't:
+ * one range, or one for each part of a quote with an ellipsis (see the module
+ * comment), in order.
+ */
+export function findQuote(text: string, quote: string): TextRange[] | null {
+  const needle = needleOf(quote);
+  if (!needle) return null;
+  const units = matchUnits(text);
+  const range = ({ first, last }: { first: number; last: number }): TextRange => ({
+    start: (units[first] as NormalisedUnit).start,
+    end: (units[last] as NormalisedUnit).end,
+  });
+
+  const whole = findFrom(units, needle, 0);
+  if (whole) return [range(whole)];
+  if (!ELLIPSIS.test(needle)) return null;
+
+  const parts = needle.split(ELLIPSIS).filter((part) => part !== "");
+  if (parts.length === 0) return null;
+  if (parts.length > 1 && !parts.every(longEnough)) return null;
+  const found: TextRange[] = [];
+  let from = 0;
+  for (const part of parts) {
+    const match = findFrom(units, part, from);
+    if (!match) return null;
+    found.push(range(match));
+    from = match.last + 1;
+  }
+  return found;
+}
+
 /**
  * Finds `quote` in a text made of pieces (e.g. a PDF page's text runs, page
- * after page) and returns the part of each piece it covers, or null if it isn't there.
+ * after page) and returns the part of each piece it covers, in order, or null
+ * if it isn't there. A piece holding two parts of a quote with an ellipsis
+ * has a range for each.
  */
 export function findQuoteInPieces(
   pieces: readonly TextPiece[],
@@ -77,15 +211,17 @@ export function findQuoteInPieces(
     text += piece.text;
     if (piece.breakAfter) text += "\n";
   }
-  const range = findQuote(text, quote);
-  if (!range) return null;
+  const ranges = findQuote(text, quote);
+  if (!ranges) return null;
   const covered: PieceRange[] = [];
-  pieces.forEach((piece, index) => {
-    const offset = offsets[index] as number;
-    const start = Math.max(range.start, offset) - offset;
-    const end = Math.min(range.end, offset + piece.text.length) - offset;
-    if (start < end) covered.push({ piece: index, start, end });
-  });
+  for (const range of ranges) {
+    pieces.forEach((piece, index) => {
+      const offset = offsets[index] as number;
+      const start = Math.max(range.start, offset) - offset;
+      const end = Math.min(range.end, offset + piece.text.length) - offset;
+      if (start < end) covered.push({ piece: index, start, end });
+    });
+  }
   return covered;
 }
 
