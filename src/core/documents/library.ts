@@ -141,7 +141,10 @@ export interface LibraryHooks {
   moved(documentIds: string[]): void;
   /** A Document's name followed its file's: its keyword index needs the new name. */
   renamed(documentId: string): void;
-  /** Removes these Documents from the index, e.g. with their Linked folder. */
+  /**
+   * Removes these Documents from the index with their Linked folder, keeping
+   * the text their Citations quote.
+   */
   remove(documentIds: string[], at: string): void;
   /** A Linked folder was paused (hold its queued work) or resumed (queue it again). */
   paused(linkedFolderId: string, paused: boolean): void;
@@ -1034,7 +1037,10 @@ export function createLibrary(options: LibraryOptions) {
       return toLinkedFolder(row);
     },
 
-    /** Unlinks a folder: its Documents and Folders leave the index. Nothing on disk changes. */
+    /**
+     * Unlinks a folder: its Documents and Folders leave the index, but for
+     * the text their Citations quote. Nothing on disk changes.
+     */
     remove(idInput: unknown): void {
       const row = getRow(idInput);
       stopWatcher(row.id);

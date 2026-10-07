@@ -80,6 +80,40 @@ describe("A Citation's badge", () => {
     expect(citationState(found, null)).toMatchObject({ check: "found", documentId: "tides" });
   });
 
+  test("keeps its check once its Document is unlinked with its folder, while every Unit it cites is kept", () => {
+    const text = { documentId: "tides", contentHash: "abc", units: [12, 13] };
+    const kept = [text];
+    expect(citationState(found, [], kept)).toEqual({
+      check: "found",
+      reason: null,
+      documentId: null,
+      changedAfterCited: false,
+    });
+    const notFound = {
+      ...found,
+      check: "not-found" as const,
+      checkReason: "quote-not-on-pages" as const,
+    };
+    expect(citationState(notFound, [], kept)).toMatchObject({
+      check: "not-found",
+      reason: "quote-not-on-pages",
+    });
+    // Linked again, the same content is a live Document again: the Citation opens it.
+    expect(citationState(found, [{ id: "tides-again", contentHash: "abc" }], kept)).toMatchObject({
+      check: "found",
+      documentId: "tides-again",
+    });
+    // Not when one of its Units, its version or its Document isn't the one kept.
+    const removed = { check: "cant-check", reason: "document-removed" };
+    expect(citationState(found, [], [{ ...text, units: [12] }])).toMatchObject(removed);
+    expect(citationState(found, [], [{ ...text, contentHash: "def" }])).toMatchObject(removed);
+    expect(citationState(found, [], [{ ...text, documentId: "rivers" }])).toMatchObject(removed);
+    // A Citation that doesn't say which version it quotes takes any; one of a whole file, its text.
+    expect(citationState({ ...found, contentHash: null }, [], kept).check).toBe("found");
+    const whole = { ...found, pageFrom: null, pageTo: null };
+    expect(citationState(whole, [], [{ ...text, units: [1] }]).check).toBe("found");
+  });
+
   test("says when the Document changed after it was cited: the check stands for the version quoted", () => {
     expect(citationState(found, [{ id: "tides", contentHash: "abc" }])).toMatchObject({
       check: "found",

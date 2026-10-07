@@ -11,12 +11,18 @@
  * Passages replace the old ones in search; the old version's page text stays
  * for as long as a Citation quotes it (`collectOldVersions`), so the
  * Citation is still checked against the text it quoted.
+ *
+ * A Document removed from the index is deleted with its Passages and text,
+ * except when its Linked folder is unlinked: then the Units the Citations in
+ * Minds point to stay, the only text a deleted Document keeps
+ * (`keptCitationTexts`), so those Citations can still be checked.
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type { Anchor, UnitKind, UnitLabel } from "../../shared/units";
+import type { CitedUnits } from "../answers/citedVersions";
 import type {
   AddDocumentsResult,
   Document,
@@ -25,6 +31,7 @@ import type {
   DocumentKind,
   DocumentStatus,
   DocumentText,
+  KeptCitationText,
   PassageSearchResult,
   ProviderErrorKind,
   SearchMode,
@@ -34,7 +41,7 @@ import type {
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Folders } from "../folders";
-import type { Database } from "../storage";
+import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
@@ -281,6 +288,11 @@ export interface DocumentsOptions {
   onReady?: (documentId: string) => void;
   /** Asks iCloud Drive to download a file an ".icloud" stub stands for. */
   downloadStub?: (path: string) => Promise<void>;
+  /**
+   * The Units the Citations in Minds point to in these Documents: kept when
+   * the Documents leave the index with their Linked folder. None if not given.
+   */
+  citedUnits?: (documentIds: readonly string[]) => CitedUnits[];
   linkedFolders: {
     watch: WatchFolder;
     retryMs: number;
@@ -609,8 +621,42 @@ export function createDocuments(options: DocumentsOptions) {
     if (!isPaused(id)) processor.enqueue(jobFor(row));
   }
 
-  /** Soft-deletes Documents, their Passages, Tags and page text, at `at`. */
-  function removeFromIndex(ids: readonly string[], at: string): void {
+  /**
+   * The stored Units (`document_pages` ids) Citations' checks read, as
+   * `pageTexts` does: of the version each quotes (or every version, if it
+   * doesn't say), its Units (or all of them, for a whole file).
+   */
+  function unitsToKeep(cited: readonly CitedUnits[]): string[] {
+    const ids = new Set<string>();
+    const seen = new Set<string>();
+    for (const units of cited) {
+      const key = JSON.stringify(units);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const conditions = ["document_id = ?", "deleted_at IS NULL"];
+      const params: SqlValue[] = [units.documentId];
+      if (units.contentHash !== null) {
+        conditions.push("content_hash = ?");
+        params.push(units.contentHash);
+      }
+      if (units.pageFrom !== null && units.pageTo !== null) {
+        conditions.push("page BETWEEN ? AND ?");
+        params.push(BigInt(units.pageFrom), BigInt(units.pageTo));
+      }
+      const rows = db.all<{ id: string }>(
+        `SELECT id FROM document_pages WHERE ${conditions.join(" AND ")}`,
+        params,
+      );
+      for (const row of rows) ids.add(row.id);
+    }
+    return [...ids];
+  }
+
+  /**
+   * Soft-deletes Documents, their Passages, Tags and page text, at `at`,
+   * except the Units Citations point to in `keep`.
+   */
+  function removeFromIndex(ids: readonly string[], at: string, keep: readonly CitedUnits[] = []) {
     if (ids.length === 0) return;
     const list = JSON.stringify(ids);
     db.transaction(() => {
@@ -631,8 +677,9 @@ export function createDocuments(options: DocumentsOptions) {
       );
       db.run(
         `UPDATE document_pages SET deleted_at = ?, updated_at = ?
-         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
-        [at, at, list],
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
+           AND id NOT IN (SELECT value FROM json_each(?))`,
+        [at, at, list, JSON.stringify(unitsToKeep(keep))],
       );
     });
     for (const id of ids) {
@@ -684,7 +731,8 @@ export function createDocuments(options: DocumentsOptions) {
         const row = find(id);
         if (row) db.transaction(() => reindexName(id, row.name));
       },
-      remove: removeFromIndex,
+      // Unlinked: the Units Citations point to stay, so those Citations can still be checked.
+      remove: (ids, at) => removeFromIndex(ids, at, options.citedUnits?.(ids) ?? []),
       paused: (linkedFolderId, paused) => {
         const rows = db.all<DocumentRow>(
           `SELECT ${COLUMNS} FROM documents
@@ -1040,6 +1088,35 @@ export function createDocuments(options: DocumentsOptions) {
           [documentId, contentHash, ...params],
         )
         .map(toUnitText);
+    },
+
+    /**
+     * The text kept of Documents unlinked with their Linked folder (see
+     * `CoreApi.listKeptCitationTexts`): by Document and version, in that order.
+     */
+    keptCitationTexts(): KeptCitationText[] {
+      // From the Documents (CROSS JOIN keeps that order): every live one's text isn't scanned.
+      const rows = db.all<{ document_id: string; content_hash: string; page: number }>(
+        `SELECT dp.document_id, dp.content_hash, dp.page FROM documents d
+         CROSS JOIN document_pages dp ON dp.document_id = d.id
+         WHERE d.deleted_at IS NOT NULL AND dp.deleted_at IS NULL
+           AND dp.content_hash IS NOT NULL AND dp.page IS NOT NULL
+         ORDER BY dp.document_id, dp.content_hash, dp.page`,
+      );
+      const kept: KeptCitationText[] = [];
+      for (const row of rows) {
+        const last = kept.at(-1);
+        if (last?.documentId === row.document_id && last.contentHash === row.content_hash) {
+          last.units.push(row.page);
+        } else {
+          kept.push({
+            documentId: row.document_id,
+            contentHash: row.content_hash,
+            units: [row.page],
+          });
+        }
+      }
+      return kept;
     },
 
     /** The current version of a live Document, or null if it was deleted. */
