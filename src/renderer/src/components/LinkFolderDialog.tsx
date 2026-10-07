@@ -43,14 +43,20 @@ const factClass = "text-[13px] leading-5 text-ink-secondary";
  * many supported files it holds and their size, roughly how long indexing
  * takes on this computer, how many online-only files it would skip, whether
  * it shows as Folders or a flat list (the User's choice, the suggestion
- * picked), and what happens with Linked folders it overlaps. Then "Link
- * folder" or "Cancel". Open while the store has a folder `linking`.
+ * picked), and what happens with Linked folders it overlaps (or that it is
+ * linked already). Then "Link folder" or "Cancel". Open while the store has a
+ * folder `linking`; several dropped at once are asked about in turn.
  */
 export function LinkFolderDialog() {
-  const t = useT();
   const linking = useAppStore((state) => state.linking);
+  // A dialog of its own for each folder: it starts from that folder's suggested layout.
+  return linking && <LinkFolderModal key={linking.path} linking={linking} />;
+}
+
+function LinkFolderModal({ linking }: { linking: LinkingFolder }) {
+  const t = useT();
   const cancel = useAppStore((state) => state.cancelLinkedFolder);
-  const dialog = useModal(linking !== null);
+  const dialog = useModal(true);
   return (
     <dialog
       ref={dialog}
@@ -61,10 +67,13 @@ export function LinkFolderDialog() {
     >
       <div className={dialogBodyClass}>
         <h2 id="link-folder-title" className={dialogTitleClass}>
-          {t("linkedFolders.preview.title")}
+          {t(
+            linking.preview?.insideLinkedFolderId != null
+              ? "linkedFolders.preview.titleLinked"
+              : "linkedFolders.preview.title",
+          )}
         </h2>
-        {/* Mounted only while open, so each folder starts from its own suggested layout. */}
-        {linking && <LinkFolderForm key={linking.path} linking={linking} onCancel={cancel} />}
+        <LinkFolderForm linking={linking} onCancel={cancel} />
       </div>
     </dialog>
   );
@@ -184,7 +193,13 @@ function PreviewFacts({ preview }: { preview: LinkedFolderPreview }) {
   const count = (n: number) => formatCount(n, language);
 
   if (preview.insideLinkedFolderId !== null) {
-    return (
+    const owner = linkedFolders.find((each) => each.id === preview.insideLinkedFolderId);
+    // The folder itself, linked already, or one inside a Linked folder: either way, nothing to do.
+    return owner?.path === preview.path ? (
+      <p data-testid="link-folder-inside" className={factClass}>
+        {t("linkedFolders.preview.already", { name: folderName(owner.path) })}
+      </p>
+    ) : (
       <p data-testid="link-folder-inside" className={factClass}>
         {t("linkedFolders.preview.inside", { name: nameOf(preview.insideLinkedFolderId) })}
       </p>

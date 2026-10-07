@@ -248,14 +248,13 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
 });
 
 test("a Linked folder shows as Folders or a flat list, chosen when linking and from its menu", async () => {
-  // Zotero's storage: a folder per item, one file in each. Linking suggests a flat list.
+  // Zotero's storage: a folder per item, one file in each. For twenty or more, linking
+  // suggests a flat list.
   const storage = join(sources, "storage");
-  await writeTree(storage, [
-    "ABCD1234/Attention Is All You Need.txt",
-    "EFGH5678/Scaling Laws.txt",
-    "IJKL9012/Chinchilla.txt",
-    "MNOP3456/Retrieval-Augmented Generation.txt",
-  ]);
+  await writeTree(
+    storage,
+    Array.from({ length: 20 }, (_, index) => `KEY${1000 + index}/Paper ${index + 1}.txt`),
+  );
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const dialog = await previewLink(app, window, storage);
@@ -269,8 +268,8 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
   const documents = window.getByTestId("document-list-item");
   const subfolders = window.locator('[data-testid="folder-item"]:not([data-root])');
   await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(documents).toHaveCount(4);
-  await expect(subfolders).toHaveCount(4);
+  await expect(documents).toHaveCount(20);
+  await expect(subfolders).toHaveCount(20);
   await expect(documents.first()).toHaveAttribute("data-depth", "2");
 
   // A flat list: every Document right under the folder, no subfolders.
@@ -278,7 +277,7 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
   await menu.getByTestId("linked-folder-layout").click();
   await expect(row).toHaveAttribute("data-layout", "flat");
   await expect(subfolders).toHaveCount(0);
-  await expect(documents).toHaveCount(4);
+  await expect(documents).toHaveCount(20);
   for (const item of await documents.all()) await expect(item).toHaveAttribute("data-depth", "1");
   await screenshot(window.getByTestId("sidebar"), "row-flat");
 
@@ -287,7 +286,20 @@ test("a Linked folder shows as Folders or a flat list, chosen when linking and f
   await expect(menu.getByTestId("linked-folder-layout")).toHaveText("Show as folders");
   await menu.getByTestId("linked-folder-layout").click();
   await expect(row).toHaveAttribute("data-layout", "tree");
-  await expect(subfolders).toHaveCount(4);
+  await expect(subfolders).toHaveCount(20);
+  await app.close();
+});
+
+test("a small library of one-file folders keeps its folders", async () => {
+  const library = join(sources, "Reading");
+  await writeTree(library, ["Week 1/Notes.txt", "Week 2/Notes.txt", "Week 3/Notes.txt"]);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const dialog = await previewLink(app, window, library);
+  await expect(dialog.getByTestId("link-folder-layout-tree")).toBeChecked();
+  await confirmLink(dialog);
+  await expect(linkedFolderRow(window, "Reading")).toHaveAttribute("data-layout", "tree");
+  await expect(window.locator('[data-testid="folder-item"]:not([data-root])')).toHaveCount(3);
   await app.close();
 });
 
@@ -458,16 +470,22 @@ test("an empty Linked folder says so; with nothing linked or added, the section 
 
 test("linking a folder that overlaps a Linked folder says what happens: they merge, or nothing changes", async () => {
   const papers = join(sources, "Papers");
-  await writeTree(papers, ["Survey.txt", "2026/Attention.txt", "2027/Scaling.txt"]);
+  await writeTree(papers, [
+    "Survey.txt",
+    "2026/Attention.txt",
+    "2026/Drafts/Draft.txt",
+    "2027/Scaling.txt",
+  ]);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await linkFolderFromSidebar(app, window, join(papers, "2026"));
   await expect(linkedFolderRow(window, "2026")).toHaveAttribute("data-state", "idle");
 
   // A folder inside it is linked already: the dialog says so, and only closes.
-  await interceptOpenDialog(app, join(papers, "2026"));
+  await interceptOpenDialog(app, join(papers, "2026", "Drafts"));
   await window.getByTestId("add-linked-folder").click();
   const dialog = window.getByTestId("link-folder-dialog");
+  await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toContainText(
     "This folder is inside “2026”, which is linked already",
   );
@@ -484,6 +502,6 @@ test("linking a folder that overlaps a Linked folder says what happens: they mer
   await confirmLink(around);
   await expect(linkedFolderRow(window, "Papers")).toHaveAttribute("data-state", "idle");
   await expect(linkedFolderRow(window, "2026")).toHaveCount(0);
-  await expect(window.getByTestId("document-list-item")).toHaveCount(3);
+  await expect(window.getByTestId("document-list-item")).toHaveCount(4);
   await app.close();
 });
