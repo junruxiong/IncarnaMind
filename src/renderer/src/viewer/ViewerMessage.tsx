@@ -27,8 +27,16 @@ export function ViewerMessage({
 /**
  * Shown instead of a Document that has been deleted (e.g. a Citation's), with
  * the quoted text when there is one, so the quote can still be read.
+ * `unlinked`: the Citation's Document went with its Linked folder, and the
+ * text it quotes was kept, so it says that instead of "deleted".
  */
-export function DocumentRemoved({ quote }: { quote?: string | undefined }) {
+export function DocumentRemoved({
+  quote,
+  unlinked = false,
+}: {
+  quote?: string | undefined;
+  unlinked?: boolean;
+}) {
   const t = useT();
   return (
     <div
@@ -37,7 +45,9 @@ export function DocumentRemoved({ quote }: { quote?: string | undefined }) {
       className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 text-center"
     >
       <h2 className="text-ui font-semibold text-ink">{t("viewer.removed.title")}</h2>
-      <p className="mt-1 max-w-sm text-ui text-ink-meta">{t("viewer.removed.body")}</p>
+      <p className="mt-1 max-w-sm text-ui text-ink-meta">
+        {t(unlinked ? "viewer.removed.unlinked" : "viewer.removed.body")}
+      </p>
       {quote && (
         <figure className="mt-6 w-full max-w-sm text-left">
           <figcaption className="text-label text-ink-meta">{t("viewer.removed.quote")}</figcaption>

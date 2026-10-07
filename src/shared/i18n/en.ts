@@ -67,6 +67,8 @@ export const en = {
   "viewer.notText": "This file doesn't hold readable text.",
   "viewer.removed.title": "Document removed",
   "viewer.removed.body": "This Document has been deleted from IncarnaMind, so it can't be shown.",
+  "viewer.removed.unlinked":
+    "This Document's folder was unlinked. IncarnaMind kept the text your Citation quotes.",
   "viewer.removed.quote": "The quoted text:",
   "viewer.file.missing":
     "The file is missing from its folder, so this is the text IncarnaMind kept of it.",
