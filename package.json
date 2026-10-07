@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "electron-vite build --mode test && playwright test",
+    "eval": "vitest run --config eval/vitest.config.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
