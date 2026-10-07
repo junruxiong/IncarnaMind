@@ -121,9 +121,14 @@ function useStatus(): Status | null {
       let processing = 0;
       let tagging = 0;
       let waitingForTagger = 0;
+      // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
+      const paused = new Set(
+        state.linkedFolders.filter((each) => each.status === "paused").map((each) => each.id),
+      );
       for (const item of state.documents) {
-        if (PROCESSING.has(item.status)) processing++;
-        else if (item.status === "ready") {
+        if (PROCESSING.has(item.status)) {
+          if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) processing++;
+        } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
           else if (item.tagging === "waiting-for-provider") waitingForTagger++;
         }

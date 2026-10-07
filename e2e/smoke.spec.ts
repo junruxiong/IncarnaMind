@@ -7,8 +7,8 @@ import {
   createDataFolder,
   dismissChatSetup,
   dragBy,
-  interceptOpenDialog,
   launchApp,
+  linkFolderFromSidebar,
   openDocumentMenu,
   openSettings,
   openViewer,
@@ -282,9 +282,9 @@ test("a Linked folder shows its Folders as on disk, and files added on their own
     await expect(window.getByTestId("new-folder")).toHaveCount(0);
     await expect(window.getByTestId("move-document")).toHaveCount(0);
 
-    // "Add folder…" links a folder, picked with the system's picker (answered by the test).
-    await interceptOpenDialog(app, library);
-    await window.getByTestId("add-linked-folder").click();
+    // "Add folder…" links a folder, picked with the system's picker (answered by the test),
+    // once the User confirms in the link dialog.
+    await linkFolderFromSidebar(app, window, library);
     const root = folders.filter({ hasText: "Library" });
     await expect(root).toHaveAttribute("data-depth", "0");
     await expect(root.getByTestId("folder-toggle")).toHaveAttribute("aria-expanded", "true");

@@ -7,6 +7,8 @@ import type {
   EmbeddingSettings,
   Folder,
   LinkedFolder,
+  LinkedFolderLayout,
+  LinkedFolderPreview,
   Mind,
   Settings,
   SettingsPatch,
@@ -33,6 +35,16 @@ export type SettingsPage = (typeof settingsPages)[number];
 
 const isSettingsPage = (page: unknown): page is SettingsPage =>
   settingsPages.some((each) => each === page);
+
+/**
+ * A folder the User picked to link, while the link dialog shows what linking
+ * it would take: the preview once it is counted, or why it couldn't be.
+ */
+export interface LinkingFolder {
+  path: string;
+  preview: LinkedFolderPreview | null;
+  error: string | null;
+}
 
 /** What the Document viewer shows: one Document, opened at a location. */
 export interface ViewerTarget extends DocumentLocation {
@@ -75,6 +87,8 @@ interface AppState {
   folders: Folder[];
   /** The Linked folders, in path order. Set once loaded, then follows the core's event. */
   linkedFolders: LinkedFolder[];
+  /** The folder the link dialog asks about, until the User links it or cancels. */
+  linking: LinkingFolder | null;
   /** Every Tag, in name order. */
   tags: Tag[];
   /** The Tag whose Documents the sidebar shows. Null: any. */
@@ -129,8 +143,25 @@ interface AppState {
   downloadEmbeddingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
-  /** Asks for a folder with the system's folder picker, and links it. */
+  /**
+   * Asks for a folder with the system's folder picker, then opens the link
+   * dialog on it: what linking it would take, counted from its files' metadata.
+   */
   addLinkedFolder(): Promise<void>;
+  /** Links the folder the link dialog asks about, shown in `layout`, and closes the dialog. */
+  confirmLinkedFolder(layout: LinkedFolderLayout): Promise<void>;
+  /** Closes the link dialog without linking. */
+  cancelLinkedFolder(): void;
+  /** Pauses or resumes a Linked folder's indexing. */
+  setLinkedFolderPaused(linkedFolderId: string, paused: boolean): Promise<void>;
+  /** Shows a Linked folder as Folders or as a flat list. */
+  setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<void>;
+  /** Downloads a Linked folder's online-only files and indexes them. */
+  downloadOnlineOnlyFiles(linkedFolderId: string): Promise<void>;
+  /** Shows a Linked folder in the system's file manager. */
+  showLinkedFolder(linkedFolderId: string): Promise<void>;
+  /** Unlinks a folder: its Documents leave the index; nothing on disk changes. */
+  removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Shows only the Documents with a Tag; null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -156,6 +187,10 @@ const upsert = (documents: Document[], item: Document) =>
   documents.some((each) => each.id === item.id)
     ? documents.map((each) => (each.id === item.id ? item : each))
     : [item, ...documents];
+
+/** Puts a Linked folder in the list in place, if it's there. New ones arrive with the core's event. */
+const replaceLinked = (linkedFolders: LinkedFolder[], linked: LinkedFolder) =>
+  linkedFolders.map((each) => (each.id === linked.id ? linked : each));
 
 /** Open tabs and the shown one, after `id`'s tab closes: the one after it is shown, or else before. */
 function withoutTab(
@@ -220,6 +255,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsPage: "general",
     folders: [],
     linkedFolders: [],
+    linking: null,
     tags: [],
     tagFilter: null,
     filteredDocumentIds: null,
@@ -442,11 +478,67 @@ export const useAppStore = create<AppState>()((set, get) => {
         set({ embedding: await core.retryEmbedding() });
       }),
 
-    // Its Documents, Folders and progress arrive with the core's events.
     addLinkedFolder: () =>
       attempt(async () => {
         const path = await files.pickLinkedFolder();
-        if (path) await core.addLinkedFolder(path);
+        if (!path) return;
+        // The dialog opens at once; a big folder takes a moment to count.
+        set({ linking: { path, preview: null, error: null } });
+        try {
+          const preview = await core.previewLinkedFolder(path);
+          if (get().linking?.path === path) set({ linking: { path, preview, error: null } });
+        } catch (error) {
+          if (get().linking?.path === path) {
+            set({ linking: { path, preview: null, error: messageOf(error) } });
+          }
+        }
+      }),
+
+    // Its Documents, Folders and progress arrive with the core's events.
+    confirmLinkedFolder: (layout) =>
+      attempt(async () => {
+        const preview = get().linking?.preview;
+        set({ linking: null });
+        if (!preview) return;
+        const linked = await core.addLinkedFolder(preview.path);
+        // Inside a Linked folder already: nothing was linked, so its layout stays as the User set it.
+        if (preview.insideLinkedFolderId !== null) return;
+        // Set now, before its first scan ends, so the scan's own suggestion doesn't replace it.
+        const shown = await core.setLinkedFolderLayout(linked.id, layout);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, shown) }));
+      }),
+
+    cancelLinkedFolder() {
+      set({ linking: null });
+    },
+
+    setLinkedFolderPaused: (linkedFolderId, paused) =>
+      attempt(async () => {
+        const linked = await core.setLinkedFolderPaused(linkedFolderId, paused);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+      }),
+
+    setLinkedFolderLayout: (linkedFolderId, layout) =>
+      attempt(async () => {
+        const linked = await core.setLinkedFolderLayout(linkedFolderId, layout);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+      }),
+
+    downloadOnlineOnlyFiles: (linkedFolderId) =>
+      attempt(async () => {
+        const linked = await core.downloadOnlineOnlyFiles(linkedFolderId);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
+      }),
+
+    showLinkedFolder: (linkedFolderId) =>
+      attempt(async () => {
+        await files.showLinkedFolder(linkedFolderId);
+      }),
+
+    // The list, its Folders and Documents follow the core's events.
+    removeLinkedFolder: (linkedFolderId) =>
+      attempt(async () => {
+        await core.removeLinkedFolder(linkedFolderId);
       }),
 
     async filterByTag(tagId) {
