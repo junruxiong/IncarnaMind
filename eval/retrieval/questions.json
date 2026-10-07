@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "description": "Retrieval evaluation set for IncarnaMind v1 (issue #21). Kept for the 'Retrieval evaluation against the core' ticket.",
+  "hitRule": "A question is a hit if one of the top 5 retrieved Passages (a) belongs to expected.document, (b) has a page range that covers expected.pages, and (c) contains expected.quote after both are normalised (src/text.ts normalize: NFKC, CJK radical folding, unified quotes/dashes/full-width punctuation, end-of-line hyphenation removed, whitespace collapsed, whitespace next to CJK characters removed).",
+  "pageNumbers": "Physical 1-based page index as pdf.js reports it, not the printed page label.",
+  "core": "The 20 questions without crossLingual: true (10 en, 10 zh) are the gating set. crossLingual questions are reported separately.",
+  "documents": {
+    "attention-is-all-you-need": "data/Attention Is All You Need.pdf",
+    "language-models-are-few-shot-learners": "data/Language Models are Few-Shot Learners.pdf",
+    "language-models-are-unsupervised-multitask-learners": "data/Language Models are Unsupervised Multitask Learners.pdf",
+    "gradient-descent-the-ultimate-optimizer": "data/Gradient Descent The Ultimate Optimizer.pdf",
+    "abpi-code-of-practice-for-the-pharmaceutical-industry-2021": "data/ABPI Code of Practice for the Pharmaceutical Industry 2021.pdf",
+    "jp-morgan-2022-environmental-social-governance-report": "data/JP Morgan 2022 Environmental Social Governance Report.pdf",
+    "united-nations-2022-annual-report": "data/United Nations 2022 Annual Report.pdf",
+    "维基百科-大型语言模型": "prototype/retrieval/eval/fixtures/维基百科-大型语言模型.pdf",
+    "维基百科-梯度下降法": "prototype/retrieval/eval/fixtures/维基百科-梯度下降法.pdf",
+    "维基百科-可持续发展目标": "prototype/retrieval/eval/fixtures/维基百科-可持续发展目标.pdf",
+    "维基百科-环境-社会和公司治理": "prototype/retrieval/eval/fixtures/维基百科-环境、社会和公司治理.pdf",
+    "维基百科-注意力机制": "prototype/retrieval/eval/fixtures/维基百科-注意力机制.pdf"
+  },
+  "questions": [
+    {
+      "id": "en-01",
+      "language": "en",
+      "question": "What hardware was the Transformer trained on?",
+      "expected": { "document": "attention-is-all-you-need", "pages": [7, 7], "quote": "We trained our models on one machine with 8 NVIDIA P100 GPUs." }
+    },
+    {
+      "id": "en-02",
+      "language": "en",
+      "question": "Which training trick made the Transformer less confident in its predictions, and what was the trade-off?",
+      "expected": { "document": "attention-is-all-you-need", "pages": [8, 8], "quote": "This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score." }
+    },
+    {
+      "id": "en-03",
+      "language": "en",
+      "question": "How did OpenAI decide which web pages went into the GPT-2 training data?",
+      "expected": { "document": "language-models-are-unsupervised-multitask-learners", "pages": [3, 3], "quote": "we scraped all outbound links from Reddit, a social media platform, which received at least 3 karma" }
+    },
+    {
+      "id": "en-04",
+      "language": "en",
+      "question": "How big was the Common Crawl data used for GPT-3 before and after filtering?",
+      "expected": { "document": "language-models-are-few-shot-learners", "pages": [8, 8], "quote": "constituting 45TB of compressed plaintext before filtering and 570GB after filtering" }
+    },
+    {
+      "id": "en-05",
+      "language": "en",
+      "question": "What happens to hyperoptimizers when you start from poorly chosen hyperparameters?",
+      "expected": { "document": "gradient-descent-the-ultimate-optimizer", "pages": [2, 2], "quote": "our hyperoptimizers are robust to suboptimal choices of initial hyperparameters" }
+    },
+    {
+      "id": "en-06",
+      "language": "en",
+      "question": "What is the per-head spending cap on meals a pharmaceutical company provides to health professionals?",
+      "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [23, 23], "quote": "The cost of any subsistence (food and drink) provided must not exceed £75 per person, excluding VAT and gratuities." }
+    },
+    {
+      "id": "en-07",
+      "language": "en",
+      "question": "How much money does JPMorgan Chase aim to finance for sustainable development, and by when?",
+      "expected": { "document": "jp-morgan-2022-environmental-social-governance-report", "pages": [8, 8], "quote": "facilitate more than $2.5 trillion over 10 years" }
+    },
+    {
+      "id": "en-08",
+      "language": "en",
+      "question": "How much funding did the UN Peacebuilding Fund approve in 2021, and how many countries did it reach?",
+      "expected": { "document": "united-nations-2022-annual-report", "pages": [29, 29], "quote": "the Peacebuilding Fund approved a record $195 million in programming, which supported system-wide responses in 31 countries" }
+    },
+    {
+      "id": "en-09",
+      "language": "en",
+      "question": "What grain export deal did the UN help broker in 2022, and who signed it?",
+      "expected": { "document": "united-nations-2022-annual-report", "pages": [26, 26], "quote": "the Black Sea Grain Initiative signed by Ukraine, the Russian Federation and Türkiye under the auspices of the United Nations on 22 July 2022" }
+    },
+    {
+      "id": "en-10",
+      "language": "en",
+      "question": "How long does a new medical representative have to pass the required exam?",
+      "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [20, 20], "quote": "must pass it within two years of starting such employment" }
+    },
+    {
+      "id": "zh-01",
+      "language": "zh",
+      "question": "可持续发展目标一共包含多少项具体目标？",
+      "expected": { "document": "维基百科-可持续发展目标", "pages": [1, 1], "quote": "这一系列目标共有 169 项細項目标" }
+    },
+    {
+      "id": "zh-02",
+      "language": "zh",
+      "question": "可持续发展目标对道路交通事故伤亡提出了什么要求？",
+      "expected": { "document": "维基百科-可持续发展目标", "pages": [4, 4], "quote": "讓全球因為交通事故而傷亡的人數減少一半" }
+    },
+    {
+      "id": "zh-03",
+      "language": "zh",
+      "question": "ESG 这个说法最早出现在哪份报告里？",
+      "expected": { "document": "维基百科-环境-社会和公司治理", "pages": [1, 1], "quote": "ESG 這一簡稱首次在 2004 年一份名為《在乎者最終成贏家（Who Cares Wins）》的報告中被使用" }
+    },
+    {
+      "id": "zh-04",
+      "language": "zh",
+      "question": "欧盟出台了什么法规来应对漂绿问题？",
+      "expected": { "document": "维基百科-环境-社会和公司治理", "pages": [12, 12], "quote": "歐盟因此於 2021 年 3 月制定永續財務揭露法規 2019/2088" }
+    },
+    {
+      "id": "zh-05",
+      "language": "zh",
+      "question": "大语言模型的“幻觉”是什么意思？",
+      "expected": { "document": "维基百科-大型语言模型", "pages": [8, 8], "quote": "幻觉指的是大语言模型输出与客观事实不符或具有误导性的内容" }
+    },
+    {
+      "id": "zh-06",
+      "language": "zh",
+      "question": "训练和推理时，每个 token 分别需要多少浮点运算？",
+      "expected": { "document": "维基百科-大型语言模型", "pages": [6, 6], "quote": "训练一个 token 需要每个参数 6 次 FLOP，而推理一个 token 需要每个参数 1 到 2 次 FLOP" }
+    },
+    {
+      "id": "zh-07",
+      "language": "zh",
+      "question": "梯度下降法最早是谁在什么时候提出的？",
+      "expected": { "document": "维基百科-梯度下降法", "pages": [1, 1], "quote": "梯度下降法通常被认为是奧古斯丁-路易·柯西（法語：Augustin-Louis Cauchy）在 1847 年首次提出的" }
+    },
+    {
+      "id": "zh-08",
+      "language": "zh",
+      "question": "为什么用梯度下降法优化 Rosenbrock 函数时收敛很慢？",
+      "expected": { "document": "维基百科-梯度下降法", "pages": [2, 2], "quote": "优化过程是之字形的向极小值点靠近，速度非常缓慢" }
+    },
+    {
+      "id": "zh-09",
+      "language": "zh",
+      "question": "注意力机制为什么比普通权重更灵活？",
+      "expected": { "document": "维基百科-注意力机制", "pages": [1, 1], "quote": "注意力机制的灵活性来自于它的“软权重”特性" }
+    },
+    {
+      "id": "zh-10",
+      "language": "zh",
+      "question": "按照可持续发展目标，极端贫困的标准是每天生活费低于多少？",
+      "expected": { "document": "维基百科-可持续发展目标", "pages": [3, 3], "quote": "目前標準按照每天生活費不足 1.25 美元計算" }
+    },
+    {
+      "id": "xl-01",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "Transformer 大模型在 WMT 2014 英德翻译任务上取得了多少 BLEU 分数？",
+      "expected": { "document": "attention-is-all-you-need", "pages": [8, 8], "quote": "BLEU score of 28.4" }
+    },
+    {
+      "id": "xl-02",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "GPT-2 使用的 WebText 数据集有多大？",
+      "expected": { "document": "language-models-are-unsupervised-multitask-learners", "pages": [3, 3], "quote": "contains slightly over 8 million documents for a total of 40 GB of text" }
+    },
+    {
+      "id": "xl-03",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "制药公司给医疗专业人员提供餐饮，每人花费上限是多少？",
+      "expected": { "document": "abpi-code-of-practice-for-the-pharmaceutical-industry-2021", "pages": [23, 23], "quote": "must not exceed £75 per person" }
+    },
+    {
+      "id": "xl-04",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "摩根大通计划在十年内为可持续发展投入多少资金？",
+      "expected": { "document": "jp-morgan-2022-environmental-social-governance-report", "pages": [8, 8], "quote": "facilitate more than $2.5 trillion over 10 years" }
+    },
+    {
+      "id": "xl-05",
+      "language": "zh",
+      "crossLingual": true,
+      "question": "2022 年联合国促成的黑海粮食倡议是由哪些国家签署的？",
+      "expected": { "document": "united-nations-2022-annual-report", "pages": [26, 26], "quote": "signed by Ukraine, the Russian Federation and Türkiye" }
+    }
+  ]
+}
