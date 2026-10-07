@@ -34,6 +34,7 @@ import {
   sectionTitleClass,
 } from "../ui";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
+import { useProviderKey } from "./shared";
 
 /**
  * Settings → Reranking: off without a key; with a Cohere or Voyage AI key,
@@ -144,7 +145,8 @@ function RerankForm({
   const t = useT();
   const id = useId();
   const [kind, setKind] = useState<RerankProviderKind>(current.kind ?? "cohere");
-  const [apiKey, setApiKey] = useState("");
+  const key = useProviderKey();
+  const { apiKey } = key;
   const [model, setModel] = useState(
     current.kind && current.modelId !== DEFAULT_RERANK_MODELS[current.kind]
       ? (current.modelId ?? "")
@@ -178,7 +180,7 @@ function RerankForm({
         setTest(await core.testRerankConnection(input()));
       } else {
         const saved = await core.saveRerankSettings(input());
-        setApiKey("");
+        key.clear();
         onSaved(saved);
       }
     } catch (failure) {
@@ -214,6 +216,8 @@ function RerankForm({
                 value={option}
                 checked={kind === option}
                 onChange={() => {
+                  // A key typed for one provider is never sent to another.
+                  if (option !== kind) key.clear();
                   setKind(option);
                   setTest(null);
                 }}
@@ -230,7 +234,7 @@ function RerankForm({
         <input
           type="password"
           value={apiKey}
-          onChange={(event) => setApiKey(event.target.value)}
+          onChange={(event) => key.type(event.target.value)}
           autoComplete="off"
           spellCheck={false}
           className={inputClass}
