@@ -16,9 +16,9 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
-  interceptOpenDialog,
   interceptSaveDialog,
   launchApp,
+  linkFolderFromSidebar,
   openDocumentAt,
   removeDataFolder,
   useLocalChatModel,
@@ -107,8 +107,7 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await widen(app, window);
-  await interceptOpenDialog(app, library);
-  await window.getByTestId("add-linked-folder").click();
+  await linkFolderFromSidebar(app, window, library);
 
   // Each file becomes a Document, and is processed.
   const items = window.getByTestId("document-list-item");
@@ -254,6 +253,8 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   const dialog = window.getByTestId("export-dialog");
   await expect(dialog.getByTestId("export-citations")).toHaveAttribute("data-unverified", "0");
   await dialog.getByTestId("export-save").click();
+  await expect(dialog.getByTestId("export-done")).toBeVisible();
+  await dialog.getByTestId("export-close").click();
   await expect(dialog).toBeHidden();
   const footnotes = Object.values(
     footnotesOf(part(unzip(await readFile(target)), "word/footnotes.xml")),
