@@ -410,7 +410,7 @@ export interface DeviceSettings {
   sidebarWidth: number;
   /**
    * Width of the right Document viewer pane, in CSS pixels, once the User
-   * has resized it. Null until then: it opens at about half the window.
+   * has resized it. Null until then: it opens at about half the room beside the sidebar.
    */
   viewerWidth: number | null;
   /**

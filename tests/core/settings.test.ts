@@ -88,7 +88,7 @@ describe("Settings", () => {
     });
   });
 
-  test("the viewer's width is unset until the User resizes it, so it opens at half the window", async () => {
+  test("the viewer's width is unset until the User resizes it, so it opens at half the room beside the sidebar", async () => {
     const core = startCore(await createTempDataFolder());
 
     expect((await core.updateSettings({ device: { viewerWidth: 500 } })).device.viewerWidth).toBe(
