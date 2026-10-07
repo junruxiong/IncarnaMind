@@ -156,7 +156,16 @@ export interface AnswerToolCall {
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
   input: Record<string, unknown>;
+  /** "failed" also covers a call the User didn't allow (see `approval`): it never ran. */
   status: "running" | "done" | "failed";
+  /**
+   * A Connector's Tool that asked the User first (see `ApprovalRequest`):
+   * "waiting" while the Answer waits for them; "allowed" once they allowed it
+   * (once, or always); "denied" when they denied it, or the Answer stopped
+   * (or IncarnaMind closed) before they decided, so it never ran. Absent when
+   * it didn't ask: its Connector says it only reads, or the User always allows it.
+   */
+  approval?: ToolCallApproval;
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
   /**
@@ -165,6 +174,9 @@ export interface AnswerToolCall {
    */
   forced?: boolean;
 }
+
+/** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
+export type ToolCallApproval = "waiting" | "allowed" | "denied";
 
 /**
  * The node type of a Citation: an inline node anchored in the text of an
@@ -1102,7 +1114,7 @@ export interface TestJevConnectionInput {
  * Where a Connector is:
  * - "off": the User turned it off, so its process isn't running.
  * - "connecting": its process is starting, and IncarnaMind is connecting to it.
- * - "ready": connected; Answers can use its read-only Tools.
+ * - "ready": connected; Answers can use its Tools (see `ApprovalPolicy` for which ask first).
  * - "error": it couldn't start, or it stopped (see `error`).
  */
 export type ConnectorState = "off" | "connecting" | "ready" | "error";
@@ -1143,8 +1155,10 @@ export interface ConnectorTool {
   description: string;
   /**
    * The Connector says the Tool only reads and changes nothing (its
-   * `readOnlyHint` annotation). That is the Connector's claim, not something
-   * IncarnaMind can check. Answers are offered only these Tools for now.
+   * `readOnlyHint` annotation). That is the Connector's claim, a hint, not
+   * something IncarnaMind can check. Answers call such a Tool without asking
+   * unless the User switched it to "ask"; every other Tool asks first, unless
+   * the User always allows it (see `ApprovalPolicy`).
    */
   readOnly: boolean;
 }
@@ -1216,6 +1230,92 @@ export interface ConnectorImportResult {
   added: Connector[];
   /** The servers that weren't added, with why. */
   skipped: ConnectorImportEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Approvals (#38)
+
+/**
+ * What an approval policy is about:
+ * - "tool": one Tool of one Connector;
+ * - "skill-script": the scripts of one Skill (Skill scripts come with #41).
+ */
+export type ApprovalSubject =
+  | {
+      kind: "tool";
+      connectorId: string;
+      /** The Tool's name as the Connector gives it. */
+      tool: string;
+    }
+  | { kind: "skill-script"; skillId: string };
+
+export type ApprovalSubjectKind = ApprovalSubject["kind"];
+
+/**
+ * What the User chose for a subject, replacing the default:
+ * - "always": it runs without asking ("always allow" a Tool; "always run" a Skill's scripts).
+ * - "ask": it asks every time, even a Tool its Connector says only reads.
+ *
+ * Without a policy, a Tool asks first unless its Connector says it only reads
+ * (`ConnectorTool.readOnly`), and a Skill script always asks.
+ */
+export type ApprovalPolicyValue = "always" | "ask";
+
+/** One of the User's approval policies, as the approvals page lists it. */
+export interface ApprovalPolicy {
+  /** A random UUID generated on this device. */
+  id: string;
+  subject: ApprovalSubject;
+  policy: ApprovalPolicyValue;
+  /** What the subject belongs to, as named now: the Connector (for a Tool) or the Skill. */
+  ownerName: string;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface SetApprovalPolicyInput {
+  /** A Connector that exists, or a Skill that exists. */
+  subject: ApprovalSubject;
+  /** Null goes back to the default, removing the User's policy. A Skill script takes "always" or null. */
+  policy: ApprovalPolicyValue | null;
+}
+
+/**
+ * What the User decides about a Tool call that asks first:
+ * - "allow-once": this call runs;
+ * - "always-allow": this call runs, and so will every later call of the Tool
+ *   without asking (the policy becomes "always");
+ * - "deny": the call doesn't run; the model is told the User denied it, and
+ *   the Answer carries on without it.
+ */
+export type ApprovalDecision = "allow-once" | "always-allow" | "deny";
+
+/**
+ * A Tool call waiting for the User's approval. Its Answer is paused until they
+ * decide; stopping the Answer, or closing IncarnaMind, denies it.
+ */
+export interface ApprovalRequest {
+  requestId: string;
+  mindId: string;
+  answerId: string;
+  /** The call's id among the Answer's `toolCalls`. */
+  toolCallId: string;
+  subject: ApprovalSubject;
+  /** The Connector the Tool belongs to, as named when the call was made. */
+  connector: { id: string; name: string };
+  /** The Tool's name as its Connector gives it, e.g. "create_issue". */
+  tool: string;
+  /** The Tool's display name, when the Connector gives one. */
+  title: string | null;
+  /** The arguments the model wants to send. */
+  input: Record<string, unknown>;
+  /**
+   * The Connector says this Tool only reads: it asks only because the User
+   * switched it to "ask". False: the Tool may change something.
+   */
+  readOnly: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1499,6 +1599,27 @@ export interface CoreApi {
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
 
+  /**
+   * The User's approval policies, for the approvals page: every Tool always
+   * allowed, every Tool switched to "ask", and (#41) every Skill whose scripts
+   * always run. Policies of deleted Connectors and Skills aren't listed.
+   */
+  listApprovalPolicies(): Promise<ApprovalPolicy[]>;
+  /**
+   * Sets a policy, or with `policy: null` removes it (back to the default).
+   * Returns the policy now in effect, or null for the default.
+   */
+  setApprovalPolicy(input: SetApprovalPolicyInput): Promise<ApprovalPolicy | null>;
+  /** Removes a policy by its id: its subject goes back to the default. Revoking one that's gone does nothing. */
+  revokeApprovalPolicy(policyId: string): Promise<void>;
+  /** Tool calls still waiting for the User's approval, e.g. for a window that opened after they were raised. */
+  listApprovalRequests(): Promise<ApprovalRequest[]>;
+  /**
+   * Answers an approval request. Answering one that's no longer waiting (decided
+   * in another window, or its Answer stopped) does nothing.
+   */
+  respondToApproval(requestId: string, decision: ApprovalDecision): Promise<void>;
+
   /** Skills that are not removed, in name order. */
   listSkills(): Promise<Skill[]>;
   /**
@@ -1590,6 +1711,15 @@ export interface CoreEvents {
    * changed (connecting, ready, error): the list as `listConnectors` now returns it.
    */
   "connectors.changed": Connector[];
+  /** Approval policies were set or revoked: the list as `listApprovalPolicies` now returns it. */
+  "approvals.changed": ApprovalPolicy[];
+  /** A Tool call is waiting for the User's approval: its Answer shows an approval card, in every window. */
+  "approval.requested": ApprovalRequest;
+  /**
+   * An approval request was decided, here or in another window, or its Answer
+   * stopped ("deny"): every window takes its card away.
+   */
+  "approval.resolved": { requestId: string; decision: ApprovalDecision };
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -1686,6 +1816,11 @@ const methods: Record<CoreApiMethod, true> = {
   deleteConnector: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listApprovalPolicies: true,
+  setApprovalPolicy: true,
+  revokeApprovalPolicy: true,
+  listApprovalRequests: true,
+  respondToApproval: true,
   listSkills: true,
   previewSkillImport: true,
   importSkill: true,
