@@ -68,9 +68,9 @@ const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
   defaults: {
-    // DESIGN.md: the sidebar is 248px by default.
+    // DESIGN.md: the sidebar is 248px by default; the viewer opens at about half the window.
     sidebarWidth: 248,
-    viewerWidth: 420,
+    viewerWidth: null,
     openMinds: [],
     activeMind: null,
     chatSetupDismissed: false,
@@ -79,7 +79,7 @@ const deviceScope: Scope<DeviceSettings> = {
   },
   validators: {
     sidebarWidth: isPaneWidth,
-    viewerWidth: isPaneWidth,
+    viewerWidth: (value): value is number | null => value === null || isPaneWidth(value),
     openMinds: isMindIdList,
     activeMind: (value): value is string | null => value === null || isMindId(value),
     chatSetupDismissed: isBoolean,

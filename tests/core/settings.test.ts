@@ -10,7 +10,7 @@ describe("Settings", () => {
       user: { language: "system", chatModel: null },
       device: {
         sidebarWidth: 248,
-        viewerWidth: 420,
+        viewerWidth: null,
         openMinds: [],
         activeMind: null,
         chatSetupDismissed: false,
@@ -65,13 +65,27 @@ describe("Settings", () => {
     expect(settings.user).toEqual({ language: "zh-CN", chatModel: null });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
-      viewerWidth: 420,
+      viewerWidth: null,
       openMinds: [],
       activeMind: null,
       chatSetupDismissed: false,
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
     });
+  });
+
+  test("the viewer's width is unset until the User resizes it, so it opens at half the window", async () => {
+    const core = startCore(await createTempDataFolder());
+
+    expect((await core.updateSettings({ device: { viewerWidth: 500 } })).device.viewerWidth).toBe(
+      500,
+    );
+    expect((await core.updateSettings({ device: { viewerWidth: null } })).device.viewerWidth).toBe(
+      null,
+    );
+    await expect(
+      core.updateSettings({ device: { sidebarWidth: null as unknown as number } }),
+    ).rejects.toThrow(InvalidInputError);
   });
 
   test("settings survive a restart", async () => {
