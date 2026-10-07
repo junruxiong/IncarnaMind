@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { CoreAdapters } from "./adapters";
+import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, parseListOptions } from "./documents";
@@ -88,6 +89,24 @@ export function createCore(adapters: CoreAdapters): Core {
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
   });
+  const answers = createAnswers({
+    content,
+    events,
+    engine: adapters.answerEngine ?? createAiSdkAnswerEngine(),
+    requireMind: (mindId) => minds.get(mindId).id,
+    mindExists: (mindId) => {
+      try {
+        minds.get(mindId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    providerExists: (providerId) => chat.exists(providerId),
+    readiness: (choice) => chat.readiness(choice),
+    prepareModel: (choice) => chat.prepareModel(choice),
+    reportError: (error) => console.error(error),
+  });
   /** Aborts work still running (model downloads) when the core closes. */
   const lifetime = new AbortController();
 
@@ -130,6 +149,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
+      answers.settleOrphans(mind.id);
       return { mind, state: content.state(mind.id) };
     },
     applyMindUpdate: async (mindId, update) => {
@@ -175,6 +195,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     testChatConnection: (input) => chat.test(input),
     getChatReadiness: () => chat.readiness(),
+    listChatModels: () => chat.listModels(),
+
+    askQuestion: async (input) => answers.ask(input),
+    regenerateAnswer: async (input) => answers.regenerate(input),
+    stopAnswer: async (input) => answers.stop(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -250,7 +275,10 @@ export function createCore(adapters: CoreAdapters): Core {
     dataFlows: consent.registry,
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
+      if (lifetime.signal.aborted) return;
       lifetime.abort();
+      // Answers being written keep what they have, marked "stopped".
+      answers.stopAll();
       consent.close();
       documents.close();
       events.clear();

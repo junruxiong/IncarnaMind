@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { AnswerEngine } from "./answers/engine";
 import type { SecretProtection } from "./api";
 import type { ChatModelFactory } from "./providers/models";
 
@@ -73,4 +74,9 @@ export interface CoreAdapters {
    * providers; tests pass AI SDK mock models.
    */
   createChatModel?: ChatModelFactory;
+  /**
+   * Turns Question context into a streamed Answer. Defaults to the AI SDK
+   * engine; an alternative agent layer plugs in here.
+   */
+  answerEngine?: AnswerEngine;
 }
