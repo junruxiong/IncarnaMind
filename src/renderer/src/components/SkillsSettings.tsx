@@ -11,16 +11,20 @@ import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { formatSize, pickSkill } from "../skills";
 import { useAppStore } from "../store";
-import { SkillIcon, TrashIcon } from "./icons";
+import { DuplicateIcon, SkillIcon, TrashIcon } from "./icons";
 import { buttonClass, primaryButtonClass } from "./providers/shared";
 
 /**
  * Settings → Skills: the Skills there are, each turned on or off or removed,
  * and importing one from a folder or a zip, shown first for the User to check.
+ * Built-in Skills are labelled, can be duplicated as the User's own, and,
+ * once removed, restored.
  */
 export function SkillsSettings() {
   const t = useT();
   const skills = useAppStore((state) => state.skills);
+  const restoreBuiltInSkills = useAppStore((state) => state.restoreBuiltInSkills);
+  const removedBuiltIns = useRemovedBuiltIns();
   const [busy, setBusy] = useState<"reading" | "importing" | null>(null);
   const [preview, setPreview] = useState<SkillImportPreview | null>(null);
   const [error, setError] = useState<SkillImportError | string | null>(null);
@@ -118,6 +122,20 @@ export function SkillsSettings() {
           >
             {t("skills.import.zip")}
           </button>
+          {removedBuiltIns.length > 0 && (
+            <button
+              type="button"
+              data-testid="skill-restore-built-ins"
+              title={t("skills.settings.restoreBuiltIns.hint", {
+                names: removedBuiltIns.join(", "),
+              })}
+              disabled={busy !== null}
+              onClick={() => void restoreBuiltInSkills()}
+              className={buttonClass}
+            >
+              {t("skills.settings.restoreBuiltIns")}
+            </button>
+          )}
         </div>
       )}
       {busy === "reading" && (
@@ -128,11 +146,38 @@ export function SkillsSettings() {
   );
 }
 
+/**
+ * The names of the built-in Skills the User removed, asked again whenever the
+ * Skills change (a removal, a restore). Empty until the core answers.
+ */
+function useRemovedBuiltIns(): string[] {
+  const [removed, setRemoved] = useState<string[]>([]);
+  useEffect(() => {
+    let current = true;
+    const refresh = () => {
+      core
+        .listRemovedBuiltInSkills()
+        .then((names) => {
+          if (current) setRemoved(names);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    const stop = core.on("skills.changed", refresh);
+    return () => {
+      current = false;
+      stop();
+    };
+  }, []);
+  return removed;
+}
+
 /** One Skill: on or off, what it's for, its licence and scripts, and removing it. */
 function SkillRow({ skill }: { skill: Skill }) {
   const t = useT();
   const setSkillEnabled = useAppStore((state) => state.setSkillEnabled);
   const removeSkill = useAppStore((state) => state.removeSkill);
+  const duplicateSkill = useAppStore((state) => state.duplicateSkill);
   const scripts = skill.files.filter((file) => file.script).length;
   const details = [
     skill.license && t("skills.settings.license", { license: skill.license }),
@@ -148,6 +193,7 @@ function SkillRow({ skill }: { skill: Skill }) {
       data-testid="skill-item"
       data-skill-name={skill.name}
       data-enabled={skill.enabled}
+      data-built-in={skill.builtIn}
       className="flex items-start gap-2 rounded-[9px] px-2 py-1.5 hover:bg-gray-50"
     >
       <input
@@ -164,12 +210,33 @@ function SkillRow({ skill }: { skill: Skill }) {
         <p className="flex items-center gap-1 font-medium">
           <SkillIcon className="size-3.5 shrink-0 text-violet-600" />
           <span className="truncate">{skill.name}</span>
+          {skill.builtIn && (
+            <span
+              data-testid="skill-built-in"
+              title={t("skills.settings.builtIn.hint")}
+              className="shrink-0 rounded-[4px] bg-violet-50 px-1 text-xs font-normal text-violet-700"
+            >
+              {t("skills.settings.builtIn")}
+            </span>
+          )}
         </p>
         <p className="line-clamp-2 text-gray-600" title={skill.description}>
           {skill.description}
         </p>
         {details.length > 0 && <p className="text-xs text-gray-500">{details.join(" · ")}</p>}
       </div>
+      {skill.builtIn && (
+        <button
+          type="button"
+          data-testid="skill-duplicate"
+          aria-label={t("skills.settings.duplicateLabel", { name: skill.name })}
+          title={t("skills.settings.duplicate")}
+          onClick={() => void duplicateSkill(skill.id)}
+          className="shrink-0 rounded-[6px] p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+        >
+          <DuplicateIcon className="size-4" />
+        </button>
+      )}
       <button
         type="button"
         data-testid="skill-remove"

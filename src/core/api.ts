@@ -922,6 +922,9 @@ export interface AnswerFailed {
  * folder, under `skills/<id>/`. The system prompt of every Answer lists the
  * enabled Skills' names and descriptions; the model loads a Skill's full
  * instructions when it needs them, or the User forces one on a Question.
+ *
+ * Built-in Skills ship with the app and are installed on first run. A newer
+ * version of the app updates them; whether each is on, or removed, is kept.
  */
 export interface Skill {
   /** A random UUID generated on this device. Importing a Skill of the same name again keeps it. */
@@ -936,6 +939,11 @@ export interface Skill {
   compatibility: string | null;
   /** Turned on, Answers can use it. New Skills start on. */
   enabled: boolean;
+  /**
+   * Ships with the app. Its files can't be replaced by importing a Skill of
+   * its name; `duplicateSkill` makes a copy that is the User's own.
+   */
+  builtIn: boolean;
   /** Every file in the Skill: SKILL.md first, then the others in path order. */
   files: SkillFile[];
   /** ISO 8601, UTC. */
@@ -988,6 +996,8 @@ export interface SkillImportPreview {
  * - "too-large": its files add up to more than `SKILL_LIMITS.maxBytes`, or SKILL.md
  *   is over `SKILL_LIMITS.maxInstructionsBytes`.
  * - "too-many-files": more than `SKILL_LIMITS.maxFiles` files.
+ * - "built-in-name": a built-in Skill has its name, and a built-in Skill's files
+ *   can't be replaced (`field` is "name").
  */
 export type SkillImportErrorKind =
   | "unreadable"
@@ -997,7 +1007,8 @@ export type SkillImportErrorKind =
   | "path-traversal"
   | "link-outside"
   | "too-large"
-  | "too-many-files";
+  | "too-many-files"
+  | "built-in-name";
 
 export interface SkillImportError {
   kind: SkillImportErrorKind;
@@ -1724,8 +1735,26 @@ export interface CoreApi {
   /**
    * Removes a Skill: soft-deleted in the database (ADR-0003). Its files are
    * deleted once nothing uses them, e.g. after Answers still being written with it finish.
+   * A removed built-in Skill stays removed, through updates of the app too,
+   * until `restoreBuiltInSkills`.
    */
   removeSkill(skillId: string): Promise<void>;
+  /**
+   * Copies a Skill as the User's own, e.g. a built-in one, whose files can't
+   * be replaced: the same files, named "<name>-copy" (or "<name>-copy-2" and
+   * on), turned on, not built-in. Returns the copy.
+   */
+  duplicateSkill(skillId: string): Promise<Skill>;
+  /**
+   * The names of the built-in Skills the User removed, which
+   * `restoreBuiltInSkills` would install again. Empty when they are all there.
+   */
+  listRemovedBuiltInSkills(): Promise<string[]>;
+  /**
+   * Installs again, turned on, the built-in Skills the User removed (those
+   * `listRemovedBuiltInSkills` names), with this version's files. Returns them.
+   */
+  restoreBuiltInSkills(): Promise<Skill[]>;
 
   /**
    * What `exportMind` will write with these options: the file name, and how
@@ -1793,7 +1822,10 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
-  /** Skills were imported, turned on or off, or removed: the list as `listSkills` now returns it. */
+  /**
+   * Skills were imported, duplicated, turned on or off, removed or restored:
+   * the list as `listSkills` now returns it.
+   */
   "skills.changed": Skill[];
   /**
    * Connectors were added, turned on or off, or deleted, or one's state
@@ -1911,6 +1943,9 @@ const methods: Record<CoreApiMethod, true> = {
   cancelSkillImport: true,
   setSkillEnabled: true,
   removeSkill: true,
+  duplicateSkill: true,
+  listRemovedBuiltInSkills: true,
+  restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
 };

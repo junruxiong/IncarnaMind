@@ -108,6 +108,10 @@ interface AppState {
   closeTagsDialog(): void;
   setSkillEnabled(skillId: string, enabled: boolean): Promise<void>;
   removeSkill(skillId: string): Promise<void>;
+  /** Copies a Skill (a built-in one) as the User's own. */
+  duplicateSkill(skillId: string): Promise<void>;
+  /** Installs the built-in Skills the User removed again. */
+  restoreBuiltInSkills(): Promise<void>;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -408,6 +412,16 @@ export const useAppStore = create<AppState>()((set, get) => {
     removeSkill: (skillId) =>
       attempt(async () => {
         await core.removeSkill(skillId);
+      }),
+
+    duplicateSkill: (skillId) =>
+      attempt(async () => {
+        await core.duplicateSkill(skillId);
+      }),
+
+    restoreBuiltInSkills: () =>
+      attempt(async () => {
+        await core.restoreBuiltInSkills();
       }),
   };
 });

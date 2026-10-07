@@ -519,6 +519,13 @@ export const en = {
   "skills.settings.license": "Licence: {license}",
   "skills.settings.scripts.one": "1 script, which can't run yet",
   "skills.settings.scripts": "{count} scripts, which can't run yet",
+  "skills.settings.builtIn": "Built-in",
+  "skills.settings.builtIn.hint":
+    "Comes with IncarnaMind and is updated with it. To change it, duplicate it as your own.",
+  "skills.settings.duplicate": "Duplicate as my own",
+  "skills.settings.duplicateLabel": "Duplicate {name} as my own",
+  "skills.settings.restoreBuiltIns": "Restore built-in Skills",
+  "skills.settings.restoreBuiltIns.hint": "Removed: {names}",
   "skills.import.folder": "Import a folder…",
   "skills.import.zip": "Import a zip…",
   "skills.import.pickFolder": "Choose a Skill folder",
@@ -546,6 +553,8 @@ export const en = {
   "skills.error.too-large":
     "The Skill is too large: its files can add up to {size} at most, and SKILL.md to {instructions}.",
   "skills.error.too-many-files": "The Skill has too many files: {count} at most.",
+  "skills.error.built-in-name":
+    "A built-in Skill already has this name, and built-in Skills can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill as your own.",
   "skills.error.details": "Details",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",
