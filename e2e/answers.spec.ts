@@ -4,6 +4,7 @@ import {
   dismissChatSetup,
   launchApp,
   removeDataFolder,
+  slideToHandle,
   useLocalChatModel,
 } from "./app";
 
@@ -72,8 +73,7 @@ test("a Note switched out of Question context looks muted, and asking without a 
 
   // The Block menu switches the Note out of Question context.
   const sideNote = editor.locator("p").first();
-  await sideNote.hover();
-  await window.getByTestId("block-handle").click();
+  await (await slideToHandle(window, sideNote)).click();
   const toggle = window.getByTestId("block-menu-context");
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await toggle.click();

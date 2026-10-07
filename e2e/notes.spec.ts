@@ -1,5 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
-import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
+import {
+  createDataFolder,
+  dismissChatSetup,
+  dragBlock,
+  launchApp,
+  removeDataFolder,
+  slideToHandle,
+} from "./app";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -80,11 +87,9 @@ test("a Block dragged above another stays there after reopening the app", async 
   const paragraphs = editor.locator("p");
   await expect(paragraphs).toHaveText(["First", "Second", "Third"]);
 
-  // Hovering a Block shows its handle. Dropping it on the top of "First" moves the Block above it.
-  await paragraphs.nth(2).hover();
-  const handle = window.getByTestId("block-handle");
-  await expect(handle).toBeVisible();
-  await handle.dragTo(paragraphs.nth(0), { targetPosition: { x: 4, y: 2 } });
+  // Pointing at a Block shows its handle, which stays while the mouse crosses the margin to it.
+  // Dragging it down the margin to the top of "First" moves the Block above it.
+  await dragBlock(window, paragraphs.nth(2), paragraphs.nth(0));
   await expect(paragraphs).toHaveText(["Third", "First", "Second"]);
   await first.app.close();
 
@@ -115,8 +120,7 @@ test("a Block is deleted from its handle's menu, and with the keyboard", async (
   const paragraphs = editor.locator("p");
 
   // Clicking the handle opens the Block's menu.
-  await paragraphs.nth(1).hover();
-  await window.getByTestId("block-handle").click();
+  await (await slideToHandle(window, paragraphs.nth(1))).click();
   await expect(window.getByTestId("block-menu")).toBeVisible();
   await window.getByTestId("block-menu-delete").click();
   await expect(window.getByTestId("block-menu")).toHaveCount(0);

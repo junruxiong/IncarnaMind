@@ -278,6 +278,40 @@ export async function dragBy(window: Page, handle: Locator, dx: number): Promise
   await window.mouse.up();
 }
 
+/**
+ * Moves the mouse as a person does onto a Block's handle: onto the Block's
+ * first line, then left across the margin in small steps (not a jump, which
+ * would skip the margin in between), and returns the handle.
+ */
+export async function slideToHandle(window: Page, block: Locator): Promise<Locator> {
+  const text = await block.boundingBox();
+  if (!text) throw new Error("The Block isn't visible.");
+  const y = text.y + Math.min(text.height, 28) / 2;
+  await window.mouse.move(text.x + 8, y, { steps: 4 });
+  const handle = window.getByTestId("block-handle");
+  await expect(handle).toBeVisible();
+  const grip = await handle.boundingBox();
+  if (!grip) throw new Error("The block handle isn't visible.");
+  await window.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2, { steps: 12 });
+  await expect(handle).toBeVisible();
+  return handle;
+}
+
+/**
+ * Drags a Block by its handle, as a person does: slide onto the handle, press,
+ * move straight up or down the margin to the top of `target`, and let go.
+ */
+export async function dragBlock(window: Page, block: Locator, target: Locator): Promise<void> {
+  const handle = await slideToHandle(window, block);
+  const grip = await handle.boundingBox();
+  const to = await target.boundingBox();
+  if (!grip || !to) throw new Error("The handle or the target isn't visible.");
+  const x = grip.x + grip.width / 2;
+  await window.mouse.down();
+  await window.mouse.move(x, to.y + 4, { steps: 12 });
+  await window.mouse.up();
+}
+
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
