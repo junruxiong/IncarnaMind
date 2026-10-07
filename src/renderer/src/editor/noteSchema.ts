@@ -9,6 +9,7 @@ import {
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
+import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
 
@@ -36,13 +37,16 @@ export interface NoteSchemaOptions {
   questionView?: NodeViewRenderer;
   /** Draws Answers, e.g. with their status and a stop button. */
   answerView?: NodeViewRenderer;
+  /** Draws Citations, e.g. as badges that open the cited page. */
+  citationView?: NodeViewRenderer;
 }
 
 /**
  * What a Mind can hold, and how it is stored. Notes: headings, bold, italic,
  * strikethrough, lists, code blocks highlighted by lowlight, and inline and
  * block math rendered by KaTeX, each with an "include in Question context"
- * flag. Questions and Answers, top-level only. Every Block has a UUID. The
+ * flag. Questions and Answers, top-level only. Citations, inline in Answers
+ * and in whatever they are copied into. Every Block has a UUID. The
  * editor adds its interface on top (collaboration, menus, the drag handle);
  * tests use this alone.
  */
@@ -51,6 +55,7 @@ export function noteExtensions({
   codeBlockView,
   questionView,
   answerView,
+  citationView,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -75,6 +80,7 @@ export function noteExtensions({
     InlineMath.configure({ katexOptions: { throwOnError: false }, onClick }),
     Question.configure({ view: questionView ?? null }),
     Answer.configure({ view: answerView ?? null }),
+    Citation.configure({ view: citationView ?? null }),
     QuestionContextFlag,
     UniqueID.configure({ attributeName: BLOCK_ID_ATTRIBUTE, types: [...BLOCK_TYPES] }),
   ];

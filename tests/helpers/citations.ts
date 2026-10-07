@@ -1,0 +1,183 @@
+import type { MockLanguageModelV4 } from "ai/test";
+import { expect } from "vitest";
+import type { CitationAttributes, Core, CoreAdapters, CoreEvents, Document } from "../../src/core";
+import { createTempDataFolder, startCore } from "./core";
+import { addAndProcess, writeSourceFile } from "./documents";
+import { connectToMind, type MindClient } from "./mindClient";
+import { answerIn, question, writeMind } from "./minds";
+import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } from "./models";
+
+/** A Passage as the search Tool showed it to the model. */
+export interface ShownPassage {
+  id: string;
+  document: string;
+  /** "3" or "3-4"; null for a Document without pages. */
+  pages: string | null;
+  text: string;
+}
+
+/** The Passages in a search result (or in instructions), as the model reads them. */
+export function shownPassages(result: string): ShownPassage[] {
+  const passages: ShownPassage[] = [];
+  const pattern =
+    /<passage id="([^"]+)" document="([^"]*)"(?: pages="([^"]+)")?>\n([\s\S]*?)\n<\/passage>/g;
+  for (const match of result.matchAll(pattern)) {
+    passages.push({
+      id: match[1] as string,
+      document: match[2] as string,
+      pages: match[3] ?? null,
+      text: match[4] as string,
+    });
+  }
+  return passages;
+}
+
+/** What a citing model does, step by step: search, give its records, then answer. */
+export interface CitingPlan {
+  /** What it searches for. */
+  query: string;
+  /** Its records, from the Passages the search showed it. */
+  records(passages: ShownPassage[]): unknown[];
+  /** Its Answer, with markers. */
+  answer: string;
+  /** What it writes before searching: a preamble. */
+  preamble?: string;
+  /** Holds the Answer's stream back once `after` characters are out, until `until` resolves. */
+  pause?: { after: number; until: Promise<void> };
+}
+
+/** A model that calls Tools: it searches once, cites, then writes its Answer. */
+export function citingModel(plan: CitingPlan): MockLanguageModelV4 {
+  return scriptedModel((call: ModelCall): ScriptedReply => {
+    if (!call.tools.includes("search_documents")) return { text: "No Tools were offered." };
+    const searches = call.results.filter((result) => result.tool === "search_documents");
+    const cited = call.results.some((result) => result.tool === "cite");
+    if (searches.length === 0) {
+      return {
+        text: plan.preamble,
+        calls: [{ tool: "search_documents", input: { query: plan.query } }],
+      };
+    }
+    if (!cited) {
+      const passages = shownPassages(searches.at(-1)?.text ?? "");
+      return { calls: [{ tool: "cite", input: { citations: plan.records(passages) } }] };
+    }
+    return { text: plan.answer, pause: plan.pause };
+  });
+}
+
+/** What the model was told about its records: the result of its last `cite` call. */
+export function citeFeedback(model: MockLanguageModelV4): string {
+  const last = model.doStreamCalls.at(-1);
+  if (!last) throw new Error("The model wasn't asked anything.");
+  const texts: string[] = [];
+  for (const message of last.prompt) {
+    if (message.role !== "tool") continue;
+    for (const part of message.content) {
+      if (part.type === "tool-result" && part.toolName === "cite" && part.output.type === "text") {
+        texts.push(part.output.value);
+      }
+    }
+  }
+  return texts.at(-1) ?? "";
+}
+
+/** A file to add as a Document. */
+export interface SourceFile {
+  name: string;
+  contents: string | Uint8Array;
+}
+
+/**
+ * A core with a local chat model (no consent needed), the files added and
+ * processed as Documents, and a Mind with a client.
+ */
+export async function setUpWithDocuments(
+  model: MockLanguageModelV4,
+  files: readonly SourceFile[],
+  overrides: Partial<CoreAdapters> = {},
+) {
+  const folder = await createTempDataFolder();
+  const sources = await createTempDataFolder();
+  const models = scriptedModels(model);
+  const core = startCore(folder, { createChatModel: models.createChatModel, ...overrides });
+  await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  const paths = await Promise.all(
+    files.map((file) => writeSourceFile(sources, file.name, file.contents)),
+  );
+  const documents: Document[] = paths.length > 0 ? await addAndProcess(core, paths) : [];
+  const mind = await core.createMind({ title: "Tides" });
+  const client = await connectToMind(core, mind.id);
+  return { core, dataDir: folder, documents, mind, client, models };
+}
+
+/** Resolves with the next "answer.finished" or "answer.failed" event for this Answer. */
+export function answerEnded(
+  core: Core,
+  answerId: string,
+): Promise<
+  | { event: "finished"; payload: CoreEvents["answer.finished"] }
+  | { event: "failed"; payload: CoreEvents["answer.failed"] }
+> {
+  return new Promise((resolve) => {
+    const stops = [
+      core.on("answer.finished", (payload) => {
+        if (payload.answerId !== answerId) return;
+        for (const stop of stops) stop();
+        resolve({ event: "finished", payload });
+      }),
+      core.on("answer.failed", (payload) => {
+        if (payload.answerId !== answerId) return;
+        for (const stop of stops) stop();
+        resolve({ event: "failed", payload });
+      }),
+    ];
+  });
+}
+
+/** Writes a Question into the Mind and asks it; returns the Answer's id. */
+export async function askNew(
+  core: Core,
+  client: MindClient,
+  mindId: string,
+  text: string,
+): Promise<string> {
+  const asked = question(text);
+  writeMind(client, [asked]);
+  await client.settled();
+  const result = await core.askQuestion({ mindId, questionId: asked.attrs.id });
+  if (!result.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(result)}`);
+  return result.answerId;
+}
+
+/** Writes a Question into the Mind, asks it, and waits for its Answer to finish. */
+export async function askAndFinish(
+  core: Core,
+  client: MindClient,
+  mindId: string,
+  text: string,
+): Promise<{ answerId: string; finished: CoreEvents["answer.finished"] }> {
+  const answerId = await askNew(core, client, mindId, text);
+  const ended = await answerEnded(core, answerId);
+  if (ended.event !== "finished") {
+    throw new Error(`The Answer failed: ${JSON.stringify(ended.payload.error)}`);
+  }
+  // The core writes the Answer before it emits the event, and pushes each change to clients as it stores it.
+  return { answerId, finished: ended.payload };
+}
+
+/** The Citation nodes in an Answer, in order, as the editor reads them. */
+export function citationsIn(client: MindClient, answerId: string): CitationAttributes[] {
+  const found: CitationAttributes[] = [];
+  answerIn(client, answerId).descendants((node) => {
+    if (node.type.name === "citation") found.push(node.attrs as CitationAttributes);
+  });
+  return found;
+}
+
+/** Asserts there is exactly one Citation in the Answer and returns it. */
+export function onlyCitation(client: MindClient, answerId: string): CitationAttributes {
+  const citations = citationsIn(client, answerId);
+  expect(citations).toHaveLength(1);
+  return citations[0] as CitationAttributes;
+}

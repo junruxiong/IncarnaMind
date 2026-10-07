@@ -24,6 +24,7 @@ export * from "./api";
 export type { DataFlowDefinition, DataFlowRegistry } from "./consent";
 export { type Core, createCore, DATABASE_FILE } from "./core";
 export type { DocumentFile } from "./documents";
+export type { Reranker, SearchCandidate } from "./documents/searchTool";
 export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
 export {
   ChatNotReadyError,

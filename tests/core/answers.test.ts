@@ -25,6 +25,9 @@ import {
 } from "../helpers/models";
 import { startModelListStub, startOllamaStub, unusedLocalUrl } from "../helpers/ollama";
 
+/** What "answer.finished" says about Citations when there were no Documents to search. */
+const NO_CITATIONS = { citations: [], droppedMarkers: 0, droppedRecords: 0, citationSupport: null };
+
 /** A core with a local chat model set up (so no consent is needed), and a Mind with two clients. */
 async function setUp(model: MockLanguageModelV4, dataDir?: string) {
   const models = scriptedModels(model);
@@ -111,7 +114,7 @@ describe("Asking a Question", () => {
 
     const finished = nextEvent(core, "answer.finished");
     controlled.finish();
-    expect(await finished).toEqual({ mindId: mind.id, answerId, status: "done" });
+    expect(await finished).toEqual({ ...NO_CITATIONS, mindId: mind.id, answerId, status: "done" });
     expect(outline(reader)).toEqual(["question", "answer:done", "paragraph"]);
     expect(answerText(reader, answerId)).toBe("A Mind is a notebook.");
 
@@ -427,7 +430,12 @@ describe("Stopping and regenerating", () => {
     const finished = nextEvent(core, "answer.finished");
     await core.stopAnswer({ mindId: mind.id, answerId });
 
-    expect(await finished).toEqual({ mindId: mind.id, answerId, status: "stopped" });
+    expect(await finished).toEqual({
+      ...NO_CITATIONS,
+      mindId: mind.id,
+      answerId,
+      status: "stopped",
+    });
     expect(controlled.aborted).toBe(true);
     expect(answerIn(reader, answerId).attrs.status).toBe("stopped");
     expect(answerText(reader, answerId)).toBe("Once upon a time,");
@@ -738,7 +746,12 @@ describe("Editing while an Answer streams", () => {
     await writer.settled();
     controlled.push(" and more");
 
-    expect(await finished).toEqual({ mindId: mind.id, answerId, status: "stopped" });
+    expect(await finished).toEqual({
+      ...NO_CITATIONS,
+      mindId: mind.id,
+      answerId,
+      status: "stopped",
+    });
     expect(controlled.aborted).toBe(true);
     expect(outline(reader)).toEqual(["question", "paragraph"]);
   });
