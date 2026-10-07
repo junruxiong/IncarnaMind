@@ -117,6 +117,25 @@ export function pathsOpened(app: ElectronApplication) {
   return app.evaluate(() => (globalThis as { pathsOpened?: string[] }).pathsOpened ?? []);
 }
 
+/**
+ * Test hook for the system browser: from now on the main process records the
+ * URLs it would open (see `urlsOpened`), and opens nothing.
+ */
+export async function interceptOpenExternal(app: ElectronApplication) {
+  await app.evaluate(({ shell }) => {
+    const opened: string[] = [];
+    (globalThis as { urlsOpened?: unknown }).urlsOpened = opened;
+    shell.openExternal = async (url: string) => {
+      opened.push(url);
+    };
+  });
+}
+
+/** The URLs the intercepted system browser was asked to open. */
+export function urlsOpened(app: ElectronApplication) {
+  return app.evaluate(() => (globalThis as { urlsOpened?: string[] }).urlsOpened ?? []);
+}
+
 /** Opens the empty Document viewer panel through the test hook. */
 export async function openViewer(window: Page): Promise<void> {
   await window.evaluate(() => {
