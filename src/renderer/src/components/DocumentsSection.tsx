@@ -2,21 +2,19 @@ import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentFailureReason, DocumentStatus } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import { endSidebarDrag, startSidebarDrag } from "../folders";
 import { useT } from "../i18n";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { DocumentFileMenu } from "./DocumentFileMenu";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
-import { FolderTree, type NewFolderPlace, rowInputClass, useDropTarget } from "./FolderTree";
+import { FolderTree } from "./FolderTree";
 import { DocumentLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
-import { MoveToMenu } from "./MoveToMenu";
 import {
-  dropTargetClass,
   rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
   rowClass,
   rowIconClass,
+  rowInputClass,
   rowPadding,
 } from "./sidebarRows";
 import {
@@ -70,12 +68,14 @@ const isProcessing = (status: DocumentStatus) =>
 
 /**
  * The sidebar's Documents: under the "Documents" label (with the Tag filter,
- * a new Folder and adding files), the tree of Folders with their Documents,
- * then the Documents in no Folder. Each Document is one row: its name and,
- * while it's processed or if it failed, its status at the end. Its Tags are
- * in its Tags menu, and the Tags dialog. Dropping files anywhere on the window
- * adds them too (see `FileDrop`). Documents are filed by dragging them onto a
- * Folder or with "Move to…". Clicking a Document opens it in the viewer.
+ * "Add folder…" to link a folder and adding files), each Linked folder with
+ * its Folders as on disk, then "Other Documents", the files added on their
+ * own (see `FolderTree`). Each Document is one row: its name and, while it's
+ * processed or if it failed, its status at the end. Its Tags are in its Tags
+ * menu, and the Tags dialog; its "More" menu renames it, opens its file or
+ * shows it in its folder, and deletes it. Dropping files anywhere on the
+ * window adds them too (see `FileDrop`). Clicking a Document opens it in the
+ * viewer.
  */
 export function DocumentsSection() {
   const t = useT();
@@ -84,10 +84,9 @@ export function DocumentsSection() {
   const filtering = useAppStore((state) => state.tagFilter !== null);
   const hasFolders = useAppStore((state) => state.folders.length > 0);
   const addDocuments = useAppStore((state) => state.addDocuments);
+  const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
-  const [newFolderIn, setNewFolderIn] = useState<NewFolderPlace>(undefined);
-  const topLevel = useDropTarget(null);
 
   const addPicked = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
@@ -95,17 +94,14 @@ export function DocumentsSection() {
     if (picked.length > 0) void addDocuments(picked);
   };
 
-  const empty = documents.length === 0 && (filtering || !hasFolders) && newFolderIn === undefined;
+  // A Linked folder shows even before its first Document, unless a filter hides it.
+  const empty = documents.length === 0 && (filtering || !hasFolders);
 
   return (
     <section aria-labelledby="documents-heading">
-      {/* The label is also where a Document or Folder is dropped to go to the top level. */}
       <div
         data-testid="documents-heading-row"
-        {...topLevel.handlers}
-        className={`mt-3 flex h-7 shrink-0 items-end justify-between rounded-md pr-1 pb-0.5 pl-2 ${
-          topLevel.over ? dropTargetClass : ""
-        }`}
+        className="mt-3 flex h-7 shrink-0 items-end justify-between rounded-md pr-1 pb-0.5 pl-2"
       >
         <h2 id="documents-heading" className="pb-0.5 text-label font-semibold text-ink-meta">
           {t("documents.title")}
@@ -114,10 +110,10 @@ export function DocumentsSection() {
           <TagFilterMenu />
           <button
             type="button"
-            data-testid="new-folder"
-            aria-label={t("folders.new")}
-            title={t("folders.new")}
-            onClick={() => setNewFolderIn(null)}
+            data-testid="add-linked-folder"
+            aria-label={t("linkedFolders.add")}
+            title={t("linkedFolders.add")}
+            onClick={() => void addLinkedFolder()}
             className={rowActionButtonClass}
           >
             <FolderPlusLineIcon className="size-4" />
@@ -147,9 +143,6 @@ export function DocumentsSection() {
       <FolderTree
         documents={documents}
         filtering={filtering}
-        newFolderIn={newFolderIn}
-        onNewFolder={setNewFolderIn}
-        onNewFolderDone={() => setNewFolderIn(undefined)}
         renderDocument={(item, depth) => (
           <DocumentRow key={item.id} item={item} depth={depth} onDelete={() => setDeleting(item)} />
         )}
@@ -166,8 +159,8 @@ export function DocumentsSection() {
 
 /**
  * A Document's row: its icon and name, and its status at the end while it's
- * processed or if it failed. Pointed at, it offers its Tags, "Move to…" and
- * a menu for the rest. Dragged, it can be dropped on a Folder.
+ * processed or if it failed. Pointed at, it offers its Tags and a menu for
+ * the rest. It is in the Folder its file is in, so there is no moving it here.
  */
 function DocumentRow({
   item,
@@ -192,10 +185,8 @@ function DocumentRow({
       data-folder-id={item.folderId ?? ""}
       data-depth={depth}
       data-status={item.status}
+      data-file-status={item.fileStatus}
       data-tagging={item.tagging}
-      draggable={!renaming}
-      onDragStart={(event) => startSidebarDrag(event, { kind: "document", id: item.id })}
-      onDragEnd={endSidebarDrag}
       className={rowClass(isOpen, muted ? "muted" : "item")}
     >
       {renaming ? (
@@ -227,7 +218,6 @@ function DocumentRow({
       {!renaming && (
         <div className={rowActionsClass}>
           <DocumentTagMenu item={item} buttonClassName={rowActionButtonClass} />
-          <MoveToMenu item={item} buttonClassName={rowActionButtonClass} />
           <DocumentFileMenu
             item={item}
             buttonClassName={rowActionButtonClass}

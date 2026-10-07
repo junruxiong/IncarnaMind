@@ -51,7 +51,7 @@ export function createProcessor(
   function lose(lost: Worker, message: string): void {
     if (worker !== lost) return;
     worker = undefined;
-    if (current) finish(current.id, { outcome: "failed", reason: "processing-error", message });
+    if (current) finish(current.id, { outcome: "crashed", message });
   }
 
   function startWorker(): Worker {

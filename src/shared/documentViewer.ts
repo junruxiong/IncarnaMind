@@ -1,9 +1,10 @@
 /**
  * Names shared by the main process and the renderer for the Document viewer.
  *
- * The main process serves each live Document's stored file at
- * `incarnamind-document://<documentId>/`, streamed from the data folder, so
- * whole files never cross IPC.
+ * The main process serves each live Document's file at
+ * `incarnamind-document://<documentId>/`, streamed from where the User keeps
+ * it, so whole files never cross IPC. A Document whose file is missing or
+ * can't be reached gets a 404; its kept text comes from `readDocumentText`.
  */
 
 import type { CitationCheck } from "../core/api";

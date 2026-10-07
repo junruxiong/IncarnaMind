@@ -1,6 +1,8 @@
+import { rename, rm } from "node:fs/promises";
+import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import type { Core, CoreAdapters, Document, Reranker, SearchScope } from "../../src/core";
+import type { Core, CoreAdapters, Document, Folder, Reranker, SearchScope } from "../../src/core";
 import { translate } from "../../src/shared/i18n";
 import {
   answerEnded,
@@ -10,6 +12,7 @@ import {
   shownPassages,
 } from "../helpers/citations";
 import { startCore } from "../helpers/core";
+import { createSourceFolder, linkAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import {
   answerIn,
@@ -23,17 +26,24 @@ import {
 import { type ModelCall, promptOf, scriptedModel } from "../helpers/models";
 
 /**
- * The library: a Folder tree Coast › Rivers › Deltas, a Kitchen Folder, a Tag,
- * and two unfiled Documents. Every Document mentions tides, so a search for
+ * The library: a Linked folder with the folders Coast › Rivers › Deltas,
+ * Kitchen, and Empty (whose only file has gone missing), a Tag, and two
+ * files added on their own. Every Document mentions tides, so a search for
  * tides would find each of them.
  */
-const FILES = [
-  { name: "Harbour.txt", contents: "Harbour tides rise twice a day along the quay.\n" },
-  { name: "Estuary.txt", contents: "Estuary tides push salt water up the river.\n" },
-  { name: "Delta.txt", contents: "Delta tides spread across the mud flats.\n" },
+const LINKED = [
+  { name: "Coast/Harbour.txt", contents: "Harbour tides rise twice a day along the quay.\n" },
+  { name: "Coast/Rivers/Estuary.txt", contents: "Estuary tides push salt water up the river.\n" },
+  { name: "Coast/Rivers/Deltas/Delta.txt", contents: "Delta tides spread across the mud flats.\n" },
+  {
+    name: "Kitchen/Recipes.txt",
+    contents: "Cook mussels at low tides, with garlic and white wine.\n",
+  },
+  { name: "Empty/Gone.txt", contents: "These tides went with the file.\n" },
+];
+const SINGLES = [
   { name: "Moon.txt", contents: "The Moon's pull raises the tides on both sides of the Earth.\n" },
   { name: "Almanac.txt", contents: "The almanac lists the times of the tides for the year.\n" },
-  { name: "Recipes.txt", contents: "Cook mussels at low tides, with garlic and white wine.\n" },
 ];
 
 const ALL = ["Almanac", "Delta", "Estuary", "Harbour", "Moon", "Recipes"];
@@ -59,22 +69,20 @@ async function setUpLibrary(model: MockLanguageModelV4 = searchingModel()) {
     searches.push([...new Set(candidates.map((candidate) => candidate.documentName))].sort());
     return [...candidates];
   };
-  const setup = await setUpWithDocuments(model, FILES, { reranker });
+  const setup = await setUpWithDocuments(model, SINGLES, { reranker });
   const { core } = setup;
+  const library = await createSourceFolder();
+  for (const file of LINKED) await writeSourceFile(library, file.name, file.contents);
+  const linked = await linkAndProcess(core, library);
+  await rm(join(library, "Empty", "Gone.txt"));
+  await core.reconcileDocuments();
   const documents = Object.fromEntries(
-    setup.documents.map((document) => [document.name, document]),
+    [...setup.documents, ...linked].map((document) => [document.name, document]),
   ) as Record<string, Document>;
   const id = (name: string) => (documents[name] as Document).id;
-
-  const coast = await core.createFolder({ name: "Coast" });
-  const rivers = await core.createFolder({ name: "Rivers", parentId: coast.id });
-  const deltas = await core.createFolder({ name: "Deltas", parentId: rivers.id });
-  const kitchen = await core.createFolder({ name: "Kitchen" });
-  const empty = await core.createFolder({ name: "Empty" });
-  await core.moveDocument(id("Harbour"), coast.id);
-  await core.moveDocument(id("Estuary"), rivers.id);
-  await core.moveDocument(id("Delta"), deltas.id);
-  await core.moveDocument(id("Recipes"), kitchen.id);
+  const folders = await core.listFolders();
+  const folder = (relativePath: string) =>
+    folders.find((each) => each.relativePath === relativePath) as Folder;
   const astronomy = await core.createTag({ name: "Astronomy" });
   await core.addDocumentTag(id("Moon"), astronomy.id);
 
@@ -83,9 +91,23 @@ async function setUpLibrary(model: MockLanguageModelV4 = searchingModel()) {
     searches,
     reranker,
     id,
-    folders: { coast, rivers, deltas, kitchen, empty },
+    library,
+    path: (name: string) => (documents[name] as Document).path,
+    folders: {
+      coast: folder("Coast"),
+      rivers: folder("Coast/Rivers"),
+      deltas: folder("Coast/Rivers/Deltas"),
+      kitchen: folder("Kitchen"),
+      empty: folder("Empty"),
+    },
     tags: { astronomy },
   };
+}
+
+/** Renames the Kitchen folder on disk: its Folder goes, and its Documents move to a new one. */
+async function renameKitchen(core: Core, library: string): Promise<void> {
+  await rename(join(library, "Kitchen"), join(library, "Cookery"));
+  await core.reconcileDocuments();
 }
 
 /** Writes a Question with a Search scope, asks it, and waits for its Answer. */
@@ -163,10 +185,10 @@ describe("Resolving a Search scope", { timeout: 30_000 }, () => {
   });
 
   test("deleted Folders, Tags and Documents are ignored", async () => {
-    const { core, client, mind, searches, folders, tags, id } = await setUpLibrary();
+    const { core, client, mind, searches, folders, tags, id, library } = await setUpLibrary();
     const comets = await core.createTag({ name: "Comets" });
     await core.addDocumentTag(id("Almanac"), comets.id);
-    await core.deleteFolder(folders.kitchen.id);
+    await renameKitchen(core, library);
     await core.deleteTag(comets.id);
     await core.deleteDocument(id("Harbour"));
 
@@ -176,14 +198,29 @@ describe("Resolving a Search scope", { timeout: 30_000 }, () => {
       documentIds: [id("Harbour")],
     });
 
-    // Recipes was unfiled with the Kitchen Folder; Almanac lost the deleted Tag.
+    // Recipes left with the Kitchen folder's name; Almanac lost the deleted Tag.
     expect(searches).toEqual([["Delta", "Moon"]]);
   });
 
-  test("the scope is resolved when the Question is asked: Documents filed since are in it, those moved out aren't", async () => {
-    const { core, client, mind, searches, folders, id } = await setUpLibrary();
-    await core.moveDocument(id("Almanac"), folders.deltas.id);
-    await core.moveDocument(id("Estuary"), null);
+  test("a missing Document is left out, even when the scope names it", async () => {
+    const { core, client, mind, searches, folders, id, path } = await setUpLibrary();
+    await rm(path("Delta"));
+    await core.reconcileDocuments();
+
+    await askScoped(core, client, mind.id, {
+      folderIds: [folders.rivers.id],
+      documentIds: [id("Delta")],
+    });
+
+    expect(searches).toEqual([["Estuary"]]);
+  });
+
+  test("the scope is resolved when the Question is asked: Documents moved in since are in it, those moved out aren't", async () => {
+    const { core, client, mind, searches, folders, library, path } = await setUpLibrary();
+    // Files moved on disk: one added on its own into Deltas, Estuary out of Rivers.
+    await rename(path("Almanac"), join(library, "Coast/Rivers/Deltas/Almanac.txt"));
+    await rename(path("Estuary"), join(library, "Kitchen/Estuary.txt"));
+    await core.reconcileDocuments();
 
     await askScoped(core, client, mind.id, { folderIds: [folders.rivers.id] });
 
@@ -212,8 +249,8 @@ describe("A Search scope with no Documents to search", { timeout: 30_000 }, () =
 
   test("a scope whose Folders, Tags and Documents were all deleted is empty, not every Document", async () => {
     const model = searchingModel();
-    const { core, client, mind, searches, folders, id } = await setUpLibrary(model);
-    await core.deleteFolder(folders.kitchen.id);
+    const { core, client, mind, searches, folders, id, library } = await setUpLibrary(model);
+    await renameKitchen(core, library);
     await core.deleteDocument(id("Almanac"));
 
     const { answerId } = await askScoped(core, client, mind.id, {
@@ -395,8 +432,9 @@ describe("The Documents an Answer is told about", { timeout: 60_000 }, () => {
     const { core, client, mind, folders } = await setUpLibrary(model);
 
     const all = await askScoped(core, client, mind.id, {}, "Which documents do I have?");
+    // The Linked folder's were added last, newest file first; the missing one isn't named.
     expect(answerText(client, all.answerId)).toBe(
-      "You have Recipes, Almanac, Moon, Delta, Estuary, Harbour.",
+      "You have Harbour, Estuary, Delta, Recipes, Almanac, Moon.",
     );
 
     const rivers = await askScoped(
@@ -406,7 +444,7 @@ describe("The Documents an Answer is told about", { timeout: 60_000 }, () => {
       { folderIds: [folders.rivers.id] },
       "Which documents do I have?",
     );
-    expect(answerText(client, rivers.answerId)).toBe("You have Delta, Estuary.");
+    expect(answerText(client, rivers.answerId)).toBe("You have Estuary, Delta.");
     // No Document outside the scope is named.
     const scoped = promptOf(model, 1)[0]?.text ?? "";
     expect(scoped).toContain("limited this Question to 2 Documents");
@@ -427,11 +465,11 @@ describe("The Documents an Answer is told about", { timeout: 60_000 }, () => {
       "Compare Harbour with Estuary.",
     );
 
-    expect(answerText(client, answerId)).toBe("Compared Estuary and Harbour.");
+    expect(answerText(client, answerId)).toBe("Compared Harbour and Estuary.");
     const calls = JSON.parse(answerIn(client, answerId).attrs.toolCalls as string) as {
       input: { query: string };
     }[];
-    expect(calls.map((call) => call.input.query)).toEqual(["Estuary", "Harbour"]);
+    expect(calls.map((call) => call.input.query)).toEqual(["Harbour", "Estuary"]);
     expect(shownDocuments(model)).toEqual(expect.arrayContaining(["Estuary", "Harbour"]));
   });
 

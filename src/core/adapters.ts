@@ -9,6 +9,7 @@ import type { ChildProcess } from "node:child_process";
 import type { AnswerEngine } from "./answers/engine";
 import type { SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
+import type { WatchFolder } from "./documents/watcher";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
@@ -16,9 +17,10 @@ import type { RerankingModelFactory } from "./providers/rerank";
 
 export interface Paths {
   /**
-   * The app data folder. It holds the SQLite database, the secrets file and, in
-   * later tickets, Document files, Skills, the embedding model (`models/`) and logs.
-   * Backing up means copying this one folder.
+   * The app data folder. It holds the SQLite database, the secrets file,
+   * Skills, the embedding model (`models/`) and logs. Documents stay where
+   * the User keeps them (ADR-0010): backing up this folder backs up the
+   * Minds, the index and settings, not the Documents' files.
    */
   dataDir: string;
   /**
@@ -29,9 +31,8 @@ export interface Paths {
    */
   builtInSkills?: string;
   /**
-   * Where each Skill script run gets its own temporary working folder, removed
-   * when the run ends, and where Documents are copied to be opened in another
-   * app. Defaults to the OS's temporary folder.
+   * Where each Skill script run gets its own temporary working folder,
+   * removed when the run ends. Defaults to the OS's temporary folder.
    */
   tempDir?: string;
 }
@@ -82,6 +83,33 @@ export interface Keychain {
 /** Opens a URL in the User's default browser, e.g. for a Connector's OAuth sign-in. */
 export interface Browser {
   open(url: string): Promise<void>;
+}
+
+/**
+ * Hands the User's own files to the OS: a Document's file opened in its
+ * default app, or shown selected in the file manager. The desktop app uses
+ * Electron's `shell`. The core passes only paths of live Documents.
+ */
+export interface FileShell {
+  /** Opens a file in the default app for its type. Rejects if the OS can't. */
+  openPath(path: string): Promise<void>;
+  /** Shows a file selected in the system's file manager (Finder, Explorer). */
+  showItemInFolder(path: string): void;
+}
+
+/** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
+export interface LinkedFolderOptions {
+  /** How long a changed path must stay unchanged before it is read, in ms. Defaults to 300. */
+  settleMs?: number;
+  /** How often unreachable folders and unreadable files are tried again, in ms. Defaults to 30 seconds. */
+  retryMs?: number;
+  /**
+   * Whether files with a size but no block stored on disk count as cloud
+   * placeholders (dataless files). Defaults to true on macOS only.
+   */
+  detectDatalessFiles?: boolean;
+  /** Starts watching a folder. Defaults to `fs.watch` in recursive mode; tests may pass a fake. */
+  watch?: WatchFolder;
 }
 
 export interface SpawnOptions {
@@ -194,6 +222,13 @@ export interface CoreAdapters {
   systemLanguages(): readonly string[];
   keychain: Keychain;
   browser: Browser;
+  /**
+   * Opens Documents' files in other apps and shows them in the file manager.
+   * Absent (tests that don't need it): both are refused.
+   */
+  shell?: FileShell;
+  /** How Linked folders are watched (see `LinkedFolderOptions`). */
+  linkedFolders?: LinkedFolderOptions;
   processes: ProcessLauncher;
   /** What Skill scripts run with (see `ScriptRuntimes`); the defaults suit the desktop app. */
   scriptRuntimes?: ScriptRuntimes;

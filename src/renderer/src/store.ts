@@ -6,6 +6,7 @@ import type {
   EmbeddingModelStatus,
   EmbeddingSettings,
   Folder,
+  LinkedFolder,
   Mind,
   Settings,
   SettingsPatch,
@@ -67,8 +68,13 @@ interface AppState {
   settingsOpen: boolean;
   /** The page Settings shows. */
   settingsPage: SettingsPage;
-  /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
+  /**
+   * Every Folder of every Linked folder, flat, in name order: each Linked
+   * folder's own Folder and those inside it. The sidebar builds the tree from each `parentId`.
+   */
   folders: Folder[];
+  /** The Linked folders, in path order. Set once loaded, then follows the core's event. */
+  linkedFolders: LinkedFolder[];
   /** Every Tag, in name order. */
   tags: Tag[];
   /** The Tag whose Documents the sidebar shows. Null: any. */
@@ -123,12 +129,8 @@ interface AppState {
   downloadEmbeddingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
-  /** Files a Document in a Folder, or unfiles it with null. */
-  moveDocument(documentId: string, folderId: string | null): Promise<void>;
-  createFolder(name: string, parentId: string | null): Promise<void>;
-  renameFolder(id: string, name: string): Promise<void>;
-  moveFolder(id: string, parentId: string | null): Promise<void>;
-  deleteFolder(id: string): Promise<void>;
+  /** Asks for a folder with the system's folder picker, and links it. */
+  addLinkedFolder(): Promise<void>;
   /** Shows only the Documents with a Tag; null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -217,6 +219,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
+    linkedFolders: [],
     tags: [],
     tagFilter: null,
     filteredDocumentIds: null,
@@ -235,6 +238,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           tags,
           skills,
           embedding,
+          linkedFolders,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -245,11 +249,13 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listTags(),
           core.listSkills(),
           core.getEmbeddingSettings(),
+          core.listLinkedFolders(),
         ]);
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
         const active = settings.device.activeMind;
         set({
+          linkedFolders,
           minds,
           tabs,
           openMindId: active !== null && tabs.includes(active) ? active : (tabs[0] ?? null),
@@ -436,31 +442,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         set({ embedding: await core.retryEmbedding() });
       }),
 
-    // The lists follow the core's "documents.moved" and "folders.changed" events, which
-    // arrive before these calls return.
-    moveDocument: (documentId, folderId) =>
+    // Its Documents, Folders and progress arrive with the core's events.
+    addLinkedFolder: () =>
       attempt(async () => {
-        await core.moveDocument(documentId, folderId);
-      }),
-
-    createFolder: (name, parentId) =>
-      attempt(async () => {
-        await core.createFolder({ name, parentId });
-      }),
-
-    renameFolder: (id, name) =>
-      attempt(async () => {
-        await core.renameFolder(id, name);
-      }),
-
-    moveFolder: (id, parentId) =>
-      attempt(async () => {
-        await core.moveFolder(id, parentId);
-      }),
-
-    deleteFolder: (id) =>
-      attempt(async () => {
-        await core.deleteFolder(id);
+        const path = await files.pickLinkedFolder();
+        if (path) await core.addLinkedFolder(path);
       }),
 
     async filterByTag(tagId) {
@@ -586,7 +572,18 @@ core.on("embedding.changed", (embedding) => useAppStore.setState({ embedding }))
 // Folders change through this window or another: follow the list. The sidebar's tree follows it.
 core.on("folders.changed", (folders) => useAppStore.setState({ folders }));
 
-// Documents moved between Folders, or unfiled by a Folder's deletion.
+// Linked folders added, removed, or scanning, paused, out of reach, or making progress.
+core.on("linkedFolders.changed", (linkedFolders) => useAppStore.setState({ linkedFolders }));
+
+// Documents removed from the index, e.g. with their Linked folder.
+core.on("documents.removed", (removed) => {
+  const gone = new Set(removed);
+  useAppStore.setState((state) => ({
+    documents: state.documents.filter((each) => !gone.has(each.id)),
+  }));
+});
+
+// Documents whose files moved to another Folder on disk.
 core.on("documents.moved", (moved) => {
   useAppStore.setState((state) => ({
     documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),

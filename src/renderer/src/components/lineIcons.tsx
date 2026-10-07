@@ -61,12 +61,12 @@ export function FolderPlusLineIcon(props: IconProps) {
   );
 }
 
-/** Into a Folder: a folder with an arrow. */
-export function MoveToLineIcon(props: IconProps) {
+/** Other Documents, the files added on their own: two pages, one behind the other. */
+export function LooseDocumentsLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
-      <path d={FOLDER} />
-      <path d="M9 13h6M13 10.5l2.5 2.5-2.5 2.5" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h5l4 4v10a2 2 0 0 1-2 2h-1" />
+      <path d="M7 7h5l4 4v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" />
     </LineIcon>
   );
 }

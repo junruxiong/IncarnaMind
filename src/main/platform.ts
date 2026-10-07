@@ -10,6 +10,7 @@ import {
   BUILT_IN_SKILLS_SOURCE,
   type CoreAdapters,
   type CrashReporter,
+  type FileShell,
   type Keychain,
   type Logger,
 } from "../core";
@@ -51,6 +52,21 @@ export const systemBrowser: Browser = {
       throw new Error(`Refusing to open a ${protocol} URL in the browser.`);
     }
     await shell.openExternal(url);
+  },
+};
+
+/**
+ * Documents' files, opened in their default app or shown in the file
+ * manager, where the User keeps them. `shell` is looked up at each call, so
+ * the smoke tests can stand in for it.
+ */
+const fileShell: FileShell = {
+  async openPath(path) {
+    const error = await shell.openPath(path);
+    if (error) throw new Error(error);
+  },
+  showItemInFolder(path) {
+    shell.showItemInFolder(path);
   },
 };
 
@@ -120,6 +136,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
+    shell: fileShell,
     processes: loginShellProcesses,
     // JavaScript Skill scripts run on Electron's own Node, as plain Node: nothing to install.
     scriptRuntimes: {

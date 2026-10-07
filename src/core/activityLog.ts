@@ -4,7 +4,7 @@
  *
  * Entries are built from the core's own events, field by field, so nothing
  * but what is picked here reaches the log: ids, statuses, kinds and counts.
- * Never a Document's name or text, Mind content, a Question or an Answer, nor
+ * Never a Document's name, path or text, Mind content, a Question or an Answer, nor
  * the messages providers and Connectors send back, which can quote any of
  * them, or a key.
  */
@@ -34,6 +34,7 @@ export interface ActivityLog {
 export function logActivity(events: EventSource, log: Logger): ActivityLog {
   /** What was last logged about each Document, Connector…, so only changes are logged. */
   const documents = new Map<string, string>();
+  const files = new Map<string, string>();
   const tagging = new Map<string, string>();
   const connectors = new Map<string, string>();
   const signIns = new Map<string, string>();
@@ -48,6 +49,11 @@ export function logActivity(events: EventSource, log: Logger): ActivityLog {
   };
 
   const onDocument = (document: Document) => {
+    // Its file went missing, can't be reached, or is back: by status, never by path.
+    const knownFile = files.get(document.id);
+    if (changed(files, document.id, document.fileStatus) && knownFile !== undefined) {
+      log.info("document.file", { documentId: document.id, file: document.fileStatus });
+    }
     const first = !documents.has(document.id);
     if (!changed(documents, document.id, document.status)) return;
     const fields = { documentId: document.id, kind: document.kind };
@@ -123,6 +129,7 @@ export function logActivity(events: EventSource, log: Logger): ActivityLog {
   return {
     documentDeleted(documentId) {
       documents.delete(documentId);
+      files.delete(documentId);
       tagging.delete(documentId);
       log.info("document.deleted", { documentId });
     },

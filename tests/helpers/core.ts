@@ -62,9 +62,10 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
 
 /**
  * Starts the core on `dataDir` with test adapters: an English OS, an in-memory
- * keychain, no browser or processes, and the deterministic fake embedding
- * model, which has no files to download. Closed when the current test
- * finishes; call `close()` yourself to simulate quitting the app.
+ * keychain, no browser, shell or processes, the deterministic fake embedding
+ * model, which has no files to download, and Linked folders that settle
+ * quickly. Closed when the current test finishes; call `close()` yourself to
+ * simulate quitting the app.
  */
 export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}): Core {
   const core = createCore({
@@ -87,6 +88,8 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
     ...overrides,
+    // Linked folders settle and retry quickly in tests.
+    linkedFolders: { settleMs: 30, retryMs: 300, ...overrides.linkedFolders },
   });
   onTestFinished(() => core.close());
   return core;
