@@ -49,16 +49,19 @@ export function MindPane() {
 
       <div className="flex-grow overflow-auto rounded-tl-[6px] bg-white">
         {mind ? (
-          // Keyed, so switching Minds starts a fresh title field and editor.
+          // Keyed, so switching Minds starts a fresh title field and editor. Every text
+          // in it starts at one edge (styles.css, `.mind-column`).
           <article
             key={mind.id}
             data-testid="mind-pane"
             data-mind-id={mind.id}
-            className="mt-2 px-10 pb-24"
+            className="mind-column"
           >
-            <MindTitle mind={mind} />
-            <ChatReadinessNotice />
-            <MindEditor mindId={mind.id} />
+            <div className="mind-measure">
+              <MindTitle mind={mind} />
+              <ChatReadinessNotice />
+              <MindEditor mindId={mind.id} />
+            </div>
           </article>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-10 text-center">
@@ -95,7 +98,7 @@ function MindTitle({ mind }: { mind: Mind }) {
   };
 
   return (
-    <h1 className="mt-4">
+    <h1 className="mind-title">
       <input
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
@@ -108,7 +111,6 @@ function MindTitle({ mind }: { mind: Mind }) {
           void renameMind(mind.id, event.target.value);
         }}
         onKeyDown={moveIntoContent}
-        className="w-full bg-transparent p-3 text-3xl font-medium text-gray-800 outline-none placeholder:text-gray-400"
       />
     </h1>
   );

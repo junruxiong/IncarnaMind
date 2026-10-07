@@ -2,7 +2,7 @@ import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tipt
 import { useT } from "../i18n";
 import { CODE_LANGUAGES } from "./codeLanguages";
 
-/** A code block with its language picker in the top-right corner, like the old editor's. */
+/** A code block with its language picker in the top-right corner. */
 export function CodeBlockView({ node, updateAttributes }: ReactNodeViewProps) {
   const t = useT();
   const language = typeof node.attrs.language === "string" ? node.attrs.language : "";

@@ -119,9 +119,9 @@ function SlashMenuList({ items, query, command, ref }: SlashMenuListProps) {
       role="listbox"
       data-testid="slash-menu"
       aria-label={t("editor.slash.label")}
-      className="editor-menu max-h-[300px] w-[220px] overflow-y-auto"
+      className="editor-menu max-h-[320px] w-[240px] overflow-y-auto"
     >
-      {shown.length === 0 && <p className="px-2 py-1 text-gray-500">{t("editor.slash.empty")}</p>}
+      {shown.length === 0 && <p className="editor-menu-empty">{t("editor.slash.empty")}</p>}
       {shown.map((item, index) => (
         <button
           key={item.id}
