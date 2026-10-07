@@ -23,7 +23,7 @@ import {
   primaryButtonClass,
   successTextClass,
 } from "../ui";
-import { testErrorKey } from "./shared";
+import { testErrorKey, useProviderKey } from "./shared";
 
 /** Providers set up with a key or a server URL. Ollama has its own one-click card. */
 const formKinds = [
@@ -64,7 +64,8 @@ export function ProviderForm({
   const t = useT();
   const id = useId();
   const [kind, setKind] = useState<FormKind | null>(null);
-  const [apiKey, setApiKey] = useState("");
+  const key = useProviderKey();
+  const { apiKey } = key;
   const [baseUrl, setBaseUrl] = useState("");
   const [modelId, setModelId] = useState("");
   const [busy, setBusy] = useState<"testing" | "saving" | null>(null);
@@ -87,6 +88,8 @@ export function ProviderForm({
     (!keyRequired || hasKey);
 
   const choose = (next: FormKind) => {
+    // A key typed for one provider is never sent to another.
+    if (next !== kind) key.clear();
     setKind(next);
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModels[next] : current,
@@ -116,7 +119,7 @@ export function ProviderForm({
         setTest(await core.testChatConnection(request));
       } else {
         const provider = await core.saveChatProvider(request);
-        setApiKey("");
+        key.clear();
         onSaved(provider);
       }
     } catch (failure) {
@@ -184,6 +187,7 @@ export function ProviderForm({
                 required
                 value={baseUrl}
                 onChange={(event) => setBaseUrl(event.target.value)}
+                onBlur={() => key.leftAddress(baseUrl)}
                 placeholder="https://"
                 spellCheck={false}
                 className={inputClass}
@@ -197,7 +201,7 @@ export function ProviderForm({
             <input
               type="password"
               value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
+              onChange={(event) => key.type(event.target.value, baseUrl)}
               autoComplete="off"
               spellCheck={false}
               className={inputClass}

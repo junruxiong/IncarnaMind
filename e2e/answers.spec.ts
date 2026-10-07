@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createDataFolder,
   dismissChatSetup,
+  dragBlock,
   launchApp,
   removeDataFolder,
   slideToHandle,
@@ -92,5 +93,56 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await expect(notReady).toBeVisible();
   await expect(notReady).toContainText("needs a chat model");
   await expect(editor.getByTestId("answer")).toHaveCount(0);
+  await app.close();
+});
+
+test("after asking, the cursor goes below the Answer; a Question and its Answer are dragged and deleted together", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type("Intro");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("## Later");
+  // Clicking right of "Intro" puts the cursor at its end, once the editor has seen it.
+  const intro = editor.locator(":scope > p").first();
+  await intro.click();
+  await expect(intro).toHaveClass(/has-focus/);
+  await window.keyboard.press("Enter");
+
+  // A Question between a Note and a heading: its Answer isn't the last Block.
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("What is IncarnaMind?");
+  await window.keyboard.press("Enter");
+  const answer = editor.getByTestId("answer");
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+
+  // What is typed next goes on a new line under the Answer, not into the Question.
+  await window.keyboard.type("Next thought");
+  const question = editor.getByTestId("question");
+  await expect(question.locator(".question-text")).toHaveText("What is IncarnaMind?");
+  const blocks = editor.locator(":scope > *");
+  const order = () =>
+    blocks.evaluateAll((all) =>
+      all.map((block) =>
+        block.matches(".node-question")
+          ? "question"
+          : block.matches(".node-answer")
+            ? "answer"
+            : (block.textContent ?? "").trim(),
+      ),
+    );
+  await expect.poll(order).toEqual(["Intro", "question", "answer", "Next thought", "Later"]);
+
+  // Dragging the Question to the top takes its Answer along.
+  await dragBlock(window, question, intro);
+  await expect.poll(order).toEqual(["question", "answer", "Intro", "Next thought", "Later"]);
+
+  // Deleting the Question from its menu deletes its Answer too.
+  await (await slideToHandle(window, question)).click();
+  await window.getByTestId("block-menu-delete").click();
+  await expect.poll(order).toEqual(["Intro", "Next thought", "Later"]);
   await app.close();
 });

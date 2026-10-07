@@ -1,13 +1,14 @@
 import type { ComputePositionConfig, VirtualElement } from "@floating-ui/dom";
 import { isMacOS } from "@tiptap/core";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
+import { NodeRangeSelection } from "@tiptap/extension-node-range";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { useT } from "../i18n";
-import { findBlock } from "./blockCommands";
+import { findBlock, questionWithAnswer } from "./blockCommands";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 import { Popover } from "./Popover";
 
@@ -86,6 +87,47 @@ export function BlockHandle({ editor }: { editor: Editor }) {
   const hovered = useRef<{ node: ProseMirrorNode; pos: number } | null>(null);
   const grip = useRef<HTMLButtonElement>(null);
   const [menuFor, setMenuFor] = useState<MenuTarget | null>(null);
+
+  // A Question and the Answer right after it are dragged as one. This runs
+  // after the handle's own dragstart (it listens on the document), so it
+  // replaces what Tiptap set up: the selection a move deletes, what is dropped,
+  // and the picture under the pointer.
+  useEffect(() => {
+    const dragWithAnswer = (event: DragEvent) => {
+      const block = hovered.current;
+      if (!(event.target instanceof Element) || !event.target.closest(".block-handle")) return;
+      if (!block || editor.isDestroyed) return;
+      const pair = questionWithAnswer(editor.state.doc, block.pos);
+      if (!pair) return;
+      const selection = NodeRangeSelection.create(editor.state.doc, pair.from, pair.to);
+      editor.view.dispatch(editor.state.tr.setSelection(selection));
+      editor.view.dragging = { slice: selection.content(), move: true };
+
+      const picture = document.createElement("div");
+      // Drawn as in the editor, with room on the left for the Question band.
+      picture.className = "mind-editor";
+      Object.assign(picture.style, {
+        position: "absolute",
+        top: "-10000px",
+        marginLeft: "0",
+        paddingLeft: "56px",
+        width: `${editor.view.dom.clientWidth}px`,
+      });
+      for (const pos of [
+        pair.from,
+        pair.from + (editor.state.doc.nodeAt(pair.from)?.nodeSize ?? 0),
+      ]) {
+        const dom = editor.view.nodeDOM(pos);
+        if (dom instanceof Element) picture.append(dom.cloneNode(true));
+      }
+      document.body.append(picture);
+      event.dataTransfer?.setDragImage(picture, 0, 0);
+      // The browser takes its picture once this event is over.
+      setTimeout(() => picture.remove(), 0);
+    };
+    document.addEventListener("dragstart", dragWithAnswer);
+    return () => document.removeEventListener("dragstart", dragWithAnswer);
+  }, [editor]);
 
   // While the menu is open, the handle stays on its Block.
   const lockHandle = (locked: boolean) => {
@@ -192,11 +234,11 @@ function BlockMenu({
 }) {
   const t = useT();
   const first = useRef<HTMLButtonElement>(null);
-  useEffect(() => first.current?.focus(), []);
 
   return (
     <Popover
       anchor={anchor}
+      initialFocus={first}
       role="menu"
       aria-label={t("editor.block.menu")}
       data-testid="block-menu"
