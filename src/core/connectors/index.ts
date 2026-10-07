@@ -15,10 +15,11 @@
  *   reached, is tried again, waiting longer after each failure. A remote one
  *   whose sign-in is missing or expired waits for the User instead. Turning
  *   one off, deleting it, or closing the core stops it.
- * - Answers: the Tools of each ready Connector that it marks read-only,
- *   namespaced by Connector. Tools that may change something wait for
- *   approvals (#38). Every call checks consent for the "connectors" flow
- *   first: even a server on this computer can reach the internet.
+ * - Answers: the Tools of each ready Connector, local or remote, namespaced by
+ *   Connector, each with its read-only claim: Answers ask the User before a
+ *   call that may change something (see ../approvals). Every call checks
+ *   consent for the "connectors" flow first: even a server on this computer
+ *   can reach the internet.
  */
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -826,6 +827,8 @@ export function createConnectors(options: ConnectorsOptions) {
       ),
       inputSchema: tool.inputSchema,
       source: { connectorId: row.id, connectorName: row.name, tool: tool.name },
+      title: tool.title,
+      readOnly: tool.readOnly,
       async call(input, signal) {
         try {
           await untilAborted(consent.ensure("connectors", service), signal);
@@ -1068,9 +1071,9 @@ export function createConnectors(options: ConnectorsOptions) {
     },
 
     /**
-     * The read-only Tools of every enabled Connector that is ready, for one
-     * Answer. Connectors not yet started start now; those still connecting
-     * are waited for, a little.
+     * The Tools of every enabled Connector that is ready, for one Answer.
+     * Connectors not yet started start now; those still connecting are
+     * waited for, a little.
      */
     async toolsForAnswer(signal: AbortSignal): Promise<ExternalTool[]> {
       const rows = liveRows().filter((row) => row.enabled === 1);
@@ -1110,7 +1113,6 @@ export function createConnectors(options: ConnectorsOptions) {
           prefix = `${slug(row.name, "connector").slice(0, 21)}_${n}`;
         prefixes.add(prefix);
         for (const tool of runtime.tools) {
-          if (!tool.readOnly) continue;
           tools.push(answerTool(row, tool, unique(`${prefix}__${slug(tool.name, "tool")}`)));
         }
       }
@@ -1118,10 +1120,36 @@ export function createConnectors(options: ConnectorsOptions) {
     },
 
     /**
-     * The names of Connectors that are on but wait for the User to sign in,
-     * so an Answer can say why it couldn't use them.
+     * Where connecting to remote Connectors that are on, and signing in to
+     * them, goes: each one's server, and the authorization server it named.
+     * Nothing of the User's content goes there this way (Tool calls are the
+     * "connectors" data flow).
      */
-    needingSignIn(): string[] {
+    remoteTraffic(): ExternalService[] {
+      const services = new Map<string, ExternalService>();
+      const add = (url: string) => {
+        try {
+          const service = remoteService(url);
+          if (!services.has(service.id)) services.set(service.id, service);
+        } catch {
+          // An unreadable URL goes nowhere.
+        }
+      };
+      for (const row of liveRows()) {
+        const config = storedConfig(row);
+        if (row.enabled !== 1 || config.transport !== "http") continue;
+        add(config.url);
+        const authorizationServer = auths.get(row.id)?.authorizationServer();
+        if (authorizationServer) add(authorizationServer);
+      }
+      return [...services.values()];
+    },
+
+    /**
+     * The Connectors that are on but wait for the User to sign in, so an
+     * Answer can say why it couldn't use them.
+     */
+    needingSignIn(): { id: string; name: string }[] {
       return liveRows()
         .filter((row) => {
           const runtime = runtimes.get(row.id);
@@ -1131,7 +1159,7 @@ export function createConnectors(options: ConnectorsOptions) {
             (runtime.signingIn !== null || runtime.state === "needs-sign-in")
           );
         })
-        .map((row) => row.name);
+        .map((row) => ({ id: row.id, name: row.name }));
     },
 
     /** Stops every Connector at once, e.g. when the app quits. */

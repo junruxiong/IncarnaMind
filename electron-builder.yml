@@ -22,6 +22,15 @@ files:
   # pdf.js's optional native canvas (about 27 MB) only renders pages in Node; text extraction doesn't use it.
   - "!**/node_modules/@napi-rs/canvas*{,/**}"
 
+# The built-in Skills (SKILL.md folders), next to app.asar in the app's resources folder,
+# where the main process finds them (src/main/platform.ts). The core installs them into
+# the data folder at startup. tests/core/builtInSkills.test.ts checks this entry.
+extraResources:
+  - from: resources/skills
+    to: skills
+    filter:
+      - "**/*"
+
 # onnxruntime-node, which runs the built-in embedding model in a utility process, loads
 # native libraries with dlopen, which can't read inside app.asar. Each platform below
 # keeps only its own libraries: the package ships them for every platform (about 250 MB).

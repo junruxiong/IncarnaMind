@@ -48,7 +48,10 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   // Settings → Skills: the folder (picked through the test hook) is shown first, then imported.
   await window.getByRole("button", { name: "Settings" }).click();
   const section = window.getByTestId("skills-settings");
-  await expect(section).toContainText("No Skills yet.");
+  // Only the built-in Skills so far (e2e/builtInSkills.spec.ts covers them).
+  const item = section.locator('[data-testid="skill-item"][data-skill-name="tide-tables"]');
+  await expect(section.getByTestId("skill-item")).toHaveCount(3);
+  await expect(item).toHaveCount(0);
   await interceptSkillPicker(window, folder);
   await section.getByTestId("skill-import-folder").click();
   const preview = section.getByTestId("skill-preview");
@@ -64,8 +67,9 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(files.nth(2)).toContainText("script: can't run yet");
   await preview.getByTestId("skill-import-confirm").click();
 
-  const item = section.getByTestId("skill-item");
-  await expect(item).toHaveAttribute("data-skill-name", "tide-tables");
+  await expect(section.getByTestId("skill-item")).toHaveCount(4);
+  await expect(item).toHaveAttribute("data-built-in", "false");
+  await expect(item.getByTestId("skill-built-in")).toHaveCount(0);
   await expect(item.getByTestId("skill-enabled")).toBeChecked();
   await expect(item).toContainText(DESCRIPTION);
   await expect(item).toContainText("Licence: MIT · 1 script, which can't run yet");
@@ -104,8 +108,8 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
 
   // Turned off, the Skill can't be used: asking says so, and can go ahead without it.
   await window.getByRole("button", { name: "Settings" }).click();
-  await section.getByTestId("skill-enabled").uncheck();
-  await expect(section.getByTestId("skill-item")).toHaveAttribute("data-enabled", "false");
+  await item.getByTestId("skill-enabled").uncheck();
+  await expect(item).toHaveAttribute("data-enabled", "false");
   await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
   await expect(chip).toHaveAttribute("data-state", "disabled");
   await question.getByTestId("question-ask").click();

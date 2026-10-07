@@ -10,7 +10,9 @@ import type { AnswerEngine } from "./answers/engine";
 import type { SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
+import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
+import type { RerankingModelFactory } from "./providers/rerank";
 
 export interface Paths {
   /**
@@ -19,6 +21,13 @@ export interface Paths {
    * Backing up means copying this one folder.
    */
   dataDir: string;
+  /**
+   * The built-in Skills the app ships, one SKILL.md folder each, named like
+   * the Skill: `resources/skills/` in the repository, copied into the packaged
+   * app's resources. The core installs them into the data folder at startup.
+   * Not given: no built-in Skills (tests that aren't about them).
+   */
+  builtInSkills?: string;
 }
 
 /**
@@ -115,6 +124,17 @@ export interface EmbeddingModelSource {
   files: readonly ModelFile[];
 }
 
+/**
+ * Sends crash reports, scrubbed of the User's content, to IncarnaMind's
+ * developers. The desktop app passes one only when it was built with a
+ * crash-report address (a Sentry DSN). The core turns it on only once the User
+ * has opted in, at startup or when they opt in, and off the moment they opt out.
+ */
+export interface CrashReporter {
+  /** Starts reporting, or stops it at once. Must not throw: a reporter that can't start says so in the log. */
+  setEnabled(enabled: boolean): void;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -160,8 +180,25 @@ export interface CoreAdapters {
    */
   answerEngine?: AnswerEngine;
   /**
+   * Builds embedding models for the providers the User can choose instead of
+   * the built-in model. Defaults to the AI SDK providers; tests pass AI SDK
+   * mock models.
+   */
+  createEmbeddingModel?: EmbeddingModelFactory;
+  /**
+   * Builds Cohere and Voyage reranking models. Defaults to the AI SDK
+   * providers; tests pass AI SDK mock models.
+   */
+  createRerankingModel?: RerankingModelFactory;
+  /**
    * Reorders the document-search Tool's hybrid hits before they are grouped,
-   * e.g. with a Cohere or Voyage reranking model. None by default.
+   * replacing the rerank the User sets up with a Cohere or Voyage key (an
+   * alternative search layer plugs in here). None by default.
    */
   reranker?: Reranker;
+  /**
+   * Sends crash reports once the User opts in (see `CrashReporter`). Absent
+   * when this copy can't send any: Settings then doesn't offer them.
+   */
+  crashReporter?: CrashReporter;
 }

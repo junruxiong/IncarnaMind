@@ -156,7 +156,16 @@ export interface AnswerToolCall {
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
   input: Record<string, unknown>;
+  /** "failed" also covers a call the User didn't allow (see `approval`): it never ran. */
   status: "running" | "done" | "failed";
+  /**
+   * A Connector's Tool that asked the User first (see `ApprovalRequest`):
+   * "waiting" while the Answer waits for them; "allowed" once they allowed it
+   * (once, or always); "denied" when they denied it, or the Answer stopped
+   * (or IncarnaMind closed) before they decided, so it never ran. Absent when
+   * it didn't ask: its Connector says it only reads, or the User always allows it.
+   */
+  approval?: ToolCallApproval;
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
   /**
@@ -164,7 +173,16 @@ export interface AnswerToolCall {
    * front instead of the model calling the Tool. Absent otherwise.
    */
   forced?: boolean;
+  /**
+   * Not a call: the note that a remote Connector waits for the User to sign
+   * in again, so its Tools weren't offered to this Answer (`tool` is
+   * "sign_in", `status` "failed"). Absent otherwise.
+   */
+  signInRequired?: boolean;
 }
+
+/** Where the User's approval of a Tool call stands (see `AnswerToolCall.approval`). */
+export type ToolCallApproval = "waiting" | "allowed" | "denied";
 
 /**
  * The node type of a Citation: an inline node anchored in the text of an
@@ -281,12 +299,14 @@ export type DocumentKind = "pdf" | "text" | "markdown";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text, then
- * "embedding" its Passages with the built-in model, then "ready". Before the
- * model has been downloaded, a Document waits after extracting as
- * "waiting-for-model", and carries on by itself once the download finishes;
- * keyword search already finds its Passages. The other end states are
- * "failed" (see `failure`) and "no-text": the file has no text to extract,
- * e.g. a scan without a text layer.
+ * "embedding" its Passages with the embedding model (the built-in one unless
+ * the User chose another), then "ready". Before the model has been
+ * downloaded, or while the chosen provider can't be used, a Document waits
+ * after extracting as "waiting-for-model", and carries on by itself once it
+ * can; keyword search already finds its Passages. Switching the embedding
+ * model takes every Document back through "embedding" (see `EmbeddingRebuild`).
+ * The other end states are "failed" (see `failure`) and "no-text": the file
+ * has no text to extract, e.g. a scan without a text layer.
  */
 export type DocumentStatus =
   | "queued"
@@ -473,8 +493,9 @@ export interface AddDocumentsResult {
  * How `searchPassages` finds Passages (ADR-0009):
  * - "keyword": FTS5 over the words of each Passage and its Document's name,
  *   ranked by BM25. Finds nothing without a word in common.
- * - "vector": the built-in embedding model's vectors, by cosine similarity.
- *   Always ranks every embedded Passage, however unrelated.
+ * - "vector": the current embedding model's vectors (see `EmbeddingSettings`),
+ *   by cosine similarity. Always ranks every Passage embedded with that model,
+ *   however unrelated; Passages embedded with another model are never compared.
  * - "hybrid": both, each list's top 50 fused by reciprocal rank fusion
  *   (k = 60). Keyword only until the embedding model is ready.
  */
@@ -539,6 +560,155 @@ export interface EmbeddingModelStatus {
   totalBytes: number;
   /** Set when `state` is "failed". */
   error: EmbeddingModelError | null;
+}
+
+// ---------------------------------------------------------------------------
+// Embedding providers (ADR-0005)
+
+/**
+ * Where Passages and search queries are embedded. "built-in" is the model
+ * above, on this computer: the default. The others trade privacy for quality:
+ * a cloud provider receives the text of every Document, and every search
+ * query. "ollama" is Ollama's embeddings, normally on this computer too.
+ */
+export const embeddingProviderKinds = [
+  "built-in",
+  "openai",
+  "google",
+  "openai-compatible",
+  "ollama",
+] as const;
+
+export type EmbeddingProviderKind = (typeof embeddingProviderKinds)[number];
+
+/**
+ * Prefilled when a provider is picked; any embedding model the account has
+ * can be typed instead. Ollama's is multilingual (bge-m3, the best model in
+ * ADR-0009's comparison); it must be pulled first.
+ */
+export const SUGGESTED_EMBEDDING_MODELS: Readonly<
+  Record<Exclude<EmbeddingProviderKind, "built-in">, string>
+> = {
+  openai: "text-embedding-3-small",
+  google: "gemini-embedding-001",
+  "openai-compatible": "",
+  ollama: "bge-m3",
+};
+
+/** The embedding model search uses on this device. */
+export interface EmbeddingProvider {
+  kind: EmbeddingProviderKind;
+  /** The server's URL for "openai-compatible" and "ollama"; null for the others. */
+  baseUrl: string | null;
+  /** The model, e.g. "text-embedding-3-small"; for "built-in", the built-in model's name. */
+  modelId: string;
+  /** Whether an API key is stored for it. Keys live in the keychain, never in the database. */
+  hasApiKey: boolean;
+  /** How many numbers the model's vectors have: known once it has made one (384 for the built-in model). */
+  dimensions: number | null;
+  /** Where Document text and search queries go, or null when they stay on this computer. */
+  service: ExternalService | null;
+}
+
+export interface SaveEmbeddingProviderInput {
+  kind: EmbeddingProviderKind;
+  /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
+  baseUrl?: string;
+  /** A new API key. Leave it out to keep the one stored for the same provider and server. */
+  apiKey?: string;
+  /** The embedding model. Required, except for "built-in", which takes none. */
+  modelId?: string;
+}
+
+/** Settings to test, which need not be saved. Without a key, the one stored for the same provider and server. */
+export type TestEmbeddingConnectionInput = SaveEmbeddingProviderInput;
+
+export type EmbeddingConnectionTestResult =
+  /** The model made a vector of this many numbers. */
+  { ok: true; dimensions: number } | { ok: false; error: ProviderError };
+
+/**
+ * Documents being embedded again after the embedding model changed. Each one
+ * goes through the usual statuses ("embedding", then "ready"); until it is
+ * done, keyword search still finds its Passages, but vector search doesn't:
+ * vectors from different models are never compared.
+ */
+export interface EmbeddingRebuild {
+  /**
+   * "provider-changed": the User chose another embedding model.
+   * "local-mode": local mode switched a cloud provider back to the built-in model.
+   */
+  reason: "provider-changed" | "local-mode";
+  /** Documents with Passages to search. */
+  total: number;
+  /** Of those, the ones whose Passages are all embedded with the current model. */
+  done: number;
+}
+
+/** Document search's embedding model on this device, and local mode. */
+export interface EmbeddingSettings {
+  provider: EmbeddingProvider;
+  /**
+   * "Keep everything on this computer": only embedding providers on this
+   * computer can be chosen, and search results aren't reranked by a cloud
+   * service. Turned on in Settings, or by choosing local models with one
+   * click (`selectOllama`).
+   */
+  localOnly: boolean;
+  /** Set while Documents are embedded again after a switch. */
+  rebuild: EmbeddingRebuild | null;
+  /**
+   * Why the provider can't embed right now, e.g. its key was refused or the
+   * User declined sending it data; null when it can. Documents wait
+   * ("waiting-for-model") until `retryEmbedding`, and search finds Passages by
+   * their words meanwhile. The built-in model reports its download in
+   * `getEmbeddingModel` instead.
+   */
+  error: ProviderError | null;
+}
+
+// ---------------------------------------------------------------------------
+// Rerank (ADR-0005)
+
+/** Reranking services. With a key for one, document search reranks its best matches. */
+export const rerankProviderKinds = ["cohere", "voyage"] as const;
+
+export type RerankProviderKind = (typeof rerankProviderKinds)[number];
+
+/** The model each provider reranks with unless the User names another: both are multilingual. */
+export const DEFAULT_RERANK_MODELS: Readonly<Record<RerankProviderKind, string>> = {
+  cohere: "rerank-v3.5",
+  voyage: "rerank-2.5",
+};
+
+/** Rerank on this device. Without a key, search is as before: nothing is reranked. */
+export interface RerankSettings {
+  /** A Cohere or Voyage key is set up on this device: document search reranks its candidates. */
+  enabled: boolean;
+  kind: RerankProviderKind | null;
+  /** The model requests name, e.g. "rerank-v3.5"; null when rerank isn't set up. */
+  modelId: string | null;
+  /** Whether its key can be read on this device. Keys live in the keychain, never in the database. */
+  hasApiKey: boolean;
+  /** Where the Question and candidate Passages go, while rerank is set up. */
+  service: ExternalService | null;
+  /** Local mode is on: nothing is reranked, though the settings are kept. */
+  paused: boolean;
+}
+
+export interface SaveRerankSettingsInput {
+  kind: RerankProviderKind;
+  /** A new key. Leave it out to keep the stored one (for the same kind); the first save needs one. */
+  apiKey?: string;
+  /** Null or empty: the provider's default model (`DEFAULT_RERANK_MODELS`). Left out: unchanged. */
+  modelId?: string | null;
+}
+
+/** Settings to test, which need not be saved; those left out are the saved ones. */
+export interface TestRerankConnectionInput {
+  kind?: RerankProviderKind;
+  apiKey?: string;
+  modelId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -770,6 +940,9 @@ export interface AnswerFailed {
  * folder, under `skills/<id>/`. The system prompt of every Answer lists the
  * enabled Skills' names and descriptions; the model loads a Skill's full
  * instructions when it needs them, or the User forces one on a Question.
+ *
+ * Built-in Skills ship with the app and are installed on first run. A newer
+ * version of the app updates them; whether each is on, or removed, is kept.
  */
 export interface Skill {
   /** A random UUID generated on this device. Importing a Skill of the same name again keeps it. */
@@ -784,6 +957,11 @@ export interface Skill {
   compatibility: string | null;
   /** Turned on, Answers can use it. New Skills start on. */
   enabled: boolean;
+  /**
+   * Ships with the app. Its files can't be replaced by importing a Skill of
+   * its name; `duplicateSkill` makes a copy that is the User's own.
+   */
+  builtIn: boolean;
   /** Every file in the Skill: SKILL.md first, then the others in path order. */
   files: SkillFile[];
   /** ISO 8601, UTC. */
@@ -836,6 +1014,8 @@ export interface SkillImportPreview {
  * - "too-large": its files add up to more than `SKILL_LIMITS.maxBytes`, or SKILL.md
  *   is over `SKILL_LIMITS.maxInstructionsBytes`.
  * - "too-many-files": more than `SKILL_LIMITS.maxFiles` files.
+ * - "built-in-name": a built-in Skill has its name, and a built-in Skill's files
+ *   can't be replaced (`field` is "name").
  */
 export type SkillImportErrorKind =
   | "unreadable"
@@ -845,7 +1025,8 @@ export type SkillImportErrorKind =
   | "path-traversal"
   | "link-outside"
   | "too-large"
-  | "too-many-files";
+  | "too-many-files"
+  | "built-in-name";
 
 export interface SkillImportError {
   kind: SkillImportErrorKind;
@@ -992,6 +1173,8 @@ export const dataKinds = [
   "tags",
   "document-excerpts",
   "tool-arguments",
+  "document-text",
+  "queries",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -1005,8 +1188,12 @@ export type DataKind = (typeof dataKinds)[number];
  *   Connector it calls: one service per local Connector (it runs on this
  *   computer but can reach the internet itself), and one per server origin
  *   for remote ones, e.g. "https://mcp.example.com".
+ * - "embeddings": every Document's text and every search query, to a cloud
+ *   embedding provider, when the User chose one instead of the built-in model.
+ * - "rerank": each search query and its candidate Passages, to Cohere or
+ *   Voyage, when a rerank key is set up.
  */
-export const dataFlowIds = ["chat", "tagging", "connectors"] as const;
+export const dataFlowIds = ["chat", "tagging", "connectors", "embeddings", "rerank"] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
@@ -1032,6 +1219,75 @@ export interface DataFlowStatus {
   consent: "accepted" | "declined" | "not-asked";
   /** ISO 8601, UTC; null when not asked. */
   decidedAt: string | null;
+}
+
+/** A registered external data flow, for the Privacy page: what it sends, and where. */
+export interface RegisteredDataFlow {
+  id: DataFlowId;
+  /** Everything the flow sends. */
+  sends: DataKind[];
+  /**
+   * The flow to each service it currently goes to and each service the User
+   * has decided on, with that decision. Empty when nothing is sent on it now,
+   * e.g. chat with a model on this computer.
+   */
+  services: DataFlowStatus[];
+}
+
+// ---------------------------------------------------------------------------
+// Privacy
+
+/**
+ * Network traffic that carries no User content: it needs no consent, and the
+ * Privacy page lists it. The UI names and describes each one
+ * (`privacy.traffic.<id>`). Features register theirs; later tickets add ids.
+ * - "update-check": asks GitHub Releases for a newer version, when IncarnaMind starts.
+ * - "embedding-model": downloads the built-in embedding model's files, once.
+ * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
+ * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
+ * - "remote-connectors": connecting to each remote Connector that is on, and
+ *   signing in to it: its server, and the authorization server it names
+ *   (discovery, registration, tokens). One entry per server. Tool calls, which
+ *   carry the User's content, are the "connectors" data flow.
+ */
+export const networkTrafficIds = [
+  "update-check",
+  "embedding-model",
+  "ollama-pull",
+  "chatgpt-sign-in",
+  "remote-connectors",
+] as const;
+
+export type NetworkTrafficId = (typeof networkTrafficIds)[number];
+
+export interface NetworkTraffic {
+  id: NetworkTrafficId;
+  /** Where it goes. */
+  service: ExternalService;
+  /** False while the User has turned it off, e.g. automatic update checks. */
+  enabled: boolean;
+}
+
+/** The privacy choices on this device. IncarnaMind collects no usage data, whatever they are. */
+export interface PrivacySettings {
+  crashReports: {
+    /**
+     * Whether this copy of IncarnaMind can send crash reports: only a build
+     * made with a crash-report address (a Sentry DSN) can. Without one, they
+     * aren't offered.
+     */
+    available: boolean;
+    /** The User opted in to sending scrubbed crash reports. Off by default. */
+    enabled: boolean;
+  };
+  /** IncarnaMind checks GitHub Releases for a new version when it starts. On by default. */
+  automaticUpdateChecks: boolean;
+}
+
+/** The choices to change; the others are kept. */
+export interface PrivacySettingsPatch {
+  crashReports?: boolean;
+  automaticUpdateChecks?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,7 +1364,7 @@ export interface TestJevConnectionInput {
  * - "needs-sign-in": remote: the server wants a sign-in IncarnaMind doesn't
  *   have on this device: the User hasn't signed in, signed out, or renewing
  *   the sign-in failed (`signIn.expired`). Answers skip its Tools.
- * - "ready": connected; Answers can use its read-only Tools.
+ * - "ready": connected; Answers can use its Tools (see `ApprovalPolicy` for which ask first).
  * - "error": it couldn't start or be reached, or it stopped (see `error`).
  */
 export type ConnectorState =
@@ -1157,8 +1413,10 @@ export interface ConnectorTool {
   description: string;
   /**
    * The Connector says the Tool only reads and changes nothing (its
-   * `readOnlyHint` annotation). That is the Connector's claim, not something
-   * IncarnaMind can check. Answers are offered only these Tools for now.
+   * `readOnlyHint` annotation). That is the Connector's claim, a hint, not
+   * something IncarnaMind can check. Answers call such a Tool without asking
+   * unless the User switched it to "ask"; every other Tool asks first, unless
+   * the User always allows it (see `ApprovalPolicy`).
    */
   readOnly: boolean;
 }
@@ -1319,6 +1577,92 @@ export interface ConnectorImportResult {
 }
 
 // ---------------------------------------------------------------------------
+// Approvals (#38)
+
+/**
+ * What an approval policy is about:
+ * - "tool": one Tool of one Connector;
+ * - "skill-script": the scripts of one Skill (Skill scripts come with #41).
+ */
+export type ApprovalSubject =
+  | {
+      kind: "tool";
+      connectorId: string;
+      /** The Tool's name as the Connector gives it. */
+      tool: string;
+    }
+  | { kind: "skill-script"; skillId: string };
+
+export type ApprovalSubjectKind = ApprovalSubject["kind"];
+
+/**
+ * What the User chose for a subject, replacing the default:
+ * - "always": it runs without asking ("always allow" a Tool; "always run" a Skill's scripts).
+ * - "ask": it asks every time, even a Tool its Connector says only reads.
+ *
+ * Without a policy, a Tool asks first unless its Connector says it only reads
+ * (`ConnectorTool.readOnly`), and a Skill script always asks.
+ */
+export type ApprovalPolicyValue = "always" | "ask";
+
+/** One of the User's approval policies, as the approvals page lists it. */
+export interface ApprovalPolicy {
+  /** A random UUID generated on this device. */
+  id: string;
+  subject: ApprovalSubject;
+  policy: ApprovalPolicyValue;
+  /** What the subject belongs to, as named now: the Connector (for a Tool) or the Skill. */
+  ownerName: string;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface SetApprovalPolicyInput {
+  /** A Connector that exists, or a Skill that exists. */
+  subject: ApprovalSubject;
+  /** Null goes back to the default, removing the User's policy. A Skill script takes "always" or null. */
+  policy: ApprovalPolicyValue | null;
+}
+
+/**
+ * What the User decides about a Tool call that asks first:
+ * - "allow-once": this call runs;
+ * - "always-allow": this call runs, and so will every later call of the Tool
+ *   without asking (the policy becomes "always");
+ * - "deny": the call doesn't run; the model is told the User denied it, and
+ *   the Answer carries on without it.
+ */
+export type ApprovalDecision = "allow-once" | "always-allow" | "deny";
+
+/**
+ * A Tool call waiting for the User's approval. Its Answer is paused until they
+ * decide; stopping the Answer, or closing IncarnaMind, denies it.
+ */
+export interface ApprovalRequest {
+  requestId: string;
+  mindId: string;
+  answerId: string;
+  /** The call's id among the Answer's `toolCalls`. */
+  toolCallId: string;
+  subject: ApprovalSubject;
+  /** The Connector the Tool belongs to, as named when the call was made. */
+  connector: { id: string; name: string };
+  /** The Tool's name as its Connector gives it, e.g. "create_issue". */
+  tool: string;
+  /** The Tool's display name, when the Connector gives one. */
+  title: string | null;
+  /** The arguments the model wants to send. */
+  input: Record<string, unknown>;
+  /**
+   * The Connector says this Tool only reads: it asks only because the User
+   * switched it to "ask". False: the Tool may change something.
+   */
+  readOnly: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Export
 
 /** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
@@ -1422,6 +1766,51 @@ export interface CoreApi {
    */
   downloadEmbeddingModel(): Promise<EmbeddingModelStatus>;
 
+  /** The embedding model document search uses, local mode, and any rebuild under way. */
+  getEmbeddingSettings(): Promise<EmbeddingSettings>;
+  /**
+   * Switches document search to another embedding model (its key goes to the
+   * keychain, never the database). A cloud provider's "embeddings" flow needs
+   * consent first: if the User declines, nothing changes. A different model
+   * means every Document is embedded again: each goes back to "embedding",
+   * and "embedding.changed" events report the rebuild. Saving the same model
+   * again (e.g. with a new key) re-embeds nothing. Refused for a cloud
+   * provider while local mode is on.
+   */
+  saveEmbeddingProvider(input: SaveEmbeddingProviderInput): Promise<EmbeddingSettings>;
+  /**
+   * Embeds one fixed text, nothing of the User's. A cloud provider's
+   * "embeddings" flow needs consent first, as for a chat provider's test.
+   */
+  testEmbeddingConnection(
+    input: TestEmbeddingConnectionInput,
+  ): Promise<EmbeddingConnectionTestResult>;
+  /** Tries the embedding provider again after an error: Documents waiting for it carry on. */
+  retryEmbedding(): Promise<EmbeddingSettings>;
+  /**
+   * Turns local mode ("keep everything on this computer") on or off on this
+   * device. Turning it on switches a cloud embedding provider back to the
+   * built-in model, which embeds every Document again (an embedding provider
+   * on this computer, e.g. Ollama, is kept), and stops reranking.
+   */
+  setLocalOnly(enabled: boolean): Promise<EmbeddingSettings>;
+
+  /** Rerank on this device: whether a Cohere or Voyage key is set up. */
+  getRerankSettings(): Promise<RerankSettings>;
+  /**
+   * Sets up rerank, or changes it: from then on document search reranks its
+   * candidates. The "rerank" flow to the service needs consent first: if the
+   * User declines, nothing changes. The key goes to the keychain.
+   */
+  saveRerankSettings(input: SaveRerankSettingsInput): Promise<RerankSettings>;
+  /** Removes rerank's key and settings from this device: search is as before. */
+  removeRerankSettings(): Promise<RerankSettings>;
+  /**
+   * Reranks two fixed texts against a fixed query, nothing of the User's,
+   * with the given settings or the saved ones. The "rerank" flow needs consent first.
+   */
+  testRerankConnection(input?: TestRerankConnectionInput): Promise<ConnectionTestResult>;
+
   listChatProviders(): Promise<ChatProvider[]>;
   /**
    * Saves a chat provider (its key goes to the keychain, never the database)
@@ -1498,6 +1887,28 @@ export interface CoreApi {
   respondToConsent(requestId: string, accept: boolean): Promise<void>;
   /** Forgets the User's decision: the next request on the flow asks again. */
   revokeConsent(flowId: DataFlowId, serviceId: string): Promise<void>;
+  /**
+   * Every registered external data flow, each with the services it goes to,
+   * including a flow that sends nothing now: the Privacy page lists them all.
+   */
+  listRegisteredDataFlows(): Promise<RegisteredDataFlow[]>;
+  /**
+   * The User allows a flow to one of its services from Settings, without
+   * waiting to be asked, e.g. after declining it. Everything the flow sends
+   * counts as accepted, and a request waiting for that flow and service is
+   * answered too.
+   */
+  allowDataFlow(flowId: DataFlowId, serviceId: string): Promise<void>;
+
+  /** Network traffic that carries nothing of the User's, such as update checks and model downloads. */
+  listNetworkTraffic(): Promise<NetworkTraffic[]>;
+  getPrivacySettings(): Promise<PrivacySettings>;
+  /**
+   * Changes the privacy choices on this device and returns them. Turning crash
+   * reports on starts them; turning them off stops them at once. Refused if
+   * this copy can't send crash reports.
+   */
+  updatePrivacySettings(patch: PrivacySettingsPatch): Promise<PrivacySettings>;
   /**
    * Files a Document in a Folder, or takes it out to unfiled with `null`. It
    * leaves any Folder it was in. Returns the Document.
@@ -1619,6 +2030,27 @@ export interface CoreApi {
   /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
   importConnectors(json: string): Promise<ConnectorImportResult>;
 
+  /**
+   * The User's approval policies, for the approvals page: every Tool always
+   * allowed, every Tool switched to "ask", and (#41) every Skill whose scripts
+   * always run. Policies of deleted Connectors and Skills aren't listed.
+   */
+  listApprovalPolicies(): Promise<ApprovalPolicy[]>;
+  /**
+   * Sets a policy, or with `policy: null` removes it (back to the default).
+   * Returns the policy now in effect, or null for the default.
+   */
+  setApprovalPolicy(input: SetApprovalPolicyInput): Promise<ApprovalPolicy | null>;
+  /** Removes a policy by its id: its subject goes back to the default. Revoking one that's gone does nothing. */
+  revokeApprovalPolicy(policyId: string): Promise<void>;
+  /** Tool calls still waiting for the User's approval, e.g. for a window that opened after they were raised. */
+  listApprovalRequests(): Promise<ApprovalRequest[]>;
+  /**
+   * Answers an approval request. Answering one that's no longer waiting (decided
+   * in another window, or its Answer stopped) does nothing.
+   */
+  respondToApproval(requestId: string, decision: ApprovalDecision): Promise<void>;
+
   /** Skills that are not removed, in name order. */
   listSkills(): Promise<Skill[]>;
   /**
@@ -1641,8 +2073,26 @@ export interface CoreApi {
   /**
    * Removes a Skill: soft-deleted in the database (ADR-0003). Its files are
    * deleted once nothing uses them, e.g. after Answers still being written with it finish.
+   * A removed built-in Skill stays removed, through updates of the app too,
+   * until `restoreBuiltInSkills`.
    */
   removeSkill(skillId: string): Promise<void>;
+  /**
+   * Copies a Skill as the User's own, e.g. a built-in one, whose files can't
+   * be replaced: the same files, named "<name>-copy" (or "<name>-copy-2" and
+   * on), turned on, not built-in. Returns the copy.
+   */
+  duplicateSkill(skillId: string): Promise<Skill>;
+  /**
+   * The names of the built-in Skills the User removed, which
+   * `restoreBuiltInSkills` would install again. Empty when they are all there.
+   */
+  listRemovedBuiltInSkills(): Promise<string[]>;
+  /**
+   * Installs again, turned on, the built-in Skills the User removed (those
+   * `listRemovedBuiltInSkills` names), with this version's files. Returns them.
+   */
+  restoreBuiltInSkills(): Promise<Skill[]>;
 
   /**
    * What `exportMind` will write with these options: the file name, and how
@@ -1676,12 +2126,23 @@ export interface CoreEvents {
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;
+  /**
+   * The embedding model search uses changed, or local mode, or a rebuild made
+   * progress (a Document finished) or finished, or the provider failed or recovered.
+   */
+  "embedding.changed": EmbeddingSettings;
+  /** Rerank was set up, changed or removed on this device, or paused by local mode. */
+  "rerank.changed": RerankSettings;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
   /** A data flow needs the User's consent before anything is sent. */
   "consent.requested": ConsentRequest;
   /** A consent request was answered, here or in another window. */
   "consent.resolved": { requestId: string; accepted: boolean };
+  /** The User allowed or revoked a data flow in Settings. */
+  "dataFlows.changed": RegisteredDataFlow[];
+  /** The privacy choices changed, e.g. crash reports were turned on. */
+  "privacy.changed": PrivacySettings;
   /** Progress of a model download through Ollama. */
   "ollama.pullProgress": OllamaPullProgress;
   /**
@@ -1703,7 +2164,10 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
-  /** Skills were imported, turned on or off, or removed: the list as `listSkills` now returns it. */
+  /**
+   * Skills were imported, duplicated, turned on or off, removed or restored:
+   * the list as `listSkills` now returns it.
+   */
   "skills.changed": Skill[];
   /**
    * Connectors were added, turned on or off, or deleted, or one's state or
@@ -1711,6 +2175,15 @@ export interface CoreEvents {
    * the list as `listConnectors` now returns it.
    */
   "connectors.changed": Connector[];
+  /** Approval policies were set or revoked: the list as `listApprovalPolicies` now returns it. */
+  "approvals.changed": ApprovalPolicy[];
+  /** A Tool call is waiting for the User's approval: its Answer shows an approval card, in every window. */
+  "approval.requested": ApprovalRequest;
+  /**
+   * An approval request was decided, here or in another window, or its Answer
+   * stopped ("deny"): every window takes its card away.
+   */
+  "approval.resolved": { requestId: string; decision: ApprovalDecision };
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -1761,6 +2234,15 @@ const methods: Record<CoreApiMethod, true> = {
   searchPassages: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
+  getEmbeddingSettings: true,
+  saveEmbeddingProvider: true,
+  testEmbeddingConnection: true,
+  retryEmbedding: true,
+  setLocalOnly: true,
+  getRerankSettings: true,
+  saveRerankSettings: true,
+  removeRerankSettings: true,
+  testRerankConnection: true,
   listChatProviders: true,
   saveChatProvider: true,
   deleteChatProvider: true,
@@ -1783,6 +2265,11 @@ const methods: Record<CoreApiMethod, true> = {
   listConsentRequests: true,
   respondToConsent: true,
   revokeConsent: true,
+  listRegisteredDataFlows: true,
+  allowDataFlow: true,
+  listNetworkTraffic: true,
+  getPrivacySettings: true,
+  updatePrivacySettings: true,
   moveDocument: true,
   createFolder: true,
   listFolders: true,
@@ -1811,12 +2298,20 @@ const methods: Record<CoreApiMethod, true> = {
   setConnectorClient: true,
   previewConnectorImport: true,
   importConnectors: true,
+  listApprovalPolicies: true,
+  setApprovalPolicy: true,
+  revokeApprovalPolicy: true,
+  listApprovalRequests: true,
+  respondToApproval: true,
   listSkills: true,
   previewSkillImport: true,
   importSkill: true,
   cancelSkillImport: true,
   setSkillEnabled: true,
   removeSkill: true,
+  duplicateSkill: true,
+  listRemovedBuiltInSkills: true,
+  restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
 };

@@ -27,7 +27,8 @@ export function answerInstructions(question: string): string {
 /**
  * What to do with the Tools of the User's Connectors, if any are offered.
  * Their results aren't Passages: they are never cited with markers. `alone`:
- * there are no Documents, so these are the only Tools.
+ * there are no Documents, so these are the only Tools. Tools that may change
+ * something ask the User first, who may deny the call.
  */
 export function connectorInstructions(
   tools: readonly { source: { connectorName: string } }[],
@@ -37,6 +38,7 @@ export function connectorInstructions(
   const names = [...new Set(tools.map((each) => `"${each.source.connectorName}"`))].join(", ");
   return [
     `You can ${alone ? "" : "also "}call Tools from the User's Connectors (${names}): other services the User has connected. Each Tool's name starts with its Connector's. Use them to look things up when the Question needs what they have.`,
+    "- Call a Tool that changes something (creates, sends, books, deletes…) only when the Question asks for that change. The User approves such calls first and may deny one: then carry on without it, don't call it again, and say what wasn't done.",
     "- What they return isn't from the User's Documents: never put a citation marker on it. Say in words where it came from when that helps.",
     ...(alone ? ["- Write nothing before your Tool calls: only the Answer, after them."] : []),
   ].join("\n");

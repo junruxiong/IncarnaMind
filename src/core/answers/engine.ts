@@ -19,8 +19,9 @@
  *
  * Skills add two Tools to the loop: `use_skill` loads a Skill's instructions
  * and `read_skill_file` one of its files. The User's Connectors add their
- * read-only Tools as external Tools; their results aren't Passages, so they
- * are never cited, and the Answer shows each call as a Tool-call card. With
+ * Tools as external Tools (those that ask the User first wait inside their
+ * `call`); their results aren't Passages, so they are never cited, and the
+ * Answer shows each call as a Tool-call card. With
  * Skills or Connector Tools but no Documents, the loop runs with those alone;
  * a model that can't call Tools answers without.
  */
@@ -82,8 +83,23 @@ export interface ExternalTool {
   inputSchema: Record<string, unknown>;
   /** Where it comes from, for the Tool-call card: the Connector, and the Tool's own name there. */
   source: { connectorId: string; connectorName: string; tool: string };
-  /** Calls it; resolves with the text the model reads, rejects when it fails (the model is told why). */
-  call(input: Record<string, unknown>, signal: AbortSignal): Promise<string>;
+  /** The Tool's display name, when its Connector gives one. */
+  title?: string | null;
+  /**
+   * Its Connector says it only reads (a hint, not a fact): it runs without
+   * asking the User unless they switched it to "ask". Otherwise it asks first.
+   */
+  readOnly: boolean;
+  /**
+   * Calls it; resolves with the text the model reads, rejects when it fails
+   * (the model is told why). `call.toolCallId` is the id the model gave the
+   * call, as in the "tool-call-started" event.
+   */
+  call(
+    input: Record<string, unknown>,
+    signal: AbortSignal,
+    call?: { toolCallId: string },
+  ): Promise<string>;
 }
 
 /** The Tools' work, done by the core: the engine only connects them to the model. */
@@ -417,8 +433,8 @@ function externalTools(external: ReadonlyMap<string, ExternalTool>, signal: Abor
     tools[each.name] = tool({
       description: each.description,
       inputSchema: jsonSchema<Record<string, unknown>>(each.inputSchema),
-      execute: (input, { abortSignal }) =>
-        each.call(isPlainObject(input) ? input : {}, abortSignal ?? signal),
+      execute: (input, { abortSignal, toolCallId }) =>
+        each.call(isPlainObject(input) ? input : {}, abortSignal ?? signal, { toolCallId }),
     });
   }
   return tools;

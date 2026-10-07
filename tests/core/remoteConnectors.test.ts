@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type {
+  AnswerToolCall,
   Connector,
   ConnectorState,
   Core,
@@ -24,7 +25,7 @@ import {
   startCore,
 } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
-import { answerText } from "../helpers/minds";
+import { answerIn, answerText } from "../helpers/minds";
 import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
 import {
   createFakeBrowser,
@@ -37,6 +38,7 @@ import {
 } from "../helpers/remoteMcp";
 
 const SEARCH = "wiki__search_wiki";
+const EDIT = "wiki__edit_wiki";
 const LOOPBACK_REDIRECT = /^http:\/\/127\.0\.0\.1:\d+\/callback$/;
 
 /** A model that searches the wiki through the Connector when it can, then answers with what it found. */
@@ -109,10 +111,18 @@ const answerConsentAlways = (core: Core, accept = true) =>
 
 /** Asks a Question in a new Mind and returns the Answer's text. */
 async function ask(core: Core, text = "What do the tide tables say?") {
+  return (await askFor(core, text)).text;
+}
+
+/** Asks a Question in a new Mind; returns the Answer's text and its Tool-call cards. */
+async function askFor(core: Core, text = "What do the tide tables say?") {
   const mind = await core.createMind({ title: "Questions" });
   const client = await connectToMind(core, mind.id);
   const { answerId } = await askAndFinish(core, client, mind.id, text);
-  return answerText(client, answerId);
+  const toolCalls = JSON.parse(
+    String(answerIn(client, answerId).attrs.toolCalls ?? "[]"),
+  ) as AnswerToolCall[];
+  return { text: answerText(client, answerId), toolCalls };
 }
 
 const tokensIn = (keychain: MemoryKeychain, id: string) => {
@@ -310,8 +320,8 @@ describe("Signing in", { timeout: 30_000 }, () => {
     await core.respondToConsent(request.requestId, true);
 
     expect(await asking).toBe('The wiki says: Wiki results for "tides": Tide tables.');
-    // Only the read-only Tool was offered.
-    expect(model.doStreamCalls[0]?.tools?.map((tool) => tool.name)).toEqual([SEARCH]);
+    // Both Tools were offered; the one that claims to only read ran without asking.
+    expect(model.doStreamCalls[0]?.tools?.map((tool) => tool.name)).toEqual([SEARCH, EDIT]);
     expect(fake.toolCalls).toEqual([
       { tool: "search_wiki", arguments: { query: "tides" }, token: fake.issued[0]?.accessToken },
     ]);
@@ -572,8 +582,21 @@ describe("Tokens", { timeout: 30_000 }, () => {
     expect(tokensIn(keychain, id)).toEqual({ expired: true });
     expect(fake.toolCalls).toEqual([]);
 
-    // The next Answer has no Wiki Tools, and its instructions say why.
-    expect(await ask(core)).toBe("I can't reach the wiki.");
+    // The next Answer has no Wiki Tools: a card in it says why, and so do its instructions.
+    const nextAnswer = await askFor(core);
+    expect(nextAnswer.text).toBe("I can't reach the wiki.");
+    expect(nextAnswer.toolCalls).toEqual([
+      {
+        id: `sign-in:${id}`,
+        tool: "sign_in",
+        source: "connector",
+        connector: { id, name: "Wiki" },
+        input: {},
+        status: "failed",
+        resultCount: null,
+        signInRequired: true,
+      },
+    ]);
     const next = model.doStreamCalls[failed];
     expect(next?.tools ?? []).toEqual([]);
     const system = String(next?.prompt.find((message) => message.role === "system")?.content);
@@ -681,5 +704,72 @@ describe("Consent and removal", { timeout: 30_000 }, () => {
 
     expect(result).toMatchObject({ ok: false, error: { kind: "secret-storage" } });
     expect(setup.browser.opened).toEqual([]);
+  });
+});
+
+describe("Approvals and privacy", { timeout: 30_000 }, () => {
+  test("a remote Tool that may change something asks first, like a local one; a read-only claim is only a hint the User can override", async () => {
+    // The model calls `tool` through the Connector once, then says what came back.
+    let tool = EDIT;
+    const model = scriptedModel((call: ModelCall) => {
+      const done = call.results.find((result) => result.tool === tool);
+      if (!done) return { calls: [{ tool, input: { query: "Tides page" } }] };
+      return { text: `Done: ${done.text}` };
+    });
+    const { core, fake, id } = await signedIn({}, model);
+    answerConsentAlways(core);
+
+    // A Tool that changes things: nothing is sent until the User allows it.
+    const requested = nextEvent(core, "approval.requested");
+    const asking = ask(core, "Fix the tides page.");
+    const request = await requested;
+    expect(request).toMatchObject({
+      subject: { kind: "tool", connectorId: id, tool: "edit_wiki" },
+      connector: { id, name: "Wiki" },
+      tool: "edit_wiki",
+      input: { query: "Tides page" },
+      readOnly: false,
+    });
+    expect(fake.toolCalls).toEqual([]);
+    await core.respondToApproval(request.requestId, "allow-once");
+    expect(await asking).toContain("Wiki results");
+    expect(fake.toolCalls.map((call) => call.tool)).toEqual(["edit_wiki"]);
+
+    // The search claims to only read, so it runs without asking, until the User says to ask.
+    tool = SEARCH;
+    expect(await ask(core)).toContain("Wiki results");
+    expect(fake.toolCalls.map((call) => call.tool)).toEqual(["edit_wiki", "search_wiki"]);
+    const subject = { kind: "tool", connectorId: id, tool: "search_wiki" } as const;
+    await core.setApprovalPolicy({ subject, policy: "ask" });
+    const asked = nextEvent(core, "approval.requested");
+    const searching = ask(core);
+    expect(await asked).toMatchObject({ subject, readOnly: true });
+    await core.respondToApproval((await asked).requestId, "deny");
+    expect(await searching).toContain("denied");
+    expect(fake.toolCalls.map((call) => call.tool)).toEqual(["edit_wiki", "search_wiki"]);
+  });
+
+  test("the Privacy page lists connecting and signing in to remote Connectors as traffic without User content", async () => {
+    const { core, fake, id } = await signedIn();
+    const remoteTraffic = async () =>
+      (await core.listNetworkTraffic()).filter((traffic) => traffic.id === "remote-connectors");
+
+    // The Connector's server, and the authorization server it named.
+    expect(await remoteTraffic()).toEqual([
+      {
+        id: "remote-connectors",
+        service: { id: fake.mcpOrigin, name: new URL(fake.mcpOrigin).host },
+        enabled: true,
+      },
+      {
+        id: "remote-connectors",
+        service: { id: fake.issuer, name: new URL(fake.issuer).host },
+        enabled: true,
+      },
+    ]);
+
+    // Off, it makes no traffic.
+    await core.setConnectorEnabled(id, false);
+    expect(await remoteTraffic()).toEqual([]);
   });
 });

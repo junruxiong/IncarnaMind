@@ -48,27 +48,24 @@ export interface BuiltPassage {
   text: string;
 }
 
-/** Joins pages in the laid-out text, so a page break counts as a paragraph break. */
+/**
+ * Joins pages in the laid-out text, so a page break is a blank line. The
+ * Citation check finds where each page starts in a Passage by this
+ * (`withPageMarks` in ../answers/citations).
+ */
 const PAGE_BREAK = "\n\n";
 
-/** Where a Passage may end, weakest to strongest. */
-const BREAK = { none: 0, word: 1, line: 2, sentence: 3, paragraph: 4 } as const;
-
-const SENTENCE_END = /[.!?。！？…;；][\]"'”’)）」』]*$/u;
-
 /**
- * The smallest pieces a Passage is built from, each with its trailing
- * whitespace: a run of non-CJK, non-space characters (a word), or one CJK
- * character. Leading whitespace is its own piece. Together they cover the text.
+ * A run of non-CJK, non-space characters (a word), or one CJK character, each
+ * with its trailing whitespace. Leading whitespace is its own match. Together
+ * they cover the text.
  */
-const PIECE = new RegExp(`\\s+|[${CJK}]\\s*|[^\\s${CJK}]+\\s*`, "gu");
+const WORD = new RegExp(`\\s+|[${CJK}]\\s*|[^\\s${CJK}]+\\s*`, "gu");
 
 interface Piece {
   start: number;
   end: number;
   tokens: number;
-  /** How good a place the end of this piece is to end a Passage. */
-  strength: number;
 }
 
 /**
@@ -84,54 +81,71 @@ export function approximateTokens(text: string): number {
   return tokens;
 }
 
-function strengthAfter(piece: string): number {
-  const word = piece.trimEnd();
-  const space = piece.slice(word.length);
-  if (/\n[^\S\n]*\n/.test(space)) return BREAK.paragraph;
-  if (SENTENCE_END.test(word)) return BREAK.sentence;
-  if (space.includes("\n")) return BREAK.line;
-  if (space) return BREAK.word;
-  // CJK characters run on without spaces, so any gap between them is a word break.
-  const last = Array.from(word).at(-1);
-  return last !== undefined && isCjk(last) ? BREAK.word : BREAK.none;
-}
-
-function toPieces(text: string, maxPieceTokens: number): Piece[] {
-  const pieces: Piece[] = [];
-  for (const match of text.matchAll(PIECE)) {
-    const start = match.index;
-    const value = match[0];
-    const tokens = approximateTokens(value);
-    if (tokens <= maxPieceTokens) {
-      pieces.push({ start, end: start + value.length, tokens, strength: strengthAfter(value) });
-      continue;
-    }
-    // A "word" too long for a Passage (a URL, a base64 blob): cut it into
-    // equal pieces, never inside a surrogate pair.
-    const size = Math.max(1, Math.floor(maxPieceTokens * 4));
-    let cut = 0;
-    while (cut < value.length) {
-      let next = Math.min(value.length, cut + size);
-      const code = value.charCodeAt(next);
-      if (code >= 0xdc00 && code <= 0xdfff) next++; // a low surrogate: keep the pair together
-      const part = value.slice(cut, next);
-      const strength = next === value.length ? strengthAfter(part) : BREAK.none;
-      pieces.push({
-        start: start + cut,
-        end: start + next,
-        tokens: approximateTokens(part),
-        strength,
-      });
-      cut = next;
-    }
-  }
-  return pieces;
-}
+/**
+ * A line's tokens: its CJK characters, plus a quarter of the rest, rounded up.
+ * The retrieval prototype counted each line this way, so these are the sizes
+ * of the Passages that ADR-0009 measured.
+ */
+const lineTokens = (line: string) => Math.ceil(approximateTokens(line));
 
 function item<T>(list: readonly T[], index: number): T {
   const value = list[index];
   if (value === undefined) throw new RangeError(`No item at index ${index}.`);
   return value;
+}
+
+/**
+ * Splits [start, end) of `text`, a line too long for a Passage, into words. A
+ * word longer than `maxWordTokens` (a URL, a base64 blob) is cut into equal
+ * parts, never inside a surrogate pair.
+ */
+function pushWords(text: string, start: number, end: number, maxWordTokens: number, out: Piece[]) {
+  for (const match of text.slice(start, end).matchAll(WORD)) {
+    const wordStart = start + match.index;
+    const word = match[0];
+    const tokens = approximateTokens(word);
+    if (tokens <= maxWordTokens) {
+      out.push({ start: wordStart, end: wordStart + word.length, tokens });
+      continue;
+    }
+    const size = Math.max(1, Math.floor(maxWordTokens * 4));
+    let cut = 0;
+    while (cut < word.length) {
+      let next = Math.min(word.length, cut + size);
+      const code = word.charCodeAt(next);
+      if (code >= 0xdc00 && code <= 0xdfff) next++; // a low surrogate: keep the pair together
+      out.push({
+        start: wordStart + cut,
+        end: wordStart + next,
+        tokens: approximateTokens(word.slice(cut, next)),
+      });
+      cut = next;
+    }
+  }
+}
+
+/**
+ * The pieces Passages are made of: the text's lines, each with its line break
+ * (pdf.js ends each line of a page with one), leaving out blank lines. A line
+ * longer than a Passage is split into words, as LangChain's recursive splitter
+ * falls back from lines to words.
+ */
+function toPieces(text: string, maxTokens: number): Piece[] {
+  const pieces: Piece[] = [];
+  let start = 0;
+  while (start < text.length) {
+    const lineBreak = text.indexOf("\n", start);
+    const end = lineBreak < 0 ? text.length : lineBreak + 1;
+    const line = text.slice(start, end);
+    if (line.trim()) {
+      const tokens = lineTokens(line);
+      if (tokens <= maxTokens) pieces.push({ start, end, tokens });
+      // A word at most a quarter of a Passage leaves room for the overlap.
+      else pushWords(text, start, end, maxTokens / 4, pieces);
+    }
+    start = end;
+  }
+  return pieces;
 }
 
 /** Lays the pages out as one text and returns it with a lookup from offset to page. */
@@ -159,10 +173,12 @@ function layOut(pages: readonly PageText[]) {
 }
 
 /**
- * Builds overlapping Passages of at most `maxTokens`, each sharing at most
- * `overlapTokens` with the one before it. A Passage prefers to end at a
- * paragraph or sentence break, and the next one to start at one. Passages run
- * across page breaks, recording the range of pages they cover.
+ * Builds overlapping Passages of at most `maxTokens`, as the retrieval
+ * prototype did (ADR-0009) and the old backend's LangChain splitter before
+ * it: whole lines are added to a Passage until the next one would take it
+ * over `maxTokens`; the next Passage then starts with the last lines of this
+ * one, at most `overlapTokens` of them. Passages run across page breaks,
+ * recording the range of pages they cover.
  */
 export function buildPassages(
   pages: readonly PageText[],
@@ -170,74 +186,41 @@ export function buildPassages(
 ): BuiltPassage[] {
   const { maxTokens, overlapTokens, windowSize, windowStep } = parameters;
   const { text, pageAt } = layOut(pages);
-  // A piece at most a quarter of a Passage always leaves room after the overlap.
-  const pieces = toPieces(text, maxTokens / 4);
+  const pieces = toPieces(text, maxTokens);
   if (pieces.length === 0) return [];
 
-  const sums = [0];
-  for (const piece of pieces) sums.push(item(sums, sums.length - 1) + piece.tokens);
-  const tokens = (from: number, to: number) => item(sums, to + 1) - item(sums, from);
-  const last = pieces.length - 1;
-
-  // The strongest break in the second half of the Passage, past the previous Passage's end.
-  const preferredEnd = (start: number, end: number, previousEnd: number) => {
-    let best = end;
-    let bestStrength = item(pieces, end).strength;
-    for (let k = end - 1; k > previousEnd && tokens(start, k) >= maxTokens / 2; k--) {
-      const { strength } = item(pieces, k);
-      if (strength > bestStrength) {
-        best = k;
-        bestStrength = strength;
-      }
-    }
-    return best;
-  };
-
-  // The earliest start that overlaps the Passage by at most `overlapTokens`,
-  // moved on to the strongest break while at least half that overlap remains.
-  const nextStart = (start: number, end: number) => {
-    let first = end + 1;
-    while (first - 1 > start && tokens(first - 1, end) <= overlapTokens) first--;
-    let best = first;
-    let bestStrength = item(pieces, first - 1).strength;
-    for (let s = first + 1; s <= end && tokens(s, end) >= overlapTokens / 2; s++) {
-      const { strength } = item(pieces, s - 1);
-      if (strength > bestStrength) {
-        best = s;
-        bestStrength = strength;
-      }
-    }
-    return best;
-  };
-
+  // LangChain's _merge_splits: [from, to] of the pieces in each Passage.
   const spans: [number, number][] = [];
-  let start = 0;
-  let previousEnd = -1;
-  for (;;) {
-    let end = start;
-    while (end < last && tokens(start, end + 1) <= maxTokens) end++;
-    if (end < last) end = preferredEnd(start, end, previousEnd);
-    spans.push([start, end]);
-    if (end === last) break;
-    start = nextStart(start, end);
-    previousEnd = end;
-  }
+  let from = 0;
+  let total = 0;
+  pieces.forEach((piece, index) => {
+    if (total + piece.tokens > maxTokens && index > from) {
+      spans.push([from, index - 1]);
+      // Keep a tail of at most `overlapTokens` that leaves room for this piece.
+      while (from < index && (total > overlapTokens || total + piece.tokens > maxTokens)) {
+        total -= item(pieces, from).tokens;
+        from++;
+      }
+    }
+    total += piece.tokens;
+  });
+  spans.push([from, pieces.length - 1]);
 
   // The old backend's sliding window: each Passage joins the window, and once
   // it holds more than `windowSize` Passages the oldest `windowStep` leave.
   const window: number[] = [];
-  return spans.map(([from, to], position) => {
+  return spans.map(([first, last], position) => {
     window.push(position);
     if (window.length > windowSize) window.splice(0, windowStep);
-    const first = item(pieces, from);
-    const final = item(pieces, to);
+    const start = item(pieces, first).start;
+    const end = item(pieces, last).end;
     return {
       position,
-      pageFrom: pageAt(first.start),
-      pageTo: pageAt(final.start),
+      pageFrom: pageAt(start),
+      pageTo: pageAt(end - 1),
       windowFrom: item(window, 0),
       windowTo: position,
-      text: text.slice(first.start, final.end).trim(),
+      text: text.slice(start, end).trim(),
     };
   });
 }

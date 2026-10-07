@@ -3,27 +3,39 @@ import { join } from "node:path";
 import { translate } from "../shared/i18n";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
+import type {
+  ChatModelChoice,
+  CoreApi,
+  CoreEventSource,
+  EmbeddingSettings,
+  Unsubscribe,
+} from "./api";
+import { createApprovals } from "./approvals";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
+import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExports } from "./exports";
 import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
+import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
   hasOllamaModel,
+  OLLAMA_REGISTRY,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
+import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
@@ -49,6 +61,11 @@ export interface Core extends CoreApi, CoreEventSource {
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
   readonly dataFlows: DataFlowRegistry;
+  /**
+   * Network traffic that carries no User content, for the Privacy page. Core
+   * modules and the host (e.g. its update check) register theirs here.
+   */
+  readonly networkTraffic: NetworkTrafficRegistry;
   /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
@@ -91,6 +108,11 @@ export function createCore(adapters: CoreAdapters): Core {
   const tagsChanged = () => events.emit("tags.changed", tags.list());
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
+  const secrets = createSecrets(adapters.keychain, settings);
+  const consent = createConsent(db, events, now);
+  const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter });
+  /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
+  const lifetime = new AbortController();
   const embeddingModel = createEmbeddingModel({
     definition: BUILT_IN_EMBEDDING_MODEL,
     source: adapters.embeddingModelSource,
@@ -98,35 +120,116 @@ export function createCore(adapters: CoreAdapters): Core {
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
   });
+  /** Reports the embedding settings again; set once Documents exist. */
+  let embeddingChanged = () => {};
+  /** A Document's status changed: during a rebuild, its progress may have too. */
+  let rebuildMayHaveProgressed = () => {};
+  // The embedding model search uses: the built-in one, or the provider the User chose.
+  const embedding = createActiveEmbedding({
+    builtIn: embeddingModel,
+    settings,
+    secrets,
+    consent,
+    createModel: adapters.createEmbeddingModel ?? createAiSdkEmbeddingModel,
+    signal: lifetime.signal,
+    onChange: () => embeddingChanged(),
+  });
   let documents: ReturnType<typeof createDocuments>;
   try {
     documents = createDocuments({
       db,
       dataDir,
       now,
-      model: embeddingModel,
-      emitStatus: (document) => events.emit("document.status", document),
+      model: embedding.model,
+      emitStatus: (document) => {
+        events.emit("document.status", document);
+        rebuildMayHaveProgressed();
+      },
       onReady: (documentId) => documentReady(documentId),
     });
   } catch (error) {
+    lifetime.abort();
     embeddingModel.close();
     db.close();
     throw error;
   }
   let skills: ReturnType<typeof createSkills>;
   try {
-    skills = createSkills({ db, dataDir, now, reportError: (error) => console.error(error) });
+    skills = createSkills({
+      db,
+      dataDir,
+      now,
+      reportError: (error) => console.error(error),
+      builtInSkills: adapters.paths.builtInSkills,
+    });
   } catch (error) {
+    lifetime.abort();
     documents.close();
     embeddingModel.close();
     db.close();
     throw error;
   }
   const skillsChanged = () => events.emit("skills.changed", skills.list());
-  const secrets = createSecrets(adapters.keychain, settings);
-  const consent = createConsent(db, events, now);
-  /** Aborts work still running (model downloads, a ChatGPT sign-in) when the core closes. */
-  const lifetime = new AbortController();
+
+  /** The embedding settings, with the rebuild's progress; a rebuild that has finished ends here. */
+  const embeddingSettings = async (): Promise<EmbeddingSettings> => {
+    const reason = embedding.rebuildReason();
+    let rebuild: EmbeddingSettings["rebuild"] = null;
+    if (reason) {
+      const progress = documents.embeddingProgress();
+      if (progress.done >= progress.total) embedding.endRebuild();
+      else rebuild = { reason, ...progress };
+    }
+    return {
+      provider: await embedding.provider(),
+      localOnly: embedding.localOnly(),
+      rebuild,
+      error: embedding.error(),
+    };
+  };
+  embeddingChanged = () => {
+    embeddingSettings().then(
+      (current) => {
+        if (!lifetime.signal.aborted) events.emit("embedding.changed", current);
+      },
+      (error: unknown) => {
+        // Reading the keychain is async, so the core may have closed meanwhile.
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
+  };
+  /** The rebuild's progress last reported, so each Document finishing is reported once. */
+  let reportedProgress = "";
+  rebuildMayHaveProgressed = () => {
+    if (!embedding.rebuildReason()) return;
+    const { total, done } = documents.embeddingProgress();
+    const progress = `${done}/${total}`;
+    if (progress === reportedProgress) return;
+    reportedProgress = progress;
+    embeddingChanged();
+  };
+
+  // Rerank, with a Cohere or Voyage key: paused in local mode.
+  const rerank = createRerank({
+    settings,
+    secrets,
+    consent,
+    createModel: adapters.createRerankingModel ?? createAiSdkRerankingModel,
+    localOnly: () => embedding.localOnly(),
+    signal: lifetime.signal,
+  });
+  const rerankChanged = async () => {
+    const status = await rerank.status();
+    if (!lifetime.signal.aborted) events.emit("rerank.changed", status);
+    return status;
+  };
+  /** Local mode on or off: embeddings may switch back to the built-in model, and rerank pauses. */
+  const setLocalOnly = async (enabled: unknown) => {
+    const wasLocal = embedding.localOnly();
+    await embedding.setLocalOnly(enabled);
+    if (wasLocal !== embedding.localOnly()) await rerankChanged();
+    return embeddingSettings();
+  };
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
@@ -197,6 +300,17 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   syncChatFlow();
 
+  // Asking the User before a Connector Tool that may change something runs (#38).
+  const approvals = createApprovals({
+    db,
+    events,
+    now,
+    owners: {
+      connectors: () => new Map(connectors.list().map((each) => [each.id, each.name])),
+      skills: () => new Map(skills.list().map((each) => [each.id, each.name])),
+    },
+  });
+
   const answers = createAnswers({
     content,
     events,
@@ -218,7 +332,7 @@ export function createCore(adapters: CoreAdapters): Core {
       search: (query, documentIds, signal) =>
         documents.searchTool(query, {
           signal,
-          rerank: adapters.reranker,
+          rerank: adapters.reranker ?? rerank.reranker,
           documentIds: documentIds ?? undefined,
         }),
       citationSource: (passageId) => documents.citationSource(passageId),
@@ -226,6 +340,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     connectorTools: (signal) => connectors.toolsForAnswer(signal),
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
+    approvals: {
+      toolNeedsApproval: (connectorId, tool, readOnly) =>
+        approvals.toolNeedsApproval(connectorId, tool, readOnly),
+      request: (call, signal) => approvals.request(call, signal),
+    },
     skills: {
       availability: (name) => skills.availability(name),
       openSession: (forced) => skills.openSession(forced),
@@ -320,6 +439,42 @@ export function createCore(adapters: CoreAdapters): Core {
   // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
   tagger.start();
 
+  // Traffic that carries nothing of the User's, for the Privacy page.
+  const modelSource = adapters.embeddingModelSource ?? BUILT_IN_EMBEDDING_MODEL.source;
+  const modelHost = new URL(modelSource.baseUrl);
+  privacy.traffic.register({
+    id: "embedding-model",
+    service: {
+      id: modelHost.origin,
+      name: modelHost.host === "huggingface.co" ? "Hugging Face" : modelHost.host,
+    },
+    // A model with no files to download (the tests' fake) makes no traffic.
+    listed: () => modelSource.files.length > 0,
+  });
+  privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
+  const chatGptSignIn = new URL(
+    adapters.chatGptPlan?.authorizeUrl ?? CHATGPT_PLAN_ENDPOINTS.authorizeUrl,
+  );
+  privacy.traffic.register({
+    id: "chatgpt-sign-in",
+    service: { id: chatGptSignIn.origin, name: "OpenAI" },
+    listed: () => chatGpt.enabled(),
+  });
+  privacy.traffic.register({
+    id: "remote-connectors",
+    services: () => connectors.remoteTraffic(),
+  });
+  // Crash reports start now if the User opted in before; otherwise not at all.
+  privacy.start();
+  const privacyChanged = () => events.emit("privacy.changed", privacy.status());
+  /** After the User allows or revokes a flow: the flows as they are now, and what that changes. */
+  const dataFlowsChanged = async () => {
+    const flows = await consent.listRegistered();
+    if (lifetime.signal.aborted) return;
+    events.emit("dataFlows.changed", flows);
+    await readinessChanged();
+  };
+
   connectorsToggled = () => {
     syncChatFlow();
     readinessChanged().catch((error: unknown) => console.error(error));
@@ -391,6 +546,29 @@ export function createCore(adapters: CoreAdapters): Core {
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
 
+    getEmbeddingSettings: () => embeddingSettings(),
+    saveEmbeddingProvider: async (input) => {
+      await embedding.save(input);
+      return embeddingSettings();
+    },
+    testEmbeddingConnection: (input) => embedding.test(input),
+    retryEmbedding: async () => {
+      embedding.retry();
+      return embeddingSettings();
+    },
+    setLocalOnly: (enabled) => setLocalOnly(enabled),
+
+    getRerankSettings: () => rerank.status(),
+    saveRerankSettings: async (input) => {
+      await rerank.save(input);
+      return rerankChanged();
+    },
+    removeRerankSettings: async () => {
+      await rerank.remove();
+      return rerankChanged();
+    },
+    testRerankConnection: (input) => rerank.test(input),
+
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
@@ -434,6 +612,10 @@ export function createCore(adapters: CoreAdapters): Core {
       const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
       settingsChanged();
       await readinessChanged();
+      // Local mode: Document search stays on this computer too. A cloud
+      // embedding provider goes back to the built-in model, and the rebuild
+      // ("embedding.changed", reason "local-mode") tells the User.
+      await setLocalOnly(true);
       return provider;
     },
 
@@ -460,7 +642,20 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     revokeConsent: async (flowId, serviceId) => {
       consent.revoke(flowId, serviceId);
-      await readinessChanged();
+      await dataFlowsChanged();
+    },
+    listRegisteredDataFlows: () => consent.listRegistered(),
+    allowDataFlow: async (flowId, serviceId) => {
+      await consent.allow(flowId, serviceId);
+      await dataFlowsChanged();
+    },
+
+    listNetworkTraffic: () => privacy.listTraffic(),
+    getPrivacySettings: async () => privacy.status(),
+    updatePrivacySettings: async (patch) => {
+      const { changed, settings: updated } = privacy.update(patch);
+      if (changed) privacyChanged();
+      return updated;
     },
 
     moveDocument: async (documentId, folderInput) => {
@@ -551,13 +746,23 @@ export function createCore(adapters: CoreAdapters): Core {
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
     restartConnector: (connectorId) => connectors.restart(connectorId),
-    deleteConnector: (connectorId) => connectors.delete(connectorId),
+    deleteConnector: async (connectorId) => {
+      await connectors.delete(connectorId);
+      // Its "always allow" and "ask" go with it: added again, it is a new Connector.
+      approvals.forgetConnector(connectorId);
+    },
     signInToConnector: (connectorId) => connectors.signIn(connectorId),
     cancelConnectorSignIn: (connectorId) => connectors.cancelSignIn(connectorId),
     signOutOfConnector: (connectorId) => connectors.signOut(connectorId),
     setConnectorClient: (connectorId, client) => connectors.setClient(connectorId, client),
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
+
+    listApprovalPolicies: async () => approvals.list(),
+    setApprovalPolicy: async (input) => approvals.set(input),
+    revokeApprovalPolicy: async (policyId) => approvals.revoke(policyId),
+    listApprovalRequests: async () => approvals.requests(),
+    respondToApproval: async (requestId, decision) => approvals.respond(requestId, decision),
 
     listSkills: async () => skills.list(),
     previewSkillImport: (path) => skills.preview(path),
@@ -575,6 +780,18 @@ export function createCore(adapters: CoreAdapters): Core {
     removeSkill: async (skillId) => {
       await skills.remove(skillId);
       skillsChanged();
+      approvals.forgetSkill(skillId);
+    },
+    duplicateSkill: async (skillId) => {
+      const skill = await skills.duplicate(skillId);
+      skillsChanged();
+      return skill;
+    },
+    listRemovedBuiltInSkills: async () => skills.removedBuiltIns(),
+    restoreBuiltInSkills: async () => {
+      const restored = await skills.restoreBuiltIns();
+      if (restored.length > 0) skillsChanged();
+      return restored;
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
@@ -584,13 +801,16 @@ export function createCore(adapters: CoreAdapters): Core {
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
+    networkTraffic: privacy.traffic,
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;
       lifetime.abort();
       void chatGpt.cancelSignIn();
-      // Answers being written keep what they have, marked "stopped".
+      // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
+      // the User's approval are denied.
       answers.stopAll();
+      approvals.close();
       connectors.close();
       tagger.close();
       skills.close();

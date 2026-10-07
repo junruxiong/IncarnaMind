@@ -28,6 +28,8 @@ import {
   TrashIcon,
 } from "./icons";
 import { MoveToMenu } from "./MoveToMenu";
+import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
+import { testErrorKey } from "./providers/shared";
 
 /** What the file picker offers. The core decides what it takes. */
 const ACCEPTED_FILES = ".pdf,.txt,.md,.markdown";
@@ -144,6 +146,7 @@ export function DocumentsSection() {
       </div>
       <SkippedFilesNotice />
       <EmbeddingModelNotice />
+      <EmbeddingRebuildNotice />
       <TaggingWaitingNotice />
       <FolderTree
         newFolderIn={newFolderIn}
@@ -387,6 +390,62 @@ function EmbeddingModelNotice() {
       >
         {t("embedding.model.retry")}
       </button>
+    </div>
+  );
+}
+
+/**
+ * After the embedding model changed: how many Documents are embedded with the
+ * new one, and why it changed if local mode did it. While the chosen provider
+ * can't be used, what is wrong, with a retry.
+ */
+function EmbeddingRebuildNotice() {
+  const t = useT();
+  const embedding = useAppStore((state) => state.embedding);
+  const retry = useAppStore((state) => state.retryEmbedding);
+  if (!embedding) return null;
+  const { rebuild, error, provider } = embedding;
+  if (error) {
+    return (
+      <div
+        role="alert"
+        data-testid="embedding-provider-error"
+        className="mx-3 mb-1 flex items-start gap-2 rounded-[9px] bg-amber-50 px-2 py-[5px] text-[12px] text-amber-800"
+      >
+        <p className="min-w-0 flex-1 break-words" title={error.message}>
+          {t("embeddingProviders.error.notice", {
+            provider: embeddingProviderLabel(provider, t),
+            reason: t(testErrorKey(error.kind)),
+          })}
+        </p>
+        <button
+          type="button"
+          onClick={() => void retry()}
+          className="shrink-0 rounded-[6px] px-1 font-medium hover:bg-amber-100"
+        >
+          {t("embeddingProviders.settings.retry")}
+        </button>
+      </div>
+    );
+  }
+  if (!rebuild) return null;
+  const share = rebuild.total > 0 ? rebuild.done / rebuild.total : 0;
+  return (
+    <div
+      role="status"
+      data-testid="embedding-rebuild-notice"
+      className="mx-3 mb-1 rounded-[9px] bg-gray-100 px-2 py-[5px] text-[12px] text-gray-600"
+    >
+      {rebuild.reason === "local-mode" && (
+        <p className="mb-1 text-gray-700">{t("embeddingProviders.rebuild.localMode")}</p>
+      )}
+      <p>{t("embeddingProviders.rebuild.title", { done: rebuild.done, total: rebuild.total })}</p>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-gray-200">
+        <div className="h-full bg-gray-500" style={{ width: `${Math.round(share * 100)}%` }} />
+      </div>
+      <p className="mt-1 text-[11px] leading-4 text-gray-400">
+        {t("embeddingProviders.rebuild.note")}
+      </p>
     </div>
   );
 }
