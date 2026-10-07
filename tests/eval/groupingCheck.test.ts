@@ -43,7 +43,7 @@ import {
 import { loadGroupingSet } from "../../eval/grouping/lib/set";
 import type { MeansTiming } from "../../eval/grouping/lib/timing";
 import type { VariantId, VariantVectors } from "../../eval/grouping/lib/variants";
-import { normalised, seededRandom } from "../../src/core/topics/grouping";
+import { normalised, seededRandom, topicCount } from "../../src/core/topics/grouping";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const set = loadGroupingSet(root);
@@ -151,11 +151,12 @@ describe("scoring", () => {
 
   test("purity is the share of grouped Documents in a Topic whose main subject is theirs", () => {
     const topicOf = topicsByKey(
-      [{ members: ["mars-en", "mars-zh", "photo-en"] }, { members: ["tea-en", "tea-zh"] }],
+      [{ members: ["mars-en", "mars-zh", "photo-en"] }, { members: ["tea-en", "tea-green"] }],
       ["quake-en"],
     );
     const summary = summariseGrouping(set, topicOf);
-    expect(summary).toMatchObject({ topics: 2, grouped: 5, ungrouped: 1 });
+    // The second Topic is English only.
+    expect(summary).toMatchObject({ topics: 2, grouped: 5, ungrouped: 1, bilingual: 1 });
     expect(summary.purity).toBeCloseTo(4 / 5, 10);
     expect(summary.contents).toEqual(["mars ×2, photosynthesis", "tea ×2"]);
   });
@@ -222,6 +223,10 @@ describe("the variants", () => {
     expect(result.heldOut.hits).toBe(result.heldOut.total);
     expect(result.choosing.hits).toBe(result.choosing.total);
     expect(result.summary.purity).toBe(1);
+    expect(result.summary.bilingual).toBe(subjects.length);
+    // The diagnostic: the design's own k for 47 Documents, without raising it to 12.
+    expect(result.designK.k).toBe(topicCount(set.documents.length));
+    expect(result.designK.heldOut.total).toBe(result.heldOut.total);
   });
 
   test("a pull towards the language splits the pairs, and the decks with an English Document stay", () => {
@@ -265,6 +270,17 @@ describe("the incremental cases", () => {
       const expected = subjectOf(arrival.key) === "pharma" ? "stays out" : "joins its subject";
       expect(arrival, arrival.key).toMatchObject({ expected, correct: true });
     }
+  });
+
+  test("when the Document to rename isn't grouped, the largest Topic is renamed instead", () => {
+    // pharma-code arrives late on a new subject, so it is in Not grouped yet.
+    const renaming = { ...set, corrections: { ...set.corrections, rename: "pharma-code" } };
+    const result = runIncremental(renaming, vectorsFor({ quiet: new Set(set.lateArrivals) }));
+    expect(result.corrections[0]).toMatch(
+      /^Renamed topic-\d+, the largest Topic \(pharma-code isn't in a Topic\)\.$/,
+    );
+    const renamed = result.checks.find((check) => check.description.startsWith('"Renamed by'));
+    expect(renamed?.kept).toBe(true);
   });
 
   test("the User's rename, moves and new Topic survive the Regroup", () => {

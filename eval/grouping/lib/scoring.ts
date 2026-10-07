@@ -162,12 +162,14 @@ export interface GroupingSummary {
   ungrouped: number;
   /** The share of grouped Documents in a Topic whose most common subject is theirs. */
   purity: number;
+  /** Topics holding both English and Chinese Documents: few means the grouping follows the language. */
+  bilingual: number;
   /** Each Topic's subjects, e.g. "climate ×2, mars". */
   contents: string[];
 }
 
 export function summariseGrouping(set: GroupingSet, topicOf: TopicOf): GroupingSummary {
-  const byTopic = new Map<number, string[]>();
+  const byTopic = new Map<number, SetDocument[]>();
   let ungrouped = 0;
   for (const document of set.documents) {
     const topic = topicOf.get(document.key);
@@ -176,17 +178,19 @@ export function summariseGrouping(set: GroupingSet, topicOf: TopicOf): GroupingS
       ungrouped++;
       continue;
     }
-    byTopic.set(topic, [...(byTopic.get(topic) ?? []), document.subject]);
+    byTopic.set(topic, [...(byTopic.get(topic) ?? []), document]);
   }
   let majority = 0;
   let grouped = 0;
+  let bilingual = 0;
   const contents: string[] = [];
   for (const topic of [...byTopic.keys()].sort((a, b) => a - b)) {
-    const subjects = byTopic.get(topic) as string[];
+    const members = byTopic.get(topic) as SetDocument[];
     const counts = new Map<string, number>();
-    for (const subject of subjects) counts.set(subject, (counts.get(subject) ?? 0) + 1);
+    for (const { subject } of members) counts.set(subject, (counts.get(subject) ?? 0) + 1);
     majority += Math.max(...counts.values());
-    grouped += subjects.length;
+    grouped += members.length;
+    if (new Set(members.map((member) => member.language)).size > 1) bilingual++;
     contents.push(describeTopic(set, topicOf, topic, ""));
   }
   return {
@@ -194,6 +198,7 @@ export function summariseGrouping(set: GroupingSet, topicOf: TopicOf): GroupingS
     grouped,
     ungrouped,
     purity: grouped === 0 ? 0 : majority / grouped,
+    bilingual,
     contents,
   };
 }

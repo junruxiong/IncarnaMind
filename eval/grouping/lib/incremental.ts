@@ -149,13 +149,25 @@ export function runIncremental(
     corrections.push(`Moved ${key} from ${from?.id ?? "Not grouped yet"} into ${target.id}.`);
   };
 
-  const renamed = topicOf(set.corrections.rename);
+  // There is always a rename: if its Document isn't grouped, the largest Topic is renamed.
+  const holding = topicOf(set.corrections.rename);
+  const renamed =
+    holding ??
+    topics.reduce<TopicState | undefined>(
+      (largest, topic) =>
+        !largest || topic.members.length > largest.members.length ? topic : largest,
+      undefined,
+    );
   if (renamed) {
     renamed.name = "Renamed by the User";
     freeze(renamed, "renamed");
-    corrections.push(`Renamed ${renamed.id}, the Topic holding ${set.corrections.rename}.`);
+    corrections.push(
+      holding
+        ? `Renamed ${renamed.id}, the Topic holding ${set.corrections.rename}.`
+        : `Renamed ${renamed.id}, the largest Topic (${set.corrections.rename} isn't in a Topic).`,
+    );
   } else {
-    corrections.push(`No rename: ${set.corrections.rename} isn't in a Topic.`);
+    corrections.push("No rename: there are no Topics.");
   }
 
   let moves = 0;

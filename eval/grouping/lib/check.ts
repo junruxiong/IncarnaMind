@@ -51,7 +51,15 @@ export function evaluateVariant(
   const seconds = (performance.now() - started) / 1000;
   const topicOf = topicsByKey(grouping.topics, grouping.ungrouped);
   const variant = variantOf(built.id);
+  const atDesignK = groupDocuments(documents, { seed: DEFAULT_SEED });
+  const designTopicOf = topicsByKey(atDesignK.topics, atDesignK.ungrouped);
   return {
+    designK: {
+      k: atDesignK.k,
+      summary: summariseGrouping(set, designTopicOf),
+      choosing: scoreCases(set, set.choosing, designTopicOf),
+      heldOut: scoreCases(set, set.heldOut, designTopicOf),
+    },
     id: built.id,
     label: variant.label,
     cost: variant.cost,

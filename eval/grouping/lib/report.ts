@@ -71,6 +71,11 @@ export interface VariantResult extends GroupingRun {
   /** Building the vectors: the extra embeddings this variant needs and their time. */
   extraEmbeddings: number;
   buildSeconds: number;
+  /**
+   * A diagnostic, not a bar: the same vectors grouped with the design's own
+   * k for this many Documents, without raising it to the number of subjects.
+   */
+  designK: { k: number; summary: GroupingSummary; choosing: CasesScore; heldOut: CasesScore };
 }
 
 export interface ClassifierResult {
@@ -170,16 +175,28 @@ function caseLine(each: CaseResult): string {
 
 function variantTable(variants: readonly VariantResult[], chosen: VariantId): string[] {
   const lines = [
-    "| Document vector | Choosing: pairs | Choosing: decks | **Held-out: pairs** | **Held-out: decks** | Purity | Topics (ungrouped) | Extra cost |",
-    "|---|---|---|---|---|---|---|---|",
+    "| Document vector | Choosing: pairs | Choosing: decks | **Held-out: pairs** | **Held-out: decks** | Purity | Topics (ungrouped) | Topics with both languages | Extra cost |",
+    "|---|---|---|---|---|---|---|---|---|",
   ];
   for (const variant of variants) {
     const label = variant.id === chosen ? `**${variant.label} (chosen)**` : variant.label;
     lines.push(
-      `| ${label} | ${fraction(variant.choosing.pairs)} | ${fraction(variant.choosing.decks)} | ${fraction(variant.heldOut.pairs)} | ${fraction(variant.heldOut.decks)} | ${percent(variant.summary.purity)} | ${variant.summary.topics} (${variant.summary.ungrouped}) | ${variant.extraEmbeddings} embeddings, ${variant.buildSeconds.toFixed(1)} s |`,
+      `| ${label} | ${fraction(variant.choosing.pairs)} | ${fraction(variant.choosing.decks)} | ${fraction(variant.heldOut.pairs)} | ${fraction(variant.heldOut.decks)} | ${percent(variant.summary.purity)} | ${variant.summary.topics} (${variant.summary.ungrouped}) | ${variant.summary.bilingual} | ${variant.extraEmbeddings} embeddings, ${variant.buildSeconds.toFixed(1)} s |`,
     );
   }
   return lines;
+}
+
+/** The same vectors at the design's own k: whether the result depends on raising k to the subjects. */
+function designKTable(variants: readonly VariantResult[]): string[] {
+  return [
+    "| Document vector | k | Choosing: pairs | Choosing: decks | Held-out: pairs | Held-out: decks | Purity | Topics (ungrouped) | Topics with both languages |",
+    "|---|---|---|---|---|---|---|---|---|",
+    ...variants.map(
+      ({ label, designK }) =>
+        `| ${label} | ${designK.k} | ${fraction(designK.choosing.pairs)} | ${fraction(designK.choosing.decks)} | ${fraction(designK.heldOut.pairs)} | ${fraction(designK.heldOut.decks)} | ${percent(designK.summary.purity)} | ${designK.summary.topics} (${designK.summary.ungrouped}) | ${designK.summary.bilingual} |`,
+    ),
+  ];
 }
 
 function nameRowTable(variants: readonly VariantResult[]): string[] {
@@ -275,6 +292,12 @@ export function fixturesMarkdown(report: FixturesReport): string {
     `Chosen: **${chosen.label}**, by ${report.chosen.reason}. A near-tie (within one case) goes to the cheaper variant.`,
     "",
     `Grouping took ${report.variants.map((variant) => `${variant.seconds.toFixed(2)} s (${variant.label})`).join(", ")}, k = ${chosen.k}.`,
+    "",
+    "### At the design's own k (a diagnostic, not a bar)",
+    "",
+    "The same vectors grouped with k = round(√(N/2)) for these Documents, without raising it to the number of subjects: whether the result depends on that.",
+    "",
+    ...designKTable(report.variants),
     "",
     "### Documents whose names share a part (R3)",
     "",
