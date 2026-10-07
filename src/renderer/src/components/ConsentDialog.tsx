@@ -78,7 +78,12 @@ export function ConsentDialog() {
             ))}
           </ul>
           {request.flow.id === "connectors" && (
-            <p className="mt-3 text-sm text-gray-700">{t("connectors.consent.note")}</p>
+            <p className="mt-3 text-sm text-gray-700">
+              {/* A local Connector's service is "connector:<id>"; a remote one's is its server's origin. */}
+              {request.flow.service.id.startsWith("connector:")
+                ? t("connectors.consent.note")
+                : t("remoteConnectors.consent.note")}
+            </p>
           )}
           <p className="mt-3 text-xs text-gray-500">{t("consent.dialog.note")}</p>
           <div className="mt-4 flex justify-end gap-2">

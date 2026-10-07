@@ -103,7 +103,7 @@ export function PrivacySettings() {
         <ul className="flex flex-col gap-3">
           {traffic?.map((item) => (
             <TrafficItem
-              key={item.id}
+              key={`${item.id} ${item.service.id}`}
               traffic={item}
               choices={choices}
               onChange={(patch) => void update(patch)}

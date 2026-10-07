@@ -1,10 +1,16 @@
 /**
  * OAuth 2.0 sign-in for a desktop app: the authorization code flow with PKCE
  * (RFC 7636) in the User's browser, redirecting to a small HTTP server on the
- * loopback interface (RFC 8252). Used by the ChatGPT plan provider and, later,
- * by remote Connectors that sign in with OAuth (#39), so nothing here knows
- * about a particular service: the caller passes every URL, the client ID, the
- * port and the path.
+ * loopback interface (RFC 8252). Nothing here knows about a particular
+ * service: the caller passes every URL, the client ID, the port and the path.
+ *
+ * - `openLoopbackRedirect` is where the browser comes back to: a one-off
+ *   server on 127.0.0.1 that accepts only the sign-in's own `state`, shows a
+ *   "you can close this tab" page, times out, and frees its port. Remote
+ *   Connectors use it on its own: the MCP SDK discovers their authorization
+ *   server, registers IncarnaMind and builds the request with PKCE.
+ * - `authorizeWithLoopback` runs the whole flow on top of it, for a server
+ *   whose endpoints and client ID are known: the ChatGPT plan provider.
  *
  * The browser is opened through the core's `Browser` adapter; this module
  * never imports Electron.
@@ -25,14 +31,8 @@ export interface OAuthPage {
   body: string;
 }
 
-export interface LoopbackAuthorizationOptions {
-  /** The authorization endpoint, e.g. "https://auth.example.com/oauth/authorize". */
-  authorizeUrl: string;
-  /** The token endpoint, for exchanging the code. */
-  tokenUrl: string;
-  clientId: string;
-  /** Space-separated scopes, if the server wants them. */
-  scope?: string;
+/** Where the browser comes back to: a one-off HTTP server on the loopback interface. */
+export interface LoopbackRedirectOptions {
   /**
    * The loopback port to listen on. Some servers allow only the redirect URI
    * they registered, so a fixed port; 0 picks any free port, for servers that
@@ -41,18 +41,28 @@ export interface LoopbackAuthorizationOptions {
   port: number;
   /** The redirect path, e.g. "/auth/callback". */
   path: string;
-  /** Extra query parameters for the authorization request (e.g. RFC 8707 `resource`). */
-  authorizeParams?: Readonly<Record<string, string>>;
-  /** Extra form parameters for the code exchange. */
-  tokenParams?: Readonly<Record<string, string>>;
-  /** Opens the authorization URL in the User's browser. */
-  openBrowser(url: string): Promise<void>;
   /** What the browser tab shows when sign-in finishes, or fails. */
   pages: { success: OAuthPage; failure: OAuthPage };
   /** Defaults to five minutes. */
   timeoutMs?: number;
   /** Aborting cancels the sign-in and frees the port. */
   signal?: AbortSignal;
+}
+
+export interface LoopbackAuthorizationOptions extends LoopbackRedirectOptions {
+  /** The authorization endpoint, e.g. "https://auth.example.com/oauth/authorize". */
+  authorizeUrl: string;
+  /** The token endpoint, for exchanging the code. */
+  tokenUrl: string;
+  clientId: string;
+  /** Space-separated scopes, if the server wants them. */
+  scope?: string;
+  /** Extra query parameters for the authorization request (e.g. RFC 8707 `resource`). */
+  authorizeParams?: Readonly<Record<string, string>>;
+  /** Extra form parameters for the code exchange. */
+  tokenParams?: Readonly<Record<string, string>>;
+  /** Opens the authorization URL in the User's browser. */
+  openBrowser(url: string): Promise<void>;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -230,32 +240,67 @@ export async function refreshOAuthTokens(options: {
   return readTokenResponse(response, "token refresh");
 }
 
+/** What the browser brought back, for the caller to check and use. */
+export interface LoopbackReceipt<T> {
+  /**
+   * Checks the authorization response before anything in it is acted on, e.g.
+   * its `iss` (RFC 9207). Throwing fails the sign-in with the thrown error, and
+   * the tab shows that error's message, never what the response said.
+   */
+  verify?(params: URLSearchParams): void;
+  /** Exchanges the authorization code for tokens. The tab then says how it went. */
+  exchange(code: string, params: URLSearchParams): Promise<T>;
+}
+
 /**
- * Runs the whole browser sign-in: listens on the loopback port, opens the
- * authorization URL, waits for the redirect, checks its state, exchanges the
- * code with the PKCE verifier, shows a "you can close this tab" page, and
- * frees the port. Rejects with `OAuthFlowError` or `OAuthTokenError`.
+ * A loopback redirect waiting for the browser. It answers only a redirect to
+ * its path that carries its `state`; anything else is refused, and it keeps
+ * waiting. The first such redirect is held until `receive` deals with it.
  */
-export async function authorizeWithLoopback(
-  options: LoopbackAuthorizationOptions,
-): Promise<OAuthTokens> {
+export interface LoopbackRedirect {
+  /** e.g. "http://127.0.0.1:53124/callback", for the authorization request. */
+  readonly redirectUri: string;
+  /** The `state` the authorization request carries and the redirect must bring back. */
+  readonly state: string;
+  /**
+   * Waits for the redirect, checks it, exchanges its code, and shows the tab
+   * a page saying how it went. Rejects with `OAuthFlowError` when the User
+   * declined, nothing came back in time, or the sign-in was cancelled, and
+   * with whatever `verify` or `exchange` threw.
+   */
+  receive<T>(receipt: LoopbackReceipt<T>): Promise<T>;
+  /** Stops waiting and frees the port. Safe to call more than once. */
+  close(): Promise<void>;
+}
+
+interface Arrival {
+  params: URLSearchParams;
+  response: ServerResponse;
+}
+
+/**
+ * Starts listening on 127.0.0.1 for the browser's redirect, with a fresh
+ * random `state`. Rejects with `OAuthFlowError` ("port-in-use") when the port
+ * is taken. The timeout runs from now; call `close` when done, whatever happened.
+ */
+export async function openLoopbackRedirect(
+  options: LoopbackRedirectOptions,
+): Promise<LoopbackRedirect> {
   const { signal } = options;
   if (signal?.aborted) throw new OAuthFlowError("cancelled", "The sign-in was cancelled.");
-  const fetcher = options.fetch ?? globalThis.fetch;
-  const pkce = createPkcePair();
   const state = base64Url(randomBytes(24));
 
-  let settle!: (tokens: OAuthTokens) => void;
+  let arrive!: (arrival: Arrival) => void;
   let fail!: (error: Error) => void;
-  const result = new Promise<OAuthTokens>((resolve, reject) => {
-    settle = resolve;
+  const arrived = new Promise<Arrival>((resolve, reject) => {
+    arrive = resolve;
     fail = reject;
   });
-  // A failure before anyone awaits (e.g. while the browser opens) must not go unhandled.
-  result.catch(() => undefined);
+  // A failure before anyone awaits (e.g. a timeout before `receive`) must not go unhandled.
+  arrived.catch(() => undefined);
 
-  let redirectUri = "";
   let claimed = false;
+  const failurePage = (detail: string) => renderPage(options.pages.failure, detail);
 
   const handle = async (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? "/", `http://${LOOPBACK_HOST}`);
@@ -263,8 +308,7 @@ export async function authorizeWithLoopback(
       response.writeHead(404, { connection: "close" }).end();
       return;
     }
-    // A redirect that didn't come from this sign-in: ignore it and keep waiting.
-    const failurePage = (detail: string) => renderPage(options.pages.failure, detail);
+    // A redirect that didn't come from this sign-in: refuse it and keep waiting.
     if (url.searchParams.get("state") !== state) {
       await sendPage(response, 400, failurePage("The sign-in state didn't match."));
       return;
@@ -274,41 +318,8 @@ export async function authorizeWithLoopback(
       return;
     }
     claimed = true;
-    const error = url.searchParams.get("error");
-    if (error) {
-      const description = url.searchParams.get("error_description") ?? error;
-      await sendPage(response, 400, failurePage(description));
-      fail(new OAuthFlowError("denied", `The sign-in was refused: ${description}`));
-      return;
-    }
-    const code = url.searchParams.get("code");
-    if (!code) {
-      await sendPage(response, 400, failurePage("No authorization code came back."));
-      fail(new OAuthFlowError("denied", "The sign-in returned no authorization code."));
-      return;
-    }
-    try {
-      const exchange = await postForm(
-        fetcher,
-        options.tokenUrl,
-        {
-          grant_type: "authorization_code",
-          client_id: options.clientId,
-          code,
-          redirect_uri: redirectUri,
-          code_verifier: pkce.verifier,
-          ...options.tokenParams,
-        },
-        signal,
-      );
-      const tokens = await readTokenResponse(exchange, "sign-in");
-      await sendPage(response, 200, renderPage(options.pages.success));
-      settle(tokens);
-    } catch (failure) {
-      const reason = failure instanceof Error ? failure : new Error(String(failure));
-      await sendPage(response, 502, failurePage(reason.message));
-      fail(reason);
-    }
+    // The tab waits for its page until `receive` has dealt with the redirect.
+    arrive({ params: url.searchParams, response });
   };
 
   const server = createServer((request, response) => {
@@ -334,42 +345,117 @@ export async function authorizeWithLoopback(
   server.on("error", (error) => fail(error));
 
   const { port } = server.address() as AddressInfo;
-  redirectUri = `http://${LOOPBACK_HOST}:${port}${options.path}`;
+  const redirectUri = `http://${LOOPBACK_HOST}:${port}${options.path}`;
 
-  const timeoutMs = options.timeoutMs ?? DEFAULT_SIGN_IN_TIMEOUT_MS;
   const timer = setTimeout(
     () => fail(new OAuthFlowError("timed-out", "The sign-in didn't finish in time.")),
-    timeoutMs,
+    options.timeoutMs ?? DEFAULT_SIGN_IN_TIMEOUT_MS,
   );
   const onAbort = () => fail(new OAuthFlowError("cancelled", "The sign-in was cancelled."));
   signal?.addEventListener("abort", onAbort, { once: true });
   // Cancelled while the server was starting: the listener above came too late to hear it.
   if (signal?.aborted) onAbort();
 
+  let closing: Promise<void> | null = null;
+  return {
+    redirectUri,
+    state,
+
+    async receive<T>(receipt: LoopbackReceipt<T>): Promise<T> {
+      const { params, response } = await arrived;
+      try {
+        receipt.verify?.(params);
+      } catch (failure) {
+        const reason = failure instanceof Error ? failure : new Error(String(failure));
+        await sendPage(response, 400, failurePage(reason.message));
+        throw reason;
+      }
+      const error = params.get("error");
+      if (error) {
+        const description = params.get("error_description") ?? error;
+        await sendPage(response, 400, failurePage(description));
+        throw new OAuthFlowError("denied", `The sign-in was refused: ${description}`);
+      }
+      const code = params.get("code");
+      if (!code) {
+        await sendPage(response, 400, failurePage("No authorization code came back."));
+        throw new OAuthFlowError("denied", "The sign-in returned no authorization code.");
+      }
+      try {
+        const value = await receipt.exchange(code, params);
+        await sendPage(response, 200, renderPage(options.pages.success));
+        return value;
+      } catch (failure) {
+        const reason = failure instanceof Error ? failure : new Error(String(failure));
+        await sendPage(response, 502, failurePage(reason.message));
+        throw reason;
+      }
+    },
+
+    close() {
+      closing ??= (async () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        fail(new OAuthFlowError("cancelled", "The sign-in was cancelled."));
+        // Pages are sent with "connection: close"; drop anything still open so the port is free now.
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+      })();
+      return closing;
+    },
+  };
+}
+
+/**
+ * Runs the whole browser sign-in: listens on the loopback port, opens the
+ * authorization URL, waits for the redirect, checks its state, exchanges the
+ * code with the PKCE verifier, shows a "you can close this tab" page, and
+ * frees the port. Rejects with `OAuthFlowError` or `OAuthTokenError`.
+ */
+export async function authorizeWithLoopback(
+  options: LoopbackAuthorizationOptions,
+): Promise<OAuthTokens> {
+  const { signal } = options;
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const pkce = createPkcePair();
+  const loopback = await openLoopbackRedirect(options);
   try {
     if (!signal?.aborted) {
       const authorize = new URL(options.authorizeUrl);
       const params: Record<string, string> = {
         response_type: "code",
         client_id: options.clientId,
-        redirect_uri: redirectUri,
+        redirect_uri: loopback.redirectUri,
         ...(options.scope ? { scope: options.scope } : {}),
         code_challenge: pkce.challenge,
         code_challenge_method: "S256",
-        state,
+        state: loopback.state,
         ...options.authorizeParams,
       };
       for (const [name, value] of Object.entries(params)) authorize.searchParams.set(name, value);
       await options.openBrowser(authorize.href);
     }
-    return await result;
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener("abort", onAbort);
-    // Responses are sent with "connection: close"; drop anything still open so the port is free now.
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve());
-      server.closeAllConnections();
+    return await loopback.receive({
+      async exchange(code) {
+        const response = await postForm(
+          fetcher,
+          options.tokenUrl,
+          {
+            grant_type: "authorization_code",
+            client_id: options.clientId,
+            code,
+            redirect_uri: loopback.redirectUri,
+            code_verifier: pkce.verifier,
+            ...options.tokenParams,
+          },
+          signal,
+        );
+        return readTokenResponse(response, "sign-in");
+      },
     });
+  } finally {
+    await loopback.close();
   }
 }

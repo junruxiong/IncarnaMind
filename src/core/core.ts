@@ -256,12 +256,30 @@ export function createCore(adapters: CoreAdapters): Core {
   const connectors = createConnectors({
     db,
     now,
+    clock: () => (adapters.now?.() ?? new Date()).getTime(),
     secrets,
     processes: adapters.processes,
+    browser: adapters.browser,
     consent,
+    signInPages: (name) => {
+      const { language } = settings.get();
+      return {
+        success: {
+          title: translate(language, "remoteConnectors.page.success.title", { name }),
+          body: translate(language, "remoteConnectors.page.success.body"),
+        },
+        failure: {
+          title: translate(language, "remoteConnectors.page.failure.title", { name }),
+          body: translate(language, "remoteConnectors.page.failure.body"),
+        },
+      };
+    },
     onChange: (list) => events.emit("connectors.changed", list),
     onEnabledChange: () => connectorsToggled(),
     reportError: (error) => console.error(error),
+    ...(adapters.connectorSignInTimeoutMs !== undefined && {
+      timing: { signInTimeoutMs: adapters.connectorSignInTimeoutMs },
+    }),
   });
   /**
    * With a Connector on, Answers send the chat model what its Tools return,
@@ -321,6 +339,7 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
     },
     connectorTools: (signal) => connectors.toolsForAnswer(signal),
+    connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
       toolNeedsApproval: (connectorId, tool, readOnly) =>
         approvals.toolNeedsApproval(connectorId, tool, readOnly),
@@ -440,6 +459,10 @@ export function createCore(adapters: CoreAdapters): Core {
     id: "chatgpt-sign-in",
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
     listed: () => chatGpt.enabled(),
+  });
+  privacy.traffic.register({
+    id: "remote-connectors",
+    services: () => connectors.remoteTraffic(),
   });
   // Crash reports start now if the User opted in before; otherwise not at all.
   privacy.start();
@@ -722,12 +745,16 @@ export function createCore(adapters: CoreAdapters): Core {
     addConnector: (input) => connectors.add(input),
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
-    restartConnector: async (connectorId) => connectors.restart(connectorId),
+    restartConnector: (connectorId) => connectors.restart(connectorId),
     deleteConnector: async (connectorId) => {
       await connectors.delete(connectorId);
       // Its "always allow" and "ask" go with it: added again, it is a new Connector.
       approvals.forgetConnector(connectorId);
     },
+    signInToConnector: (connectorId) => connectors.signIn(connectorId),
+    cancelConnectorSignIn: (connectorId) => connectors.cancelSignIn(connectorId),
+    signOutOfConnector: (connectorId) => connectors.signOut(connectorId),
+    setConnectorClient: (connectorId, client) => connectors.setClient(connectorId, client),
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
 

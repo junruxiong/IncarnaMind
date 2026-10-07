@@ -70,6 +70,7 @@ import {
   connectorInstructions,
   documentInstructions,
   loadedSkillText,
+  signInNeededInstructions,
   skillInstructions,
 } from "./prompt";
 
@@ -123,6 +124,8 @@ export interface AnswersOptions {
   skills: AnswerSkills;
   /** The Connector Tools an Answer may call: the Tools of every Connector that is on and ready. */
   connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
+  /** The Connectors that are on but wait for the User to sign in: their Tools are skipped. */
+  connectorsNeedingSignIn?(): { id: string; name: string }[];
   /** Asking the User before a Connector Tool runs. */
   approvals: AnswerApprovals;
   reportError(error: unknown): void;
@@ -509,6 +512,23 @@ export function createAnswers(options: AnswersOptions) {
         options.reportError(error);
       }
       if (finished) return;
+      // Connectors waiting for a sign-in offer nothing. The Answer shows a card for each, which
+      // didn't run, and the model is told, so the Answer can say why.
+      const signInNeeded = options.connectorsNeedingSignIn?.() ?? [];
+      for (const connector of signInNeeded) {
+        const id = `sign-in:${connector.id}`;
+        callStarted({
+          id,
+          tool: "sign_in",
+          source: "connector",
+          connector,
+          input: {},
+          status: "running",
+          resultCount: null,
+          signInRequired: true,
+        });
+        callFinished(id, false, null);
+      }
       const tools: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
@@ -537,6 +557,7 @@ export function createAnswers(options: AnswersOptions) {
             documentInstructions(mode, tools.documentCount, passages, documentIds !== null),
             skillInstructions(listed, forced, withSkillTools),
             connectorTools ? connectorInstructions(external, mode === "no-documents") : "",
+            signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
           ]
             .filter(Boolean)
             .join("\n\n"),

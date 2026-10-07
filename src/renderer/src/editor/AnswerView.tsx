@@ -368,6 +368,7 @@ function ConnectorCall({ call }: { call: AnswerToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const params = { connector: call.connector?.name ?? "", tool: call.tool };
   const running = call.status === "running";
+  if (call.signInRequired) return <SignInRequired connector={params.connector} />;
   const summary =
     call.approval === "denied"
       ? t("approvals.call.denied", params)
@@ -410,6 +411,19 @@ function ConnectorCall({ call }: { call: AnswerToolCall }) {
           <pre data-testid="answer-connector-arguments">{JSON.stringify(call.input, null, 2)}</pre>
         </div>
       )}
+    </div>
+  );
+}
+
+/** A remote Connector the Answer couldn't use: it waits for the User to sign in again. */
+function SignInRequired({ connector }: { connector: string }) {
+  const t = useT();
+  return (
+    <div contentEditable={false} data-testid="answer-sign-in-required" className="answer-tools">
+      <span className="answer-tools-summary max-w-full">
+        <PlugIcon className="size-3.5 shrink-0" />
+        <span>{t("remoteConnectors.answer.signInRequired", { connector })}</span>
+      </span>
     </div>
   );
 }

@@ -23,7 +23,12 @@ import type { SettingsStore } from "./settings";
 export interface NetworkTrafficDefinition {
   id: NetworkTrafficId;
   /** Where the traffic goes. */
-  service: ExternalService;
+  service?: ExternalService;
+  /**
+   * Where it goes when that depends on what the User set up, e.g. each remote
+   * Connector's servers: one entry per service. Used instead of `service`.
+   */
+  services?(): ExternalService[] | Promise<ExternalService[]>;
   /**
    * Whether the traffic can happen in this app at all, e.g. the ChatGPT
    * sign-in only while the experimental provider is on. Unlisted otherwise.
@@ -135,7 +140,14 @@ export function createPrivacy(options: {
       for (const definition of definitions.values()) {
         if (definition.listed && !(await definition.listed())) continue;
         const enabled = definition.enabled ? await definition.enabled() : true;
-        result.push({ id: definition.id, service: { ...definition.service }, enabled });
+        const services = definition.services
+          ? await definition.services()
+          : definition.service
+            ? [definition.service]
+            : [];
+        for (const service of services) {
+          result.push({ id: definition.id, service: { ...service }, enabled });
+        }
       }
       return result;
     },
