@@ -3,6 +3,7 @@ import { lstat, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from
 import { dirname, join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, LinkedFolder } from "../src/core/api";
+import { buildPdf } from "../tests/helpers/pdf";
 import {
   confirmLink,
   createDataFolder,
@@ -19,14 +20,16 @@ import {
   pathsShown,
   previewLink,
   removeDataFolder,
+  useLocalChatModel,
 } from "./app";
 
 /*
  * Linked folders in the sidebar (ADR-0010): "Add folder…" previews what
  * linking takes before anything is read, the folder's row says how it is
  * (indexing, paused, unavailable, online-only files, nothing in it), its
- * menu pauses, re-lays out, shows and unlinks it, and its Documents say
- * when their file is missing or can't be reached. Set INCARNAMIND_SCREENSHOTS
+ * menu pauses, re-lays out, shows and unlinks it (its Citations still
+ * check), and its Documents say when their file is missing or can't be
+ * reached. Set INCARNAMIND_SCREENSHOTS
  * to a folder to also save screenshots of each there.
  */
 
@@ -70,6 +73,13 @@ async function writeTree(root: string, files: string[], text?: string): Promise<
     await writeFile(join(root, file), text ?? `${file}.\n`);
   }
 }
+
+/** Three short pages: the line about spring tides is on page 2. */
+const TIDES = buildPdf([
+  { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
+  { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
+  { lines: ["Tide tables", "Harbours publish the times of high water every year."] },
+]);
 
 /** Long enough for many Passages, so indexing a few of these stays on screen for a moment. */
 const LONG_TEXT = Array.from(
@@ -375,7 +385,7 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   const dialog = window.getByTestId("unlink-folder-dialog");
   await expect(dialog.getByRole("heading")).toHaveText("Unlink “Library”?");
   await expect(dialog).toContainText("The folder and the files in it aren't touched.");
-  await expect(dialog).toContainText("Citations to its Documents stay in your Minds");
+  await expect(dialog).toContainText("It keeps only the few pages your Citations quote");
   await screenshot(window, "unlink-dialog");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
@@ -391,6 +401,58 @@ test("unlinking asks first, and leaves the folder on disk exactly as it was", as
   await expect(window.getByTestId("documents-empty")).toBeVisible();
   // Byte for byte, time for time, as it was.
   expect(await snapshot(library)).toEqual(before);
+  await app.close();
+});
+
+test("after unlinking, a Citation of a Document in the folder still says its quote was found, and linked again it opens the Document", async () => {
+  const library = join(sources, "Library");
+  await mkdir(library, { recursive: true });
+  await writeFile(join(library, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await linkFolderFromSidebar(app, window, library);
+  const row = linkedFolderRow(window, "Library");
+  await expect(row).toHaveAttribute("data-state", "idle");
+
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("When do spring tides happen?");
+  await window.keyboard.press("Enter");
+  const answer = editor.getByTestId("answer");
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  const citation = answer.getByTestId("citation");
+  await expect(citation).toHaveAttribute("data-check", "found");
+
+  const menu = await openLinkedFolderMenu(row);
+  await menu.getByTestId("unlink-folder").click();
+  await window.getByTestId("confirm-unlink-folder").click();
+  await expect(row).toHaveCount(0);
+  await expect(window.getByTestId("document-list-item")).toHaveCount(0);
+
+  // The page it quotes is kept, so its check stands, in the text and in the margin.
+  await expect(citation).toHaveAttribute("data-check", "found");
+  await expect(window.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
+  await citation.getByTestId("citation-chip").click();
+  await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
+  // The viewer shows the quote, as it does for a Document whose file is gone.
+  await expect(window.getByTestId("viewer-removed")).toContainText(
+    "Spring tides happen at new moon and at full moon.",
+  );
+  await screenshot(window, "unlinked-citation");
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("citation-card")).toBeHidden();
+
+  // Linked again, the file is found again by its content: the Citation opens it at its page.
+  await linkFolderFromSidebar(app, window, library);
+  await expect(linkedFolderRow(window, "Library")).toHaveAttribute("data-state", "idle");
+  await expect(window.getByTestId("document-list-item")).toHaveCount(1);
+  await citation.getByTestId("citation-chip").click();
+  await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
+  await expect(window.getByTestId("viewer-title")).toHaveText("Tides");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
   await app.close();
 });
 
