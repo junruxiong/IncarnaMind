@@ -32,6 +32,12 @@ export interface Paths {
    */
   builtInSkills?: string;
   /**
+   * The example Documents the app ships for its example Mind (onboarding):
+   * `resources/examples/` in the repository, copied into the packaged app's
+   * resources. Not given: no examples (tests that aren't about them).
+   */
+  examples?: string;
+  /**
    * Where each Skill script run gets its own temporary working folder,
    * removed when the run ends. Defaults to the OS's temporary folder.
    */
