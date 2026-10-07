@@ -76,7 +76,7 @@ const deviceScope: Scope<DeviceSettings> = {
   name: "device",
   table: "device_settings",
   defaults: {
-    // DESIGN.md: the sidebar is 248px by default; the viewer opens at about half the window.
+    // DESIGN.md: the sidebar is 248px by default; the viewer opens at about half the room beside the sidebar.
     sidebarWidth: 248,
     viewerWidth: null,
     openMinds: [],
