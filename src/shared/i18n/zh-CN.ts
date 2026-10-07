@@ -418,6 +418,13 @@ export const zhCN = {
   "skills.settings.license": "许可：{license}",
   "skills.settings.scripts.one": "1 个脚本，暂时还不能运行",
   "skills.settings.scripts": "{count} 个脚本，暂时还不能运行",
+  "skills.settings.builtIn": "内置",
+  "skills.settings.builtIn.hint":
+    "随 IncarnaMind 提供，并随应用一起更新。想修改它，请复制为你自己的技能。",
+  "skills.settings.duplicate": "复制为我的技能",
+  "skills.settings.duplicateLabel": "将 {name} 复制为我的技能",
+  "skills.settings.restoreBuiltIns": "恢复内置技能",
+  "skills.settings.restoreBuiltIns.hint": "已移除：{names}",
   "skills.import.folder": "导入文件夹…",
   "skills.import.zip": "导入 zip…",
   "skills.import.pickFolder": "选择技能文件夹",
@@ -443,6 +450,8 @@ export const zhCN = {
   "skills.error.link-outside": "技能中有链接指向技能之外：{path}",
   "skills.error.too-large": "技能太大：所有文件合计最多 {size}，SKILL.md 最多 {instructions}。",
   "skills.error.too-many-files": "技能的文件太多：最多 {count} 个。",
+  "skills.error.built-in-name":
+    "已有同名的内置技能，而内置技能不能被替换。请在它的 SKILL.md 中换一个名字，或把内置技能复制为你自己的技能。",
   "skills.error.details": "详情",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",

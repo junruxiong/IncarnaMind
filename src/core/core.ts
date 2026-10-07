@@ -114,7 +114,13 @@ export function createCore(adapters: CoreAdapters): Core {
   }
   let skills: ReturnType<typeof createSkills>;
   try {
-    skills = createSkills({ db, dataDir, now, reportError: (error) => console.error(error) });
+    skills = createSkills({
+      db,
+      dataDir,
+      now,
+      reportError: (error) => console.error(error),
+      builtInSkills: adapters.paths.builtInSkills,
+    });
   } catch (error) {
     documents.close();
     embeddingModel.close();
@@ -502,6 +508,17 @@ export function createCore(adapters: CoreAdapters): Core {
     removeSkill: async (skillId) => {
       await skills.remove(skillId);
       skillsChanged();
+    },
+    duplicateSkill: async (skillId) => {
+      const skill = await skills.duplicate(skillId);
+      skillsChanged();
+      return skill;
+    },
+    listRemovedBuiltInSkills: async () => skills.removedBuiltIns(),
+    restoreBuiltInSkills: async () => {
+      const restored = await skills.restoreBuiltIns();
+      if (restored.length > 0) skillsChanged();
+      return restored;
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),

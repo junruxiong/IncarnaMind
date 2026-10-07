@@ -1,7 +1,33 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
-import type { Core, Skill, SkillImportPreview } from "../../src/core";
+import {
+  BUILT_IN_SKILLS_SOURCE,
+  type Core,
+  type Skill,
+  type SkillImportPreview,
+} from "../../src/core";
+import { createTempDataFolder } from "./core";
+
+/** The repository's root. */
+export const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
+/** The built-in Skills the app ships, in the repository. */
+export const BUILT_IN_SKILLS_DIR = join(REPO_ROOT, BUILT_IN_SKILLS_SOURCE);
+
+/** The names of the built-in Skills, in name order. */
+export const BUILT_IN_SKILL_NAMES = ["literature-review", "mind-to-report", "summarise-document"];
+
+/**
+ * A copy of the built-in Skills in a temporary folder, deleted when the test
+ * finishes: a test changes it to play a newer version of the app.
+ */
+export async function copyBuiltInSkills(): Promise<string> {
+  const folder = join(await createTempDataFolder(), "skills");
+  await cp(BUILT_IN_SKILLS_DIR, folder, { recursive: true });
+  return folder;
+}
 
 /** SKILL.md text: frontmatter (given as YAML lines), then the instructions. */
 export function skillMd(frontmatter: string, body = "Follow these steps."): string {

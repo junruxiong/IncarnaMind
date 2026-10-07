@@ -49,3 +49,4 @@ export {
 } from "./providers/models";
 export { RECOMMENDED_OLLAMA_MODEL } from "./providers/ollama";
 export { classifyProviderError } from "./providers/providerErrors";
+export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";

@@ -4,7 +4,14 @@
  */
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
-import type { Browser, CoreAdapters, Keychain, ProcessLauncher } from "../core";
+import {
+  type Browser,
+  BUILT_IN_SKILLS_PACKAGED,
+  BUILT_IN_SKILLS_SOURCE,
+  type CoreAdapters,
+  type Keychain,
+  type ProcessLauncher,
+} from "../core";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 
@@ -59,11 +66,22 @@ export const loginShellProcesses: ProcessLauncher = {
 const fakeEmbedder =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_EMBEDDER === "fake";
 
+/**
+ * The built-in Skills: in a packaged app, where electron-builder copied them
+ * into its resources (`extraResources` in electron-builder.yml); otherwise
+ * (development, the smoke tests) in the repository.
+ */
+function builtInSkillsFolder(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, BUILT_IN_SKILLS_PACKAGED)
+    : join(app.getAppPath(), BUILT_IN_SKILLS_SOURCE);
+}
+
 /** Builds the core's adapters. Call after `app` is ready. */
 export function createElectronAdapters(): CoreAdapters {
   const dataDir = app.getPath("userData");
   return {
-    paths: { dataDir },
+    paths: { dataDir, builtInSkills: builtInSkillsFolder() },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
