@@ -61,8 +61,12 @@ A short span of a Document that can be retrieved and cited.
 _Avoid_: chunk, snippet
 
 **Citation**:
-A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the page or two it cites, and a quote from the Passage that is checked against those pages. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
+A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
 _Avoid_: source, reference
+
+**Location**:
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in Markdown, or a range of lines in plain text.
+_Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
 A folder inside a Linked folder, as it is on disk. A Document is in the Folder its file is in; a file added on its own is in no Folder.
