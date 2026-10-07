@@ -694,6 +694,20 @@ export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailab
  * is. Hidden files and folders, .git and node_modules are left out, and cloud
  * placeholders (online-only files) aren't read unless the User asks.
  */
+/**
+ * The example Mind (onboarding, see src/core/examples.ts): "Where tea comes
+ * from", with two example Documents in their own Linked folder, written in
+ * advance so it works before any chat model is set up.
+ */
+export interface Examples {
+  /** Whether this copy of IncarnaMind ships the examples. */
+  available: boolean;
+  /** The example Mind, while it exists. */
+  mindId: string | null;
+  /** The Linked folder of the example Documents, while it exists. */
+  linkedFolderId: string | null;
+}
+
 export interface LinkedFolder {
   /** A random UUID generated on this device. */
   id: string;
@@ -2150,6 +2164,22 @@ export interface CoreApi {
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
+
+  /** The example Mind and its Documents, if made (see `Examples`). */
+  getExamples(): Promise<Examples>;
+  /**
+   * On a first run (no Mind yet, examples never offered before), makes the
+   * examples, once. Returns them, or null when nothing was made.
+   */
+  offerExamples(): Promise<Examples | null>;
+  /**
+   * Makes the example Mind and its Documents (copies of the shipped files in
+   * the data folder, linked), or returns them if they exist. Its Citations
+   * are checked once the Documents have been read. "examples.changed" follows.
+   */
+  createExamples(): Promise<Examples>;
+  /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */
+  removeExamples(): Promise<void>;
   /** Shows a Linked folder as a tree of Folders or as a flat list. Returns it. */
   setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<LinkedFolder>;
   /**
@@ -2534,6 +2564,7 @@ export interface CoreEvents {
   "settings.changed": Settings;
   /** Minds were created, renamed, deleted or edited: the list as `listMinds` now returns it. */
   "minds.changed": Mind[];
+  "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
   /** A Document was added or its processing status (or embedding progress) changed. Carries the whole Document. */
@@ -2724,6 +2755,10 @@ const methods: Record<CoreApiMethod, true> = {
   testJevConnection: true,
   listConnectors: true,
   addConnector: true,
+  getExamples: true,
+  offerExamples: true,
+  createExamples: true,
+  removeExamples: true,
   editConnector: true,
   setConnectorEnabled: true,
   restartConnector: true,

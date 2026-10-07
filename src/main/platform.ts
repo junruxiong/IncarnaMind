@@ -99,6 +99,20 @@ function builtInSkillsFolder(): string {
 }
 
 /**
+ * The example Documents for the example Mind, found like the built-in Skills.
+ * The smoke tests start without them (each would otherwise begin with the
+ * example Mind), unless one asks for them with INCARNAMIND_TEST_EXAMPLES=1.
+ */
+function examplesFolder(): string | undefined {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_EXAMPLES !== "1") {
+    return undefined;
+  }
+  return app.isPackaged
+    ? join(process.resourcesPath, "examples")
+    : join(app.getAppPath(), "resources", "examples");
+}
+
+/**
  * Where crash reports go: the Sentry DSN this copy was built with
  * (`MAIN_VITE_SENTRY_DSN`), if any. A test build ignores it, so the smoke
  * tests never reach Sentry; they may point it at a local server instead.
@@ -132,7 +146,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   return {
     ...(crashReporter && { crashReporter }),
     log,
-    paths: { dataDir, builtInSkills: builtInSkillsFolder() },
+    paths: { dataDir, builtInSkills: builtInSkillsFolder(), examples: examplesFolder() },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,

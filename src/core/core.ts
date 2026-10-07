@@ -30,6 +30,7 @@ import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
+import { createExamples } from "./examples";
 import { createExports } from "./exports";
 import { createFolders } from "./folders";
 import { createMindContent } from "./mindContent";
@@ -607,6 +608,37 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   // Connectors that are on start with the app.
   connectors.startAll();
+  // The example Mind: its Citations are checked once its Documents have been read.
+  const examples = createExamples({
+    source: adapters.paths.examples,
+    dataDir,
+    language: () => settings.get().language,
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    createMind: (title) => {
+      const mind = minds.create({ title });
+      mindsChanged();
+      return mind;
+    },
+    mindExists: (mindId) => minds.list().some((mind) => mind.id === mindId),
+    deleteMind: (mindId) => {
+      const at = now();
+      db.transaction(() => {
+        const mind = minds.delete(mindId, at);
+        content.remove(mind.id, at);
+      });
+      mindsChanged();
+    },
+    editMind: (mindId, change) => content.edit(mindId, change),
+    linkFolder: (path) => documents.linkedFolders.add(path),
+    unlinkFolder: (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    linkedFolderExists: (linkedFolderId) =>
+      documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
+    documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
+    recheck: (input) => recheckCitation(documents, input),
+    changed: (value) => events.emit("examples.changed", value),
+  });
+  events.on("document.status", () => examples.documentChanged());
   // Linked folders and single files are compared with the disk, then watched.
   documents.start();
 
@@ -688,6 +720,10 @@ export function createCore(adapters: CoreAdapters): Core {
     listLinkedFolders: async () => documents.linkedFolders.list(),
     removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
+    getExamples: async () => examples.status(),
+    offerExamples: async () => examples.offer(minds.list().length > 0),
+    createExamples: async () => examples.create(),
+    removeExamples: async () => examples.remove(),
     setLinkedFolderLayout: async (linkedFolderId, layout) =>
       documents.linkedFolders.setLayout(linkedFolderId, layout),
     setLinkedFolderPaused: async (linkedFolderId, paused) =>

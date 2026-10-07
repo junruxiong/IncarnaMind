@@ -30,6 +30,11 @@ extraResources:
     to: skills
     filter:
       - "**/*"
+  # The example Mind's Documents (src/core/examples.ts), with their licence.
+  - from: resources/examples
+    to: examples
+    filter:
+      - "**/*"
 
 # onnxruntime-node, which runs the built-in embedding model in a utility process, loads
 # native libraries with dlopen, which can't read inside app.asar. Each platform below
