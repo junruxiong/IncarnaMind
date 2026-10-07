@@ -31,7 +31,7 @@ What an Answer is generated from: every Block above its Question in the Mind, ex
 _Avoid_: prompt, history
 
 **Search scope**:
-The Folders, Tags and individual Documents that a Question's Document search is limited to. A Question with no Search scope searches all Documents.
+The Topics, Folders, Tags and individual Documents that a Question's Document search is limited to. A Question with no Search scope searches all Documents.
 _Avoid_: filter, context
 
 ### Documents
@@ -50,7 +50,7 @@ _Avoid_: offline, missing
 
 **Linked folder**:
 A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes anything in it. Files a cloud drive keeps online only are indexed when the User asks.
-_Avoid_: workspace, vault, library, source
+_Avoid_: workspace, vault, source
 
 **Other Documents**:
 The Documents added on their own, outside any Linked folder.
@@ -65,7 +65,7 @@ A reference, anchored in the text of an Answer, to the Passage a claim was drawn
 _Avoid_: source, reference
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in Markdown, or a range of lines in plain text.
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown, or a range of lines in plain text.
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
@@ -75,6 +75,14 @@ _Avoid_: collection, directory, category
 **Tag**:
 A label with a short description that a Document can carry. A Document can have many Tags. IncarnaMind applies Tags automatically, and the User can add or remove them.
 _Avoid_: category, label, class
+
+**Topic**:
+A group of Documents on one subject that IncarnaMind forms, in two levels: a parent Topic holds Topics, and any other Topic holds Documents. A Document is in exactly one Topic, or in none yet. The User can rename Topics, move Documents between them and make new ones, and those corrections are kept when the Topics are regrouped.
+_Avoid_: cluster, category, collection, group
+
+**Library**:
+The view of all of a User's Documents, grouped into Topics and filtered by kind, year, Tag or Linked folder.
+_Avoid_: archive, index, vault
 
 ### Tools
 
