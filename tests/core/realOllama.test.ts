@@ -197,12 +197,18 @@ describe.runIf(process.env.INCARNAMIND_REAL_OLLAMA === "1")(
           writeMind(client, [asked]);
           await client.settled();
           const phases: string[] = [];
-          const stop = core.on("answer.phase", ({ phase }) => phases.push(phase));
+          const records: string[] = [];
+          const stops = [
+            core.on("answer.phase", ({ phase }) => phases.push(phase)),
+            core.on("answer.citationAdded", ({ marker, citation }) =>
+              records.push(`[^${marker}] ${citation.quote ?? ""}`),
+            ),
+          ];
           const started = Date.now();
           const result = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
           if (!result.asked) throw new Error(JSON.stringify(result));
           const ended = await answerEnded(core, result.answerId);
-          stop();
+          for (const stop of stops) stop();
           const seconds = (Date.now() - started) / 1000;
           const payload = ended.payload as Partial<CoreEvents["answer.finished"]> &
             Partial<CoreEvents["answer.failed"]>;
@@ -218,6 +224,8 @@ describe.runIf(process.env.INCARNAMIND_REAL_OLLAMA === "1")(
             droppedRecords: payload.droppedRecords,
             droppedMarkers: payload.droppedMarkers,
             phases: phases.join(">"),
+            // Every record the core took, as quoted (a Citation or not).
+            records,
             text: answerText(client, result.answerId).slice(0, 300),
             quotes: payload.citations?.map(
               (citation) => `${citation.check} ${citation.checkReason ?? ""}: ${citation.quote}`,

@@ -272,9 +272,9 @@ export function placeMissingMarkers(
 /**
  * The Answer with the markers of `records` that are missing from it placed,
  * for the records the core accepted (`accepted`): a marker without a valid
- * record would only be removed again. A record with an empty quote (and no
- * sentence) is left to be dropped: nothing says where it goes. The engine
- * calls this once the text is complete.
+ * record would only be removed again. A record whose quote (and sentence)
+ * has no word, such as an empty one or "…", is left to be dropped: nothing
+ * says where it goes. The engine calls this once the text is complete.
  */
 export function withMissingMarkers(
   answer: string,
@@ -285,8 +285,9 @@ export function withMissingMarkers(
     (record) =>
       Number.isInteger(record.marker) &&
       record.marker >= 1 &&
-      // With neither a quote nor a sentence, nothing says where it goes, or checks it.
-      (record.quote.trim() !== "" || (record.sentence ?? "").trim() !== "") &&
+      // With no word in its quote or its sentence (empty, or only "…" or quotation marks),
+      // nothing says where it goes, or what the check would find.
+      (wordsOf(record.quote).size > 0 || wordsOf(record.sentence ?? "").size > 0) &&
       accepted(record.marker),
   );
   return usable.length === 0 ? { text: answer, placed: [] } : placeMissingMarkers(answer, usable);
