@@ -528,6 +528,30 @@ export const migrations: readonly Migration[] = [
       UPDATE document_pages SET kind = 'text', page = 1 WHERE page IS NULL;
     `,
   },
+  {
+    // 23 is reserved for Topics (docs/designs/library-structure-view.md, T4).
+    version: 24,
+    description: "Each Document's creation date, read without processing it again (#53)",
+    sql: `
+      -- When the Document itself was created, for the Library's year: the
+      -- creation date in its file's metadata (a PDF's Info dictionary or
+      -- XMP, the core properties of a Word, PowerPoint or Excel file), or
+      -- else a year written in its first Unit; never a modification date.
+      -- ISO 8601 at the precision the file gives, with the offset from UTC
+      -- it gives, so the first four characters are the year:
+      -- '2019-03-04T10:30:00+01:00', '2019-03-04', or '2019' from text. NULL
+      -- when nothing gives one. metadata_version is the version of the
+      -- metadata read that set it (METADATA_VERSION in
+      -- src/core/documents/processing.ts), 0 for none: those Documents have
+      -- their metadata read in the background, one at a time, without being
+      -- processed or embedded again. A new version of the file is read as
+      -- it is processed.
+      ALTER TABLE documents ADD COLUMN creation_date TEXT;
+      ALTER TABLE documents ADD COLUMN metadata_version INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX documents_by_metadata_version ON documents (metadata_version)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
