@@ -197,6 +197,138 @@ export function promptOf(model: MockLanguageModelV4, call = 0): { role: string; 
   }));
 }
 
+type CallOptions = Parameters<MockLanguageModelV4["doStream"]>[0];
+
+/** One request to a scripted model, as its script sees it. */
+export interface ModelCall {
+  /** Which request this is, from 0. */
+  index: number;
+  /** The names of the Tools offered. */
+  tools: string[];
+  /** Whether the request asks for a JSON object (structured output). */
+  json: boolean;
+  /** The system prompt. */
+  system: string;
+  /** The results of the Tool calls so far, oldest first: their Tool's name and text. */
+  results: { tool: string; text: string }[];
+  options: CallOptions;
+}
+
+/** What a scripted model replies to one request. */
+export type ScriptedReply =
+  | {
+      text?: string;
+      calls?: { tool: string; input: unknown }[];
+      /** Stops streaming once `after` characters of the text are out, until `until` resolves. */
+      pause?: { after: number; until: Promise<void> };
+    }
+  /** The provider refuses the request with an HTTP error. */
+  | { error: { status: number; message: string } };
+
+function resultsOf(options: CallOptions): ModelCall["results"] {
+  const results: ModelCall["results"] = [];
+  for (const message of options.prompt) {
+    if (message.role !== "tool") continue;
+    for (const part of message.content) {
+      if (part.type !== "tool-result") continue;
+      const output = part.output;
+      const text =
+        output.type === "text" || output.type === "error-text"
+          ? output.value
+          : output.type === "json" || output.type === "error-json"
+            ? JSON.stringify(output.value)
+            : "";
+      results.push({ tool: part.toolName, text });
+    }
+  }
+  return results;
+}
+
+/**
+ * A chat model whose every reply comes from `script`, given the request: text
+ * (streamed in chunks of `chunkSize`), Tool calls, or a provider error. For
+ * scripting the Tool-calling loop: search, cite, then answer.
+ */
+export function scriptedModel(
+  script: (call: ModelCall) => ScriptedReply,
+  { chunkSize = 8 }: { chunkSize?: number } = {},
+): MockLanguageModelV4 {
+  let index = 0;
+  return new MockLanguageModelV4({
+    doStream: async (options) => {
+      const system = options.prompt
+        .filter((message) => message.role === "system")
+        .map((message) => (typeof message.content === "string" ? message.content : ""))
+        .join("\n");
+      const call: ModelCall = {
+        index: index++,
+        tools: (options.tools ?? []).map((each) => each.name),
+        json: options.responseFormat?.type === "json",
+        system,
+        results: resultsOf(options),
+        options,
+      };
+      const reply = script(call);
+      if ("error" in reply) {
+        throw new APICallError({
+          message: reply.error.message,
+          url: "http://127.0.0.1:11434/v1/chat/completions",
+          requestBodyValues: {},
+          statusCode: reply.error.status,
+          responseBody: JSON.stringify({ error: { message: reply.error.message } }),
+          isRetryable: false,
+        });
+      }
+      const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
+      const text = reply.text ?? "";
+      if (text) {
+        parts.push({ type: "text-start", id: "answer" });
+        for (let at = 0; at < text.length; at += chunkSize) {
+          parts.push({ type: "text-delta", id: "answer", delta: text.slice(at, at + chunkSize) });
+        }
+        parts.push({ type: "text-end", id: "answer" });
+      }
+      (reply.calls ?? []).forEach((each, number) => {
+        parts.push({
+          type: "tool-call",
+          toolCallId: `call-${call.index}-${number}`,
+          toolName: each.tool,
+          input: JSON.stringify(each.input),
+        });
+      });
+      parts.push({
+        type: "finish",
+        finishReason: {
+          unified: reply.calls?.length ? "tool-calls" : "stop",
+          raw: undefined,
+        },
+        usage: STREAM_USAGE,
+      });
+      const { pause } = reply;
+      let streamed = 0;
+      const stream = new ReadableStream<StreamPart>({
+        async pull(controller) {
+          const part = parts.shift();
+          if (!part) {
+            controller.close();
+            return;
+          }
+          if (pause && streamed >= pause.after && part.type !== "stream-start") {
+            await pause.until;
+          }
+          if (part.type === "text-delta") streamed += part.delta.length;
+          if (options.abortSignal?.aborted) {
+            controller.error(new DOMException("The request was aborted.", "AbortError"));
+            return;
+          }
+          controller.enqueue(part);
+        },
+      });
+      return { stream };
+    },
+  });
+}
+
 /** A model factory that always returns `model` and records what it was asked to build. */
 export function scriptedModels(model: MockLanguageModelV4) {
   const specs: ChatModelSpec[] = [];

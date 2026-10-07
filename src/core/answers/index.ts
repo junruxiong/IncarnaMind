@@ -2,7 +2,8 @@
  * Asking Questions (ADR-0007): the core builds the Question context from the
  * Mind's Yjs document, has the Answer engine stream an Answer, and writes it
  * into the document as it arrives, right after its Question, so every window
- * sees it grow. It also pushes the Answer event stream for UI state.
+ * sees it grow: its text, its Citations (see ./citations), and the searches it
+ * ran. It also pushes the Answer event stream for UI state and the evaluation.
  *
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
@@ -11,10 +12,12 @@ import type * as Y from "yjs";
 import {
   ANSWER_BLOCK,
   type AnswerAttributes,
+  type AnswerToolCall,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
   type ChatReadiness,
+  type CitationSupport,
   type ProviderError,
   QUESTION_BLOCK,
 } from "../api";
@@ -32,12 +35,26 @@ import {
   textAttribute,
   topLevelBlocks,
 } from "./blocks";
+import {
+  type AnswerDocuments,
+  createCitationSession,
+  withCitations,
+  withoutFootnoteDefinitions,
+} from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
 import type { AnswerEngine } from "./engine";
 import { markdownToBlocks } from "./markdown";
-import { answerInstructions } from "./prompt";
+import { answerInstructions, documentInstructions } from "./prompt";
 
-export type { AnswerEngine, AnswerEngineEvent, AnswerMessage, AnswerRequest } from "./engine";
+export type { AnswerDocuments } from "./citations";
+export type {
+  AnswerEngine,
+  AnswerEngineEvent,
+  AnswerMessage,
+  AnswerRequest,
+  AnswerTools,
+  CitationRecordInput,
+} from "./engine";
 export { createAiSdkAnswerEngine } from "./engine";
 
 /**
@@ -66,6 +83,8 @@ export interface AnswersOptions {
   readiness(choice: ChatModelChoice | undefined): Promise<ChatReadiness>;
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
+  /** Searching the User's Documents, and what Citations point to. */
+  documents: AnswerDocuments;
   reportError(error: unknown): void;
 }
 
@@ -146,6 +165,10 @@ export function createAnswers(options: AnswersOptions) {
     });
   };
 
+  /** How each model gives Citations, learnt from its earlier Answers: by provider and model. */
+  const supportByModel = new Map<string, CitationSupport>();
+  const modelKey = (model: ChatModelChoice) => `${model.providerId}\n${model.modelId}`;
+
   function start(input: {
     mindId: string;
     answerId: string;
@@ -155,9 +178,23 @@ export function createAnswers(options: AnswersOptions) {
   }): void {
     const { mindId, answerId, model, context } = input;
     const controller = new AbortController();
+    /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
+    let support: CitationSupport | null = null;
+    const toolCalls: AnswerToolCall[] = [];
+    const session = createCitationSession(options.documents, {
+      onRecord: (marker, citation) =>
+        events.emit("answer.citationAdded", { mindId, answerId, marker, citation }),
+    });
+
+    /** The Answer's Blocks: its Markdown, with each marker a Citation node. */
+    const blocksOf = (final: boolean) =>
+      withCitations(
+        markdownToBlocks(withoutFootnoteDefinitions(markdown), { streaming: !final }),
+        final ? (marker) => session.finalNode(marker) : (marker) => session.streamingNode(marker),
+      );
 
     /** Writes the Answer as it stands; false if it is gone (deleted, or its Mind deleted). */
     const write = (outcome?: Outcome): boolean => {
@@ -167,7 +204,13 @@ export function createAnswers(options: AnswersOptions) {
           const found = findBlock(blocks, ANSWER_BLOCK, answerId);
           if (!found) return false;
           const { element } = found;
-          syncContent(element, markdownToBlocks(markdown, { streaming: !outcome }));
+          syncContent(element, blocksOf(outcome !== undefined));
+          const calls = toolCalls.length > 0 ? JSON.stringify(toolCalls) : null;
+          if (textAttribute(element, "toolCalls") !== calls)
+            setAttributes(element, { toolCalls: calls });
+          if (support && textAttribute(element, "citationSupport") !== support) {
+            setAttributes(element, { citationSupport: support });
+          }
           if (outcome) {
             setAttributes(element, {
               status: outcome.status,
@@ -190,6 +233,16 @@ export function createAnswers(options: AnswersOptions) {
       if (timer) clearTimeout(timer);
       active.delete(answerId);
       controller.abort();
+      // A search still running when the Answer stopped didn't finish.
+      for (const call of toolCalls) {
+        if (call.status === "running") call.status = "failed";
+      }
+      // The check runs once, now; its results are stored with each Citation.
+      try {
+        session.check();
+      } catch (error) {
+        options.reportError(error);
+      }
       const written = write(outcome);
       if (outcome.status === "failed") {
         events.emit("answer.failed", { mindId, answerId, error: outcome.error });
@@ -198,6 +251,8 @@ export function createAnswers(options: AnswersOptions) {
           mindId,
           answerId,
           status: written ? outcome.status : "stopped",
+          ...session.summary(),
+          citationSupport: support,
         });
       }
     };
@@ -213,6 +268,7 @@ export function createAnswers(options: AnswersOptions) {
     active.set(answerId, { mindId, finish });
     events.emit("answer.started", { mindId, answerId, questionId: input.questionId, model });
 
+    const base = answerInstructions(context.question);
     const run = async () => {
       let prepared: PreparedChatModel;
       try {
@@ -223,22 +279,65 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
+      const { tools } = session;
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
-        system: answerInstructions(context.question),
+        instructions: (mode, passages) =>
+          [base, documentInstructions(mode, tools.documentCount, passages)]
+            .filter(Boolean)
+            .join("\n\n"),
         messages: context.messages,
+        question: context.question,
         model: prepared.model,
+        tools,
+        support: supportByModel.get(modelKey(model)),
         signal: controller.signal,
       })) {
         if (finished) break;
-        if (event.type === "text-delta") {
-          markdown += event.text;
-          events.emit("answer.delta", { mindId, answerId, text: event.text });
-          writeSoon();
-        } else if (event.type === "finished") {
-          outcome = { status: "done" };
-        } else {
-          outcome = { status: "failed", error: event.error };
+        switch (event.type) {
+          case "support":
+            support = event.support;
+            supportByModel.set(modelKey(model), event.support);
+            writeSoon();
+            break;
+          case "text-delta":
+            markdown += event.text;
+            events.emit("answer.delta", { mindId, answerId, text: event.text });
+            writeSoon();
+            break;
+          case "text-retracted":
+            markdown = markdown.slice(0, Math.max(0, markdown.length - event.length));
+            writeSoon();
+            break;
+          case "tool-call-started": {
+            const call: AnswerToolCall = {
+              id: event.id,
+              tool: event.tool,
+              source: "documents",
+              input: event.input,
+              status: "running",
+              resultCount: null,
+            };
+            toolCalls.push(call);
+            events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
+            writeSoon();
+            break;
+          }
+          case "tool-call-finished": {
+            const call = toolCalls.find((each) => each.id === event.id);
+            if (!call) break;
+            call.status = event.ok ? "done" : "failed";
+            call.resultCount = event.resultCount;
+            events.emit("answer.toolCallFinished", { mindId, answerId, call: { ...call } });
+            writeSoon();
+            break;
+          }
+          case "finished":
+            outcome = { status: "done" };
+            break;
+          case "failed":
+            outcome = { status: "failed", error: event.error };
+            break;
         }
       }
       finish(outcome);
@@ -293,6 +392,8 @@ export function createAnswers(options: AnswersOptions) {
           errorKind: null,
           errorMessage: null,
           generatedHash: null,
+          citationSupport: null,
+          toolCalls: null,
         };
 
         const answer = answerFor(blocks, questionId);

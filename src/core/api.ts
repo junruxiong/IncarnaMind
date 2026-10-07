@@ -62,7 +62,7 @@ export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
 
 /**
  * Attributes of a Question Block, as stored in the Mind's Yjs document. Later
- * tickets add its Search scope (#30) and a forced Skill.
+ * tickets add its Search scope (#36) and a forced Skill.
  */
 export interface QuestionAttributes {
   id: string | null;
@@ -73,6 +73,15 @@ export interface QuestionAttributes {
 
 /** Where an Answer is: being written, finished, stopped by the User, or failed (see `errorKind`). */
 export type AnswerStatus = "streaming" | "done" | "stopped" | "failed";
+
+/**
+ * How the model behind an Answer gives the records of its Citations:
+ * - "tools": through the `cite` Tool, in a Tool-calling loop that searches the Documents;
+ * - "structured-output": the model can't call Tools, so the core searches once with the
+ *   Question's text and the model returns the Answer and its records as one JSON object;
+ * - "none": the model can do neither, so its Answers have no Citations, and say so.
+ */
+export type CitationSupport = "tools" | "structured-output" | "none";
 
 /** Attributes of an Answer Block, as stored in the Mind's Yjs document. */
 export interface AnswerAttributes {
@@ -89,6 +98,96 @@ export interface AnswerAttributes {
   errorMessage: string | null;
   /** A fingerprint of the content as it was generated: it differs once the User edits the Answer. */
   generatedHash: string | null;
+  /**
+   * How the model could give Citations (see `CitationSupport`). Null until the
+   * model has answered, when there were no Documents to search, and on Answers
+   * written before Citations.
+   */
+  citationSupport: CitationSupport | null;
+  /** The Tools the Answer called, in order: a JSON array of `AnswerToolCall`. Null when none. */
+  toolCalls: string | null;
+}
+
+/** A Tool the model called while writing an Answer, e.g. a search of the User's Documents. */
+export interface AnswerToolCall {
+  /** Unique within its Answer. */
+  id: string;
+  /** "search_documents": the document-search Tool. Connectors and Skills add theirs. */
+  tool: string;
+  /** Where the Tool comes from: "documents" is IncarnaMind's own document search. */
+  source: "documents";
+  /** What the model asked, e.g. `{ query }` for a search. */
+  input: Record<string, unknown>;
+  status: "running" | "done" | "failed";
+  /** A search: how many Passages it gave the model. Null otherwise, and while running. */
+  resultCount: number | null;
+}
+
+/**
+ * The node type of a Citation: an inline node anchored in the text of an
+ * Answer (or of a Note it was copied into), so it moves with edits and goes
+ * when its text is deleted.
+ */
+export const CITATION_NODE = "citation";
+
+/**
+ * Where a Citation's check stands. The check compares the model's quote with
+ * the text of the cited pages (for a Document without pages, its whole text),
+ * once, when the Answer finishes. "found" means the quote is there, not that
+ * it supports the sentence.
+ * - "checking": the Answer is still being written.
+ * - "found", "not-found": see `checkReason` for why it wasn't found.
+ * - "cant-check": there is no text to look in (see `checkReason`).
+ */
+export type CitationCheck = "checking" | "found" | "not-found" | "cant-check";
+
+export type CitationCheckReason =
+  /** Not found: the quote isn't in the text of the cited pages. */
+  | "quote-not-on-pages"
+  /** Not found: the cited pages aren't all among the pages of the cited Passage. */
+  | "pages-outside-passage"
+  /** Not found: a Citation covers one page, or two consecutive pages, at most. */
+  | "too-many-pages"
+  /** Can't check: the cited pages have no text, e.g. they are scanned. */
+  | "no-text"
+  /** Can't check: the Document was deleted. */
+  | "document-removed";
+
+/** At most this many consecutive pages per Citation (the page-range rule). */
+export const MAX_CITED_PAGES = 2;
+
+/**
+ * A Citation's attributes, as stored on its node in the Mind's Yjs document.
+ * Everything a footnote or a message needs is stored here, so it still reads
+ * after the Document is deleted.
+ */
+export interface CitationAttributes {
+  passageId: string | null;
+  documentId: string | null;
+  /** The Document's display name when the Citation was made. */
+  documentName: string | null;
+  /** The SHA-256 of the Document's file (`Document.contentHash`): the content the quote was checked against. */
+  contentHash: string | null;
+  /** The cited pages, from 1. Both null for a Document without pages (TXT, Markdown). */
+  pageFrom: number | null;
+  pageTo: number | null;
+  /** The quote the model gave, which it was asked to copy word for word from the Passage. */
+  quote: string | null;
+  check: CitationCheck;
+  checkReason: CitationCheckReason | null;
+}
+
+/** A Citation, as the Answer event stream reports it. */
+export interface Citation {
+  passageId: string;
+  documentId: string;
+  documentName: string;
+  contentHash: string;
+  pageFrom: number | null;
+  pageTo: number | null;
+  quote: string;
+  check: CitationCheck;
+  checkReason: CitationCheckReason | null;
 }
 
 /** A Mind opened for editing. */
@@ -484,11 +583,38 @@ export interface AnswerDelta {
   text: string;
 }
 
+/** A Tool call of an Answer started, or finished (see `call.status`). */
+export interface AnswerToolCallEvent {
+  mindId: string;
+  answerId: string;
+  call: AnswerToolCall;
+}
+
+/**
+ * The model gave the record for a Citation marker in the Answer: the marker
+ * becomes this Citation, "checking" until the Answer finishes.
+ */
+export interface AnswerCitationAdded {
+  mindId: string;
+  answerId: string;
+  /** The number of the marker the model wrote in the text, e.g. 1 for "[^1]". */
+  marker: number;
+  citation: Citation;
+}
+
 /** An Answer is complete ("done") or the User stopped it ("stopped"), keeping what was written. */
 export interface AnswerFinished {
   mindId: string;
   answerId: string;
   status: "done" | "stopped";
+  /** The Answer's Citations, checked, in the order of their markers in the text, each once. */
+  citations: Citation[];
+  /** Markers the model wrote with no valid record: removed, leaving their sentences uncited. */
+  droppedMarkers: number;
+  /** Records the model gave for no marker in the text, or naming no Passage it was given: dropped. */
+  droppedRecords: number;
+  /** How the model could give Citations; null when there were no Documents to search. */
+  citationSupport: CitationSupport | null;
 }
 
 /** An Answer failed; the Answer shows the error by kind. */
@@ -844,11 +970,15 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
-   * document as it streams, so every window sees it; these events are for UI
-   * state, e.g. the stop button. #30 adds Tool calls and Citations.
+   * document as it streams (its text, Citations and Tool calls), so every
+   * window sees it; these events are for UI state, e.g. the stop button, and
+   * for the evaluation.
    */
   "answer.started": AnswerStarted;
   "answer.delta": AnswerDelta;
+  "answer.toolCallStarted": AnswerToolCallEvent;
+  "answer.toolCallFinished": AnswerToolCallEvent;
+  "answer.citationAdded": AnswerCitationAdded;
   "answer.finished": AnswerFinished;
   "answer.failed": AnswerFailed;
 }
