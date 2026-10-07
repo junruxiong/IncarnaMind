@@ -338,7 +338,7 @@ export const en = {
   "consent.settings.askAgain": "Ask again",
 
   "question.slash": "Question",
-  "question.placeholder": "Ask a Question…",
+  "question.placeholder": "Ask a Question… (type @ to choose what it searches)",
   "question.ask": "Ask",
   "question.askHint": "Ask (Enter)",
   "question.setUp": "Set up",
@@ -348,6 +348,24 @@ export const en = {
   "question.mind.placeholder": "Start writing, or press {shortcut} to ask a Question…",
   "question.followUp.placeholder": "Keep writing, or press {shortcut} to ask a follow-up",
   "question.context.include": "Include in Question context",
+
+  "scope.picker.label": "Search scope",
+  "scope.picker.folders": "Folders",
+  "scope.picker.tags": "Tags",
+  "scope.picker.documents": "Documents",
+  "scope.picker.empty": "No Folders, Tags or Documents match",
+  "scope.picker.none": "Add Documents, Folders or Tags to choose what a Question searches.",
+  "scope.label": "Search only",
+  "scope.chip.folder": "Folder “{name}”, with its sub-Folders",
+  "scope.chip.tag": "Documents tagged “{name}”",
+  "scope.chip.document": "Document “{name}”",
+  "scope.chip.deleted.folder": "Deleted Folder",
+  "scope.chip.deleted.tag": "Deleted Tag",
+  "scope.chip.deleted.document": "Deleted Document",
+  "scope.chip.deleted": "It has been deleted, so the search ignores it.",
+  "scope.chip.remove": "Remove {name} from the Search scope",
+  "scope.answer.empty":
+    "This Question's Search scope has no Documents to search, so nothing was searched. Add Documents to its Folders or Tags, or remove the scope to search all your Documents.",
 
   "answer.label": "Answer",
   "answer.status.streaming": "Writing…",

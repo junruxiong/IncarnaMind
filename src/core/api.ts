@@ -61,14 +61,35 @@ export const ANSWER_BLOCK = "answer";
 export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
 
 /**
- * Attributes of a Question Block, as stored in the Mind's Yjs document. Later
- * tickets add its Search scope (#36) and a forced Skill.
+ * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
+ * Documents its Document search is limited to. It covers every Document in
+ * one of the Folders or their sub-Folders (at any depth), every Document with
+ * one of the Tags, and each of the Documents. Those deleted since are ignored.
+ * With all three empty there is no Search scope: every Document is searched.
+ */
+export interface SearchScope {
+  folderIds: string[];
+  tagIds: string[];
+  documentIds: string[];
+}
+
+/**
+ * Attributes of a Question Block, as stored in the Mind's Yjs document. A
+ * later ticket adds a forced Skill.
  */
 export interface QuestionAttributes {
   id: string | null;
   /** The model picked for this Question, overriding the default. Both null: the default model. */
   providerId: string | null;
   modelId: string | null;
+  /**
+   * Its Search scope (see `SearchScope`), as lists of ids: the User types "@"
+   * in the Question to choose them. Null (or empty) for none of that kind;
+   * all three null: no Search scope.
+   */
+  scopeFolderIds: string[] | null;
+  scopeTagIds: string[] | null;
+  scopeDocumentIds: string[] | null;
 }
 
 /** Where an Answer is: being written, finished, stopped by the User, or failed (see `errorKind`). */

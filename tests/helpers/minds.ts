@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "@tiptap/y-tiptap";
+import type { SearchScope } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
+import { SCOPE_ATTRIBUTES } from "../../src/shared/searchScope";
 import type { MindClient } from "./mindClient";
 
 /** The schema of the renderer's editor: what a Mind can hold. */
@@ -50,12 +52,27 @@ export function heading(level: number, text: string): JSONContent {
   return { type: "heading", attrs: { id: randomUUID(), level }, content: inline(text) };
 }
 
-/** A Question Block, optionally with a model picked for it. */
+/** A Question Block, optionally with a model picked for it and a Search scope. */
 export function question(
   text: string,
   model?: { providerId: string; modelId: string },
+  scope?: Partial<SearchScope>,
 ): JSONContent & { attrs: { id: string } } {
-  return { type: "question", attrs: { id: randomUUID(), ...model }, content: inline(text) };
+  return {
+    type: "question",
+    attrs: { id: randomUUID(), ...model, ...(scope && scopeAttributes(scope)) },
+    content: inline(text),
+  };
+}
+
+/** A Search scope as a Question Block's attributes, the way the editor stores it. */
+export function scopeAttributes(scope: Partial<SearchScope>): Record<string, string[] | null> {
+  const list = (ids: string[] | undefined) => (ids && ids.length > 0 ? ids : null);
+  return {
+    [SCOPE_ATTRIBUTES.folder]: list(scope.folderIds),
+    [SCOPE_ATTRIBUTES.tag]: list(scope.tagIds),
+    [SCOPE_ATTRIBUTES.document]: list(scope.documentIds),
+  };
 }
 
 /** Each top-level Block's type, with an Answer's status. */

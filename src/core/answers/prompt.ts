@@ -31,19 +31,23 @@ const RECORD =
 
 /**
  * What to do with the User's Documents, for a way of citing. `passages`: what
- * the one search found, for a model that can't call Tools.
+ * the one search found, for a model that can't call Tools. `scoped`: the User
+ * limited the Question to some of their Documents (its Search scope), and
+ * `documentCount` counts only those.
  */
 export function documentInstructions(
   mode: CitationSupport | "no-documents",
   documentCount: number,
   passages = "",
+  scoped = false,
 ): string {
+  const documents = `${documentCount} Document${documentCount === 1 ? "" : "s"}`;
   switch (mode) {
     case "no-documents":
       return "";
     case "tools":
       return [
-        `The User has added ${documentCount} Document${documentCount === 1 ? "" : "s"} (PDF, text and Markdown files). Search them with search_documents whenever they may help; search again with other words if the Passages don't answer the Question.`,
+        `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, text and Markdown files). Search them with search_documents whenever they may help; search again with other words if the Passages don't answer the Question.`,
         "",
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,

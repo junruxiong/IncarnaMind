@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { translate } from "../shared/i18n";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
@@ -21,6 +22,7 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
+import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { migrate, openDatabase } from "./storage";
@@ -149,11 +151,22 @@ export function createCore(adapters: CoreAdapters): Core {
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
     documents: {
-      searchableCount: () => documents.searchableCount(),
-      search: (query, signal) => documents.searchTool(query, { signal, rerank: adapters.reranker }),
+      searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+      search: (query, documentIds, signal) =>
+        documents.searchTool(query, {
+          signal,
+          rerank: adapters.reranker,
+          documentIds: documentIds ?? undefined,
+        }),
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
     },
+    resolveScope: (scope) =>
+      resolveSearchScope(scope, {
+        folderTree: (folderId) => folders.subtree(folderId),
+        documentIds: (filter) => documents.ids(filter),
+      }),
+    emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     reportError: (error) => console.error(error),
   });
 
