@@ -94,7 +94,10 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
-  await expect(citation.getByTestId("citation-chip")).toHaveText("Tide tables");
+  await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
+    "aria-label",
+    /^Citation 1: Tide tables\. /,
+  );
 
   // Once the Folder is deleted, its chip shows it, struck through; regenerating searches nothing.
   await window.evaluate(async (folderId) => {

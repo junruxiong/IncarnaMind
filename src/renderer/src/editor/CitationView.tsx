@@ -1,12 +1,7 @@
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  ANSWER_BLOCK,
-  BLOCK_ID_ATTRIBUTE,
-  type CitationAttributes,
-  type CitationCheck,
-} from "../../../core/api";
+import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, type CitationAttributes } from "../../../core/api";
 import {
   badgeMessage,
   type CitationState,
@@ -14,28 +9,12 @@ import {
   citedPages,
 } from "../../../shared/citations";
 import { useAnswers } from "../answers";
-import {
-  CantCheckIcon,
-  CheckingIcon,
-  QuoteFoundIcon,
-  QuoteNotFoundIcon,
-} from "../components/icons";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { citationNumberOf } from "./citationNumbers";
+import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { Popover } from "./Popover";
-
-const ICONS: Record<CitationCheck, typeof QuoteFoundIcon> = {
-  checking: CheckingIcon,
-  found: QuoteFoundIcon,
-  "not-found": QuoteNotFoundIcon,
-  "cant-check": CantCheckIcon,
-};
-
-function BadgeIcon({ check, className }: { check: CitationCheck; className?: string }) {
-  const Icon = ICONS[check];
-  return <Icon className={className} />;
-}
 
 /** The Answer a Citation sits in, if it does (it may have been copied into a Note). */
 function answerAround(
@@ -57,12 +36,21 @@ function answerAround(
 }
 
 /**
- * A Citation in the text: a small badge with the state of its check (an icon,
- * a colour, the page) that opens the cited page. Clicking it also shows its
- * card: the badge in words, the quote, and, when the quote wasn't found, ways
- * on: open the page anyway, remove the Citation, or regenerate the Answer.
+ * A Citation in the text: an 18px marker with its number, the Citation's
+ * order within its Answer (see `CitationNumbers`). It stays neutral unless the
+ * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
+ * or, in a narrow Mind, as an icon inside the marker. Clicking it opens the
+ * cited page and shows its card: the check in words, the quote, and, when the
+ * quote wasn't found, ways on: open the page anyway, remove the Citation, or
+ * regenerate the Answer.
  */
-export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeViewProps) {
+export function CitationView({
+  node,
+  editor,
+  getPos,
+  deleteNode,
+  decorations,
+}: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
   const attributes = node.attrs as CitationAttributes;
@@ -75,10 +63,16 @@ export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeView
   const badge = badgeMessage(state, attributes);
   const badgeText = t(badge.key, badge.params);
   const documentName = attributes.documentName ?? "";
+  const number = citationNumberOf(decorations);
   const [open, setOpen] = useState(false);
-  const chip = useRef<HTMLButtonElement>(null);
+  const marker = useRef<HTMLButtonElement>(null);
 
-  /** Opens the cited page (or the Document), highlighting the quote only if it was found. */
+  /**
+   * Opens the cited page (or the Document), with the quote to highlight if
+   * asked, and the Citation's check and number: the viewer colours the quote
+   * by the check (amber when opened anyway after "not found") and shows the
+   * check mark beside it.
+   */
   const openCited = (withQuote: boolean) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
@@ -88,6 +82,7 @@ export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeView
       pageFrom: attributes.pageFrom ?? undefined,
       pageTo: attributes.pageTo ?? undefined,
       quote: withQuote && attributes.quote ? attributes.quote : undefined,
+      citation: { check: state.check, ...(number > 0 ? { number } : {}) },
     });
   };
 
@@ -99,16 +94,12 @@ export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeView
     else if (state.check !== "not-found") openCited(false);
   };
 
+  // The number, the Document, the page and the check: the marker only shows the number.
   const label = t("citation.label", {
+    number,
     document: pages ? t("citation.where.page", { document: documentName, pages }) : documentName,
     badge: badgeText,
   });
-  const short =
-    state.check === "checking"
-      ? badgeText
-      : pages
-        ? t("citation.chip.page", { pages })
-        : documentName;
 
   return (
     <NodeViewWrapper
@@ -117,13 +108,16 @@ export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeView
       data-testid="citation"
       data-check={state.check}
       data-reason={state.reason ?? undefined}
+      data-number={number || undefined}
       contentEditable={false}
     >
       <button
-        ref={chip}
+        ref={marker}
         type="button"
         data-testid="citation-chip"
-        className={`citation-chip citation-chip--${state.check}`}
+        data-check={state.check}
+        data-number={number || undefined}
+        className="citation-marker"
         aria-label={label}
         title={label}
         aria-haspopup="dialog"
@@ -132,15 +126,15 @@ export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeView
         onMouseDown={(event) => event.preventDefault()}
         onClick={onClick}
       >
-        <BadgeIcon check={state.check} className="citation-chip-icon" />
-        <span className="citation-chip-text">{short}</span>
+        <CheckMarkIcon check={state.check} className="citation-marker-icon" />
+        <span>{number || "·"}</span>
       </button>
       {open &&
-        chip.current &&
+        marker.current &&
         // In the body, not the editor: ProseMirror must not see the card's events.
         createPortal(
           <Popover
-            anchor={chip.current}
+            anchor={marker.current}
             onDismiss={() => setOpen(false)}
             aria-label={label}
             data-testid="citation-card"
@@ -173,6 +167,11 @@ export function CitationView({ node, editor, getPos, deleteNode }: ReactNodeView
   );
 }
 
+/**
+ * A Citation's card: the state line with its icon, the Document, the quote
+ * washed in the state's colour, what the state means (or why the quote wasn't
+ * found), and what to do next.
+ */
 function CitationCard({
   state,
   attributes,
@@ -193,6 +192,15 @@ function CitationCard({
   const t = useT();
   const pages = citedPages(attributes);
   const name = attributes.documentName ?? "";
+  const checked = state.check === "found" || state.check === "not-found";
+  // Once checked, the state line names the page, or the Document if it has no pages.
+  const source = checked
+    ? pages
+      ? name
+      : null
+    : pages
+      ? t("citation.where.page", { document: name, pages })
+      : name;
   const reason =
     state.check === "checking"
       ? t("citation.reason.checking")
@@ -201,38 +209,37 @@ function CitationCard({
         : null;
   const removed = state.reason === "document-removed";
   return (
-    <div className="citation-card" contentEditable={false}>
-      <p
-        data-testid="citation-badge"
-        data-check={state.check}
-        className={`citation-badge citation-badge--${state.check}`}
-      >
-        <BadgeIcon check={state.check} className="size-4 shrink-0" />
-        <span>{badgeText}</span>
-      </p>
+    <div className={`citation-card citation-card--${state.check}`} contentEditable={false}>
+      <div className="citation-card-head">
+        <p data-testid="citation-badge" data-check={state.check} className="citation-badge">
+          <CheckStateIcon check={state.check} className="citation-badge-icon" />
+          <span>{badgeText}</span>
+        </p>
+        {source && <p className="citation-card-source">{source}</p>}
+      </div>
+      {attributes.quote && (
+        <figure className="citation-card-quote">
+          <figcaption className="sr-only">{t("citation.quote")}</figcaption>
+          <blockquote>
+            <span className="citation-card-wash">{attributes.quote}</span>
+          </blockquote>
+        </figure>
+      )}
       {reason && (
-        <p data-testid="citation-reason" className="citation-card-reason">
+        <p data-testid="citation-reason" className="citation-card-note">
           {reason}
         </p>
       )}
-      <p className="citation-card-source">
-        {pages ? t("citation.where.page", { document: name, pages }) : name}
-      </p>
-      {attributes.quote && (
-        <figure className="citation-card-quote">
-          <figcaption>{t("citation.quote")}</figcaption>
-          <blockquote>{attributes.quote}</blockquote>
-        </figure>
-      )}
-      {state.check === "found" && <p className="citation-card-meaning">{t("citation.meaning")}</p>}
+      {state.check === "found" && <p className="citation-card-note">{t("citation.meaning")}</p>}
       <div className="citation-card-actions">
         {state.check === "not-found" ? (
           <>
             <button
               type="button"
               data-testid="citation-open-anyway"
-              className="citation-card-action"
-              onClick={() => onOpen(false)}
+              className="citation-card-action citation-card-action--primary"
+              // With the quote: the viewer washes it amber wherever it does find it.
+              onClick={() => onOpen(true)}
             >
               {t(pages ? "citation.openAnyway.page" : "citation.openAnyway.document")}
             </button>
@@ -260,7 +267,7 @@ function CitationCard({
             <button
               type="button"
               data-testid="citation-open"
-              className="citation-card-action"
+              className="citation-card-action citation-card-action--primary"
               onClick={() => onOpen(state.check === "found")}
             >
               {t(pages ? "citation.open.page" : "citation.open.document")}
