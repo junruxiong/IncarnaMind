@@ -103,6 +103,35 @@ test("a Block dragged above another stays there after reopening the app", async 
   await second.app.close();
 });
 
+test("Esc closes a Block's menu, and the handle then moves on to the Block under the mouse", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  for (const [index, text] of ["One", "Two", "Three"].entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(text);
+  }
+  const paragraphs = editor.locator("p");
+
+  // Opened with the mouse, the menu takes the focus, so Esc closes it.
+  await (await slideToHandle(window, paragraphs.nth(0))).click();
+  const menu = window.getByTestId("block-menu");
+  await expect(menu).toBeVisible();
+  await expect(window.getByTestId("block-menu-context")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+
+  // The handle isn't stuck on the first Block: it follows the mouse to the third.
+  const handle = await slideToHandle(window, paragraphs.nth(2));
+  const grip = await handle.boundingBox();
+  const third = await paragraphs.nth(2).boundingBox();
+  if (!grip || !third) throw new Error("The handle or the Block isn't visible.");
+  expect(Math.abs(grip.y + grip.height / 2 - (third.y + third.height / 2))).toBeLessThan(4);
+  await app.close();
+});
+
 test("a Block is deleted from its handle's menu, and with the keyboard", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
