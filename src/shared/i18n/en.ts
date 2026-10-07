@@ -70,10 +70,12 @@ export const en = {
   "viewer.removed.unlinked":
     "This Document's folder was unlinked. IncarnaMind kept the text your Citation quotes.",
   "viewer.removed.quote": "The quoted text:",
+  "viewer.file.missing.title": "File missing",
   "viewer.file.missing":
-    "The file is missing from its folder, so this is the text IncarnaMind kept of it.",
+    "This Document's file is missing from its folder, so it can't be shown. It shows here again once the file is back.",
+  "viewer.file.unavailable.title": "File can't be reached",
   "viewer.file.unavailable":
-    "The file can't be reached right now, so this is the text IncarnaMind kept of it.",
+    "This Document's file can't be reached right now, e.g. its drive is unplugged. It shows here again once it can be.",
   "viewer.page.label": "Page {number}",
   "viewer.page.number": "Page number",
   "viewer.page.count": "of {count}",

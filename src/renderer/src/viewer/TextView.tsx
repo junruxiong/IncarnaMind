@@ -10,7 +10,7 @@ import { type Block, type Inline, parseMarkdown } from "./markdown";
 import { CitationMark, marginRoom, markTopFor, quoteMarkOf, quoteTone } from "./quoteMark";
 import { OutlineButton, type OutlineEntry, UnitOutline } from "./UnitOutline";
 import { ViewerHeader } from "./ViewerHeader";
-import { DocumentRemoved, ViewerMessage } from "./ViewerMessage";
+import { FileGone, ViewerMessage } from "./ViewerMessage";
 
 type Loaded =
   | { kind: "loading" }
@@ -72,7 +72,7 @@ export function TextView({ document, target }: { document: Document; target: Vie
       {loaded.kind === "loading" ? (
         <ViewerMessage>{t("viewer.loading")}</ViewerMessage>
       ) : loaded.kind === "missing" ? (
-        <DocumentRemoved quote={target.quote} />
+        <FileGone quote={target.quote} />
       ) : loaded.kind === "failed" ? (
         <ViewerMessage tone="error">
           {loaded.message ? t("viewer.failed", { message: loaded.message }) : t("viewer.notText")}

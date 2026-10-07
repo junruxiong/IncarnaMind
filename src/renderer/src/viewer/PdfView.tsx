@@ -4,6 +4,7 @@ import {
   type KeyboardEvent,
   memo,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -25,9 +26,10 @@ import {
 } from "./icons";
 import { loadOutline, type OutlineItem } from "./outline";
 import { isMissingDocumentError, loadPdfJs, openPdf, type PdfJs } from "./pdfjs";
+import { PlaceMemoryContext } from "./place";
 import { CitationMark, type QuoteMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import { HeaderDivider, ViewerHeader } from "./ViewerHeader";
-import { DocumentRemoved, ViewerMessage } from "./ViewerMessage";
+import { FileGone, ViewerMessage } from "./ViewerMessage";
 
 /** CSS pixels per PDF point: at 100% a page shows at its printed size. */
 const CSS_UNITS = 96 / 72;
@@ -119,7 +121,7 @@ export function PdfView({ document, target }: { document: Document; target: View
       return (
         <>
           <ViewerHeader openable={false} />
-          <DocumentRemoved quote={target.quote} />
+          <FileGone quote={target.quote} />
         </>
       );
     case "failed":
@@ -152,11 +154,16 @@ interface PdfPagesProps {
 
 function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   const pageCount = pdf.numPages;
+  const places = useContext(PlaceMemoryContext);
+  // Where the view was, if its file was read again: it comes back at the same zoom and page.
+  const [recalled] = useState(() => places.recall());
   // Every page starts at the first page's size; each is corrected once it loads.
   const [sizes, setSizes] = useState<readonly PageSize[]>(() =>
     Array.from({ length: pageCount }, () => firstPage),
   );
-  const [zoom, setZoom] = useState<Zoom>({ fit: true });
+  const [zoom, setZoom] = useState<Zoom>(() =>
+    recalled?.zoom ? { fit: false, zoom: recalled.zoom } : { fit: true },
+  );
   const [viewportWidth, setViewportWidth] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [nearby, setNearby] = useState<ReadonlySet<number>>(() => new Set());
@@ -281,13 +288,19 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   }, [scale, sizes]);
 
   // Each open request goes to the first page of its range (a plain reopen keeps the place).
+  // Read again, the file opens there too, or else where the view was.
   const appliedRequest = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (appliedRequest.current === target.request) return;
     const first = appliedRequest.current === null;
     appliedRequest.current = target.request;
-    if (target.pageFrom !== undefined || target.quote || first) goToPage(target.pageFrom ?? 1);
-  }, [target.request, target.pageFrom, target.quote, goToPage]);
+    if (target.pageFrom !== undefined || target.quote) goToPage(target.pageFrom ?? 1);
+    else if (first) goToPage(recalled?.page ?? 1);
+  }, [target.request, target.pageFrom, target.quote, goToPage, recalled]);
+
+  useEffect(() => {
+    places.remember({ page: currentPage, zoom: zoom.fit ? null : zoom.zoom });
+  }, [places, currentPage, zoom]);
 
   // Finds the quote on the pages of the range, for each page's text layer to highlight.
   useEffect(() => {
