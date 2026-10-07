@@ -257,6 +257,34 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await second.app.close();
 });
 
+test("an API key typed for one chat provider is cleared when another is chosen, or when the server changes", async () => {
+  const { app, window } = await launchApp(dataDir);
+  const form = window.getByTestId("chat-setup").getByTestId("provider-form");
+  await window.getByTestId("chat-choice-api-key").check();
+  const key = form.getByLabel(/^API key/);
+  const test = form.getByRole("button", { name: "Test connection" });
+
+  // Typed for OpenAI, the key isn't kept for Anthropic: there is nothing to test or use with it.
+  await form.getByRole("radio", { name: "OpenAI", exact: true }).check();
+  await key.fill("sk-typed-for-openai");
+  await form.getByRole("radio", { name: "Anthropic" }).check();
+  await expect(key).toHaveValue("");
+  await expect(test).toBeDisabled();
+
+  // For a server, the key stays while the address is fixed, and goes once it names another host.
+  await form.getByRole("radio", { name: "OpenAI-compatible server" }).check();
+  const server = form.getByLabel("Server URL");
+  await server.fill("https://api.example.com/v1");
+  await key.fill("sk-typed-for-example");
+  await server.fill("https://api.example.com/v2");
+  await server.blur();
+  await expect(key).toHaveValue("sk-typed-for-example");
+  await server.fill("https://other.example.net/v1");
+  await server.blur();
+  await expect(key).toHaveValue("");
+  await app.close();
+});
+
 test("a Linked folder shows its Folders as on disk, and files added on their own are Other Documents", async () => {
   const sources = await createDataFolder();
   try {

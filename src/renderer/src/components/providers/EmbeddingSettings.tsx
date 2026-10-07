@@ -41,7 +41,7 @@ import {
 } from "../ui";
 import { useModal } from "../useModal";
 import { SecretStorageNotice, TestResult } from "./ProviderForm";
-import { testErrorKey } from "./shared";
+import { testErrorKey, useProviderKey } from "./shared";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
@@ -218,7 +218,8 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   const id = useId();
   const [kind, setKind] = useState<EmbeddingProviderKind>(current.provider.kind);
   const [baseUrl, setBaseUrl] = useState(current.provider.baseUrl ?? "");
-  const [apiKey, setApiKey] = useState("");
+  const key = useProviderKey();
+  const { apiKey } = key;
   const [modelId, setModelId] = useState(
     current.provider.kind === "built-in" ? "" : current.provider.modelId,
   );
@@ -249,6 +250,8 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   const cloudService = cloudServiceOf(kind, baseUrl, t);
 
   const choose = (next: EmbeddingProviderKind) => {
+    // A key typed for one provider is never sent to another.
+    if (next !== kind) key.clear();
     setKind(next);
     setBaseUrl(next === saved.kind ? (saved.baseUrl ?? "") : "");
     setModelId(
@@ -293,7 +296,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     setError(null);
     try {
       useAppStore.setState({ embedding: await core.saveEmbeddingProvider(input()) });
-      setApiKey("");
+      key.clear();
       onDone();
     } catch (failure) {
       setError(errorMessage(failure));
@@ -354,6 +357,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             required={kind === "openai-compatible"}
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
+            onBlur={() => key.leftAddress(baseUrl)}
             placeholder={kind === "ollama" ? OLLAMA_URL : "https://"}
             spellCheck={false}
             className={inputClass}
@@ -372,7 +376,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
           <input
             type="password"
             value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
+            onChange={(event) => key.type(event.target.value, baseUrl)}
             autoComplete="off"
             spellCheck={false}
             className={inputClass}
