@@ -24,7 +24,7 @@ The first run downloads the model, about 135 MB from Hugging Face, into `~/.cach
 
 The model runs on a Node worker thread (`lib/embedderWorker.ts`). It uses the same code as the app's embedding utility process: `createOnnxEmbedder`, served over the channel in `src/core/embedding/channel.ts`.
 
-A run takes about a minute on an Apple M2 Max, most of it spent embedding about 1,300 Passages.
+A run takes about a minute on an Apple M2 Max, most of it spent embedding about 1,200 Passages.
 
 ### Citation quality
 
@@ -54,7 +54,7 @@ INCARNAMIND_EVAL_EMBED_KEY=sk-... npm run eval
 - **How:** the run adds the Documents again, to a second temporary data folder. Before adding them, it chooses the provider through the core's public interface (`saveEmbeddingProvider`), as a User would in Settings. The core's own provider code (#32) then embeds the Passages and the searches. With `INCARNAMIND_EVAL_EMBED_BASE_URL`, the provider is an OpenAI-compatible server.
 - **Consent:** setting the variables is the consent to send the Documents' text and the searches to the provider. The run accepts the "embeddings" flow's consent request and declines any other.
 - **Size:** vectors keep the model's own size (1,536 for `text-embedding-3-small`, 3,072 for `gemini-embedding-001`). The core records the model and size with the vectors.
-- **Cost:** embedding the corpus sends about 1,300 Passages, about 0.6 million tokens.
+- **Cost:** embedding the corpus sends about 1,200 Passages, about 0.6 million tokens.
 
 ### Environment variables
 
@@ -143,32 +143,48 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 
 ## Results
 
-Measured on 2026-10-07 at commit `faab607`, on an Apple M2 Max (12 cores) with Node v25.5.0, using the built-in model. Four runs gave the same numbers. The 12 Documents made 1,291 Passages, added and processed in 45 to 75 s.
+Measured on 2026-10-07 at commit `472d8d8`, on an Apple M2 Max (12 cores) with Node v25.5.0, using the built-in model. Two runs gave the same numbers and ranks. The 12 Documents made 1,199 Passages, added and processed in 43 to 51 s.
 
 | Mode | English | Chinese | Gating set | Cross-lingual |
 |---|---|---|---|---|
-| hybrid (gating) | 6/10 | 9/10 | **15/20** | 1/5 |
+| hybrid (gating) | 7/10 | 9/10 | **16/20** | 1/5 |
 | keyword | 7/10 | 8/10 | 15/20 | 1/5 |
 | vector | 5/10 | 10/10 | 15/20 | 1/5 |
 
-**Retrieval misses the gate.** Hybrid search finds 15 of 20, not 16. English finds 6 of 10, not 8. Chinese passes with 9 of 10.
+**Retrieval still misses the gate, in English.** Hybrid search finds 16 of 20, which meets the overall target, and Chinese passes with 9 of 10. English finds 7 of 10, not 8.
 
-Hybrid search misses en-01, en-03, en-05, en-07 and zh-03. Their first hits are at ranks 7, 11, 9, 20 and 15. en-01 and en-03 are keyword hits (ranks 1 and 4) that fusion with vector search pushes out of the top 5. zh-03 is a vector hit at rank 1 that fusion pushes out the same way.
+Hybrid search misses en-03, en-05, en-07 and zh-03. Their first hits are at ranks 19, 12, 20 and 16. en-03 is a keyword hit (rank 3) and zh-03 a vector hit (rank 1) that fusion pushes out of the top 5. en-05 ranks 7th with keyword search and 17th with vector search.
 
 The cross-lingual results match ADR-0009's finding: the built-in model favours Documents in the Question's language.
 
-**Compared with the prototype (ADR-0009):**
+### Before and after the Passage fix
 
-- **Vector search:** on the gating Questions it matches the prototype exactly, 5 English and 10 Chinese.
-- **Hybrid search:** the prototype found 17 of 20, with 8 English. The core loses en-01 and en-05, which were near misses in the prototype too, at ranks 4 and 5.
-- **Vector ranks:** they are a little lower in the core for those two Questions: 15 against 11, and 13 against 10.
+Gating set hits, English + Chinese:
 
-Two causes were tried and ruled out, each in a run that was then reverted:
+| Mode | Core at `faab607` (1,291 Passages) | Core at `472d8d8` (1,199 Passages) | Prototype (1,204 Passages) |
+|---|---|---|---|
+| hybrid | 15 (6 + 9) | **16 (7 + 9)** | 17 (8 + 9) |
+| keyword | 15 (7 + 8) | 15 (7 + 8) | 14 (6 + 8) |
+| vector | 15 (5 + 10) | 15 (5 + 10) | 15 (5 + 10) |
 
-- the order in which reciprocal rank fusion breaks ties: the prototype put the vector list first, the core puts the keyword list first;
-- the removal of running headers, footers and page numbers (#30).
+The fix brought back en-01 (rank 7 to 3). en-05 is still missed.
 
-The core also builds more Passages than the prototype did: 1,291 against 1,204. So the gap may lie in how Passages are built. That is a follow-up, outside this ticket.
+### Compared with the prototype, stage by stage
+
+The prototype (`prototype/retrieval`) was rerun on this machine at 500/200. It gave its recorded numbers and the same rank for every Question. Each stage of the core was then compared with the prototype's on the same input.
+
+- **Passages: the main cause, now fixed.** The core had kept #25's builder and only given it ADR-0009's sizes. That builder ends a Passage at the strongest sentence or paragraph break in its second half, and a page break counts as a paragraph break. The prototype fills a Passage with whole lines and starts the next with the last lines of it, at most 200 tokens of them, as LangChain's splitter does. The core's Passages were shorter (443 approximate tokens on average, against 477), and fewer crossed a page (384, against 599). In the prototype's own harness, with nothing else changed, the core's builder took hybrid search from 17 to 15 of 20 (English from 8 to 6). The core now builds Passages the prototype's way, and counts each line in whole tokens as the prototype did. Given the same page text, its English Passages are the prototype's exactly.
+- **Keyword search:** the same terms, stopwords and ranks on the same Passages.
+- **Vector search:** the same "query: " and "passage: " prefixes, Document-name prefix, L2-normalised vectors and 50 candidates. The core also normalises the query, which changes nothing. Two differences are deliberate:
+  - The core runs onnxruntime-node 1.23.2, the last version with Intel macOS binaries (#26). The prototype ran 1.30.0, through transformers.js.
+  - A text over 512 tokens keeps its end-of-text token in the core, which is how Hugging Face's tokenizers and sentence-transformers cut it. The prototype's transformers.js setup cut it off. About one Passage in six is that long.
+
+  On the same runtime, the core and the prototype give identical vectors for texts within 512 tokens.
+- **Fusion:** the same. Reciprocal rank fusion takes each list's top 50, with k = 60. The order in which ties are broken was ruled out before (#31).
+- **Hit rule:** the same. The core's `findQuote` and the prototype's substring match agree on every Passage and Question.
+- **Page text:** the core removes running headers, footers and page numbers (#30) and NUL characters, and joins CJK lines broken inside a paragraph. Dropping the 95 NUL characters in en-05's Document moves the boundaries of 28 of its 32 Passages. Without #30's removal, the core still finds 16 of 20, with 7 English.
+
+**Why English stays at 7.** The English Question that the prototype finds and the core doesn't is en-05. It was the prototype's fifth-ranked hit, on the edge of the top 5. Its keyword rank is the same in both (7th), but its vector rank is 17th in the core against 10th. The vector differences above move it most: on the core's Passages, transformers.js on onnxruntime 1.30 puts it 12th. With onnxruntime 1.30, the prototype's truncation and no header removal all at once, the core puts en-05 7th and still finds 7 English Questions. The rest comes from the page text. Each difference is deliberate or correct, so no honest change meets the English target. ADR-0009 already noted that int8 differences of this size flipped an English Question in the prototype. With 10 Questions per language, one Question is the margin.
 
 **The Citation part** hasn't been run with a cloud model yet, because that needs a paid key.
 

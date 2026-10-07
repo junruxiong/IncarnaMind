@@ -17,9 +17,10 @@ import { type BuiltPassage, buildPassages, type PageText } from "./passages";
  * 1: #25 (400/200 Passages, trigram index). 2: ADR-0009 (500/200 Passages,
  * normalised text, segmented keyword index, embeddings). 3: #30 (running
  * headers, footers and page numbers removed; page text stored for the
- * Citation check).
+ * Citation check). 4: #31 (Passages built from whole lines, as the retrieval
+ * prototype built them).
  */
-export const PROCESSING_VERSION = 3;
+export const PROCESSING_VERSION = 4;
 
 export interface ProcessingJob {
   documentId: string;
