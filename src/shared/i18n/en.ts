@@ -102,6 +102,72 @@ export const en = {
   "embedding.model.failure.storage": "it couldn't be saved to the data folder",
   "embedding.model.retry": "Try again",
 
+  "embeddingProviders.settings.title": "Document search",
+  "embeddingProviders.settings.body":
+    "Documents are searched by their words and by their meaning. Meaning comes from an embedding model: the built-in one runs on this computer. A cloud model may find more, but it receives the text of every Document.",
+  "embeddingProviders.settings.current": "Embedding model: ",
+  "embeddingProviders.settings.builtIn": "Built-in ({model})",
+  "embeddingProviders.settings.sendsTo":
+    "The text of your Documents, and your searches, are sent to {service}.",
+  "embeddingProviders.settings.local": "Nothing leaves this computer.",
+  "embeddingProviders.settings.change": "Change model",
+  "embeddingProviders.settings.error":
+    "Search can't use this model, so Documents wait for it. {reason}",
+  "embeddingProviders.settings.retry": "Try again",
+  "embeddingProviders.kind.built-in": "Built-in model",
+  "embeddingProviders.kind.openai": "OpenAI",
+  "embeddingProviders.kind.google": "Google",
+  "embeddingProviders.kind.openai-compatible": "OpenAI-compatible server",
+  "embeddingProviders.kind.ollama": "Ollama",
+  "embeddingProviders.form.label": "Embedding model",
+  "embeddingProviders.form.localOnly":
+    "Local mode is on, so only models on this computer can be chosen.",
+  "embeddingProviders.form.builtInHint":
+    "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
+  "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
+  "embeddingProviders.form.ollamaHint":
+    "Leave it empty for Ollama on this computer. Pull the model in Ollama first, e.g. ollama pull bge-m3.",
+  "embeddingProviders.form.model": "Embedding model name",
+  "embeddingProviders.form.switch": "Switch…",
+  "embeddingProviders.test.ok": "Connected: the model made a vector of {dimensions} numbers.",
+  "embeddingProviders.confirm.title": "Switch to {provider}?",
+  "embeddingProviders.confirm.reprocess":
+    "Every Document ({count} in all) will be processed again with the new model, which can take a while. Until each one is done, search finds its Passages by their words only.",
+  "embeddingProviders.confirm.cloud":
+    "{service} will receive the full text of all your Documents, and every search you make.",
+  "embeddingProviders.confirm.local": "Everything stays on this computer.",
+  "embeddingProviders.confirm.cancel": "Cancel",
+  "embeddingProviders.confirm.switch": "Switch and process again",
+  "embeddingProviders.localOnly.label": "Keep everything on this computer",
+  "embeddingProviders.localOnly.body":
+    "Document search uses the built-in model or Ollama, and search results aren't sent for reranking. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+  "embeddingProviders.localOnly.cloudChat":
+    "Your chat model still sends Questions to {service}: choose a local model under Chat model to keep them here too.",
+  "embeddingProviders.rebuild.title":
+    "Rebuilding search for the new model: {done} of {total} Documents",
+  "embeddingProviders.rebuild.localMode":
+    "To keep everything on this computer, search now uses the built-in model.",
+  "embeddingProviders.rebuild.note":
+    "Search finds Passages by their words until each Document is done.",
+  "embeddingProviders.error.notice": "Search can't use {provider}. {reason}",
+
+  "rerank.settings.title": "Reranking",
+  "rerank.settings.body":
+    "With a Cohere or Voyage AI key, document search reorders its best matches with a reranking model, so the most relevant Passages come first. Without a key, nothing changes.",
+  "rerank.settings.inUse": "{service} reranks search results ({model}).",
+  "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
+  "rerank.settings.paused": "Paused: local mode keeps search results on this computer.",
+  "rerank.settings.keyMissing":
+    "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
+  "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.change": "Change",
+  "rerank.settings.remove": "Stop reranking",
+  "rerank.kind.cohere": "Cohere",
+  "rerank.kind.voyage": "Voyage AI",
+  "rerank.form.label": "Reranking service",
+  "rerank.form.model": "Model (optional)",
+  "rerank.form.save": "Use for reranking",
+
   "folders.label": "Folders",
   "folders.all": "All Documents",
   "folders.new": "New Folder",
@@ -328,6 +394,12 @@ export const en = {
   "consent.data.tags": "The names and descriptions of your Tags",
   "consent.data.document-excerpts":
     "The name and type of each Document being tagged, and a short excerpt from its beginning",
+  "consent.flow.embeddings": "Document search",
+  "consent.flow.embeddings.purpose": "search your Documents by their meaning",
+  "consent.data.document-text": "The full text of every Document, as it is processed",
+  "consent.data.queries": "Your searches: each Question's words, or what an Answer searches for",
+  "consent.flow.rerank": "Reranking",
+  "consent.flow.rerank.purpose": "put the best search results first",
 
   "consent.settings.title": "Data sent to other services",
   "consent.settings.empty": "Nothing is sent to other services.",

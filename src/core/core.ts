@@ -3,10 +3,17 @@ import { join } from "node:path";
 import { translate } from "../shared/i18n";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
+import type {
+  ChatModelChoice,
+  CoreApi,
+  CoreEventSource,
+  EmbeddingSettings,
+  Unsubscribe,
+} from "./api";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
+import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createFolders, parseFolderId } from "./folders";
@@ -14,6 +21,7 @@ import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
+import { createAiSdkEmbeddingModel } from "./providers/embeddings";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
 import {
@@ -22,6 +30,7 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
+import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
@@ -88,6 +97,10 @@ export function createCore(adapters: CoreAdapters): Core {
   const tagsChanged = () => events.emit("tags.changed", tags.list());
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
+  const secrets = createSecrets(adapters.keychain, settings);
+  const consent = createConsent(db, events, now);
+  /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
+  const lifetime = new AbortController();
   const embeddingModel = createEmbeddingModel({
     definition: BUILT_IN_EMBEDDING_MODEL,
     source: adapters.embeddingModelSource,
@@ -95,25 +108,99 @@ export function createCore(adapters: CoreAdapters): Core {
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
   });
+  /** Reports the embedding settings again; set once Documents exist. */
+  let embeddingChanged = () => {};
+  /** A Document's status changed: during a rebuild, its progress may have too. */
+  let rebuildMayHaveProgressed = () => {};
+  // The embedding model search uses: the built-in one, or the provider the User chose.
+  const embedding = createActiveEmbedding({
+    builtIn: embeddingModel,
+    settings,
+    secrets,
+    consent,
+    createModel: adapters.createEmbeddingModel ?? createAiSdkEmbeddingModel,
+    signal: lifetime.signal,
+    onChange: () => embeddingChanged(),
+  });
   let documents: ReturnType<typeof createDocuments>;
   try {
     documents = createDocuments({
       db,
       dataDir,
       now,
-      model: embeddingModel,
-      emitStatus: (document) => events.emit("document.status", document),
+      model: embedding.model,
+      emitStatus: (document) => {
+        events.emit("document.status", document);
+        rebuildMayHaveProgressed();
+      },
       onReady: (documentId) => documentReady(documentId),
     });
   } catch (error) {
+    lifetime.abort();
     embeddingModel.close();
     db.close();
     throw error;
   }
-  const secrets = createSecrets(adapters.keychain, settings);
-  const consent = createConsent(db, events, now);
-  /** Aborts work still running (model downloads, a ChatGPT sign-in) when the core closes. */
-  const lifetime = new AbortController();
+
+  /** The embedding settings, with the rebuild's progress; a rebuild that has finished ends here. */
+  const embeddingSettings = async (): Promise<EmbeddingSettings> => {
+    const reason = embedding.rebuildReason();
+    let rebuild: EmbeddingSettings["rebuild"] = null;
+    if (reason) {
+      const progress = documents.embeddingProgress();
+      if (progress.done >= progress.total) embedding.endRebuild();
+      else rebuild = { reason, ...progress };
+    }
+    return {
+      provider: await embedding.provider(),
+      localOnly: embedding.localOnly(),
+      rebuild,
+      error: embedding.error(),
+    };
+  };
+  embeddingChanged = () => {
+    embeddingSettings().then(
+      (current) => {
+        if (!lifetime.signal.aborted) events.emit("embedding.changed", current);
+      },
+      (error: unknown) => {
+        // Reading the keychain is async, so the core may have closed meanwhile.
+        if (!lifetime.signal.aborted) console.error(error);
+      },
+    );
+  };
+  /** The rebuild's progress last reported, so each Document finishing is reported once. */
+  let reportedProgress = "";
+  rebuildMayHaveProgressed = () => {
+    if (!embedding.rebuildReason()) return;
+    const { total, done } = documents.embeddingProgress();
+    const progress = `${done}/${total}`;
+    if (progress === reportedProgress) return;
+    reportedProgress = progress;
+    embeddingChanged();
+  };
+
+  // Rerank, with a Cohere or Voyage key: paused in local mode.
+  const rerank = createRerank({
+    settings,
+    secrets,
+    consent,
+    createModel: adapters.createRerankingModel ?? createAiSdkRerankingModel,
+    localOnly: () => embedding.localOnly(),
+    signal: lifetime.signal,
+  });
+  const rerankChanged = async () => {
+    const status = await rerank.status();
+    if (!lifetime.signal.aborted) events.emit("rerank.changed", status);
+    return status;
+  };
+  /** Local mode on or off: embeddings may switch back to the built-in model, and rerank pauses. */
+  const setLocalOnly = async (enabled: unknown) => {
+    const wasLocal = embedding.localOnly();
+    await embedding.setLocalOnly(enabled);
+    if (wasLocal !== embedding.localOnly()) await rerankChanged();
+    return embeddingSettings();
+  };
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
@@ -155,7 +242,7 @@ export function createCore(adapters: CoreAdapters): Core {
       search: (query, documentIds, signal) =>
         documents.searchTool(query, {
           signal,
-          rerank: adapters.reranker,
+          rerank: adapters.reranker ?? rerank.reranker,
           documentIds: documentIds ?? undefined,
         }),
       citationSource: (passageId) => documents.citationSource(passageId),
@@ -307,6 +394,29 @@ export function createCore(adapters: CoreAdapters): Core {
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
 
+    getEmbeddingSettings: () => embeddingSettings(),
+    saveEmbeddingProvider: async (input) => {
+      await embedding.save(input);
+      return embeddingSettings();
+    },
+    testEmbeddingConnection: (input) => embedding.test(input),
+    retryEmbedding: async () => {
+      embedding.retry();
+      return embeddingSettings();
+    },
+    setLocalOnly: (enabled) => setLocalOnly(enabled),
+
+    getRerankSettings: () => rerank.status(),
+    saveRerankSettings: async (input) => {
+      await rerank.save(input);
+      return rerankChanged();
+    },
+    removeRerankSettings: async () => {
+      await rerank.remove();
+      return rerankChanged();
+    },
+    testRerankConnection: (input) => rerank.test(input),
+
     listChatProviders: () => chat.list(),
     saveChatProvider: async (input) => {
       const provider = await chat.save(input);
@@ -350,6 +460,10 @@ export function createCore(adapters: CoreAdapters): Core {
       const provider = await chat.save({ kind: "ollama", baseUrl, modelId: model });
       settingsChanged();
       await readinessChanged();
+      // Local mode: Document search stays on this computer too. A cloud
+      // embedding provider goes back to the built-in model, and the rebuild
+      // ("embedding.changed", reason "local-mode") tells the User.
+      await setLocalOnly(true);
       return provider;
     },
 

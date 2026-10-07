@@ -259,12 +259,14 @@ export type DocumentKind = "pdf" | "text" | "markdown";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text, then
- * "embedding" its Passages with the built-in model, then "ready". Before the
- * model has been downloaded, a Document waits after extracting as
- * "waiting-for-model", and carries on by itself once the download finishes;
- * keyword search already finds its Passages. The other end states are
- * "failed" (see `failure`) and "no-text": the file has no text to extract,
- * e.g. a scan without a text layer.
+ * "embedding" its Passages with the embedding model (the built-in one unless
+ * the User chose another), then "ready". Before the model has been
+ * downloaded, or while the chosen provider can't be used, a Document waits
+ * after extracting as "waiting-for-model", and carries on by itself once it
+ * can; keyword search already finds its Passages. Switching the embedding
+ * model takes every Document back through "embedding" (see `EmbeddingRebuild`).
+ * The other end states are "failed" (see `failure`) and "no-text": the file
+ * has no text to extract, e.g. a scan without a text layer.
  */
 export type DocumentStatus =
   | "queued"
@@ -451,8 +453,9 @@ export interface AddDocumentsResult {
  * How `searchPassages` finds Passages (ADR-0009):
  * - "keyword": FTS5 over the words of each Passage and its Document's name,
  *   ranked by BM25. Finds nothing without a word in common.
- * - "vector": the built-in embedding model's vectors, by cosine similarity.
- *   Always ranks every embedded Passage, however unrelated.
+ * - "vector": the current embedding model's vectors (see `EmbeddingSettings`),
+ *   by cosine similarity. Always ranks every Passage embedded with that model,
+ *   however unrelated; Passages embedded with another model are never compared.
  * - "hybrid": both, each list's top 50 fused by reciprocal rank fusion
  *   (k = 60). Keyword only until the embedding model is ready.
  */
@@ -517,6 +520,155 @@ export interface EmbeddingModelStatus {
   totalBytes: number;
   /** Set when `state` is "failed". */
   error: EmbeddingModelError | null;
+}
+
+// ---------------------------------------------------------------------------
+// Embedding providers (ADR-0005)
+
+/**
+ * Where Passages and search queries are embedded. "built-in" is the model
+ * above, on this computer: the default. The others trade privacy for quality:
+ * a cloud provider receives the text of every Document, and every search
+ * query. "ollama" is Ollama's embeddings, normally on this computer too.
+ */
+export const embeddingProviderKinds = [
+  "built-in",
+  "openai",
+  "google",
+  "openai-compatible",
+  "ollama",
+] as const;
+
+export type EmbeddingProviderKind = (typeof embeddingProviderKinds)[number];
+
+/**
+ * Prefilled when a provider is picked; any embedding model the account has
+ * can be typed instead. Ollama's is multilingual (bge-m3, the best model in
+ * ADR-0009's comparison); it must be pulled first.
+ */
+export const SUGGESTED_EMBEDDING_MODELS: Readonly<
+  Record<Exclude<EmbeddingProviderKind, "built-in">, string>
+> = {
+  openai: "text-embedding-3-small",
+  google: "gemini-embedding-001",
+  "openai-compatible": "",
+  ollama: "bge-m3",
+};
+
+/** The embedding model search uses on this device. */
+export interface EmbeddingProvider {
+  kind: EmbeddingProviderKind;
+  /** The server's URL for "openai-compatible" and "ollama"; null for the others. */
+  baseUrl: string | null;
+  /** The model, e.g. "text-embedding-3-small"; for "built-in", the built-in model's name. */
+  modelId: string;
+  /** Whether an API key is stored for it. Keys live in the keychain, never in the database. */
+  hasApiKey: boolean;
+  /** How many numbers the model's vectors have: known once it has made one (384 for the built-in model). */
+  dimensions: number | null;
+  /** Where Document text and search queries go, or null when they stay on this computer. */
+  service: ExternalService | null;
+}
+
+export interface SaveEmbeddingProviderInput {
+  kind: EmbeddingProviderKind;
+  /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
+  baseUrl?: string;
+  /** A new API key. Leave it out to keep the one stored for the same provider and server. */
+  apiKey?: string;
+  /** The embedding model. Required, except for "built-in", which takes none. */
+  modelId?: string;
+}
+
+/** Settings to test, which need not be saved. Without a key, the one stored for the same provider and server. */
+export type TestEmbeddingConnectionInput = SaveEmbeddingProviderInput;
+
+export type EmbeddingConnectionTestResult =
+  /** The model made a vector of this many numbers. */
+  { ok: true; dimensions: number } | { ok: false; error: ProviderError };
+
+/**
+ * Documents being embedded again after the embedding model changed. Each one
+ * goes through the usual statuses ("embedding", then "ready"); until it is
+ * done, keyword search still finds its Passages, but vector search doesn't:
+ * vectors from different models are never compared.
+ */
+export interface EmbeddingRebuild {
+  /**
+   * "provider-changed": the User chose another embedding model.
+   * "local-mode": local mode switched a cloud provider back to the built-in model.
+   */
+  reason: "provider-changed" | "local-mode";
+  /** Documents with Passages to search. */
+  total: number;
+  /** Of those, the ones whose Passages are all embedded with the current model. */
+  done: number;
+}
+
+/** Document search's embedding model on this device, and local mode. */
+export interface EmbeddingSettings {
+  provider: EmbeddingProvider;
+  /**
+   * "Keep everything on this computer": only embedding providers on this
+   * computer can be chosen, and search results aren't reranked by a cloud
+   * service. Turned on in Settings, or by choosing local models with one
+   * click (`selectOllama`).
+   */
+  localOnly: boolean;
+  /** Set while Documents are embedded again after a switch. */
+  rebuild: EmbeddingRebuild | null;
+  /**
+   * Why the provider can't embed right now, e.g. its key was refused or the
+   * User declined sending it data; null when it can. Documents wait
+   * ("waiting-for-model") until `retryEmbedding`, and search finds Passages by
+   * their words meanwhile. The built-in model reports its download in
+   * `getEmbeddingModel` instead.
+   */
+  error: ProviderError | null;
+}
+
+// ---------------------------------------------------------------------------
+// Rerank (ADR-0005)
+
+/** Reranking services. With a key for one, document search reranks its best matches. */
+export const rerankProviderKinds = ["cohere", "voyage"] as const;
+
+export type RerankProviderKind = (typeof rerankProviderKinds)[number];
+
+/** The model each provider reranks with unless the User names another: both are multilingual. */
+export const DEFAULT_RERANK_MODELS: Readonly<Record<RerankProviderKind, string>> = {
+  cohere: "rerank-v3.5",
+  voyage: "rerank-2.5",
+};
+
+/** Rerank on this device. Without a key, search is as before: nothing is reranked. */
+export interface RerankSettings {
+  /** A Cohere or Voyage key is set up on this device: document search reranks its candidates. */
+  enabled: boolean;
+  kind: RerankProviderKind | null;
+  /** The model requests name, e.g. "rerank-v3.5"; null when rerank isn't set up. */
+  modelId: string | null;
+  /** Whether its key can be read on this device. Keys live in the keychain, never in the database. */
+  hasApiKey: boolean;
+  /** Where the Question and candidate Passages go, while rerank is set up. */
+  service: ExternalService | null;
+  /** Local mode is on: nothing is reranked, though the settings are kept. */
+  paused: boolean;
+}
+
+export interface SaveRerankSettingsInput {
+  kind: RerankProviderKind;
+  /** A new key. Leave it out to keep the stored one (for the same kind); the first save needs one. */
+  apiKey?: string;
+  /** Null or empty: the provider's default model (`DEFAULT_RERANK_MODELS`). Left out: unchanged. */
+  modelId?: string | null;
+}
+
+/** Settings to test, which need not be saved; those left out are the saved ones. */
+export interface TestRerankConnectionInput {
+  kind?: RerankProviderKind;
+  apiKey?: string;
+  modelId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -854,6 +1006,8 @@ export const dataKinds = [
   "tool-results",
   "tags",
   "document-excerpts",
+  "document-text",
+  "queries",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -863,8 +1017,12 @@ export type DataKind = (typeof dataKinds)[number];
  * - "chat": Questions, to the chat provider they are asked with.
  * - "tagging": automatic tagging, to Jev's service when a Jev key is set up,
  *   otherwise to the default chat model's provider.
+ * - "embeddings": every Document's text and every search query, to a cloud
+ *   embedding provider, when the User chose one instead of the built-in model.
+ * - "rerank": each search query and its candidate Passages, to Cohere or
+ *   Voyage, when a rerank key is set up.
  */
-export const dataFlowIds = ["chat", "tagging"] as const;
+export const dataFlowIds = ["chat", "tagging", "embeddings", "rerank"] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
@@ -1015,6 +1173,51 @@ export interface CoreApi {
    * download by itself as soon as a Document needs the model.
    */
   downloadEmbeddingModel(): Promise<EmbeddingModelStatus>;
+
+  /** The embedding model document search uses, local mode, and any rebuild under way. */
+  getEmbeddingSettings(): Promise<EmbeddingSettings>;
+  /**
+   * Switches document search to another embedding model (its key goes to the
+   * keychain, never the database). A cloud provider's "embeddings" flow needs
+   * consent first: if the User declines, nothing changes. A different model
+   * means every Document is embedded again: each goes back to "embedding",
+   * and "embedding.changed" events report the rebuild. Saving the same model
+   * again (e.g. with a new key) re-embeds nothing. Refused for a cloud
+   * provider while local mode is on.
+   */
+  saveEmbeddingProvider(input: SaveEmbeddingProviderInput): Promise<EmbeddingSettings>;
+  /**
+   * Embeds one fixed text, nothing of the User's. A cloud provider's
+   * "embeddings" flow needs consent first, as for a chat provider's test.
+   */
+  testEmbeddingConnection(
+    input: TestEmbeddingConnectionInput,
+  ): Promise<EmbeddingConnectionTestResult>;
+  /** Tries the embedding provider again after an error: Documents waiting for it carry on. */
+  retryEmbedding(): Promise<EmbeddingSettings>;
+  /**
+   * Turns local mode ("keep everything on this computer") on or off on this
+   * device. Turning it on switches a cloud embedding provider back to the
+   * built-in model, which embeds every Document again (an embedding provider
+   * on this computer, e.g. Ollama, is kept), and stops reranking.
+   */
+  setLocalOnly(enabled: boolean): Promise<EmbeddingSettings>;
+
+  /** Rerank on this device: whether a Cohere or Voyage key is set up. */
+  getRerankSettings(): Promise<RerankSettings>;
+  /**
+   * Sets up rerank, or changes it: from then on document search reranks its
+   * candidates. The "rerank" flow to the service needs consent first: if the
+   * User declines, nothing changes. The key goes to the keychain.
+   */
+  saveRerankSettings(input: SaveRerankSettingsInput): Promise<RerankSettings>;
+  /** Removes rerank's key and settings from this device: search is as before. */
+  removeRerankSettings(): Promise<RerankSettings>;
+  /**
+   * Reranks two fixed texts against a fixed query, nothing of the User's,
+   * with the given settings or the saved ones. The "rerank" flow needs consent first.
+   */
+  testRerankConnection(input?: TestRerankConnectionInput): Promise<ConnectionTestResult>;
 
   listChatProviders(): Promise<ChatProvider[]>;
   /**
@@ -1185,6 +1388,13 @@ export interface CoreEvents {
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
   "embeddingModel.status": EmbeddingModelStatus;
+  /**
+   * The embedding model search uses changed, or local mode, or a rebuild made
+   * progress (a Document finished) or finished, or the provider failed or recovered.
+   */
+  "embedding.changed": EmbeddingSettings;
+  /** Rerank was set up, changed or removed on this device, or paused by local mode. */
+  "rerank.changed": RerankSettings;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
   /** A data flow needs the User's consent before anything is sent. */
@@ -1262,6 +1472,15 @@ const methods: Record<CoreApiMethod, true> = {
   searchPassages: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
+  getEmbeddingSettings: true,
+  saveEmbeddingProvider: true,
+  testEmbeddingConnection: true,
+  retryEmbedding: true,
+  setLocalOnly: true,
+  getRerankSettings: true,
+  saveRerankSettings: true,
+  removeRerankSettings: true,
+  testRerankConnection: true,
   listChatProviders: true,
   saveChatProvider: true,
   deleteChatProvider: true,
