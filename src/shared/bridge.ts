@@ -31,6 +31,18 @@ export interface FilesBridge {
    * file. Resolves with its absolute path, or null if the User cancelled.
    */
   pickSkill(kind: SkillPickKind): Promise<string | null>;
+  /**
+   * Opens a Document's original file in the system's default app for its
+   * type: a temporary copy, named after the Document. Rejects for a deleted Document.
+   */
+  openDocumentExternally(documentId: string): Promise<void>;
+  /**
+   * Saves a copy of a Document's original file where the User picks in the
+   * system save dialog, suggesting the Document's name and extension.
+   * Resolves with the copy's path, or null if they cancelled. Rejects for a
+   * deleted Document.
+   */
+  saveDocumentCopy(documentId: string): Promise<string | null>;
 }
 
 export type SkillPickKind = "folder" | "zip";
@@ -40,4 +52,6 @@ export const FILES_CHANNELS = {
   saveMindExport: "files:saveMindExport",
   openDataFolder: "files:openDataFolder",
   pickSkill: "files:pickSkill",
+  openDocumentExternally: "files:openDocumentExternally",
+  saveDocumentCopy: "files:saveDocumentCopy",
 } as const;

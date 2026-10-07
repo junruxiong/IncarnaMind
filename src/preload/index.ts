@@ -64,6 +64,9 @@ const files: FilesBridge = {
     ipcRenderer.invoke(FILES_CHANNELS.saveMindExport, mindId, options),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),
+  openDocumentExternally: (documentId) =>
+    ipcRenderer.invoke(FILES_CHANNELS.openDocumentExternally, documentId),
+  saveDocumentCopy: (documentId) => ipcRenderer.invoke(FILES_CHANNELS.saveDocumentCopy, documentId),
 };
 
 contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);

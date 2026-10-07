@@ -4,7 +4,8 @@
  * filing in Folders, soft-deleting, and keyword, vector and hybrid search.
  */
 import { randomUUID } from "node:crypto";
-import { basename, extname, isAbsolute } from "node:path";
+import { rm } from "node:fs/promises";
+import { basename, extname, isAbsolute, join } from "node:path";
 import type {
   AddDocumentsResult,
   Document,
@@ -22,6 +23,7 @@ import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
+import { copyFileName, createOpenCopies } from "./copies";
 import { createEmbeddingQueue } from "./embedding";
 import { createDocumentFiles, kindOf } from "./files";
 import { keywordText } from "./keywords";
@@ -196,6 +198,8 @@ export interface DocumentFile {
 export interface DocumentsOptions {
   db: Database;
   dataDir: string;
+  /** Where copies to open in another app go (see ./copies). */
+  tempDir: string;
   now: () => string;
   /**
    * The embedding model in use (the built-in one unless the User chose
@@ -221,6 +225,7 @@ export interface DocumentFilter {
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
   const files = createDocumentFiles(dataDir);
+  const openCopies = createOpenCopies(options.tempDir);
   const vectors = createVectorIndex(db, model);
 
   /**
@@ -428,6 +433,7 @@ export function createDocuments(options: DocumentsOptions) {
 
   // Startup: tidy the folder, then pick up work a quit interrupted.
   files.prepare((contentHash) => findByHash(contentHash) !== undefined);
+  void openCopies.tidy();
   // Documents processed by an older pipeline are processed again, through the usual statuses.
   db.run(
     `UPDATE documents SET status = 'queued', updated_at = ?
@@ -523,6 +529,39 @@ export function createDocuments(options: DocumentsOptions) {
       )
       .map(toDocument);
   };
+
+  /** A live Document, and the name a copy of its file gets (see ./copies). Throws NotFoundError otherwise. */
+  const copyName = (idInput: unknown): { document: Document; fileName: string } => {
+    const row = find(parseId(idInput));
+    if (!row) throw new NotFoundError("There is no such Document.");
+    const document = toDocument(row);
+    return { document, fileName: copyFileName(document) };
+  };
+
+  /**
+   * Copies a live Document's stored file to `destination`, an absolute path,
+   * replacing any file there. Deleted or unknown Documents, and a missing
+   * stored file, are refused (NotFoundError) before anything is written.
+   */
+  async function saveCopy(idInput: unknown, destination: unknown): Promise<void> {
+    const id = parseId(idInput);
+    if (typeof destination !== "string" || !isAbsolute(destination)) {
+      throw new InvalidInputError("A copy must be saved to an absolute file path.");
+    }
+    const row = find(id);
+    if (!row) throw new NotFoundError("There is no such Document.");
+    try {
+      await files.copy(row.content_hash, destination);
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === "ENOENT" &&
+        !(await files.has(row.content_hash))
+      ) {
+        throw new NotFoundError("The Document's file is missing from the data folder.");
+      }
+      throw error;
+    }
+  }
 
   /** Adds one file whose kind is known. Returns undefined if it can't be read. */
   async function addFile(path: string, kind: DocumentKind): Promise<Document | undefined> {
@@ -816,6 +855,26 @@ export function createDocuments(options: DocumentsOptions) {
       vectors.removeDocument(id);
       processor.cancel(id);
       await releaseFile(row.content_hash);
+    },
+
+    copyName,
+    saveCopy,
+
+    /**
+     * Copies a live Document's stored file into a new folder of its own in the
+     * temporary folder, named after the Document (see ./copies), to open in
+     * another app. Resolves with the copy's path. Refuses what `saveCopy` does.
+     */
+    async openableCopy(idInput: unknown): Promise<string> {
+      const { document, fileName } = copyName(idInput);
+      const folder = await openCopies.folder();
+      try {
+        await saveCopy(document.id, join(folder, fileName));
+      } catch (error) {
+        await rm(folder, { recursive: true, force: true });
+        throw error;
+      }
+      return join(folder, fileName);
     },
 
     /** Opens a live Document's stored file. Deleted or unknown Documents, and missing files, are refused. */

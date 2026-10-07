@@ -8,6 +8,7 @@ import type {
   ChatModelChoice,
   CoreApi,
   CoreEventSource,
+  Document,
   EmbeddingSettings,
   Unsubscribe,
 } from "./api";
@@ -59,6 +60,27 @@ export interface Core extends CoreApi, CoreEventSource {
    * or if its file is missing from the data folder.
    */
   openDocumentFile(documentId: string): Promise<DocumentFile>;
+  /**
+   * A live Document, and the file name a copy of its file gets: the
+   * Document's name, without characters file systems refuse, and the
+   * extension of its kind, never its content hash. Throws NotFoundError for
+   * an unknown or deleted Document.
+   */
+  documentCopyName(documentId: string): Promise<{ document: Document; fileName: string }>;
+  /**
+   * Saves a copy of a live Document's file at `path`, an absolute path the
+   * host got from the User (e.g. from a save dialog), replacing any file
+   * there. Throws NotFoundError for an unknown or deleted Document, or if its
+   * file is missing from the data folder, before anything is written.
+   */
+  saveDocumentCopy(documentId: string, path: string): Promise<void>;
+  /**
+   * Copies a live Document's file into a new folder in the temporary folder,
+   * named as `documentCopyName` says, for the host to open in another app,
+   * and resolves with its path. Throws as `saveDocumentCopy` does. Copies are
+   * removed at a later start, a day on.
+   */
+  temporaryDocumentCopy(documentId: string): Promise<string>;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -141,6 +163,7 @@ export function createCore(adapters: CoreAdapters): Core {
     documents = createDocuments({
       db,
       dataDir,
+      tempDir: adapters.paths.tempDir ?? tmpdir(),
       now,
       model: embedding.model,
       emitStatus: (document) => {
@@ -836,6 +859,9 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
+    documentCopyName: async (documentId) => documents.copyName(documentId),
+    saveDocumentCopy: (documentId, path) => documents.saveCopy(documentId, path),
+    temporaryDocumentCopy: (documentId) => documents.openableCopy(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,

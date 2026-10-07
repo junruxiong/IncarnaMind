@@ -30,7 +30,8 @@ export interface Paths {
   builtInSkills?: string;
   /**
    * Where each Skill script run gets its own temporary working folder, removed
-   * when the run ends. Defaults to the OS's temporary folder.
+   * when the run ends, and where Documents are copied to be opened in another
+   * app. Defaults to the OS's temporary folder.
    */
   tempDir?: string;
 }
