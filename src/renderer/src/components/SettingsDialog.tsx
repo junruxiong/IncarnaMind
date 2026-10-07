@@ -9,7 +9,9 @@ import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
+import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
+import { RerankSettingsSection } from "./providers/RerankSettings";
 import { buttonClass } from "./providers/shared";
 import { SkillsSettings } from "./SkillsSettings";
 import { useModal } from "./useModal";
@@ -116,6 +118,8 @@ function GeneralSettings() {
   return (
     <div className="flex flex-col gap-6">
       <ChatModelSettings />
+      <EmbeddingSettingsSection />
+      <RerankSettingsSection />
       <ConnectorsSettings />
       <SkillsSettings />
       <JevSettingsSection />

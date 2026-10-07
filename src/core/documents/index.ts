@@ -17,8 +17,8 @@ import type {
   SkippedFile,
   TaggingState,
 } from "../api";
-import type { EmbeddingModel } from "../embedding";
-import { EmbeddingModelNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
+import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
+import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
@@ -65,13 +65,14 @@ interface DocumentRow {
   tagging_status: string;
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
+  embedding_model: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
-  tagging_error_message, created_at, updated_at`;
+  tagging_error_message, embedding_model, created_at, updated_at`;
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -196,8 +197,11 @@ export interface DocumentsOptions {
   db: Database;
   dataDir: string;
   now: () => string;
-  /** The built-in embedding model, which embeds Passages and search queries. */
-  model: EmbeddingModel;
+  /**
+   * The embedding model in use (the built-in one unless the User chose
+   * another), which embeds Passages and search queries.
+   */
+  model: SearchEmbedder;
   /** Pushes the "document.status" event. */
   emitStatus(document: Document): void;
   /** A Document just became ready, i.e. searchable: called before its status is pushed. */
@@ -219,12 +223,16 @@ export function createDocuments(options: DocumentsOptions) {
   const files = createDocumentFiles(dataDir);
   const vectors = createVectorIndex(db, model);
 
-  /** The share of a Document's Passages embedded so far. */
-  const progressOf = (id: string): number => {
+  /**
+   * The share of a Document's Passages embedded so far with the current model:
+   * none while it waits its turn after a switch, holding another model's vectors.
+   */
+  const progressOf = (row: DocumentRow): number => {
+    if (row.embedding_model !== model.id) return 0;
     const counts = db.get<{ total: number; embedded: number }>(
       `SELECT count(*) AS total, count(embedding) AS embedded FROM passages
        WHERE document_id = ? AND deleted_at IS NULL`,
-      [id],
+      [row.id],
     );
     return counts && counts.total > 0 ? counts.embedded / counts.total : 0;
   };
@@ -239,7 +247,7 @@ export function createDocuments(options: DocumentsOptions) {
       size: row.size,
       pageCount: row.page_count,
       status: row.status as DocumentStatus,
-      progress: row.status === "embedding" ? progressOf(row.id) : null,
+      progress: row.status === "embedding" ? progressOf(row) : null,
       failure:
         row.status === "failed"
           ? {
@@ -379,7 +387,7 @@ export function createDocuments(options: DocumentsOptions) {
       }
       db.run(
         `UPDATE documents SET status = ?, page_count = ?, failure_reason = ?, failure_message = ?,
-           processing_version = ?, embedding_model = ?, updated_at = ?
+           processing_version = ?, embedding_model = ?, embedding_dimensions = NULL, updated_at = ?
          WHERE id = ?`,
         [
           status,
@@ -436,21 +444,52 @@ export function createDocuments(options: DocumentsOptions) {
     if (row.status === "extracting") setStatus(row.id, "queued");
     processor.enqueue(jobFor(row));
   }
-  // Embedding carries on where it stopped, or waits for the model.
-  const embeddingRows = db.all<{ id: string }>(
-    `SELECT id FROM documents WHERE deleted_at IS NULL AND status = 'embedding'
-     ORDER BY created_at, rowid`,
-  );
-  for (const { id } of embeddingRows) {
-    if (model.isReady()) embedding.enqueue(id);
-    else setStatus(id, "waiting-for-model");
+  /**
+   * Puts every Document with Passages to search whose vectors aren't all from
+   * the current model through embedding (again), or has it wait for the model.
+   * Documents already embedded with it stay ready. Returns those whose status changed.
+   */
+  function embedWithCurrentModel(): string[] {
+    const ready = model.isReady();
+    const changed = db.transaction(() => {
+      const rows = db.all<{ id: string; status: string }>(
+        `SELECT id, status FROM documents
+         WHERE deleted_at IS NULL AND status IN ('ready', 'embedding', 'waiting-for-model')
+           AND (status <> 'ready' OR embedding_model IS NOT ?)
+         ORDER BY created_at, rowid`,
+        [model.id],
+      );
+      const target = ready ? "embedding" : "waiting-for-model";
+      return rows.filter((row) => {
+        if (row.status === target) return false;
+        setStatus(row.id, target);
+        return true;
+      });
+    });
+    if (ready) {
+      const embeddingRows = db.all<{ id: string }>(
+        `SELECT id FROM documents WHERE deleted_at IS NULL AND status = 'embedding'
+         ORDER BY created_at, rowid`,
+      );
+      for (const { id } of embeddingRows) embedding.enqueue(id);
+    } else if (
+      db.get("SELECT 1 FROM documents WHERE deleted_at IS NULL AND status = 'waiting-for-model'")
+    ) {
+      model.ensure();
+    }
+    return changed.map((row) => row.id);
   }
+
+  // Embedding carries on where it stopped, or waits for the model; Documents
+  // embedded with a model other than the current one are embedded again.
+  embedWithCurrentModel();
   model.onReady(() => embedding.resumeWaiting());
-  if (model.isReady()) embedding.resumeWaiting();
-  else if (
-    db.get("SELECT 1 FROM documents WHERE deleted_at IS NULL AND status = 'waiting-for-model'")
-  )
-    model.ensure();
+  // The User switched model: what is under way stops, and every Document is embedded again.
+  model.onSwitch(() => {
+    embedding.restart();
+    vectors.reset();
+    for (const id of embedWithCurrentModel()) announce(id);
+  });
 
   /** The live Documents a filter keeps, as SQL conditions on `documents`, with their parameters. */
   const filterWhere = ({ folderIds, tagId, ids }: DocumentFilter) => {
@@ -522,22 +561,17 @@ export function createDocuments(options: DocumentsOptions) {
    */
   async function queryVector(query: string, mode: SearchMode): Promise<Float32Array | null> {
     const unavailable = () => {
-      if (mode === "vector") throw new EmbeddingModelNotReadyError(model.status());
+      if (mode === "vector") throw model.notReadyError();
       return null;
     };
     if (!(await model.load())) return unavailable();
     try {
       return await model.embedQuery(query);
-    } catch {
-      // The process running the model may have stopped: start it again and retry once.
-      if (!(await model.load())) return unavailable();
-      try {
-        return await model.embedQuery(query);
-      } catch (error) {
-        if (mode === "vector") throw error;
-        console.error(error);
-        return null;
-      }
+    } catch (error) {
+      if (error instanceof EmbeddingUnavailableError) return unavailable();
+      if (mode === "vector") throw error;
+      console.error(error);
+      return null;
     }
   }
 
@@ -571,6 +605,22 @@ export function createDocuments(options: DocumentsOptions) {
         query,
         options,
       );
+    },
+
+    /**
+     * How far embedding with the current model has got: the live Documents
+     * with Passages to search, and of those, the ones whose Passages are all
+     * embedded with it.
+     */
+    embeddingProgress(): { total: number; done: number } {
+      const counts = db.get<{ total: number; done: number | null }>(
+        `SELECT count(*) AS total,
+           sum(status = 'ready' AND embedding_model IS ?) AS done
+         FROM documents
+         WHERE deleted_at IS NULL AND status IN ('ready', 'embedding', 'waiting-for-model')`,
+        [model.id],
+      );
+      return { total: counts?.total ?? 0, done: counts?.done ?? 0 };
     },
 
     /** How many live Documents have Passages to search: of all of them, or only of these. */

@@ -39,6 +39,11 @@ export interface EmbeddingModel {
   embedPassage(documentName: string, text: string): Promise<Float32Array>;
   /** A search query's vector. L2-normalised. */
   embedQuery(query: string): Promise<Float32Array>;
+  /**
+   * Stops the embedder, freeing its memory, e.g. while another provider
+   * embeds. The next `load` starts it again.
+   */
+  unload(): void;
   /** Stops a download (keeping what it got) and the embedder. */
   close(): void;
 }
@@ -189,6 +194,9 @@ export function createEmbeddingModel(options: EmbeddingModelOptions): EmbeddingM
     embedPassage: (documentName, text) =>
       vectorOf(passageEmbeddingText(definition, documentName, text)),
     embedQuery: (query) => vectorOf(`${definition.queryPrefix}${normaliseText(query)}`),
+    unload() {
+      embedder.close();
+    },
     close() {
       lifetime.abort();
       readyListeners.clear();

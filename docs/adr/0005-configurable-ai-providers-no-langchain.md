@@ -17,4 +17,8 @@ We don't use LangChain. The only parts the old code used were document loaders a
 ## Consequences
 
 - Changing the embedding provider means re-processing every Document, because Passages embedded by different models can't be compared.
+  - Each Document records the model its vectors come from (provider, server and model) and their size. Search compares a query only with vectors of the current model.
+  - During a switch, search uses the new model at once and is marked as rebuilding. Keyword search covers every Document throughout; vector search covers the Documents already embedded again. We chose this over searching the old vectors until the switch completes. That would keep sending queries to the old provider after the User left it, which would defeat local mode. It would also need the old key and two sets of vectors.
+  - A Document keeps its old vectors until the rebuild reaches it. Switching back before then costs nothing for that Document.
+- Local mode ("keep everything on this computer") is a per-device setting. One-click Ollama also turns it on. It switches a cloud embedding provider back to the built-in model, which means re-processing every Document; an embedding provider on this computer, such as Ollama, is kept. It also pauses rerank. It doesn't block cloud chat or tagging. Settings tells the User when the chat model still sends Questions to a cloud provider.
 - Jev is a closed, hosted model in early access, so nothing may depend on it being configured.

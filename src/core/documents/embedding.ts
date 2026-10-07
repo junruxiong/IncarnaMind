@@ -1,11 +1,19 @@
 /**
- * Embeds Documents' Passages with the built-in model, one Passage at a time
- * (ADR-0009: batches were no faster, and changed int8 results), one Document
- * after another. A Document's status goes from "embedding" to "ready"; while
- * the model isn't ready it waits as "waiting-for-model". Each vector is stored
- * as it comes, so a quit loses at most one Passage's work.
+ * Embeds Documents' Passages with the current embedding model, one Document
+ * after another: the built-in model one Passage at a time (ADR-0009: batches
+ * were no faster, and changed int8 results), an API provider in batches. A
+ * Document's status goes from "embedding" to "ready"; while the model can't
+ * be used it waits as "waiting-for-model". Each batch of vectors is stored as
+ * it comes, so a quit loses at most one batch's work.
+ *
+ * The model each Document's vectors come from is recorded with them
+ * (documents.embedding_model, and their size in documents.embedding_dimensions).
+ * When the User switches model, every Document goes back to "embedding", and
+ * keeps its old vectors until its turn comes: then they are dropped and the
+ * new model's written. Switching back before that costs nothing for the
+ * Documents not yet reached. Vectors from two models are never left in one Document.
  */
-import type { EmbeddingModel } from "../embedding";
+import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import type { Database } from "../storage";
 import { encodeVector, type VectorIndex } from "./vectors";
 
@@ -15,7 +23,7 @@ const PROGRESS_INTERVAL_MS = 500;
 export interface EmbeddingQueueOptions {
   db: Database;
   now: () => string;
-  model: EmbeddingModel;
+  model: SearchEmbedder;
   vectors: VectorIndex;
   /** Pushes a Document's current state as a "document.status" event. */
   announce(documentId: string): void;
@@ -29,11 +37,23 @@ export interface EmbeddingQueue {
   enqueue(documentId: string): void;
   /** Moves every Document waiting for the model on to "embedding", and queues it. */
   resumeWaiting(): void;
+  /**
+   * The model changed: work under way stops without storing anything more,
+   * and the queue empties. The caller queues Documents again.
+   */
+  restart(): void;
   /** Stops working: Documents keep their status, so the next start picks them up. */
   close(): void;
 }
 
 type Outcome = "done" | "skipped" | "model-unavailable";
+
+interface DocumentState {
+  status: string;
+  name: string;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+}
 
 export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQueue {
   const { db, now, model, vectors, announce } = options;
@@ -41,10 +61,13 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
   const queue: string[] = [];
   let running = false;
   let closed = false;
+  /** Counts model switches: work started under an earlier count stops. */
+  let generation = 0;
 
-  const statusOf = (id: string) =>
-    db.get<{ status: string; name: string }>(
-      "SELECT status, name FROM documents WHERE id = ? AND deleted_at IS NULL",
+  const stateOf = (id: string) =>
+    db.get<DocumentState>(
+      `SELECT status, name, embedding_model, embedding_dimensions FROM documents
+       WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
 
@@ -78,11 +101,34 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     announce(id);
   }
 
+  /** The Document's vectors come from another model: drop them, and record the current one. */
+  function startOver(id: string): void {
+    db.transaction(() => {
+      db.run(
+        "UPDATE passages SET embedding = NULL WHERE document_id = ? AND deleted_at IS NULL AND embedding IS NOT NULL",
+        [id],
+      );
+      db.run(
+        `UPDATE documents SET embedding_model = ?, embedding_dimensions = NULL, updated_at = ?
+         WHERE id = ?`,
+        [model.id, now(), id],
+      );
+    });
+    vectors.removeDocument(id);
+  }
+
   async function embedDocument(id: string): Promise<Outcome> {
-    const document = statusOf(id);
+    const started = generation;
+    const stopped = () => closed || generation !== started;
+    const document = stateOf(id);
     if (document?.status !== "embedding") return "skipped";
-    if (!(await model.load())) return "model-unavailable";
-    if (closed) return "skipped";
+    if (!(await model.load())) return stopped() ? "skipped" : "model-unavailable";
+    if (stopped()) return "skipped";
+    let dimensions = document.embedding_dimensions;
+    if (document.embedding_model !== model.id) {
+      startOver(id);
+      dimensions = null;
+    }
     const passages = db.all<{ seq: number; text: string }>(
       `SELECT seq, text FROM passages
        WHERE document_id = ? AND deleted_at IS NULL AND embedding IS NULL
@@ -90,36 +136,53 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       [id],
     );
     let announced = Date.now();
-    for (const passage of passages) {
-      let vector: Float32Array;
+    for (let at = 0; at < passages.length; at += model.batchSize) {
+      const batch = passages.slice(at, at + model.batchSize);
+      let embedded: Float32Array[];
       try {
-        vector = await model.embedPassage(document.name, passage.text);
-      } catch {
-        // The process running the model may have stopped: start it again and retry once.
-        if (closed) return "skipped";
-        if (!(await model.load())) return "model-unavailable";
-        try {
-          vector = await model.embedPassage(document.name, passage.text);
-        } catch (error) {
-          if (closed) return "skipped";
-          fail(id, `Embedding failed: ${error instanceof Error ? error.message : String(error)}`);
-          return "done";
-        }
+        embedded = await model.embedPassages(
+          document.name,
+          batch.map((passage) => passage.text),
+        );
+      } catch (error) {
+        if (stopped()) return "skipped";
+        if (error instanceof EmbeddingUnavailableError) return "model-unavailable";
+        fail(id, `Embedding failed: ${error instanceof Error ? error.message : String(error)}`);
+        return "done";
       }
-      // Deleted, or processed again, meanwhile.
-      if (closed || statusOf(id)?.status !== "embedding") return "skipped";
-      db.run("UPDATE passages SET embedding = ? WHERE seq = ? AND deleted_at IS NULL", [
-        encodeVector(vector),
-        BigInt(passage.seq),
-      ]);
-      vectors.add(id, passage.seq, vector);
+      // Deleted, or processed again, or the model switched, meanwhile.
+      if (stopped() || stateOf(id)?.status !== "embedding") return "skipped";
+      const size = embedded[0]?.length ?? 0;
+      if (dimensions !== null && size !== dimensions) {
+        fail(
+          id,
+          `The embedding model returned ${size} numbers per vector instead of ${dimensions}.`,
+        );
+        return "done";
+      }
+      db.transaction(() => {
+        if (dimensions === null) {
+          db.run("UPDATE documents SET embedding_dimensions = ? WHERE id = ?", [BigInt(size), id]);
+        }
+        batch.forEach((passage, index) => {
+          const vector = embedded[index] as Float32Array;
+          db.run("UPDATE passages SET embedding = ? WHERE seq = ? AND deleted_at IS NULL", [
+            encodeVector(vector),
+            BigInt(passage.seq),
+          ]);
+        });
+      });
+      dimensions = size;
+      batch.forEach((passage, index) => {
+        vectors.add(id, passage.seq, embedded[index] as Float32Array);
+      });
       if (Date.now() - announced >= PROGRESS_INTERVAL_MS) {
         announced = Date.now();
         announce(id);
       }
     }
     setStatus(id, "ready", "embedding");
-    if (statusOf(id)?.status === "ready") {
+    if (stateOf(id)?.status === "ready") {
       try {
         options.onReady?.(id);
       } catch (error) {
@@ -165,14 +228,15 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
          ORDER BY created_at, rowid`,
       );
       for (const { id } of waiting) {
-        db.run(
-          `UPDATE documents SET status = 'embedding', embedding_model = ?, updated_at = ?
-           WHERE id = ? AND status = 'waiting-for-model'`,
-          [model.id, now(), id],
-        );
+        setStatus(id, "embedding", "waiting-for-model");
         announce(id);
         enqueue(id);
       }
+    },
+
+    restart() {
+      generation++;
+      queue.length = 0;
     },
 
     close() {

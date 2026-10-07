@@ -51,8 +51,9 @@ INCARNAMIND_EVAL_EMBED_KIND=openai INCARNAMIND_EVAL_EMBED_MODEL=text-embedding-3
 INCARNAMIND_EVAL_EMBED_KEY=sk-... npm run eval
 ```
 
-- **How:** the run adds the Documents again, to a second temporary data folder whose core gets a cloud `Embedder` in place of the built-in one.
-- **Size:** vectors are requested at the built-in model's 384 dimensions. OpenAI's `text-embedding-3-*` and Google's Gemini embedding models support shortened vectors; the core refuses any other size.
+- **How:** the run adds the Documents again, to a second temporary data folder. Before adding them, it chooses the provider through the core's public interface (`saveEmbeddingProvider`), as a User would in Settings. The core's own provider code (#32) then embeds the Passages and the searches. With `INCARNAMIND_EVAL_EMBED_BASE_URL`, the provider is an OpenAI-compatible server.
+- **Consent:** setting the variables is the consent to send the Documents' text and the searches to the provider. The run accepts the "embeddings" flow's consent request and declines any other.
+- **Size:** vectors keep the model's own size (1,536 for `text-embedding-3-small`, 3,072 for `gemini-embedding-001`). The core records the model and size with the vectors.
 - **Cost:** embedding the corpus sends about 1,300 Passages, about 0.6 million tokens.
 
 ### Environment variables

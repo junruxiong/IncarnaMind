@@ -4,6 +4,7 @@ import type {
   DeviceSettings,
   Document,
   EmbeddingModelStatus,
+  EmbeddingSettings,
   Folder,
   Mind,
   Settings,
@@ -45,6 +46,8 @@ interface AppState {
   skippedFiles: string[];
   /** The built-in embedding model and its download. Set once loaded, then follows the core's event. */
   embeddingModel: EmbeddingModelStatus | null;
+  /** The embedding model search uses, local mode and any rebuild. Set once loaded, then follows the core's event. */
+  embedding: EmbeddingSettings | null;
   settingsOpen: boolean;
   /** The page Settings shows. */
   settingsPage: SettingsPage;
@@ -92,6 +95,8 @@ interface AppState {
   dismissSkippedFiles(): void;
   /** Downloads the embedding model again after a failure. */
   downloadEmbeddingModel(): Promise<void>;
+  /** Tries the chosen embedding provider again after an error. */
+  retryEmbedding(): Promise<void>;
   /** Files a Document in a Folder, or unfiles it with null. */
   moveDocument(documentId: string, folderId: string | null): Promise<void>;
   /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
@@ -153,6 +158,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     documents: [],
     skippedFiles: [],
     embeddingModel: null,
+    embedding: null,
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
@@ -165,17 +171,27 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     async load() {
       try {
-        const [minds, settings, documents, chatReadiness, folders, embeddingModel, tags, skills] =
-          await Promise.all([
-            core.listMinds(),
-            core.getSettings(),
-            core.listDocuments(),
-            core.getChatReadiness(),
-            core.listFolders(),
-            core.getEmbeddingModel(),
-            core.listTags(),
-            core.listSkills(),
-          ]);
+        const [
+          minds,
+          settings,
+          documents,
+          chatReadiness,
+          folders,
+          embeddingModel,
+          tags,
+          skills,
+          embedding,
+        ] = await Promise.all([
+          core.listMinds(),
+          core.getSettings(),
+          core.listDocuments(),
+          core.getChatReadiness(),
+          core.listFolders(),
+          core.getEmbeddingModel(),
+          core.listTags(),
+          core.listSkills(),
+          core.getEmbeddingSettings(),
+        ]);
         set({
           minds,
           settings,
@@ -185,6 +201,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           embeddingModel,
           tags,
           skills,
+          embedding,
           status: { kind: "ready" },
         });
       } catch (error) {
@@ -325,6 +342,11 @@ export const useAppStore = create<AppState>()((set, get) => {
     downloadEmbeddingModel: () =>
       attempt(async () => {
         set({ embeddingModel: await core.downloadEmbeddingModel() });
+      }),
+
+    retryEmbedding: () =>
+      attempt(async () => {
+        set({ embedding: await core.retryEmbedding() });
       }),
 
     // The lists follow the core's "documents.moved" and "folders.changed" events, which
@@ -468,6 +490,9 @@ core.on("chatReadiness.changed", (chatReadiness) => useAppStore.setState({ chatR
 
 // The embedding model downloads in the background: follow its state and progress.
 core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embeddingModel }));
+
+// The embedding model can change in Settings or by local mode, and a rebuild reports its progress.
+core.on("embedding.changed", (embedding) => useAppStore.setState({ embedding }));
 
 // Folders change through this window or another: follow the list, and keep the filter right.
 core.on("folders.changed", (folders) => {

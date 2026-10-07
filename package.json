@@ -27,9 +27,11 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.73",
+    "@ai-sdk/cohere": "4.0.56",
     "@ai-sdk/google": "4.0.89",
     "@ai-sdk/openai": "4.0.85",
     "@ai-sdk/openai-compatible": "3.0.64",
+    "@ai-sdk/voyage": "2.0.55",
     "@floating-ui/dom": "1.8.0",
     "@huggingface/tokenizers": "0.2.0",
     "@modelcontextprotocol/sdk": "1.32.1",

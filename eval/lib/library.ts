@@ -14,9 +14,9 @@ import {
   type Document,
   type DocumentStatus,
   type Embedder,
-  type EmbeddingModelSource,
   type EmbeddingModelStatus,
   type Keychain,
+  type SaveEmbeddingProviderInput,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
 import type { EvalDocument } from "./evaluationSet";
@@ -25,9 +25,15 @@ import type { Log } from "./log";
 export interface LibraryOptions {
   /** For the temporary folder's name and the log. */
   name: string;
+  /** Runs the built-in model; never started when `embeddingProvider` is given. */
   embedder: Embedder;
-  /** Where the embedding model's files come from. Defaults to the built-in model's. */
-  embeddingModelSource?: EmbeddingModelSource;
+  /**
+   * An embedding provider to use instead of the built-in model, chosen
+   * through the core's public interface before any Document is added, as in
+   * Settings. Setting it is the consent to send it the Documents' text: the
+   * library accepts the "embeddings" flow's consent request.
+   */
+  embeddingProvider?: SaveEmbeddingProviderInput;
   /**
    * A folder kept between runs that the data folder's `models/` points to, so
    * the built-in model is downloaded (and checked) by the core once.
@@ -154,7 +160,6 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       },
     },
     embedder: options.embedder,
-    ...(options.embeddingModelSource && { embeddingModelSource: options.embeddingModelSource }),
   };
   const core = createCore(adapters);
   const close = async () => {
@@ -170,8 +175,18 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
 
   try {
     const started = Date.now();
-    await modelReady(core, log);
-    log(`The embedding model is ready (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+    if (options.embeddingProvider) {
+      const provider = options.embeddingProvider;
+      // Only the embeddings flow is accepted; nothing else may leave the machine.
+      core.on("consent.requested", (request) => {
+        void core.respondToConsent(request.requestId, request.flow.id === "embeddings");
+      });
+      const saved = await core.saveEmbeddingProvider(provider);
+      log(`Embedding with ${saved.provider.kind}/${saved.provider.modelId}`);
+    } else {
+      await modelReady(core, log);
+      log(`The embedding model is ready (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+    }
 
     const begun = Date.now();
     const { documents: added, skipped } = await core.addDocuments(
