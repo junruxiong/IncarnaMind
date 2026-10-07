@@ -10,20 +10,41 @@
  * - An unsigned macOS build can't install updates: Squirrel.Mac refuses to update an app
  *   that isn't signed with a Developer ID. The User is told that a new version is out
  *   and offered its download page instead.
+ *
+ * The check sends nothing of the User's, so it needs no consent; the Privacy page lists
+ * it, and the User can turn automatic checks off there. They are on by default.
  */
 import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 import { autoUpdater } from "electron-updater";
-import type { CoreApi, Language } from "../core";
+import type { Core, CoreApi, ExternalService, Language } from "../core";
 import { translate } from "../shared/i18n";
 import { systemBrowser } from "./platform";
 
 const RELEASES_PAGE = "https://github.com/junruxiong/IncarnaMind/releases";
 
-type SettingsSource = Pick<CoreApi, "getSettings">;
+/** Where update checks go. */
+export const GITHUB_RELEASES: Readonly<ExternalService> = {
+  id: "https://github.com",
+  name: "GitHub Releases",
+};
 
-/** Starts this run's update check in the background. Does nothing in an unpackaged app. */
+type SettingsSource = Pick<CoreApi, "getSettings" | "getPrivacySettings">;
+
+/** Lists the update check on the Privacy page, on or off as the User chose. */
+export function registerUpdateCheck(core: Pick<Core, "networkTraffic" | "getPrivacySettings">) {
+  core.networkTraffic.register({
+    id: "update-check",
+    service: GITHUB_RELEASES,
+    enabled: async () => (await core.getPrivacySettings()).automaticUpdateChecks,
+  });
+}
+
+/**
+ * Starts this run's update check in the background. Does nothing in an
+ * unpackaged app, or when the User turned automatic update checks off.
+ */
 export function startAutoUpdates(core: SettingsSource): void {
   if (!app.isPackaged) return;
   checkForUpdates(core).catch((error: unknown) => {
@@ -33,6 +54,7 @@ export function startAutoUpdates(core: SettingsSource): void {
 }
 
 async function checkForUpdates(core: SettingsSource): Promise<void> {
+  if (!(await core.getPrivacySettings()).automaticUpdateChecks) return;
   const installable = await canInstallUpdates();
   autoUpdater.autoDownload = installable;
   autoUpdater.autoInstallOnAppQuit = installable;
