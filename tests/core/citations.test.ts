@@ -1,7 +1,9 @@
 import { Editor, type JSONContent } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test } from "vitest";
-import type { Citation, CoreEvents } from "../../src/core";
+import type { Citation, Core, CoreEvents } from "../../src/core";
+import { ANSWER_TEMPERATURE } from "../../src/core/answers/engine";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   answerEnded,
@@ -16,9 +18,9 @@ import {
   shownPassages,
 } from "../helpers/citations";
 import { startCore } from "../helpers/core";
-import { connectToMind } from "../helpers/mindClient";
+import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { answerIn, answerText, note, question, readMind, writeMind } from "../helpers/minds";
-import { promptOf, scriptedModel } from "../helpers/models";
+import { type GenerateCall, type GeneratedReply, promptOf, scriptedModel } from "../helpers/models";
 import { buildPdf } from "../helpers/pdf";
 
 /** Two pages about tides. */
@@ -646,6 +648,155 @@ describe("Models that can't call Tools", { timeout: 30_000 }, () => {
 
     expect(ended).toMatchObject({ event: "failed", payload: { error: { kind: "auth" } } });
     expect(model.doStreamCalls).toHaveLength(1);
+  });
+});
+
+describe("Searching for a follow-up Question", { timeout: 30_000 }, () => {
+  const refusesTools = { status: 400, message: "tiny:latest does not support tools" };
+  /** The instructions of a request to rewrite a Question for search. */
+  const REWRITING = /one query for searching the User's Documents/;
+
+  /**
+   * A local model that can't call Tools: it answers in JSON, without
+   * Citations, and rewrites Questions for search with `rewrite`. (It can't
+   * tag Documents, which asks for a reply that isn't streamed too.)
+   */
+  const withoutTools = (rewrite: (call: GenerateCall) => GeneratedReply) =>
+    scriptedModel(
+      (call) =>
+        call.tools.length > 0
+          ? { error: refusesTools }
+          : { text: JSON.stringify({ answer: "At new and full moon.", citations: [] }) },
+      {
+        generate: (call) =>
+          REWRITING.test(call.system)
+            ? rewrite(call)
+            : { error: { status: 400, message: "This model doesn't tag Documents." } },
+      },
+    );
+
+  /** The requests a model had to rewrite a Question for search: their instructions, text and temperature. */
+  const rewritesOf = (model: MockLanguageModelV4) =>
+    model.doGenerateCalls
+      .map((options) => {
+        const [system = "", prompt = ""] = options.prompt.map((message) =>
+          typeof message.content === "string"
+            ? message.content
+            : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
+        );
+        return { system, prompt, temperature: options.temperature };
+      })
+      .filter((request) => REWRITING.test(request.system));
+
+  /** Writes `above`, then a Question, into the Mind; asks it and waits for its Answer. */
+  async function askBelow(
+    core: Core,
+    client: MindClient,
+    mindId: string,
+    above: JSONContent[],
+    text: string,
+  ): Promise<string> {
+    const asked = question(text);
+    writeMind(client, [...above, asked]);
+    await client.settled();
+    const result = await core.askQuestion({ mindId, questionId: asked.attrs.id });
+    if (!result.asked) throw new Error(`The Question wasn't asked: ${JSON.stringify(result)}`);
+    const ended = await answerEnded(core, result.answerId);
+    expect(ended.event).toBe("finished");
+    return result.answerId;
+  }
+
+  /** What the Answer's search looked for, as its Tool-call card shows it. */
+  const searchedFor = (client: MindClient, answerId: string): unknown =>
+    JSON.parse(answerIn(client, answerId).attrs.toolCalls as string)[0]?.input.query;
+
+  test("a model without Tools rewrites the Question into a query that stands on its own, from the Blocks above, and searches for that", async () => {
+    const model = withoutTools(({ prompt }) => ({
+      text: prompt.includes("Spring tides have the largest range")
+        ? '"When do spring tides happen?"'
+        : "The rewrite didn't see the Notes above the Question.",
+    }));
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    const answerId = await askBelow(
+      core,
+      client,
+      mind.id,
+      [question("Tell me about spring tides."), note("Spring tides have the largest range.")],
+      "When do they happen?",
+    );
+
+    // One short request, with the Blocks above, the Question, and the Answer temperature.
+    const rewrites = rewritesOf(model);
+    expect(rewrites).toHaveLength(1);
+    expect(rewrites[0]?.temperature).toBe(ANSWER_TEMPERATURE);
+    expect(rewrites[0]?.prompt).toContain("User: Tell me about spring tides.");
+    expect(rewrites[0]?.prompt).toMatch(/The Question: When do they happen\?$/);
+    // The search used the rewrite, without its quotes, and found the Passages it needs.
+    expect(searchedFor(client, answerId)).toBe("When do spring tides happen?");
+    expect(promptOf(model, 1)[0]?.text).toContain(SPRING);
+  });
+
+  test("a Question with nothing above it in its context is searched as it is, with no rewrite", async () => {
+    const model = withoutTools(() => ({ text: "A rewrite that shouldn't be used" }));
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    // A Note switched out of the Question context isn't context to rewrite from.
+    const answerId = await askBelow(
+      core,
+      client,
+      mind.id,
+      [note("Spring tides have the largest range.", { off: true })],
+      "When are spring tides?",
+    );
+
+    expect(rewritesOf(model)).toHaveLength(0);
+    expect(searchedFor(client, answerId)).toBe("When are spring tides?");
+  });
+
+  test("when the rewrite fails or comes back empty, the Question is searched as it is", async () => {
+    const replies: GeneratedReply[] = [
+      { error: { status: 500, message: "The server had an error." } },
+      { text: "<think>The Question is about spring tides, so" },
+    ];
+    const model = withoutTools(() => replies.shift() ?? { text: "" });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+    const above = [note("Spring tides have the largest range.")];
+
+    const failed = await askBelow(core, client, mind.id, above, "When do they happen?");
+    expect(searchedFor(client, failed)).toBe("When do they happen?");
+
+    const cutOff = await askBelow(core, client, mind.id, above, "And how high are they?");
+    expect(searchedFor(client, cutOff)).toBe("And how high are they?");
+    expect(rewritesOf(model)).toHaveLength(2);
+  });
+
+  test("a model that calls Tools isn't asked to rewrite: the search Tool tells it to write queries that stand on their own", async () => {
+    const model = citingModel({ query: "spring tides", records: () => [], answer: "Twice." });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    await askBelow(
+      core,
+      client,
+      mind.id,
+      [note("Spring tides have the largest range.")],
+      "When do they happen?",
+    );
+
+    expect(rewritesOf(model)).toHaveLength(0);
+    const search = model.doStreamCalls[0]?.tools?.find((each) => each.name === "search_documents");
+    expect(search?.type === "function" && search.description).toMatch(/stand on its own/);
+    expect(JSON.stringify(search?.type === "function" && search.inputSchema)).toMatch(
+      /instead of pronouns or words that point back/,
+    );
   });
 });
 

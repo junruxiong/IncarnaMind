@@ -61,25 +61,66 @@ const NOT_COVERED =
 const RECORD =
   "the Passage's id, the page or two consecutive pages the quote is on (a Passage marks where each new page starts, like [p. 4]; leave pages out for a Passage without pages), and a short quote copied exactly from the Passage, without page marks";
 
+/** The most Document names the instructions list: the most recently added. */
+export const LISTED_DOCUMENTS = 50;
+
+/** The longest a listed Document name may be, in characters. */
+const MAX_NAME_LENGTH = 200;
+
+/** The Documents an Answer may draw on: how many, and some of their names. */
+export interface ListedDocuments {
+  /** How many there are. */
+  total: number;
+  /** The names of the most recently added, newest first: at most `LISTED_DOCUMENTS`. */
+  names: readonly string[];
+}
+
+/** A Document name on one line of its own, and not too long. */
+function listedName(name: string): string {
+  const line = name.replace(/\s+/g, " ").trim();
+  return line.length > MAX_NAME_LENGTH ? `${line.slice(0, MAX_NAME_LENGTH - 1)}…` : line;
+}
+
+/**
+ * How many Documents there are and what they are called, so the model can
+ * tell which ones a Question means ("compare A with B") and say which there
+ * are. Past `LISTED_DOCUMENTS`, the rest are counted.
+ */
+function documentNames({ total, names }: ListedDocuments): string {
+  const more = total - names.length;
+  return [
+    more > 0
+      ? `The names of the ${names.length} added most recently:`
+      : total === 1
+        ? "Its name:"
+        : "Their names, newest first:",
+    ...names.map((name) => `- ${listedName(name)}`),
+    ...(more > 0 ? [`- …and ${more} more`] : []),
+    "Use the names to tell which Documents a Question means, and to say which Documents there are when asked; only the Passages say what is in them.",
+  ].join("\n");
+}
+
 /**
  * What to do with the User's Documents, for a way of citing. `passages`: what
  * the one search found, for a model that can't call Tools. `scoped`: the User
  * limited the Question to some of their Documents (its Search scope), and
- * `documentCount` counts only those.
+ * `listed` covers only those.
  */
 export function documentInstructions(
   mode: CitationSupport | "no-documents",
-  documentCount: number,
+  listed: ListedDocuments,
   passages = "",
   scoped = false,
 ): string {
-  const documents = `${documentCount} Document${documentCount === 1 ? "" : "s"}`;
+  const documents = `${listed.total} Document${listed.total === 1 ? "" : "s"}`;
+  const added = `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, text and Markdown files).`;
   switch (mode) {
     case "no-documents":
       return "";
     case "tools":
       return [
-        `${scoped ? `The User limited this Question to ${documents} of theirs` : `The User has added ${documents}`} (PDF, text and Markdown files). Search them with search_documents whenever they may help; search again with other words if the Passages don't answer the Question.`,
+        `${added} Search them with search_documents whenever they may help; search again with other words if the Passages don't answer the Question.`,
+        documentNames(listed),
         "",
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
@@ -89,6 +130,9 @@ export function documentInstructions(
       ].join("\n");
     case "structured-output":
       return [
+        added,
+        documentNames(listed),
+        "",
         "Passages found in the User's Documents for this Question:",
         passages,
         "",
@@ -99,6 +143,9 @@ export function documentInstructions(
       ].join("\n");
     case "none":
       return [
+        added,
+        documentNames(listed),
+        "",
         "Passages found in the User's Documents for this Question:",
         passages,
         "",
@@ -106,6 +153,30 @@ export function documentInstructions(
         "If the Passages don't cover the Question, say so plainly, then answer from your own knowledge if you can.",
       ].join("\n");
   }
+}
+
+/**
+ * For a model that can't call Tools, before its one search: rewriting the
+ * Question into a search query that stands on its own, from the notebook
+ * above it (see `searchQuery` in ./engine).
+ */
+export const SEARCH_QUERY_INSTRUCTIONS = [
+  "You turn a Question from the User's notebook into one query for searching the User's Documents. The search sees only the query.",
+  '- Use the notebook text above the Question to work out what the Question refers to, and name it in the query: replace words such as "it", "they", "this paper" or "the second one" with what they mean.',
+  "- Keep the Question's own key words, in its language. If the Question already stands on its own, give it back unchanged.",
+  "- Reply with the query alone, on one line. Don't answer the Question or explain.",
+].join("\n");
+
+/** The request to rewrite `question` into a search query, with the notebook text above it. */
+export function searchQueryPrompt(earlier: string, question: string): string {
+  return [
+    "The notebook text above the Question:",
+    "<notebook>",
+    earlier,
+    "</notebook>",
+    "",
+    `The Question: ${question}`,
+  ].join("\n");
 }
 
 /** XML attribute text. */
