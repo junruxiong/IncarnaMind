@@ -366,6 +366,26 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
+/** A plug: a Connector, and the calls an Answer makes through one. */
+export function PlugIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M6 2.5v3M10 2.5v3" />
+      <path d="M4.25 5.5h7.5v2a3.75 3.75 0 0 1-7.5 0z" />
+      <path d="M8 11.25v2.25" />
+    </svg>
+  );
+}
+
 /** A circle with a tick: the quote was found on the page. */
 export function QuoteFoundIcon(props: IconProps) {
   return (
