@@ -30,6 +30,13 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
   await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
+/** Sets the viewer's width, as dragging its edge would, through the core's bridge. */
+const setViewerWidth = (window: Page, width: number) =>
+  window.evaluate(async (viewerWidth) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ device: { viewerWidth } });
+  }, width);
+
 /** An element's box; it must be shown. */
 async function boxOf(locator: Locator) {
   const box = await locator.boundingBox();
@@ -270,10 +277,7 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await copyFile(join(FORMATS, "Coastal Flood Risk Review.docx"), word);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.updateSettings({ device: { viewerWidth: 420 } });
-  });
+  await setViewerWidth(window, 420);
   await addDocuments(window, [guide, word]);
   const viewer = window.getByTestId("viewer");
   const items = window.getByTestId("document-list-item");
@@ -302,6 +306,112 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await expect(viewer.getByTestId("viewer-outline")).toBeVisible();
   await expect.poll(() => fitsAcross(docx, docx.locator("section.docx").first())).toBe(true);
   await screenshot(viewer, "viewer-docx-outline");
+  await app.close();
+});
+
+/** Where on a page a point of the window is, as fractions of the page's width and height. */
+const pointOnPage = (page: Locator, x: number, y: number) =>
+  page.evaluate(
+    (element, point) => {
+      const box = element.getBoundingClientRect();
+      return { x: (point.x - box.left) / box.width, y: (point.y - box.top) / box.height };
+    },
+    { x, y },
+  );
+
+/** Wheel events as a trackpad's pinch sends them: Ctrl set, though no key is down. */
+const pinch = (scroller: Locator, x: number, y: number, deltas: number[]) =>
+  scroller.evaluate(
+    (element, gesture) =>
+      gesture.deltas.map(
+        (deltaY) =>
+          !element.dispatchEvent(
+            new WheelEvent("wheel", {
+              deltaY,
+              ctrlKey: true,
+              clientX: gesture.x,
+              clientY: gesture.y,
+              bubbles: true,
+              cancelable: true,
+            }),
+          ),
+      ),
+    { x, y, deltas },
+  );
+
+test("a pinch, or the wheel with Ctrl held, zooms a PDF around the pointer through the zoom steps", async () => {
+  const long = join(sources, "Long.pdf");
+  await writeFile(
+    long,
+    buildPdf(Array.from({ length: 6 }, (_, index) => ({ lines: [`Page ${index + 1} of 6`] }))),
+  );
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await setViewerWidth(window, 420);
+  await addDocuments(window, [long]);
+  await window.getByTestId("open-document").click();
+  const viewer = window.getByTestId("viewer");
+  const scroller = window.getByTestId("pdf-scroller");
+  const level = window.getByTestId("pdf-zoom-level");
+  const page2 = viewer.locator('[data-page-number="2"]');
+  await expect(page2).toHaveAttribute("data-drawn", "true");
+  await window.getByTestId("pdf-page-number").fill("2");
+  await window.getByTestId("pdf-page-number").press("Enter");
+  const fitted = Number.parseInt((await level.textContent()) ?? "", 10);
+  const box = await boxOf(scroller);
+  const x = box.x + box.width * 0.7;
+  const y = box.y + 160;
+  const before = await pointOnPage(page2, x, y);
+
+  // Pinching out: the page grows a step at a time, the point under the pointer staying put,
+  // and nothing else takes the gesture.
+  expect(await pinch(scroller, x, y, Array(8).fill(-3))).toEqual(Array(8).fill(true));
+  await expect(window.getByTestId("pdf-fit-width")).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => Number.parseInt((await level.textContent()) ?? "", 10)).toBe(67);
+  expect(fitted).toBeLessThan(67);
+  await expect(async () => {
+    const after = await pointOnPage(page2, x, y);
+    expect(Math.abs(after.x - before.x)).toBeLessThan(0.01);
+    expect(Math.abs(after.y - before.y)).toBeLessThan(0.01);
+  }).toPass();
+  await expect(page2).toHaveAttribute("data-drawn", "true");
+  await screenshot(viewer, "viewer-pinch-zoomed");
+  // Pinching in goes back down the steps.
+  await pinch(scroller, x, y, Array(5).fill(3));
+  await expect(level).toHaveText("50%");
+
+  // The wheel with Ctrl held: a step per notch, around the pointer too.
+  await window.mouse.move(x, y);
+  const held = await pointOnPage(page2, x, y);
+  await window.keyboard.down("Control");
+  await window.mouse.wheel(0, -100);
+  await window.keyboard.up("Control");
+  await expect(level).toHaveText("67%");
+  await expect(async () => {
+    const after = await pointOnPage(page2, x, y);
+    expect(Math.abs(after.x - held.x)).toBeLessThan(0.01);
+    expect(Math.abs(after.y - held.y)).toBeLessThan(0.01);
+  }).toPass();
+  // The window itself isn't zoomed.
+  expect(
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor(),
+    ),
+  ).toBe(1);
+
+  // Without Ctrl the wheel scrolls, and leaves the zoom alone.
+  const top = await scroller.evaluate((element) => element.scrollTop);
+  await window.mouse.wheel(0, 200);
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(top);
+  await expect(level).toHaveText("67%");
+
+  // However far the pinch goes, the zoom stays within its limits.
+  await pinch(scroller, x, y, Array(200).fill(-5));
+  await expect(level).toHaveText("400%");
+  await expect(window.getByTestId("pdf-zoom-in")).toBeDisabled();
+  await pinch(scroller, x, y, Array(300).fill(5));
+  await expect(level).toHaveText("25%");
+  await expect(window.getByTestId("pdf-zoom-out")).toBeDisabled();
   await app.close();
 });
 
