@@ -10,10 +10,16 @@
  * and the model loads one with `use_skill` when it needs it. A Skill the
  * Question forces is loaded up front, and shown as a Tool call too.
  *
+ * A Question with a Search scope searches only the Documents it covers,
+ * resolved when the Question is asked (or its Answer regenerated). When the
+ * scope covers no Document with Passages, the Answer says so, and nothing is
+ * searched or sent.
+ *
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { searchScopeOf } from "../../shared/searchScope";
 import {
   ANSWER_BLOCK,
   type AnswerAttributes,
@@ -25,8 +31,10 @@ import {
   type CitationSupport,
   type ProviderError,
   QUESTION_BLOCK,
+  type SearchScope,
   type SkillAvailability,
 } from "../api";
+import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
 import type { MindContent } from "../mindContent";
@@ -98,7 +106,11 @@ export interface AnswersOptions {
   /** The model, once the User has accepted its data flow (see `Core.prepareChatModel`). */
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
-  documents: AnswerDocuments;
+  documents: DocumentsForAnswers;
+  /** The ids of the live Documents a Search scope covers; null with no Search scope (every Document). */
+  resolveScope(scope: SearchScope): string[] | null;
+  /** What an Answer says when its Question's Search scope has no Documents to search. */
+  emptyScopeAnswer(): string;
   /** The User's Skills. */
   skills: AnswerSkills;
   reportError(error: unknown): void;
@@ -114,6 +126,33 @@ export interface AnswerSkills {
 
 /** The Tool call that shows a forced Skill: loaded by the core, up front. */
 const FORCED_SKILL_CALL = "forced-skill";
+
+/**
+ * What the core gives Answers from Documents: `AnswerDocuments`, counting and
+ * searching only the Documents of a Search scope when given their ids (null:
+ * every Document).
+ */
+export interface DocumentsForAnswers extends Pick<AnswerDocuments, "citationSource" | "pageTexts"> {
+  searchableCount(documentIds: readonly string[] | null): number;
+  search(
+    query: string,
+    documentIds: readonly string[] | null,
+    signal?: AbortSignal,
+  ): Promise<WindowedPassage[]>;
+}
+
+/** The Documents one Answer searches: those of its Question's Search scope, or all of them (null). */
+function inScope(
+  documents: DocumentsForAnswers,
+  documentIds: readonly string[] | null,
+): AnswerDocuments {
+  return {
+    searchableCount: () => documents.searchableCount(documentIds),
+    search: (query, signal) => documents.search(query, documentIds, signal),
+    citationSource: (passageId) => documents.citationSource(passageId),
+    pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
+  };
+}
 
 function parseId(value: unknown, what: string): string {
   if (typeof value !== "string" || value === "")
@@ -206,9 +245,14 @@ export function createAnswers(options: AnswersOptions) {
     questionId: string;
     model: ChatModelChoice;
     context: QuestionContext;
+    /** The Documents of the Question's Search scope; null with no Search scope (every Document). */
+    documentIds: string[] | null;
+    /** The Search scope has no Documents to search: the Answer says so, and nothing is sent. */
+    emptyScope: boolean;
+    /** The Skill the Question forces, loaded up front; null if none. */
     forcedSkill: string | null;
   }): void {
-    const { mindId, answerId, model, context, forcedSkill } = input;
+    const { mindId, answerId, model, context, documentIds, forcedSkill } = input;
     const controller = new AbortController();
     /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
@@ -217,7 +261,7 @@ export function createAnswers(options: AnswersOptions) {
     let support: CitationSupport | null = null;
     const toolCalls: AnswerToolCall[] = [];
     let skills: SkillSession | null = null;
-    const session = createCitationSession(options.documents, {
+    const session = createCitationSession(inScope(options.documents, documentIds), {
       onRecord: (marker, citation) =>
         events.emit("answer.citationAdded", { mindId, answerId, marker, citation }),
     });
@@ -353,6 +397,17 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     const run = async () => {
+      // Rather than search every Document, the Answer says the scope has none to search.
+      if (input.emptyScope) {
+        // On a later turn, as a model's Answer would arrive, so whoever asked hears every event.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (finished) return;
+        const text = options.emptyScopeAnswer();
+        markdown = text;
+        events.emit("answer.delta", { mindId, answerId, text });
+        finish({ status: "done" });
+        return;
+      }
       let prepared: PreparedChatModel;
       try {
         prepared = await options.prepareModel(model);
@@ -380,7 +435,7 @@ export function createAnswers(options: AnswersOptions) {
         instructions: (mode, { passages, skillTools: withSkillTools = false } = {}) =>
           [
             base,
-            documentInstructions(mode, tools.documentCount, passages),
+            documentInstructions(mode, tools.documentCount, passages, documentIds !== null),
             skillInstructions(listed, forced, withSkillTools),
           ]
             .filter(Boolean)
@@ -438,6 +493,16 @@ export function createAnswers(options: AnswersOptions) {
     });
   }
 
+  /**
+   * What an Answer to `question` is written from: its context, and its Search
+   * scope as it is now, resolved to the Documents it covers now.
+   */
+  const askedWith = (context: QuestionContext, question: Y.XmlElement) => {
+    const documentIds = options.resolveScope(searchScopeOf(question.getAttributes()));
+    const emptyScope = documentIds !== null && options.documents.searchableCount(documentIds) === 0;
+    return { context, documentIds, emptyScope };
+  };
+
   async function ask(
     mindIdInput: unknown,
     questionIdInput: unknown,
@@ -473,16 +538,20 @@ export function createAnswers(options: AnswersOptions) {
     const currentId = current && textAttribute(current, BLOCK_ID_ATTRIBUTE);
     if (currentId) active.get(currentId)?.finish({ status: "stopped" });
 
+    /** What the Answer is written from: its Question context and Search scope, as they are now. */
+    type Asked = { context: QuestionContext; documentIds: string[] | null; emptyScope: boolean };
     const written = content.edit(
       mindId,
-      (blocks): { edited: string } | { answerId: string; context: QuestionContext } => {
+      (blocks): { edited: string } | ({ answerId: string } & Asked) => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError("That Question isn't in this Mind.");
         const context = buildQuestionContext(blocks, question.index);
+        const asked = askedWith(context, question.element);
         const attributes: Partial<AnswerAttributes> = {
           questionId,
-          providerId: model.providerId,
-          modelId: model.modelId,
+          // No model writes an Answer that says the Search scope is empty.
+          providerId: asked.emptyScope ? null : model.providerId,
+          modelId: asked.emptyScope ? null : model.modelId,
           status: "streaming",
           errorKind: null,
           errorMessage: null,
@@ -498,7 +567,7 @@ export function createAnswers(options: AnswersOptions) {
           // Regenerating: the same Block, where it is, with new content.
           setAttributes(answer, attributes);
           syncContent(answer, [{ type: "paragraph" }]);
-          return { answerId, context };
+          return { answerId, ...asked };
         }
 
         const id = randomUUID();
@@ -511,19 +580,12 @@ export function createAnswers(options: AnswersOptions) {
         blocks.insert(at, [element]);
         // Somewhere to go on writing, or to ask the next Question.
         if (at + 1 === blocks.length) blocks.insert(at + 1, [createElement({ type: "paragraph" })]);
-        return { answerId: id, context };
+        return { answerId: id, ...asked };
       },
     );
     if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
-    start({
-      mindId,
-      answerId: written.answerId,
-      questionId,
-      model,
-      context: written.context,
-      forcedSkill,
-    });
+    start({ mindId, questionId, model, ...written, forcedSkill });
     return { asked: true, answerId: written.answerId };
   }
 

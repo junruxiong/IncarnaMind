@@ -204,12 +204,14 @@ export interface DocumentsOptions {
   onReady?: (documentId: string) => void;
 }
 
-/** Which Documents `list` returns. */
+/** Which Documents `list` returns. Every condition given must match. */
 export interface DocumentFilter {
   /** Only Documents filed in one of these Folders. */
   folderIds?: readonly string[];
-  /** Only Documents carrying this Tag. */
+  /** Only Documents carrying this Tag, if it isn't deleted. */
   tagId?: string;
+  /** Only these Documents. */
+  ids?: readonly string[];
 }
 
 export function createDocuments(options: DocumentsOptions) {
@@ -450,8 +452,8 @@ export function createDocuments(options: DocumentsOptions) {
   )
     model.ensure();
 
-  /** Most recently added first, only those in the Folders or with the Tag when asked (both must match). */
-  const list = ({ folderIds, tagId }: DocumentFilter = {}): Document[] => {
+  /** The live Documents a filter keeps, as SQL conditions on `documents`, with their parameters. */
+  const filterWhere = ({ folderIds, tagId, ids }: DocumentFilter) => {
     const conditions = ["deleted_at IS NULL"];
     const params: string[] = [];
     if (folderIds !== undefined) {
@@ -460,14 +462,24 @@ export function createDocuments(options: DocumentsOptions) {
     }
     if (tagId !== undefined) {
       conditions.push(
-        "id IN (SELECT document_id FROM document_tags WHERE tag_id = ? AND deleted_at IS NULL)",
+        `id IN (SELECT l.document_id FROM document_tags l JOIN tags t ON t.id = l.tag_id
+                WHERE l.tag_id = ? AND l.deleted_at IS NULL AND t.deleted_at IS NULL)`,
       );
       params.push(tagId);
     }
+    if (ids !== undefined) {
+      conditions.push("id IN (SELECT value FROM json_each(?))");
+      params.push(JSON.stringify(ids));
+    }
+    return { where: conditions.join(" AND "), params };
+  };
+
+  /** Most recently added first, only those the filter keeps. */
+  const list = (filter: DocumentFilter = {}): Document[] => {
+    const { where, params } = filterWhere(filter);
     return db
       .all<DocumentRow>(
-        `SELECT ${COLUMNS} FROM documents WHERE ${conditions.join(" AND ")}
-         ORDER BY created_at DESC, rowid DESC`,
+        `SELECT ${COLUMNS} FROM documents WHERE ${where} ORDER BY created_at DESC, rowid DESC`,
         params,
       )
       .map(toDocument);
@@ -561,13 +573,15 @@ export function createDocuments(options: DocumentsOptions) {
       );
     },
 
-    /** How many live Documents have Passages to search. */
-    searchableCount(): number {
+    /** How many live Documents have Passages to search: of all of them, or only of these. */
+    searchableCount(documentIds?: readonly string[]): number {
       return (
         db.get<{ count: number }>(
           `SELECT count(*) AS count FROM documents d
            WHERE d.deleted_at IS NULL
-             AND EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id AND p.deleted_at IS NULL)`,
+             AND EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id AND p.deleted_at IS NULL)
+             ${documentIds ? "AND d.id IN (SELECT value FROM json_each(?))" : ""}`,
+          documentIds ? [JSON.stringify(documentIds)] : [],
         )?.count ?? 0
       );
     },
@@ -644,6 +658,17 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     list,
+
+    /** The ids of the live Documents the filter keeps, in `list`'s order. */
+    ids(filter: DocumentFilter = {}): string[] {
+      const { where, params } = filterWhere(filter);
+      return db
+        .all<{ id: string }>(
+          `SELECT id FROM documents WHERE ${where} ORDER BY created_at DESC, rowid DESC`,
+          params,
+        )
+        .map((row) => row.id);
+    },
 
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {

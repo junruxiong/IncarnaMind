@@ -1,12 +1,5 @@
 import { join, resolve } from "node:path";
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  type IpcMainInvokeEvent,
-  ipcMain,
-  type OpenDialogOptions,
-} from "electron";
+import { app, BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain } from "electron";
 import {
   type ChatModelFactory,
   type Core,
@@ -14,9 +7,10 @@ import {
   createCore,
   resolveLanguage,
 } from "../core";
-import { channelFor, EVENT_CHANNEL, PICK_SKILL_CHANNEL } from "../shared/bridge";
+import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
+import { serveFileActions } from "./files";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { startAutoUpdates } from "./updater";
 
@@ -68,34 +62,6 @@ function exposeCore(core: Core): void {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
     }
-  });
-}
-
-/** The open dialog for a Skill to import (see `FilesBridge.pickSkill`). */
-function servePickSkill(): void {
-  ipcMain.handle(PICK_SKILL_CHANNEL, async (event, kind: unknown) => {
-    if (!isFromOurRenderer(event)) throw new Error("Refused a call from an unknown page.");
-    const language = core
-      ? (await core.getSettings()).language
-      : resolveLanguage("system", app.getPreferredSystemLanguages());
-    const options: OpenDialogOptions =
-      kind === "zip"
-        ? {
-            title: translate(language, "skills.import.pickZip"),
-            properties: ["openFile"],
-            filters: [
-              { name: translate(language, "skills.import.zipFilter"), extensions: ["zip"] },
-            ],
-          }
-        : {
-            title: translate(language, "skills.import.pickFolder"),
-            properties: ["openDirectory"],
-          };
-    const window = BrowserWindow.fromWebContents(event.sender);
-    const result = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options);
-    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 }
 
@@ -156,7 +122,7 @@ app.whenReady().then(async () => {
     return;
   }
   exposeCore(core);
-  servePickSkill();
+  serveFileActions(core, { dataDir: app.getPath("userData"), trusted: isFromOurRenderer });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.

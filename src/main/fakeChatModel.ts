@@ -175,17 +175,16 @@ function nextReply(
     const named = skillNamed(prompt, question);
     if (named) return { tool: "use_skill", input: { name: named } };
   }
-  if (!tools.includes("search_documents")) {
-    return { text: fakeAnswer(question, skillFollowed(prompt)) };
-  }
+  const skill = skillFollowed(prompt);
+  if (!tools.includes("search_documents")) return { text: fakeAnswer(question, skill) };
   const searches = toolResults(prompt, "search_documents");
   if (searches.length === 0) return { tool: "search_documents", input: { query: question } };
   if (toolResults(prompt, "cite").length === 0) {
     const record = recordFor(searches.at(-1) ?? "", question);
     if (record) return { tool: "cite", input: { citations: [record] } };
-    return { text: fakeAnswer(question) };
+    return { text: fakeAnswer(question, skill) };
   }
-  return { text: CITED_ANSWER };
+  return { text: skill ? `Following the Skill ${skill}.\n\n${CITED_ANSWER}` : CITED_ANSWER };
 }
 
 export const createFakeChatModel: ChatModelFactory = (spec) =>
