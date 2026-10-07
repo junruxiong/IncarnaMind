@@ -9,6 +9,7 @@ import { createDocuments, type DocumentFile, parseListOptions } from "./document
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
+import { createExports } from "./exports";
 import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
@@ -168,6 +169,14 @@ export function createCore(adapters: CoreAdapters): Core {
       }),
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     reportError: (error) => console.error(error),
+  });
+
+  const mindExports = createExports({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.read(mindId, look),
+    liveDocuments: () => documents.list(),
+    language: () => settings.get().language,
+    now,
   });
 
   // Automatic tagging: Jev when it is set up on this device, otherwise the
@@ -461,6 +470,9 @@ export function createCore(adapters: CoreAdapters): Core {
       return jevChanged();
     },
     testJevConnection: (input) => jev.test(input),
+
+    previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
