@@ -17,9 +17,12 @@
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output.
  *
- * In the Tool-calling loop the model may also call external Tools (the
- * read-only Tools of the User's Connectors). Their results aren't Passages,
- * so they are never cited; the Answer shows each call as a Tool-call card.
+ * Skills add two Tools to the loop: `use_skill` loads a Skill's instructions
+ * and `read_skill_file` one of its files. The User's Connectors add their
+ * read-only Tools as external Tools; their results aren't Passages, so they
+ * are never cited, and the Answer shows each call as a Tool-call card. With
+ * Skills or Connector Tools but no Documents, the loop runs with those alone;
+ * a model that can't call Tools answers without.
  */
 import {
   APICallError,
@@ -67,8 +70,9 @@ export interface SearchResultForModel {
 
 /**
  * A Tool from outside IncarnaMind, e.g. one of a Connector's: offered to the
- * model as it is, next to document search. Its result isn't a Passage, so it
- * can't be cited; the Answer shows the call as a Tool-call card instead.
+ * model as it is, next to document search and the Skill Tools. Its result
+ * isn't a Passage, so it can't be cited; the Answer shows the call as a
+ * Tool-call card instead.
  */
 export interface ExternalTool {
   /** The name the model calls it by: unique among the Answer's Tools, e.g. "github__search_issues". */
@@ -94,20 +98,31 @@ export interface AnswerTools {
   readonly external?: readonly ExternalTool[];
 }
 
-/**
- * How an Answer is written, for its instructions: a way of citing (see
- * `CitationSupport`), "no-documents" when the User has no Documents to search,
- * or "connectors" when there are none but Connector Tools are offered.
- */
-export type AnswerMode = CitationSupport | "no-documents" | "connectors";
+/** The Skill Tools' work, done by the core. */
+export interface AnswerSkillTools {
+  /** Offer `use_skill`: there are Skills the model may load, listed in the instructions. */
+  readonly loadable: boolean;
+  /** A Skill's full instructions and its list of files, for the model. Throws for an unknown Skill. */
+  useSkill(name: string): Promise<string>;
+  /** One of a Skill's files, as text. Throws for a path outside the Skill. */
+  readSkillFile(skill: string, path: string): Promise<string>;
+}
+
+export interface InstructionOptions {
+  /** "structured-output" and "none": the Passages the search found (formatted, or a sentence saying there are none). */
+  passages?: string;
+  /** The model is offered the Skill Tools. */
+  skillTools?: boolean;
+  /** The model is offered Connector Tools (`AnswerTools.external`). */
+  connectorTools?: boolean;
+}
 
 export interface AnswerRequest {
   /**
-   * The instructions for a way of answering; for "structured-output" and
-   * "none", with the Passages the search found (formatted, or a sentence
-   * saying there are none).
+   * The instructions for a way of citing. "no-documents": the User has no
+   * Documents to search.
    */
-  instructions(mode: AnswerMode, passages?: string): string;
+  instructions(mode: CitationSupport | "no-documents", options?: InstructionOptions): string;
   /** The Question context, oldest first; the last message is the User's and ends with the Question. */
   messages: AnswerMessage[];
   /** The Question's own text: what a model that can't call Tools searches for. */
@@ -115,6 +130,8 @@ export interface AnswerRequest {
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
   tools: AnswerTools;
+  /** The Skill Tools, or null when there are no Skills to use. */
+  skills: AnswerSkillTools | null;
   /** How this model is known to cite, from earlier Answers. Unknown: try Tools first. */
   support?: CitationSupport;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
@@ -133,8 +150,9 @@ export type AnswerEngineEvent =
   | { type: "text-retracted"; length: number }
   /**
    * A Tool call started: a search of the Documents (by the model, or by the
-   * engine for a model without Tools), or an external Tool's, with its
-   * `source` and the arguments the model sent.
+   * engine for a model without Tools, `{ query }`), a Skill Tool
+   * (`use_skill` with `{ name }`, `read_skill_file` with `{ skill, path }`),
+   * or an external Tool, with its `source` and the arguments the model sent.
    */
   | {
       type: "tool-call-started";
@@ -167,6 +185,14 @@ type Attempt = AsyncGenerator<AnswerEngineEvent | { type: "unsupported" }>;
 
 const SEARCH_TOOL = "search_documents";
 const CITE_TOOL = "cite";
+const USE_SKILL_TOOL = "use_skill";
+const READ_SKILL_FILE_TOOL = "read_skill_file";
+/** Tool calls the Answer shows, and text before which was a preamble. `cite` isn't one: its records become Citations. */
+const SHOWN_TOOLS: ReadonlySet<string> = new Set([
+  SEARCH_TOOL,
+  USE_SKILL_TOOL,
+  READ_SKILL_FILE_TOOL,
+]);
 const MARKER = /\[\^\d{1,4}\]/;
 
 /**
@@ -261,13 +287,13 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       });
       const { signal } = request;
 
-      // With no Documents there is nothing to search or cite: Connector Tools
-      // if there are any and the model can call them, otherwise a plain Answer.
+      // With no Documents there is nothing to search or cite: Skills and
+      // Connector Tools alone, or a plain Answer.
       if (request.tools.documentCount === 0) {
         const external = request.tools.external?.length ?? 0;
-        if (external > 0 && (request.support ?? "tools") === "tools") {
+        if ((request.skills || external > 0) && (request.support ?? "tools") === "tools") {
           let unsupported = false;
-          for await (const event of toolLoop(request, maxSteps)) {
+          for await (const event of toolLoop(request, maxSteps, "no-documents")) {
             if (event.type === "unsupported") {
               unsupported = true;
               break;
@@ -313,14 +339,14 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         const support = order[mode] as CitationSupport;
         let attempt: Attempt;
         try {
-          if (support === "tools") attempt = toolLoop(request, maxSteps);
+          if (support === "tools") attempt = toolLoop(request, maxSteps, "tools");
           else {
             const passages: string = yield* searchOnce();
             if (signal.aborted) return;
             attempt =
               support === "structured-output"
-                ? structured(request, request.instructions(support, passages))
-                : plain(request, request.instructions(support, passages));
+                ? structured(request, request.instructions(support, { passages }))
+                : plain(request, request.instructions(support, { passages }));
           }
         } catch (error) {
           if (signal.aborted) return;
@@ -346,21 +372,47 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
   };
 }
 
+/** The Skill Tools, for the model. */
+function skillTools(skills: AnswerSkillTools): ToolSet {
+  const tools: ToolSet = {};
+  if (skills.loadable) {
+    tools[USE_SKILL_TOOL] = tool({
+      description:
+        "Load a Skill's full instructions by its name, before answering a Question the Skill is for. Returns the instructions and the Skill's files.",
+      inputSchema: jsonSchema<{ name: string }>({
+        type: "object",
+        properties: { name: { type: "string", description: "The Skill's name, as listed." } },
+        required: ["name"],
+      }),
+      execute: async ({ name }) => skills.useSkill(String(name ?? "")),
+    });
+  }
+  tools[READ_SKILL_FILE_TOOL] = tool({
+    description:
+      "Read one of a Skill's files, such as a reference its instructions point to. Only files inside the Skill can be read.",
+    inputSchema: jsonSchema<{ skill: string; path: string }>({
+      type: "object",
+      properties: {
+        skill: { type: "string", description: "The Skill's name." },
+        path: {
+          type: "string",
+          description: "The file's path inside the Skill, e.g. references/guide.md.",
+        },
+      },
+      required: ["skill", "path"],
+    }),
+    execute: async ({ skill, path }) =>
+      skills.readSkillFile(String(skill ?? ""), String(path ?? "")),
+  });
+  return tools;
+}
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/**
- * The Tool-calling loop: search, cite, answer, with external Tools where they
- * help. With no Documents: the external Tools alone, and no Citations.
- */
-async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
-  const { signal } = request;
-  const documents = request.tools.documentCount > 0;
-  /** Passages each search gave, by Tool call. */
-  const results = new Map<string, number>();
-  /** External Tools, by the name the model calls them. */
-  const external = new Map((request.tools.external ?? []).map((each) => [each.name, each]));
-  const tools: ToolSet = documents ? documentTools(request, results) : {};
+/** The external Tools (a Connector's), for the model. Names IncarnaMind's own Tools use are skipped. */
+function externalTools(external: ReadonlyMap<string, ExternalTool>, signal: AbortSignal): ToolSet {
+  const tools: ToolSet = {};
   for (const each of external.values()) {
     tools[each.name] = tool({
       description: each.description,
@@ -369,10 +421,71 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
         each.call(isPlainObject(input) ? input : {}, abortSignal ?? signal),
     });
   }
+  return tools;
+}
+
+/**
+ * The Tool-calling loop: search, cite, answer; with Skills, load them as
+ * needed; with Connectors, call their Tools where they help. "no-documents":
+ * the Skill and Connector Tools alone, with nothing to cite.
+ */
+async function* toolLoop(
+  request: AnswerRequest,
+  maxSteps: number,
+  mode: "tools" | "no-documents",
+): Attempt {
+  const { signal } = request;
+  /** Passages each search gave, by Tool call. */
+  const results = new Map<string, number>();
+  const documentTools: ToolSet = {
+    [SEARCH_TOOL]: tool({
+      description:
+        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages.",
+      inputSchema: jsonSchema<{ query: string }>({
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "What to look for: words likely to be in the Passages, in their language.",
+          },
+        },
+        required: ["query"],
+      }),
+      execute: async ({ query }, { toolCallId, abortSignal }) => {
+        const result = await request.tools.searchDocuments(String(query ?? ""), abortSignal);
+        results.set(toolCallId, result.passageCount);
+        return result.text;
+      },
+    }),
+    [CITE_TOOL]: tool({
+      description:
+        "Record the Citations of your Answer: for each marker such as [^1], the Passage, the page or two consecutive pages its quote is on, and a short quote copied word for word from the Passage.",
+      inputSchema: jsonSchema<{ citations: unknown }>({
+        type: "object",
+        properties: { citations: recordsSchema },
+        required: ["citations"],
+      }),
+      execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
+    }),
+  };
+  /** External Tools, by the name the model calls them; never one of IncarnaMind's own names. */
+  const external = new Map(
+    (request.tools.external ?? [])
+      .filter((each) => !SHOWN_TOOLS.has(each.name) && each.name !== CITE_TOOL)
+      .map((each) => [each.name, each]),
+  );
+  const tools: ToolSet = {
+    ...externalTools(external, signal),
+    ...(mode === "tools" ? documentTools : {}),
+    ...(request.skills ? skillTools(request.skills) : {}),
+  };
 
   const result = streamText({
     model: request.model,
-    instructions: request.instructions(documents ? "tools" : "connectors"),
+    instructions: request.instructions(mode, {
+      skillTools: request.skills !== null,
+      connectorTools: external.size > 0,
+    }),
     messages: request.messages,
     tools,
     stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
@@ -410,13 +523,12 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
           produced = true;
           stepTools.push(part.toolName);
           const outside = external.get(part.toolName);
-          if (part.toolName === SEARCH_TOOL && documents) {
-            const input = part.input as { query?: unknown };
+          if (SHOWN_TOOLS.has(part.toolName)) {
             yield {
               type: "tool-call-started",
               id: part.toolCallId,
-              tool: SEARCH_TOOL,
-              input: { query: String(input?.query ?? "") },
+              tool: part.toolName,
+              input: shownInput(part.toolName, part.input),
             };
           } else if (outside) {
             yield {
@@ -430,7 +542,7 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
           break;
         }
         case "tool-result":
-          if ((part.toolName === SEARCH_TOOL && documents) || external.has(part.toolName)) {
+          if (SHOWN_TOOLS.has(part.toolName) || external.has(part.toolName)) {
             yield {
               type: "tool-call-finished",
               id: part.toolCallId,
@@ -440,17 +552,18 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
           }
           break;
         case "tool-error":
-          if (part.toolName === SEARCH_TOOL && documents) {
-            if (!signal.aborted) console.error(part.error);
-            yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
-          } else if (external.has(part.toolName)) {
+          if (SHOWN_TOOLS.has(part.toolName) || external.has(part.toolName)) {
+            // A failed search is the app's problem; a Skill or file that isn't there, the
+            // model's; a Connector's failure (or a declined consent) is told to the model.
+            if (part.toolName === SEARCH_TOOL && !signal.aborted) console.error(part.error);
             yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
           }
           break;
         case "finish-step": {
-          // Text before a search or another Tool's call, or before records with no marker in it, was a preamble.
+          // Text before a search, a Skill or a Connector's Tool, or before records with no
+          // marker in it, was a preamble.
           const preamble =
-            stepTools.some((name) => name !== CITE_TOOL) ||
+            stepTools.some((name) => SHOWN_TOOLS.has(name) || external.has(name)) ||
             (stepTools.includes(CITE_TOOL) && !MARKER.test(stepText));
           if (preamble && stepText) yield { type: "text-retracted", length: stepText.length };
           else keptText += stepText;
@@ -478,39 +591,16 @@ async function* toolLoop(request: AnswerRequest, maxSteps: number): Attempt {
   if (!signal.aborted) yield { type: "finished" };
 }
 
-/** IncarnaMind's own Tools: document search, and `cite` for the records of Citations. */
-function documentTools(request: AnswerRequest, results: Map<string, number>): ToolSet {
-  return {
-    [SEARCH_TOOL]: tool({
-      description:
-        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages.",
-      inputSchema: jsonSchema<{ query: string }>({
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "What to look for: words likely to be in the Passages, in their language.",
-          },
-        },
-        required: ["query"],
-      }),
-      execute: async ({ query }, { toolCallId, abortSignal }) => {
-        const result = await request.tools.searchDocuments(String(query ?? ""), abortSignal);
-        results.set(toolCallId, result.passageCount);
-        return result.text;
-      },
-    }),
-    [CITE_TOOL]: tool({
-      description:
-        "Record the Citations of your Answer: for each marker such as [^1], the Passage, the page or two consecutive pages its quote is on, and a short quote copied word for word from the Passage.",
-      inputSchema: jsonSchema<{ citations: unknown }>({
-        type: "object",
-        properties: { citations: recordsSchema },
-        required: ["citations"],
-      }),
-      execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
-    }),
-  };
+/** What a shown Tool call was asked, as text fields. */
+function shownInput(toolName: string, input: unknown): Record<string, unknown> {
+  const fields = (typeof input === "object" && input !== null ? input : {}) as Record<
+    string,
+    unknown
+  >;
+  const text = (value: unknown) => String(value ?? "");
+  if (toolName === SEARCH_TOOL) return { query: text(fields.query) };
+  if (toolName === USE_SKILL_TOOL) return { name: text(fields.name) };
+  return { skill: text(fields.skill), path: text(fields.path) };
 }
 
 /** The Answer and its records as one JSON object, streamed: its `answer` text as it grows. */

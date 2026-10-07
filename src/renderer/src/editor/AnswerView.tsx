@@ -2,7 +2,7 @@ import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tipt
 import { useState } from "react";
 import { type AnswerToolCall, BLOCK_ID_ATTRIBUTE, type ProviderErrorKind } from "../../../core/api";
 import { useAnswers } from "../answers";
-import { PlugIcon, RegenerateIcon, SearchIcon, StopIcon } from "../components/icons";
+import { PlugIcon, RegenerateIcon, SearchIcon, SkillIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { useMindId } from "./mindContext";
@@ -111,6 +111,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         )}
       </div>
 
+      {toolCalls.length > 0 && <SkillCalls calls={toolCalls} />}
       {toolCalls.length > 0 && <ToolCalls calls={toolCalls} />}
 
       {text(node.attrs.citationSupport) === "none" && (
@@ -202,9 +203,12 @@ function AnswerError({
   );
 }
 
-/** The Tools an Answer called: its searches as one line, then a card for each Connector call. */
+/**
+ * The searches and Connector calls an Answer made: its searches as one line,
+ * then a card for each Connector call. Skills have their own cards (`SkillCalls`).
+ */
 function ToolCalls({ calls }: { calls: AnswerToolCall[] }) {
-  const searches = calls.filter((call) => call.source !== "connector");
+  const searches = calls.filter((call) => call.tool === "search_documents");
   const connectorCalls = calls.filter((call) => call.source === "connector");
   return (
     <>
@@ -256,6 +260,74 @@ function ConnectorCall({ call }: { call: AnswerToolCall }) {
           <pre data-testid="answer-connector-arguments">{JSON.stringify(call.input, null, 2)}</pre>
         </div>
       )}
+    </div>
+  );
+}
+
+/** A text field of what a Tool call was asked, or "". */
+function field(call: AnswerToolCall, name: string): string {
+  const value: unknown = call.input?.[name];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * The Skills an Answer used, one card each: loaded by the model or chosen
+ * for the Question, and the Skill's files it read.
+ */
+function SkillCalls({ calls }: { calls: AnswerToolCall[] }) {
+  const t = useT();
+  const skills = new Map<string, { use: AnswerToolCall | null; reads: AnswerToolCall[] }>();
+  for (const call of calls) {
+    if (call.source !== "skill") continue;
+    const name = call.tool === "use_skill" ? field(call, "name") : field(call, "skill");
+    const entry = skills.get(name) ?? { use: null, reads: [] };
+    if (call.tool === "use_skill") entry.use ??= call;
+    else entry.reads.push(call);
+    skills.set(name, entry);
+  }
+  if (skills.size === 0) return null;
+  return (
+    <div contentEditable={false} className="answer-skills">
+      {[...skills].map(([name, { use, reads }]) => {
+        const status = use?.status ?? "done";
+        const summary =
+          status === "running"
+            ? t("skills.answer.loading", { name })
+            : status === "failed"
+              ? t("skills.answer.failed", { name })
+              : t("skills.answer.used", { name });
+        return (
+          <div
+            key={name}
+            data-testid="answer-skill"
+            data-skill-name={name}
+            data-status={status}
+            data-forced={use?.forced === true}
+            className={`answer-skill ${status === "failed" ? "answer-skill--failed" : ""}`}
+          >
+            <p className="flex items-center gap-1">
+              <SkillIcon
+                className={`size-3.5 shrink-0 ${status === "running" ? "animate-pulse" : ""}`}
+              />
+              <span className="truncate">{summary}</span>
+              {use?.forced && (
+                <span className="shrink-0 text-gray-400"> · {t("skills.answer.forced")}</span>
+              )}
+            </p>
+            {reads.length > 0 && (
+              <ul className="answer-skill-files">
+                {reads.map((read) => (
+                  <li key={read.id} data-testid="answer-skill-file" data-status={read.status}>
+                    {read.status === "failed"
+                      ? t("skills.answer.readFailed", { path: field(read, "path") })
+                      : t("skills.answer.read", { path: field(read, "path") })}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
