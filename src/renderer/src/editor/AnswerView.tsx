@@ -2,7 +2,7 @@ import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tipt
 import { useState } from "react";
 import { type AnswerToolCall, BLOCK_ID_ATTRIBUTE, type ProviderErrorKind } from "../../../core/api";
 import { useAnswers } from "../answers";
-import { RegenerateIcon, SearchIcon, StopIcon } from "../components/icons";
+import { PlugIcon, RegenerateIcon, SearchIcon, SkillIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { useMindId } from "./mindContext";
@@ -111,6 +111,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         )}
       </div>
 
+      {toolCalls.length > 0 && <SkillCalls calls={toolCalls} />}
       {toolCalls.length > 0 && <ToolCalls calls={toolCalls} />}
 
       {text(node.attrs.citationSupport) === "none" && (
@@ -203,14 +204,141 @@ function AnswerError({
 }
 
 /**
+ * The searches and Connector calls an Answer made: its searches as one line,
+ * then a card for each Connector call. Skills have their own cards (`SkillCalls`).
+ */
+function ToolCalls({ calls }: { calls: AnswerToolCall[] }) {
+  const searches = calls.filter((call) => call.tool === "search_documents");
+  const connectorCalls = calls.filter((call) => call.source === "connector");
+  return (
+    <>
+      {searches.length > 0 && <Searches searches={searches} />}
+      {connectorCalls.map((call) => (
+        <ConnectorCall key={call.id} call={call} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * A call an Answer made through a Connector: which Connector and Tool, and
+ * the arguments it sent, on one line that opens to show them in full. What
+ * came back went to the model; it isn't a Passage, so it is never a Citation.
+ */
+function ConnectorCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const params = { connector: call.connector?.name ?? "", tool: call.tool };
+  const running = call.status === "running";
+  const summary = running
+    ? t("connectors.call.running", params)
+    : call.status === "failed"
+      ? t("connectors.call.failed", params)
+      : t("connectors.call.done", params);
+  const compact = JSON.stringify(call.input);
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-connector-call"
+      data-status={call.status}
+      className="answer-tools"
+    >
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${summary}. ${t("connectors.call.details")}`}
+        onClick={() => setExpanded((open) => !open)}
+        className="answer-tools-summary max-w-full"
+      >
+        <PlugIcon className={`size-3.5 shrink-0 ${running ? "animate-pulse" : ""}`} />
+        <span className="shrink-0">{summary}</span>
+        {!expanded && compact !== "{}" && <code className="answer-tool-args">{compact}</code>}
+      </button>
+      {expanded && (
+        <div className="answer-tool-args-full">
+          <div className="mb-0.5 font-sans text-gray-400">{t("connectors.call.arguments")}</div>
+          <pre data-testid="answer-connector-arguments">{JSON.stringify(call.input, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A text field of what a Tool call was asked, or "". */
+function field(call: AnswerToolCall, name: string): string {
+  const value: unknown = call.input?.[name];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * The Skills an Answer used, one card each: loaded by the model or chosen
+ * for the Question, and the Skill's files it read.
+ */
+function SkillCalls({ calls }: { calls: AnswerToolCall[] }) {
+  const t = useT();
+  const skills = new Map<string, { use: AnswerToolCall | null; reads: AnswerToolCall[] }>();
+  for (const call of calls) {
+    if (call.source !== "skill") continue;
+    const name = call.tool === "use_skill" ? field(call, "name") : field(call, "skill");
+    const entry = skills.get(name) ?? { use: null, reads: [] };
+    if (call.tool === "use_skill") entry.use ??= call;
+    else entry.reads.push(call);
+    skills.set(name, entry);
+  }
+  if (skills.size === 0) return null;
+  return (
+    <div contentEditable={false} className="answer-skills">
+      {[...skills].map(([name, { use, reads }]) => {
+        const status = use?.status ?? "done";
+        const summary =
+          status === "running"
+            ? t("skills.answer.loading", { name })
+            : status === "failed"
+              ? t("skills.answer.failed", { name })
+              : t("skills.answer.used", { name });
+        return (
+          <div
+            key={name}
+            data-testid="answer-skill"
+            data-skill-name={name}
+            data-status={status}
+            data-forced={use?.forced === true}
+            className={`answer-skill ${status === "failed" ? "answer-skill--failed" : ""}`}
+          >
+            <p className="flex items-center gap-1">
+              <SkillIcon
+                className={`size-3.5 shrink-0 ${status === "running" ? "animate-pulse" : ""}`}
+              />
+              <span className="truncate">{summary}</span>
+              {use?.forced && (
+                <span className="shrink-0 text-gray-400"> · {t("skills.answer.forced")}</span>
+              )}
+            </p>
+            {reads.length > 0 && (
+              <ul className="answer-skill-files">
+                {reads.map((read) => (
+                  <li key={read.id} data-testid="answer-skill-file" data-status={read.status}>
+                    {read.status === "failed"
+                      ? t("skills.answer.readFailed", { path: field(read, "path") })
+                      : t("skills.answer.read", { path: field(read, "path") })}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * The searches an Answer ran, small and out of the way: one line saying it
  * searched the User's Documents, which opens to show what it searched for.
  */
-function ToolCalls({ calls }: { calls: AnswerToolCall[] }) {
+function Searches({ searches }: { searches: AnswerToolCall[] }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
-  const searches = calls.filter((call) => call.tool === "search_documents");
-  if (searches.length === 0) return null;
   const running = searches.some((call) => call.status === "running");
   const failed = searches.every((call) => call.status === "failed");
   const summary = running ? t("search.running") : failed ? t("search.failed") : t("search.done");

@@ -77,6 +77,9 @@ export function ConsentDialog() {
               <li key={kind}>{t(`consent.data.${kind}`)}</li>
             ))}
           </ul>
+          {request.flow.id === "connectors" && (
+            <p className="mt-3 text-sm text-gray-700">{t("connectors.consent.note")}</p>
+          )}
           <p className="mt-3 text-xs text-gray-500">{t("consent.dialog.note")}</p>
           <div className="mt-4 flex justify-end gap-2">
             <button

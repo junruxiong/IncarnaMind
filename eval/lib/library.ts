@@ -1,0 +1,248 @@
+/**
+ * A Document library for the evaluation: a core on a new temporary data
+ * folder (never the User's), with the evaluation set's Documents added
+ * through the core's public interface and processed.
+ */
+import { mkdir, mkdtemp, rm, symlink, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  type Core,
+  type CoreAdapters,
+  createCore,
+  DATABASE_FILE,
+  type Document,
+  type DocumentStatus,
+  type Embedder,
+  type EmbeddingModelStatus,
+  type Keychain,
+  type SaveEmbeddingProviderInput,
+} from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
+import type { EvalDocument } from "./evaluationSet";
+import type { Log } from "./log";
+
+export interface LibraryOptions {
+  /** For the temporary folder's name and the log. */
+  name: string;
+  /** Runs the built-in model; never started when `embeddingProvider` is given. */
+  embedder: Embedder;
+  /**
+   * An embedding provider to use instead of the built-in model, chosen
+   * through the core's public interface before any Document is added, as in
+   * Settings. Setting it is the consent to send it the Documents' text: the
+   * library accepts the "embeddings" flow's consent request.
+   */
+  embeddingProvider?: SaveEmbeddingProviderInput;
+  /**
+   * A folder kept between runs that the data folder's `models/` points to, so
+   * the built-in model is downloaded (and checked) by the core once.
+   */
+  modelCache?: string;
+  documents: readonly EvalDocument[];
+  /** Keep the data folder afterwards, also when opening fails. */
+  keep: boolean;
+  log: Log;
+}
+
+export interface Library {
+  core: Core;
+  dataDir: string;
+  /** The Document added for each key of the evaluation set. */
+  documents: ReadonlyMap<string, Document>;
+  /** How long adding and processing took, embedding included. */
+  processingSeconds: number;
+  /** Live Passages in the data folder. */
+  passageCount: number;
+  /** The stored text of a Document's pages, as the Citation check reads them. */
+  pageTexts(documentId: string): { page: number | null; text: string }[];
+  /** Closes the core, and deletes the data folder unless it is kept. */
+  close(): Promise<void>;
+}
+
+/** Keys in memory, like the tests' keychain: nothing is written anywhere. */
+function memoryKeychain(): Keychain {
+  const secrets = new Map<string, string>();
+  return {
+    protection: () => "os",
+    allowPlainText: () => {},
+    get: async (name) => secrets.get(name) ?? null,
+    set: async (name, secret) => {
+      secrets.set(name, secret);
+    },
+    delete: async (name) => {
+      secrets.delete(name);
+    },
+  };
+}
+
+const FINISHED: ReadonlySet<DocumentStatus> = new Set(["ready", "failed", "no-text"]);
+
+/** Resolves once the built-in model is ready; rejects if its download fails. */
+function modelReady(core: Core, log: Log): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let lastLogged = 0;
+    const settle = (status: EmbeddingModelStatus) => {
+      if (status.state === "ready") {
+        stop();
+        resolve();
+      } else if (status.state === "failed") {
+        stop();
+        reject(new Error(`The embedding model couldn't be downloaded: ${status.error?.message}`));
+      } else if (status.state === "downloading" && Date.now() - lastLogged > 5000) {
+        lastLogged = Date.now();
+        const mb = (bytes: number) => Math.round(bytes / 1e6);
+        log(
+          `Downloading ${status.name}: ${mb(status.downloadedBytes)} of ${mb(status.totalBytes)} MB`,
+        );
+      }
+    };
+    const stop = core.on("embeddingModel.status", settle);
+    void core.downloadEmbeddingModel().then(settle, reject);
+  });
+}
+
+/** Resolves with the Documents once each has finished processing, logging progress. */
+function processed(core: Core, ids: readonly string[], log: Log): Promise<Document[]> {
+  return new Promise<Document[]>((resolve, reject) => {
+    const latest = new Map<string, Document>();
+    const finish = () => {
+      clearInterval(timer);
+      stop();
+    };
+    const settle = (document: Document) => {
+      if (!ids.includes(document.id)) return;
+      latest.set(document.id, document);
+      if (!ids.every((id) => FINISHED.has(latest.get(id)?.status as DocumentStatus))) return;
+      finish();
+      resolve(ids.map((id) => latest.get(id) as Document));
+    };
+    const timer = setInterval(() => {
+      const documents = [...latest.values()];
+      const ready = documents.filter((document) => FINISHED.has(document.status)).length;
+      // One Document is embedded at a time; the others wait as "embedding" at 0%.
+      const embedding = documents
+        .filter((document) => document.status === "embedding")
+        .sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0))[0];
+      const detail = embedding
+        ? `, embedding ${embedding.name} (${Math.round((embedding.progress ?? 0) * 100)}%)`
+        : "";
+      log(`Processing: ${ready} of ${ids.length} Documents done${detail}`);
+    }, 15_000);
+    const stop = core.on("document.status", settle);
+    core.listDocuments().then((documents) => {
+      for (const document of documents) settle(document);
+    }, reject);
+  });
+}
+
+export async function openLibrary(options: LibraryOptions): Promise<Library> {
+  const { log } = options;
+  const dataDir = await mkdtemp(join(tmpdir(), `incarnamind-eval-${options.name}-`));
+  const modelsLink = join(dataDir, "models");
+  if (options.modelCache) {
+    await mkdir(options.modelCache, { recursive: true });
+    // A junction on Windows needs no special rights; elsewhere the type is ignored.
+    await symlink(options.modelCache, modelsLink, "junction");
+  }
+  const adapters: CoreAdapters = {
+    paths: { dataDir },
+    systemLanguages: () => ["en-US"],
+    keychain: memoryKeychain(),
+    browser: {
+      open: async () => {
+        throw new Error("The evaluation can't open a browser.");
+      },
+    },
+    processes: {
+      spawn: () => {
+        throw new Error("The evaluation can't start processes.");
+      },
+    },
+    embedder: options.embedder,
+  };
+  const core = createCore(adapters);
+  const close = async () => {
+    core.close();
+    if (options.keep) {
+      log(`Kept the data folder ${dataDir}`);
+      return;
+    }
+    // The link goes first, so deleting the folder can't reach the model cache it points to.
+    if (options.modelCache) await unlink(modelsLink);
+    await rm(dataDir, { recursive: true, force: true });
+  };
+
+  try {
+    const started = Date.now();
+    if (options.embeddingProvider) {
+      const provider = options.embeddingProvider;
+      // Only the embeddings flow is accepted; nothing else may leave the machine.
+      core.on("consent.requested", (request) => {
+        void core.respondToConsent(request.requestId, request.flow.id === "embeddings");
+      });
+      const saved = await core.saveEmbeddingProvider(provider);
+      log(`Embedding with ${saved.provider.kind}/${saved.provider.modelId}`);
+    } else {
+      await modelReady(core, log);
+      log(`The embedding model is ready (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+    }
+
+    const begun = Date.now();
+    const { documents: added, skipped } = await core.addDocuments(
+      options.documents.map((document) => document.path),
+    );
+    if (skipped.length > 0) {
+      throw new Error(`Files weren't added: ${skipped.map((file) => file.path).join(", ")}`);
+    }
+    const done = await processed(
+      core,
+      added.map((document) => document.id),
+      log,
+    );
+    const processingSeconds = (Date.now() - begun) / 1000;
+    const notReady = done.filter((document) => document.status !== "ready");
+    if (notReady.length > 0) {
+      throw new Error(
+        `Documents didn't process: ${notReady.map((document) => `${document.name} (${document.status}: ${document.failure?.message ?? ""})`).join(", ")}`,
+      );
+    }
+    const documents = new Map(
+      options.documents.map((document, index) => [document.key, done[index] as Document]),
+    );
+
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    const pages = new Map<string, { page: number | null; text: string }[]>();
+    const passageCount =
+      db.get<{ count: number }>("SELECT COUNT(*) AS count FROM passages WHERE deleted_at IS NULL")
+        ?.count ?? 0;
+    log(`${done.length} Documents, ${passageCount} Passages, in ${processingSeconds.toFixed(0)} s`);
+
+    return {
+      core,
+      dataDir,
+      documents,
+      processingSeconds,
+      passageCount,
+      pageTexts(documentId) {
+        let found = pages.get(documentId);
+        if (!found) {
+          // Read straight from the data folder, as the tests do: the public interface has no call for it.
+          found = db.all<{ page: number | null; text: string }>(
+            "SELECT page, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page",
+            [documentId],
+          );
+          pages.set(documentId, found);
+        }
+        return found;
+      },
+      async close() {
+        db.close();
+        await close();
+      },
+    };
+  } catch (error) {
+    await close();
+    throw error;
+  }
+}

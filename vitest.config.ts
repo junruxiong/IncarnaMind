@@ -11,9 +11,10 @@ const NODE_WORKER = "?nodeWorker";
  * chunk and a function that starts it on a worker thread. Vitest can't run a
  * TypeScript worker, so this plugin does the same for tests: it bundles the
  * worker with Vite into node_modules/.cache (where its npm imports still
- * resolve) and returns a function that starts the bundle.
+ * resolve) and returns a function that starts the bundle. The evaluation's
+ * config (eval/vitest.config.ts) uses it too.
  */
-function nodeWorkers(): Plugin {
+export function nodeWorkers(): Plugin {
   const outDir = join(root, "node_modules/.cache/incarnamind-test-workers");
   return {
     name: "incarnamind:node-workers-for-tests",
