@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useT } from "../i18n";
 
-/** A short message filling the viewer: loading, empty, or a failure. */
+/** A short message filling the viewer under its header: loading, empty, or a failure. */
 export function ViewerMessage({
   children,
   testId,
@@ -15,11 +15,11 @@ export function ViewerMessage({
     <div
       data-testid={testId}
       role={tone === "error" ? "alert" : "status"}
-      className={`flex h-full items-center justify-center px-6 text-center text-sm ${
-        tone === "error" ? "text-red-700" : "text-gray-500"
-      }`}
+      className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-ui"
     >
-      <p className="max-w-sm break-words">{children}</p>
+      <p className={`max-w-sm break-words ${tone === "error" ? "text-danger" : "text-ink-meta"}`}>
+        {children}
+      </p>
     </div>
   );
 }
@@ -28,20 +28,20 @@ export function ViewerMessage({
  * Shown instead of a Document that has been deleted (e.g. a Citation's), with
  * the quoted text when there is one, so the quote can still be read.
  */
-export function DocumentRemoved({ quote }: { quote?: string }) {
+export function DocumentRemoved({ quote }: { quote?: string | undefined }) {
   const t = useT();
   return (
     <div
       data-testid="viewer-removed"
       role="status"
-      className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center"
+      className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 text-center"
     >
-      <h2 className="text-base font-medium text-gray-700">{t("viewer.removed.title")}</h2>
-      <p className="max-w-sm text-sm text-gray-500">{t("viewer.removed.body")}</p>
+      <h2 className="text-ui font-semibold text-ink">{t("viewer.removed.title")}</h2>
+      <p className="mt-1 max-w-sm text-ui text-ink-meta">{t("viewer.removed.body")}</p>
       {quote && (
-        <figure className="mt-2 max-w-sm text-left text-sm">
-          <figcaption className="text-[11px] text-gray-400">{t("viewer.removed.quote")}</figcaption>
-          <blockquote className="mt-1 border-l-2 border-gray-200 pl-3 break-words whitespace-pre-wrap text-gray-700">
+        <figure className="mt-6 w-full max-w-sm text-left">
+          <figcaption className="text-label text-ink-meta">{t("viewer.removed.quote")}</figcaption>
+          <blockquote className="mt-2 rounded-lg bg-frame px-4 py-3 font-serif text-[15px] leading-6 break-words whitespace-pre-wrap text-ink-answer">
             {quote}
           </blockquote>
         </figure>

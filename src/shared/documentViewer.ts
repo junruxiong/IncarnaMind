@@ -6,6 +6,8 @@
  * whole files never cross IPC.
  */
 
+import type { CitationCheck } from "../core/api";
+
 export const DOCUMENT_SCHEME = "incarnamind-document";
 
 /** The URL the main process serves a Document's file at. */
@@ -37,4 +39,18 @@ export interface DocumentLocation {
    * for a PDF, anywhere for TXT and Markdown (which the viewer scrolls to it).
    */
   quote?: string;
+  /**
+   * The Citation this opens, when a Citation opens it. Its check colours the
+   * quote's highlight (green when found, amber when opened anyway after "not
+   * found"); with its number too, the viewer shows its check mark in the page's
+   * margin, beside the quote, as the Mind does beside the Answer.
+   */
+  citation?: ViewerCitation;
+}
+
+/** What the viewer knows of the Citation it was opened from. */
+export interface ViewerCitation {
+  check: CitationCheck;
+  /** The number the Citation shows in its Answer, from 1. */
+  number?: number;
 }
