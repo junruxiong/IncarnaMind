@@ -8,9 +8,10 @@
  *
  * Headings use Word's built-in heading styles, so they show in Word's
  * navigation pane; lists are Word lists; each Citation is a real Word
- * footnote; math is LaTeX text (native Word equations are a follow-up); code
- * is monospaced paragraphs.
+ * footnote; maths is Word's own equations (./math), or its LaTeX as text
+ * where it can't be converted; code is monospaced paragraphs.
  */
+import { latexToOmml, MATH_NAMESPACE } from "./math";
 import type { Block, Footnote, Image, Inline, Marks, TableCell } from "./model";
 import { zip } from "./zip";
 
@@ -36,6 +37,7 @@ const NS = {
   wp: "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
   a: "http://schemas.openxmlformats.org/drawingml/2006/main",
   pic: "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  m: MATH_NAMESPACE,
   packageRelationships: "http://schemas.openxmlformats.org/package/2006/relationships",
   contentTypes: "http://schemas.openxmlformats.org/package/2006/content-types",
 } as const;
@@ -78,7 +80,7 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
   const body = writer.body(blocks);
 
   const document =
-    `${XML_DECLARATION}<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}"><w:body>` +
+    `${XML_DECLARATION}<w:document xmlns:w="${NS.w}" xmlns:r="${NS.r}" xmlns:wp="${NS.wp}" xmlns:a="${NS.a}" xmlns:pic="${NS.pic}" xmlns:m="${NS.m}"><w:body>` +
     `${title}${body}` +
     `<w:sectPr><w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
     "</w:body></w:document>";
@@ -203,8 +205,14 @@ class DocxWriter {
           )
           .join("");
       }
-      case "math":
-        return paragraph({ style: "Math", indent }, run(`$$${block.latex}$$`));
+      case "math": {
+        // A display equation, or its LaTeX if it can't be one.
+        const equation = latexToOmml(block.latex, true);
+        return paragraph(
+          { style: "Math", indent },
+          equation ? `<m:oMathPara>${equation}</m:oMathPara>` : run(`$$${block.latex}$$`),
+        );
+      }
       case "list":
         return this.list(block, context);
       case "quote":
@@ -305,7 +313,7 @@ class DocxWriter {
           xml += run(item.text, formatOf(item.marks, context));
           break;
         case "math":
-          xml += run(`$${item.latex}$`, { bold: context.bold });
+          xml += latexToOmml(item.latex, false) ?? run(`$${item.latex}$`, { bold: context.bold });
           break;
         case "break":
           xml += "<w:r><w:br/></w:r>";

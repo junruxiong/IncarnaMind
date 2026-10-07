@@ -118,6 +118,10 @@ function writeSample(client: MindClient, tides: Document): void {
 
 const decode = (exported: MindExport) => new TextDecoder().decode(exported.data);
 
+/** The text of an equation's runs, joined. */
+const mathText = (omml: string) =>
+  [...omml.matchAll(/<m:t xml:space="preserve">([^<]*)<\/m:t>/g)].map((match) => match[1]).join("");
+
 /** The parts of an exported .docx, each checked to be well-formed XML. */
 function docxParts(exported: MindExport) {
   const files = unzip(exported.data);
@@ -237,10 +241,27 @@ describe("exporting a Mind", () => {
       { style: "ListParagraph", list: "2/0", text: "Full moon" },
       { style: "ListParagraph", list: "3/1", text: "Twice a month" },
       { style: "Code", text: 'console.log("tide");' },
-      { style: "Math", text: "$$F = G\\frac{m_1 m_2}{r^2}$$" },
+      // The maths is in Word's equations, not text (below).
+      { style: "Math", text: "" },
       { text: "At new moon[1] and at full moon[2]." },
-      { text: "The pull falls off as $1/r^3$[3]." },
+      { text: "The pull falls off as [3]." },
     ]);
+    // Maths is Word's own equations: a display equation in its paragraph, and inline.
+    expect(document).toContain(
+      'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"',
+    );
+    const display =
+      /<w:p><w:pPr><w:pStyle w:val="Math"\/><\/w:pPr><m:oMathPara>(.*?)<\/m:oMathPara><\/w:p>/.exec(
+        document,
+      )?.[1];
+    expect(display).toMatch(/^<m:oMath>.*<\/m:oMath>$/);
+    expect(display).toContain("<m:f><m:num>");
+    expect(mathText(display ?? "")).toBe("F=Gm1m2r2");
+    const inline = /falls off as <\/w:t><\/w:r>(<m:oMath>.*?<\/m:oMath>)/.exec(document)?.[1];
+    expect(mathText(inline ?? "")).toBe("1/r3");
+    expect(inline).toContain("<m:sSup>");
+    expect(document).not.toContain("$$");
+    expect(document).not.toContain("$1/r^3$");
     expect(document).not.toContain("When do spring tides happen?");
     expect(document).toContain(
       '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Neap</w:t></w:r>',
@@ -495,6 +516,34 @@ describe("exporting a Mind", () => {
         "[^3]: Review，§ 2.1 Sensitivity",
         "[^4]: Log，第 120–134 行",
       ].join("\n"),
+    );
+  });
+
+  test("maths Word's equations can't hold stays LaTeX text in a .docx that still opens; Markdown keeps $…$", async () => {
+    const { core, mind, client } = await setUp();
+    writeMind(client, [
+      { type: "blockMath", attrs: { latex: "\\undefinedmacro{x}" } },
+      paragraph(
+        text("Linked "),
+        { type: "inlineMath", attrs: { latex: "\\href{https://example.com}{x}" } },
+        text(", and fine "),
+        { type: "inlineMath", attrs: { latex: "E = mc^2" } },
+        text("."),
+      ),
+    ]);
+    await client.settled();
+
+    const { document } = docxParts(await core.exportMind(mind.id, { format: "docx" }));
+    expect(paragraphsOf(document)).toEqual([
+      { style: "Title", text: "Tides" },
+      { style: "Math", text: "$$\\undefinedmacro{x}$$" },
+      { text: "Linked $\\href{https://example.com}{x}$, and fine ." },
+    ]);
+    expect(document.match(/<m:oMath>/g)).toHaveLength(1);
+    expect(document).not.toContain("<m:oMathPara>");
+
+    expect(decode(await core.exportMind(mind.id, { format: "markdown" }))).toContain(
+      "Linked $\\href{https://example.com}{x}$, and fine $E = mc^2$.",
     );
   });
 

@@ -92,6 +92,66 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first, 
   await app.close();
 });
 
+test("maths exports to .docx as Word equations, which a Word viewer shows as equations", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByTestId("new-mind").click();
+  await window.getByTestId("mind-title").fill("Gravity");
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+
+  // A formula on its own line, then one in a sentence, from the slash menu.
+  await window.keyboard.type("/math");
+  await window.keyboard.press("Enter");
+  await window.getByTestId("math-editor").fill("F = G\\frac{m_1 m_2}{r^2}");
+  await window.getByTestId("math-editor").press("Enter");
+  await expect(editor.locator('[data-type="block-math"] .katex')).toBeVisible();
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("The tide-raising pull falls off as /inline");
+  await expect(window.getByTestId("slash-item-inline-math")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await window.keyboard.press("Enter");
+  await window.getByTestId("math-editor").fill("\\frac{1}{r^3}");
+  await window.getByTestId("math-editor").press("Enter");
+  await expect(editor.locator('[data-type="inline-math"] .katex')).toBeVisible();
+
+  const target = join(sources, "Gravity.docx");
+  await interceptSaveDialog(app, target);
+  await window.getByTestId("export-mind").click();
+  const dialog = window.getByTestId("export-dialog");
+  await dialog.getByTestId("export-save").click();
+  await expect(dialog.getByTestId("export-done")).toBeVisible();
+  await dialog.getByTestId("export-close").click();
+
+  // Word equations, not "$…$" text: one on its own line, one in the sentence.
+  const document = part(unzip(await readFile(target)), "word/document.xml");
+  expect(document.match(/<m:oMathPara>/g)).toHaveLength(1);
+  expect(document.match(/<m:oMath>/g)).toHaveLength(2);
+  expect(document).not.toContain("$");
+  expect(paragraphsOf(document).map((each) => each.text)).toContain(
+    "The tide-raising pull falls off as ",
+  );
+
+  // Opened as a Document, the Word viewer draws them as equations.
+  await addDocuments(window, [target]);
+  await window.getByTestId("open-document").click();
+  const viewer = window.getByTestId("viewer");
+  const docx = viewer.getByTestId("viewer-docx");
+  await expect(docx).toHaveAttribute("data-rendered", "yes");
+  const equations = docx.locator("math");
+  await expect(equations).toHaveCount(2);
+  await expect(equations.first().locator("mfrac")).toHaveCount(1);
+  await expect(equations.nth(1).locator("mfrac")).toHaveCount(1);
+  if (process.env.INCARNAMIND_SCREENSHOTS) {
+    await viewer.screenshot({
+      path: join(process.env.INCARNAMIND_SCREENSHOTS, "export-docx-equations.png"),
+    });
+  }
+  await app.close();
+});
+
 test("Settings opens the data folder in the file manager", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
