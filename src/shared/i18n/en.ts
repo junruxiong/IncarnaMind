@@ -132,6 +132,46 @@ export const en = {
   "providers.settings.cancel": "Cancel",
   "providers.settings.remove": "Remove",
 
+  "codex.experimental.title": "Experimental",
+  "codex.provider.name": "ChatGPT plan (via Codex sign-in)",
+  "codex.switch.description":
+    "Answer Questions with your ChatGPT Plus or Pro plan instead of an API key.",
+  "codex.warning.title": "This isn't an official OpenAI integration",
+  "codex.warning.body":
+    "It signs in the way OpenAI's Codex CLI does. OpenAI hasn't approved this for other apps and may block it at any time. Questions you ask count against your ChatGPT plan's usage limits. Turning this off signs you out.",
+  "codex.account.signedOut": "Not signed in.",
+  "codex.account.expired":
+    "Your ChatGPT sign-in has expired. Sign in again to keep using your plan.",
+  "codex.account.signedIn": "Signed in as {account}.",
+  "codex.account.unknown": "your ChatGPT account",
+  "codex.account.plan": "Plan: {plan}",
+  "codex.signIn": "Sign in with ChatGPT",
+  "codex.signInAgain": "Sign in again",
+  "codex.signingIn": "Finish signing in in your browser…",
+  "codex.cancel": "Cancel",
+  "codex.signOut": "Sign out",
+  "codex.model": "Model",
+  "codex.use": "Use for Questions",
+  "codex.inUse": "Questions use your ChatGPT plan.",
+  "codex.signIn.error.port-in-use":
+    "The local port the ChatGPT sign-in needs is in use by another program, for example the Codex CLI signing in. Finish or cancel that sign-in, then try again.",
+  "codex.signIn.error.timed-out": "The sign-in took too long. Try again.",
+  "codex.signIn.error.cancelled": "The sign-in was cancelled.",
+  "codex.signIn.error.denied": "OpenAI didn't complete the sign-in. Try again.",
+  "codex.signIn.error.secret-storage":
+    "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
+  "codex.signIn.error.failed": "The sign-in didn't work.",
+  "codex.test.not-signed-in": "You're not signed in to ChatGPT. Sign in, then try again.",
+  "codex.test.plan-limit": "Your ChatGPT plan's usage limit is reached. Try again once it resets.",
+  "codex.test.blocked":
+    "OpenAI refused the request although you're signed in. It may have blocked this integration; an API key still works.",
+  "codex.readiness.sign-in-required":
+    "Sign in to ChatGPT again in Settings, under Experimental, to ask Questions with your plan.",
+  "codex.page.success.title": "Signed in to ChatGPT",
+  "codex.page.success.body": "You can close this tab and go back to IncarnaMind.",
+  "codex.page.failure.title": "The ChatGPT sign-in didn't work",
+  "codex.page.failure.body": "Close this tab and try again in IncarnaMind.",
+
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
   "consent.dialog.bodyMore": "To {purpose}, IncarnaMind will now also send this to {service}:",

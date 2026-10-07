@@ -7,6 +7,7 @@
  */
 import type { ChildProcess } from "node:child_process";
 import type { SecretProtection } from "./api";
+import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { ChatModelFactory } from "./providers/models";
 
 export interface Paths {
@@ -73,4 +74,10 @@ export interface CoreAdapters {
    * providers; tests pass AI SDK mock models.
    */
   createChatModel?: ChatModelFactory;
+  /**
+   * Where the experimental ChatGPT plan provider signs in and sends Questions.
+   * Defaults to OpenAI's servers and the Codex CLI's callback port; tests
+   * point it at a local fake authorization server and endpoint.
+   */
+  chatGptPlan?: Partial<ChatGptPlanEndpoints>;
 }
