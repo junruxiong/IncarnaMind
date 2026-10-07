@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { AskResult, ChatModelGroup, ChatReadiness, SkillAvailability } from "../../core/api";
+import type {
+  AnswerPhase,
+  AskResult,
+  ChatModelGroup,
+  ChatReadiness,
+  SkillAvailability,
+} from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
@@ -19,6 +25,8 @@ interface AnswersState {
   blocked: Readonly<Record<string, AskBlock>>;
   /** Answers being written, by Block ID, from the core's Answer events. */
   writing: ReadonlySet<string>;
+  /** What each Answer being written is doing, by Block ID, from "answer.phase" events. */
+  phases: Readonly<Record<string, AnswerPhase>>;
   /** The models a Question's picker offers; null until first asked for. */
   models: ChatModelGroup[] | null;
 
@@ -62,6 +70,7 @@ function settle(questionId: string, result: AskResult | null, error?: unknown): 
 export const useAnswers = create<AnswersState>()((set, get) => ({
   blocked: {},
   writing: new Set(),
+  phases: {},
   models: null,
 
   async ask(mindId, questionId, discardEdits) {
@@ -110,8 +119,14 @@ const setWriting = (answerId: string, writing: boolean) =>
     const next = new Set(state.writing);
     if (writing) next.add(answerId);
     else next.delete(answerId);
-    return { writing: next };
+    // A new run starts without a phase; a finished one has none.
+    const { [answerId]: _ended, ...phases } = state.phases;
+    return { writing: next, phases };
   });
+
+core.on("answer.phase", ({ answerId, phase }) =>
+  useAnswers.setState((state) => ({ phases: { ...state.phases, [answerId]: phase } })),
+);
 
 core.on("answer.started", ({ answerId }) => setWriting(answerId, true));
 core.on("answer.finished", ({ answerId }) => setWriting(answerId, false));
