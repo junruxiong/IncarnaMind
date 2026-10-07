@@ -1,17 +1,29 @@
 /**
- * Documents: adding files, processing them into Passages off the main thread
- * (extracting on a worker thread, embedding through the embedder), renaming,
- * filing in Folders, soft-deleting, and keyword, vector and hybrid search.
+ * Documents (ADR-0010): files indexed where the User keeps them, processed
+ * into Passages off the main thread (extracting on a worker thread,
+ * embedding through the embedder), renamed, removed from the index, and
+ * searched by keyword, vector and hybrid search. Linked folders and the
+ * files on disk are kept in step by ./library.
+ *
+ * Each Document has a current version, its `content_hash`: the SHA-256 of
+ * its file as read for processing. Passages and page text belong to a
+ * version. When the file changes, the new version is processed and its
+ * Passages replace the old ones in search; the old version's page text stays
+ * for as long as a Citation quotes it (`collectOldVersions`), so the
+ * Citation is still checked against the text it quoted.
  */
 import { randomUUID } from "node:crypto";
+import { existsSync, renameSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { basename, extname, isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type {
   AddDocumentsResult,
   Document,
   DocumentFailureReason,
+  DocumentFileStatus,
   DocumentKind,
   DocumentStatus,
+  DocumentText,
   PassageSearchResult,
   ProviderErrorKind,
   SearchMode,
@@ -20,13 +32,14 @@ import type {
 } from "../api";
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
+import type { Folders } from "../folders";
 import type { Database } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
-import { copyFileName, createOpenCopies } from "./copies";
 import { createEmbeddingQueue } from "./embedding";
-import { createDocumentFiles, kindOf } from "./files";
+import { DOCUMENT_EXTENSIONS, isInside, openFile } from "./files";
 import { keywordText } from "./keywords";
+import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   PROCESSING_VERSION,
@@ -36,6 +49,7 @@ import {
 } from "./processing";
 import { createProcessor } from "./processor";
 import {
+  distinctPassages,
   fuseRankingScores,
   fuseRankings,
   HYBRID_CANDIDATES,
@@ -47,6 +61,7 @@ import {
 } from "./search";
 import { type SearchCandidate, type SearchToolOptions, searchDocumentsTool } from "./searchTool";
 import { createVectorIndex } from "./vectors";
+import type { WatchFolder } from "./watcher";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -68,13 +83,17 @@ interface DocumentRow {
   tagging_error_kind: string | null;
   tagging_error_message: string | null;
   embedding_model: string | null;
+  path: string;
+  linked_folder_id: string | null;
+  file_status: string;
   created_at: string;
   updated_at: string;
 }
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
-  tagging_error_message, embedding_model, created_at, updated_at`;
+  tagging_error_message, embedding_model, path, linked_folder_id, file_status,
+  created_at, updated_at`;
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -104,17 +123,23 @@ function parseName(name: unknown): string {
   return trimmed;
 }
 
-/** `listDocuments` options, checked. `folderId` and `tagId` undefined mean any. */
+/** `listDocuments` options, checked. Undefined means any. */
 export function parseListOptions(options: unknown): {
   folderId: string | undefined;
   includeSubfolders: boolean;
   tagId: string | undefined;
+  linkedFolderId: string | null | undefined;
 } {
   if (options === undefined) {
-    return { folderId: undefined, includeSubfolders: false, tagId: undefined };
+    return {
+      folderId: undefined,
+      includeSubfolders: false,
+      tagId: undefined,
+      linkedFolderId: undefined,
+    };
   }
   if (!isRecord(options)) throw new InvalidInputError("listDocuments expects an object.");
-  const { folderId, includeSubfolders = false, tagId } = options;
+  const { folderId, includeSubfolders = false, tagId, linkedFolderId } = options;
   if (folderId !== undefined && (typeof folderId !== "string" || folderId === "")) {
     throw new InvalidInputError("A Folder id must be a non-empty string.");
   }
@@ -124,7 +149,14 @@ export function parseListOptions(options: unknown): {
   if (tagId !== undefined && (typeof tagId !== "string" || tagId === "")) {
     throw new InvalidInputError("A Tag id must be a non-empty string.");
   }
-  return { folderId, includeSubfolders, tagId };
+  if (
+    linkedFolderId !== undefined &&
+    linkedFolderId !== null &&
+    (typeof linkedFolderId !== "string" || linkedFolderId === "")
+  ) {
+    throw new InvalidInputError("A Linked folder id must be a non-empty string, or null.");
+  }
+  return { folderId, includeSubfolders, tagId, linkedFolderId };
 }
 
 /** Where automatic tagging is, from what is stored and the Document's processing status. */
@@ -165,9 +197,6 @@ function parseSearchOptions(options: unknown): {
   };
 }
 
-/** The file name without its extension, or the whole name if that leaves nothing. */
-const nameFromPath = (path: string) => basename(path, extname(path)).trim() || basename(path);
-
 /** What the keyword index holds for a Passage: its Document's name, then its own words. */
 const indexedText = (nameKeywords: string, passageKeywords: string) =>
   nameKeywords ? `${nameKeywords} ${passageKeywords}` : passageKeywords;
@@ -183,50 +212,73 @@ export interface CitationSource {
   documentId: string;
   documentName: string;
   documentKind: DocumentKind;
+  /** The version of the Document the Passage was built from: what a Citation of it quotes. */
   contentHash: string;
   /** The Document has been deleted since. */
   documentDeleted: boolean;
 }
 
-/** A live Document's stored file, opened for reading. */
+/** A live Document's file, opened for reading. */
 export interface DocumentFile {
   document: Document;
   /** The file's bytes. Cancel the stream if it isn't read to the end, so the file is closed. */
   stream: ReadableStream<Uint8Array>;
+  /** The file's size now, in bytes. */
+  size: number;
 }
 
 export interface DocumentsOptions {
   db: Database;
   dataDir: string;
-  /** Where copies to open in another app go (see ./copies). */
-  tempDir: string;
   now: () => string;
   /**
    * The embedding model in use (the built-in one unless the User chose
    * another), which embeds Passages and search queries.
    */
   model: SearchEmbedder;
+  /** The Folders of Linked folders, which follow the disk. */
+  folders: Folders;
   /** Pushes the "document.status" event. */
   emitStatus(document: Document): void;
+  /** Pushes the "documents.moved" event. */
+  emitMoved(documents: Document[]): void;
+  /** Pushes the "documents.removed" event. */
+  emitRemoved(documentIds: string[]): void;
+  /** Folders changed: push "folders.changed". */
+  foldersChanged(): void;
+  /** Pushes "linkedFolders.changed". */
+  linkedFoldersChanged: LibraryHooks["linkedFoldersChanged"];
   /** A Document just became ready, i.e. searchable: called before its status is pushed. */
   onReady?: (documentId: string) => void;
+  /** Asks iCloud Drive to download a file an ".icloud" stub stands for. */
+  downloadStub?: (path: string) => Promise<void>;
+  linkedFolders: {
+    watch: WatchFolder;
+    retryMs: number;
+    detectDataless: boolean;
+  };
+  reportError?: (error: unknown) => void;
 }
 
 /** Which Documents `list` returns. Every condition given must match. */
 export interface DocumentFilter {
-  /** Only Documents filed in one of these Folders. */
+  /** Only Documents in one of these Folders. */
   folderIds?: readonly string[];
   /** Only Documents carrying this Tag, if it isn't deleted. */
   tagId?: string;
   /** Only these Documents. */
   ids?: readonly string[];
+  /** Only this Linked folder's Documents, or with null, files added on their own. */
+  linkedFolderId?: string | null;
+  /** Leave out missing Documents: new searches don't look at them. */
+  searchable?: boolean;
 }
 
 export function createDocuments(options: DocumentsOptions) {
   const { db, dataDir, now, model, emitStatus } = options;
-  const files = createDocumentFiles(dataDir);
-  const openCopies = createOpenCopies(options.tempDir);
+  const reportError = options.reportError ?? ((error: unknown) => console.error(error));
   const vectors = createVectorIndex(db, model);
+  const legacyFolder = join(dataDir, "documents");
 
   /**
    * The share of a Document's Passages embedded so far with the current model:
@@ -249,6 +301,9 @@ export function createDocuments(options: DocumentsOptions) {
       name: row.name,
       kind: row.kind as DocumentKind,
       contentHash: row.content_hash,
+      path: row.path,
+      fileStatus: row.file_status as DocumentFileStatus,
+      linkedFolderId: row.linked_folder_id,
       size: row.size,
       pageCount: row.page_count,
       status: row.status as DocumentStatus,
@@ -280,31 +335,27 @@ export function createDocuments(options: DocumentsOptions) {
       id,
     ]);
 
-  const findByHash = (contentHash: string) =>
-    db.get<DocumentRow>(
-      `SELECT ${COLUMNS} FROM documents WHERE content_hash = ? AND deleted_at IS NULL`,
-      [contentHash],
-    );
+  // Set below, once the library exists: Linked folders' progress follows their Documents.
+  let progressed = (_linkedFolderId: string | null) => {};
 
   const announce = (id: string) => {
     const row = find(id);
-    if (row) emitStatus(toDocument(row));
+    if (!row) return;
+    emitStatus(toDocument(row));
+    progressed(row.linked_folder_id);
   };
 
-  const jobFor = (row: Pick<DocumentRow, "id" | "content_hash" | "kind">): ProcessingJob => ({
+  const jobFor = (row: Pick<DocumentRow, "id" | "kind" | "path">): ProcessingJob => ({
     documentId: row.id,
-    contentHash: row.content_hash,
     kind: row.kind as DocumentKind,
-    file: files.pathFor(row.content_hash),
+    file: row.path,
   });
-
-  /** Removes a Document file once no live Document uses it. */
-  const releaseFile = async (contentHash: string) => {
-    if (!findByHash(contentHash)) await files.remove(contentHash);
-  };
 
   const setStatus = (id: string, status: DocumentStatus) =>
     db.run("UPDATE documents SET status = ?, updated_at = ? WHERE id = ?", [status, now(), id]);
+
+  // Set below, once the library exists.
+  let isPaused = (_documentId: string) => false;
 
   const embedding = createEmbeddingQueue({
     db,
@@ -313,45 +364,57 @@ export function createDocuments(options: DocumentsOptions) {
     vectors,
     announce,
     onReady: options.onReady,
+    isPaused: (id) => isPaused(id),
   });
 
   /** Adds a Passage to the keyword index, under the `seq` it was stored with. */
   const index = (seq: number, text: string) =>
     db.run("INSERT INTO passages_fts (rowid, text) VALUES (?, ?)", [BigInt(seq), text]);
 
-  /** Stores the text of a Document's pages, for the Citation check. Run in a transaction. */
-  function insertPages(documentId: string, pages: readonly PageText[]): void {
+  /** Re-indexes a Document's live Passages' keywords, which include its name. Run in a transaction. */
+  function reindexName(id: string, name: string): void {
+    const nameKeywords = keywordText(name);
+    const passages = db.all<{ seq: number; text: string }>(
+      "SELECT seq, text FROM passages WHERE document_id = ? AND deleted_at IS NULL",
+      [id],
+    );
+    for (const { seq, text } of passages) {
+      db.run("DELETE FROM passages_fts WHERE rowid = ?", [BigInt(seq)]);
+      index(seq, indexedText(nameKeywords, keywordText(text)));
+    }
+  }
+
+  /** Stores the text of a version's pages, for the Citation check. Run in a transaction. */
+  function insertPages(documentId: string, contentHash: string, pages: readonly PageText[]): void {
     const at = now();
     for (const { page, text } of pages) {
       db.run(
-        `INSERT INTO document_pages (id, document_id, page, text, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), documentId, page === null ? null : BigInt(page), text, at, at],
+        `INSERT INTO document_pages (id, document_id, content_hash, page, text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), documentId, contentHash, page === null ? null : BigInt(page), text, at, at],
       );
     }
   }
 
-  /** Soft-deletes a Document's stored page text. Run in a transaction. */
-  const removePages = (documentId: string, at: string) =>
-    db.run(
-      `UPDATE document_pages SET deleted_at = ?, updated_at = ?
-       WHERE document_id = ? AND deleted_at IS NULL`,
-      [at, at, documentId],
-    );
-
-  /** Stores Passages and indexes them. Run in a transaction. */
-  function insertPassages(documentId: string, name: string, passages: ProcessedPassage[]): void {
+  /** Stores a version's Passages and indexes them. Run in a transaction. */
+  function insertPassages(
+    documentId: string,
+    contentHash: string,
+    name: string,
+    passages: ProcessedPassage[],
+  ): void {
     const at = now();
     const nameKeywords = keywordText(name);
     for (const passage of passages) {
       const stored = db.get<{ seq: number }>(
-        `INSERT INTO passages (id, document_id, position, page_from, page_to,
+        `INSERT INTO passages (id, document_id, content_hash, position, page_from, page_to,
            window_from, window_to, text, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING seq`,
         [
           randomUUID(),
           documentId,
+          contentHash,
           BigInt(passage.position),
           passage.pageFrom === null ? null : BigInt(passage.pageFrom),
           passage.pageTo === null ? null : BigInt(passage.pageTo),
@@ -368,31 +431,75 @@ export function createDocuments(options: DocumentsOptions) {
   }
 
   /**
-   * Writes a job's result, replacing Passages from an earlier processing,
-   * unless the Document was deleted meanwhile. Returns the status it wrote, if it did.
+   * The status of a Document whose file couldn't be read for processing:
+   * what was indexed before stays, so it is ready again if all of it is
+   * embedded with the current model, otherwise it goes back to embedding.
+   * With nothing indexed, it waits, queued, for its file.
+   */
+  function indexedStatus(row: DocumentRow): DocumentStatus {
+    const counts = db.get<{ total: number; embedded: number }>(
+      `SELECT count(*) AS total, count(embedding) AS embedded FROM passages
+       WHERE document_id = ? AND deleted_at IS NULL`,
+      [row.id],
+    );
+    if (!counts || counts.total === 0) return "queued";
+    if (counts.embedded === counts.total && row.embedding_model === model.id) return "ready";
+    return model.isReady() ? "embedding" : "waiting-for-model";
+  }
+
+  /**
+   * Writes a job's result: the version read replaces the Passages of an
+   * earlier processing, and its pages replace those of the same version;
+   * other versions' pages stay for their Citations. Nothing is written if the
+   * Document was deleted or queued again meanwhile. Returns the status it wrote, if it did.
    */
   function record(job: ProcessingJob, result: ProcessingResult): DocumentStatus | undefined {
     return db.transaction(() => {
       const row = find(job.documentId);
       if (row?.status !== "extracting") return undefined;
       const at = now();
+      if (result.outcome === "file-unreadable") {
+        const status = indexedStatus(row);
+        // Gone, or not readable now: the library works out which, and tells.
+        // The modified time is forgotten, so the file is read again once it
+        // can be, and a version still to process isn't taken as indexed.
+        db.run(
+          `UPDATE documents SET status = ?, file_status = ?, file_mtime_ms = NULL, updated_at = ?
+           WHERE id = ?`,
+          [status, result.gone ? row.file_status : "unavailable", at, row.id],
+        );
+        return status;
+      }
       db.run(
         `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
          WHERE document_id = ? AND deleted_at IS NULL`,
         [at, at, job.documentId],
       );
-      removePages(job.documentId, at);
+      if (result.outcome === "crashed") {
+        db.run(
+          `UPDATE documents SET status = 'failed', failure_reason = 'processing-error',
+             failure_message = ?, updated_at = ? WHERE id = ?`,
+          [result.message, at, job.documentId],
+        );
+        return "failed";
+      }
+      db.run(
+        `UPDATE document_pages SET deleted_at = ?, updated_at = ?
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL`,
+        [at, at, job.documentId, result.contentHash],
+      );
       let status: DocumentStatus;
       if (result.outcome === "ready") {
-        insertPassages(job.documentId, row.name, result.passages);
-        insertPages(job.documentId, result.pages);
+        insertPassages(job.documentId, result.contentHash, row.name, result.passages);
+        insertPages(job.documentId, result.contentHash, result.pages);
         status = model.isReady() ? "embedding" : "waiting-for-model";
       } else {
         status = result.outcome;
       }
       db.run(
         `UPDATE documents SET status = ?, page_count = ?, failure_reason = ?, failure_message = ?,
-           processing_version = ?, embedding_model = ?, embedding_dimensions = NULL, updated_at = ?
+           processing_version = ?, embedding_model = ?, embedding_dimensions = NULL,
+           content_hash = ?, size = ?, file_status = 'available', updated_at = ?
          WHERE id = ?`,
         [
           status,
@@ -403,6 +510,8 @@ export function createDocuments(options: DocumentsOptions) {
           result.outcome === "failed" ? result.message : null,
           BigInt(PROCESSING_VERSION),
           status === "embedding" ? model.id : null,
+          result.contentHash,
+          result.size,
           at,
           job.documentId,
         ],
@@ -410,6 +519,9 @@ export function createDocuments(options: DocumentsOptions) {
       return status;
     });
   }
+
+  // Set below, once the library exists: works out whether an unreadable file is gone.
+  let checkFile = (_path: string) => {};
 
   const processor = createProcessor({
     onStart(job) {
@@ -419,21 +531,149 @@ export function createDocuments(options: DocumentsOptions) {
     },
     onResult(job, result) {
       const status = record(job, result);
-      if (status === undefined) {
-        void releaseFile(job.contentHash); // deleted while processing
+      if (status === undefined) return; // deleted, or queued again, while processing
+      if (result.outcome !== "file-unreadable") {
+        // Any vectors from an earlier processing went with the old Passages.
+        vectors.removeDocument(job.documentId);
+      } else if (find(job.documentId)?.path !== job.file) {
+        // The file moved while it was being read: read it where it is now.
+        announce(job.documentId);
+        process(job.documentId);
         return;
+      } else {
+        checkFile(job.file);
       }
-      // Any vectors from an earlier processing went with the old Passages.
-      vectors.removeDocument(job.documentId);
       announce(job.documentId);
       if (status === "embedding") embedding.enqueue(job.documentId);
       if (status === "waiting-for-model") model.ensure();
     },
   });
 
-  // Startup: tidy the folder, then pick up work a quit interrupted.
-  files.prepare((contentHash) => findByHash(contentHash) !== undefined);
-  void openCopies.tidy();
+  /**
+   * Queues a Document for processing, replacing a job not yet started. A
+   * paused Linked folder's Documents wait, queued, until it is resumed.
+   */
+  function process(id: string): void {
+    const row = find(id);
+    if (!row) return;
+    processor.cancel(id);
+    if (row.status !== "queued") {
+      setStatus(id, "queued");
+      announce(id);
+    }
+    if (!isPaused(id)) processor.enqueue(jobFor(row));
+  }
+
+  /** Soft-deletes Documents, their Passages, Tags and page text, at `at`. */
+  function removeFromIndex(ids: readonly string[], at: string): void {
+    if (ids.length === 0) return;
+    const list = JSON.stringify(ids);
+    db.transaction(() => {
+      db.run(
+        `UPDATE documents SET deleted_at = ?, updated_at = ?
+         WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
+        `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
+        `UPDATE document_tags SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
+        `UPDATE document_pages SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+    });
+    for (const id of ids) {
+      vectors.removeDocument(id);
+      processor.cancel(id);
+    }
+    options.emitRemoved([...ids]);
+  }
+
+  // Startup: Documents copied into the data folder by the old layout (before
+  // ADR-0010) are single files there, until the User links their originals.
+  // Each copy gets its kind's extension, so another app can open it.
+  for (const row of db.all<{ id: string; content_hash: string; kind: string }>(
+    "SELECT id, content_hash, kind FROM documents WHERE deleted_at IS NULL AND path IS NULL",
+  )) {
+    const bare = join(legacyFolder, row.content_hash);
+    const extension = DOCUMENT_EXTENSIONS[row.kind as DocumentKind]?.[0];
+    const named = extension ? `${bare}.${extension}` : bare;
+    try {
+      if (named !== bare && !existsSync(named) && existsSync(bare)) renameSync(bare, named);
+    } catch (error) {
+      reportError(error);
+    }
+    db.run("UPDATE documents SET path = ? WHERE id = ?", [
+      existsSync(named) ? named : bare,
+      row.id,
+    ]);
+  }
+
+  const library = createLibrary({
+    db,
+    now,
+    dataDir,
+    folders: options.folders,
+    watch: options.linkedFolders.watch,
+    retryMs: options.linkedFolders.retryMs,
+    detectDataless: options.linkedFolders.detectDataless,
+    hooks: {
+      process,
+      announce,
+      moved: (ids) => {
+        const moved = ids.flatMap((id) => {
+          const row = find(id);
+          return row ? [toDocument(row)] : [];
+        });
+        if (moved.length > 0) options.emitMoved(moved);
+      },
+      renamed: (id) => {
+        const row = find(id);
+        if (row) db.transaction(() => reindexName(id, row.name));
+      },
+      remove: removeFromIndex,
+      paused: (linkedFolderId, paused) => {
+        const rows = db.all<DocumentRow>(
+          `SELECT ${COLUMNS} FROM documents
+           WHERE linked_folder_id = ? AND deleted_at IS NULL
+             AND status IN ('queued', 'extracting', 'embedding')
+           ORDER BY created_at, rowid`,
+          [linkedFolderId],
+        );
+        for (const row of rows) {
+          if (paused) {
+            processor.cancel(row.id);
+            if (row.status === "extracting") {
+              setStatus(row.id, "queued"); // its result is dropped
+              announce(row.id);
+            }
+          } else if (row.status === "embedding") {
+            embedding.enqueue(row.id);
+          } else {
+            processor.enqueue(jobFor(row));
+          }
+        }
+      },
+      foldersChanged: options.foldersChanged,
+      linkedFoldersChanged: options.linkedFoldersChanged,
+      downloadStub: options.downloadStub,
+      reportError,
+    },
+  });
+  isPaused = (id) => library.isPaused(find(id)?.linked_folder_id ?? null);
+  progressed = (linkedFolderId) => library.progressed(linkedFolderId);
+  checkFile = (path) => {
+    library.check([path]).catch(reportError);
+  };
+
   // Documents processed by an older pipeline are processed again, through the usual statuses.
   db.run(
     `UPDATE documents SET status = 'queued', updated_at = ?
@@ -441,6 +681,7 @@ export function createDocuments(options: DocumentsOptions) {
        AND status IN ('ready', 'embedding', 'waiting-for-model')`,
     [now(), BigInt(PROCESSING_VERSION)],
   );
+  // Pick up work a quit interrupted, in the order it was queued (newest files first).
   const unfinished = db.all<DocumentRow>(
     `SELECT ${COLUMNS} FROM documents
      WHERE deleted_at IS NULL AND status IN ('queued', 'extracting')
@@ -448,8 +689,9 @@ export function createDocuments(options: DocumentsOptions) {
   );
   for (const row of unfinished) {
     if (row.status === "extracting") setStatus(row.id, "queued");
-    processor.enqueue(jobFor(row));
+    if (!isPaused(row.id)) processor.enqueue(jobFor(row));
   }
+
   /**
    * Puts every Document with Passages to search whose vectors aren't all from
    * the current model through embedding (again), or has it wait for the model.
@@ -498,7 +740,7 @@ export function createDocuments(options: DocumentsOptions) {
   });
 
   /** The live Documents a filter keeps, as SQL conditions on `documents`, with their parameters. */
-  const filterWhere = ({ folderIds, tagId, ids }: DocumentFilter) => {
+  const filterWhere = ({ folderIds, tagId, ids, linkedFolderId, searchable }: DocumentFilter) => {
     const conditions = ["deleted_at IS NULL"];
     const params: string[] = [];
     if (folderIds !== undefined) {
@@ -516,6 +758,12 @@ export function createDocuments(options: DocumentsOptions) {
       conditions.push("id IN (SELECT value FROM json_each(?))");
       params.push(JSON.stringify(ids));
     }
+    if (linkedFolderId === null) conditions.push("linked_folder_id IS NULL");
+    else if (linkedFolderId !== undefined) {
+      conditions.push("linked_folder_id = ?");
+      params.push(linkedFolderId);
+    }
+    if (searchable) conditions.push("file_status <> 'missing'");
     return { where: conditions.join(" AND "), params };
   };
 
@@ -530,68 +778,28 @@ export function createDocuments(options: DocumentsOptions) {
       .map(toDocument);
   };
 
-  /** A live Document, and the name a copy of its file gets (see ./copies). Throws NotFoundError otherwise. */
-  const copyName = (idInput: unknown): { document: Document; fileName: string } => {
-    const row = find(parseId(idInput));
-    if (!row) throw new NotFoundError("There is no such Document.");
-    const document = toDocument(row);
-    return { document, fileName: copyFileName(document) };
+  /** The ids of the live Documents the filter keeps, in `list`'s order. */
+  const ids = (filter: DocumentFilter = {}): string[] => {
+    const { where, params } = filterWhere(filter);
+    return db
+      .all<{ id: string }>(
+        `SELECT id FROM documents WHERE ${where} ORDER BY created_at DESC, rowid DESC`,
+        params,
+      )
+      .map((row) => row.id);
   };
 
   /**
-   * Copies a live Document's stored file to `destination`, an absolute path,
-   * replacing any file there. Deleted or unknown Documents, and a missing
-   * stored file, are refused (NotFoundError) before anything is written.
+   * The Documents a search looks at: those given that aren't missing, or,
+   * with none given, undefined (every Document) unless some are missing:
+   * then every Document that isn't.
    */
-  async function saveCopy(idInput: unknown, destination: unknown): Promise<void> {
-    const id = parseId(idInput);
-    if (typeof destination !== "string" || !isAbsolute(destination)) {
-      throw new InvalidInputError("A copy must be saved to an absolute file path.");
-    }
-    const row = find(id);
-    if (!row) throw new NotFoundError("There is no such Document.");
-    try {
-      await files.copy(row.content_hash, destination);
-    } catch (error) {
-      if (
-        (error as NodeJS.ErrnoException).code === "ENOENT" &&
-        !(await files.has(row.content_hash))
-      ) {
-        throw new NotFoundError("The Document's file is missing from the data folder.");
-      }
-      throw error;
-    }
-  }
-
-  /** Adds one file whose kind is known. Returns undefined if it can't be read. */
-  async function addFile(path: string, kind: DocumentKind): Promise<Document | undefined> {
-    let imported: Awaited<ReturnType<typeof files.import>>;
-    try {
-      imported = await files.import(path);
-    } catch {
-      return undefined;
-    }
-    const { contentHash, size } = imported;
-    const added = db.transaction(() => {
-      const existing = findByHash(contentHash);
-      if (existing) return { row: existing, isNew: false };
-      const id = randomUUID();
-      const at = now();
-      db.run(
-        `INSERT INTO documents (id, content_hash, name, kind, size, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`,
-        [id, contentHash, nameFromPath(path), kind, size, at, at],
-      );
-      const row = find(id);
-      if (!row) throw new Error("The new Document wasn't saved.");
-      return { row, isNew: true };
-    });
-    const document = toDocument(added.row);
-    if (added.isNew) {
-      emitStatus(document);
-      processor.enqueue(jobFor(added.row));
-    }
-    return document;
+  function searchScope(documentIds: readonly string[] | undefined): string[] | undefined {
+    if (documentIds) return ids({ ids: documentIds, searchable: true });
+    const anyMissing = db.get(
+      "SELECT 1 FROM documents WHERE deleted_at IS NULL AND file_status = 'missing'",
+    );
+    return anyMissing ? ids({ searchable: true }) : undefined;
   }
 
   /**
@@ -614,10 +822,10 @@ export function createDocuments(options: DocumentsOptions) {
     }
   }
 
-  /** SQL for the live Documents `d` with Passages to search: of all of them, or only of these. */
+  /** SQL for the live, not missing Documents `d` with Passages to search: of all of them, or only of these. */
   function searchable(documentIds: readonly string[] | undefined) {
     return {
-      where: `d.deleted_at IS NULL
+      where: `d.deleted_at IS NULL AND d.file_status <> 'missing'
         AND EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id AND p.deleted_at IS NULL)
         ${documentIds ? "AND d.id IN (SELECT value FROM json_each(?))" : ""}`,
       params: documentIds ? [JSON.stringify(documentIds)] : [],
@@ -639,11 +847,12 @@ export function createDocuments(options: DocumentsOptions) {
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
+    const scope = searchScope(documentIds);
     const vector = await queryVector(query, "hybrid");
     const listed = Math.max(limit, HYBRID_CANDIDATES);
-    const keyword = keywordSearch(db, query, listed, documentIds);
-    const similar = vector ? vectors.search(vector, listed, documentIds).map((hit) => hit.seq) : [];
-    const fused = fuseRankingScores([keyword, similar], limit);
+    const keyword = keywordSearch(db, query, listed, scope);
+    const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
+    const fused = fuseRankingScores(distinctPassages(db, [keyword, similar]), limit);
     const scores = new Map(fused.map((hit) => [hit.seq, hit.score]));
     return windowedPassagesBySeq(
       db,
@@ -651,16 +860,35 @@ export function createDocuments(options: DocumentsOptions) {
     ).map((passage) => ({ ...passage, score: scores.get(passage.seq) ?? 0 }));
   }
 
+  /** The live Document whose file is to be opened, checked against the disk first. */
+  async function openablePath(idInput: unknown): Promise<DocumentRow> {
+    const id = parseId(idInput);
+    const before = find(id);
+    if (!before) throw new NotFoundError("There is no such Document.");
+    // A file is looked at again when it is opened: it may have changed, moved or gone.
+    await library.check([before.path]);
+    const row = find(id);
+    if (!row) throw new NotFoundError("There is no such Document.");
+    if (row.file_status === "missing") throw new NotFoundError("The Document's file is missing.");
+    if (row.file_status === "unavailable") {
+      throw new NotFoundError("The Document's file can't be reached right now.");
+    }
+    return row;
+  }
+
   return {
+    /** Starts watching Linked folders, and reconciles the index with the disk. */
+    start: () => library.start(),
+
     /**
      * The document-search Tool (see ./searchTool): hybrid search, grouped by
      * Document and clustered by sliding window.
      */
-    searchTool(query: string, options?: SearchToolOptions): Promise<WindowedPassage[]> {
+    searchTool(query: string, toolOptions?: SearchToolOptions): Promise<WindowedPassage[]> {
       return searchDocumentsTool(
         { candidates, window: (documentId, window) => passagesInWindow(db, documentId, window) },
         query,
-        options,
+        toolOptions,
       );
     },
 
@@ -704,8 +932,9 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * A Passage and its Document, for a Citation. Deleted Passages are found
-     * too (processing a Document again replaces its Passages), and a deleted
-     * Document is reported as such. Null for an unknown Passage.
+     * too (a new version of the Document replaces its Passages), with the
+     * version they were built from, and a deleted Document is reported as
+     * such. Null for an unknown Passage.
      */
     citationSource(passageId: string): CitationSource | null {
       const row = db.get<{
@@ -720,7 +949,7 @@ export function createDocuments(options: DocumentsOptions) {
         deleted_at: string | null;
       }>(
         `SELECT p.id, p.text, p.page_from, p.page_to, p.document_id, d.name, d.kind,
-           d.content_hash, d.deleted_at
+           coalesce(p.content_hash, d.content_hash) AS content_hash, d.deleted_at
          FROM passages p JOIN documents d ON d.id = p.document_id
          WHERE p.id = ?`,
         [passageId],
@@ -740,51 +969,94 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * The stored text of a live Document's pages from `from` to `to`, in
-     * order, as its Passages were built from it. With both null, every row: the
-     * one "page" of a Document without pages. Empty if the Document was
-     * deleted, or hasn't been processed by this version yet.
+     * The stored text of one version of a live Document, pages `from` to
+     * `to`, in order, as its Passages were built from it. With both null,
+     * every page: the one "page" of a Document without pages. Empty if the
+     * Document was deleted, or that version's text is gone.
      */
-    pageTexts(documentId: string, from: number | null, to: number | null): PageText[] {
+    pageTexts(
+      documentId: string,
+      contentHash: string,
+      from: number | null,
+      to: number | null,
+    ): PageText[] {
       const range = from === null || to === null ? "" : "AND dp.page BETWEEN ? AND ?";
       const params = from === null || to === null ? [] : [BigInt(from), BigInt(to)];
       return db
         .all<{ page: number | null; text: string }>(
           `SELECT dp.page, dp.text FROM document_pages dp
            JOIN documents d ON d.id = dp.document_id
-           WHERE dp.document_id = ? AND dp.deleted_at IS NULL AND d.deleted_at IS NULL ${range}
+           WHERE dp.document_id = ? AND dp.content_hash = ? AND dp.deleted_at IS NULL
+             AND d.deleted_at IS NULL ${range}
            ORDER BY dp.page`,
-          [documentId, ...params],
+          [documentId, contentHash, ...params],
         )
         .map((row) => ({ page: row.page, text: row.text }));
     },
 
+    /** The current version of a live Document, or null if it was deleted. */
+    currentVersion(documentId: string): string | null {
+      return find(documentId)?.content_hash ?? null;
+    },
+
+    /**
+     * The live Passages of a Document's current version that cover pages
+     * `from` to `to` (any, for a Document without pages), in reading order.
+     */
+    passagesCovering(
+      documentId: string,
+      from: number | null,
+      to: number | null,
+    ): { id: string; text: string }[] {
+      const range = from === null || to === null ? "" : "AND p.page_from <= ? AND p.page_to >= ?";
+      const params = from === null || to === null ? [] : [BigInt(from), BigInt(to)];
+      return db.all<{ id: string; text: string }>(
+        `SELECT p.id, p.text FROM passages p JOIN documents d ON d.id = p.document_id
+         WHERE p.document_id = ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL
+           AND p.content_hash = d.content_hash ${range}
+         ORDER BY p.position`,
+        [documentId, ...params],
+      );
+    },
+
+    /** The text kept of a live Document's current version (see `CoreApi.readDocumentText`). */
+    readText(idInput: unknown): DocumentText {
+      const row = find(parseId(idInput));
+      if (!row) throw new NotFoundError("There is no such Document.");
+      const pages = db.all<{ page: number | null; text: string }>(
+        `SELECT page, text FROM document_pages
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL ORDER BY page`,
+        [row.id, row.content_hash],
+      );
+      return {
+        documentId: row.id,
+        contentHash: row.content_hash,
+        fileStatus: row.file_status as DocumentFileStatus,
+        pages: pages.map((page) => ({ page: page.page, text: page.text })),
+      };
+    },
+
     async add(input: unknown): Promise<AddDocumentsResult> {
       const paths = parsePaths(input);
+      const results = await library.addFiles(paths);
       const documents: Document[] = [];
       const skipped: SkippedFile[] = [];
-      // One at a time: keeps the order, and doesn't copy many large files at once.
-      for (const path of paths) {
-        const kind = kindOf(path);
-        const document = kind && (await addFile(path, kind));
-        if (document) documents.push(document);
-        else skipped.push({ path, reason: kind ? "unreadable" : "unsupported-type" });
-      }
+      results.forEach((result, at) => {
+        const row =
+          result === "unreadable" || result === "unsupported-type" ? undefined : find(result);
+        if (row) documents.push(toDocument(row));
+        else {
+          skipped.push({
+            path: paths[at] as string,
+            reason: result === "unsupported-type" ? "unsupported-type" : "unreadable",
+          });
+        }
+      });
       return { documents, skipped };
     },
 
     list,
-
-    /** The ids of the live Documents the filter keeps, in `list`'s order. */
-    ids(filter: DocumentFilter = {}): string[] {
-      const { where, params } = filterWhere(filter);
-      return db
-        .all<{ id: string }>(
-          `SELECT id FROM documents WHERE ${where} ORDER BY created_at DESC, rowid DESC`,
-          params,
-        )
-        .map((row) => row.id);
-    },
+    ids,
 
     /** A live Document. Throws NotFoundError for an unknown or deleted one. */
     get(idInput: unknown): Document {
@@ -794,50 +1066,16 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /** The live Documents among `ids`, in that order. */
-    getMany(ids: readonly string[]): Document[] {
-      return ids.flatMap((id) => {
+    getMany(documentIds: readonly string[]): Document[] {
+      return documentIds.flatMap((id) => {
         const row = find(id);
         return row ? [toDocument(row)] : [];
       });
     },
 
     /**
-     * Files a Document in a Folder, or unfiles it with null. The caller checks
-     * that the Folder exists. Returns the Document and whether it moved.
-     */
-    move(idInput: unknown, folderId: string | null): { document: Document; moved: boolean } {
-      const id = parseId(idInput);
-      return db.transaction(() => {
-        const row = find(id);
-        if (!row) throw new NotFoundError("There is no such Document.");
-        if (row.folder_id === folderId) return { document: toDocument(row), moved: false };
-        db.run("UPDATE documents SET folder_id = ?, updated_at = ? WHERE id = ?", [
-          folderId,
-          now(),
-          id,
-        ]);
-        const moved = find(id);
-        if (!moved) throw new NotFoundError("There is no such Document.");
-        return { document: toDocument(moved), moved: true };
-      });
-    },
-
-    /** Unfiles every Document filed in one of `folderIds`, at `at`. Returns them, unfiled. */
-    unfile(folderIds: readonly string[], at: string): Document[] {
-      return db.transaction(() => {
-        const filed = list({ folderIds });
-        db.run(
-          `UPDATE documents SET folder_id = NULL, updated_at = ?
-           WHERE deleted_at IS NULL AND folder_id IN (SELECT value FROM json_each(?))`,
-          [at, JSON.stringify(folderIds)],
-        );
-        return filed.map((document) => ({ ...document, folderId: null, updatedAt: at }));
-      });
-    },
-
-    /**
      * Renames a Document, and re-indexes its Passages' keywords, which include
-     * the name. Its vectors keep the name they were embedded with.
+     * the name. Its vectors keep the name they were embedded with. The file isn't touched.
      */
     rename(idInput: unknown, nameInput: unknown): Document {
       const id = parseId(idInput);
@@ -845,105 +1083,125 @@ export function createDocuments(options: DocumentsOptions) {
       if (!find(id)) throw new NotFoundError("There is no such Document.");
       db.transaction(() => {
         db.run("UPDATE documents SET name = ?, updated_at = ? WHERE id = ?", [name, now(), id]);
-        const nameKeywords = keywordText(name);
-        const passages = db.all<{ seq: number; text: string }>(
-          "SELECT seq, text FROM passages WHERE document_id = ? AND deleted_at IS NULL",
-          [id],
-        );
-        for (const { seq, text } of passages) {
-          db.run("DELETE FROM passages_fts WHERE rowid = ?", [BigInt(seq)]);
-          index(seq, indexedText(nameKeywords, keywordText(text)));
-        }
+        reindexName(id, name);
       });
       const row = find(id);
       if (!row) throw new NotFoundError("There is no such Document.");
       return toDocument(row);
     },
 
+    /**
+     * Removes a Document from the index. The User's file isn't touched; only a
+     * copy the old layout made in the data folder is removed with it.
+     */
     async delete(idInput: unknown): Promise<void> {
       const id = parseId(idInput);
       const row = find(id);
       if (!row) throw new NotFoundError("There is no such Document.");
-      const at = now();
-      db.transaction(() => {
-        db.run("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, id]);
-        db.run(
-          `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
-           WHERE document_id = ? AND deleted_at IS NULL`,
-          [at, at, id],
-        );
-        db.run(
-          `UPDATE document_tags SET deleted_at = ?, updated_at = ?
-           WHERE document_id = ? AND deleted_at IS NULL`,
-          [at, at, id],
-        );
-        removePages(id, at);
-      });
-      vectors.removeDocument(id);
-      processor.cancel(id);
-      await releaseFile(row.content_hash);
-    },
-
-    copyName,
-    saveCopy,
-
-    /**
-     * Copies a live Document's stored file into a new folder of its own in the
-     * temporary folder, named after the Document (see ./copies), to open in
-     * another app. Resolves with the copy's path. Refuses what `saveCopy` does.
-     */
-    async openableCopy(idInput: unknown): Promise<string> {
-      const { document, fileName } = copyName(idInput);
-      const folder = await openCopies.folder();
-      try {
-        await saveCopy(document.id, join(folder, fileName));
-      } catch (error) {
-        await rm(folder, { recursive: true, force: true });
-        throw error;
+      removeFromIndex([id], now());
+      if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
+        await rm(row.path, { force: true }).catch(reportError);
       }
-      return join(folder, fileName);
+      // Its Folder may hold nothing now.
+      library.documentRemoved(row.linked_folder_id);
     },
 
-    /** Opens a live Document's stored file. Deleted or unknown Documents, and missing files, are refused. */
+    /** Opens a live Document's file where it is. Missing and unreachable files are refused (NotFoundError). */
     async openFile(idInput: unknown): Promise<DocumentFile> {
-      const id = parseId(idInput);
-      const row = find(id);
-      if (!row) throw new NotFoundError("There is no such Document.");
-      let stream: ReadableStream<Uint8Array>;
+      const row = await openablePath(idInput);
       try {
-        stream = await files.open(row.content_hash);
+        const { stream, size } = await openFile(row.path);
+        return { document: toDocument(row), stream, size };
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-          throw new NotFoundError("The Document's file is missing from the data folder.");
-        }
-        throw error;
+        await library.check([row.path]);
+        throw new NotFoundError("The Document's file can't be opened.", { cause: error });
       }
-      return { document: toDocument(row), stream };
     },
 
-    async search(query: unknown, options: unknown): Promise<PassageSearchResult[]> {
-      if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
-      const { mode, limit, documentIds } = parseSearchOptions(options);
-      if (query.trim() === "") return [];
-      if (mode === "keyword")
-        return passagesBySeq(db, keywordSearch(db, query, limit, documentIds));
+    /** The path of a live Document's file, checked to be there, to open in another app. */
+    async filePath(idInput: unknown): Promise<string> {
+      return (await openablePath(idInput)).path;
+    },
 
+    async search(query: unknown, searchOptions: unknown): Promise<PassageSearchResult[]> {
+      if (typeof query !== "string") throw new InvalidInputError("The search query must be text.");
+      const { mode, limit, documentIds } = parseSearchOptions(searchOptions);
+      if (query.trim() === "") return [];
+      const scope = searchScope(documentIds);
+      // Copies of one file share Passages: ask for more, so the limit holds after they are merged.
+      const asked = Math.min(MAX_SEARCH_LIMIT, limit * 2);
+      if (mode === "keyword") {
+        const [keyword = []] = distinctPassages(db, [keywordSearch(db, query, asked, scope)]);
+        return passagesBySeq(db, keyword.slice(0, limit));
+      }
       const vector = await queryVector(query, mode);
       if (mode === "vector") {
-        const hits = vector ? vectors.search(vector, limit, documentIds) : [];
-        return passagesBySeq(
-          db,
-          hits.map((hit) => hit.seq),
-        );
+        const hits = vector ? vectors.search(vector, asked, scope) : [];
+        const [similar = []] = distinctPassages(db, [hits.map((hit) => hit.seq)]);
+        return passagesBySeq(db, similar.slice(0, limit));
       }
-      const keyword = keywordSearch(db, query, HYBRID_CANDIDATES, documentIds);
+      const keyword = keywordSearch(db, query, HYBRID_CANDIDATES, scope);
       const similar = vector
-        ? vectors.search(vector, HYBRID_CANDIDATES, documentIds).map((hit) => hit.seq)
+        ? vectors.search(vector, HYBRID_CANDIDATES, scope).map((hit) => hit.seq)
         : [];
-      return passagesBySeq(db, fuseRankings([keyword, similar], limit));
+      return passagesBySeq(db, fuseRankings(distinctPassages(db, [keyword, similar]), limit));
+    },
+
+    /** Linked folders (see ./library). */
+    linkedFolders: library,
+
+    /**
+     * Garbage-collects old versions' text: the pages (and replaced Passages)
+     * of each version that isn't a live Document's current one, unless
+     * `isCited` says a Citation quotes it. Returns how many versions went.
+     */
+    collectOldVersions(isCited: (documentId: string, contentHash: string) => boolean): number {
+      const versions = db.all<{ document_id: string; content_hash: string | null }>(
+        `SELECT DISTINCT dp.document_id, dp.content_hash FROM document_pages dp
+         JOIN documents d ON d.id = dp.document_id
+         WHERE d.deleted_at IS NULL AND dp.content_hash IS NOT d.content_hash
+         UNION
+         SELECT DISTINCT p.document_id, p.content_hash FROM passages p
+         JOIN documents d ON d.id = p.document_id
+         WHERE d.deleted_at IS NULL AND p.deleted_at IS NOT NULL
+           AND p.content_hash IS NOT d.content_hash`,
+      );
+      let collected = 0;
+      db.transaction(() => {
+        for (const { document_id: documentId, content_hash: contentHash } of versions) {
+          if (contentHash !== null && isCited(documentId, contentHash)) continue;
+          db.run("DELETE FROM document_pages WHERE document_id = ? AND content_hash IS ?", [
+            documentId,
+            contentHash,
+          ]);
+          db.run(
+            `DELETE FROM passages
+             WHERE document_id = ? AND content_hash IS ? AND deleted_at IS NOT NULL`,
+            [documentId, contentHash],
+          );
+          collected++;
+        }
+      });
+      return collected;
+    },
+
+    /** Whether any live Document has text of a version other than its current one. */
+    hasOldVersions(): boolean {
+      return (
+        db.get(
+          `SELECT 1 FROM document_pages dp JOIN documents d ON d.id = dp.document_id
+           WHERE d.deleted_at IS NULL AND dp.content_hash IS NOT d.content_hash
+           UNION ALL
+           SELECT 1 FROM passages p JOIN documents d ON d.id = p.document_id
+           WHERE d.deleted_at IS NULL AND p.deleted_at IS NOT NULL
+             AND p.content_hash IS NOT d.content_hash
+           LIMIT 1`,
+        ) !== undefined
+      );
     },
 
     close(): void {
+      library.close();
       embedding.close();
       processor.close();
     },

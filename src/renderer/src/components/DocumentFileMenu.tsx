@@ -7,10 +7,9 @@ import { MoreIcon } from "./icons";
 import { menuClass, menuItemClass, menuTitleClass, usePopoverMenu } from "./usePopoverMenu";
 
 /**
- * A Document's menu for its original file, whose stored copy is named by a
- * hash: "Open in default app" opens a temporary copy named after the
- * Document, and "Save a copy…" saves one where the User picks. The main
- * process does both, for live Documents only.
+ * A Document's menu for its file, where the User keeps it: "Open in default
+ * app" and "Show in folder". The main process does both, for live Documents
+ * whose file is there.
  */
 export function DocumentFileMenu({
   item,
@@ -61,11 +60,11 @@ export function DocumentFileMenu({
         <button
           type="button"
           role="menuitem"
-          data-testid="document-save-copy"
-          onClick={() => run(files.saveDocumentCopy)}
+          data-testid="document-show-in-folder"
+          onClick={() => run(files.showDocumentInFolder)}
           className={`${menuItemClass} pl-2`}
         >
-          {t("documents.copy.save")}
+          {t("documents.copy.showInFolder")}
         </button>
       </div>
     </>

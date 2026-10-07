@@ -1,12 +1,10 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
-  addDocuments,
   createDataFolder,
   dismissChatSetup,
-  documentIdOf,
   launchApp,
   removeDataFolder,
   useLocalChatModel,
@@ -25,31 +23,34 @@ test.afterEach(async () => {
 });
 
 test("typing @ in a Question limits its search to a Folder: the Answer cites only a Document in it", async () => {
-  // Both answer the Question; each is filed in its own Folder.
+  // Both answer the Question; each is in its own folder of a Linked folder, Notes.
+  const notes = join(await realpath(sources), "Notes");
+  await mkdir(join(notes, "Ocean"), { recursive: true });
+  await mkdir(join(notes, "Kitchen"));
   await writeFile(
-    join(sources, "Tide tables.txt"),
+    join(notes, "Ocean", "Tide tables.txt"),
     "Neap tides are the smallest of the month.\nSpring tides happen at new moon and at full moon.\n",
   );
   await writeFile(
-    join(sources, "Spring menu.txt"),
+    join(notes, "Kitchen", "Spring menu.txt"),
     "When do spring tides happen? Spring tides happen when the market sells mussels.\n",
   );
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await addDocuments(window, [join(sources, "Tide tables.txt"), join(sources, "Spring menu.txt")]);
-  const ids = {
-    tides: await documentIdOf(window, "Tide tables"),
-    menu: await documentIdOf(window, "Spring menu"),
-  };
-  const oceanId = await window.evaluate(async ({ tides, menu }) => {
+  await window.evaluate(async (path) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const ocean = await bridge.createFolder({ name: "Ocean" });
-    const kitchen = await bridge.createFolder({ name: "Kitchen" });
-    await bridge.moveDocument(tides, ocean.id);
-    await bridge.moveDocument(menu, kitchen.id);
-    return ocean.id;
-  }, ids);
+    await bridge.addLinkedFolder(path);
+  }, notes);
+  const items = window.getByTestId("document-list-item");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toHaveAttribute("data-status", "ready");
+  await expect(items.nth(1)).toHaveAttribute("data-status", "ready");
+  const oceanId = await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.listFolders()).find((folder) => folder.name === "Ocean")?.id;
+  });
+  if (!oceanId) throw new Error("No Ocean Folder.");
 
   await window.getByTestId("new-mind").click();
   const editor = window.getByTestId("mind-editor");
@@ -66,10 +67,11 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   await expect(picker.getByRole("group", { name: "Tags" })).toBeVisible();
   await expect(picker.getByRole("group", { name: "Documents" })).toBeVisible();
   const choices = picker.getByTestId("scope-choice");
-  await expect(choices.first()).toHaveText("Kitchen");
+  // The Linked folder's own Folder, then its folders, each with the path it is in.
+  await expect(choices.first()).toHaveText("Notes");
   await expect(choices.first()).toHaveAttribute("aria-selected", "true");
   await window.keyboard.press("ArrowDown");
-  await expect(choices.nth(1)).toHaveText("Ocean");
+  await expect(choices.nth(1)).toHaveText(/^Kitchen/);
   await expect(choices.nth(1)).toHaveAttribute("aria-selected", "true");
 
   // Typing filters; Enter adds the choice as a chip, and the "@" text goes.
@@ -99,11 +101,9 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
     /^Citation 1: Tide tables\. /,
   );
 
-  // Once the Folder is deleted, its chip shows it, struck through; regenerating searches nothing.
-  await window.evaluate(async (folderId) => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.deleteFolder(folderId);
-  }, oceanId);
+  // Once the folder is renamed on disk, its Folder is gone: its chip shows it, struck through,
+  // and regenerating searches nothing.
+  await rename(join(notes, "Ocean"), join(notes, "Sea"));
   await expect(chip).toHaveAttribute("data-deleted", "true");
   await expect(chip).toContainText("Deleted Folder");
   await expect(chip.locator("s")).toHaveText("Deleted Folder");

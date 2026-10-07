@@ -67,7 +67,9 @@ const files: FilesBridge = {
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),
   openDocumentExternally: (documentId) =>
     ipcRenderer.invoke(FILES_CHANNELS.openDocumentExternally, documentId),
-  saveDocumentCopy: (documentId) => ipcRenderer.invoke(FILES_CHANNELS.saveDocumentCopy, documentId),
+  showDocumentInFolder: (documentId) =>
+    ipcRenderer.invoke(FILES_CHANNELS.showDocumentInFolder, documentId),
+  pickLinkedFolder: () => ipcRenderer.invoke(FILES_CHANNELS.pickLinkedFolder),
   logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),
 };
 
