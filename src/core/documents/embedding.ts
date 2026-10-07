@@ -19,6 +19,8 @@ export interface EmbeddingQueueOptions {
   vectors: VectorIndex;
   /** Pushes a Document's current state as a "document.status" event. */
   announce(documentId: string): void;
+  /** A Document just became ready (e.g. for automatic tagging). Called before it is announced. */
+  onReady?: (documentId: string) => void;
   reportError?: (error: unknown) => void;
 }
 
@@ -117,6 +119,13 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       }
     }
     setStatus(id, "ready", "embedding");
+    if (statusOf(id)?.status === "ready") {
+      try {
+        options.onReady?.(id);
+      } catch (error) {
+        reportError(error); // the Document is ready all the same
+      }
+    }
     announce(id);
     return "done";
   }

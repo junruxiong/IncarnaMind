@@ -236,6 +236,62 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE documents ADD COLUMN embedding_model TEXT;
     `,
   },
+  {
+    version: 12,
+    description: "Tags, the Tags on each Document, and automatic tagging's state",
+    sql: `
+      -- Labels with a short description. preset is the key of the preset Tag a
+      -- row was created as on first run (e.g. 'paper'), NULL for the User's own;
+      -- it outlives edits, so a later sync can tell two devices' presets apart.
+      -- Names are unique among live Tags, ignoring case: the core checks it,
+      -- since a later sync may bring two.
+      CREATE TABLE tags (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        preset TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX tags_by_name ON tags (name COLLATE NOCASE) WHERE deleted_at IS NULL;
+
+      -- The Tags each Document carries: one live row per Document and Tag.
+      -- source is 'automatic' (automatic tagging applied it, and may take it
+      -- away again) or 'user' (the User added it). Taking a Tag off marks the
+      -- row deleted; when the User does, the row's source becomes 'user'. So a
+      -- Document and Tag with any 'user' row, live or deleted, are the User's:
+      -- automatic tagging never adds, keeps or removes that Tag there again.
+      -- confidence (0 to 1) and needs_review are set by taggers that give a
+      -- probability; the chat model doesn't. No foreign keys: a later sync may
+      -- deliver a link before its Document or Tag.
+      CREATE TABLE document_tags (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        tag_id TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('automatic', 'user')),
+        confidence REAL,
+        needs_review INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX document_tags_by_pair ON document_tags (document_id, tag_id)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX document_tags_by_tag ON document_tags (tag_id) WHERE deleted_at IS NULL;
+      CREATE INDEX document_tags_by_user ON document_tags (document_id, tag_id)
+        WHERE source = 'user';
+
+      -- Where automatic tagging is for each Document, separately from status
+      -- (a Document is searchable once ready, tagged or not): pending |
+      -- waiting-for-provider | tagging | tagged | failed, checked in code. A
+      -- failure keeps the provider's error kind and message. Documents from
+      -- before this migration start pending, so they get tagged too.
+      ALTER TABLE documents ADD COLUMN tagging_status TEXT NOT NULL DEFAULT 'pending';
+      ALTER TABLE documents ADD COLUMN tagging_error_kind TEXT;
+      ALTER TABLE documents ADD COLUMN tagging_error_message TEXT;
+    `,
+  },
 ];
 
 /**

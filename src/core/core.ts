@@ -24,6 +24,8 @@ import {
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { migrate, openDatabase } from "./storage";
+import { createTags } from "./tags";
+import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 
 export const DATABASE_FILE = "incarnamind.db";
 
@@ -76,6 +78,12 @@ export function createCore(adapters: CoreAdapters): Core {
   const settings = createSettings(db, now, adapters.systemLanguages);
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
+  const tags = createTags(db, now);
+  // First run: the preset Tags, in the interface language of the time.
+  tags.seedPresets(settings.get().language);
+  const tagsChanged = () => events.emit("tags.changed", tags.list());
+  /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
+  let documentReady = (_documentId: string) => {};
   const embeddingModel = createEmbeddingModel({
     definition: BUILT_IN_EMBEDDING_MODEL,
     source: adapters.embeddingModelSource,
@@ -91,6 +99,7 @@ export function createCore(adapters: CoreAdapters): Core {
       now,
       model: embeddingModel,
       emitStatus: (document) => events.emit("document.status", document),
+      onReady: (documentId) => documentReady(documentId),
     });
   } catch (error) {
     embeddingModel.close();
@@ -140,6 +149,32 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  // Automatic tagging: the default chat model, with its own data flow and consent.
+  consent.registry.register({
+    id: "tagging",
+    sends: TAGGING_FLOW_SENDS,
+    async services() {
+      const service = chat.defaultService();
+      return service ? [service] : [];
+    },
+  });
+  /** Pushes "documents.tagged" for those of these Documents that still exist. */
+  const announceTagged = (documentIds: readonly string[]) => {
+    const live = documents.getMany(documentIds);
+    if (live.length > 0) events.emit("documents.tagged", live);
+  };
+  const tagger = createTagger({
+    db,
+    now,
+    tags,
+    readiness: () => chat.readiness(undefined, "tagging"),
+    mightBeReady: () => chat.mightBeReady("tagging"),
+    prepareModel: () => chat.prepareModel(undefined, "tagging"),
+    announce: announceTagged,
+    reportError: (error) => console.error(error),
+  });
+  documentReady = (documentId) => tagger.documentReady(documentId);
+
   const settingsChanged = () => events.emit("settings.changed", settings.get());
   const readinessChanged = async () => {
     try {
@@ -149,6 +184,8 @@ export function createCore(adapters: CoreAdapters): Core {
       // Reading the keychain is async, so the core may have closed meanwhile: nobody is listening.
       if (!lifetime.signal.aborted) throw error;
     }
+    // Documents waiting for a chat model may be able to go on now.
+    if (!lifetime.signal.aborted) tagger.resume();
   };
   chatGptChanged = () => {
     const report = async () => {
@@ -161,6 +198,9 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+
+  // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
+  tagger.start();
 
   const ollamaUrl = (input: unknown) => {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
@@ -213,10 +253,12 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addDocuments: (paths) => documents.add(paths),
     listDocuments: async (options) => {
-      const { folderId, includeSubfolders } = parseListOptions(options);
-      if (folderId === undefined) return documents.list();
-      const folder = folders.get(folderId);
-      return documents.list(includeSubfolders ? folders.subtree(folder.id) : [folder.id]);
+      const { folderId, includeSubfolders, tagId } = parseListOptions(options);
+      const folder = folderId === undefined ? undefined : folders.get(folderId);
+      return documents.list({
+        folderIds: folder && (includeSubfolders ? folders.subtree(folder.id) : [folder.id]),
+        tagId: tagId === undefined ? undefined : tags.get(tagId).id,
+      });
     },
     renameDocument: async (id, name) => documents.rename(id, name),
     deleteDocument: (id) => documents.delete(id),
@@ -328,6 +370,46 @@ export function createCore(adapters: CoreAdapters): Core {
       foldersChanged();
       if (unfiled.length > 0) events.emit("documents.moved", unfiled);
     },
+
+    listTags: async () => tags.list(),
+    createTag: async (input) => {
+      const tag = tags.create(input);
+      tagsChanged();
+      return tag;
+    },
+    updateTag: async (tagId, patch) => {
+      const tag = tags.update(tagId, patch);
+      tagsChanged();
+      return tag;
+    },
+    deleteTag: async (tagId) => {
+      const documentIds = tags.delete(tagId, now());
+      // Tags first, so a listener filtering by the deleted Tag hears it's gone before it refreshes.
+      tagsChanged();
+      announceTagged(documentIds);
+    },
+    addDocumentTag: async (documentId, tagId) => {
+      const { document, changed } = db.transaction(() => {
+        const document = documents.get(documentId);
+        return { document, changed: tags.addToDocument(document.id, tagId) };
+      });
+      if (!changed) return document;
+      const updated = documents.get(document.id);
+      events.emit("documents.tagged", [updated]);
+      return updated;
+    },
+    removeDocumentTag: async (documentId, tagId) => {
+      const { document, changed } = db.transaction(() => {
+        const document = documents.get(documentId);
+        return { document, changed: tags.removeFromDocument(document.id, tagId) };
+      });
+      if (!changed) return document;
+      const updated = documents.get(document.id);
+      events.emit("documents.tagged", [updated]);
+      return updated;
+    },
+    retagDocuments: async (documentIds) => tagger.retag(documentIds),
+
     openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
@@ -339,6 +421,7 @@ export function createCore(adapters: CoreAdapters): Core {
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped".
       answers.stopAll();
+      tagger.close();
       consent.close();
       documents.close();
       embeddingModel.close();

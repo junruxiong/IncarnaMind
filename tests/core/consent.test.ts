@@ -86,6 +86,12 @@ describe("Data-flow consent", () => {
         consent: "accepted",
         decidedAt: expect.any(String),
       },
+      // Automatic tagging also goes to the default model's service, and asks for itself.
+      {
+        flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
+        consent: "not-asked",
+        decidedAt: null,
+      },
     ]);
   });
 
@@ -162,6 +168,14 @@ describe("Data-flow consent", () => {
         }),
         consent: "declined",
       }),
+      // Tagging goes to the default model's service only: Anthropic, saved last.
+      expect.objectContaining({
+        flow: expect.objectContaining({
+          id: "tagging",
+          service: { id: "https://api.anthropic.com", name: "Anthropic" },
+        }),
+        consent: "not-asked",
+      }),
     ]);
   });
 
@@ -177,7 +191,12 @@ describe("Data-flow consent", () => {
 
     expect(await readinessChanged).toMatchObject({ ready: true, consent: "needed" });
     expect(await core.listDataFlows()).toEqual([
-      expect.objectContaining({ consent: "not-asked", decidedAt: null }),
+      expect.objectContaining({
+        flow: expect.objectContaining({ id: "chat" }),
+        consent: "not-asked",
+        decidedAt: null,
+      }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
     ]);
     const second = await testAndWaitForConsent(core);
     expect(models.model.doGenerateCalls).toHaveLength(1);
@@ -235,7 +254,10 @@ describe("Data-flow consent", () => {
 
     await core.respondToConsent(second.request.requestId, true);
     expect(await second.result).toEqual({ ok: true });
-    expect(await core.listDataFlows()).toEqual([expect.objectContaining({ consent: "accepted" })]);
+    expect(await core.listDataFlows()).toEqual([
+      expect.objectContaining({ consent: "accepted" }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
+    ]);
   });
 
   test("requests made while a dialog is open wait for the same answer", async () => {
