@@ -88,3 +88,70 @@ export function findQuoteInPieces(
   });
   return covered;
 }
+
+/** Part of a quote's match inside one piece of one page. */
+export interface PagePieceRange extends PieceRange {
+  /** Index of the page among those given. */
+  page: number;
+}
+
+/**
+ * Finds `quote` in pages of pieces (e.g. a PDF's text runs, page by page) and
+ * returns the part of each piece it covers, or null if it isn't there.
+ *
+ * A quote that runs across a page break is also found when lines at the
+ * bottom of one page and the top of the next come between its halves:
+ * running headers, footers and page numbers, which Passages and the Citation
+ * check leave out. Up to `edgeLines` lines on each side of the breaks are
+ * tried without, fewest first.
+ */
+export function findQuoteInPages(
+  pages: readonly (readonly TextPiece[])[],
+  quote: string,
+  edgeLines = 4,
+): PagePieceRange[] | null {
+  // The line each piece is on, counted from the top and from the bottom of its page.
+  const lines = pages.map((pieces) => {
+    const fromTop: number[] = [];
+    let line = 0;
+    for (const piece of pieces) {
+      fromTop.push(line);
+      if (piece.breakAfter) line++;
+    }
+    const count = pieces.at(-1)?.breakAfter ? line : line + 1;
+    return { fromTop, count };
+  });
+  const tries: [number, number][] = [];
+  for (let total = 0; total <= edgeLines * 2; total++) {
+    for (let bottom = 0; bottom <= Math.min(total, edgeLines); bottom++) {
+      const top = total - bottom;
+      if (top <= edgeLines) tries.push([bottom, top]);
+    }
+  }
+  for (const [bottom, top] of pages.length > 1 ? tries : [[0, 0] as [number, number]]) {
+    const kept: TextPiece[] = [];
+    const origin: { page: number; piece: number }[] = [];
+    pages.forEach((pieces, page) => {
+      const { fromTop, count } = lines[page] as { fromTop: number[]; count: number };
+      pieces.forEach((piece, index) => {
+        const line = fromTop[index] as number;
+        // Lines at a page break: the bottom of every page but the last, the top of every page but the first.
+        if (page < pages.length - 1 && line >= count - bottom) return;
+        if (page > 0 && line < top) return;
+        kept.push(piece);
+        origin.push({ page, piece: index });
+      });
+      const last = kept.at(-1);
+      if (last && origin.at(-1)?.page === page)
+        kept[kept.length - 1] = { ...last, breakAfter: true };
+    });
+    const found = findQuoteInPieces(kept, quote);
+    if (found) {
+      return found.map((part) => {
+        const { page, piece } = origin[part.piece] as { page: number; piece: number };
+        return { page, piece, start: part.start, end: part.end };
+      });
+    }
+  }
+  return null;
+}

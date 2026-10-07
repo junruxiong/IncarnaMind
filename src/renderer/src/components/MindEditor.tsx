@@ -9,6 +9,7 @@ import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
+import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { FormatMenu } from "../editor/FormatMenu";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
@@ -111,6 +112,7 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
           codeBlockView: ReactNodeViewRenderer(CodeBlockView),
           questionView: ReactNodeViewRenderer(QuestionView),
           answerView: ReactNodeViewRenderer(AnswerView),
+          citationView: ReactNodeViewRenderer(CitationView, { as: "span" }),
         }),
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({

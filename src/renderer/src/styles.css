@@ -279,6 +279,57 @@
     .answer-error {
       @apply my-1 rounded-[6px] bg-red-50 px-3 py-2 text-sm text-red-900;
     }
+    .answer-info {
+      @apply my-1 rounded-[6px] bg-gray-50 px-3 py-1.5 text-custom-xs text-gray-600;
+    }
+
+    /* The searches an Answer ran: one muted line, which opens to list them. */
+    .answer-tools {
+      @apply -mt-0.5 mb-1 text-custom-xs text-gray-400 select-none;
+    }
+    .answer-tools-summary {
+      @apply flex items-center gap-1 rounded-[6px] px-1 py-0.5 -ml-1 hover:bg-gray-50 hover:text-gray-600;
+    }
+    .answer-tools-list {
+      @apply mt-0.5 mb-1 ml-5 list-none space-y-0.5 text-gray-500;
+    }
+
+    /* A Citation: a small badge in the text. Icon, colour and words all say its state. */
+    .citation {
+      @apply inline;
+    }
+    .citation-chip {
+      @apply mx-0.5 inline-flex max-w-[16em] items-center gap-0.5 rounded-full border px-1.5 align-[0.1em] text-[0.72em] leading-[1.5] font-medium whitespace-nowrap select-none;
+
+      > * {
+        pointer-events: none;
+      }
+    }
+    .citation-chip-icon {
+      @apply size-[1.1em] shrink-0;
+    }
+    .citation-chip-text {
+      @apply truncate;
+    }
+    .citation-chip--found {
+      @apply border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100;
+    }
+    .citation-chip--not-found {
+      @apply border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100;
+    }
+    .citation-chip--cant-check {
+      @apply border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100;
+    }
+    .citation-chip--checking {
+      @apply border-sky-200 bg-sky-50 text-sky-700;
+
+      .citation-chip-icon {
+        @apply animate-pulse;
+      }
+    }
+    .ProseMirror-selectednode > .citation-chip {
+      @apply outline-2 outline-sky-400;
+    }
 
     /* The placeholder of an empty Mind. */
     p.is-editor-empty:first-child::before {
@@ -331,6 +382,47 @@
     background: transparent;
     color: inherit;
     visibility: hidden;
+  }
+
+  /* A Citation's card: its badge in words, where it points, the quote, and what to do next. */
+  .citation-card {
+    @apply flex w-[320px] max-w-[calc(100vw-16px)] flex-col gap-1.5 rounded-[9px] bg-white p-3 text-sm text-gray-700 shadow-custom-focus outline-1 outline-gray-200;
+  }
+  .citation-badge {
+    @apply flex items-center gap-1.5 font-medium;
+  }
+  .citation-badge--found {
+    @apply text-emerald-700;
+  }
+  .citation-badge--not-found {
+    @apply text-amber-800;
+  }
+  .citation-badge--cant-check,
+  .citation-badge--checking {
+    @apply text-gray-600;
+  }
+  .citation-card-reason {
+    @apply text-custom-xs text-gray-600;
+  }
+  .citation-card-source {
+    @apply truncate text-custom-xs text-gray-500;
+  }
+  .citation-card-quote {
+    figcaption {
+      @apply text-[11px] text-gray-400;
+    }
+    blockquote {
+      @apply mt-0.5 max-h-40 overflow-y-auto border-l-2 border-gray-200 pl-2.5 break-words whitespace-pre-wrap text-gray-800;
+    }
+  }
+  .citation-card-meaning {
+    @apply text-[11px] text-gray-400;
+  }
+  .citation-card-actions {
+    @apply flex flex-wrap gap-1.5 empty:hidden;
+  }
+  .citation-card-action {
+    @apply rounded-[6px] border border-gray-200 px-2 py-0.5 text-custom-xs text-gray-700 hover:bg-gray-50;
   }
 
   /* The slash menu and the Block menu, in the old slash menu's style. */
