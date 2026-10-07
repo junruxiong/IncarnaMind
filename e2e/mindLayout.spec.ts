@@ -253,7 +253,12 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
   await expect(answer.locator(".answer-label")).toBeVisible();
   expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
-  expectNear((await box(texts.answer)).x, (await textColumn(editor)).x, 1, "narrow: the Answer's edge");
+  expectNear(
+    (await box(texts.answer)).x,
+    (await textColumn(editor)).x,
+    1,
+    "narrow: the Answer's edge",
+  );
   await screenshot(window, "mind-narrow.png");
   await setViewer(window, false);
   await expect(window.getByTestId("margin-checks")).toBeVisible();
