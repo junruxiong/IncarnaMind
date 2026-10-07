@@ -472,6 +472,11 @@ export function createConnectorAuth(options: ConnectorAuthOptions) {
       };
     },
 
+    /** The authorization server the server named, once discovered; null before. */
+    authorizationServer(): string | null {
+      return discovery?.authorizationServerUrl ?? null;
+    },
+
     /** The port the last sign-in used: trying it first keeps a registration's redirect URI valid. */
     preferredPort(): number {
       if (!client.redirectUri) return 0;

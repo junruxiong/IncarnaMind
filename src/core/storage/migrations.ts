@@ -368,6 +368,64 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX skills_by_name ON skills (name) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 17,
+    description: "The size of each Document's vectors, beside their embedding model (#32)",
+    sql: `
+      -- With a choice of embedding providers (#32), documents.embedding_model
+      -- names the provider and server as well as the model (the built-in
+      -- model keeps its id), and this records how many float32s each of its
+      -- Passages' vectors has: set with the first vector. Search compares a
+      -- query only with vectors of the same model and size, so vectors from
+      -- different models are never mixed. Every vector so far is the built-in
+      -- model's, of 384.
+      ALTER TABLE documents ADD COLUMN embedding_dimensions INTEGER;
+      UPDATE documents SET embedding_dimensions = 384
+        WHERE embedding_model = 'multilingual-e5-small-int8';
+    `,
+  },
+  {
+    version: 19,
+    description: "Built-in Skills (#42)",
+    sql: `
+      -- Skills that ship with the app. built_in is 1 for one the core
+      -- installed from the app's copy at startup, 0 for one the User imported
+      -- or duplicated. built_in_digest is the SHA-256 of the app's files it was
+      -- installed from: a start with other files (a newer version of the app)
+      -- updates it in place, keeping its id and whether it's on. Removing one
+      -- marks the row deleted, like any Skill; a deleted built-in row of a name
+      -- is how later starts know the User removed it, so it isn't installed again.
+      ALTER TABLE skills ADD COLUMN built_in INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE skills ADD COLUMN built_in_digest TEXT;
+    `,
+  },
+  {
+    version: 20,
+    description: "Approval policies (#38)",
+    sql: `
+      -- What the User chose about asking before something runs, replacing the
+      -- default. subject_kind: 'tool' (one Tool of one Connector) or
+      -- 'skill-script' (the scripts of one Skill, #41), checked in code.
+      -- subject_id: for 'tool', the Connector's id and the Tool's name as the
+      -- Connector gives it, joined by ':' (a UUID has none); for
+      -- 'skill-script', the Skill's id. policy: 'always' (always allow, or
+      -- always run) or 'ask' (ask every time, even for a Tool its Connector
+      -- says only reads), checked in code. One live row per subject: changing
+      -- the policy updates it, revoking it marks it deleted. No foreign keys: a
+      -- later sync may deliver a policy before its Connector or Skill.
+      CREATE TABLE approval_policies (
+        id TEXT PRIMARY KEY NOT NULL,
+        subject_kind TEXT NOT NULL,
+        subject_id TEXT NOT NULL,
+        policy TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX approval_policies_by_subject ON approval_policies (subject_kind, subject_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

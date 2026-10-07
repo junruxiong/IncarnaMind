@@ -27,7 +27,11 @@ The retrieval prototype (issue #21, `prototype/retrieval/` on the `prototype/ret
 
 ## Consequences
 
-- The success bar in the v1 design (16 of 20, and 8 of 10 per language, with the built-in model) is met by hybrid search at 500/200 (17 of 20: 8 English, 9 Chinese) but not by vector search alone (15 of 20, with 5 English). The search Tool must run both.
+- The success bar in the v1 design (16 of 20, and 8 of 10 per language, with the built-in model) is met in the prototype by hybrid search at 500/200 (17 of 20: 8 English, 9 Chinese) but not by vector search alone (15 of 20, with 5 English). The search Tool must run both.
+- The Passage sizes hold only with the prototype's way of building Passages. Whole lines fill a Passage up to the size, the next Passage starts with a tail of whole lines, and each line counts in whole tokens. The core first kept #25's builder at these sizes, which prefers to end at sentence and paragraph breaks. Its Passages were shorter, and hybrid search found 15 of 20 (6 English). Built the prototype's way, the app finds 16 of 20 (7 English, 9 Chinese; #31, `eval/README.md`). The one English Question still missed, en-05, was the prototype's fifth-ranked hit. Deliberate differences from the prototype tip it out:
+  - onnxruntime-node 1.23.2;
+  - the end-of-text token kept when a text is cut at 512 tokens;
+  - the page text, without #30's headers and footers or NUL characters, and with CJK line breaks joined.
 - Chinese questions over English Documents are weak with the built-in model (2 of 5 with vector search, 1 of 5 with hybrid search). The model favours Documents in the question's language.
 - The embedding utility process embeds Passages one at a time. Batches gave no speed-up, raised peak memory from 0.9 GB to 1.9 GB at a batch of 16, and made int8 embeddings depend on the other texts in the batch: cosine similarity with the unbatched embedding dropped as low as 0.991.
 - The search Tool keeps the vectors for a Search scope in memory in the process that runs search, and must keep them in step as Documents are added and deleted.

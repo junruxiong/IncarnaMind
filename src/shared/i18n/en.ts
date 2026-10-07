@@ -102,6 +102,72 @@ export const en = {
   "embedding.model.failure.storage": "it couldn't be saved to the data folder",
   "embedding.model.retry": "Try again",
 
+  "embeddingProviders.settings.title": "Document search",
+  "embeddingProviders.settings.body":
+    "Documents are searched by their words and by their meaning. Meaning comes from an embedding model: the built-in one runs on this computer. A cloud model may find more, but it receives the text of every Document.",
+  "embeddingProviders.settings.current": "Embedding model: ",
+  "embeddingProviders.settings.builtIn": "Built-in ({model})",
+  "embeddingProviders.settings.sendsTo":
+    "The text of your Documents, and your searches, are sent to {service}.",
+  "embeddingProviders.settings.local": "Nothing leaves this computer.",
+  "embeddingProviders.settings.change": "Change model",
+  "embeddingProviders.settings.error":
+    "Search can't use this model, so Documents wait for it. {reason}",
+  "embeddingProviders.settings.retry": "Try again",
+  "embeddingProviders.kind.built-in": "Built-in model",
+  "embeddingProviders.kind.openai": "OpenAI",
+  "embeddingProviders.kind.google": "Google",
+  "embeddingProviders.kind.openai-compatible": "OpenAI-compatible server",
+  "embeddingProviders.kind.ollama": "Ollama",
+  "embeddingProviders.form.label": "Embedding model",
+  "embeddingProviders.form.localOnly":
+    "Local mode is on, so only models on this computer can be chosen.",
+  "embeddingProviders.form.builtInHint":
+    "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
+  "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
+  "embeddingProviders.form.ollamaHint":
+    "Leave it empty for Ollama on this computer. Pull the model in Ollama first, e.g. ollama pull bge-m3.",
+  "embeddingProviders.form.model": "Embedding model name",
+  "embeddingProviders.form.switch": "Switch…",
+  "embeddingProviders.test.ok": "Connected: the model made a vector of {dimensions} numbers.",
+  "embeddingProviders.confirm.title": "Switch to {provider}?",
+  "embeddingProviders.confirm.reprocess":
+    "Every Document ({count} in all) will be processed again with the new model, which can take a while. Until each one is done, search finds its Passages by their words only.",
+  "embeddingProviders.confirm.cloud":
+    "{service} will receive the full text of all your Documents, and every search you make.",
+  "embeddingProviders.confirm.local": "Everything stays on this computer.",
+  "embeddingProviders.confirm.cancel": "Cancel",
+  "embeddingProviders.confirm.switch": "Switch and process again",
+  "embeddingProviders.localOnly.label": "Keep everything on this computer",
+  "embeddingProviders.localOnly.body":
+    "Document search uses the built-in model or Ollama, and search results aren't sent for reranking. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+  "embeddingProviders.localOnly.cloudChat":
+    "Your chat model still sends Questions to {service}: choose a local model under Chat model to keep them here too.",
+  "embeddingProviders.rebuild.title":
+    "Rebuilding search for the new model: {done} of {total} Documents",
+  "embeddingProviders.rebuild.localMode":
+    "To keep everything on this computer, search now uses the built-in model.",
+  "embeddingProviders.rebuild.note":
+    "Search finds Passages by their words until each Document is done.",
+  "embeddingProviders.error.notice": "Search can't use {provider}. {reason}",
+
+  "rerank.settings.title": "Reranking",
+  "rerank.settings.body":
+    "With a Cohere or Voyage AI key, document search reorders its best matches with a reranking model, so the most relevant Passages come first. Without a key, nothing changes.",
+  "rerank.settings.inUse": "{service} reranks search results ({model}).",
+  "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
+  "rerank.settings.paused": "Paused: local mode keeps search results on this computer.",
+  "rerank.settings.keyMissing":
+    "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
+  "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.change": "Change",
+  "rerank.settings.remove": "Stop reranking",
+  "rerank.kind.cohere": "Cohere",
+  "rerank.kind.voyage": "Voyage AI",
+  "rerank.form.label": "Reranking service",
+  "rerank.form.model": "Model (optional)",
+  "rerank.form.save": "Use for reranking",
+
   "folders.label": "Folders",
   "folders.all": "All Documents",
   "folders.new": "New Folder",
@@ -328,18 +394,64 @@ export const en = {
   "consent.data.tags": "The names and descriptions of your Tags",
   "consent.data.document-excerpts":
     "The name and type of each Document being tagged, and a short excerpt from its beginning",
+  "consent.flow.embeddings": "Document search",
+  "consent.flow.embeddings.purpose": "search your Documents by their meaning",
+  "consent.data.document-text": "The full text of every Document, as it is processed",
+  "consent.data.queries": "Your searches: each Question's words, or what an Answer searches for",
+  "consent.flow.rerank": "Reranking",
+  "consent.flow.rerank.purpose": "put the best search results first",
   "consent.flow.connectors": "Connectors",
   "consent.flow.connectors.purpose": "use its Tools in your Answers",
   "consent.data.tool-arguments":
     "What an Answer asks its Tools: the arguments of each Tool call, such as what to look up",
 
   "consent.settings.title": "Data sent to other services",
-  "consent.settings.empty": "Nothing is sent to other services.",
   "consent.settings.status.accepted": "Allowed",
   "consent.settings.status.declined": "Not allowed",
   "consent.settings.status.not-asked": "Not asked yet",
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
+
+  "privacy.tabs.label": "Settings pages",
+  "privacy.tabs.general": "General",
+  "privacy.tabs.privacy": "Privacy",
+  "privacy.intro":
+    "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
+  "privacy.flows.intro":
+    "These send your content to a service outside this computer. Nothing is sent on one until you allow it.",
+  "privacy.flows.service": "To {service}",
+  "privacy.flows.sends": "Sends:",
+  "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
+  "privacy.flows.decided": "{status} on {date}",
+  "privacy.flows.allow": "Allow",
+  "privacy.traffic.title": "Other network traffic",
+  "privacy.traffic.intro":
+    "IncarnaMind also connects to these services. They receive nothing of yours: no Documents, Minds, Questions or Answers.",
+  "privacy.traffic.on": "On",
+  "privacy.traffic.off": "Off",
+  "privacy.traffic.update-check": "Update checks",
+  "privacy.traffic.update-check.description":
+    "When IncarnaMind starts, it asks GitHub Releases whether a new version is out. The request says which version you have and your operating system.",
+  "privacy.traffic.update-check.toggle": "Check for updates automatically",
+  "privacy.traffic.embedding-model": "Search model download",
+  "privacy.traffic.embedding-model.description":
+    "The built-in search model is downloaded once, the first time a Document needs it.",
+  "privacy.traffic.ollama-pull": "Local model downloads",
+  "privacy.traffic.ollama-pull.description":
+    "When you choose a local model, Ollama downloads it from its library.",
+  "privacy.traffic.chatgpt-sign-in": "ChatGPT sign-in",
+  "privacy.traffic.chatgpt-sign-in.description":
+    "The experimental ChatGPT plan signs you in with OpenAI and renews the sign-in. Questions asked with it are the chat flow above.",
+  "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
+  "privacy.traffic.remote-connectors.description":
+    "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
+  "privacy.skills.title": "Skill scripts",
+  "privacy.skills.body":
+    "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does.",
+  "privacy.crashReports.title": "Crash reports",
+  "privacy.crashReports.toggle": "Send crash reports",
+  "privacy.crashReports.body":
+    "Off unless you turn it on. When IncarnaMind crashes or hits an error, it sends a report to its developers through Sentry: the error, where in IncarnaMind's code it happened, the app version and your operating system. File paths, your Documents' text, your Minds, Questions and Answers are removed first, and no IP address is stored with it.",
 
   "question.slash": "Question",
   "question.placeholder": "Ask a Question… (type @ to choose what it searches)",
@@ -447,6 +559,13 @@ export const en = {
   "skills.settings.license": "Licence: {license}",
   "skills.settings.scripts.one": "1 script, which can't run yet",
   "skills.settings.scripts": "{count} scripts, which can't run yet",
+  "skills.settings.builtIn": "Built-in",
+  "skills.settings.builtIn.hint":
+    "Comes with IncarnaMind and is updated with it. To change it, duplicate it as your own.",
+  "skills.settings.duplicate": "Duplicate as my own",
+  "skills.settings.duplicateLabel": "Duplicate {name} as my own",
+  "skills.settings.restoreBuiltIns": "Restore built-in Skills",
+  "skills.settings.restoreBuiltIns.hint": "Removed: {names}",
   "skills.import.folder": "Import a folder…",
   "skills.import.zip": "Import a zip…",
   "skills.import.pickFolder": "Choose a Skill folder",
@@ -474,6 +593,8 @@ export const en = {
   "skills.error.too-large":
     "The Skill is too large: its files can add up to {size} at most, and SKILL.md to {instructions}.",
   "skills.error.too-many-files": "The Skill has too many files: {count} at most.",
+  "skills.error.built-in-name":
+    "A built-in Skill already has this name, and built-in Skills can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill as your own.",
   "skills.error.details": "Details",
   "skills.size.kb": "{size} KB",
   "skills.size.mb": "{size} MB",
@@ -547,7 +668,7 @@ export const en = {
 
   "connectors.settings.title": "Connectors",
   "connectors.settings.body":
-    "Connectors let Answers look things up in your other tools. Add an MCP server that runs on this computer or a remote one by its URL, or import the ones you set up in Claude Desktop or Cursor.",
+    "Connectors let Answers look things up in your other tools, and make changes there once you approve them. Add an MCP server that runs on this computer or a remote one by its URL, or import the ones you set up in Claude Desktop or Cursor.",
   "connectors.settings.empty": "No Connectors yet.",
   "connectors.settings.add": "Add Connector…",
   "connectors.settings.import": "Import from Claude Desktop or Cursor…",
@@ -571,10 +692,10 @@ export const en = {
   "connectors.tools.count": "{count} Tools",
   "connectors.tools.count.one": "1 Tool",
   "connectors.tools.none": "No Tools",
-  "connectors.tools.readOnly": "read-only",
-  "connectors.tools.changes": "may change things, not used yet",
+  "connectors.tools.readOnly": "claims to be read-only",
+  "connectors.tools.changes": "may change things",
   "connectors.tools.note":
-    "Answers use only the Tools a Connector says are read-only. That is the Connector's claim: IncarnaMind can't check it.",
+    "A Connector says which of its Tools only read; IncarnaMind can't check that. Those run without asking, and the others ask before each call. Change either here.",
   "connectors.form.name": "Name",
   "connectors.form.command": "Command",
   "connectors.form.commandHint":
@@ -648,8 +769,44 @@ export const en = {
   "remoteConnectors.error.unreachable":
     "Its server can't be reached. Check the URL and your internet connection.",
   "remoteConnectors.consent.note": "The Tool's arguments go to this server over the network.",
+  "remoteConnectors.answer.signInRequired":
+    "Not used: {connector} needs you to sign in again, in Settings → Connectors",
   "remoteConnectors.page.success.title": "Signed in to {name}",
   "remoteConnectors.page.success.body": "You can close this tab and go back to IncarnaMind.",
   "remoteConnectors.page.failure.title": "Signing in to {name} didn't work",
   "remoteConnectors.page.failure.body": "Close this tab and try again in IncarnaMind.",
+
+  "approvals.answer.waiting": "Waiting for your approval",
+  "approvals.card.title": "{connector} wants to run {tool}",
+  "approvals.card.changes":
+    "This Tool may change something in {connector}. Nothing is sent until you choose.",
+  "approvals.card.readOnly":
+    "{connector} says this Tool only reads. You chose to approve it every time.",
+  "approvals.card.arguments": "It would send:",
+  "approvals.card.noArguments": "No arguments.",
+  "approvals.card.allowOnce": "Allow once",
+  "approvals.card.alwaysAllow": "Always allow",
+  "approvals.card.alwaysAllowHint":
+    "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
+  "approvals.card.deny": "Deny",
+  "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
+  "approvals.call.denied": "Not allowed: {connector}: {tool}",
+  "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
+  "approvals.call.notSent": "Not sent",
+  "approvals.tools.readOnly.count": "{count} claim to be read-only",
+  "approvals.tools.readOnly.one": "1 claims to be read-only",
+  "approvals.tools.readOnly.none": "none claims to be read-only",
+  "approvals.tools.select": "When an Answer calls {tool}",
+  "approvals.tools.ask": "Ask every time",
+  "approvals.tools.always": "Always allow",
+  "approvals.settings.title": "Approvals",
+  "approvals.settings.body":
+    "Tools that may change something ask before each call. Here is every Tool you always allow, and every Tool you set to ask every time. Revoke one to go back to the default.",
+  "approvals.settings.empty": "No Tool is set to always allow or to ask every time.",
+  "approvals.settings.revoke": "Revoke",
+  "approvals.settings.revokeLabel": "Revoke the setting for {name}",
+  "approvals.settings.skillScripts": "Scripts of {skill}",
+  "approvals.policy.always": "Always allow",
+  "approvals.policy.ask": "Ask every time",
+  "approvals.policy.alwaysRun": "Always run",
 } as const satisfies Record<string, string>;

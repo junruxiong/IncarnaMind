@@ -1,4 +1,10 @@
-import type { ChatReadiness, DataFlow, EmbeddingModelStatus, SecretProtection } from "./api";
+import type {
+  ChatReadiness,
+  DataFlow,
+  EmbeddingModelStatus,
+  ProviderError,
+  SecretProtection,
+} from "./api";
 
 /** Thrown when a caller of the core's public interface passes malformed input. */
 export class InvalidInputError extends Error {
@@ -46,14 +52,25 @@ export class TaggingNotReadyError extends Error {
   override name = "TaggingNotReadyError";
 }
 
-/** Thrown by a vector search while the built-in embedding model isn't downloaded, or can't start. */
+/**
+ * Thrown by a vector search while the embedding model can't be used: the
+ * built-in one isn't downloaded or can't start (`status`), or the provider the
+ * User chose instead can't be used, e.g. its key is missing (`error`).
+ */
 export class EmbeddingModelNotReadyError extends Error {
   override name = "EmbeddingModelNotReadyError";
-  constructor(readonly status: EmbeddingModelStatus) {
+  constructor(
+    /** The built-in model's state; null when another provider is in use. */
+    readonly status: EmbeddingModelStatus | null,
+    /** Why the chosen provider can't be used, when it isn't the built-in model. */
+    readonly error: ProviderError | null = null,
+  ) {
     super(
-      status.error
-        ? `The embedding model isn't ready (${status.error.kind}: ${status.error.message}).`
-        : `The embedding model isn't ready (${status.state}).`,
+      status === null
+        ? `The embedding provider can't be used${error ? ` (${error.kind}: ${error.message})` : ""}.`
+        : status.error
+          ? `The embedding model isn't ready (${status.error.kind}: ${status.error.message}).`
+          : `The embedding model isn't ready (${status.state}).`,
     );
   }
 }

@@ -22,6 +22,7 @@ import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models
 import { importSkill, simpleSkillMd, writeFolder } from "../helpers/skills";
 
 const LOOKUP = "tides__lookup_tide";
+const BOOK = "tides__book_boat";
 
 /**
  * A model that looks the tide up through the Connector once, then answers
@@ -64,13 +65,15 @@ const toolCalls = (attribute: unknown): AnswerToolCall[] =>
   JSON.parse(String(attribute)) as AnswerToolCall[];
 
 describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
-  test("only Tools marked read-only are offered, namespaced by Connector, and the call's card carries the arguments sent", async () => {
+  test("every Tool is offered, namespaced by Connector; one marked read-only runs without asking, and its card carries the arguments sent", async () => {
     const model = tideModel();
     const { core, connector, logFile, mind, client } = await setUp(model);
     const started: CoreEvents["answer.toolCallStarted"][] = [];
     const ended: CoreEvents["answer.toolCallFinished"][] = [];
+    const approvals: unknown[] = [];
     core.on("answer.toolCallStarted", (event) => started.push(event));
     core.on("answer.toolCallFinished", (event) => ended.push(event));
+    core.on("approval.requested", (request) => approvals.push(request));
 
     const consent = answerConsent(core, true);
     const { answerId, finished } = await askAndFinish(core, client, mind.id, "When is high tide?");
@@ -81,10 +84,10 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
       service: { id: `connector:${connector.id}`, name: "Tides" },
       sends: ["tool-arguments"],
     });
-    // Only the read-only Tool, under the Connector's name; no Documents, so no search.
+    // Both Tools, under the Connector's name; no Documents, so no search.
     const first = model.doStreamCalls[0];
-    expect(first?.tools?.map((each) => each.name)).toEqual([LOOKUP]);
-    expect(first?.tools?.[0]).toMatchObject({
+    expect(first?.tools?.map((each) => each.name).sort()).toEqual([BOOK, LOOKUP]);
+    expect(first?.tools?.find((each) => each.name === LOOKUP)).toMatchObject({
       description: expect.stringContaining('Connector "Tides"'),
     });
     const system = String(first?.prompt.find((message) => message.role === "system")?.content);
@@ -96,6 +99,8 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
     expect(answerText(client, answerId)).toBe(
       "The tide service says: High water at Dover: 06:12 and 18:40.",
     );
+    // The Connector says the Tool only reads, so it didn't ask.
+    expect(approvals).toEqual([]);
 
     // The Tool-call card: the Connector, the Tool and the arguments sent; no Citations.
     const call: AnswerToolCall = {
@@ -257,6 +262,7 @@ describe("Answers use Connector Tools", { timeout: 30_000 }, () => {
       "cite",
       "read_skill_file",
       "search_documents",
+      BOOK,
       LOOKUP,
       "use_skill",
     ]);

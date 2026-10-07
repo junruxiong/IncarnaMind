@@ -14,6 +14,10 @@
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
  * by saying which.
  *
+ * With Connectors: a Question that names one of their Tools (e.g. "book_boat")
+ * gets it called once first, its required arguments set to the Question's
+ * last word; the Answer then starts with what the call gave back.
+ *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  */
 import { MockLanguageModelV4 } from "ai/test";
@@ -165,11 +169,75 @@ function offeredTags(options: GenerateOptions): string[] {
   return names.filter((name): name is string => typeof name === "string");
 }
 
-/** What the model does next: call a Tool, or stream its Answer. */
-function nextReply(
-  prompt: Prompt,
-  tools: readonly string[],
-): { text: string } | { tool: string; input: unknown } {
+type OfferedTool = NonNullable<Parameters<MockLanguageModelV4["doStream"]>[0]["tools"]>[number];
+type Reply = { text: string } | { tool: string; input: unknown };
+
+/**
+ * A Connector Tool the Question names by its own name (after the Connector's
+ * prefix, e.g. "book_boat" for "tides__book_boat"), with every required
+ * argument set to the Question's last word.
+ */
+function connectorToolNamed(
+  question: string,
+  tools: readonly OfferedTool[],
+): { tool: string; own: string; input: Record<string, string> } | null {
+  const lastWord =
+    question
+      .split(/\s+/)
+      .filter(Boolean)
+      .at(-1)
+      ?.replace(/[^\p{L}\p{N}_-]/gu, "") ?? "";
+  for (const each of tools) {
+    if (each.type !== "function") continue;
+    const own = each.name.split("__")[1];
+    if (!own || !question.toLowerCase().includes(own.toLowerCase())) continue;
+    const required = (each.inputSchema as { required?: unknown }).required;
+    const names = Array.isArray(required)
+      ? required.filter((name): name is string => typeof name === "string")
+      : [];
+    return {
+      tool: each.name,
+      own,
+      input: Object.fromEntries(names.map((name) => [name, lastWord])),
+    };
+  }
+  return null;
+}
+
+/** What a Tool call gave back, as text, whether it worked or not; undefined if it hasn't been called. */
+function lastResult(prompt: Prompt, tool: string): string | undefined {
+  let found: string | undefined;
+  for (const message of prompt) {
+    if (message.role !== "tool") continue;
+    for (const part of message.content) {
+      if (part.type !== "tool-result" || part.toolName !== tool) continue;
+      const output = part.output;
+      found =
+        output.type === "text" || output.type === "error-text"
+          ? output.value
+          : JSON.stringify(output);
+    }
+  }
+  return found;
+}
+
+/**
+ * What the model does next. A Question that names a Connector Tool gets it
+ * called once first, and the Answer starts with what it said (e.g. that the
+ * User denied it).
+ */
+function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
+  const names = tools.map((tool) => tool.name);
+  const named = connectorToolNamed(lastQuestion(prompt), tools);
+  if (!named) return answerReply(prompt, names);
+  const said = lastResult(prompt, named.tool);
+  if (said === undefined) return { tool: named.tool, input: named.input };
+  const reply = answerReply(prompt, names);
+  return "text" in reply ? { text: `${named.own} said: ${said}\n\n${reply.text}` } : reply;
+}
+
+/** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */
+function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   const question = lastQuestion(prompt);
   if (tools.includes("use_skill") && toolResults(prompt, "use_skill").length === 0) {
     const named = skillNamed(prompt, question);
@@ -207,10 +275,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
       warnings: [],
     }),
     doStream: async ({ prompt, tools, abortSignal }) => {
-      const reply = nextReply(
-        prompt,
-        (tools ?? []).map((tool) => tool.name),
-      );
+      const reply = nextReply(prompt, tools ?? []);
       const parts: StreamPart[] = [{ type: "stream-start", warnings: [] }];
       if ("tool" in reply) {
         parts.push(
