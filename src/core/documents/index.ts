@@ -12,12 +12,16 @@ import type {
   DocumentKind,
   DocumentStatus,
   PassageSearchResult,
+  ProviderErrorKind,
   SearchMode,
   SkippedFile,
+  TaggingState,
 } from "../api";
 import type { EmbeddingModel } from "../embedding";
 import { EmbeddingModelNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
+import { tagsOfDocument } from "../tags";
+import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
 import { createDocumentFiles, kindOf } from "./files";
 import { keywordText } from "./keywords";
@@ -47,12 +51,16 @@ interface DocumentRow {
   failure_reason: string | null;
   failure_message: string | null;
   folder_id: string | null;
+  tagging_status: string;
+  tagging_error_kind: string | null;
+  tagging_error_message: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
-  failure_reason, failure_message, folder_id, created_at, updated_at`;
+  failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
+  tagging_error_message, created_at, updated_at`;
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -82,21 +90,35 @@ function parseName(name: unknown): string {
   return trimmed;
 }
 
-/** `listDocuments` options, checked. `folderId` undefined means every Document. */
+/** `listDocuments` options, checked. `folderId` and `tagId` undefined mean any. */
 export function parseListOptions(options: unknown): {
   folderId: string | undefined;
   includeSubfolders: boolean;
+  tagId: string | undefined;
 } {
-  if (options === undefined) return { folderId: undefined, includeSubfolders: false };
+  if (options === undefined) {
+    return { folderId: undefined, includeSubfolders: false, tagId: undefined };
+  }
   if (!isRecord(options)) throw new InvalidInputError("listDocuments expects an object.");
-  const { folderId, includeSubfolders = false } = options;
+  const { folderId, includeSubfolders = false, tagId } = options;
   if (folderId !== undefined && (typeof folderId !== "string" || folderId === "")) {
     throw new InvalidInputError("A Folder id must be a non-empty string.");
   }
   if (typeof includeSubfolders !== "boolean") {
     throw new InvalidInputError("includeSubfolders must be true or false.");
   }
-  return { folderId, includeSubfolders };
+  if (tagId !== undefined && (typeof tagId !== "string" || tagId === "")) {
+    throw new InvalidInputError("A Tag id must be a non-empty string.");
+  }
+  return { folderId, includeSubfolders, tagId };
+}
+
+/** Where automatic tagging is, from what is stored and the Document's processing status. */
+function taggingOf(status: string, stored: string): TaggingState {
+  if (stored === "tagged") return "tagged"; // kept while the Document is processed again
+  if (status === "ready") return stored as StoredTaggingState;
+  if (status === "failed" || status === "no-text") return "skipped";
+  return "pending";
 }
 
 /** `searchPassages` options, checked and with their defaults. */
@@ -151,9 +173,20 @@ export interface DocumentsOptions {
   model: EmbeddingModel;
   /** Pushes the "document.status" event. */
   emitStatus(document: Document): void;
+  /** A Document just became ready, i.e. searchable: called before its status is pushed. */
+  onReady?: (documentId: string) => void;
 }
 
-export function createDocuments({ db, dataDir, now, model, emitStatus }: DocumentsOptions) {
+/** Which Documents `list` returns. */
+export interface DocumentFilter {
+  /** Only Documents filed in one of these Folders. */
+  folderIds?: readonly string[];
+  /** Only Documents carrying this Tag. */
+  tagId?: string;
+}
+
+export function createDocuments(options: DocumentsOptions) {
+  const { db, dataDir, now, model, emitStatus } = options;
   const files = createDocumentFiles(dataDir);
   const vectors = createVectorIndex(db, model);
 
@@ -167,26 +200,38 @@ export function createDocuments({ db, dataDir, now, model, emitStatus }: Documen
     return counts && counts.total > 0 ? counts.embedded / counts.total : 0;
   };
 
-  const toDocument = (row: DocumentRow): Document => ({
-    id: row.id,
-    name: row.name,
-    kind: row.kind as DocumentKind,
-    contentHash: row.content_hash,
-    size: row.size,
-    pageCount: row.page_count,
-    status: row.status as DocumentStatus,
-    progress: row.status === "embedding" ? progressOf(row.id) : null,
-    failure:
-      row.status === "failed"
-        ? {
-            reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
-            message: row.failure_message ?? "",
-          }
-        : null,
-    folderId: row.folder_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  });
+  const toDocument = (row: DocumentRow): Document => {
+    const tagging = taggingOf(row.status, row.tagging_status);
+    return {
+      id: row.id,
+      name: row.name,
+      kind: row.kind as DocumentKind,
+      contentHash: row.content_hash,
+      size: row.size,
+      pageCount: row.page_count,
+      status: row.status as DocumentStatus,
+      progress: row.status === "embedding" ? progressOf(row.id) : null,
+      failure:
+        row.status === "failed"
+          ? {
+              reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
+              message: row.failure_message ?? "",
+            }
+          : null,
+      folderId: row.folder_id,
+      tags: tagsOfDocument(db, row.id),
+      tagging,
+      taggingError:
+        tagging === "failed"
+          ? {
+              kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
+              message: row.tagging_error_message ?? "",
+            }
+          : null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  };
 
   const find = (id: string) =>
     db.get<DocumentRow>(`SELECT ${COLUMNS} FROM documents WHERE id = ? AND deleted_at IS NULL`, [
@@ -219,7 +264,14 @@ export function createDocuments({ db, dataDir, now, model, emitStatus }: Documen
   const setStatus = (id: string, status: DocumentStatus) =>
     db.run("UPDATE documents SET status = ?, updated_at = ? WHERE id = ?", [status, now(), id]);
 
-  const embedding = createEmbeddingQueue({ db, now, model, vectors, announce });
+  const embedding = createEmbeddingQueue({
+    db,
+    now,
+    model,
+    vectors,
+    announce,
+    onReady: options.onReady,
+  });
 
   /** Adds a Passage to the keyword index, under the `seq` it was stored with. */
   const index = (seq: number, text: string) =>
@@ -349,21 +401,27 @@ export function createDocuments({ db, dataDir, now, model, emitStatus }: Documen
   )
     model.ensure();
 
-  /** Most recently added first. With `folderIds`, only Documents filed in one of those Folders. */
-  const list = (folderIds?: readonly string[]): Document[] => {
-    const rows =
-      folderIds === undefined
-        ? db.all<DocumentRow>(
-            `SELECT ${COLUMNS} FROM documents WHERE deleted_at IS NULL
-             ORDER BY created_at DESC, rowid DESC`,
-          )
-        : db.all<DocumentRow>(
-            `SELECT ${COLUMNS} FROM documents
-             WHERE deleted_at IS NULL AND folder_id IN (SELECT value FROM json_each(?))
-             ORDER BY created_at DESC, rowid DESC`,
-            [JSON.stringify(folderIds)],
-          );
-    return rows.map(toDocument);
+  /** Most recently added first, only those in the Folders or with the Tag when asked (both must match). */
+  const list = ({ folderIds, tagId }: DocumentFilter = {}): Document[] => {
+    const conditions = ["deleted_at IS NULL"];
+    const params: string[] = [];
+    if (folderIds !== undefined) {
+      conditions.push("folder_id IN (SELECT value FROM json_each(?))");
+      params.push(JSON.stringify(folderIds));
+    }
+    if (tagId !== undefined) {
+      conditions.push(
+        "id IN (SELECT document_id FROM document_tags WHERE tag_id = ? AND deleted_at IS NULL)",
+      );
+      params.push(tagId);
+    }
+    return db
+      .all<DocumentRow>(
+        `SELECT ${COLUMNS} FROM documents WHERE ${conditions.join(" AND ")}
+         ORDER BY created_at DESC, rowid DESC`,
+        params,
+      )
+      .map(toDocument);
   };
 
   /** Adds one file whose kind is known. Returns undefined if it can't be read. */
@@ -439,6 +497,21 @@ export function createDocuments({ db, dataDir, now, model, emitStatus }: Documen
 
     list,
 
+    /** A live Document. Throws NotFoundError for an unknown or deleted one. */
+    get(idInput: unknown): Document {
+      const row = find(parseId(idInput));
+      if (!row) throw new NotFoundError("There is no such Document.");
+      return toDocument(row);
+    },
+
+    /** The live Documents among `ids`, in that order. */
+    getMany(ids: readonly string[]): Document[] {
+      return ids.flatMap((id) => {
+        const row = find(id);
+        return row ? [toDocument(row)] : [];
+      });
+    },
+
     /**
      * Files a Document in a Folder, or unfiles it with null. The caller checks
      * that the Folder exists. Returns the Document and whether it moved.
@@ -463,7 +536,7 @@ export function createDocuments({ db, dataDir, now, model, emitStatus }: Documen
     /** Unfiles every Document filed in one of `folderIds`, at `at`. Returns them, unfiled. */
     unfile(folderIds: readonly string[], at: string): Document[] {
       return db.transaction(() => {
-        const filed = list(folderIds);
+        const filed = list({ folderIds });
         db.run(
           `UPDATE documents SET folder_id = NULL, updated_at = ?
            WHERE deleted_at IS NULL AND folder_id IN (SELECT value FROM json_each(?))`,
@@ -507,6 +580,11 @@ export function createDocuments({ db, dataDir, now, model, emitStatus }: Documen
         db.run("UPDATE documents SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, id]);
         db.run(
           `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
+           WHERE document_id = ? AND deleted_at IS NULL`,
+          [at, at, id],
+        );
+        db.run(
+          `UPDATE document_tags SET deleted_at = ?, updated_at = ?
            WHERE document_id = ? AND deleted_at IS NULL`,
           [at, at, id],
         );

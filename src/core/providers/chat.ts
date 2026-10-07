@@ -12,6 +12,7 @@ import type {
   ChatProviderKind,
   ChatReadiness,
   ConnectionTestResult,
+  DataFlowId,
   ExternalService,
 } from "../api";
 import type { Consent } from "../consent";
@@ -186,7 +187,21 @@ export function createChat(options: {
     },
   });
 
-  const readinessFor = async (choice: ChatModelChoice | null): Promise<ChatReadiness> => {
+  /** The saved provider of the default chat model, if there is one. */
+  const defaultRow = () => {
+    const choice = settings.get().user.chatModel;
+    const row = choice && rowById(choice.providerId);
+    return row && isChatProviderKind(row.kind) ? row : undefined;
+  };
+
+  /**
+   * Whether `choice` can take requests on `flow` (Questions use "chat";
+   * automatic tagging uses "tagging", with its own consent).
+   */
+  const readinessFor = async (
+    choice: ChatModelChoice | null,
+    flow: DataFlowId,
+  ): Promise<ChatReadiness> => {
     const row = choice && rowById(choice.providerId);
     if (!choice || !row || !isChatProviderKind(row.kind)) {
       return { ready: false, reason: "no-provider" };
@@ -200,7 +215,7 @@ export function createChat(options: {
       return { ready: false, reason: "sign-in-required", provider, modelId };
     }
     if (!provider.service) return { ready: true, provider, modelId, consent: "not-required" };
-    const decision = consent.status("chat", provider.service);
+    const decision = consent.status(flow, provider.service);
     if (decision === "declined") {
       return { ready: false, reason: "consent-declined", provider, modelId };
     }
@@ -300,8 +315,30 @@ export function createChat(options: {
 
     exists: (id: string) => rowById(id) !== undefined,
 
-    /** Whether Questions can be asked with `choice`, or with the default model when it is left out. */
-    readiness: (choice?: ChatModelChoice) => readinessFor(choice ?? settings.get().user.chatModel),
+    /**
+     * Whether Questions can be asked with `choice`, or with the default model
+     * when it is left out. With another `flow`, whether that flow can use it.
+     */
+    readiness: (choice?: ChatModelChoice, flow: DataFlowId = "chat") =>
+      readinessFor(choice ?? settings.get().user.chatModel, flow),
+
+    /** The service the default chat model sends to, or null when there is none or it runs on this computer. */
+    defaultService(): ExternalService | null {
+      const row = defaultRow();
+      return row ? serviceFor(row.kind as ChatProviderKind, row.base_url) : null;
+    },
+
+    /**
+     * A quick check, with nothing to wait for: false when the default chat
+     * model certainly can't be used on `flow` (there is none, or the User
+     * declined the flow to its service). `readiness` checks keys and sign-ins too.
+     */
+    mightBeReady(flow: DataFlowId): boolean {
+      const row = defaultRow();
+      if (!row) return false;
+      const service = serviceFor(row.kind as ChatProviderKind, row.base_url);
+      return !service || consent.status(flow, service) !== "declined";
+    },
 
     /**
      * Each saved provider with the models it lists and its default model, for
@@ -380,14 +417,18 @@ export function createChat(options: {
 
     /**
      * For Answers (#29): the default model, or `choice` from a Question's model
-     * picker, after checking readiness and getting consent for its service.
+     * picker, after checking readiness and getting consent for its service on
+     * `flow` (automatic tagging passes "tagging").
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
-    async prepareModel(choice?: ChatModelChoice): Promise<PreparedChatModel> {
-      const readiness = await readinessFor(choice ?? settings.get().user.chatModel);
+    async prepareModel(
+      choice?: ChatModelChoice,
+      flow: DataFlowId = "chat",
+    ): Promise<PreparedChatModel> {
+      const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
       const { provider, modelId } = readiness;
-      if (provider.service) await consent.ensure("chat", provider.service);
+      if (provider.service) await consent.ensure(flow, provider.service);
       const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
       const model = createModel(specFor(provider.kind, provider.baseUrl, apiKey, modelId));
       return { model, provider, modelId };

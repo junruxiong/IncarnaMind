@@ -170,6 +170,45 @@ export interface DocumentFailure {
   message: string;
 }
 
+/**
+ * Where automatic tagging is for a Document. It runs once the Document is
+ * "ready", and never holds that up: a Document is searchable as soon as it is
+ * embedded, tagged or not.
+ * - "pending": tagged once processing finishes, or about to be.
+ * - "waiting-for-provider": no chat model can be used yet (none is set up, its
+ *   key or sign-in is missing, or the User declined sending excerpts to its
+ *   service). Tagging resumes by itself once one can.
+ * - "tagging": the chat model is choosing the Document's Tags.
+ * - "tagged": its automatic Tags are up to date.
+ * - "failed": the chat model's provider failed (see `taggingError`); a re-tag,
+ *   a change of chat model or a restart tries again.
+ * - "skipped": the Document has no text to tag (processing failed, or found none).
+ */
+export type TaggingState =
+  | "pending"
+  | "waiting-for-provider"
+  | "tagging"
+  | "tagged"
+  | "failed"
+  | "skipped";
+
+/** Who put a Tag on a Document: automatic tagging, or the User. */
+export type TagSource = "automatic" | "user";
+
+/** A Tag on a Document. */
+export interface DocumentTag {
+  tagId: string;
+  /**
+   * "automatic": automatic tagging applied it, and a re-tag may take it away.
+   * "user": the User added it; automatic tagging never changes it.
+   */
+  source: TagSource;
+  /** How sure automatic tagging was, from 0 to 1, when its model says. Null for the chat model and for the User's Tags. */
+  confidence: number | null;
+  /** Automatic tagging wasn't sure, so the User may want to check it. */
+  needsReview: boolean;
+}
+
 export interface Document {
   /** A random UUID generated on this device. */
   id: string;
@@ -192,6 +231,12 @@ export interface Document {
   failure: DocumentFailure | null;
   /** The Folder the Document is filed in, or null if it is unfiled. A Document is in at most one Folder. */
   folderId: string | null;
+  /** The Tags on the Document, in Tag name order (ignoring case). */
+  tags: DocumentTag[];
+  /** Where automatic tagging is, separately from `status`. */
+  tagging: TaggingState;
+  /** Set when `tagging` is "failed". */
+  taggingError: ProviderError | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -203,6 +248,41 @@ export interface ListDocumentsOptions {
   folderId?: string;
   /** With `folderId`, also Documents filed in its sub-Folders, at any depth. Defaults to false. */
   includeSubfolders?: boolean;
+  /** Only Documents that carry this Tag. Combines with `folderId`: both must match. */
+  tagId?: string;
+}
+
+/**
+ * A label with a short description that Documents can carry. IncarnaMind
+ * applies Tags automatically, choosing them by their names and descriptions,
+ * and the User can add or remove them.
+ */
+export interface Tag {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** Never empty; unique among Tags, ignoring case. */
+  name: string;
+  /** What the Tag means, for the User and for automatic tagging. May be empty. */
+  description: string;
+  /** Created on first run as one of the preset Tags, rather than by the User. Editing one keeps it a preset. */
+  preset: boolean;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface CreateTagInput {
+  /** Trimmed; must not be empty, nor another Tag's name (ignoring case). */
+  name: string;
+  /** Trimmed. Defaults to empty. */
+  description?: string;
+}
+
+/** The fields to change; the others are kept. */
+export interface UpdateTagInput {
+  name?: string;
+  description?: string;
 }
 
 /** A place where the User files Documents by hand. Folders nest, with no depth limit. */
@@ -613,12 +693,22 @@ export interface OllamaPullProgress {
  * Kinds of data a flow can send. The UI describes each one
  * (`consent.data.<kind>`). Later tickets add theirs.
  */
-export const dataKinds = ["blocks", "passages", "tool-results"] as const;
+export const dataKinds = [
+  "blocks",
+  "passages",
+  "tool-results",
+  "tags",
+  "document-excerpts",
+] as const;
 
 export type DataKind = (typeof dataKinds)[number];
 
-/** External data flows. The UI names each one (`consent.flow.<id>`). Later tickets add theirs. */
-export const dataFlowIds = ["chat"] as const;
+/**
+ * External data flows. The UI names each one (`consent.flow.<id>`). Later tickets add theirs.
+ * - "chat": Questions, to the chat provider they are asked with.
+ * - "tagging": automatic tagging, to the default chat model's provider.
+ */
+export const dataFlowIds = ["chat", "tagging"] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
@@ -680,7 +770,8 @@ export interface CoreApi {
   addDocuments(paths: string[]): Promise<AddDocumentsResult>;
   /**
    * Documents that are not deleted, most recently added first. With a Folder,
-   * only the Documents filed in it, and in its sub-Folders if asked.
+   * only the Documents filed in it, and in its sub-Folders if asked; with a
+   * Tag, only the Documents carrying it.
    */
   listDocuments(options?: ListDocumentsOptions): Promise<Document[]>;
   /** Returns the renamed Document. */
@@ -807,6 +898,37 @@ export interface CoreApi {
    * are kept, and become unfiled: Documents are never deleted with a Folder.
    */
   deleteFolder(folderId: string): Promise<void>;
+
+  /**
+   * Tags that are not deleted, in name order (ignoring case). The preset Tags
+   * are created on first run, in the interface language of the time.
+   */
+  listTags(): Promise<Tag[]>;
+  createTag(input: CreateTagInput): Promise<Tag>;
+  /**
+   * Changes a Tag's name or description and returns the Tag. Documents keep
+   * their Tags; "Re-tag" applies the new definition to the automatic ones.
+   */
+  updateTag(tagId: string, patch: UpdateTagInput): Promise<Tag>;
+  /** Soft-deletes a Tag, and takes it off every Document. */
+  deleteTag(tagId: string): Promise<void>;
+  /**
+   * The User puts a Tag on a Document. From then on automatic tagging leaves
+   * that Tag on that Document alone. Returns the Document.
+   */
+  addDocumentTag(documentId: string, tagId: string): Promise<Document>;
+  /**
+   * The User takes a Tag off a Document. The removal is kept, so automatic
+   * tagging never puts it back. Returns the Document.
+   */
+  removeDocumentTag(documentId: string, tagId: string): Promise<Document>;
+  /**
+   * Recomputes the automatic Tags of these Documents, or of every Document,
+   * e.g. after Tag definitions changed. Tags the User added or removed are
+   * kept as they are. Returns once the Documents are queued; "documents.tagged"
+   * events report progress. Documents still being processed are tagged when they finish.
+   */
+  retagDocuments(documentIds?: string[]): Promise<void>;
 }
 
 /**
@@ -840,6 +962,14 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Folders were created, renamed, moved or deleted: the list as `listFolders` now returns it. */
   "folders.changed": Folder[];
+  /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
+  "tags.changed": Tag[];
+  /**
+   * Documents' Tags changed, or where automatic tagging is for them: the User
+   * added or removed a Tag, automatic tagging started, waited, finished or
+   * failed, or a deleted Tag left them. Carries each Document whole.
+   */
+  "documents.tagged": Document[];
   /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
   "chatGptPlan.changed": ChatGptPlanStatus;
   /**
@@ -916,6 +1046,13 @@ const methods: Record<CoreApiMethod, true> = {
   renameFolder: true,
   moveFolder: true,
   deleteFolder: true,
+  listTags: true,
+  createTag: true,
+  updateTag: true,
+  deleteTag: true,
+  addDocumentTag: true,
+  removeDocumentTag: true,
+  retagDocuments: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */
