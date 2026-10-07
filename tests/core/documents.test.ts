@@ -64,6 +64,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         size: Buffer.byteLength(ENGLISH_NOTES),
         pageCount: null,
         status: "queued",
+        progress: null,
         failure: null,
         folderId: null,
         createdAt: "2026-10-06T12:00:00.000Z",
@@ -90,7 +91,7 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(stored.filter((name) => !name.startsWith("."))).toEqual([sha256(CHINESE_NOTES)]);
   });
 
-  test("processing reports queued, then extracting, then ready", async () => {
+  test("processing reports queued, extracting, embedding, then ready", async () => {
     const sources = await createTempDataFolder();
     const core = startCore(await createTempDataFolder());
     const seen: Document[] = [];
@@ -105,9 +106,16 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(seen.filter((each) => each.id === added.id).map((each) => each.status)).toEqual([
       "queued",
       "extracting",
+      "embedding",
       "ready",
     ]);
-    expect(ready).toMatchObject({ status: "ready", failure: null, pageCount: null });
+    expect(seen.find((each) => each.status === "embedding")?.progress).toBe(0);
+    expect(ready).toMatchObject({
+      status: "ready",
+      progress: null,
+      failure: null,
+      pageCount: null,
+    });
     expect(await core.listDocuments()).toEqual([ready]);
   });
 
@@ -122,7 +130,7 @@ describe("Documents", { timeout: 30_000 }, () => {
 
     expect(document).toMatchObject({ kind: "pdf", status: "ready", pageCount: 3 });
     // Every Passage has the word "fox"; read them all back in order.
-    const passages = (await core.searchPassages("fox", 200)).sort(
+    const passages = (await core.searchPassages("fox", { mode: "keyword", limit: 200 })).sort(
       (a, b) => a.position - b.position,
     );
     expect(passages.map((passage) => passage.position)).toEqual(passages.map((_, index) => index));
@@ -133,13 +141,13 @@ describe("Documents", { timeout: 30_000 }, () => {
       expect(passage.pageFrom).not.toBeNull();
       expect(passage.pageFrom as number).toBeLessThanOrEqual(passage.pageTo as number);
     }
-    // Pages are about 300 tokens and Passages about 400, so some cross a page break.
+    // Pages are about 300 tokens and Passages about 500, so some cross a page break.
     expect(
       passages.some((passage) => (passage.pageFrom as number) < (passage.pageTo as number)),
     ).toBe(true);
     // Each marker is found within the page range of every Passage that contains it.
     for (const [index, marker] of MARKERS.entries()) {
-      const found = await core.searchPassages(marker);
+      const found = await core.searchPassages(marker, { mode: "keyword" });
       expect(found.length).toBeGreaterThan(0);
       for (const passage of found) {
         expect(passage.text).toContain(marker);
@@ -195,7 +203,7 @@ describe("Documents", { timeout: 30_000 }, () => {
       await writeSourceFile(sources, "讲义.pdf", chinesePdf),
     ]);
 
-    const selfAttention = await core.searchPassages("self-attention");
+    const selfAttention = await core.searchPassages("self-attention", { mode: "keyword" });
     expect(selfAttention).toEqual([
       {
         passageId: expect.stringMatching(UUID_V4),
@@ -208,7 +216,7 @@ describe("Documents", { timeout: 30_000 }, () => {
       },
     ]);
 
-    const attention = await core.searchPassages("注意力机制");
+    const attention = await core.searchPassages("注意力机制", { mode: "keyword" });
     expect(attention.map((result) => result.documentId).sort()).toEqual(
       [chinese?.id, pdf?.id].sort(),
     );
@@ -217,11 +225,11 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(inPdf).toMatchObject({ documentName: "讲义", pageFrom: 1, pageTo: 2 });
     expect(inPdf?.text).toContain("自注意力机制");
 
-    // Two-character words are too short for the trigram index, so they are scanned for.
-    const model = await core.searchPassages("模型");
+    // Chinese is split into words, so a two-character word matches on its own.
+    const model = await core.searchPassages("模型", { mode: "keyword" });
     expect(model.map((result) => result.documentId)).toEqual([chinese?.id]);
 
-    expect(await core.searchPassages("convolution")).toEqual([]);
+    expect(await core.searchPassages("convolution", { mode: "keyword" })).toEqual([]);
     expect(await core.searchPassages("   ")).toEqual([]);
   });
 
@@ -233,10 +241,12 @@ describe("Documents", { timeout: 30_000 }, () => {
       await writeSourceFile(sources, "twice.txt", "Attention, attention: the word appears twice."),
     ]);
 
-    const results = await core.searchPassages("attention");
+    const results = await core.searchPassages("attention", { mode: "keyword" });
     expect(results.map((result) => result.documentName)).toEqual(["twice", "once"]);
-    expect(await core.searchPassages("attention", 1)).toEqual([results[0]]);
-    await expect(core.searchPassages("attention", 0)).rejects.toThrow(InvalidInputError);
+    expect(await core.searchPassages("attention", { mode: "keyword", limit: 1 })).toEqual([
+      results[0],
+    ]);
+    await expect(core.searchPassages("attention", { limit: 0 })).rejects.toThrow(InvalidInputError);
   });
 
   test("renaming a Document changes its name in the list and in search results", async () => {
@@ -270,9 +280,9 @@ describe("Documents", { timeout: 30_000 }, () => {
     await core.deleteDocument(english.id);
 
     expect(await core.listDocuments()).toEqual([chinese]);
-    expect(await core.searchPassages("Transformer")).toEqual([]);
-    expect(await core.searchPassages("Recurrent")).toEqual([]);
-    expect(await core.searchPassages("注意力")).toHaveLength(1);
+    expect(await core.searchPassages("Transformer", { mode: "keyword" })).toEqual([]);
+    expect(await core.searchPassages("Recurrent", { mode: "keyword" })).toEqual([]);
+    expect(await core.searchPassages("注意力", { mode: "keyword" })).toHaveLength(1);
     expect(await readdir(join(dataDir, "documents"))).not.toContain(english.contentHash);
     expect(await readdir(join(dataDir, "documents"))).toContain(chinese.contentHash);
     await expect(core.deleteDocument(english.id)).rejects.toThrow(NotFoundError);

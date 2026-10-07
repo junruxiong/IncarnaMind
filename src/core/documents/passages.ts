@@ -16,13 +16,14 @@ export interface PassageParameters {
 }
 
 /**
- * PROVISIONAL (ticket #21, the retrieval prototype, decides these): the old
- * backend's parameters. About 400-token Passages overlapping by 200 tokens,
- * each recording a sliding window of 3 Passages with step 1. Token counts are
- * approximate; there is no tokenizer dependency.
+ * About 500-token Passages overlapping by 200 tokens, each recording a sliding
+ * window of 3 Passages with step 1 (ADR-0009: with the built-in model, hybrid
+ * search found 17 of 20 evaluation questions at 500/200 against 15 at the old
+ * backend's 400/200). Token counts are approximate; there is no tokenizer
+ * dependency. Changing these needs a new `PROCESSING_VERSION`.
  */
 export const PASSAGE_PARAMETERS: PassageParameters = {
-  maxTokens: 400,
+  maxTokens: 500,
   overlapTokens: 200,
   windowSize: 3,
   windowStep: 1,
@@ -70,25 +71,15 @@ interface Piece {
   strength: number;
 }
 
-const isSpaceCode = (code: number) => code === 32 || (code >= 9 && code <= 13);
-
 /**
- * Roughly how many tokens a language model would count: about one per CJK
- * character, one per four other characters, and a run of whitespace as one character.
+ * Roughly how many tokens a language model would count, as the retrieval
+ * prototype counted them (ADR-0009): one per CJK character, and one per four
+ * other characters, whitespace included.
  */
 export function approximateTokens(text: string): number {
   let tokens = 0;
-  let inSpace = false;
   for (const character of text) {
-    const code = character.charCodeAt(0);
-    const space = code < 128 ? isSpaceCode(code) : /\s/u.test(character);
-    if (space) {
-      if (!inSpace) tokens += 0.25;
-      inSpace = true;
-      continue;
-    }
-    inSpace = false;
-    tokens += code >= 128 && isCjk(character) ? 1 : 0.25;
+    tokens += character.charCodeAt(0) >= 128 && isCjk(character) ? 1 : 0.25;
   }
   return tokens;
 }

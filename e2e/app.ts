@@ -18,7 +18,10 @@ export interface RunningApp {
   window: Page;
 }
 
-/** Launches the built app (`out/`) on the given data folder, with test hooks on. */
+/**
+ * Launches the built app (`out/`) on the given data folder, with test hooks on
+ * and the fake embedding model, which needs no download.
+ */
 export async function launchApp(dataDir: string): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -27,6 +30,7 @@ export async function launchApp(dataDir: string): Promise<RunningApp> {
   delete env.ELECTRON_RUN_AS_NODE;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
+  env.INCARNAMIND_TEST_EMBEDDER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
   const window = await app.firstWindow();

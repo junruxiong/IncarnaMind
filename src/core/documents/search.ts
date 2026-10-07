@@ -1,70 +1,67 @@
 /**
- * Keyword search over Passage text with the FTS5 index. Later tickets build
- * hybrid search (keyword plus vector) on it.
+ * Searching Passages (ADR-0009). Keyword search runs FTS5 over each Passage's
+ * segmented words (see ./keywords); vector search scans the in-memory vectors
+ * (see ./vectors); hybrid search fuses the two by reciprocal rank fusion. The
+ * search Tool (#30) and Search scopes (#36) build on these.
  */
-
-import { hasCjk } from "../../shared/text";
 import type { PassageSearchResult } from "../api";
-import type { Database, SqlValue } from "../storage";
+import type { Database } from "../storage";
+import { keywordQuery } from "./keywords";
 
-/** The trigram tokenizer can't match anything shorter than this. */
-const TRIGRAM = 3;
-/** Keeps a pasted paragraph from becoming a huge query. */
-const MAX_TERMS = 64;
+/** Reciprocal rank fusion's k: a Passage at rank r (from 1) in a list scores 1 / (k + r). */
+export const RRF_K = 60;
 
-export interface KeywordQuery {
-  /** Matched through the index, any of them, ranked by BM25. */
-  phrases: string[];
-  /** Too short for the index (e.g. "AI", "模型"): matched by scanning, only when there are no phrases. */
-  shortTerms: string[];
+/** How many results each list hands to a hybrid search. */
+export const HYBRID_CANDIDATES = 50;
+
+/** SQL that limits a query to some Documents, if `documentIds` is given. */
+const scopeClause = (documentIds: readonly string[] | undefined) =>
+  documentIds ? "AND p.document_id IN (SELECT value FROM json_each(?))" : "";
+
+const scopeParams = (documentIds: readonly string[] | undefined) =>
+  documentIds ? [JSON.stringify(documentIds)] : [];
+
+/** The `seq`s of the live Passages that best match the query's words, best first. */
+export function keywordSearch(
+  db: Database,
+  query: string,
+  limit: number,
+  documentIds?: readonly string[],
+): number[] {
+  const match = keywordQuery(query);
+  if (!match) return [];
+  return db
+    .all<{ seq: number }>(
+      `SELECT p.seq
+       FROM passages_fts
+       JOIN passages p ON p.seq = passages_fts.rowid
+       JOIN documents d ON d.id = p.document_id
+       WHERE passages_fts MATCH ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL
+         ${scopeClause(documentIds)}
+       ORDER BY bm25(passages_fts), p.position, p.seq
+       LIMIT ?`,
+      [match, ...scopeParams(documentIds), BigInt(limit)],
+    )
+    .map((row) => row.seq);
 }
 
-const JOINERS = "-_.'’+#&@/";
-const SEPARATOR = new RegExp(`[^\\p{L}\\p{N}\\p{M}${escapeForClass(JOINERS)}]+`, "u");
-const EDGE_JOINERS = new RegExp(`^[${escapeForClass(JOINERS)}]+|[-_.'’&@/]+$`, "gu");
-
-function escapeForClass(characters: string): string {
-  return characters.replace(/[\\\]^-]/g, "\\$&");
-}
-
-/**
- * Splits a query into terms at spaces and punctuation, keeping joiners inside
- * words ("GPT-4", "C++"). Every term is matched as a substring: the trigram
- * tokenizer indexes every 3 characters. Chinese has no spaces, so a long CJK
- * term matches through its overlapping 3-character pieces, any of them; the
- * Passages with the most pieces rank first.
- *
- * PROVISIONAL, like the trigram tokenizer (ticket #21).
- */
-export function parseKeywordQuery(query: string): KeywordQuery {
-  const phrases = new Set<string>();
-  const shortTerms = new Set<string>();
-  const terms = query
-    .normalize("NFKC")
-    .split(SEPARATOR)
-    .map((term) => term.replace(EDGE_JOINERS, ""))
-    .filter(Boolean);
-  for (const term of terms) {
-    const characters = Array.from(term);
-    if (characters.length < TRIGRAM) shortTerms.add(term);
-    else if (characters.length === TRIGRAM || !hasCjk(term)) phrases.add(term);
-    else {
-      for (let start = 0; start + TRIGRAM <= characters.length; start++) {
-        phrases.add(characters.slice(start, start + TRIGRAM).join(""));
-      }
-    }
+/** Fuses ranked lists of `seq`s by reciprocal rank fusion: the best `limit`, best first. */
+export function fuseRankings(rankings: readonly (readonly number[])[], limit: number): number[] {
+  const scores = new Map<number, number>();
+  for (const ranking of rankings) {
+    ranking.forEach((seq, index) => {
+      scores.set(seq, (scores.get(seq) ?? 0) + 1 / (RRF_K + index + 1));
+    });
   }
-  return {
-    phrases: [...phrases].slice(0, MAX_TERMS),
-    shortTerms: [...shortTerms].slice(0, MAX_TERMS),
-  };
+  // Ties keep the order of first appearance: the keyword list's order comes first.
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([seq]) => seq);
 }
-
-const quote = (phrase: string) => `"${phrase.replaceAll('"', '""')}"`;
-
-const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, "\\$&")}%`;
 
 interface ResultRow {
+  seq: number;
   passage_id: string;
   document_id: string;
   document_name: string;
@@ -74,52 +71,32 @@ interface ResultRow {
   text: string;
 }
 
-const COLUMNS = `p.id AS passage_id, p.document_id, d.name AS document_name,
-  p.page_from, p.page_to, p.position, p.text`;
-
-const toResult = (row: ResultRow): PassageSearchResult => ({
-  passageId: row.passage_id,
-  documentId: row.document_id,
-  documentName: row.document_name,
-  pageFrom: row.page_from,
-  pageTo: row.page_to,
-  position: row.position,
-  text: row.text,
-});
-
-/** Live Passages of live Documents matching the query, best first. */
-export function searchPassages(db: Database, query: string, limit: number): PassageSearchResult[] {
-  const { phrases, shortTerms } = parseKeywordQuery(query);
-  if (phrases.length > 0) {
-    return db
-      .all<ResultRow>(
-        `SELECT ${COLUMNS}
-         FROM passages_fts
-         JOIN passages p ON p.seq = passages_fts.rowid
-         JOIN documents d ON d.id = p.document_id
-         WHERE passages_fts MATCH ? AND p.deleted_at IS NULL AND d.deleted_at IS NULL
-         ORDER BY bm25(passages_fts), p.position
-         LIMIT ?`,
-        [phrases.map(quote).join(" OR "), limit],
-      )
-      .map(toResult);
-  }
-  if (shortTerms.length === 0) return [];
-  // No index for these: scan, and rank by how many of the terms a Passage has.
-  const hits = shortTerms.map(() => `(p.text LIKE ? ESCAPE '\\')`).join(" + ");
-  const params: SqlValue[] = shortTerms.map(likePattern);
-  return db
-    .all<ResultRow>(
-      `SELECT * FROM (
-         SELECT ${COLUMNS}, d.created_at AS added_at, ${hits} AS hits
-         FROM passages p
-         JOIN documents d ON d.id = p.document_id
-         WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL
-       )
-       WHERE hits > 0
-       ORDER BY hits DESC, added_at DESC, position
-       LIMIT ?`,
-      [...params, limit],
-    )
-    .map(toResult);
+/** The live Passages with these `seq`s, in the order given. */
+export function passagesBySeq(db: Database, seqs: readonly number[]): PassageSearchResult[] {
+  if (seqs.length === 0) return [];
+  const rows = db.all<ResultRow>(
+    `SELECT p.seq, p.id AS passage_id, p.document_id, d.name AS document_name,
+       p.page_from, p.page_to, p.position, p.text
+     FROM passages p JOIN documents d ON d.id = p.document_id
+     WHERE p.seq IN (SELECT value FROM json_each(?))
+       AND p.deleted_at IS NULL AND d.deleted_at IS NULL`,
+    [JSON.stringify(seqs)],
+  );
+  const bySeq = new Map(rows.map((row) => [row.seq, row]));
+  return seqs.flatMap((seq) => {
+    const row = bySeq.get(seq);
+    return row
+      ? [
+          {
+            passageId: row.passage_id,
+            documentId: row.document_id,
+            documentName: row.document_name,
+            pageFrom: row.page_from,
+            pageTo: row.page_to,
+            position: row.position,
+            text: row.text,
+          },
+        ]
+      : [];
+  });
 }

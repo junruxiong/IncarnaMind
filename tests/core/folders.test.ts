@@ -336,9 +336,11 @@ describe("Deleting Folders", { timeout: 30_000 }, () => {
     expect(documents.find((each) => each.id === inBottom.id)?.folderId).toBeNull();
     expect(documents.find((each) => each.id === inKept.id)).toEqual(keptDocument);
     // The Documents are still searchable: deleting a Folder never deletes Documents.
-    expect((await core.searchPassages("In bottom")).map((result) => result.documentId)).toEqual([
-      inBottom.id,
-    ]);
+    expect(
+      (await core.searchPassages("In bottom", { mode: "keyword" })).map(
+        (result) => result.documentId,
+      ),
+    ).toEqual([inBottom.id]);
   });
 
   test("a deleted Folder, and its sub-Folders, can't be renamed, moved, used or deleted again", async () => {

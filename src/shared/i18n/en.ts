@@ -91,6 +91,17 @@ export const en = {
   "documents.delete.cancel": "Cancel",
   "documents.delete.confirm": "Delete",
   "documents.skipped": "Only PDF, TXT and Markdown files can be added. Skipped: {names}",
+  "embedding.status.waiting": "Waiting for the model",
+  "embedding.status.embedding": "Embedding… {percent}%",
+  "embedding.model.downloading": "Downloading the search model: {downloaded} of {total} MB",
+  "embedding.model.note":
+    "Downloaded once. Documents are searched on this computer: nothing of yours is sent.",
+  "embedding.model.failed": "The search model couldn't be downloaded: {reason}.",
+  "embedding.model.loadFailed": "The search model couldn't start on this computer.",
+  "embedding.model.failure.network": "check your internet connection",
+  "embedding.model.failure.integrity": "the downloaded file was damaged",
+  "embedding.model.failure.storage": "it couldn't be saved to the data folder",
+  "embedding.model.retry": "Try again",
 
   "folders.label": "Folders",
   "folders.all": "All Documents",

@@ -44,8 +44,6 @@ const cjkCharacter = new RegExp(`[${CJK}]`, "u");
 
 export const isCjk = (character: string): boolean => cjkCharacter.test(character);
 
-export const hasCjk = (text: string): boolean => cjkCharacter.test(text);
-
 /**
  * Characters whitespace is removed next to (rule 6): Han (radicals included),
  * kana, Bopomofo, CJK punctuation, CJK compatibility forms, and the full-width
