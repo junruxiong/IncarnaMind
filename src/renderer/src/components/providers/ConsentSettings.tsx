@@ -20,10 +20,13 @@ export function ConsentSettings() {
     const stopReadiness = core.on("chatReadiness.changed", refresh);
     // Setting Jev up or removing it moves the tagging flow to another service.
     const stopJev = core.on("jev.changed", refresh);
+    // Each Connector that is on is a service of the "connectors" flow.
+    const stopConnectors = core.on("connectors.changed", refresh);
     return () => {
       stopResolved();
       stopReadiness();
       stopJev();
+      stopConnectors();
     };
   }, [refresh]);
 

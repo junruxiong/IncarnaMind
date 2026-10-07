@@ -2,7 +2,7 @@ import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tipt
 import { useState } from "react";
 import { type AnswerToolCall, BLOCK_ID_ATTRIBUTE, type ProviderErrorKind } from "../../../core/api";
 import { useAnswers } from "../answers";
-import { RegenerateIcon, SearchIcon, SkillIcon, StopIcon } from "../components/icons";
+import { PlugIcon, RegenerateIcon, SearchIcon, SkillIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { useMindId } from "./mindContext";
@@ -203,6 +203,67 @@ function AnswerError({
   );
 }
 
+/**
+ * The searches and Connector calls an Answer made: its searches as one line,
+ * then a card for each Connector call. Skills have their own cards (`SkillCalls`).
+ */
+function ToolCalls({ calls }: { calls: AnswerToolCall[] }) {
+  const searches = calls.filter((call) => call.tool === "search_documents");
+  const connectorCalls = calls.filter((call) => call.source === "connector");
+  return (
+    <>
+      {searches.length > 0 && <Searches searches={searches} />}
+      {connectorCalls.map((call) => (
+        <ConnectorCall key={call.id} call={call} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * A call an Answer made through a Connector: which Connector and Tool, and
+ * the arguments it sent, on one line that opens to show them in full. What
+ * came back went to the model; it isn't a Passage, so it is never a Citation.
+ */
+function ConnectorCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const params = { connector: call.connector?.name ?? "", tool: call.tool };
+  const running = call.status === "running";
+  const summary = running
+    ? t("connectors.call.running", params)
+    : call.status === "failed"
+      ? t("connectors.call.failed", params)
+      : t("connectors.call.done", params);
+  const compact = JSON.stringify(call.input);
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-connector-call"
+      data-status={call.status}
+      className="answer-tools"
+    >
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${summary}. ${t("connectors.call.details")}`}
+        onClick={() => setExpanded((open) => !open)}
+        className="answer-tools-summary max-w-full"
+      >
+        <PlugIcon className={`size-3.5 shrink-0 ${running ? "animate-pulse" : ""}`} />
+        <span className="shrink-0">{summary}</span>
+        {!expanded && compact !== "{}" && <code className="answer-tool-args">{compact}</code>}
+      </button>
+      {expanded && (
+        <div className="answer-tool-args-full">
+          <div className="mb-0.5 font-sans text-gray-400">{t("connectors.call.arguments")}</div>
+          <pre data-testid="answer-connector-arguments">{JSON.stringify(call.input, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** A text field of what a Tool call was asked, or "". */
 function field(call: AnswerToolCall, name: string): string {
   const value: unknown = call.input?.[name];
@@ -275,11 +336,9 @@ function SkillCalls({ calls }: { calls: AnswerToolCall[] }) {
  * The searches an Answer ran, small and out of the way: one line saying it
  * searched the User's Documents, which opens to show what it searched for.
  */
-function ToolCalls({ calls }: { calls: AnswerToolCall[] }) {
+function Searches({ searches }: { searches: AnswerToolCall[] }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
-  const searches = calls.filter((call) => call.tool === "search_documents");
-  if (searches.length === 0) return null;
   const running = searches.some((call) => call.status === "running");
   const failed = searches.every((call) => call.status === "failed");
   const summary = running ? t("search.running") : failed ? t("search.failed") : t("search.done");

@@ -18,8 +18,11 @@
  * provider refuses Tools or structured output.
  *
  * Skills add two Tools to the loop: `use_skill` loads a Skill's instructions
- * and `read_skill_file` one of its files. With Skills but no Documents, the
- * loop runs with those alone; a model that can't call Tools answers without.
+ * and `read_skill_file` one of its files. The User's Connectors add their
+ * read-only Tools as external Tools; their results aren't Passages, so they
+ * are never cited, and the Answer shows each call as a Tool-call card. With
+ * Skills or Connector Tools but no Documents, the loop runs with those alone;
+ * a model that can't call Tools answers without.
  */
 import {
   APICallError,
@@ -65,14 +68,34 @@ export interface SearchResultForModel {
   passageCount: number;
 }
 
+/**
+ * A Tool from outside IncarnaMind, e.g. one of a Connector's: offered to the
+ * model as it is, next to document search and the Skill Tools. Its result
+ * isn't a Passage, so it can't be cited; the Answer shows the call as a
+ * Tool-call card instead.
+ */
+export interface ExternalTool {
+  /** The name the model calls it by: unique among the Answer's Tools, e.g. "github__search_issues". */
+  name: string;
+  description: string;
+  /** A JSON Schema for its arguments (an object). */
+  inputSchema: Record<string, unknown>;
+  /** Where it comes from, for the Tool-call card: the Connector, and the Tool's own name there. */
+  source: { connectorId: string; connectorName: string; tool: string };
+  /** Calls it; resolves with the text the model reads, rejects when it fails (the model is told why). */
+  call(input: Record<string, unknown>, signal: AbortSignal): Promise<string>;
+}
+
 /** The Tools' work, done by the core: the engine only connects them to the model. */
 export interface AnswerTools {
-  /** Documents with Passages to search. With none, the model gets no Tools. */
+  /** Documents with Passages to search. With none, there is no document search. */
   readonly documentCount: number;
   /** The document-search Tool. */
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
   cite(records: readonly CitationRecordInput[]): string;
+  /** Tools from the User's Connectors, offered to a model that can call Tools. */
+  readonly external?: readonly ExternalTool[];
 }
 
 /** The Skill Tools' work, done by the core. */
@@ -90,6 +113,8 @@ export interface InstructionOptions {
   passages?: string;
   /** The model is offered the Skill Tools. */
   skillTools?: boolean;
+  /** The model is offered Connector Tools (`AnswerTools.external`). */
+  connectorTools?: boolean;
 }
 
 export interface AnswerRequest {
@@ -125,10 +150,17 @@ export type AnswerEngineEvent =
   | { type: "text-retracted"; length: number }
   /**
    * A Tool call started: a search of the Documents (by the model, or by the
-   * engine for a model without Tools, `{ query }`), or a Skill Tool
-   * (`use_skill` with `{ name }`, `read_skill_file` with `{ skill, path }`).
+   * engine for a model without Tools, `{ query }`), a Skill Tool
+   * (`use_skill` with `{ name }`, `read_skill_file` with `{ skill, path }`),
+   * or an external Tool, with its `source` and the arguments the model sent.
    */
-  | { type: "tool-call-started"; id: string; tool: string; input: Record<string, unknown> }
+  | {
+      type: "tool-call-started";
+      id: string;
+      tool: string;
+      source?: ExternalTool["source"];
+      input: Record<string, unknown>;
+    }
   | { type: "tool-call-finished"; id: string; ok: boolean; resultCount: number | null }
   /** The Answer is complete. Nothing follows. */
   | { type: "finished" }
@@ -255,9 +287,11 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       });
       const { signal } = request;
 
-      // With no Documents there is nothing to search or cite: Skills alone, or a plain Answer.
+      // With no Documents there is nothing to search or cite: Skills and
+      // Connector Tools alone, or a plain Answer.
       if (request.tools.documentCount === 0) {
-        if (request.skills && (request.support ?? "tools") === "tools") {
+        const external = request.tools.external?.length ?? 0;
+        if ((request.skills || external > 0) && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of toolLoop(request, maxSteps, "no-documents")) {
             if (event.type === "unsupported") {
@@ -373,9 +407,27 @@ function skillTools(skills: AnswerSkillTools): ToolSet {
   return tools;
 }
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** The external Tools (a Connector's), for the model. Names IncarnaMind's own Tools use are skipped. */
+function externalTools(external: ReadonlyMap<string, ExternalTool>, signal: AbortSignal): ToolSet {
+  const tools: ToolSet = {};
+  for (const each of external.values()) {
+    tools[each.name] = tool({
+      description: each.description,
+      inputSchema: jsonSchema<Record<string, unknown>>(each.inputSchema),
+      execute: (input, { abortSignal }) =>
+        each.call(isPlainObject(input) ? input : {}, abortSignal ?? signal),
+    });
+  }
+  return tools;
+}
+
 /**
  * The Tool-calling loop: search, cite, answer; with Skills, load them as
- * needed. "no-documents": the Skill Tools alone, with nothing to cite.
+ * needed; with Connectors, call their Tools where they help. "no-documents":
+ * the Skill and Connector Tools alone, with nothing to cite.
  */
 async function* toolLoop(
   request: AnswerRequest,
@@ -416,14 +468,24 @@ async function* toolLoop(
       execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
     }),
   };
+  /** External Tools, by the name the model calls them; never one of IncarnaMind's own names. */
+  const external = new Map(
+    (request.tools.external ?? [])
+      .filter((each) => !SHOWN_TOOLS.has(each.name) && each.name !== CITE_TOOL)
+      .map((each) => [each.name, each]),
+  );
   const tools: ToolSet = {
+    ...externalTools(external, signal),
     ...(mode === "tools" ? documentTools : {}),
     ...(request.skills ? skillTools(request.skills) : {}),
   };
 
   const result = streamText({
     model: request.model,
-    instructions: request.instructions(mode, { skillTools: request.skills !== null }),
+    instructions: request.instructions(mode, {
+      skillTools: request.skills !== null,
+      connectorTools: external.size > 0,
+    }),
     messages: request.messages,
     tools,
     stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
@@ -457,9 +519,10 @@ async function* toolLoop(
           yield { type: "text-delta", text };
           break;
         }
-        case "tool-call":
+        case "tool-call": {
           produced = true;
           stepTools.push(part.toolName);
+          const outside = external.get(part.toolName);
           if (SHOWN_TOOLS.has(part.toolName)) {
             yield {
               type: "tool-call-started",
@@ -467,10 +530,19 @@ async function* toolLoop(
               tool: part.toolName,
               input: shownInput(part.toolName, part.input),
             };
+          } else if (outside) {
+            yield {
+              type: "tool-call-started",
+              id: part.toolCallId,
+              tool: outside.source.tool,
+              source: outside.source,
+              input: isPlainObject(part.input) ? part.input : {},
+            };
           }
           break;
+        }
         case "tool-result":
-          if (SHOWN_TOOLS.has(part.toolName)) {
+          if (SHOWN_TOOLS.has(part.toolName) || external.has(part.toolName)) {
             yield {
               type: "tool-call-finished",
               id: part.toolCallId,
@@ -480,16 +552,18 @@ async function* toolLoop(
           }
           break;
         case "tool-error":
-          if (SHOWN_TOOLS.has(part.toolName)) {
-            // A failed search is the app's problem; a Skill or file that isn't there, the model's.
+          if (SHOWN_TOOLS.has(part.toolName) || external.has(part.toolName)) {
+            // A failed search is the app's problem; a Skill or file that isn't there, the
+            // model's; a Connector's failure (or a declined consent) is told to the model.
             if (part.toolName === SEARCH_TOOL && !signal.aborted) console.error(part.error);
             yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
           }
           break;
         case "finish-step": {
-          // Text before a search or a Skill, or before records with no marker in it, was a preamble.
+          // Text before a search, a Skill or a Connector's Tool, or before records with no
+          // marker in it, was a preamble.
           const preamble =
-            stepTools.some((name) => SHOWN_TOOLS.has(name)) ||
+            stepTools.some((name) => SHOWN_TOOLS.has(name) || external.has(name)) ||
             (stepTools.includes(CITE_TOOL) && !MARKER.test(stepText));
           if (preamble && stepText) yield { type: "text-retracted", length: stepText.length };
           else keptText += stepText;
