@@ -219,7 +219,7 @@ export function ChatGptPlanSettings() {
             </>
           )}
 
-          {test && <TestResult result={test} />}
+          {test && <TestResult result={test} onRetry={() => void testConnection()} />}
           {error && (
             <p role="alert" data-testid="codex-error" className={errorTextClass}>
               {error}
