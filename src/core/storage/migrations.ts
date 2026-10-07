@@ -426,6 +426,84 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 21,
+    description: "Documents indexed in place: Linked folders, file paths and versions (ADR-0010)",
+    sql: `
+      -- Folders on the User's computer that IncarnaMind keeps in sync, read
+      -- only: every supported file in one, at any depth, is a Document. path is
+      -- absolute, with symbolic links resolved. layout is how the sidebar shows
+      -- it: 'tree' (its sub-folders as Folders) or 'flat' (one list, for
+      -- Zotero-style folders of one file each), NULL until its first scan
+      -- suggests one. paused is 1 while its indexing is paused.
+      -- ignore_patterns is a JSON array of extra names or relative paths to
+      -- leave out, on top of hidden files, .git and node_modules (no UI yet).
+      CREATE TABLE linked_folders (
+        id TEXT PRIMARY KEY NOT NULL,
+        path TEXT NOT NULL,
+        layout TEXT,
+        paused INTEGER NOT NULL DEFAULT 0,
+        ignore_patterns TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX linked_folders_by_path ON linked_folders (path) WHERE deleted_at IS NULL;
+
+      -- Folders now mirror the folders inside Linked folders, as they are on
+      -- disk; the in-app Folders the User filed Documents in by hand are gone.
+      -- They are marked deleted, so a Search scope naming one shows it as a
+      -- deleted Folder. A Folder's id is derived from its Linked folder and its
+      -- relative_path ('' for the Linked folder itself, '/' between names), so
+      -- it is the same at every scan.
+      UPDATE folders SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE deleted_at IS NULL;
+      ALTER TABLE folders ADD COLUMN linked_folder_id TEXT;
+      ALTER TABLE folders ADD COLUMN relative_path TEXT;
+      CREATE INDEX folders_by_linked_folder ON folders (linked_folder_id) WHERE deleted_at IS NULL;
+
+      -- A Document is a file at a path, indexed where the User keeps it. The
+      -- same content at two paths is two Documents, so content_hash is no
+      -- longer unique. content_hash is the version whose text is indexed (the
+      -- SHA-256 of the file as it was read). path is absolute: NULL only for
+      -- Documents copied into the data folder before this migration, whose
+      -- path the core fills in at startup (their copy in documents/, until
+      -- the User links the folder the original is in). linked_folder_id is the
+      -- Linked folder the file is in, NULL for a file added on its own.
+      -- file_status: 'available' | 'missing' (the file is gone) |
+      -- 'unavailable' (its Linked folder, or a single file's folder, can't be
+      -- reached, or the file can't be read), checked in code. size and
+      -- file_mtime_ms are the file's as last seen, so a scan only reads files
+      -- whose size or modified time changed. Documents filed in the old
+      -- Folders become unfiled.
+      UPDATE documents SET folder_id = NULL WHERE folder_id IS NOT NULL;
+      DROP INDEX documents_by_content_hash;
+      CREATE INDEX documents_by_content_hash ON documents (content_hash) WHERE deleted_at IS NULL;
+      ALTER TABLE documents ADD COLUMN path TEXT;
+      ALTER TABLE documents ADD COLUMN linked_folder_id TEXT;
+      ALTER TABLE documents ADD COLUMN file_status TEXT NOT NULL DEFAULT 'available';
+      ALTER TABLE documents ADD COLUMN file_mtime_ms REAL;
+      CREATE UNIQUE INDEX documents_by_path ON documents (path) WHERE deleted_at IS NULL;
+      CREATE INDEX documents_by_linked_folder ON documents (linked_folder_id)
+        WHERE deleted_at IS NULL;
+
+      -- Each Passage and each page of text belongs to one version of its
+      -- Document: the content_hash it was built from. When the file changes,
+      -- the new version's Passages replace the old ones in search, but the old
+      -- version's pages stay for as long as a Citation quotes that version,
+      -- so its check still reads the text it quoted.
+      ALTER TABLE passages ADD COLUMN content_hash TEXT;
+      UPDATE passages SET content_hash =
+        (SELECT d.content_hash FROM documents d WHERE d.id = passages.document_id);
+      ALTER TABLE document_pages ADD COLUMN content_hash TEXT;
+      UPDATE document_pages SET content_hash =
+        (SELECT d.content_hash FROM documents d WHERE d.id = document_pages.document_id);
+      DROP INDEX document_pages_by_document;
+      CREATE INDEX document_pages_by_version ON document_pages (document_id, content_hash, page)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
