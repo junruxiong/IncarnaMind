@@ -199,7 +199,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is ${GATING_MODE} search with the built-in model: at least 16 of 20, and 8 of 10 in each language. Cross-lingual Questions and cloud embedding models are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is ${GATING_MODE} search with the built-in model: at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). Cross-lingual Questions and cloud embedding models are reported only.`,
     "",
     ...retrievalTable(retrieval.runs),
     "",

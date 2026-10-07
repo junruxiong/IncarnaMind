@@ -122,30 +122,46 @@ test("the Document viewer is hidden until opened, resizes from its left edge and
   await expect(viewer).toHaveCount(0);
   const fullWidth = await widthOf(mindArea);
 
-  // Opening it narrows the Mind area: it opens at about half the window (DESIGN.md).
+  // Opening it narrows the Mind area: it opens at half the room beside the sidebar (DESIGN.md),
+  // which it shares with the Mind about evenly.
   await openViewer(window);
   await expect(viewer).toBeVisible();
   expect(await widthOf(mindArea)).toBeLessThan(fullWidth);
-  const halfWindow = await window.evaluate(() => Math.round(globalThis.innerWidth / 2));
-  expect(await widthOf(viewer)).toBe(halfWindow);
+  const sidebarWidth = await widthOf(window.getByTestId("sidebar"));
+  expect(sidebarWidth).toBe(248);
+  const halfRoom = await window.evaluate(
+    (sidebar) => Math.round((globalThis.innerWidth - sidebar) / 2),
+    sidebarWidth,
+  );
+  expect(await widthOf(viewer)).toBe(halfRoom);
+  expect(Math.abs((await widthOf(mindArea)) - halfRoom)).toBeLessThanOrEqual(2);
 
-  // In a narrower window it gives way to the Mind, which keeps its 300px; it comes back as the window grows.
+  // Until it's resized, it keeps to half the room as the window changes: at 1280px, 516px.
   const resize = (width: number) =>
     first.app.evaluate(({ BrowserWindow }, size) => {
       BrowserWindow.getAllWindows()[0]?.setSize(size, 800);
     }, width);
   await resize(1000);
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1000);
-  await expect.poll(() => widthOf(mindArea)).toBe(300);
-  expect(await widthOf(viewer)).toBeLessThan(500);
+  await expect.poll(() => widthOf(viewer)).toBe(376);
   await resize(1280);
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
-  await expect.poll(() => widthOf(viewer)).toBe(640);
+  await expect.poll(() => widthOf(viewer)).toBe(516);
 
-  // Dragging the left edge 100px to the right narrows the panel by 100px.
-  const openedWidth = await widthOf(viewer);
-  await dragBy(window, window.getByTestId("viewer-resize"), 100);
-  await expect.poll(() => widthOf(viewer)).toBe(openedWidth - 100);
+  // Dragging the left edge 100px to the left widens the panel by 100px.
+  const draggedWidth = (await widthOf(viewer)) + 100;
+  await dragBy(window, window.getByTestId("viewer-resize"), -100);
+  await expect.poll(() => widthOf(viewer)).toBe(draggedWidth);
+
+  // In a window too narrow for that width it gives way to the Mind, which keeps its 300px;
+  // the width comes back as the window grows.
+  await resize(1000);
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1000);
+  await expect.poll(() => widthOf(mindArea)).toBe(300);
+  expect(await widthOf(viewer)).toBeLessThan(draggedWidth);
+  await resize(1280);
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
+  await expect.poll(() => widthOf(viewer)).toBe(draggedWidth);
 
   // Esc closes it and the Mind area gets its full width back.
   await window.keyboard.press("Escape");
@@ -157,7 +173,7 @@ test("the Document viewer is hidden until opened, resizes from its left edge and
   const second = await launchApp(dataDir);
   await expect(second.window.getByTestId("viewer")).toHaveCount(0);
   await openViewer(second.window);
-  await expect.poll(() => widthOf(second.window.getByTestId("viewer"))).toBe(openedWidth - 100);
+  await expect.poll(() => widthOf(second.window.getByTestId("viewer"))).toBe(draggedWidth);
   await second.window.getByTestId("viewer-close").click();
   await expect(second.window.getByTestId("viewer")).toHaveCount(0);
   await second.app.close();

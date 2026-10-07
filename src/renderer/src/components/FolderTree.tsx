@@ -10,6 +10,7 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import { useAppStore } from "../store";
+import { ExampleChip } from "./GettingStarted";
 import { LinkedFolderMenu, UnlinkFolderDialog } from "./LinkedFolderMenu";
 import {
   ChevronDownLineIcon,
@@ -255,6 +256,7 @@ function LinkedFolderItem({
   const language = useLanguage();
   const state = linkedFolderRowState(linked, hasContents);
   const label = rowStateLabel(state, t, language);
+  const isExample = useAppStore((current) => current.examples?.linkedFolderId === linked.id);
   return (
     <GroupItem
       testId="folder-item"
@@ -269,6 +271,7 @@ function LinkedFolderItem({
       status={label && { ...label, kind: state.kind }}
       progress={indexingShare(state)}
       paused={state.kind === "paused"}
+      chip={isExample && <ExampleChip />}
       actions={
         <LinkedFolderMenu
           linked={linked}
@@ -318,6 +321,8 @@ interface GroupItemProps {
   paused?: boolean;
   /** Its actions, over its right end while pointed at (see `rowActionsClass`). */
   actions?: ReactNode;
+  /** After its name, unless a status takes the room: the examples' Linked folder says "Example". */
+  chip?: ReactNode;
   data?: Record<`data-${string}`, string>;
   /** What is inside: sub-Folders, then Documents, shown while unfolded. */
   children: ReactNode;
@@ -330,7 +335,7 @@ interface GroupItemProps {
  */
 function GroupItem(props: GroupItemProps) {
   const { testId, groupKey, name, title, icon: Icon, depth, expanded, expandable } = props;
-  const { muted = false, status, progress = null, paused = false, actions, data } = props;
+  const { muted = false, status, progress = null, paused = false, actions, chip, data } = props;
   const children = props.children;
   const toggle = useFolderTree((state) => state.toggle);
   const tagFilter = useAppStore((state) => state.tagFilter);
@@ -342,6 +347,7 @@ function GroupItem(props: GroupItemProps) {
       <span data-testid="row-text" className="min-w-12 flex-1 truncate">
         {name}
       </span>
+      {!status && chip}
       {status && (
         <span
           data-testid="folder-status"

@@ -650,8 +650,6 @@ export const en = {
   "question.model.label": "Model for this Question",
   "question.model.default": "Default model ({model})",
   "question.model.defaultUnset": "Default model",
-  "question.mind.placeholder": "Start writing, or press {shortcut} to ask a Question…",
-  "question.followUp.placeholder": "Keep writing, or press {shortcut} to ask a follow-up",
   "question.context.include": "Include in Question context",
 
   "scope.picker.label": "Search scope",
@@ -1107,4 +1105,45 @@ export const en = {
   "approvals.policy.always": "Always allow",
   "approvals.policy.ask": "Ask every time",
   "approvals.policy.alwaysRun": "Always run",
+
+  // Onboarding: the example Mind, the "Get started" checklist and the three steps.
+  "editor.hint.empty": "Start writing, or {ask}",
+  "editor.hint.empty.ask": "press {shortcut} to ask a Question…",
+  "editor.hint.afterAnswer": "Keep writing, or {ask}",
+  "editor.hint.afterAnswer.ask": "press {shortcut} to ask a follow-up",
+  "editor.hint.example": "Try it: write a line here, or {ask}",
+  "editor.hint.example.ask": "press {shortcut} to ask your own Question",
+  "examples.chip": "Example",
+  "examples.banner.label": "About this example",
+  "examples.banner.title": "This is an example Mind.",
+  "examples.banner.body":
+    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a green check to see the quote.",
+  "examples.banner.addOwn": "Add your Documents or apps",
+  "examples.banner.remove": "Remove the examples",
+  "examples.answer": "Example Answer, written in advance: no model needed to try it",
+  "gettingStarted.title": "Get started",
+  "gettingStarted.count": "· {done} of {total}",
+  "gettingStarted.hide": "Hide Get started",
+  "gettingStarted.done": "Done: ",
+  "gettingStarted.step.citation": "Check a Citation in the example",
+  "gettingStarted.step.documents": "Index your Documents or connect apps",
+  "gettingStarted.step.question": "Ask your own Question",
+  "startGuide.title": "Start in three steps",
+  "startGuide.documents.title": "Add your Documents, or connect your apps",
+  "startGuide.documents.body":
+    "PDF, Word, PowerPoint, Excel, Markdown or text. Your files stay where they are; IncarnaMind only reads them. A Google Drive or OneDrive folder synced to this computer works too.",
+  "startGuide.documents.linkFolder": "Link a folder…",
+  "startGuide.documents.addFiles": "Add files",
+  "startGuide.documents.connectApp": "Connect an app…",
+  "startGuide.documents.apps":
+    "Connect Notion, Google Drive or any app with an MCP server, and Answers can look things up there too. Only your Documents get checked Citations.",
+  "startGuide.ask.title": "Ask a Question",
+  "startGuide.ask.body":
+    "Press {shortcut} anywhere in a Mind and type. The Answer is written right below, from your Documents.",
+  "startGuide.ask.example": "e.g. What do these reports say about Q3 revenue?",
+  "startGuide.check.title": "Check where each claim comes from",
+  "startGuide.check.body":
+    "Every claim gets a mark in the margin: {mark} when the quote is found in your Document. Click it to open the page.",
+  "startGuide.example.lead": "Want to see it first?",
+  "startGuide.example.open": "Open the example Mind",
 } as const satisfies Record<string, string>;

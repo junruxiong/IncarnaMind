@@ -386,13 +386,31 @@ export interface UserSettings {
   chatModel: ChatModelChoice | null;
 }
 
+/**
+ * The "Get started" checklist of a first run, at the bottom of the sidebar:
+ * check a Citation in the example Mind, add Documents or connect an app, and
+ * ask a Question of one's own. Each step ticks itself as the User does it.
+ */
+export interface GettingStarted {
+  /** Shown: the examples were made on this device's first run. */
+  started: boolean;
+  /** The User opened a Citation's card. */
+  citationChecked: boolean;
+  /** The User added Documents of their own, or connected an app. */
+  indexed: boolean;
+  /** The User asked a Question of their own, not the example's. */
+  askedOwn: boolean;
+  /** The User hid the checklist. */
+  hidden: boolean;
+}
+
 /** Settings that belong to this device and never sync (ADR-0003). */
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
   sidebarWidth: number;
   /**
    * Width of the right Document viewer pane, in CSS pixels, once the User
-   * has resized it. Null until then: it opens at about half the window.
+   * has resized it. Null until then: it opens at about half the room beside the sidebar.
    */
   viewerWidth: number | null;
   /**
@@ -404,6 +422,8 @@ export interface DeviceSettings {
   activeMind: string | null;
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
+  /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
+  gettingStarted: GettingStarted;
   /**
    * Skill scripts may run on this device: on by default, and each run still
    * asks first unless the Skill's scripts always run. Off, Answers aren't
@@ -700,6 +720,22 @@ export type LinkedFolderLayout = "tree" | "flat";
  *   unmounted share). Its Documents stay searchable; it is checked again later.
  */
 export type LinkedFolderStatus = "scanning" | "watching" | "paused" | "unavailable";
+
+/**
+ * The example Mind (onboarding, see src/core/examples.ts): "Where tea comes
+ * from", with two example Documents in their own Linked folder, written in
+ * advance so it works before any chat model is set up.
+ */
+export interface Examples {
+  /** Whether this copy of IncarnaMind ships the examples. */
+  available: boolean;
+  /** The example Mind, while it exists. */
+  mindId: string | null;
+  /** The Linked folder of the example Documents, while it exists. */
+  linkedFolderId: string | null;
+  /** The example Answer, written in advance, while the example Mind exists. */
+  answerId: string | null;
+}
 
 /**
  * A folder on the User's computer that IncarnaMind keeps in sync, read only:
@@ -2163,6 +2199,22 @@ export interface CoreApi {
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
+
+  /** The example Mind and its Documents, if made (see `Examples`). */
+  getExamples(): Promise<Examples>;
+  /**
+   * On a first run (no Mind yet, examples never offered before), makes the
+   * examples, once. Returns them, or null when nothing was made.
+   */
+  offerExamples(): Promise<Examples | null>;
+  /**
+   * Makes the example Mind and its Documents (copies of the shipped files in
+   * the data folder, linked), or returns them if they exist. Its Citations
+   * are checked once the Documents have been read. "examples.changed" follows.
+   */
+  createExamples(): Promise<Examples>;
+  /** Deletes the example Mind, and unlinks the example Documents and deletes their copies. */
+  removeExamples(): Promise<void>;
   /** Shows a Linked folder as a tree of Folders or as a flat list. Returns it. */
   setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<LinkedFolder>;
   /**
@@ -2547,6 +2599,7 @@ export interface CoreEvents {
   "settings.changed": Settings;
   /** Minds were created, renamed, deleted or edited: the list as `listMinds` now returns it. */
   "minds.changed": Mind[];
+  "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
   /**
@@ -2740,6 +2793,10 @@ const methods: Record<CoreApiMethod, true> = {
   testJevConnection: true,
   listConnectors: true,
   addConnector: true,
+  getExamples: true,
+  offerExamples: true,
+  createExamples: true,
+  removeExamples: true,
   editConnector: true,
   setConnectorEnabled: true,
   restartConnector: true,
