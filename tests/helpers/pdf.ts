@@ -15,6 +15,27 @@ export interface PdfPage {
   image?: boolean;
 }
 
+/** An entry of a PDF's outline (its bookmarks). */
+export interface PdfOutlineEntry {
+  title: string;
+  /** The page it goes to, from 1. */
+  page?: number;
+  /**
+   * How it says where it goes: an explicit destination (`[page /XYZ …]`, the
+   * default), a named destination looked up in the catalog's `/Dests`, a
+   * GoTo action, or a web link (`url`) instead of a page.
+   */
+  via?: "explicit" | "named" | "action";
+  url?: string;
+  /** Shown expanded at first (a positive `/Count`). */
+  open?: boolean;
+  items?: readonly PdfOutlineEntry[];
+}
+
+export interface PdfOptions {
+  outline?: readonly PdfOutlineEntry[];
+}
+
 const LINE_HEIGHT = 14;
 const TOP = 760;
 
@@ -48,12 +69,75 @@ function contentStream(page: PdfPage): string {
   return parts.join("\n");
 }
 
-/** Returns the bytes of a PDF with one page per entry. */
-export function buildPdf(pages: readonly PdfPage[]): Uint8Array {
+/**
+ * Adds an outline's objects, numbered from `firstId`, and returns the
+ * catalog's entries for it: `/Outlines` and, for named destinations, `/Dests`.
+ */
+function addOutline(
+  objects: string[],
+  firstId: number,
+  outline: readonly PdfOutlineEntry[],
+  pageRef: (page: number) => string,
+): string {
+  let nextId = firstId;
+  const named: string[] = [];
+
+  const destination = (entry: PdfOutlineEntry): string => {
+    if (entry.url) return `/A << /S /URI /URI (${escapeLatin(entry.url)}) >>`;
+    const explicit = `[${pageRef(entry.page ?? 1)} /XYZ 0 792 0]`;
+    if (entry.via === "named") {
+      const name = `section${named.length + 1}`;
+      named.push(`/${name} ${explicit}`);
+      return `/Dest (${name})`;
+    }
+    if (entry.via === "action") return `/A << /S /GoTo /D ${explicit} >>`;
+    return `/Dest ${explicit}`;
+  };
+
+  /** The entries shown under an open entry: its children, and theirs if open. */
+  const shown = (entries: readonly PdfOutlineEntry[]): number =>
+    entries.reduce((count, entry) => count + 1 + (entry.open ? shown(entry.items ?? []) : 0), 0);
+
+  const add = (entries: readonly PdfOutlineEntry[], parentId: number) => {
+    const ids = entries.map(() => nextId++);
+    entries.forEach((entry, index) => {
+      const id = ids[index] as number;
+      const children = entry.items ?? [];
+      let object = `<< /Title (${escapeLatin(entry.title)}) /Parent ${parentId} 0 R ${destination(entry)}`;
+      if (index > 0) object += ` /Prev ${ids[index - 1]} 0 R`;
+      if (index < ids.length - 1) object += ` /Next ${ids[index + 1]} 0 R`;
+      if (children.length > 0) {
+        const range = add(children, id);
+        const count = entry.open ? shown(children) : -children.length;
+        object += ` /First ${range.first} 0 R /Last ${range.last} 0 R /Count ${count}`;
+      }
+      objects[id] = `${object} >>`;
+    });
+    return { first: ids[0], last: ids.at(-1) };
+  };
+
+  const rootId = nextId++;
+  const range = add(outline, rootId);
+  objects[rootId] =
+    `<< /Type /Outlines /First ${range.first} 0 R /Last ${range.last} 0 R /Count ${shown(outline)} >>`;
+  const dests = named.length > 0 ? ` /Dests << ${named.join(" ")} >>` : "";
+  return ` /Outlines ${rootId} 0 R /PageMode /UseOutlines${dests}`;
+}
+
+/** Returns the bytes of a PDF with one page per entry, and the outline given. */
+export function buildPdf(pages: readonly PdfPage[], options: PdfOptions = {}): Uint8Array {
   // Objects 1–5 are fixed; each page then adds a page object and a content stream.
   const objects: string[] = [];
   const pageIds = pages.map((_, index) => 6 + index * 2);
-  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  const outline =
+    options.outline && options.outline.length > 0
+      ? addOutline(objects, 6 + pages.length * 2, options.outline, (page) => {
+          const id = pageIds[page - 1];
+          if (id === undefined) throw new Error(`There is no page ${page}.`);
+          return `${id} 0 R`;
+        })
+      : "";
+  objects[1] = `<< /Type /Catalog /Pages 2 0 R${outline} >>`;
   objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`;
   objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
   objects[4] =

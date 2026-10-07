@@ -13,13 +13,16 @@ import type { Document } from "../../../core/api";
 import { findQuoteInPages, type TextPiece } from "../../../shared/quoteMatch";
 import {
   ChevronDownIcon,
+  ChevronIcon,
   ChevronUpIcon,
   FitWidthIcon,
   MinusIcon,
+  OutlineIcon,
   PlusIcon,
 } from "../components/icons";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import { loadOutline, type OutlineItem } from "./outline";
 import { isMissingDocumentError, loadPdfJs, openPdf, type PdfJs } from "./pdfjs";
 import { DocumentRemoved, ViewerMessage } from "./ViewerMessage";
 
@@ -64,7 +67,8 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
  * A PDF Document, rendered with pdf.js: pages are drawn only while near the
  * visible area, each with a text layer so its text can be selected. Opened at
  * a page range with a quote, it shows the first page of the range and
- * highlights the quote if those pages contain it.
+ * highlights the quote if those pages contain it. A PDF with an outline
+ * (bookmarks) can show it in a panel beside the pages.
  */
 export function PdfView({ document, target }: { document: Document; target: ViewerTarget }) {
   const t = useT();
@@ -142,6 +146,8 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   const [highlights, setHighlights] = useState<ReadonlyMap<number, RunHighlight[]>>(
     () => new Map(),
   );
+  const [outline, setOutline] = useState<readonly OutlineItem[]>([]);
+  const [outlineOpen, setOutlineOpen] = useState(false);
 
   const scroller = useRef<HTMLDivElement>(null);
   const pageElements = useRef<(HTMLElement | null)[]>([]);
@@ -309,6 +315,22 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     };
   }, [pdf, pageCount, target.request, target.quote, target.pageFrom, target.pageTo]);
 
+  // The outline, if the PDF has one: its button shows only then.
+  useEffect(() => {
+    let cancelled = false;
+    loadOutline(pdf).then(
+      (items) => {
+        if (!cancelled) setOutline(items);
+      },
+      (error: unknown) => {
+        if (!cancelled) console.error(error);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [pdf]);
+
   // Pages within a screen of the view are drawn; the rest are released.
   useEffect(() => {
     const root = scroller.current;
@@ -367,6 +389,8 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
     setZoom({ fit: false, zoom: clamp(next, MIN_ZOOM, MAX_ZOOM) });
   };
 
+  const hasOutline = outline.length > 0;
+
   return (
     <div className="flex h-full flex-col">
       <Toolbar
@@ -374,6 +398,11 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
         pageCount={pageCount}
         zoomPercent={Math.round(currentZoom * 100)}
         fitWidth={zoom.fit}
+        outlineOpen={hasOutline ? outlineOpen : null}
+        onToggleOutline={() => {
+          measure(); // the pages may refit to the narrower view: keep the place
+          setOutlineOpen((open) => !open);
+        }}
         onGoToPage={goToPage}
         onZoomIn={() => zoomTo(ZOOM_STEPS.find((step) => step > currentZoom + 0.001) ?? MAX_ZOOM)}
         onZoomOut={() =>
@@ -384,37 +413,143 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
           setZoom({ fit: true });
         }}
       />
-      <div
-        ref={scroller}
-        data-testid="pdf-scroller"
-        onScroll={onScroll}
-        className="relative min-h-0 flex-1 overflow-auto bg-gray-100 [overflow-anchor:none]"
-      >
+      <div className="flex min-h-0 flex-1">
+        {hasOutline && outlineOpen && <OutlinePanel items={outline} onGoToPage={goToPage} />}
         <div
-          className="flex w-max min-w-full flex-col items-center"
-          style={{ gap: PAGE_GAP, padding: PAGE_GAP }}
+          ref={scroller}
+          data-testid="pdf-scroller"
+          onScroll={onScroll}
+          className="relative min-w-0 flex-1 overflow-auto bg-gray-100 [overflow-anchor:none]"
         >
-          {sizes.map((size, index) => {
-            const page = index + 1;
-            return (
-              <PdfPage
-                key={page}
-                pdfjs={pdfjs}
-                pdf={pdf}
-                page={page}
-                size={size}
-                scale={scale}
-                nearby={nearby.has(page)}
-                highlights={highlights.get(page)}
-                onSize={onPageSize}
-                onHighlightShown={onHighlightShown}
-                setElement={setPageElement}
-              />
-            );
-          })}
+          <div
+            className="flex w-max min-w-full flex-col items-center"
+            style={{ gap: PAGE_GAP, padding: PAGE_GAP }}
+          >
+            {sizes.map((size, index) => {
+              const page = index + 1;
+              return (
+                <PdfPage
+                  key={page}
+                  pdfjs={pdfjs}
+                  pdf={pdf}
+                  page={page}
+                  size={size}
+                  scale={scale}
+                  nearby={nearby.has(page)}
+                  highlights={highlights.get(page)}
+                  onSize={onPageSize}
+                  onHighlightShown={onHighlightShown}
+                  setElement={setPageElement}
+                />
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** The outline's indent per level, in CSS pixels, as in the sidebar's Folder tree. */
+const OUTLINE_INDENT = 12;
+
+/**
+ * The PDF's outline, beside its pages: entries with others under them expand
+ * and collapse, and clicking an entry goes to its page.
+ */
+function OutlinePanel({
+  items,
+  onGoToPage,
+}: {
+  items: readonly OutlineItem[];
+  onGoToPage(page: number): void;
+}) {
+  const t = useT();
+  return (
+    <nav
+      data-testid="pdf-outline"
+      aria-label={t("viewer.outline.label")}
+      className="w-56 max-w-[45%] shrink-0 overflow-auto border-r border-gray-200 bg-white p-1 text-[13px] text-gray-700"
+    >
+      <OutlineList items={items} depth={0} onGoToPage={onGoToPage} />
+    </nav>
+  );
+}
+
+function OutlineList({
+  items,
+  depth,
+  onGoToPage,
+}: {
+  items: readonly OutlineItem[];
+  depth: number;
+  onGoToPage(page: number): void;
+}) {
+  return (
+    <ul>
+      {items.map((item, index) => (
+        // The outline never changes while shown, so its order is a stable key.
+        // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a title.
+        <OutlineEntry key={index} item={item} depth={depth} onGoToPage={onGoToPage} />
+      ))}
+    </ul>
+  );
+}
+
+function OutlineEntry({
+  item,
+  depth,
+  onGoToPage,
+}: {
+  item: OutlineItem;
+  depth: number;
+  onGoToPage(page: number): void;
+}) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(item.open);
+  const title = item.title || t("viewer.outline.untitled");
+  const hasChildren = item.items.length > 0;
+  const { page } = item;
+  return (
+    <li>
+      <div
+        className="flex items-center gap-[2px] rounded-[6px] hover:bg-gray-100"
+        style={{ paddingLeft: 2 + depth * OUTLINE_INDENT }}
+      >
+        {hasChildren ? (
+          <button
+            type="button"
+            data-testid="pdf-outline-expand"
+            aria-expanded={expanded}
+            aria-label={t(expanded ? "viewer.outline.collapse" : "viewer.outline.expand", {
+              title,
+            })}
+            onClick={() => setExpanded((open) => !open)}
+            className="shrink-0 rounded-[6px] p-[2px] text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+          >
+            <ChevronIcon className={`size-3 transition-transform ${expanded ? "rotate-90" : ""}`} />
+          </button>
+        ) : (
+          <span className="size-4 shrink-0" />
+        )}
+        <button
+          type="button"
+          data-testid="pdf-outline-item"
+          data-page={page ?? undefined}
+          disabled={page === null}
+          title={title}
+          onClick={() => {
+            if (page !== null) onGoToPage(page);
+          }}
+          className="min-w-0 flex-1 truncate py-[3px] pr-1 text-left disabled:text-gray-400"
+        >
+          {title}
+        </button>
+      </div>
+      {hasChildren && expanded && (
+        <OutlineList items={item.items} depth={depth + 1} onGoToPage={onGoToPage} />
+      )}
+    </li>
   );
 }
 
@@ -423,6 +558,9 @@ interface ToolbarProps {
   pageCount: number;
   zoomPercent: number;
   fitWidth: boolean;
+  /** Whether the outline panel is open; null for a PDF without an outline, which has no button. */
+  outlineOpen: boolean | null;
+  onToggleOutline(): void;
   onGoToPage(page: number): void;
   onZoomIn(): void;
   onZoomOut(): void;
@@ -434,12 +572,25 @@ const toolButton =
 
 function Toolbar(props: ToolbarProps) {
   const t = useT();
-  const { currentPage, pageCount, zoomPercent, fitWidth } = props;
+  const { currentPage, pageCount, zoomPercent, fitWidth, outlineOpen } = props;
   return (
     <div
       data-testid="pdf-toolbar"
       className="flex h-9 shrink-0 items-center gap-1 border-b border-gray-200 px-2 text-sm text-gray-600"
     >
+      {outlineOpen !== null && (
+        <button
+          type="button"
+          data-testid="pdf-outline-button"
+          aria-label={t(outlineOpen ? "viewer.outline.hide" : "viewer.outline.show")}
+          aria-pressed={outlineOpen}
+          title={t(outlineOpen ? "viewer.outline.hide" : "viewer.outline.show")}
+          onClick={props.onToggleOutline}
+          className={`${toolButton} ${outlineOpen ? "bg-gray-200 text-gray-800" : ""}`}
+        >
+          <OutlineIcon className="size-4" />
+        </button>
+      )}
       <button
         type="button"
         data-testid="pdf-previous-page"

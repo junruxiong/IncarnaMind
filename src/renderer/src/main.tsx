@@ -4,8 +4,10 @@ import { App } from "./App";
 import "./fonts.css";
 import "./styles.css";
 import "./viewer/viewer.css";
+import { installErrorLog } from "./errorLog";
 import { installTestHooks } from "./viewerControls";
 
+installErrorLog();
 installTestHooks();
 
 const container = document.getElementById("root");

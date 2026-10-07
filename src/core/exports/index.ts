@@ -16,6 +16,7 @@ import type {
   MindExportPreview,
 } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
+import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
 import { renderDocx } from "./docx";
 import { renderMarkdown } from "./markdown";
@@ -59,7 +60,7 @@ export function createExports(deps: ExportsDependencies) {
     }));
     const footnotes = footnotesIn(blocks);
     const preview: MindExportPreview = {
-      fileName: `${fileNameOf(mind.title || translate(language, "mind.untitled"))}.${EXTENSIONS[format]}`,
+      fileName: `${safeFileName(mind.title || translate(language, "mind.untitled"), "Mind")}.${EXTENSIONS[format]}`,
       citations: footnotes.length,
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
@@ -123,17 +124,4 @@ function footnoteOf(
       : translate(language, "export.citation.document", { document }),
     unverified: citationState(attributes, documents).check !== "found",
   };
-}
-
-/** A file name from a Mind's title: without characters file systems refuse, and not too long. */
-function fileNameOf(title: string): string {
-  const name = title
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters can't be in file names.
-    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\.+/, "")
-    .slice(0, 120)
-    .replace(/[\s.]+$/, "");
-  return name || "Mind";
 }

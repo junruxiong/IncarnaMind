@@ -26,18 +26,46 @@ export interface FilesBridge {
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<string | null>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
+  /** Shows the data folder's `logs/` in the system's file manager, e.g. to attach the log to a bug report. */
+  openLogsFolder(): Promise<void>;
   /**
    * Shows the system's open dialog for a Skill to import: a folder, or a zip
    * file. Resolves with its absolute path, or null if the User cancelled.
    */
   pickSkill(kind: SkillPickKind): Promise<string | null>;
+  /**
+   * Opens a Document's original file in the system's default app for its
+   * type: a temporary copy, named after the Document. Rejects for a deleted Document.
+   */
+  openDocumentExternally(documentId: string): Promise<void>;
+  /**
+   * Saves a copy of a Document's original file where the User picks in the
+   * system save dialog, suggesting the Document's name and extension.
+   * Resolves with the copy's path, or null if they cancelled. Rejects for a
+   * deleted Document.
+   */
+  saveDocumentCopy(documentId: string): Promise<string | null>;
+  /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
+  logError(report: RendererErrorReport): void;
 }
 
 export type SkillPickKind = "folder" | "zip";
+
+/** An error nothing in the window caught: a thrown error, or a rejected promise nobody handled. */
+export interface RendererErrorReport {
+  kind: "error" | "rejection";
+  name: string;
+  message: string;
+  stack: string;
+}
 
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
   saveMindExport: "files:saveMindExport",
   openDataFolder: "files:openDataFolder",
+  openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",
+  openDocumentExternally: "files:openDocumentExternally",
+  saveDocumentCopy: "files:saveDocumentCopy",
+  logError: "files:logError",
 } as const;

@@ -11,6 +11,7 @@ import {
   type CoreAdapters,
   type CrashReporter,
   type Keychain,
+  type Logger,
 } from "../core";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -108,12 +109,13 @@ function createCrashReporter(dataDir: string): CrashReporter | undefined {
   });
 }
 
-/** Builds the core's adapters. Call after `app` is ready. */
-export function createElectronAdapters(): CoreAdapters {
+/** Builds the core's adapters, with the log the core writes to. Call after `app` is ready. */
+export function createElectronAdapters(log: Logger): CoreAdapters {
   const dataDir = app.getPath("userData");
   const crashReporter = createCrashReporter(dataDir);
   return {
     ...(crashReporter && { crashReporter }),
+    log,
     paths: { dataDir, builtInSkills: builtInSkillsFolder() },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
