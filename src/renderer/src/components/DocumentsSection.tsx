@@ -10,7 +10,13 @@ import type { MessageKey } from "../../../shared/i18n";
 import { endSidebarDrag, startSidebarDrag } from "../folders";
 import { useT } from "../i18n";
 import { selectVisibleDocuments, useAppStore } from "../store";
-import { DocumentTagChips, DocumentTagMenu, TagFilter, TaggingStatus } from "./DocumentTags";
+import {
+  DocumentTagChips,
+  DocumentTagMenu,
+  TagFilter,
+  TaggingStatus,
+  TaggingWaitingNotice,
+} from "./DocumentTags";
 import { FolderTree, type NewFolderPlace } from "./FolderTree";
 import {
   CloseIcon,
@@ -54,7 +60,8 @@ const statusTones: Record<DocumentStatus, string> = {
 
 /**
  * The sidebar's Documents: a list with each Document's processing status, its
- * Tags and its tagging, an add button with a file picker, and rename and
+ * Tags and its tagging (with one notice above the list while tagging waits
+ * for a model), an add button with a file picker, and rename and
  * delete. Dropping files anywhere on the window adds them too (see
  * `FileDrop`). Above the list, the Folder tree and the Tag chips filter it;
  * Documents are filed by dragging them onto a Folder or with "Move to…", and
@@ -137,6 +144,7 @@ export function DocumentsSection() {
       </div>
       <SkippedFilesNotice />
       <EmbeddingModelNotice />
+      <TaggingWaitingNotice />
       <FolderTree
         newFolderIn={newFolderIn}
         onNewFolder={setNewFolderIn}
