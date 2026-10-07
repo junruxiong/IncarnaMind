@@ -22,12 +22,22 @@ files:
   # pdf.js's optional native canvas (about 27 MB) only renders pages in Node; text extraction doesn't use it.
   - "!**/node_modules/@napi-rs/canvas*{,/**}"
 
+# onnxruntime-node, which runs the built-in embedding model in a utility process, loads
+# native libraries with dlopen, which can't read inside app.asar. Each platform below
+# keeps only its own libraries: the package ships them for every platform (about 250 MB).
+asarUnpack:
+  - "**/node_modules/onnxruntime-node/bin/**"
+
 # No spaces in file names, and the architecture in every name: the auto-updater tells the
 # Apple silicon and Intel macOS downloads apart by it.
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 mac:
   category: public.app-category.productivity
+  files:
+    # The arm64 and x64 apps are built separately: each keeps its own architecture.
+    - "!**/node_modules/onnxruntime-node/bin/napi-v*/{linux,win32}{,/**}"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v*/darwin/!(${arch}){,/**}"
   # The zip is what auto-update downloads; the dmg is what people install from.
   target:
     - dmg
@@ -41,6 +51,9 @@ dmg:
   writeUpdateInfo: false
 
 win:
+  files:
+    - "!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,linux}{,/**}"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v*/win32/!(${arch}){,/**}"
   # TODO(signing): unsigned in v1. SignPath Foundation's free signing for open-source
   # projects is the follow-up; until then SmartScreen warns on first run (see the README).
   target:
@@ -53,6 +66,9 @@ nsis:
 
 linux:
   category: Office
+  files:
+    - "!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,win32}{,/**}"
+    - "!**/node_modules/onnxruntime-node/bin/napi-v*/linux/!(${arch}){,/**}"
   target:
     - AppImage
 

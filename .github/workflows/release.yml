@@ -11,6 +11,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # onnxruntime-node's install script downloads its CUDA libraries (hundreds of MB) on Linux
+  # x64, and the AppImage would ship them. The app runs the embedding model on the CPU.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
