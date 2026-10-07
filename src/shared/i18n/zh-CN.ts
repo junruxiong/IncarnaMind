@@ -65,6 +65,8 @@ export const zhCN = {
   "viewer.notText": "这个文件中没有可读的文字。",
   "viewer.removed.title": "文档已移除",
   "viewer.removed.body": "这个文档已从 IncarnaMind 中删除，因此无法显示。",
+  "viewer.removed.unlinked":
+    "这个文档所在的文件夹已取消关联。IncarnaMind 保留了你的引用所引的文字。",
   "viewer.removed.quote": "引用的文字：",
   "viewer.file.missing": "文件已不在原来的文件夹中，这里显示的是 IncarnaMind 保留的文字。",
   "viewer.file.unavailable": "暂时无法访问文件，这里显示的是 IncarnaMind 保留的文字。",

@@ -60,4 +60,9 @@ export interface ViewerCitation {
   number?: number;
   /** Its Location's short label, e.g. "slide 4" or "Revenue, rows 12–14": the mark shows it. */
   label?: string;
+  /**
+   * The version of the Document it quotes: with the Document gone, the viewer
+   * tells whether that text was kept because its Linked folder was unlinked.
+   */
+  contentHash?: string;
 }

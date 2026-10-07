@@ -45,10 +45,13 @@ export interface CitationState {
 /**
  * Whether the stored text a Citation's check read is kept, though its
  * Document was unlinked with its Linked folder: every Unit it cites, of the
- * version it quotes (or of any version, if it doesn't say).
+ * version it quotes (or of any version, if it doesn't say). The viewer asks
+ * too, to say why it can't show the Document.
  */
-function textKept(
-  attributes: Partial<CitationAttributes>,
+export function citedTextKept(
+  attributes: Partial<
+    Pick<CitationAttributes, "documentId" | "contentHash" | "pageFrom" | "pageTo">
+  >,
   kept: readonly KeptCitationText[],
 ): boolean {
   const { documentId, contentHash, pageFrom, pageTo } = attributes;
@@ -95,7 +98,7 @@ export function citationState(
   if (check === "checking") {
     return { check, reason: null, documentId: live?.id ?? own, changedAfterCited: false };
   }
-  if (!live && textKept(attributes, kept)) {
+  if (!live && citedTextKept(attributes, kept)) {
     return { check, reason, documentId: null, changedAfterCited: false };
   }
   if (!live) {

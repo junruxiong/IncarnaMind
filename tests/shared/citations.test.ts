@@ -6,6 +6,7 @@ import {
   citationReference,
   citationState,
   citedLocation,
+  citedTextKept,
 } from "../../src/shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 import { findQuoteInPages } from "../../src/shared/quoteMatch";
@@ -112,6 +113,18 @@ describe("A Citation's badge", () => {
     expect(citationState({ ...found, contentHash: null }, [], kept).check).toBe("found");
     const whole = { ...found, pageFrom: null, pageTo: null };
     expect(citationState(whole, [], [{ ...text, units: [1] }]).check).toBe("found");
+  });
+
+  test("the viewer tells an unlinked Document whose quoted text was kept from a deleted one", () => {
+    const kept = [{ documentId: "tides", contentHash: "abc", units: [12, 13] }];
+    // As the viewer opens a Citation: its Document, version and Units.
+    const opened = { documentId: "tides", contentHash: "abc", pageFrom: 12, pageTo: 13 };
+    expect(citedTextKept(opened, kept)).toBe(true);
+    expect(citedTextKept({ ...opened, contentHash: null }, kept)).toBe(true);
+    // Deleted by the User, nothing is kept; nor of another version, or Unit.
+    expect(citedTextKept(opened, [])).toBe(false);
+    expect(citedTextKept({ ...opened, contentHash: "def" }, kept)).toBe(false);
+    expect(citedTextKept({ ...opened, pageFrom: 14, pageTo: 14 }, kept)).toBe(false);
   });
 
   test("says when the Document changed after it was cited: the check stands for the version quoted", () => {

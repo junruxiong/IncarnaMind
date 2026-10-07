@@ -85,6 +85,7 @@ export function CitationView({
         check: state.check,
         ...(number > 0 ? { number } : {}),
         ...(where ? { label: where } : {}),
+        ...(attributes.contentHash ? { contentHash: attributes.contentHash } : {}),
       },
     });
   };

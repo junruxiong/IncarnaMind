@@ -347,6 +347,10 @@ test("a Document deleted while it is open, or already deleted, shows Document re
   await openDocumentAt(window, { documentId, pageFrom: 2, quote: "Revenue grew by ten percent" });
   await expect(window.getByTestId("viewer-removed")).toContainText("Document removed");
   await expect(window.getByTestId("viewer-removed")).toContainText("Revenue grew by ten percent");
+  // Deleted by the User, not unlinked with its folder: it says so.
+  await expect(window.getByTestId("viewer-removed")).toContainText(
+    "This Document has been deleted from IncarnaMind",
+  );
   await app.close();
 });
 

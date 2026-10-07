@@ -337,9 +337,12 @@ test("a file deleted on disk shows as missing, still opens, and can be removed f
   expect((await doomed.boundingBox())?.height).toBeCloseTo(28, 0);
   await screenshot(window.getByTestId("sidebar"), "document-missing");
 
-  // Opening it still opens the viewer, as for any Document.
+  // Opening it still opens the viewer, as for any Document, which says it can't show it.
   await doomed.getByTestId("open-document").click();
   await expect(window.getByTestId("viewer")).toBeVisible();
+  await expect(window.getByTestId("viewer-removed")).toContainText(
+    "This Document has been deleted from IncarnaMind",
+  );
 
   // Its file can't be opened or shown: the items say why, and do nothing.
   await openDocumentMenu(doomed);
@@ -437,10 +440,13 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   await expect(window.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
   await citation.getByTestId("citation-chip").click();
   await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
-  // The viewer shows the quote, as it does for a Document whose file is gone.
-  await expect(window.getByTestId("viewer-removed")).toContainText(
-    "Spring tides happen at new moon and at full moon.",
+  // The viewer shows the quote, and says the folder was unlinked: the Document wasn't deleted.
+  const removed = window.getByTestId("viewer-removed");
+  await expect(removed).toContainText("Spring tides happen at new moon and at full moon.");
+  await expect(removed).toContainText(
+    "This Document's folder was unlinked. IncarnaMind kept the text your Citation quotes.",
   );
+  await expect(removed).not.toContainText("deleted");
   await screenshot(window, "unlinked-citation");
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("citation-card")).toBeHidden();

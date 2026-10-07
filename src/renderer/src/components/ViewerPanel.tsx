@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { Document } from "../../../core/api";
+import { citedTextKept } from "../../../shared/citations";
 import { useT } from "../i18n";
 import { useAppStore, type ViewerTarget } from "../store";
 import { DocxView } from "../viewer/DocxView";
@@ -43,6 +44,20 @@ export function ViewerPanel({ width, onClose }: { width: number; onClose(): void
       ? state.documents.find((each) => each.id === state.viewerTarget?.documentId)
       : undefined,
   );
+  // A Citation's Document that went with its Linked folder, whose quoted text was kept.
+  const unlinked = useAppStore((state) => {
+    const opened = state.viewerTarget;
+    if (!opened?.citation) return false;
+    return citedTextKept(
+      {
+        documentId: opened.documentId,
+        contentHash: opened.citation.contentHash ?? null,
+        pageFrom: opened.pageFrom ?? null,
+        pageTo: opened.pageTo ?? null,
+      },
+      state.keptCitationTexts,
+    );
+  });
   const frame = useMemo<ViewerFrame>(() => ({ document, onClose }), [document, onClose]);
 
   // Esc closes the panel, unless it is closing a dialog.
@@ -73,7 +88,7 @@ export function ViewerPanel({ width, onClose }: { width: number; onClose(): void
         ) : !document ? (
           <>
             <ViewerHeader />
-            <DocumentRemoved quote={target.quote} />
+            <DocumentRemoved quote={target.quote} unlinked={unlinked} />
           </>
         ) : (
           // Keyed, so another Document starts afresh.
