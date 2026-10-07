@@ -214,6 +214,72 @@
       @apply bg-sky-100;
     }
 
+    /* A Note switched out of Question context: still there, but muted. */
+    > .context-off {
+      opacity: 0.45;
+    }
+
+    /* A Question, like the old editor's query block: a dark round button on the left asks it. */
+    .question-block {
+      @apply relative rounded-[9px] bg-slate-50 py-1.5 pr-2 pl-11;
+    }
+    .question-ask {
+      @apply absolute top-[9px] left-2.5 flex size-6 items-center justify-center rounded-full bg-gray-800 pl-px text-white hover:bg-black disabled:cursor-default disabled:bg-gray-300;
+    }
+    .question-row {
+      @apply relative flex items-start gap-2;
+    }
+    .question-text {
+      @apply min-w-0 flex-1 py-0.5;
+    }
+    .question-placeholder {
+      @apply pointer-events-none absolute top-0.5 left-0 text-gray-400 select-none;
+    }
+    .question-model {
+      @apply mt-1 max-w-[220px] shrink-0 truncate rounded-[6px] bg-transparent px-1 py-0.5 text-custom-xs text-gray-500 outline-none hover:bg-gray-200/70 focus-visible:bg-gray-200/70;
+    }
+    .question-notice {
+      @apply my-1 flex items-center gap-3 rounded-[6px] bg-amber-50 px-2 py-1 text-sm text-amber-900;
+    }
+    .question-notice-action {
+      @apply shrink-0 rounded-[6px] px-2 py-0.5 text-gray-700 hover:bg-amber-100;
+    }
+
+    /* An Answer, as the old editor's output block: its text, with who wrote it above. */
+    .answer-block {
+      @apply relative rounded-[9px] border border-gray-100 px-4 pt-1.5 pb-2;
+    }
+    .answer-header {
+      @apply flex h-7 items-center gap-1.5 text-custom-xs text-gray-400 select-none;
+    }
+    .answer-writing {
+      @apply flex items-center gap-1.5 text-sky-600;
+
+      &::before {
+        content: "";
+        @apply size-1.5 animate-pulse rounded-full bg-sky-500;
+      }
+    }
+    .answer-action {
+      @apply flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800;
+    }
+    /* Regenerate shows when the Answer is pointed at or reached by keyboard. */
+    .answer-block:not(:hover, :focus-within) .answer-action--on-hover {
+      @apply opacity-0;
+    }
+    .answer-content > * + * {
+      margin-top: 0.75em;
+    }
+    .answer-notice {
+      @apply my-1 flex items-center gap-2 rounded-[6px] bg-amber-50 px-3 py-1.5 text-sm text-amber-900;
+    }
+    .answer-notice-action {
+      @apply shrink-0 rounded-[6px] border border-current/20 px-2 py-0.5 hover:bg-white/60;
+    }
+    .answer-error {
+      @apply my-1 rounded-[6px] bg-red-50 px-3 py-2 text-sm text-red-900;
+    }
+
     /* The placeholder of an empty Mind. */
     p.is-editor-empty:first-child::before {
       content: attr(data-placeholder);
@@ -275,8 +341,8 @@
     @apply flex w-full items-center gap-2 rounded-[6px] px-1.5 py-1 text-left outline-none;
 
     &[aria-selected="true"],
-    &[role="menuitem"]:hover,
-    &[role="menuitem"]:focus-visible {
+    &[role^="menuitem"]:hover,
+    &[role^="menuitem"]:focus-visible {
       background-color: rgb(46 50 56 / 13%);
     }
   }

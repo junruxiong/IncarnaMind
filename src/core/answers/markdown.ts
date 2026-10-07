@@ -194,8 +194,31 @@ function parseBlocks(lines: readonly string[], open: boolean): NodeJSON[] {
   return blocks;
 }
 
+/** Fence names models use for languages that highlight.js knows by another name. */
+const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  node: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  py: "python",
+  python3: "python",
+  sh: "bash",
+  shell: "bash",
+  zsh: "bash",
+  yml: "yaml",
+  md: "markdown",
+  c: "cpp",
+  "c++": "cpp",
+  rs: "rust",
+  golang: "go",
+  html: "xml",
+};
+
 function codeBlock(language: string, code: string): NodeJSON {
-  const name = language.toLowerCase();
+  const lower = language.toLowerCase();
+  const name = Object.hasOwn(LANGUAGE_ALIASES, lower) ? (LANGUAGE_ALIASES[lower] as string) : lower;
   return {
     type: "codeBlock",
     attrs: { language: name || null },
