@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
 
 /*
@@ -26,18 +26,41 @@ const rowTones: Record<RowTone, string> = {
  * A row's container. Pointed at it's washed; selected it's on the sheet with
  * an inset rule and weight 600. Its actions (`rowActionsClass`) sit on its
  * right end and take its background. Names of Documents and Folders are a
- * shade darker than the app's own rows.
+ * shade darker than the app's own rows. A row's words can't be selected, so
+ * a right-click (see `openRowMenu`) never selects them.
  */
 export const rowClass = (selected: boolean, tone: RowTone = "app") =>
-  `group relative flex h-7 shrink-0 items-center rounded-md text-ui ${
+  `group relative flex h-7 shrink-0 items-center rounded-md text-ui select-none ${
     selected
       ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]"
       : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
   }`;
 
+/**
+ * A right-click on a row opens its "More" menu, as its ⋯ button (found by
+ * `menuTestId`) does. A right-click inside the open menu leaves it be.
+ */
+export function openRowMenu(event: MouseEvent<HTMLElement>, menuTestId: string): void {
+  if ((event.target as Element).closest('[role="menu"]')) return;
+  const button = event.currentTarget.querySelector<HTMLButtonElement>(
+    `[data-testid="${menuTestId}"]`,
+  );
+  if (!button) return;
+  event.preventDefault();
+  if (button.getAttribute("aria-expanded") === "true") return;
+  // With a button still held, open once it's let go: letting go outside the menu would close it.
+  if (event.buttons === 0) button.click();
+  else {
+    const open = () => {
+      if (button.isConnected) button.click();
+    };
+    window.addEventListener("pointerup", () => setTimeout(open), { once: true });
+  }
+}
+
 /** A name being typed in a row. */
 export const rowInputClass =
-  "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-accent";
+  "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-accent select-text";
 
 /** The button that fills a row: icon, 8px gap, text, and anything at its end. */
 export const rowButtonClass =
@@ -51,10 +74,11 @@ export const rowIconClass = (selected: boolean) =>
  * A row's actions, over its right end: shown while it is pointed at, is
  * reached by keyboard, or has a menu open (a mouse click alone doesn't keep
  * them). They take the row's background, so its end (a status, a chevron)
- * doesn't show through.
+ * doesn't show through, and sit 1px inside its edge, so a selected row's
+ * outline runs unbroken behind them.
  */
 export const rowActionsClass =
-  "absolute inset-y-0 right-0 flex items-center gap-px rounded-r-md bg-inherit pr-1 pl-1 opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:opacity-100";
+  "absolute inset-y-px right-px flex items-center gap-px rounded-r-[5px] bg-inherit pr-[3px] pl-1 opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 has-[[aria-expanded=true]]:opacity-100";
 
 /** A 24px icon button among a row's actions. */
 export const rowActionButtonClass =

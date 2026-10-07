@@ -2,15 +2,25 @@ import type { Document } from "../../../core/api";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { fileStatusLabel } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { MoreLineIcon } from "./lineIcons";
-import { menuClass, menuItemClass, menuRuleClass, menuTitleClass } from "./ui";
+import {
+  menuClass,
+  menuItemClass,
+  menuItemUnavailableClass,
+  menuRuleClass,
+  menuTitleClass,
+} from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
- * A Document's "More" menu: rename it; its file, where the User keeps it
- * ("Open in default app" and "Show in folder", which the main process does
- * for live Documents whose file is there); and delete it.
+ * A Document's "More" menu: process it again if it failed (and its file is
+ * there); rename it; its file, where the User keeps it ("Open in default
+ * app" and "Show in folder", which the main process does for live Documents
+ * whose file is there, and which say why not for a file that is missing or
+ * can't be reached); and delete it, or, for a missing one, remove it from
+ * IncarnaMind.
  */
 export function DocumentFileMenu({
   item,
@@ -25,8 +35,13 @@ export function DocumentFileMenu({
 }) {
   const t = useT();
   const menu = usePopoverMenu();
+  const retryDocument = useAppStore((state) => state.retryDocument);
+  const fileState = fileStatusLabel(item.fileStatus);
+  const reason = fileState ? t(fileState.reason) : undefined;
+  const canRetry = item.status === "failed" && fileState === null;
 
   const run = (action: (documentId: string) => Promise<unknown>) => {
+    if (fileState) return; // its file isn't there: the item says why
     menu.close();
     action(item.id).catch((failure: unknown) => {
       useAppStore.setState({ actionError: errorMessage(failure) });
@@ -52,6 +67,23 @@ export function DocumentFileMenu({
         data-testid="document-file-actions"
         className={menuClass}
       >
+        {canRetry && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="retry-document"
+              onClick={() => {
+                menu.close();
+                void retryDocument(item.id);
+              }}
+              className={`${menuItemClass} pl-2`}
+            >
+              {t("documents.retryAction")}
+            </button>
+            <div className={menuRuleClass} />
+          </>
+        )}
         <button
           type="button"
           role="menuitem"
@@ -70,8 +102,10 @@ export function DocumentFileMenu({
           type="button"
           role="menuitem"
           data-testid="document-open-externally"
+          aria-disabled={fileState ? true : undefined}
+          title={reason}
           onClick={() => run(files.openDocumentExternally)}
-          className={`${menuItemClass} pl-2`}
+          className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
         >
           {t("documents.copy.open")}
         </button>
@@ -79,8 +113,10 @@ export function DocumentFileMenu({
           type="button"
           role="menuitem"
           data-testid="document-show-in-folder"
+          aria-disabled={fileState ? true : undefined}
+          title={reason}
           onClick={() => run(files.showDocumentInFolder)}
-          className={`${menuItemClass} pl-2`}
+          className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
         >
           {t("documents.copy.showInFolder")}
         </button>
@@ -88,14 +124,14 @@ export function DocumentFileMenu({
         <button
           type="button"
           role="menuitem"
-          data-testid="delete-document"
+          data-testid={item.fileStatus === "missing" ? "remove-document" : "delete-document"}
           onClick={() => {
             menu.close();
             onDelete();
           }}
           className={`${menuItemClass} pl-2 text-danger`}
         >
-          {t("documents.deleteAction")}
+          {t(item.fileStatus === "missing" ? "documents.removeAction" : "documents.deleteAction")}
         </button>
       </div>
     </>

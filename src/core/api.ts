@@ -2064,6 +2064,13 @@ export interface CoreApi {
    */
   deleteDocument(id: string): Promise<void>;
   /**
+   * Processes a Document that failed again, from its file as it is now, e.g.
+   * once the User has fixed it. Returns it, queued; "document.status" events
+   * report its progress. Throws InvalidInputError for a Document that didn't
+   * fail, and NotFoundError for an unknown one or one whose file isn't there.
+   */
+  retryDocument(id: string): Promise<Document>;
+  /**
    * The text IncarnaMind kept of a Document's current version: what the
    * viewer shows when the file is missing or can't be reached. Throws
    * NotFoundError for an unknown or deleted Document.
@@ -2596,6 +2603,7 @@ const methods: Record<CoreApiMethod, true> = {
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
+  retryDocument: true,
   readDocumentText: true,
   previewLinkedFolder: true,
   addLinkedFolder: true,

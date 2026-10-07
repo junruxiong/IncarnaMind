@@ -1,12 +1,16 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, LinkedFolder } from "../src/core/api";
 import {
   addDocuments,
+  confirmLink,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  linkedFolderRow,
+  openLinkedFolderMenu,
+  previewLink,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -96,6 +100,43 @@ const LONG_TEXT = Array.from(
   { length: 4000 },
   (_, index) => `Line ${index}: test loss falls as a power law in model size and data.`,
 ).join("\n");
+
+/** The sidebar's Folder, group and Document rows. */
+const treeRows = (window: Page) =>
+  window
+    .getByTestId("sidebar-tree")
+    .locator(
+      '[data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
+    );
+
+/**
+ * Every Folder, group and Document row is 28px, puts its icon at x 16 and
+ * its text at x 40 (24px deeper per level), and keeps its name, its status
+ * at the end and a Linked folder's bar on its one line. Returns how many rows.
+ */
+async function expectRowsAligned(window: Page): Promise<number> {
+  const rows = treeRows(window);
+  for (const { icon, text, depth } of await rowEdges(window.getByTestId("sidebar"), rows)) {
+    expect(icon).toBeCloseTo(16 + depth * 24, 0);
+    expect(text).toBeCloseTo(40 + depth * 24, 0);
+  }
+  const all = await rows.all();
+  for (const row of all) {
+    const box = await boxOf(row);
+    expect(box.height).toBeCloseTo(28, 0);
+    // One line of text, never wrapped.
+    expect((await boxOf(row.getByTestId("row-text"))).height).toBeLessThanOrEqual(20.5);
+    const ends = row.locator(
+      ':scope > button [data-testid$="-status"], :scope > div [data-testid$="-status"], [data-testid="folder-progress"]',
+    );
+    for (const end of await ends.all()) {
+      const part = await boxOf(end);
+      expect(part.y).toBeGreaterThanOrEqual(box.y - 0.5);
+      expect(part.y + part.height).toBeLessThanOrEqual(box.y + box.height + 0.5);
+    }
+  }
+  return all.length;
+}
 
 test("sidebar rows share one text edge, a Folder's children are one step deeper, and pane headers are 44px", async () => {
   // Two Linked folders, one with a folder inside, and a file added on its own.
@@ -214,6 +255,95 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   await screenshot(window, "sidebar-only", sidebar);
   await expect(processing).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
   await app.close();
+});
+
+test("Linked folder and Document rows stay 28px, on the shared text edge, through every state", async () => {
+  // Indexing and waiting for the long files takes a while with the test's embedding model.
+  test.setTimeout(180_000);
+  // Papers: long files, one in a folder, and two online-only files (iCloud Drive's stubs).
+  // Drive: two small files, one deleted later, and the whole folder unplugged after a restart.
+  // Projects: empty. And a file added on its own.
+  const papersPath = join(sources, "Papers");
+  const drivePath = join(sources, "Drive");
+  const projectsPath = join(sources, "Projects");
+  for (const name of ["Scaling laws.txt", "Chinchilla.txt", "2026/Attention.txt"]) {
+    await mkdir(dirname(join(papersPath, name)), { recursive: true });
+    await writeFile(join(papersPath, name), LONG_TEXT);
+  }
+  await writeFile(join(papersPath, ".Remote paper.pdf.icloud"), "plist");
+  await writeFile(join(papersPath, "2026", ".Remote notes.md.icloud"), "plist");
+  await writeTree(drivePath, ["Field notes.txt", "Survey with a very long name about tides.txt"]);
+  await mkdir(projectsPath);
+  await writeTree(sources, ["Supervisor meeting notes.txt"]);
+
+  let running = await launchApp(dataDir);
+  let { window } = running;
+  await dismissChatSetup(window);
+  await addDocuments(window, [join(sources, "Supervisor meeting notes.txt")]);
+  await linkFolder(window, drivePath);
+  await linkFolder(window, projectsPath);
+  const drive = linkedFolderRow(window, "Drive");
+  const projects = linkedFolderRow(window, "Projects");
+  await expect(drive).toHaveAttribute("data-state", "idle");
+  await expect(projects).toHaveAttribute("data-state", "empty");
+  const sidebar = () => window.getByTestId("sidebar");
+
+  // Indexing: "Indexing 1 of 3" and a thin bar, on the folder's one line.
+  const dialog = await previewLink(running.app, window, papersPath);
+  await screenshot(window, "linked-folders-link-dialog");
+  await confirmLink(dialog);
+  const papers = linkedFolderRow(window, "Papers");
+  await expect(papers).toHaveAttribute("data-state", "indexing");
+  expect(await expectRowsAligned(window)).toBeGreaterThanOrEqual(10);
+  await screenshot(window, "linked-folders-indexing", sidebar());
+
+  // Paused, here with the bar held where it stopped; in a narrow sidebar too.
+  await (await openLinkedFolderMenu(papers)).getByTestId("linked-folder-pause").click();
+  await expect(papers).toHaveAttribute("data-state", "paused");
+  await expectRowsAligned(window);
+  await screenshot(window, "linked-folders-paused", sidebar());
+  const setSidebarWidth = (width: number) =>
+    window.evaluate(async (sidebarWidth) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ device: { sidebarWidth } });
+    }, width);
+  await setSidebarWidth(165);
+  await expect.poll(async () => (await boxOf(sidebar())).width).toBeCloseTo(165, 0);
+  await expectRowsAligned(window);
+  await screenshot(window, "linked-folders-paused-narrow", sidebar());
+  await setSidebarWidth(248);
+  await expect.poll(async () => (await boxOf(sidebar())).width).toBeCloseTo(248, 0);
+
+  // Done: "2 online-only" at the end, no bar.
+  await (await openLinkedFolderMenu(papers)).getByTestId("linked-folder-pause").click();
+  await expect(papers).toHaveAttribute("data-state", "online-only", { timeout: 120_000 });
+  await expectRowsAligned(window);
+  await screenshot(window, "linked-folders-online-only", sidebar());
+
+  // A file deleted on disk: "Missing" at its row's end.
+  await rm(join(drivePath, "Field notes.txt"));
+  const missing = window.getByTestId("document-list-item").filter({ hasText: "Field notes" });
+  await expect(missing).toHaveAttribute("data-file-status", "missing", { timeout: 15_000 });
+  await expectRowsAligned(window);
+  await screenshot(window, "linked-folders-missing", sidebar());
+
+  // Papers as a flat list: its Documents right under it.
+  await (await openLinkedFolderMenu(papers)).getByTestId("linked-folder-layout").click();
+  await expect(papers).toHaveAttribute("data-layout", "flat");
+  await expectRowsAligned(window);
+  await screenshot(window, "linked-folders-flat", sidebar());
+  await running.app.close();
+
+  // Drive unplugged while the app was closed: it and its Documents are unavailable.
+  await rename(drivePath, join(sources, "Drive (unplugged)"));
+  running = await launchApp(dataDir);
+  window = running.window;
+  await expect(linkedFolderRow(window, "Drive")).toHaveAttribute("data-state", "unavailable", {
+    timeout: 15_000,
+  });
+  await expectRowsAligned(window);
+  await screenshot(window, "linked-folders-unavailable", sidebar());
+  await running.app.close();
 });
 
 test("the status footer doesn't move the tree when tagging starts or stops", async () => {
