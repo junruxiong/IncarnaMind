@@ -773,6 +773,7 @@ export const zhCN = {
   "connectors.state.error": "出错",
   "connectors.toggle": "使用 {name}",
   "connectors.remove": "移除 {name}",
+  "connectors.edit": "修改 {name}",
   "connectors.retry": "重试",
   "connectors.restarting": "正在重新启动…",
   "connectors.details": "详情",
@@ -793,6 +794,7 @@ export const zhCN = {
   "connectors.form.command": "命令",
   "connectors.form.commandHint": "启动 MCP 服务器的程序，例如 npx 或 uvx。查找方式与你的终端相同。",
   "connectors.form.args": "参数，每行一个",
+  "connectors.form.argsMoved": "粘贴内容的其余部分已移到“参数”，每行一个。",
   "connectors.form.env": "环境变量，NAME=value，每行一个",
   "connectors.form.envHint":
     "用于 API 密钥等。这些值保存在你的钥匙串中，绝不会存入 IncarnaMind 的数据库。",
@@ -800,6 +802,9 @@ export const zhCN = {
   "connectors.form.add": "添加连接器",
   "connectors.form.adding": "正在添加…",
   "connectors.form.cancel": "取消",
+  "connectors.form.save": "保存并重启",
+  "connectors.form.saving": "正在保存…",
+  "connectors.form.envKeep": "留空则保留已保存的 {names} 的值。",
   "connectors.import.body":
     "粘贴 Claude Desktop（claude_desktop_config.json）或 Cursor（mcp.json）中的 mcpServers JSON，或选择该文件。添加前会先显示将要添加的内容。",
   "connectors.import.json": "配置",

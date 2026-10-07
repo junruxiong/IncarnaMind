@@ -493,3 +493,53 @@ describe("Connectors and restarts", { timeout: 30_000 }, () => {
     });
   });
 });
+
+describe("Editing a local Connector", { timeout: 30_000 }, () => {
+  test("a Connector added with its whole command line as the command is fixed by editing it, and keeps its environment", async () => {
+    const { core, logFile, keychain } = await setUp();
+    const broken = await core.addConnector({
+      ...tideServer(logFile),
+      command: `${NODE} ${TIDE_SERVER}`,
+      args: [],
+    });
+    const failed = await waitForState(core, broken.id, "error");
+    expect(failed.error?.kind).toBe("missing-command");
+
+    // No environment given: the saved values stay, in the keychain.
+    const edited = await core.editConnector(broken.id, {
+      name: "Tide tables",
+      command: NODE,
+      args: [TIDE_SERVER],
+    });
+    expect(edited).toMatchObject({
+      id: broken.id,
+      name: "Tide tables",
+      command: NODE,
+      args: [TIDE_SERVER],
+      env: ["MCP_TEST_LOG", "TIDE_TOKEN"],
+    });
+    const ready = await waitForState(core, broken.id, "ready");
+    expect(ready.tools?.map((tool) => tool.name)).toEqual(["lookup_tide", "book_boat"]);
+    expect([...keychain.secrets.values()].join("\n")).toContain("tide-secret-123");
+  });
+
+  test("a name another Connector has is refused, and a remote Connector's command can't be set", async () => {
+    const { core, logFile } = await setUp();
+    const tides = await core.addConnector(tideServer(logFile));
+    const other = await core.addConnector({ ...tideServer(logFile), name: "Other" });
+    await expect(
+      core.editConnector(other.id, { name: "tides", command: NODE, args: [TIDE_SERVER] }),
+    ).rejects.toThrow('A Connector named "tides" already exists.');
+    // A server on this computer that isn't there: nothing goes over the network.
+    const remote = await core.addConnector({ name: "Harbour", url: "http://127.0.0.1:9/mcp" });
+    await expect(
+      core.editConnector(remote.id, { name: "Harbour", command: NODE, args: [] }),
+    ).rejects.toThrow("Only a local Connector's command can be changed.");
+    expect((await core.listConnectors()).map((each) => each.name)).toEqual([
+      "Harbour",
+      "Other",
+      "Tides",
+    ]);
+    await core.setConnectorEnabled(tides.id, false);
+  });
+});

@@ -139,3 +139,43 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     await fake.close();
   }
 });
+
+test("a whole command line pasted as the command is split into its arguments, and a broken Connector is fixed by changing it", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await openSettings(window, "connectors");
+  const section = window.getByTestId("connectors-settings");
+
+  // Pasted whole, the command keeps the program and its arguments go below.
+  await section.getByTestId("connector-add").click();
+  const form = section.getByTestId("connector-form");
+  await form.getByLabel("Name", { exact: true }).fill("Tides");
+  const command = form.getByLabel(/^Command/);
+  await command.fill(`"${process.execPath}" ${TIDE_SERVER}`);
+  await form.getByLabel(/^Arguments, one per line/).focus();
+  await expect(command).toHaveValue(process.execPath);
+  await expect(form.getByLabel(/^Arguments, one per line/)).toHaveValue(TIDE_SERVER);
+  await expect(form).toContainText("The rest of what you pasted went into Arguments");
+  await form.getByRole("button", { name: "Cancel" }).click();
+
+  // A Connector added with a command that isn't there fails; changing its command fixes it.
+  await section.getByTestId("connector-add").click();
+  await form.getByLabel("Name", { exact: true }).fill("Tides");
+  await form.getByLabel(/^Command/).fill("tide-runtime-not-installed");
+  await form.getByLabel(/^Environment variables/).fill("TIDE_TOKEN=smoke-secret");
+  await form.getByRole("button", { name: "Add Connector" }).click();
+  const connector = section.getByTestId("connector");
+  await expect(connector).toHaveAttribute("data-state", "error", { timeout: 30_000 });
+
+  await connector.getByTestId("connector-edit").click();
+  const edit = connector.getByTestId("connector-form");
+  await expect(edit.getByLabel("Name", { exact: true })).toHaveValue("Tides");
+  await expect(edit).toContainText("Leave empty to keep the saved values of TIDE_TOKEN.");
+  await edit.getByLabel(/^Command/).fill(process.execPath);
+  await edit.getByLabel(/^Arguments, one per line/).fill(TIDE_SERVER);
+  await edit.getByRole("button", { name: "Save and restart" }).click();
+  await expect(edit).toBeHidden();
+  await expect(connector).toHaveAttribute("data-state", "ready", { timeout: 30_000 });
+  await expect(connector).toContainText(TIDE_SERVER);
+  await app.close();
+});
