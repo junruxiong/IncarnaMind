@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  clickEmptyLine,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -86,7 +87,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
 
   // A second Question, on the empty line after the Answer: Deny. The call isn't made, and the
   // Answer still finishes.
-  await editor.locator(":scope > p").last().click();
+  await clickEmptyLine(editor.locator(":scope > p").last());
   await ask(window, "Now book_boat from Calais");
   const second = editor.getByTestId("answer").nth(1);
   const secondCard = second.getByTestId("approval-card");
