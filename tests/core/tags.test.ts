@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { APICallError } from "ai";
 import { describe, expect, test } from "vitest";
 import {
@@ -24,7 +25,13 @@ import {
   startCore,
   tickingClock,
 } from "../helpers/core";
-import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import {
+  addAndProcess,
+  createSourceFolder,
+  documentAt,
+  linkAndProcess,
+  writeSourceFile,
+} from "../helpers/documents";
 import { scriptedModels } from "../helpers/models";
 import { taggingModel, tagNamed, tagNamesOf, waitForTagging } from "../helpers/tags";
 
@@ -588,37 +595,44 @@ describe("Re-tagging", { timeout: 30_000 }, () => {
 describe("Filtering by Tag", { timeout: 30_000 }, () => {
   test("listDocuments filters by Tag, and by Tag and Folder together", async () => {
     const core = startCore(await createTempDataFolder());
-    const a = await addDocument(core, "A.txt", "Notes about A, kept for later.");
-    const b = await addDocument(core, "B.txt", "Notes about B, kept for later.");
+    // A and B in a Linked folder, Projects/A.txt and Projects/Nested/B.txt; C added on its own.
+    const library = await createSourceFolder();
+    await writeSourceFile(library, "Projects/A.txt", "Notes about A, kept for later.");
+    await writeSourceFile(library, "Projects/Nested/B.txt", "Notes about B, kept for later.");
+    const linked = await linkAndProcess(core, library);
+    const a = documentAt(linked, join(library, "Projects/A.txt"));
+    const b = documentAt(linked, join(library, "Projects/Nested/B.txt"));
     const c = await addDocument(core, "C.txt", "Notes about C, kept for later.");
-    const projects = await core.createFolder({ name: "Projects" });
-    const nested = await core.createFolder({ name: "Nested", parentId: projects.id });
-    await core.moveDocument(a.id, projects.id);
-    await core.moveDocument(b.id, nested.id);
+    const folders = await core.listFolders();
+    const projects = folders.find((folder) => folder.relativePath === "Projects");
+    if (!projects) throw new Error("No Projects Folder.");
     const paper = await tagNamed(core, "Paper");
     const book = await tagNamed(core, "Book");
     for (const document of [a, b, c]) await core.addDocumentTag(document.id, paper.id);
     await core.addDocumentTag(b.id, book.id);
+    const sorted = (documents: Document[]) => ids(documents).sort();
 
-    expect(ids(await core.listDocuments({ tagId: paper.id }))).toEqual([c.id, b.id, a.id]);
+    expect(sorted(await core.listDocuments({ tagId: paper.id }))).toEqual(
+      [a.id, b.id, c.id].sort(),
+    );
     expect(ids(await core.listDocuments({ tagId: book.id }))).toEqual([b.id]);
     expect(ids(await core.listDocuments({ folderId: projects.id, tagId: paper.id }))).toEqual([
       a.id,
     ]);
     expect(
-      ids(
+      sorted(
         await core.listDocuments({
           folderId: projects.id,
           includeSubfolders: true,
           tagId: paper.id,
         }),
       ),
-    ).toEqual([b.id, a.id]);
+    ).toEqual([a.id, b.id].sort());
     expect(await core.listDocuments({ folderId: projects.id, tagId: book.id })).toEqual([]);
 
     // Removing a Tag takes the Document out of the filter.
     await core.removeDocumentTag(c.id, paper.id);
-    expect(ids(await core.listDocuments({ tagId: paper.id }))).toEqual([b.id, a.id]);
+    expect(sorted(await core.listDocuments({ tagId: paper.id }))).toEqual([a.id, b.id].sort());
 
     await expect(core.listDocuments({ tagId: "" })).rejects.toThrow(InvalidInputError);
     await expect(core.listDocuments({ tagId: randomUUID() })).rejects.toThrow(NotFoundError);

@@ -18,7 +18,7 @@ import {
   TaggingStatus,
   TaggingWaitingNotice,
 } from "./DocumentTags";
-import { FolderTree, type NewFolderPlace } from "./FolderTree";
+import { FolderTree } from "./FolderTree";
 import {
   CloseIcon,
   DocumentIcon,
@@ -28,7 +28,6 @@ import {
   TagIcon,
   TrashIcon,
 } from "./icons";
-import { MoveToMenu } from "./MoveToMenu";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
 
@@ -64,11 +63,12 @@ const statusTones: Record<DocumentStatus, string> = {
 /**
  * The sidebar's Documents: a list with each Document's processing status, its
  * Tags and its tagging (with one notice above the list while tagging waits
- * for a model), an add button with a file picker, rename and delete, and a
- * menu to open or save a copy of its original file. Dropping files anywhere on the window adds them too (see
- * `FileDrop`). Above the list, the Folder tree and the Tag chips filter it;
- * Documents are filed by dragging them onto a Folder or with "Move to…", and
- * tagged from their Tags menu. Clicking a Document opens it in the viewer.
+ * for a model), an add button with a file picker, an "Add folder…" button
+ * that links a folder, rename and delete, and a menu to open its file or
+ * show it in its folder. Dropping files anywhere on the window adds them too
+ * (see `FileDrop`). Above the list, the Folder tree (the Linked folders'
+ * folders, as on disk) and the Tag chips filter it; Documents are tagged
+ * from their Tags menu. Clicking a Document opens it in the viewer.
  */
 export function DocumentsSection() {
   const t = useT();
@@ -83,10 +83,10 @@ export function DocumentsSection() {
           : "documents.none",
   );
   const addDocuments = useAppStore((state) => state.addDocuments);
+  const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
   const openTagsDialog = useAppStore((state) => state.openTagsDialog);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
-  const [newFolderIn, setNewFolderIn] = useState<NewFolderPlace>(undefined);
 
   const addPicked = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
@@ -116,10 +116,10 @@ export function DocumentsSection() {
           </button>
           <button
             type="button"
-            data-testid="new-folder"
-            aria-label={t("folders.new")}
-            title={t("folders.new")}
-            onClick={() => setNewFolderIn(null)}
+            data-testid="add-linked-folder"
+            aria-label={t("linkedFolders.add")}
+            title={t("linkedFolders.add")}
+            onClick={() => void addLinkedFolder()}
             className="rounded-[9px] p-[2px] text-gray-500 hover:bg-gray-200 hover:text-gray-700"
           >
             <FolderPlusIcon className="size-4" />
@@ -149,11 +149,7 @@ export function DocumentsSection() {
       <EmbeddingModelNotice />
       <EmbeddingRebuildNotice />
       <TaggingWaitingNotice />
-      <FolderTree
-        newFolderIn={newFolderIn}
-        onNewFolder={setNewFolderIn}
-        onNewFolderDone={() => setNewFolderIn(undefined)}
-      />
+      <FolderTree />
       <TagFilter />
       {documents.length === 0 ? (
         <p className="mx-4 py-[5px] text-sm text-gray-400">{t(emptyMessage)}</p>
@@ -199,6 +195,7 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       data-document-id={item.id}
       data-folder-id={item.folderId ?? ""}
       data-status={item.status}
+      data-file-status={item.fileStatus}
       data-tagging={item.tagging}
       draggable={!renaming}
       onDragStart={(event) => startSidebarDrag(event, { kind: "document", id: item.id })}
@@ -241,7 +238,6 @@ function DocumentItem({ item, onDelete }: { item: Document; onDelete(): void }) 
       {!renaming && (
         <div className="flex shrink-0 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
           <DocumentTagMenu item={item} buttonClassName={actionButton} />
-          <MoveToMenu item={item} buttonClassName={actionButton} />
           <button
             type="button"
             aria-label={t("documents.rename", { name: item.name })}

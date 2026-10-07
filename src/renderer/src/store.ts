@@ -6,6 +6,7 @@ import type {
   EmbeddingModelStatus,
   EmbeddingSettings,
   Folder,
+  LinkedFolder,
   Mind,
   Settings,
   SettingsPatch,
@@ -53,6 +54,8 @@ interface AppState {
   settingsPage: SettingsPage;
   /** Every Folder, flat, in name order. The sidebar builds the tree from each `parentId`. */
   folders: Folder[];
+  /** The Linked folders, in path order. Set once loaded, then follows the core's event. */
+  linkedFolders: LinkedFolder[];
   /** The Folder whose Documents the sidebar shows, sub-Folders included. Null shows every Document. */
   folderFilter: string | null;
   /** Every Tag, in name order. */
@@ -97,14 +100,10 @@ interface AppState {
   downloadEmbeddingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
-  /** Files a Document in a Folder, or unfiles it with null. */
-  moveDocument(documentId: string, folderId: string | null): Promise<void>;
   /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
   filterByFolder(folderId: string | null): Promise<void>;
-  createFolder(name: string, parentId: string | null): Promise<void>;
-  renameFolder(id: string, name: string): Promise<void>;
-  moveFolder(id: string, parentId: string | null): Promise<void>;
-  deleteFolder(id: string): Promise<void>;
+  /** Asks for a folder with the system's folder picker, and links it. */
+  addLinkedFolder(): Promise<void>;
   /** Shows only the Documents with a Tag (in the filtered Folder, if any); null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -166,6 +165,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
+    linkedFolders: [],
     folderFilter: null,
     tags: [],
     tagFilter: null,
@@ -185,6 +185,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           tags,
           skills,
           embedding,
+          linkedFolders,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -195,8 +196,10 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listTags(),
           core.listSkills(),
           core.getEmbeddingSettings(),
+          core.listLinkedFolders(),
         ]);
         set({
+          linkedFolders,
           minds,
           settings,
           documents,
@@ -354,37 +357,17 @@ export const useAppStore = create<AppState>()((set, get) => {
         set({ embedding: await core.retryEmbedding() });
       }),
 
-    // The lists follow the core's "documents.moved" and "folders.changed" events, which
-    // arrive before these calls return.
-    moveDocument: (documentId, folderId) =>
-      attempt(async () => {
-        await core.moveDocument(documentId, folderId);
-      }),
-
     async filterByFolder(folderId) {
       if (folderId === get().folderFilter) return;
       set({ folderFilter: folderId, filteredDocumentIds: null });
       await refreshFilter();
     },
 
-    createFolder: (name, parentId) =>
+    // Its Documents, Folders and progress arrive with the core's events.
+    addLinkedFolder: () =>
       attempt(async () => {
-        await core.createFolder({ name, parentId });
-      }),
-
-    renameFolder: (id, name) =>
-      attempt(async () => {
-        await core.renameFolder(id, name);
-      }),
-
-    moveFolder: (id, parentId) =>
-      attempt(async () => {
-        await core.moveFolder(id, parentId);
-      }),
-
-    deleteFolder: (id) =>
-      attempt(async () => {
-        await core.deleteFolder(id);
+        const path = await files.pickLinkedFolder();
+        if (path) await core.addLinkedFolder(path);
       }),
 
     async filterByTag(tagId) {
@@ -521,7 +504,18 @@ core.on("folders.changed", (folders) => {
   refreshFilterIfAny();
 });
 
-// Documents moved between Folders, or unfiled by a Folder's deletion.
+// Linked folders added, removed, or scanning, paused, out of reach, or making progress.
+core.on("linkedFolders.changed", (linkedFolders) => useAppStore.setState({ linkedFolders }));
+
+// Documents removed from the index, e.g. with their Linked folder.
+core.on("documents.removed", (removed) => {
+  const gone = new Set(removed);
+  useAppStore.setState((state) => ({
+    documents: state.documents.filter((each) => !gone.has(each.id)),
+  }));
+});
+
+// Documents whose files moved to another Folder on disk.
 core.on("documents.moved", (moved) => {
   useAppStore.setState((state) => ({
     documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),

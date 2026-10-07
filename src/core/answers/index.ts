@@ -210,7 +210,8 @@ function inScope(
     searchableCount: () => documents.searchableCount(documentIds),
     search: (query, signal) => documents.search(query, documentIds, signal),
     citationSource: (passageId) => documents.citationSource(passageId),
-    pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
+    pageTexts: (documentId, contentHash, from, to) =>
+      documents.pageTexts(documentId, contentHash, from, to),
   };
 }
 

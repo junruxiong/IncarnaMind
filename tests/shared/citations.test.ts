@@ -58,15 +58,37 @@ describe("A Citation's badge", () => {
       check: "cant-check",
       reason: "document-removed",
       documentId: null,
+      changedAfterCited: false,
     });
     // Added again, the same content is a new Document: the Citation opens it.
     expect(citationState(found, [{ id: "tides-again", contentHash: "abc" }])).toEqual({
       check: "found",
       reason: null,
       documentId: "tides-again",
+      changedAfterCited: false,
     });
     // While the Documents are loading, the stored result stands.
     expect(citationState(found, null)).toMatchObject({ check: "found", documentId: "tides" });
+  });
+
+  test("says when the Document changed after it was cited: the check stands for the version quoted", () => {
+    expect(citationState(found, [{ id: "tides", contentHash: "abc" }])).toMatchObject({
+      check: "found",
+      changedAfterCited: false,
+    });
+    expect(citationState(found, [{ id: "tides", contentHash: "def" }])).toEqual({
+      check: "found",
+      reason: null,
+      documentId: "tides",
+      changedAfterCited: true,
+    });
+    // Not while it is being written, nor for a Citation that doesn't say which version it quotes.
+    expect(
+      citationState({ ...found, check: "checking" }, [{ id: "tides", contentHash: "def" }]),
+    ).toMatchObject({ changedAfterCited: false });
+    expect(
+      citationState({ ...found, contentHash: null }, [{ id: "tides", contentHash: "def" }]),
+    ).toMatchObject({ changedAfterCited: false });
   });
 
   test("names its source in plain text, for copying and for Question context", () => {

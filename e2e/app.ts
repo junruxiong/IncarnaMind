@@ -134,6 +134,38 @@ export function pathsOpened(app: ElectronApplication) {
 }
 
 /**
+ * Test hook for showing a file in the system's file manager: from now on the
+ * main process records the path instead (see `pathsShown`).
+ */
+export async function interceptShowItemInFolder(app: ElectronApplication) {
+  await app.evaluate(({ shell }) => {
+    const shown: string[] = [];
+    (globalThis as { pathsShown?: unknown }).pathsShown = shown;
+    shell.showItemInFolder = (path: string) => {
+      shown.push(path);
+    };
+  });
+}
+
+/** The paths the intercepted file manager was asked to show. */
+export function pathsShown(app: ElectronApplication) {
+  return app.evaluate(() => (globalThis as { pathsShown?: string[] }).pathsShown ?? []);
+}
+
+/**
+ * Test hook for the system's open dialog: from now on the main process
+ * answers it with `path` instead of showing it, e.g. the folder to link.
+ */
+export async function interceptOpenDialog(app: ElectronApplication, path: string) {
+  await app.evaluate(({ dialog }, picked) => {
+    dialog.showOpenDialog = (async () => ({
+      canceled: false,
+      filePaths: [picked],
+    })) as unknown as typeof dialog.showOpenDialog;
+  }, path);
+}
+
+/**
  * Test hook for the system browser: from now on the main process records the
  * URLs it would open (see `urlsOpened`), and opens nothing.
  */

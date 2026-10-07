@@ -1,12 +1,13 @@
-import { readdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { type Document, InvalidInputError, NotFoundError } from "../../src/core";
 import { createTempDataFolder, startCore, tickingClock } from "../helpers/core";
 import {
   addAndProcess,
+  createSourceFolder,
   sha256,
-  storedFile,
   waitForProcessing,
   writeSourceFile,
 } from "../helpers/documents";
@@ -46,9 +47,9 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(await core.searchPassages("anything")).toEqual([]);
   });
 
-  test("adding a file copies it into the data folder under its SHA-256 content hash", async () => {
+  test("adding a file indexes it where it is, under the SHA-256 of its content, without copying it", async () => {
     const dataDir = await createTempDataFolder();
-    const sources = await createTempDataFolder();
+    const sources = await createSourceFolder();
     const core = startCore(dataDir, { now: () => new Date("2026-10-06T12:00:00Z") });
     const path = await writeSourceFile(sources, "Reading notes.md", ENGLISH_NOTES);
 
@@ -61,9 +62,12 @@ describe("Documents", { timeout: 30_000 }, () => {
         name: "Reading notes",
         kind: "markdown",
         contentHash: sha256(ENGLISH_NOTES),
+        path,
+        fileStatus: "available",
+        linkedFolderId: null,
         size: Buffer.byteLength(ENGLISH_NOTES),
         pageCount: null,
-        status: "queued",
+        status: expect.stringMatching(/^(queued|extracting)$/),
         progress: null,
         failure: null,
         folderId: null,
@@ -74,12 +78,13 @@ describe("Documents", { timeout: 30_000 }, () => {
         updatedAt: "2026-10-06T12:00:00.000Z",
       },
     ]);
-    expect(await readFile(storedFile(dataDir, sha256(ENGLISH_NOTES)), "utf8")).toBe(ENGLISH_NOTES);
+    expect(existsSync(join(dataDir, "documents"))).toBe(false);
+    expect(await readFile(path, "utf8")).toBe(ENGLISH_NOTES);
   });
 
-  test("adding the same file twice, even under another name, gives the same Document", async () => {
+  test("a file is a Document at its path: added twice it is one, and a copy elsewhere is another", async () => {
     const dataDir = await createTempDataFolder();
-    const sources = await createTempDataFolder();
+    const sources = await createSourceFolder();
     const core = startCore(dataDir);
     const original = await writeSourceFile(sources, "notes.txt", CHINESE_NOTES);
     const copy = await writeSourceFile(sources, "copy of notes.txt", CHINESE_NOTES);
@@ -88,10 +93,13 @@ describe("Documents", { timeout: 30_000 }, () => {
     const second = await core.addDocuments([original, copy]);
 
     const id = first.documents[0]?.id;
-    expect(second.documents.map((document) => document.id)).toEqual([id, id]);
-    expect((await core.listDocuments()).map((document) => document.id)).toEqual([id]);
-    const stored = await readdir(join(dataDir, "documents"));
-    expect(stored.filter((name) => !name.startsWith("."))).toEqual([sha256(CHINESE_NOTES)]);
+    const [again, other] = second.documents;
+    expect(again?.id).toBe(id);
+    expect(other?.id).not.toBe(id);
+    expect(other).toMatchObject({ path: copy, contentHash: sha256(CHINESE_NOTES) });
+    expect((await core.listDocuments()).map((document) => document.path).sort()).toEqual(
+      [copy, original].sort(),
+    );
   });
 
   test("processing reports queued, extracting, embedding, then ready", async () => {
@@ -270,12 +278,13 @@ describe("Documents", { timeout: 30_000 }, () => {
     await expect(core.renameDocument("no-such-id", "Name")).rejects.toThrow(NotFoundError);
   });
 
-  test("deleting a Document hides it and its Passages, and removes its file", async () => {
+  test("deleting a Document hides it and its Passages; its file isn't touched", async () => {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const core = startCore(dataDir);
+    const englishPath = await writeSourceFile(sources, "english.md", ENGLISH_NOTES);
     const [english, chinese] = await addAndProcess(core, [
-      await writeSourceFile(sources, "english.md", ENGLISH_NOTES),
+      englishPath,
       await writeSourceFile(sources, "chinese.txt", CHINESE_NOTES),
     ]);
     if (!english || !chinese) throw new Error("Nothing was added.");
@@ -286,8 +295,7 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(await core.searchPassages("Transformer", { mode: "keyword" })).toEqual([]);
     expect(await core.searchPassages("Recurrent", { mode: "keyword" })).toEqual([]);
     expect(await core.searchPassages("注意力", { mode: "keyword" })).toHaveLength(1);
-    expect(await readdir(join(dataDir, "documents"))).not.toContain(english.contentHash);
-    expect(await readdir(join(dataDir, "documents"))).toContain(chinese.contentHash);
+    expect(await readFile(englishPath, "utf8")).toBe(ENGLISH_NOTES);
     await expect(core.deleteDocument(english.id)).rejects.toThrow(NotFoundError);
     await expect(core.renameDocument(english.id, "Back")).rejects.toThrow(NotFoundError);
   });
@@ -305,7 +313,6 @@ describe("Documents", { timeout: 30_000 }, () => {
 
     expect(second?.id).not.toBe(first.id);
     expect(second?.status).toBe("ready");
-    expect(await readFile(storedFile(dataDir, first.contentHash), "utf8")).toBe(ENGLISH_NOTES);
     expect((await core.searchPassages("Transformer")).map((result) => result.documentId)).toEqual([
       second?.id,
     ]);
@@ -332,11 +339,11 @@ describe("Documents", { timeout: 30_000 }, () => {
     await expect(core.addDocuments("notes.txt" as never)).rejects.toThrow(InvalidInputError);
   });
 
-  test("Documents, their Passages and their files survive a restart", async () => {
+  test("Documents and their Passages survive a restart", async () => {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const before = startCore(dataDir, { now: tickingClock() });
-    const processed = await addAndProcess(before, [
+    await addAndProcess(before, [
       await writeSourceFile(sources, "english.md", ENGLISH_NOTES),
       await writeSourceFile(sources, "Report.pdf", buildPdf([pageOfText(1, "Alphamarker")])),
     ]);
@@ -349,9 +356,6 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(await after.listDocuments()).toEqual(listed);
     expect(listed.map((document) => document.status)).toEqual(["ready", "ready"]);
     expect(await after.searchPassages("Alphamarker")).toEqual(found);
-    for (const document of processed) {
-      expect(await readdir(join(dataDir, "documents"))).toContain(document.contentHash);
-    }
   });
 
   test("processing interrupted by quitting picks up again after a restart", async () => {
@@ -364,7 +368,7 @@ describe("Documents", { timeout: 30_000 }, () => {
     before.close();
     const [document] = documents;
     if (!document) throw new Error("Nothing was added.");
-    expect(document.status).toBe("queued");
+    expect(["queued", "extracting"]).toContain(document.status);
 
     const after = startCore(dataDir);
     const [finished] = await waitForProcessing(after, [document.id]);

@@ -1,23 +1,38 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { vi } from "vitest";
 import type { Core, Document, DocumentStatus } from "../../src/core";
+import { createTempDataFolder } from "./core";
 
-/** Writes a file the User might add, in a folder outside the data folder, and returns its path. */
+/**
+ * Writes a file the User might add, in a folder outside the data folder (and
+ * any folders on the way), and returns its path.
+ */
 export async function writeSourceFile(
   folder: string,
   name: string,
   contents: string | Uint8Array,
 ): Promise<string> {
   const path = join(folder, name);
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents);
   return path;
+}
+
+/**
+ * A fresh, empty folder for the User's files, deleted when the current test
+ * finishes. Its path has symbolic links resolved (macOS's temporary folder is
+ * one), as the core records Documents' paths.
+ */
+export async function createSourceFolder(): Promise<string> {
+  return realpath(await createTempDataFolder());
 }
 
 export const sha256 = (contents: string | Uint8Array) =>
   createHash("sha256").update(contents).digest("hex");
 
-/** Where the data folder keeps a Document's file. */
+/** Where the old layout (before ADR-0010) kept a Document's copy in the data folder. */
 export const storedFile = (dataDir: string, contentHash: string) =>
   join(dataDir, "documents", contentHash);
 
@@ -29,6 +44,7 @@ export function waitForProcessing(
   ids: readonly string[],
   timeout = 15_000,
 ): Promise<Document[]> {
+  if (ids.length === 0) return Promise.resolve([]);
   return new Promise((resolve, reject) => {
     const wanted = new Set(ids);
     const finished = new Map<string, Document>();
@@ -62,5 +78,43 @@ export async function addAndProcess(
     core,
     documents.map((document) => document.id),
     timeout,
+  );
+}
+
+/**
+ * Polls the core's Documents until `check` passes for them (it throws until
+ * then, e.g. with `expect`), and returns them: for changes the core picks up
+ * by itself, such as a Linked folder's watcher.
+ */
+export function waitForDocuments(
+  core: Core,
+  check: (documents: Document[]) => void,
+  timeout = 15_000,
+): Promise<Document[]> {
+  return vi.waitFor(
+    async () => {
+      const documents = await core.listDocuments();
+      check(documents);
+      return documents;
+    },
+    { timeout, interval: 25 },
+  );
+}
+
+/** The live Document at `path`; throws if there is none. */
+export function documentAt(documents: readonly Document[], path: string): Document {
+  const document = documents.find((each) => each.path === path);
+  if (!document) throw new Error(`No Document at ${path}.`);
+  return document;
+}
+
+/** Links a folder and waits until every file in it is processed. */
+export async function linkAndProcess(core: Core, path: string): Promise<Document[]> {
+  const linked = await core.addLinkedFolder(path);
+  await core.reconcileDocuments();
+  const documents = await core.listDocuments({ linkedFolderId: linked.id });
+  return waitForProcessing(
+    core,
+    documents.map((document) => document.id),
   );
 }

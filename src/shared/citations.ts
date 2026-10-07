@@ -15,11 +15,18 @@ export interface CitationState {
   /** Why it wasn't found, or can't be checked. */
   reason: CitationCheckReason | null;
   /**
-   * The live Document the Citation opens: its own, or the one the same file
-   * was added as again after it was deleted (Documents are their content).
-   * Null once the Document has been deleted.
+   * The live Document the Citation opens: its own, or one with the same
+   * content added again after it was deleted. Null once the Document has
+   * been deleted.
    */
   documentId: string | null;
+  /**
+   * The Document changed after the Citation was made: its current version
+   * isn't the one quoted. The check still stands for the version quoted,
+   * whose text is kept; `recheckCitation` checks the current one, so the
+   * card can say "the Document changed after this was cited" and offer it.
+   */
+  changedAfterCited: boolean;
 }
 
 /**
@@ -34,15 +41,24 @@ export function citationState(
   const check = attributes.check ?? "checking";
   const reason = attributes.checkReason ?? null;
   const own = attributes.documentId ?? null;
-  if (documents === null) return { check, reason, documentId: own };
+  if (documents === null) return { check, reason, documentId: own, changedAfterCited: false };
   const live =
     documents.find((document) => document.id === own) ??
     (attributes.contentHash
       ? documents.find((document) => document.contentHash === attributes.contentHash)
       : undefined);
-  if (check === "checking") return { check, reason: null, documentId: live?.id ?? own };
-  if (!live) return { check: "cant-check", reason: "document-removed", documentId: null };
-  return { check, reason, documentId: live.id };
+  const changedAfterCited =
+    live !== undefined &&
+    typeof attributes.contentHash === "string" &&
+    attributes.contentHash !== "" &&
+    live.contentHash !== attributes.contentHash;
+  if (check === "checking") {
+    return { check, reason: null, documentId: live?.id ?? own, changedAfterCited: false };
+  }
+  if (!live) {
+    return { check: "cant-check", reason: "document-removed", documentId: null, changedAfterCited };
+  }
+  return { check, reason, documentId: live.id, changedAfterCited };
 }
 
 /** The cited pages, e.g. "3" or "3–4"; null for a Document without pages. */

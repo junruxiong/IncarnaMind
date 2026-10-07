@@ -29,6 +29,11 @@ export interface EmbeddingQueueOptions {
   announce(documentId: string): void;
   /** A Document just became ready (e.g. for automatic tagging). Called before it is announced. */
   onReady?: (documentId: string) => void;
+  /**
+   * The Document's Linked folder is paused: it is left "embedding" until it
+   * is resumed, which queues it again.
+   */
+  isPaused?: (documentId: string) => boolean;
   reportError?: (error: unknown) => void;
 }
 
@@ -121,7 +126,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     const started = generation;
     const stopped = () => closed || generation !== started;
     const document = stateOf(id);
-    if (document?.status !== "embedding") return "skipped";
+    if (document?.status !== "embedding" || options.isPaused?.(id)) return "skipped";
     if (!(await model.load())) return stopped() ? "skipped" : "model-unavailable";
     if (stopped()) return "skipped";
     let dimensions = document.embedding_dimensions;
@@ -150,8 +155,10 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
         fail(id, `Embedding failed: ${error instanceof Error ? error.message : String(error)}`);
         return "done";
       }
-      // Deleted, or processed again, or the model switched, meanwhile.
-      if (stopped() || stateOf(id)?.status !== "embedding") return "skipped";
+      // Deleted, or processed again, or the model switched, or paused, meanwhile.
+      if (stopped() || stateOf(id)?.status !== "embedding" || options.isPaused?.(id)) {
+        return "skipped";
+      }
       const size = embedded[0]?.length ?? 0;
       if (dimensions !== null && size !== dimensions) {
         fail(

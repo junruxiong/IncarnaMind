@@ -34,17 +34,22 @@ export interface FilesBridge {
    */
   pickSkill(kind: SkillPickKind): Promise<string | null>;
   /**
-   * Opens a Document's original file in the system's default app for its
-   * type: a temporary copy, named after the Document. Rejects for a deleted Document.
+   * Opens a Document's file, where the User keeps it, in the system's default
+   * app for its type. Rejects for a deleted Document, or one whose file is
+   * missing or can't be reached.
    */
   openDocumentExternally(documentId: string): Promise<void>;
   /**
-   * Saves a copy of a Document's original file where the User picks in the
-   * system save dialog, suggesting the Document's name and extension.
-   * Resolves with the copy's path, or null if they cancelled. Rejects for a
-   * deleted Document.
+   * Shows a Document's file selected in the system's file manager. Rejects
+   * as `openDocumentExternally` does.
    */
-  saveDocumentCopy(documentId: string): Promise<string | null>;
+  showDocumentInFolder(documentId: string): Promise<void>;
+  /**
+   * Shows the system's open dialog for a folder to link (see
+   * `CoreApi.addLinkedFolder`). Resolves with its absolute path, or null if
+   * the User cancelled.
+   */
+  pickLinkedFolder(): Promise<string | null>;
   /** Writes an error nothing in the window caught to the log, scrubbed of the User's content. */
   logError(report: RendererErrorReport): void;
 }
@@ -66,6 +71,7 @@ export const FILES_CHANNELS = {
   openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",
   openDocumentExternally: "files:openDocumentExternally",
-  saveDocumentCopy: "files:saveDocumentCopy",
+  showDocumentInFolder: "files:showDocumentInFolder",
+  pickLinkedFolder: "files:pickLinkedFolder",
   logError: "files:logError",
 } as const;

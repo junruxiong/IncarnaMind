@@ -1,7 +1,11 @@
 /**
- * Turns a stored file into Passages: what the processing worker does with
- * each job. It never touches the database; the core writes the result.
+ * Turns a Document's file into Passages: what the processing worker does with
+ * each job. It reads the file where the User keeps it, once, and hashes what
+ * it read, so the Passages are always of the version recorded with them, even
+ * if the file changes meanwhile. It never touches the database; the core
+ * writes the result.
  */
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import { stripBoilerplate } from "./boilerplate";
@@ -24,9 +28,8 @@ export const PROCESSING_VERSION = 4;
 
 export interface ProcessingJob {
   documentId: string;
-  contentHash: string;
   kind: DocumentKind;
-  /** The Document's copy in the data folder. */
+  /** The Document's file, where the User keeps it. */
   file: string;
 }
 
@@ -40,7 +43,8 @@ export interface ProcessedPassage extends BuiltPassage {
   keywords: string;
 }
 
-export type ProcessingResult =
+/** What became of the file's text. */
+type Processed =
   | {
       outcome: "ready";
       pageCount: number | null;
@@ -50,6 +54,18 @@ export type ProcessingResult =
     }
   | { outcome: "no-text"; pageCount: number | null }
   | { outcome: "failed"; reason: DocumentFailureReason; message: string };
+
+export type ProcessingResult =
+  | (Processed & {
+      /** The version processed: the SHA-256 of the bytes read, hex. */
+      contentHash: string;
+      /** How many bytes were read. */
+      size: number;
+    })
+  /** The file couldn't be read: it is gone (`gone`), or can't be read now. Nothing was processed. */
+  | { outcome: "file-unreadable"; gone: boolean; message: string }
+  /** The worker stopped mid-job (a crash, or out of memory). */
+  | { outcome: "crashed"; message: string };
 
 /** Messages between the core and the worker. `id` pairs a result with its job. */
 export interface WorkerRequest {
@@ -68,15 +84,23 @@ export async function processFile(job: ProcessingJob): Promise<ProcessingResult>
   try {
     bytes = await readFile(job.file);
   } catch (error) {
-    const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+    const code = (error as NodeJS.ErrnoException).code;
     return {
-      outcome: "failed",
-      reason: missing ? "file-missing" : "processing-error",
+      outcome: "file-unreadable",
+      gone: code === "ENOENT" || code === "ENOTDIR",
       message: messageOf(error),
     };
   }
+  const version = {
+    contentHash: createHash("sha256").update(bytes).digest("hex"),
+    size: bytes.byteLength,
+  };
+  return { ...(await processBytes(job.kind, bytes)), ...version };
+}
+
+async function processBytes(kind: DocumentKind, bytes: Uint8Array): Promise<Processed> {
   try {
-    const extracted = await extractText(job.kind, bytes);
+    const extracted = await extractText(kind, bytes);
     const pages = stripBoilerplate(extracted.pages);
     const { pageCount } = extracted;
     const passages = buildPassages(pages).map((passage) => ({
