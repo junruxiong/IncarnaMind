@@ -108,8 +108,44 @@ test("in local mode, a server elsewhere and reranking are turned down as they're
   await expect(why).toBeHidden();
   await expect(form.getByTestId("embedding-switch")).toBeEnabled();
 
+  // Reranking: only the built-in model, on this computer, can be chosen.
   const rerank = window.getByTestId("rerank-settings");
-  await expect(rerank.getByTestId("rerank-set-up")).toBeDisabled();
-  await expect(rerank.getByTestId("rerank-local-only")).toBeVisible();
+  await rerank.getByTestId("rerank-set-up").click();
+  const rerankForm = rerank.getByTestId("rerank-form");
+  await expect(rerankForm.getByLabel("Cohere", { exact: true })).toBeDisabled();
+  await expect(rerankForm.getByLabel("Voyage AI", { exact: true })).toBeDisabled();
+  await expect(rerankForm.getByLabel("On this computer (built-in model)")).toBeChecked();
+  await expect(rerankForm.getByTestId("rerank-local-only")).toBeVisible();
+  await app.close();
+});
+
+test("the built-in reranking model is turned on in Settings, and stays on this computer", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await openSettings(window, "search");
+  const rerank = window.getByTestId("rerank-settings");
+  await expect(rerank).toContainText("Off");
+
+  await rerank.getByTestId("rerank-set-up").click();
+  const form = rerank.getByTestId("rerank-form");
+  await form.getByLabel("On this computer (built-in model)").check();
+  await expect(form.getByTestId("rerank-built-in-note")).toContainText(
+    "Your searches and Documents stay on this computer.",
+  );
+  await expect(form.getByLabel("API key")).toHaveCount(0);
+  await form.getByRole("button", { name: "Use for reranking" }).click();
+
+  // The smoke tests' fake model has nothing to download: it is ready at once.
+  await expect(rerank.getByTestId("rerank-current")).toHaveText(
+    /^The built-in model reranks search results \(.+\)\.$/,
+  );
+  await expect(rerank.getByTestId("rerank-model-state")).toHaveCount(0);
+  const settings = await window.evaluate(() =>
+    (globalThis as Page).incarnamind.getRerankSettings(),
+  );
+  expect(settings).toMatchObject({ enabled: true, kind: "built-in", service: null });
+
+  await rerank.getByTestId("rerank-remove").click();
+  await expect(rerank).toContainText("Off");
   await app.close();
 });
