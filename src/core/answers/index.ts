@@ -702,6 +702,7 @@ export function createAnswers(options: AnswersOptions) {
         tools,
         skills: skillTools,
         support: supportByModel.get(modelKey(model)),
+        window: prepared.window,
         signal: controller.signal,
       })) {
         if (finished) break;
