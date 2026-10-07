@@ -1,7 +1,12 @@
 import type { ChatReadiness } from "../../../../core/api";
 import { useT } from "../../i18n";
-import { useAppStore } from "../../store";
+import { type SettingsPage, useAppStore } from "../../store";
 import { readinessKey, serviceName } from "./shared";
+
+/** Where to fix it: a declined data flow is allowed again on the Privacy page. */
+export const settingsPageFor = (
+  readiness: Extract<ChatReadiness, { ready: false }>,
+): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "general");
 
 /** What to configure before Questions can be asked. */
 export function ReadinessExplanation({
@@ -33,7 +38,7 @@ export function ChatReadinessNotice() {
       </span>
       <button
         type="button"
-        onClick={openSettings}
+        onClick={() => openSettings(settingsPageFor(readiness))}
         className="shrink-0 rounded-[9px] px-2 py-1 text-gray-700 hover:bg-gray-200"
       >
         {t("providers.readiness.setUp")}

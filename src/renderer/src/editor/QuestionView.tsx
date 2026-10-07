@@ -22,7 +22,7 @@ import {
   SkillIcon,
   TagIcon,
 } from "../components/icons";
-import { ReadinessExplanation } from "../components/providers/ChatReadinessNotice";
+import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
 import { providerLabel } from "../components/providers/shared";
 import { useT } from "../i18n";
 import { type ScopeChip, scopeChips } from "../scope";
@@ -117,7 +117,11 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
           <span className="flex-1">
             <ReadinessExplanation readiness={blocked.readiness} />
           </span>
-          <button type="button" onClick={openSettings} className="question-notice-action">
+          <button
+            type="button"
+            onClick={() => openSettings(settingsPageFor(blocked.readiness))}
+            className="question-notice-action"
+          >
             {t("question.setUp")}
           </button>
         </p>
@@ -131,7 +135,7 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
           <span className="flex-1">
             {t(`skills.unavailable.${blocked.state}`, { name: blocked.skill })}
           </span>
-          <button type="button" onClick={openSettings} className="question-notice-action">
+          <button type="button" onClick={() => openSettings()} className="question-notice-action">
             {t("skills.unavailable.settings")}
           </button>
           <button

@@ -406,12 +406,49 @@ export const en = {
     "What an Answer asks its Tools: the arguments of each Tool call, such as what to look up",
 
   "consent.settings.title": "Data sent to other services",
-  "consent.settings.empty": "Nothing is sent to other services.",
   "consent.settings.status.accepted": "Allowed",
   "consent.settings.status.declined": "Not allowed",
   "consent.settings.status.not-asked": "Not asked yet",
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
+
+  "privacy.tabs.label": "Settings pages",
+  "privacy.tabs.general": "General",
+  "privacy.tabs.privacy": "Privacy",
+  "privacy.intro":
+    "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
+  "privacy.flows.intro":
+    "These send your content to a service outside this computer. Nothing is sent on one until you allow it.",
+  "privacy.flows.service": "To {service}",
+  "privacy.flows.sends": "Sends:",
+  "privacy.flows.notInUse": "Not in use: everything stays on this computer.",
+  "privacy.flows.decided": "{status} on {date}",
+  "privacy.flows.allow": "Allow",
+  "privacy.traffic.title": "Other network traffic",
+  "privacy.traffic.intro":
+    "IncarnaMind also connects to these services. They receive nothing of yours: no Documents, Minds, Questions or Answers.",
+  "privacy.traffic.on": "On",
+  "privacy.traffic.off": "Off",
+  "privacy.traffic.update-check": "Update checks",
+  "privacy.traffic.update-check.description":
+    "When IncarnaMind starts, it asks GitHub Releases whether a new version is out. The request says which version you have and your operating system.",
+  "privacy.traffic.update-check.toggle": "Check for updates automatically",
+  "privacy.traffic.embedding-model": "Search model download",
+  "privacy.traffic.embedding-model.description":
+    "The built-in search model is downloaded once, the first time a Document needs it.",
+  "privacy.traffic.ollama-pull": "Local model downloads",
+  "privacy.traffic.ollama-pull.description":
+    "When you choose a local model, Ollama downloads it from its library.",
+  "privacy.traffic.chatgpt-sign-in": "ChatGPT sign-in",
+  "privacy.traffic.chatgpt-sign-in.description":
+    "The experimental ChatGPT plan signs you in with OpenAI and renews the sign-in. Questions asked with it are the chat flow above.",
+  "privacy.skills.title": "Skill scripts",
+  "privacy.skills.body":
+    "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does.",
+  "privacy.crashReports.title": "Crash reports",
+  "privacy.crashReports.toggle": "Send crash reports",
+  "privacy.crashReports.body":
+    "Off unless you turn it on. When IncarnaMind crashes or hits an error, it sends a report to its developers through Sentry: the error, where in IncarnaMind's code it happened, the app version and your operating system. File paths, your Documents' text, your Minds, Questions and Answers are removed first, and no IP address is stored with it.",
 
   "question.slash": "Question",
   "question.placeholder": "Ask a Question… (type @ to choose what it searches)",
