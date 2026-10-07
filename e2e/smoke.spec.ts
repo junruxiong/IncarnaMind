@@ -180,6 +180,30 @@ test("added files are processed, show as ready in the sidebar, and can be delete
   }
 });
 
+test("the experimental ChatGPT plan is off by default, and turning it on shows the warning and the sign-in", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await window.getByRole("button", { name: "Settings" }).click();
+
+  const experimental = window.getByTestId("experimental-settings");
+  const toggle = experimental.getByTestId("codex-switch");
+  await expect(toggle).toBeVisible();
+  await expect(toggle).not.toBeChecked();
+  await expect(experimental.getByTestId("codex-warning")).toHaveCount(0);
+  await expect(experimental.getByTestId("codex-sign-in")).toHaveCount(0);
+
+  // Turning it on explains what it is before anything can be signed in. Nothing is signed in here.
+  await toggle.check();
+  const warning = experimental.getByTestId("codex-warning");
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText("isn't an official OpenAI integration");
+  await expect(warning).toContainText("may block it");
+  await expect(warning).toContainText("usage limits");
+  await expect(experimental.getByTestId("codex-sign-in")).toBeVisible();
+  await expect(experimental.getByTestId("codex-account")).toHaveText("Not signed in.");
+  await app.close();
+});
+
 test("first-run chat setup appears on a fresh data folder and can be set up later", async () => {
   const first = await launchApp(dataDir);
   const { window } = first;

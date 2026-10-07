@@ -1,7 +1,7 @@
 import type { ChatReadiness } from "../../../../core/api";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
-import { serviceName } from "./shared";
+import { readinessKey, serviceName } from "./shared";
 
 /** What to configure before Questions can be asked. */
 export function ReadinessExplanation({
@@ -11,7 +11,7 @@ export function ReadinessExplanation({
 }) {
   const t = useT();
   const service = "provider" in readiness ? serviceName(readiness.provider, t) : "";
-  return <>{t(`providers.readiness.${readiness.reason}`, { service })}</>;
+  return <>{t(readinessKey(readiness.reason), { service })}</>;
 }
 
 /**

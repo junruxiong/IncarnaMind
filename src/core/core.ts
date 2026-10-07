@@ -10,6 +10,7 @@ import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createChat, type PreparedChatModel } from "./providers/chat";
+import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
 import {
@@ -87,6 +88,19 @@ export function createCore(adapters: CoreAdapters): Core {
   }
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
+  /** Aborts work still running (model downloads, a ChatGPT sign-in) when the core closes. */
+  const lifetime = new AbortController();
+
+  // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
+  let chatGptChanged = () => {};
+  const chatGpt = createChatGptPlan({
+    endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
+    secrets,
+    settings,
+    browser: adapters.browser,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    onChange: () => chatGptChanged(),
+  });
   const chat = createChat({
     db,
     now,
@@ -94,9 +108,8 @@ export function createCore(adapters: CoreAdapters): Core {
     secrets,
     consent,
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
+    chatGpt,
   });
-  /** Aborts work still running (model downloads) when the core closes. */
-  const lifetime = new AbortController();
 
   const settingsChanged = () => events.emit("settings.changed", settings.get());
   const readinessChanged = async () => {
@@ -107,6 +120,17 @@ export function createCore(adapters: CoreAdapters): Core {
       // Reading the keychain is async, so the core may have closed meanwhile: nobody is listening.
       if (!lifetime.signal.aborted) throw error;
     }
+  };
+  chatGptChanged = () => {
+    const report = async () => {
+      const status = await chatGpt.status();
+      if (lifetime.signal.aborted) return;
+      events.emit("chatGptPlan.changed", status);
+      await readinessChanged();
+    };
+    report().catch((error: unknown) => {
+      if (!lifetime.signal.aborted) console.error(error);
+    });
   };
 
   const ollamaUrl = (input: unknown) => {
@@ -209,6 +233,21 @@ export function createCore(adapters: CoreAdapters): Core {
       return provider;
     },
 
+    getChatGptPlan: () => chatGpt.status(),
+    setChatGptPlanEnabled: async (enabled) => {
+      await chatGpt.setEnabled(enabled);
+      if (!enabled) {
+        // Off means nothing of it is left: no tokens (signed out above) and no provider.
+        await chat.deleteKind("chatgpt");
+        settingsChanged();
+        await readinessChanged();
+      }
+      return chatGpt.status();
+    },
+    signInToChatGpt: () => chatGpt.signIn(),
+    cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
+    signOutOfChatGpt: () => chatGpt.signOut(),
+
     listDataFlows: () => consent.list(),
     listConsentRequests: async () => consent.requests(),
     respondToConsent: async (requestId, accept) => {
@@ -259,6 +298,7 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       lifetime.abort();
+      void chatGpt.cancelSignIn();
       consent.close();
       documents.close();
       events.clear();

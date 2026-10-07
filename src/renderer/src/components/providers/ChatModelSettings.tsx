@@ -1,9 +1,10 @@
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useState } from "react";
 import type { ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import { useChatGptPlan } from "./ChatGptPlanSettings";
 import { ReadinessExplanation } from "./ChatReadinessNotice";
 import { OllamaCard } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
@@ -18,6 +19,8 @@ export function ChatModelSettings() {
   const [providers, setProviders] = useState<ChatProvider[]>([]);
   const [changing, setChanging] = useState(false);
   const [model, setModel] = useState(chatModel?.modelId ?? "");
+  const [chatGptPlan] = useChatGptPlan();
+  const modelFieldId = useId();
 
   const refresh = useCallback(() => {
     core.listChatProviders().then(setProviders, () => undefined);
@@ -70,15 +73,32 @@ export function ChatModelSettings() {
             {providerLabel(current, t)}
           </p>
           <form onSubmit={saveModel} className="flex items-end gap-2">
-            <label className="flex-1 text-sm text-gray-600">
-              {t("providers.settings.defaultModel")}
-              <input
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
-                spellCheck={false}
-                className={inputClass}
-              />
-            </label>
+            <div className="flex-1 text-sm text-gray-600">
+              <label htmlFor={modelFieldId}>{t("providers.settings.defaultModel")}</label>
+              {current.kind === "chatgpt" ? (
+                // The ChatGPT plan takes only the models its endpoint accepts.
+                <select
+                  id={modelFieldId}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  className={inputClass}
+                >
+                  {chatGptPlan?.models.map((each) => (
+                    <option key={each.id} value={each.id}>
+                      {each.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id={modelFieldId}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  spellCheck={false}
+                  className={inputClass}
+                />
+              )}
+            </div>
             <button
               type="submit"
               disabled={model.trim() === "" || model.trim() === chatModel?.modelId}

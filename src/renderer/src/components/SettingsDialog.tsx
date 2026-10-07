@@ -2,6 +2,7 @@ import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { ConsentSettings } from "./providers/ConsentSettings";
 import { useModal } from "./useModal";
@@ -52,6 +53,7 @@ export function SettingsDialog() {
             ))}
           </fieldset>
           <ConsentSettings />
+          <ChatGptPlanSettings />
         </div>
       )}
       <div className="mt-5 flex justify-end">

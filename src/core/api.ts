@@ -184,6 +184,8 @@ export interface PassageSearchResult {
 /**
  * Where Answers can come from. "ollama" is an OpenAI-compatible server run by
  * Ollama, normally on this computer; it also offers one-click model downloads.
+ * "chatgpt" is the User's ChatGPT plan, used through a browser sign-in instead
+ * of an API key; it is experimental (see `ChatGptPlanStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -191,6 +193,7 @@ export const chatProviderKinds = [
   "google",
   "openai-compatible",
   "ollama",
+  "chatgpt",
 ] as const;
 
 export type ChatProviderKind = (typeof chatProviderKinds)[number];
@@ -241,6 +244,12 @@ export type ProviderErrorKind =
   | "network"
   | "provider"
   | "consent-declined"
+  /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
+  | "not-signed-in"
+  /** ChatGPT plan: the plan's usage limit is reached, or the plan doesn't include this use. */
+  | "plan-limit"
+  /** ChatGPT plan: OpenAI refused a valid sign-in (401 or 403), e.g. it blocked this integration. */
+  | "blocked"
   | "unknown";
 
 export interface ProviderError {
@@ -273,11 +282,74 @@ export type ChatReadiness =
   | { ready: false; reason: "no-provider" }
   | {
       ready: false;
-      /** "missing-api-key": the provider needs a key and none is stored. "consent-declined": the User declined sending data to its service. */
-      reason: "missing-api-key" | "consent-declined";
+      /**
+       * "missing-api-key": the provider needs a key and none is stored.
+       * "consent-declined": the User declined sending data to its service.
+       * "sign-in-required": the provider uses a sign-in (the ChatGPT plan) and
+       * this device has none, e.g. the User signed out or it expired.
+       */
+      reason: "missing-api-key" | "consent-declined" | "sign-in-required";
       provider: ChatProvider;
       modelId: string;
     };
+
+// ---------------------------------------------------------------------------
+// ChatGPT plan (experimental)
+
+/**
+ * A model the ChatGPT plan's endpoint accepts. The list is fixed in the app
+ * and follows the Codex CLI's own model catalog.
+ */
+export interface ChatGptPlanModel {
+  id: string;
+  /** What the User sees, e.g. "GPT-5.5". */
+  name: string;
+}
+
+/** The ChatGPT sign-in on this device. */
+export type ChatGptAccount =
+  | { state: "signed-out" }
+  /** Refreshing the sign-in failed, so it was removed: the User has to sign in again. */
+  | { state: "expired" }
+  | {
+      state: "signed-in";
+      /** From the sign-in's ID token, when it carries one. */
+      email: string | null;
+      /** The ChatGPT plan, e.g. "plus" or "pro", when the ID token says. */
+      plan: string | null;
+    };
+
+/**
+ * The experimental "ChatGPT plan (via Codex sign-in)" provider. It signs in
+ * with the sign-in OpenAI's Codex CLI uses, which OpenAI hasn't approved for
+ * other apps and may block. It is off until the User turns it on in Settings.
+ */
+export interface ChatGptPlanStatus {
+  /** The User turned the experimental provider on, on this device. Off by default. */
+  enabled: boolean;
+  account: ChatGptAccount;
+  /** A browser sign-in is waiting for the User. */
+  signingIn: boolean;
+  /** The models Questions can use with the plan, the default first. */
+  models: ChatGptPlanModel[];
+}
+
+export type ChatGptSignInErrorKind =
+  /** The sign-in's fixed local port is taken, e.g. the Codex CLI is signing in at the same time. */
+  | "port-in-use"
+  /** The User didn't finish in the browser within a few minutes. */
+  | "timed-out"
+  /** The User cancelled in IncarnaMind. */
+  | "cancelled"
+  /** OpenAI refused the sign-in, e.g. the User declined in the browser. */
+  | "denied"
+  /** This device can't store the sign-in securely (see `getSecretStorage`). */
+  | "secret-storage"
+  | "failed";
+
+export type ChatGptSignInResult =
+  | { ok: true; status: ChatGptPlanStatus }
+  | { ok: false; error: { kind: ChatGptSignInErrorKind; message: string } };
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -441,6 +513,24 @@ export interface CoreApi {
    */
   selectOllama(input?: SelectOllamaInput): Promise<ChatProvider>;
 
+  /** The experimental ChatGPT plan provider: whether it's on, the sign-in, and its models. */
+  getChatGptPlan(): Promise<ChatGptPlanStatus>;
+  /**
+   * Turns the experimental ChatGPT plan provider on or off on this device.
+   * Turning it off signs out (deleting the tokens) and removes the provider.
+   */
+  setChatGptPlanEnabled(enabled: boolean): Promise<ChatGptPlanStatus>;
+  /**
+   * Opens the ChatGPT sign-in in the User's browser and waits, for a few
+   * minutes at most, until they finish. Starting again cancels a sign-in
+   * still waiting. The provider must be turned on.
+   */
+  signInToChatGpt(): Promise<ChatGptSignInResult>;
+  /** Stops waiting for a browser sign-in. */
+  cancelChatGptSignIn(): Promise<void>;
+  /** Deletes the ChatGPT tokens from this device. A saved ChatGPT provider then needs a new sign-in. */
+  signOutOfChatGpt(): Promise<ChatGptPlanStatus>;
+
   /**
    * Every registered external data flow, to each service it currently goes to
    * and each service the User has decided on, with that decision.
@@ -506,6 +596,8 @@ export interface CoreEvents {
   "documents.moved": Document[];
   /** Folders were created, renamed, moved or deleted: the list as `listFolders` now returns it. */
   "folders.changed": Folder[];
+  /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
+  "chatGptPlan.changed": ChatGptPlanStatus;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -550,6 +642,11 @@ const methods: Record<CoreApiMethod, true> = {
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
   selectOllama: true,
+  getChatGptPlan: true,
+  setChatGptPlanEnabled: true,
+  signInToChatGpt: true,
+  cancelChatGptSignIn: true,
+  signOutOfChatGpt: true,
   listDataFlows: true,
   listConsentRequests: true,
   respondToConsent: true,
