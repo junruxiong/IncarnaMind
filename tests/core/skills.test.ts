@@ -10,6 +10,7 @@ import {
   SKILL_LIMITS,
   type Skill,
 } from "../../src/core";
+import { setUpWithDocuments, shownPassages } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, queryDatabase, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { answerIn, answerText, question, writeMind } from "../helpers/minds";
@@ -820,6 +821,64 @@ describe("Answers use Skills", () => {
     controlled.finish();
     await ended;
     await vi.waitFor(() => expect(existsSync(join(dataDir, "skills", skill.id))).toBe(false));
+  });
+});
+
+describe("A forced Skill with a Search scope", { timeout: 30_000 }, () => {
+  test("both apply, when the Question is asked and when its Answer is regenerated", async () => {
+    const calls: ModelCall[] = [];
+    // Searches for tides once per Answer, then answers.
+    const model = scriptedModel((call): ScriptedReply => {
+      calls.push(call);
+      if (!call.results.some((result) => result.tool === "search_documents")) {
+        return { calls: [{ tool: "search_documents", input: { query: "tides" } }] };
+      }
+      return { text: "Answered." };
+    });
+    const { core, client, mind, documents } = await setUpWithDocuments(model, [
+      { name: "Harbour.txt", contents: "Harbour tides rise twice a day along the quay.\n" },
+      { name: "Recipes.txt", contents: "Cook mussels at low tides, with garlic.\n" },
+    ]);
+    const harbour = documents.find((document) => document.name === "Harbour");
+    if (!harbour) throw new Error("No Harbour Document.");
+    await importSkill(core, await writeFolder(await createTempDataFolder(), "tides", TIDES_SKILL));
+    const asked = question("What about tides?", undefined, { documentIds: [harbour.id] });
+    Object.assign(asked.attrs, { forcedSkill: "tide-tables" });
+    writeMind(client, [asked]);
+    await client.settled();
+
+    /** What the model was given in the Answer's requests from `from` on: instructions, and Documents searched. */
+    const seen = (from: number) => {
+      const answerCalls = calls.slice(from);
+      const searched = answerCalls
+        .flatMap((call) => call.results)
+        .filter((result) => result.tool === "search_documents")
+        .flatMap((result) => shownPassages(result.text).map((passage) => passage.document));
+      return {
+        followsSkill: answerCalls.every((call) => call.system.includes(BODY_MARKER)),
+        searched: [...new Set(searched)].sort(),
+      };
+    };
+
+    const result = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+    if (!result.asked) throw new Error(`Not asked: ${JSON.stringify(result)}`);
+    expect((await answerEnded(core, result.answerId)).event).toBe("finished");
+    expect(seen(0)).toEqual({ followsSkill: true, searched: ["Harbour"] });
+    expect(toolCallsOf(client, result.answerId)).toMatchObject([
+      { tool: "use_skill", input: { name: "tide-tables" }, forced: true, status: "done" },
+      { tool: "search_documents", source: "documents", status: "done" },
+    ]);
+
+    const before = calls.length;
+    const again = await core.regenerateAnswer({ mindId: mind.id, answerId: result.answerId });
+    if (!again.asked) throw new Error(`Not regenerated: ${JSON.stringify(again)}`);
+    expect((await answerEnded(core, again.answerId)).event).toBe("finished");
+    expect(calls.length).toBeGreaterThan(before);
+    expect(seen(before)).toEqual({ followsSkill: true, searched: ["Harbour"] });
+    expect(toolCallsOf(client, again.answerId)).toMatchObject([
+      { tool: "use_skill", forced: true },
+      { tool: "search_documents" },
+    ]);
   });
 });
 

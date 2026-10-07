@@ -61,14 +61,34 @@ export const ANSWER_BLOCK = "answer";
 export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
 
 /**
- * Attributes of a Question Block, as stored in the Mind's Yjs document. Later
- * tickets add its Search scope (#36).
+ * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
+ * Documents its Document search is limited to. It covers every Document in
+ * one of the Folders or their sub-Folders (at any depth), every Document with
+ * one of the Tags, and each of the Documents. Those deleted since are ignored.
+ * With all three empty there is no Search scope: every Document is searched.
+ */
+export interface SearchScope {
+  folderIds: string[];
+  tagIds: string[];
+  documentIds: string[];
+}
+
+/**
+ * Attributes of a Question Block, as stored in the Mind's Yjs document.
  */
 export interface QuestionAttributes {
   id: string | null;
   /** The model picked for this Question, overriding the default. Both null: the default model. */
   providerId: string | null;
   modelId: string | null;
+  /**
+   * Its Search scope (see `SearchScope`), as lists of ids: the User types "@"
+   * in the Question to choose them. Null (or empty) for none of that kind;
+   * all three null: no Search scope.
+   */
+  scopeFolderIds: string[] | null;
+  scopeTagIds: string[] | null;
+  scopeDocumentIds: string[] | null;
   /**
    * The name of the Skill the User forced on this Question from the slash
    * menu: its instructions are loaded up front. Null: the model picks Skills
@@ -1065,6 +1085,48 @@ export interface TestJevConnectionInput {
 }
 
 // ---------------------------------------------------------------------------
+// Export
+
+/** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
+export type ExportFormat = "markdown" | "docx";
+
+export interface ExportMindOptions {
+  format: ExportFormat;
+  /**
+   * Whether Questions are exported, marked as Questions. Defaults to true for
+   * Markdown, an archive of everything, and to false for .docx: the deliverable
+   * leaves the working material out.
+   */
+  includeQuestions?: boolean;
+}
+
+/** What exporting a Mind will write, for the User to see before the file is written. */
+export interface MindExportPreview {
+  /** A file name for the export, from the Mind's title, e.g. "Tides.docx". */
+  fileName: string;
+  /**
+   * The Citations in the exported text. Each becomes its own footnote, even
+   * when several cite the same page.
+   */
+  citations: number;
+  /**
+   * Of those, the ones not shown as "Quote found": the quote wasn't found on
+   * the cited pages, or it can't be checked (the pages have no text, or the
+   * Document was deleted), or it is still being checked. Their footnotes carry
+   * an "[unverified]" marker.
+   */
+  unverifiedCitations: number;
+  /** The Question Blocks in the Mind, whether the export includes them or not. */
+  questions: number;
+}
+
+/** A Mind exported as a file, for the host to save where the User chooses. */
+export interface MindExport extends MindExportPreview {
+  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx. */
+  data: Uint8Array;
+}
+
+// ---------------------------------------------------------------------------
 
 export interface CoreApi {
   createMind(input?: CreateMindInput): Promise<Mind>;
@@ -1302,6 +1364,21 @@ export interface CoreApi {
    * deleted once nothing uses them, e.g. after Answers still being written with it finish.
    */
   removeSkill(skillId: string): Promise<void>;
+
+  /**
+   * What `exportMind` will write with these options: the file name, and how
+   * many of the exported Citations are unverified, so the User sees that
+   * before the file is written.
+   */
+  previewMindExport(mindId: string, options: ExportMindOptions): Promise<MindExportPreview>;
+  /**
+   * Exports a Mind as a file, which the host saves: its title, its Notes
+   * (those switched out of Question context too), its Answers and, if
+   * included, its Questions, in order. Each Citation becomes its own footnote
+   * naming its Document and pages, e.g. "Tides, p. 12–13", marked
+   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   */
+  exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
 }
 
 /**
@@ -1444,6 +1521,8 @@ const methods: Record<CoreApiMethod, true> = {
   cancelSkillImport: true,
   setSkillEnabled: true,
   removeSkill: true,
+  previewMindExport: true,
+  exportMind: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

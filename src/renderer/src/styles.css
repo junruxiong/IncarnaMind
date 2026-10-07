@@ -254,6 +254,27 @@
     .question-skill-remove {
       @apply flex size-4 shrink-0 items-center justify-center rounded-full hover:bg-violet-100;
     }
+    /* Its Search scope: chips under its text, for what "@" chose. */
+    .question-scope {
+      @apply mt-0.5 mb-0.5 flex flex-wrap items-center gap-1 text-custom-xs leading-5 select-none;
+    }
+    .question-scope-label {
+      @apply mr-0.5 text-gray-400;
+    }
+    .scope-chip {
+      @apply inline-flex max-w-[18rem] items-center gap-1 rounded-full bg-white py-px pr-0.5 pl-1.5 text-gray-700 ring-1 ring-gray-200;
+    }
+    /* Deleted since: struck through, and ignored by the search. */
+    .scope-chip--deleted {
+      @apply bg-transparent text-gray-400 ring-0 outline-1 outline-gray-300 outline-dashed;
+
+      svg:first-child {
+        @apply opacity-50;
+      }
+    }
+    .scope-chip-remove {
+      @apply shrink-0 rounded-full p-[3px] text-gray-400 hover:bg-gray-200 hover:text-gray-700;
+    }
 
     /* An Answer, as the old editor's output block: its text, with who wrote it above. */
     .answer-block {
@@ -461,6 +482,19 @@
     &[role^="menuitem"]:focus-visible {
       background-color: rgb(46 50 56 / 13%);
     }
+  }
+  /* The "@" picker of a Question's Search scope: Folders, Tags and Documents, under headings. */
+  .scope-picker {
+    @apply max-h-[320px] w-[300px] overflow-y-auto;
+  }
+  .scope-picker-heading {
+    @apply px-1.5 pt-1.5 pb-0.5 text-[11px] font-medium tracking-wide text-gray-400 uppercase first:pt-0.5;
+  }
+  .scope-picker-path {
+    @apply ml-auto max-w-[45%] shrink-0 truncate pl-2 text-custom-xs text-gray-400;
+  }
+  .scope-picker-empty {
+    @apply px-2 py-1 text-gray-500;
   }
   .editor-menu-icon {
     @apply flex size-6 shrink-0 items-center justify-center rounded-[6px] border border-gray-200 bg-white text-custom-xs font-medium text-gray-600;
