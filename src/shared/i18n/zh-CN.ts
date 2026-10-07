@@ -177,6 +177,8 @@ export const zhCN = {
   "embeddingProviders.kind.ollama": "Ollama",
   "embeddingProviders.form.label": "嵌入模型",
   "embeddingProviders.form.localOnly": "本地模式已开启，只能选择在这台电脑上运行的模型。",
+  "embeddingProviders.form.localOnlyServer":
+    "本地模式已开启，而此服务器不在这台电脑上：请使用 localhost 或 127.0.0.1 上的服务器，或在上方关闭“所有内容都留在这台电脑上”。",
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small：约 135 MB，只需下载一次，在这台电脑上运行，支持中文和英文。",
   "embeddingProviders.form.ollamaUrl": "Ollama 地址（可选）",
@@ -211,6 +213,8 @@ export const zhCN = {
   "rerank.settings.keyMissing":
     "这台设备上读取不到 {service} 的密钥，因此不会重新排序。请重新输入密钥。",
   "rerank.settings.setUp": "添加重排序密钥…",
+  "rerank.settings.localOnly":
+    "本地模式已开启：重排序会把搜索结果发送到 Cohere 或 Voyage AI。要设置它，请关闭“所有内容都留在这台电脑上”。",
   "rerank.settings.change": "更改",
   "rerank.settings.remove": "停止重新排序",
   "rerank.kind.cohere": "Cohere",

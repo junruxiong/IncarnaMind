@@ -188,6 +188,8 @@ export const en = {
   "embeddingProviders.form.label": "Embedding model",
   "embeddingProviders.form.localOnly":
     "Local mode is on, so only models on this computer can be chosen.",
+  "embeddingProviders.form.localOnlyServer":
+    'Local mode is on, and this server isn\'t on this computer: use one at localhost or 127.0.0.1, or turn off "Keep everything on this computer" above.',
   "embeddingProviders.form.builtInHint":
     "multilingual-e5-small: about 135 MB, downloaded once, and runs on this computer. English and Chinese.",
   "embeddingProviders.form.ollamaUrl": "Ollama URL (optional)",
@@ -226,6 +228,8 @@ export const en = {
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
   "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.localOnly":
+    'Local mode is on: reranking would send search matches to Cohere or Voyage AI. Turn off "Keep everything on this computer" to set it up.',
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Stop reranking",
   "rerank.kind.cohere": "Cohere",
