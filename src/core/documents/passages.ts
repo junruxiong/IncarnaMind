@@ -2,7 +2,7 @@
  * Splits a Document's text into Passages. Pure: it runs in the processing
  * worker and in tests.
  */
-import { CJK, isCjk } from "./text";
+import { CJK, isCjk } from "../../shared/text";
 
 export interface PassageParameters {
   /** The most approximate tokens a Passage holds. */
