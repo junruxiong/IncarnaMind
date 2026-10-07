@@ -173,15 +173,16 @@ export interface DocumentFailure {
 /**
  * Where automatic tagging is for a Document. It runs once the Document is
  * "ready", and never holds that up: a Document is searchable as soon as it is
- * embedded, tagged or not.
+ * embedded, tagged or not. The tagger is Jev when a Jev key is set up on this
+ * device (see `getJevSettings`), otherwise the default chat model.
  * - "pending": tagged once processing finishes, or about to be.
- * - "waiting-for-provider": no chat model can be used yet (none is set up, its
- *   key or sign-in is missing, or the User declined sending excerpts to its
- *   service). Tagging resumes by itself once one can.
- * - "tagging": the chat model is choosing the Document's Tags.
+ * - "waiting-for-provider": no tagger can be used yet (no chat model is set
+ *   up, a key or sign-in is missing, or the User declined sending excerpts to
+ *   the tagger's service). Tagging resumes by itself once one can.
+ * - "tagging": the tagger is deciding the Document's Tags.
  * - "tagged": its automatic Tags are up to date.
- * - "failed": the chat model's provider failed (see `taggingError`); a re-tag,
- *   a change of chat model or a restart tries again.
+ * - "failed": the tagger's provider failed (see `taggingError`); a re-tag, a
+ *   change of model or a restart tries again.
  * - "skipped": the Document has no text to tag (processing failed, or found none).
  */
 export type TaggingState =
@@ -203,9 +204,16 @@ export interface DocumentTag {
    * "user": the User added it; automatic tagging never changes it.
    */
   source: TagSource;
-  /** How sure automatic tagging was, from 0 to 1, when its model says. Null for the chat model and for the User's Tags. */
+  /**
+   * How likely automatic tagging found it that the Tag applies, from 0 to 1,
+   * when its tagger says (Jev does). Null for the chat model and for the User's Tags.
+   */
   confidence: number | null;
-  /** Automatic tagging wasn't sure, so the User may want to check it. */
+  /**
+   * Automatic tagging wasn't sure (Jev's probability fell in the review band),
+   * so the Tag is applied and marked for the User to check: `addDocumentTag`
+   * confirms it, making it theirs, and `removeDocumentTag` takes it off.
+   */
   needsReview: boolean;
 }
 
@@ -706,7 +714,8 @@ export type DataKind = (typeof dataKinds)[number];
 /**
  * External data flows. The UI names each one (`consent.flow.<id>`). Later tickets add theirs.
  * - "chat": Questions, to the chat provider they are asked with.
- * - "tagging": automatic tagging, to the default chat model's provider.
+ * - "tagging": automatic tagging, to Jev's service when a Jev key is set up,
+ *   otherwise to the default chat model's provider.
  */
 export const dataFlowIds = ["chat", "tagging"] as const;
 
@@ -734,6 +743,68 @@ export interface DataFlowStatus {
   consent: "accepted" | "declined" | "not-asked";
   /** ISO 8601, UTC; null when not asked. */
   decidedAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// TypeSafe Jev, the optional tagger (ADR-0005)
+
+/** The model Jev requests name unless the User changes it: TypeSafe's latest stable Jev. */
+export const JEV_DEFAULT_MODEL = "jev-latest";
+
+/**
+ * Where Jev's probability that a Tag applies counts as unsure. Below `low` the
+ * Tag isn't applied; from `low` up to (not including) `high` it is applied and
+ * marked "needs review"; from `high` it is applied. 0 < low ≤ high ≤ 1.
+ */
+export interface JevReviewBand {
+  low: number;
+  high: number;
+}
+
+export const JEV_DEFAULT_REVIEW_BAND: Readonly<JevReviewBand> = { low: 0.35, high: 0.65 };
+
+/**
+ * TypeSafe Jev on this device: a hosted classifier that decides each Tag with
+ * a probability, faster and cheaper than a chat model. Optional: without it,
+ * the chat model tags Documents. Its settings and key stay on this device.
+ */
+export interface JevSettings {
+  /** Jev is set up on this device: automatic tagging uses it instead of the chat model. */
+  enabled: boolean;
+  /**
+   * Whether its key can be read on this device. Keys live in the keychain,
+   * never in the database. Enabled without a key, Documents wait for one.
+   */
+  hasApiKey: boolean;
+  /** A Jev-compatible server's base URL, or null for TypeSafe's hosted Jev. */
+  endpoint: string | null;
+  /** The model each request names, e.g. "jev-latest". */
+  model: string;
+  reviewBand: JevReviewBand;
+  /** Where tagging requests go, or null when the server runs on this computer. */
+  service: ExternalService | null;
+}
+
+export interface SaveJevSettingsInput {
+  /** A new key. Leave it out to keep the stored one; the first save needs one. */
+  apiKey?: string;
+  /**
+   * A Jev-compatible server's base URL, e.g. "https://jev.example.com"
+   * (requests go to its `/v1/systemone`). Null or empty: TypeSafe's hosted
+   * Jev. Left out: unchanged.
+   */
+  endpoint?: string | null;
+  /** Null or empty: "jev-latest". Left out: unchanged. */
+  model?: string | null;
+  /** Left out: unchanged (at first, `JEV_DEFAULT_REVIEW_BAND`). */
+  reviewBand?: JevReviewBand;
+}
+
+/** Settings to test, which need not be saved; those left out are the saved ones. */
+export interface TestJevConnectionInput {
+  apiKey?: string;
+  endpoint?: string | null;
+  model?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -914,7 +985,9 @@ export interface CoreApi {
   deleteTag(tagId: string): Promise<void>;
   /**
    * The User puts a Tag on a Document. From then on automatic tagging leaves
-   * that Tag on that Document alone. Returns the Document.
+   * that Tag on that Document alone. Confirming a Tag automatic tagging
+   * applied (e.g. one marked "needs review") is the same: it becomes the
+   * User's. Returns the Document.
    */
   addDocumentTag(documentId: string, tagId: string): Promise<Document>;
   /**
@@ -929,6 +1002,24 @@ export interface CoreApi {
    * events report progress. Documents still being processed are tagged when they finish.
    */
   retagDocuments(documentIds?: string[]): Promise<void>;
+
+  /** TypeSafe Jev, the optional tagger: whether it is set up on this device, and how. */
+  getJevSettings(): Promise<JevSettings>;
+  /**
+   * Sets up Jev on this device, or changes its settings. From then on
+   * automatic tagging uses Jev instead of the chat model; Documents already
+   * tagged keep their Tags until re-tagged. The key goes to the keychain,
+   * never the database.
+   */
+  saveJevSettings(input: SaveJevSettingsInput): Promise<JevSettings>;
+  /** Removes Jev's key and settings from this device: automatic tagging uses the chat model again. */
+  removeJevSettings(): Promise<JevSettings>;
+  /**
+   * Asks Jev one question about a fixed text, nothing of the User's. Like a
+   * chat provider's test, a cloud service's flow (here "tagging") needs
+   * consent first.
+   */
+  testJevConnection(input?: TestJevConnectionInput): Promise<ConnectionTestResult>;
 }
 
 /**
@@ -972,6 +1063,8 @@ export interface CoreEvents {
   "documents.tagged": Document[];
   /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
   "chatGptPlan.changed": ChatGptPlanStatus;
+  /** Jev was set up, changed or removed on this device. */
+  "jev.changed": JevSettings;
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams, so every window sees it; these events are for UI
@@ -1053,6 +1146,10 @@ const methods: Record<CoreApiMethod, true> = {
   addDocumentTag: true,
   removeDocumentTag: true,
   retagDocuments: true,
+  getJevSettings: true,
+  saveJevSettings: true,
+  removeJevSettings: true,
+  testJevConnection: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

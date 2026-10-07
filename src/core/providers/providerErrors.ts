@@ -3,6 +3,7 @@ import type { ProviderError } from "../api";
 import { ConsentDeclinedError } from "../errors";
 import { OAuthTokenError } from "../oauth";
 import { ChatGptPlanError, ChatGptSignInRequiredError } from "./chatgpt/errors";
+import { JevRequestError } from "./jev";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -10,7 +11,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  * Sorts a failed provider request into a kind the UI can explain: a bad key,
  * an unknown model, rate limiting, no connection, or the provider's own error.
  * For the ChatGPT plan, also a missing or expired sign-in, a reached plan
- * limit, or OpenAI refusing the sign-in.
+ * limit, or OpenAI refusing the sign-in. Jev's errors come sorted already.
  * Answers (#29) reuse it for errors shown inside an Answer.
  */
 export function classifyProviderError(error: unknown): ProviderError {
@@ -18,6 +19,7 @@ export function classifyProviderError(error: unknown): ProviderError {
   const message = messageOf(cause);
 
   if (cause instanceof ConsentDeclinedError) return { kind: "consent-declined", message };
+  if (cause instanceof JevRequestError) return { kind: cause.kind, message };
   if (cause instanceof ChatGptSignInRequiredError) return { kind: "not-signed-in", message };
   if (cause instanceof ChatGptPlanError) return { kind: cause.kind, message };
   // The ChatGPT sign-in couldn't be refreshed for a passing reason (e.g. OpenAI's server failed).

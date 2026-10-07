@@ -136,6 +136,12 @@ export interface CoreAdapters {
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
   /**
+   * Where requests to TypeSafe's hosted Jev go. Defaults to
+   * https://api.typesafe.ai; tests point it at a local fake server. Consent
+   * still treats them as going to TypeSafe.
+   */
+  jevHostedUrl?: string;
+  /**
    * Turns Question context into a streamed Answer. Defaults to the AI SDK
    * engine; an alternative agent layer plugs in here.
    */
