@@ -4,6 +4,7 @@ import { translate } from "../shared/i18n";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
+import { createApprovals } from "./approvals";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
@@ -179,6 +180,17 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   syncChatFlow();
 
+  // Asking the User before a Connector Tool that may change something runs (#38).
+  const approvals = createApprovals({
+    db,
+    events,
+    now,
+    owners: {
+      connectors: () => new Map(connectors.list().map((each) => [each.id, each.name])),
+      skills: () => new Map(skills.list().map((each) => [each.id, each.name])),
+    },
+  });
+
   const answers = createAnswers({
     content,
     events,
@@ -207,6 +219,11 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
     },
     connectorTools: (signal) => connectors.toolsForAnswer(signal),
+    approvals: {
+      toolNeedsApproval: (connectorId, tool, readOnly) =>
+        approvals.toolNeedsApproval(connectorId, tool, readOnly),
+      request: (call, signal) => approvals.request(call, signal),
+    },
     skills: {
       availability: (name) => skills.availability(name),
       openSession: (forced) => skills.openSession(forced),
@@ -532,9 +549,19 @@ export function createCore(adapters: CoreAdapters): Core {
     setConnectorEnabled: async (connectorId, enabled) =>
       connectors.setEnabled(connectorId, enabled),
     restartConnector: async (connectorId) => connectors.restart(connectorId),
-    deleteConnector: (connectorId) => connectors.delete(connectorId),
+    deleteConnector: async (connectorId) => {
+      await connectors.delete(connectorId);
+      // Its "always allow" and "ask" go with it: added again, it is a new Connector.
+      approvals.forgetConnector(connectorId);
+    },
     previewConnectorImport: async (json) => connectors.previewImport(json),
     importConnectors: (json) => connectors.import(json),
+
+    listApprovalPolicies: async () => approvals.list(),
+    setApprovalPolicy: async (input) => approvals.set(input),
+    revokeApprovalPolicy: async (policyId) => approvals.revoke(policyId),
+    listApprovalRequests: async () => approvals.requests(),
+    respondToApproval: async (requestId, decision) => approvals.respond(requestId, decision),
 
     listSkills: async () => skills.list(),
     previewSkillImport: (path) => skills.preview(path),
@@ -552,6 +579,7 @@ export function createCore(adapters: CoreAdapters): Core {
     removeSkill: async (skillId) => {
       await skills.remove(skillId);
       skillsChanged();
+      approvals.forgetSkill(skillId);
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
@@ -566,8 +594,10 @@ export function createCore(adapters: CoreAdapters): Core {
       if (lifetime.signal.aborted) return;
       lifetime.abort();
       void chatGpt.cancelSignIn();
-      // Answers being written keep what they have, marked "stopped".
+      // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
+      // the User's approval are denied.
       answers.stopAll();
+      approvals.close();
       connectors.close();
       tagger.close();
       skills.close();
