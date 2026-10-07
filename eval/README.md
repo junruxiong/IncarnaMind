@@ -101,7 +101,7 @@ The evaluation set is `retrieval/questions.json`: 20 gating Questions (10 Englis
   - covers the expected pages;
   - contains the expected quote.
 
-  The quote is matched as the Citation check matches quotes: both are normalised by `normaliseText` and compared with `findQuote`.
+  The quote is matched as the Citation check matches quotes, with `findQuote`: both are normalised the same way and compared.
 - **Gate:** hybrid search, which is what the search Tool runs, with the built-in model must find at least 16 of 20, and at least 8 of 10 in each language.
 - **Reported, not gating:** keyword-only and vector-only search, the cross-lingual Questions, and a cloud embedding model if one is given.
 - **Per Question:** the report gives the rank of the first hit in each mode. A rank in brackets is a near miss, between 6 and 20. For each hybrid miss, it lists what the top 5 were and what each lacked.
@@ -133,13 +133,19 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 
 | Case | English | Chinese | End-to-end and related tests |
 |---|---|---|---|
-| Hyphenation | A word split at a line end is joined. A compound broken after its hyphen keeps the hyphen. | An English term split at a line end inside Chinese text. | `tests/shared/quoteMatch.test.ts` ("matches a word split at a line end…", "matches a hyphenated compound…") and `tests/shared/text.test.ts` ("line-break hyphenation") |
+| Hyphenation | A word split at a line end is joined. A compound broken after its hyphen keeps the hyphen. The quote may keep the hyphen with a space ("hyper- step"). A soft hyphen at a line end joins the word. | An English term split at a line end inside Chinese text, by a hyphen or a soft hyphen. | `tests/shared/quoteMatch.test.ts` ("matches a word split at a line end…", "matches a hyphenated compound…", "joins a word split by a soft hyphen…") and `tests/shared/text.test.ts` ("line-break hyphenation") |
 | Ligatures | ﬁ, ﬂ and ﬃ on the page match plain letters. | A ligature in an English term inside Chinese text. | `tests/shared/quoteMatch.test.ts` ("maps back through characters NFKC changes") |
 | Full-width punctuation | Full-width letters, digits and hyphen in the quote. | Full-width colon, comma and full stop, Chinese quotation marks and full-width brackets. | `tests/core/citations.test.ts` ("a Chinese quote across a page break is found, with full-width punctuation and spacing normalised") |
+| Quote marks and dashes | Curly and angle quotes, apostrophes, en, em and long dashes. | Corner brackets and a double em dash. | `tests/shared/quoteMatch.test.ts` ("unifies the quote marks and dashes…") |
+| Whitespace | Line breaks, tabs, blank lines and non-breaking spaces. | Line breaks and spaces inside Chinese text. | |
+| Letter case | A quote starting mid-sentence, given a capital (from the 2026-10-07 run). | An English term in Chinese text, in another case. | `tests/shared/quoteMatch.test.ts` ("ignores letter case…") |
+| Greek letters | ε matches the lunate ϵ and the mathematical 𝜖. | ε in Chinese text. | |
+| Reference marks | A reference "[36]" written "[^36]" (from the 2026-10-07 run), and the other way round; another number isn't found. | "[2]" written "[^2]". | `tests/core/citations.test.ts` ("a quote that writes the page's reference [36] as [^36] is found…") |
+| Ellipsis | Parts on the pages in order are found (from the 2026-10-07 run); a part shorter than 3 words or 15 letters, parts out of order and a reworded part aren't. | A Chinese ellipsis "……"; a part shorter than 15 characters. | `tests/shared/quoteMatch.test.ts` ("a quote with an ellipsis"), `tests/core/citations.test.ts` ("a quote with an ellipsis is found when each part is on the cited page…") |
 | CJK text | A Chinese term in English text, whatever the spacing. | Radical look-alikes and the spaces pdf.js adds. Simplified characters don't match traditional ones (ADR-0009). | `tests/core/citations.test.ts` ("a Chinese quote is found in text that has radical look-alikes…") and `tests/shared/quoteMatch.test.ts` |
 | A quote across a page break | Citing both pages; a word hyphenated across the break; citing only the first page ("not found"). | Citing both pages. | `tests/core/citations.test.ts` ("a quote across a page break is found once running headers, footers and page numbers are left out", and the Chinese one above), `tests/shared/citations.test.ts` (the viewer's highlight) |
 | A range breaking the page-range rule | Three pages; a page outside the cited Passage. | The same. | `tests/core/citations.test.ts` ("The page-range rule") |
-| The match is exact | A paraphrase isn't found. | The same. | `tests/core/citations.test.ts` ("a paraphrased quote is 'not found'") |
+| The match is exact | A paraphrase, a quote with one word changed, and a quote from another page than the one cited aren't found. | A paraphrase, and a quote from another page. | `tests/core/citations.test.ts` ("a paraphrased quote is 'not found'") |
 
 ## Results
 
@@ -189,6 +195,14 @@ The prototype (`prototype/retrieval`) was rerun on this machine at 500/200. It g
 **The Citation part** hasn't been run with a cloud model yet, because that needs a paid key.
 
 A smoke run with Ollama's `llama3.2`, a 3B model, ran from start to finish, but the model gave no valid Citations. It wrote 9 markers without records in English, and its Chinese searches were garbled, so the run isn't a measurement. That model is local, so the run didn't gate.
+
+A run with Ollama's `mistral` on 2026-10-07 (local, so not gating) recorded 12 English and 7 Chinese Citations. The check marked 3 of the 12 English ones "not found" though their quotes were on the cited pages (25%, against a target of at most 5%):
+
+- "If the initial hyper-step sizes are too large, …" (Gradient Descent The Ultimate Optimizer, p. 8): the page reads "… we find that if the initial …". The quote starts mid-sentence and the model gave it a capital.
+- "… label smoothing of value ϵls = 0.1 [^36]. This hurts perplexity, …" (Attention Is All You Need, p. 8): the page's reference is "[36]", and the model wrote it in the syntax of our Citation markers. The "ϵ" is the page's own.
+- "… in some of those tested... Clause 19.1 (18.1) Outcome or Risk Sharing Agreements" (ABPI Code of Practice, pp. 35–36): the model wrote "..." where the page has a full stop and a heading.
+
+The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote with an ellipsis part by part (ADR-0009).
 
 `tests/eval/citations.test.ts` checks the Citation part through the core with a scripted model instead: found quotes, false "not found", wrong pages, coverage and rounds.
 

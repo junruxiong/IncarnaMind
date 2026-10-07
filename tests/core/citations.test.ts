@@ -224,6 +224,9 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     expect(system).toMatch(/Cite every claim you draw from a Passage/);
     expect(system).toMatch(/If the Documents don't cover the Question, say so/);
     expect(system).toMatch(/\[\^1\]/);
+    expect(system).toMatch(
+      /one unbroken stretch of the Passage: don't leave words out with an ellipsis/,
+    );
     expect(system).toMatch(/The User has added 1 Document /);
     // Short: it is sent with every Question.
     expect(system.length).toBeLessThan(2500);
@@ -418,6 +421,67 @@ describe("The Citation check", { timeout: 30_000 }, () => {
       check: "not-found",
       checkReason: "quote-not-on-pages",
     });
+  });
+
+  test("a quote that writes the page's reference [36] as [^36] is found, and the Answer's own markers still become Citations", async () => {
+    const quote =
+      "during training, we employed label smoothing of value 0.1 [^36]. This hurts perplexity";
+    const model = citingModel({
+      query: "label smoothing",
+      records: (passages) => [
+        { marker: 1, passage: first(passages).id, pageFrom: 1, pageTo: 1, quote },
+      ],
+      answer: "Label smoothing hurt perplexity but helped BLEU [^1].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      {
+        name: "Attention.pdf",
+        contents: buildPdf([
+          {
+            lines: [
+              "Label Smoothing",
+              "During training, we employed label smoothing of value 0.1 [36]. This",
+              "hurts perplexity, but improves accuracy and BLEU score.",
+            ],
+          },
+        ]),
+      },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "What did label smoothing do?");
+
+    expect(answerText(client, answerId)).toBe("Label smoothing hurt perplexity but helped BLEU .");
+    expect(citationsIn(client, answerId)).toEqual([
+      expect.objectContaining({ quote, check: "found", checkReason: null }),
+    ]);
+    expect(citeFeedback(model)).toMatch(/^Recorded \[\^1\]\. Write the Answer now/);
+  });
+
+  test("a quote with an ellipsis is found when each part is on the cited page, and 'not found' when a part is too short", async () => {
+    const parts = "Spring tides happen at new moon … the Moon is at its first or last quarter.";
+    const short = "Spring tides happen at new moon ... last quarter.";
+    const model = citingModel({
+      query: "spring tides",
+      records: (passages) => [
+        { marker: 1, passage: first(passages).id, pageFrom: 2, pageTo: 2, quote: parts },
+        { marker: 2, passage: first(passages).id, pageFrom: 2, pageTo: 2, quote: short },
+      ],
+      answer: "Spring tides come at new moon [^1], neap tides at the quarters [^2].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "When are the tides?");
+
+    expect(citationsIn(client, answerId)).toEqual([
+      expect.objectContaining({ quote: parts, check: "found", checkReason: null }),
+      expect.objectContaining({
+        quote: short,
+        check: "not-found",
+        checkReason: "quote-not-on-pages",
+      }),
+    ]);
   });
 
   test("a Chinese quote across a page break is found, with full-width punctuation and spacing normalised", async () => {

@@ -822,23 +822,35 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
     const strings = layer.textContentItemsStr;
     let first: HTMLElement | null = null;
     const marked: number[] = [];
+    // A run can hold two parts of a quote with an ellipsis: its ranges, in order.
+    const byItem = new Map<number, { start: number; end: number }[]>();
     for (const { item, start, end } of highlights ?? []) {
+      byItem.set(item, [...(byItem.get(item) ?? []), { start, end }]);
+    }
+    for (const [item, ranges] of byItem) {
       const div = divs[item];
       const text = strings[item];
       if (!div || text === undefined) continue;
       marked.push(item);
-      let mark: HTMLElement;
-      if (start === 0 && end === text.length) {
-        mark = div;
+      const [only] = ranges;
+      if (ranges.length === 1 && only && only.start === 0 && only.end === text.length) {
         div.classList.add("highlight");
-      } else {
-        mark = document.createElement("span");
+        div.dataset.quoteHighlight = "";
+        first ??= div;
+        continue;
+      }
+      const children: (string | HTMLElement)[] = [];
+      let at = 0;
+      for (const { start, end } of ranges) {
+        const mark = document.createElement("span");
         mark.className = "highlight appended";
         mark.textContent = text.slice(start, end);
-        div.replaceChildren(text.slice(0, start), mark, text.slice(end));
+        mark.dataset.quoteHighlight = "";
+        children.push(text.slice(at, start), mark);
+        at = end;
+        first ??= mark;
       }
-      mark.dataset.quoteHighlight = "";
-      first ??= mark;
+      div.replaceChildren(...children, text.slice(at));
     }
     if (first) onHighlightShown(page, first);
     return () => {
