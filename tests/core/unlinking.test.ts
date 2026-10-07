@@ -4,7 +4,7 @@ import { citationState } from "../../src/shared/citations";
 import { quoteInUnits } from "../../src/shared/locations";
 import type { UnitKind } from "../../src/shared/units";
 import { askAndFinish, citingModel, onlyCitation, setUpWithDocuments } from "../helpers/citations";
-import { nextEvent, queryDatabase } from "../helpers/core";
+import { nextEvent, queryDatabase, startCore } from "../helpers/core";
 import {
   createSourceFolder,
   documentAt,
@@ -218,5 +218,28 @@ describe("Unlinking a folder keeps the text its Citations quote", { timeout: 30_
     expect(await core.listKeptCitationTexts()).toEqual(kept);
     expect(storedUnits(dataDir)).toHaveLength(2);
     expect(citationState(answered, [], kept)).toMatchObject({ check: "found" });
+  });
+
+  test("the kept text goes at a start once no Citation quotes it", async () => {
+    const { core, dataDir, mind, rivers, noted } = await citeThenUnlink();
+    core.close();
+
+    // Still quoted: kept.
+    const second = startCore(dataDir);
+    expect(await second.listKeptCitationTexts()).toHaveLength(2);
+    // The Answer's Citation goes with its Mind; the Note's stays.
+    await second.deleteMind(mind.id);
+    second.close();
+
+    const third = startCore(dataDir);
+    expect(await third.listKeptCitationTexts()).toEqual([
+      { documentId: rivers.id, contentHash: rivers.contentHash, units: [1] },
+    ]);
+    await third.deleteMind(noted.mind.id);
+    third.close();
+
+    const fourth = startCore(dataDir);
+    expect(await fourth.listKeptCitationTexts()).toEqual([]);
+    expect(storedUnits(dataDir)).toEqual([]);
   });
 });

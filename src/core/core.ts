@@ -225,17 +225,18 @@ export function createCore(adapters: CoreAdapters): Core {
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
     });
-    // Old versions' text no Citation quotes any more goes, at startup only:
-    // nothing is being written or undone then, so no Citation is in flight.
-    if (documents.hasOldVersions()) {
+    // Old versions' text, and the text kept of unlinked Documents, that no
+    // Citation quotes any more goes, at startup only: nothing is being
+    // written or undone then, so no Citation is in flight.
+    if (documents.hasOldVersions() || documents.keptCitationTexts().length > 0) {
       const cited: CitedVersions = new Map();
       for (const mind of minds.list()) {
-        content.read(mind.id, (fragment) => addCitedVersions(fragment, cited));
-        content.close(mind.id);
+        content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
       }
-      documents.collectOldVersions((documentId, contentHash) =>
-        isCited(cited, documentId, contentHash),
-      );
+      const quoted = (documentId: string, contentHash: string) =>
+        isCited(cited, documentId, contentHash);
+      documents.collectOldVersions(quoted);
+      documents.releaseKeptText(quoted);
     }
   } catch (error) {
     lifetime.abort();
