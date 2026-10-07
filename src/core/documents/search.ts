@@ -2,9 +2,10 @@
  * Keyword search over Passage text with the FTS5 index. Later tickets build
  * hybrid search (keyword plus vector) on it.
  */
+
+import { hasCjk } from "../../shared/text";
 import type { PassageSearchResult } from "../api";
 import type { Database, SqlValue } from "../storage";
-import { hasCjk } from "./text";
 
 /** The trigram tokenizer can't match anything shorter than this. */
 const TRIGRAM = 3;

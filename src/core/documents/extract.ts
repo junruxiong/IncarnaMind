@@ -4,10 +4,10 @@
  */
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { CJK } from "../../shared/text";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import { decodeText } from "./decode";
 import type { PageText } from "./passages";
-import { CJK } from "./text";
 
 /** Why a file's text couldn't be extracted. */
 export class ExtractionError extends Error {
