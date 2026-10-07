@@ -134,7 +134,7 @@ Besides the evaluation's own (`eval/README.md`: the chat model, the model cache,
 
 Each run writes `eval/results/grouping-<start time>/` (gitignored), or `grouping-founder-<start time>/` for the founder's library:
 
-- `report.md`: the recommendation; the three variants on both sets; the shared-name rows; the held-out bars with every case and why it missed; the chosen variant's Topics by subject; the incremental cases; the classifier fallback; the timings; the founder's procedure; the fixture table.
+- `report.md`: the recommendation; the three variants on both sets, with how many Topics hold both languages; the same at the design's own k (5 for 47 Documents), a diagnostic that isn't a bar; the shared-name rows; the held-out bars with every case and why it missed; the chosen variant's Topics by subject; the incremental cases; the classifier fallback; the timings; the founder's procedure; the fixture table.
 - `report.json`: everything.
 - `founder-sample.csv`: the founder's sheet.
 
