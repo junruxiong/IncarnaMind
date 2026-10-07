@@ -255,6 +255,20 @@ function setAttributes(element: Y.XmlElement, attributes: Partial<AnswerAttribut
   }
 }
 
+const CITING_ORDER: readonly CitationSupport[] = ["tools", "structured-output", "none"];
+
+/**
+ * How to start citing: what the model's capabilities say, unless an earlier
+ * Answer found its provider refuses that (the engine stepped down), which wins.
+ */
+function startingSupport(
+  known: CitationSupport | undefined,
+  learnt: CitationSupport | undefined,
+): CitationSupport | undefined {
+  if (!known || !learnt) return learnt ?? known;
+  return CITING_ORDER.indexOf(learnt) > CITING_ORDER.indexOf(known) ? learnt : known;
+}
+
 /** Why a model couldn't be prepared, as the kind of error the Answer shows. */
 function failureOf(error: unknown): ProviderError {
   if (error instanceof ChatNotReadyError) {
@@ -296,9 +310,13 @@ export function createAnswers(options: AnswersOptions) {
     });
   };
 
-  /** How each model gives Citations, learnt from its earlier Answers: by provider and model. */
+  /**
+   * How each model gives Citations, learnt from its earlier Answers: by
+   * provider, model and, for a local model, its build (a model pulled again may do more).
+   */
   const supportByModel = new Map<string, CitationSupport>();
-  const modelKey = (model: ChatModelChoice) => `${model.providerId}\n${model.modelId}`;
+  const modelKey = (model: ChatModelChoice, prepared: PreparedChatModel) =>
+    `${model.providerId}\n${model.modelId}\n${prepared.revision ?? ""}`;
 
   function start(input: {
     mindId: string;
@@ -674,6 +692,7 @@ export function createAnswers(options: AnswersOptions) {
               }),
             }
           : null;
+      const learntKey = modelKey(model, prepared);
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
         instructions: (
@@ -701,7 +720,7 @@ export function createAnswers(options: AnswersOptions) {
         model: prepared.model,
         tools,
         skills: skillTools,
-        support: supportByModel.get(modelKey(model)),
+        support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         window: prepared.window,
         signal: controller.signal,
       })) {
@@ -709,7 +728,7 @@ export function createAnswers(options: AnswersOptions) {
         switch (event.type) {
           case "support":
             support = event.support;
-            supportByModel.set(modelKey(model), event.support);
+            supportByModel.set(learntKey, event.support);
             writeSoon();
             break;
           case "text-delta":
