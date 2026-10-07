@@ -43,7 +43,7 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { isRecord } from "../errors";
 import type { Secrets } from "../secrets";
 
-export const tokensSecret = (connectorId: string) => `connector:${connectorId}:oauth-tokens`;
+const tokensSecret = (connectorId: string) => `connector:${connectorId}:oauth-tokens`;
 export const clientSecret = (connectorId: string) => `connector:${connectorId}:oauth-client`;
 
 /** Renew an access token this long before it expires. */
@@ -142,7 +142,7 @@ function parseClient(raw: string | null): ClientRecord {
  * The canonical URI of an MCP server, as the `resource` parameter names it:
  * without a fragment, and without the "/" a URL gets when it has no path.
  */
-export function canonicalResource(serverUrl: string | URL): string {
+function canonicalResource(serverUrl: string | URL): string {
   const url = new URL(serverUrl);
   url.hash = "";
   const href = url.href;

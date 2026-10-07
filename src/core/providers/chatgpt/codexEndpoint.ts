@@ -106,7 +106,7 @@ function instructionText(item: unknown): string | null {
 }
 
 /** Turns the AI SDK's Responses API body into one the Codex endpoint accepts. */
-export function shapeCodexRequest(body: Record<string, unknown>): Record<string, unknown> {
+function shapeCodexRequest(body: Record<string, unknown>): Record<string, unknown> {
   const shaped: Record<string, unknown> = {};
   for (const field of FORWARDED_FIELDS) {
     if (body[field] !== undefined) shaped[field] = body[field];
@@ -302,7 +302,7 @@ async function collectStream(response: Response, url: string): Promise<Response>
  * the request, reshapes the body, retries once with a refreshed token after a
  * 401, and turns refusals into `ChatGptPlanError`.
  */
-export function createCodexFetch(
+function createCodexFetch(
   credentials: ChatGptCredentials,
   fetcher: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {

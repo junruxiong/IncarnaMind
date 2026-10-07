@@ -49,14 +49,11 @@ import {
   type SkillSourceFile,
 } from "./source";
 
-export { SKILL_LIMITS } from "../api";
-export type { SkillLimits } from "./source";
-
 /** Previews kept for importing; an older one is forgotten when a newer one comes. */
 const MAX_PENDING_IMPORTS = 3;
 
 /** The most of one file `readFile` gives the model, in characters. */
-export const MAX_SKILL_FILE_CHARS = 60_000;
+const MAX_SKILL_FILE_CHARS = 60_000;
 
 /** File types that are scripts wherever they are in a Skill. */
 const SCRIPT_EXTENSIONS = new Set([
@@ -75,7 +72,7 @@ const SCRIPT_EXTENSIONS = new Set([
   "cmd",
 ]);
 
-export const isScript = (path: string): boolean =>
+const isScript = (path: string): boolean =>
   path.startsWith("scripts/") || SCRIPT_EXTENSIONS.has(path.split(".").at(-1)?.toLowerCase() ?? "");
 
 /** A Skill as the system prompt lists it: its name and description only. */
@@ -210,8 +207,6 @@ function copyName(name: string, taken: (name: string) => boolean): string {
 
 const builtInNameMessage = (name: string) =>
   `"${name}" is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.`;
-
-export type SkillsStore = ReturnType<typeof createSkills>;
 
 export function createSkills(options: SkillsOptions) {
   const { db, now } = options;

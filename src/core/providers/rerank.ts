@@ -47,13 +47,13 @@ export const createAiSdkRerankingModel: RerankingModelFactory = ({ kind, apiKey,
     : createVoyage({ apiKey }).reranking(modelId);
 
 /** Where each provider's requests go. */
-export const RERANK_SERVICES: Readonly<Record<RerankProviderKind, ExternalService>> = {
+const RERANK_SERVICES: Readonly<Record<RerankProviderKind, ExternalService>> = {
   cohere: { id: "https://api.cohere.com", name: "Cohere" },
   voyage: { id: "https://api.voyageai.com", name: "Voyage AI" },
 };
 
 /** The data the "rerank" flow sends. */
-export const RERANK_FLOW_SENDS = ["queries", "passages"] as const;
+const RERANK_FLOW_SENDS = ["queries", "passages"] as const;
 
 const KEY_NAME = "rerank:api-key";
 /** A per-device value, outside `DeviceSettings`: only these methods change it. */
@@ -105,8 +105,6 @@ function parseKind(value: unknown): RerankProviderKind {
 /** What the reranking model reads for a candidate: its Document's name, then the Passage. */
 const candidateText = (candidate: SearchCandidate) =>
   `${candidate.documentName}\n${candidate.text}`;
-
-export type Rerank = ReturnType<typeof createRerank>;
 
 export function createRerank(options: {
   settings: SettingsStore;

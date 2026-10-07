@@ -38,7 +38,7 @@ export interface EmbeddingCall {
  * Passages are sent as their Document's name, a line break, then their text;
  * search queries have no line break.
  */
-export const isPassageCall = (call: Pick<EmbeddingCall, "values">) =>
+const isPassageCall = (call: Pick<EmbeddingCall, "values">) =>
   call.values.some((value) => value.includes("\n"));
 
 export interface MockEmbeddings {

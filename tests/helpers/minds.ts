@@ -8,7 +8,7 @@ import { SCOPE_ATTRIBUTES } from "../../src/shared/searchScope";
 import type { MindClient } from "./mindClient";
 
 /** The schema of the renderer's editor: what a Mind can hold. */
-export const mindSchema = getSchema(noteExtensions());
+const mindSchema = getSchema(noteExtensions());
 
 /**
  * The Mind's Blocks as the editor reads them from Yjs. Throws if anything in

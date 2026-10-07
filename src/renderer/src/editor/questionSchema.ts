@@ -146,7 +146,7 @@ export const Answer = Node.create<AnswerOptions>({
  * open into are unwrapped to their content; whole Answers (e.g. one dragged by
  * its handle) are left alone.
  */
-export function unwrapOpenAnswers(slice: Slice, answer: NodeType): Slice {
+function unwrapOpenAnswers(slice: Slice, answer: NodeType): Slice {
   const { content, openStart, openEnd } = slice;
   const last = content.childCount - 1;
   const openFirst = content.firstChild?.type === answer && openStart > 0;
@@ -169,7 +169,7 @@ export function unwrapOpenAnswers(slice: Slice, answer: NodeType): Slice {
 }
 
 /** Whether a top-level Block is a Note the User switched out of Question context. */
-export const isSwitchedOff = (node: ProseMirrorNode): boolean =>
+const isSwitchedOff = (node: ProseMirrorNode): boolean =>
   node.attrs[INCLUDE_IN_CONTEXT_ATTRIBUTE] === false &&
   (NOTE_BLOCK_TYPES as readonly string[]).includes(node.type.name);
 

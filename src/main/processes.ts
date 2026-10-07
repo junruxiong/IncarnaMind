@@ -37,7 +37,7 @@ export interface LoginShellOptions {
 }
 
 /** Generous: some shell profiles (nvm, conda, oh-my-zsh) take a few seconds. */
-export const LOGIN_SHELL_TIMEOUT_MS = 10_000;
+const LOGIN_SHELL_TIMEOUT_MS = 10_000;
 
 /**
  * Variables a child mustn't inherit: those the shell sets for itself, and

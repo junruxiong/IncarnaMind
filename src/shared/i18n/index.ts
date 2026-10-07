@@ -7,9 +7,9 @@ import { en } from "./en";
 import type { Dictionary, MessageKey, MessageParams } from "./types";
 import { zhCN } from "./zh-CN";
 
-export type { Dictionary, MessageKey, MessageParams } from "./types";
+export type { MessageKey, MessageParams } from "./types";
 
-export const dictionaries: { readonly [L in Language]: Dictionary } = {
+const dictionaries: { readonly [L in Language]: Dictionary } = {
   en,
   "zh-CN": zhCN,
 };

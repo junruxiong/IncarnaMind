@@ -14,7 +14,7 @@ const lines = (text: string) =>
     .filter(Boolean);
 
 /** "NAME=value" lines as variables, or null if a line has no name. */
-export function parseEnvLines(text: string): Record<string, string> | null {
+function parseEnvLines(text: string): Record<string, string> | null {
   const env: Record<string, string> = {};
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;

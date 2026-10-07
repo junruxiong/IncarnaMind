@@ -182,7 +182,7 @@ function citationTable(run: CitationRun): string[] {
   ];
 }
 
-export function markdownReport(report: EvalReport, reportDir: string, root: string): string {
+function markdownReport(report: EvalReport, reportDir: string, root: string): string {
   const { run, retrieval, citations } = report;
   const builtIn = retrieval.runs[0] as RetrievalRun;
   const sheet = relative(root, join(reportDir, "reviewer-sheet.csv"));
