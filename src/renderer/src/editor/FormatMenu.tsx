@@ -44,7 +44,7 @@ const showOverText: NonNullable<BubbleMenuProps["shouldShow"]> = ({
   return view.hasFocus() || element.contains(document.activeElement);
 };
 
-/** The old editor's bubble menu: bold, italic, strikethrough and highlight for the selected text. */
+/** The bubble menu over selected text: bold, italic, strikethrough and highlight. */
 export function FormatMenu({ editor }: { editor: Editor }) {
   const t = useT();
   const active = useEditorState({
@@ -76,9 +76,10 @@ export function FormatMenu({ editor }: { editor: Editor }) {
           // Keep the selection in the editor.
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => editor.chain().focus().toggleMark(mark).run()}
-          className={className}
+          data-mark={mark}
         >
-          {t(label)}
+          {/* The label shows what the mark does: bold, italic, struck through, highlighted. */}
+          <span className={className}>{t(label)}</span>
         </button>
       ))}
     </BubbleMenu>

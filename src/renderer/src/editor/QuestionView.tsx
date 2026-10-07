@@ -14,30 +14,25 @@ import {
   searchScopeOf,
 } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
-import {
-  AskIcon,
-  CloseIcon,
-  DocumentIcon,
-  FolderIcon,
-  SkillIcon,
-  TagIcon,
-} from "../components/icons";
+import { SkillIcon } from "../components/icons";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
 import { providerLabel } from "../components/providers/shared";
 import { useT } from "../i18n";
-import { type ScopeChip, scopeChips } from "../scope";
+import { scopeChips } from "../scope";
 import { useAppStore } from "../store";
+import { AskPlayIcon, ChevronDownSmallIcon, RemoveIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { askInEditor } from "./questionCommands";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
 /**
- * A Question, as the old editor's query block: the button on its left (or
- * Enter) asks it, and the picker on its right chooses its model. A Skill
- * forced from the slash menu shows as a chip beside its text, and its Search
- * scope, chosen by typing "@", as chips under it. When it can't be asked, it
- * says why underneath.
+ * A Question: a `frame` band whose text starts at the Mind's text edge. The
+ * band reaches into the left margin, where the Ask button (a small square
+ * play button) asks it, as Enter does; the picker on its right chooses its
+ * model. A Skill forced from the slash menu shows as a chip beside its text,
+ * and its Search scope, chosen by typing "@", as chips under it. When it
+ * can't be asked, it says why underneath.
  */
 export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewProps) {
   const t = useT();
@@ -73,7 +68,7 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
         type="button"
         contentEditable={false}
         data-testid="question-ask"
-        aria-label={t("question.ask")}
+        aria-label={t("question.askHint")}
         title={t("question.askHint")}
         disabled={!canAsk}
         // Keep the cursor in the editor.
@@ -83,7 +78,7 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
         }}
         className="question-ask"
       >
-        <AskIcon className="size-4" />
+        <AskPlayIcon className="size-3" />
       </button>
       <div className="question-row">
         {empty && (
@@ -114,7 +109,7 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
       {hasSearchScope(scope) && <ScopeChips scope={scope} onRemove={removeFromScope} />}
       {blocked?.kind === "not-ready" && (
         <p contentEditable={false} data-testid="question-not-ready" className="question-notice">
-          <span className="flex-1">
+          <span className="question-notice-text">
             <ReadinessExplanation readiness={blocked.readiness} />
           </span>
           <button
@@ -132,7 +127,7 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
           data-testid="question-skill-unavailable"
           className="question-notice"
         >
-          <span className="flex-1">
+          <span className="question-notice-text">
             {t(`skills.unavailable.${blocked.state}`, { name: blocked.skill })}
           </span>
           <button type="button" onClick={() => openSettings()} className="question-notice-action">
@@ -151,8 +146,10 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
         </p>
       )}
       {blocked?.kind === "error" && (
-        <p contentEditable={false} role="alert" className="question-notice">
-          {t("error.action", { message: blocked.message })}
+        <p contentEditable={false} role="alert" className="question-notice question-notice--error">
+          <span className="question-notice-text">
+            {t("error.action", { message: blocked.message })}
+          </span>
         </p>
       )}
     </NodeViewWrapper>
@@ -183,7 +180,7 @@ function SkillChip({
       title={title}
       className={`question-skill ${state === "enabled" ? "" : "question-skill--unavailable"}`}
     >
-      <SkillIcon className="size-3.5 shrink-0" />
+      <SkillIcon className="question-skill-icon" />
       <span className="truncate">{name}</span>
       <button
         type="button"
@@ -193,9 +190,9 @@ function SkillChip({
         // Keep the cursor in the editor.
         onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
-        className="question-skill-remove"
+        className="scope-chip-remove"
       >
-        <CloseIcon className="size-3" />
+        <RemoveIcon className="size-2.5" />
       </button>
     </span>
   );
@@ -213,15 +210,10 @@ const DELETED_NAMES: Record<ScopeKind, MessageKey> = {
   document: "scope.chip.deleted.document",
 };
 
-function ChipIcon({ chip }: { chip: ScopeChip }) {
-  if (chip.kind === "folder") return <FolderIcon className="size-3.5" />;
-  if (chip.kind === "tag") return <TagIcon className="size-3.5" />;
-  return <DocumentIcon kind={chip.documentKind ?? "text"} className="size-3.5" />;
-}
-
 /**
- * The Question's Search scope: a chip for each Folder, Tag and Document, with
- * a × that takes it out. One deleted since is struck through: the search ignores it.
+ * The Question's Search scope: a chip for each Folder, Tag and Document (its
+ * title says which), with a × that takes it out. One deleted since is struck
+ * through: the search ignores it.
  */
 function ScopeChips({
   scope,
@@ -253,7 +245,6 @@ function ScopeChips({
               title={deleted ? t("scope.chip.deleted") : t(CHIP_TITLES[chip.kind], { name })}
               className={`scope-chip ${deleted ? "scope-chip--deleted" : ""}`}
             >
-              <ChipIcon chip={chip} />
               {deleted ? (
                 <>
                   <s className="truncate">{name}</s>
@@ -272,7 +263,7 @@ function ScopeChips({
                 onClick={() => onRemove(chip.kind, chip.id)}
                 className="scope-chip-remove"
               >
-                <CloseIcon className="size-[10px]" />
+                <RemoveIcon className="size-2.5" />
               </button>
             </li>
           );
@@ -313,34 +304,36 @@ function ModelPicker({
   if (!chatModel && !picked) return null;
 
   return (
-    <select
-      contentEditable={false}
-      data-testid="question-model"
-      aria-label={t("question.model.label")}
-      title={t("question.model.label")}
-      value={picked}
-      onFocus={onFocus}
-      onChange={(event) => onChange(parseChoice(event.target.value))}
-      className="question-model"
-    >
-      <option value="">
-        {chatModel
-          ? t("question.model.default", { model: chatModel.modelId })
-          : t("question.model.defaultUnset")}
-      </option>
-      {/* A model picked earlier that the provider no longer lists. */}
-      {picked && !listed && <option value={picked}>{modelId}</option>}
-      {groups
-        .filter((group) => group.models.length > 0)
-        .map((group) => (
-          <optgroup key={group.provider.id} label={providerLabel(group.provider, t)}>
-            {group.models.map((model) => (
-              <option key={model} value={choiceValue(group.provider.id, model)}>
-                {model}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-    </select>
+    <span contentEditable={false} className="question-model-picker">
+      <select
+        data-testid="question-model"
+        aria-label={t("question.model.label")}
+        title={t("question.model.label")}
+        value={picked}
+        onFocus={onFocus}
+        onChange={(event) => onChange(parseChoice(event.target.value))}
+        className="question-model"
+      >
+        <option value="">
+          {chatModel
+            ? t("question.model.default", { model: chatModel.modelId })
+            : t("question.model.defaultUnset")}
+        </option>
+        {/* A model picked earlier that the provider no longer lists. */}
+        {picked && !listed && <option value={picked}>{modelId}</option>}
+        {groups
+          .filter((group) => group.models.length > 0)
+          .map((group) => (
+            <optgroup key={group.provider.id} label={providerLabel(group.provider, t)}>
+              {group.models.map((model) => (
+                <option key={model} value={choiceValue(group.provider.id, model)}>
+                  {model}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+      </select>
+      <ChevronDownSmallIcon className="question-model-chevron" />
+    </span>
   );
 }

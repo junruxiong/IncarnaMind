@@ -11,7 +11,9 @@ import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
+import { CitationNumbers } from "../editor/citationNumbers";
 import { FormatMenu } from "../editor/FormatMenu";
+import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { MindIdContext } from "../editor/mindContext";
 import { noteExtensions } from "../editor/noteSchema";
@@ -87,9 +89,27 @@ const editorPropsFor = (label: string, emptyFormula: string) => ({
 });
 
 /**
+ * A Citation redraws when it changes, and when an edit renumbers it (its
+ * number comes in a decoration, see `CitationNumbers`), not on every edit.
+ */
+const citationView = ReactNodeViewRenderer(CitationView, {
+  as: "span",
+  update: ({ oldNode, newNode, oldDecorations, newDecorations, updateProps }) => {
+    if (newNode.type !== oldNode.type) return false;
+    if (newNode !== oldNode || oldDecorations !== newDecorations) updateProps();
+    return true;
+  },
+});
+
+/**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
- * the drag handle, the formatting menu, smart typography and the LaTeX field.
+ * the drag handle, the formatting menu, smart typography, the LaTeX field,
+ * and the margin column of Citation checks.
+ *
+ * Every text starts at one edge: the column (styles.css, `.mind-column`) has
+ * a left margin for the controls (the block handle, the Ask button, the
+ * "Answer" label) and a right margin for the checks.
  */
 function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
   const t = useT();
@@ -114,8 +134,9 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
           codeBlockView: ReactNodeViewRenderer(CodeBlockView),
           questionView: ReactNodeViewRenderer(QuestionView),
           answerView: ReactNodeViewRenderer(AnswerView),
-          citationView: ReactNodeViewRenderer(CitationView, { as: "span" }),
+          citationView,
         }),
+        CitationNumbers,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
           placeholder: ({ editor: current, pos }) => {
@@ -152,7 +173,10 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
 
   return (
     <MindIdContext.Provider value={mindId}>
-      <EditorContent editor={editor} className="relative" />
+      <div className="mind-editor-frame">
+        <EditorContent editor={editor} />
+        <MarginChecks editor={editor} />
+      </div>
       <BlockHandle editor={editor} />
       <FormatMenu editor={editor} />
       {editingMath !== null && (

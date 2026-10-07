@@ -167,7 +167,7 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
   await expect(answer).toContainText("Following the Skill tide-tables.");
-  await expect(answer.getByTestId("citation")).toContainText("Harbour");
+  await expect(answer.getByTestId("citation-chip")).toHaveAttribute("aria-label", /Harbour/);
   // Without the scope, both Documents would match.
   await answer.getByTestId("answer-tools-toggle").click();
   await expect(answer.getByTestId("answer-tool-call")).toContainText("1 Passage");
@@ -179,7 +179,7 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
   await expect(answer).toContainText("Following the Skill tide-tables.");
-  await expect(answer.getByTestId("citation")).toContainText("Harbour");
+  await expect(answer.getByTestId("citation-chip")).toHaveAttribute("aria-label", /Harbour/);
   await answer.getByTestId("answer-tools-toggle").click();
   await expect(answer.getByTestId("answer-tool-call")).toContainText("1 Passage");
   await app.close();

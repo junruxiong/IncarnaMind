@@ -117,7 +117,7 @@ export const ScopePicker = Extension.create({
 
 function ChoiceIcon({ choice }: { choice: ScopeChoice }) {
   if (choice.kind === "folder") return <FolderIcon className="size-4" />;
-  if (choice.kind === "tag") return <TagIcon className="size-4 text-gray-500" />;
+  if (choice.kind === "tag") return <TagIcon className="size-4 text-ink-meta" />;
   return <DocumentIcon kind={choice.documentKind ?? "text"} className="size-4" />;
 }
 
@@ -198,7 +198,7 @@ function ScopePickerList({ editor, range, query, command, ref }: ScopePickerList
                   onClick={() => command(item)}
                   className="editor-menu-item"
                 >
-                  <span className="flex shrink-0 items-center">
+                  <span className="scope-picker-icon">
                     <ChoiceIcon choice={item} />
                   </span>
                   <span className="truncate">{item.name}</span>

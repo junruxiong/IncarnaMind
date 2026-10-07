@@ -79,11 +79,16 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
     "When do spring tides happen?",
   );
 
-  // The marker became a Citation whose quote was found on page 2.
+  // The marker became a Citation whose quote was found on page 2: numbered 1 in the text,
+  // its label naming the Document, the page and the check.
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
-  await expect(citation).toContainText("p. 2");
+  await expect(citation.getByTestId("citation-chip")).toHaveText("1");
+  await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
+    "aria-label",
+    "Citation 1: Tides, p. 2. Quote found on p. 2",
+  );
   await expect(answer).toContainText("Your Documents answer this");
   await expect(answer).not.toContainText("[^1]");
 

@@ -473,7 +473,6 @@ export const en = {
 
   "question.slash": "Question",
   "question.placeholder": "Ask a Question… (type @ to choose what it searches)",
-  "question.ask": "Ask",
   "question.askHint": "Ask (Enter)",
   "question.setUp": "Set up",
   "question.model.label": "Model for this Question",
@@ -529,8 +528,8 @@ export const en = {
   "answer.error.retry": "Try again",
   "answer.error.details": "Details",
 
-  "citation.label": "Citation: {document}. {badge}",
-  "citation.chip.page": "p. {pages}",
+  "citation.label": "Citation {number}: {document}. {badge}",
+  "citation.mark.label": "Citation {number}: {badge}",
   "citation.badge.checking": "checking…",
   "citation.badge.found.page": "Quote found on p. {pages}",
   "citation.badge.found.document": "Quote found in {document}",
@@ -642,6 +641,7 @@ export const en = {
   "scripts.card.skill": "Skill",
   "scripts.card.script": "Script",
   "scripts.card.args": "Arguments",
+  "scripts.card.wouldRun": "It would run",
   "scripts.card.noArgs": "No arguments.",
   "scripts.card.noSandbox":
     "Scripts run on this computer with no sandbox: this one could read, change or delete your files and use the internet, as you can. Nothing runs until you choose.",
@@ -840,7 +840,7 @@ export const en = {
     "This Tool may change something in {connector}. Nothing is sent until you choose.",
   "approvals.card.readOnly":
     "{connector} says this Tool only reads. You chose to approve it every time.",
-  "approvals.card.arguments": "It would send:",
+  "approvals.card.arguments": "It would send",
   "approvals.card.noArguments": "No arguments.",
   "approvals.card.allowOnce": "Allow once",
   "approvals.card.alwaysAllow": "Always allow",

@@ -150,7 +150,7 @@ async function fontsDrawing(window: Page, selector: string) {
   }
 }
 
-test("Latin text is drawn in a bundled font, and Chinese text in a system font", async () => {
+test("Latin text is drawn in the bundled Source Serif 4, and Chinese text in a system serif", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await window.getByTestId("new-mind").click();
@@ -166,41 +166,32 @@ test("Latin text is drawn in a bundled font, and Chinese text in a system font",
     "大潮在新月和满月时出现。",
   ]);
 
-  // Notes are set in one of the bundled families (DESIGN.md): Source Serif 4
-  // for writing, or Source Sans 3.
   const family = await editor
     .locator("p")
     .first()
     .evaluate((paragraph) => getComputedStyle(paragraph).fontFamily);
-  expect(family).toMatch(/^"?Source (Serif 4|Sans 3)"?,/);
-  // Upright and italic are both drawn in that bundled family, which the CSP
-  // (font-src 'self') lets load.
+  expect(family).toMatch(/^"?Source Serif 4"?,/);
+  // Upright and italic are both the bundled font, which the CSP (font-src 'self') lets load.
   const paragraph = '[data-testid="mind-editor"] p';
   const latin = await fontsDrawing(window, paragraph);
-  expect(latin.length).toBeGreaterThanOrEqual(2);
-  expect(latin.every((font) => font.bundled)).toBe(true);
-  expect(new Set(latin.map((font) => font.family)).size).toBe(1);
-  // A variable font reports its default instance, e.g. "Source Sans 3 ExtraLight".
-  const first = family.split(",")[0]?.replaceAll('"', "").trim() ?? "";
-  expect(latin[0]?.family.startsWith(first)).toBe(true);
-  // Chinese falls through to the system's Simplified Chinese font.
+  expect(latin).toHaveLength(2);
+  expect(latin.every((font) => font.family === "Source Serif 4" && font.bundled)).toBe(true);
+  // Chinese falls through to the system's Simplified Chinese serif.
   const chinese = await fontsDrawing(window, `${paragraph}:nth-child(2)`);
   expect(chinese).not.toEqual([]);
   expect(chinese.filter((font) => font.bundled)).toEqual([]);
+  if (process.platform === "darwin")
+    expect(chinese.map((font) => font.family)).toEqual(["Songti SC"]);
 
-  // All three bundled families load.
-  const loaded = await window.evaluate(async () => {
-    const statuses = async (font: string) =>
-      (await document.fonts.load(font)).map((face) => face.status);
-    return {
-      serif: await statuses('16px "Source Serif 4"'),
-      sans: await statuses('16px "Source Sans 3"'),
-      mono: await statuses('13px "JetBrains Mono"'),
-    };
-  });
-  expect(loaded.serif).toContain("loaded");
-  expect(loaded.sans).toContain("loaded");
-  expect(loaded.mono).toContain("loaded");
+  // The interface and code fonts are bundled too.
+  const others = await window.evaluate(async () =>
+    Promise.all(
+      ["16px 'Source Sans 3'", "13px 'JetBrains Mono'"].map(async (font) =>
+        (await document.fonts.load(font)).map((face) => face.status),
+      ),
+    ),
+  );
+  expect(others).toEqual([["loaded"], ["loaded"]]);
   await app.close();
 });
 

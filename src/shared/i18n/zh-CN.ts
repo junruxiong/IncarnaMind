@@ -444,7 +444,6 @@ export const zhCN = {
 
   "question.slash": "提问",
   "question.placeholder": "提一个问题…（输入 @ 选择搜索范围）",
-  "question.ask": "提问",
   "question.askHint": "提问（Enter）",
   "question.setUp": "去设置",
   "question.model.label": "回答这个问题的模型",
@@ -497,8 +496,8 @@ export const zhCN = {
   "answer.error.retry": "重试",
   "answer.error.details": "详情",
 
-  "citation.label": "引用：{document}。{badge}",
-  "citation.chip.page": "第 {pages} 页",
+  "citation.label": "引用 {number}：{document}。{badge}",
+  "citation.mark.label": "引用 {number}：{badge}",
   "citation.badge.checking": "核对中…",
   "citation.badge.found.page": "已在第 {pages} 页找到引文",
   "citation.badge.found.document": "已在《{document}》中找到引文",
@@ -605,6 +604,7 @@ export const zhCN = {
   "scripts.card.skill": "技能",
   "scripts.card.script": "脚本",
   "scripts.card.args": "参数",
+  "scripts.card.wouldRun": "它将运行",
   "scripts.card.noArgs": "没有参数。",
   "scripts.card.noSandbox":
     "脚本在这台电脑上运行，没有沙盒：它可以像你一样读取、修改或删除你的文件，也可以访问互联网。在你做出选择之前，什么都不会运行。",
@@ -794,7 +794,7 @@ export const zhCN = {
   "approvals.card.changes":
     "这个工具可能会修改 {connector} 中的内容。在你选择之前不会发送任何内容。",
   "approvals.card.readOnly": "{connector} 声称这个工具只读取内容。你选择了每次都要批准它。",
-  "approvals.card.arguments": "它将发送：",
+  "approvals.card.arguments": "它将发送",
   "approvals.card.noArguments": "没有参数。",
   "approvals.card.allowOnce": "允许一次",
   "approvals.card.alwaysAllow": "始终允许",
