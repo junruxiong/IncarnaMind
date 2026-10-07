@@ -2,8 +2,13 @@
  * Asking Questions (ADR-0007): the core builds the Question context from the
  * Mind's Yjs document, has the Answer engine stream an Answer, and writes it
  * into the document as it arrives, right after its Question, so every window
- * sees it grow: its text, its Citations (see ./citations), and the searches it
- * ran. It also pushes the Answer event stream for UI state and the evaluation.
+ * sees it grow: its text, its Citations (see ./citations), and the Tools it
+ * called (searches, and the Skills it used). It also pushes the Answer event
+ * stream for UI state and the evaluation.
+ *
+ * Skills: the instructions list the enabled Skills' names and descriptions,
+ * and the model loads one with `use_skill` when it needs it. A Skill the
+ * Question forces is loaded up front, and shown as a Tool call too.
  *
  * Everything here depends on the `AnswerEngine` port, not on the AI SDK.
  */
@@ -20,12 +25,14 @@ import {
   type CitationSupport,
   type ProviderError,
   QUESTION_BLOCK,
+  type SkillAvailability,
 } from "../api";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
 import type { MindContent } from "../mindContent";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import type { SkillSession } from "../skills";
 import {
   contentHash,
   createElement,
@@ -42,9 +49,14 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import type { AnswerEngine } from "./engine";
+import type { AnswerEngine, AnswerSkillTools } from "./engine";
 import { markdownToBlocks } from "./markdown";
-import { answerInstructions, documentInstructions } from "./prompt";
+import {
+  answerInstructions,
+  documentInstructions,
+  loadedSkillText,
+  skillInstructions,
+} from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
 export type {
@@ -52,8 +64,10 @@ export type {
   AnswerEngineEvent,
   AnswerMessage,
   AnswerRequest,
+  AnswerSkillTools,
   AnswerTools,
   CitationRecordInput,
+  InstructionOptions,
 } from "./engine";
 export { createAiSdkAnswerEngine } from "./engine";
 
@@ -85,8 +99,21 @@ export interface AnswersOptions {
   prepareModel(choice: ChatModelChoice): Promise<PreparedChatModel>;
   /** Searching the User's Documents, and what Citations point to. */
   documents: AnswerDocuments;
+  /** The User's Skills. */
+  skills: AnswerSkills;
   reportError(error: unknown): void;
 }
+
+/** What Answers need of Skills (see ../skills). */
+export interface AnswerSkills {
+  /** Whether the Skill named `name` can be forced now. */
+  availability(name: string): SkillAvailability;
+  /** The Skills one Answer may use, with the forced one loaded. Throws if it can't be used. */
+  openSession(forced: string | null): Promise<SkillSession>;
+}
+
+/** The Tool call that shows a forced Skill: loaded by the core, up front. */
+const FORCED_SKILL_CALL = "forced-skill";
 
 function parseId(value: unknown, what: string): string {
   if (typeof value !== "string" || value === "")
@@ -109,6 +136,10 @@ function pickedModel(question: Y.XmlElement): ChatModelChoice | null {
   const modelId = textAttribute(question, "modelId");
   return providerId && modelId ? { providerId, modelId } : null;
 }
+
+/** The Skill forced on a Question, if any. */
+const forcedSkillOf = (question: Y.XmlElement): string | null =>
+  textAttribute(question, "forcedSkill") || null;
 
 /** The User has changed the Answer since it was written. */
 function isEdited(answer: Y.XmlElement): boolean {
@@ -175,8 +206,9 @@ export function createAnswers(options: AnswersOptions) {
     questionId: string;
     model: ChatModelChoice;
     context: QuestionContext;
+    forcedSkill: string | null;
   }): void {
-    const { mindId, answerId, model, context } = input;
+    const { mindId, answerId, model, context, forcedSkill } = input;
     const controller = new AbortController();
     /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
@@ -184,6 +216,7 @@ export function createAnswers(options: AnswersOptions) {
     let finished = false;
     let support: CitationSupport | null = null;
     const toolCalls: AnswerToolCall[] = [];
+    let skills: SkillSession | null = null;
     const session = createCitationSession(options.documents, {
       onRecord: (marker, citation) =>
         events.emit("answer.citationAdded", { mindId, answerId, marker, citation }),
@@ -233,7 +266,8 @@ export function createAnswers(options: AnswersOptions) {
       if (timer) clearTimeout(timer);
       active.delete(answerId);
       controller.abort();
-      // A search still running when the Answer stopped didn't finish.
+      skills?.release();
+      // A Tool call still running when the Answer stopped didn't finish.
       for (const call of toolCalls) {
         if (call.status === "running") call.status = "failed";
       }
@@ -269,6 +303,55 @@ export function createAnswers(options: AnswersOptions) {
     events.emit("answer.started", { mindId, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions(context.question);
+    const callStarted = (call: AnswerToolCall) => {
+      toolCalls.push(call);
+      events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
+      writeSoon();
+    };
+    const callFinished = (id: string, ok: boolean, resultCount: number | null) => {
+      const call = toolCalls.find((each) => each.id === id);
+      if (!call) return;
+      call.status = ok ? "done" : "failed";
+      call.resultCount = resultCount;
+      events.emit("answer.toolCallFinished", { mindId, answerId, call: { ...call } });
+      writeSoon();
+    };
+
+    /** Opens the Answer's Skills, loading the forced one, shown as its Tool call; false if it failed. */
+    const openSkills = async (): Promise<boolean> => {
+      if (forcedSkill) {
+        callStarted({
+          id: FORCED_SKILL_CALL,
+          tool: "use_skill",
+          source: "skill",
+          input: { name: forcedSkill },
+          status: "running",
+          resultCount: null,
+          forced: true,
+        });
+      }
+      try {
+        const session = await options.skills.openSession(forcedSkill);
+        if (finished) {
+          session.release();
+          return false;
+        }
+        skills = session;
+      } catch (error) {
+        if (forcedSkill) callFinished(FORCED_SKILL_CALL, false, null);
+        finish({
+          status: "failed",
+          error: {
+            kind: "unknown",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return false;
+      }
+      if (forcedSkill) callFinished(FORCED_SKILL_CALL, true, null);
+      return true;
+    };
+
     const run = async () => {
       let prepared: PreparedChatModel;
       try {
@@ -279,17 +362,34 @@ export function createAnswers(options: AnswersOptions) {
       }
       // Stopped while waiting, e.g. for consent: send nothing.
       if (finished) return;
+      if (!(await openSkills()) || !skills) return;
+      const { listed, forced } = skills;
+      const opened: SkillSession = skills;
       const { tools } = session;
+      const skillTools: AnswerSkillTools | null =
+        listed.length > 0 || (forced && forced.files.length > 1)
+          ? {
+              loadable: listed.length > 0,
+              useSkill: async (name) =>
+                loadedSkillText(await opened.load(name), { withFiles: true }),
+              readSkillFile: (skill, path) => opened.readFile(skill, path),
+            }
+          : null;
       let outcome: Outcome = { status: "stopped" };
       for await (const event of engine.generate({
-        instructions: (mode, passages) =>
-          [base, documentInstructions(mode, tools.documentCount, passages)]
+        instructions: (mode, { passages, skillTools: withSkillTools = false } = {}) =>
+          [
+            base,
+            documentInstructions(mode, tools.documentCount, passages),
+            skillInstructions(listed, forced, withSkillTools),
+          ]
             .filter(Boolean)
             .join("\n\n"),
         messages: context.messages,
         question: context.question,
         model: prepared.model,
         tools,
+        skills: skillTools,
         support: supportByModel.get(modelKey(model)),
         signal: controller.signal,
       })) {
@@ -309,29 +409,19 @@ export function createAnswers(options: AnswersOptions) {
             markdown = markdown.slice(0, Math.max(0, markdown.length - event.length));
             writeSoon();
             break;
-          case "tool-call-started": {
-            const call: AnswerToolCall = {
+          case "tool-call-started":
+            callStarted({
               id: event.id,
               tool: event.tool,
-              source: "documents",
+              source: event.tool === "search_documents" ? "documents" : "skill",
               input: event.input,
               status: "running",
               resultCount: null,
-            };
-            toolCalls.push(call);
-            events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
-            writeSoon();
+            });
             break;
-          }
-          case "tool-call-finished": {
-            const call = toolCalls.find((each) => each.id === event.id);
-            if (!call) break;
-            call.status = event.ok ? "done" : "failed";
-            call.resultCount = event.resultCount;
-            events.emit("answer.toolCallFinished", { mindId, answerId, call: { ...call } });
-            writeSoon();
+          case "tool-call-finished":
+            callFinished(event.id, event.ok, event.resultCount);
             break;
-          }
           case "finished":
             outcome = { status: "done" };
             break;
@@ -359,18 +449,23 @@ export function createAnswers(options: AnswersOptions) {
       throw new InvalidInputError("discardEdits must be true or false.");
     }
 
-    const picked = content.read(mindId, (blocks) => {
+    const { picked, forcedSkill } = content.read(mindId, (blocks) => {
       const found = findBlock(blocks, QUESTION_BLOCK, questionId);
       if (!found) throw new NotFoundError("That Question isn't in this Mind.");
       if (plainText(found.element).trim() === "") {
         throw new InvalidInputError("Write the Question before asking it.");
       }
-      return pickedModel(found.element);
+      return { picked: pickedModel(found.element), forcedSkill: forcedSkillOf(found.element) };
     });
     // A model picked on a provider that has since been removed falls back to the default.
     const choice = picked && options.providerExists(picked.providerId) ? picked : undefined;
     const readiness = await options.readiness(choice);
     if (!readiness.ready) return { asked: false, reason: "not-ready", readiness };
+    // A forced Skill that is off or gone: say so rather than answer without it.
+    const skillState = forcedSkill ? options.skills.availability(forcedSkill) : "enabled";
+    if (forcedSkill && skillState !== "enabled") {
+      return { asked: false, reason: "skill-unavailable", skill: forcedSkill, state: skillState };
+    }
     const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
 
     // From here on nothing awaits, so the Mind can't change underneath.
@@ -421,7 +516,14 @@ export function createAnswers(options: AnswersOptions) {
     );
     if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
-    start({ mindId, answerId: written.answerId, questionId, model, context: written.context });
+    start({
+      mindId,
+      answerId: written.answerId,
+      questionId,
+      model,
+      context: written.context,
+      forcedSkill,
+    });
     return { asked: true, answerId: written.answerId };
   }
 

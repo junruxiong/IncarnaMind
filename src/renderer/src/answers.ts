@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AskResult, ChatModelGroup, ChatReadiness } from "../../core/api";
+import type { AskResult, ChatModelGroup, ChatReadiness, SkillAvailability } from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
@@ -10,6 +10,8 @@ export type AskBlock =
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** The User edited the Answer: the Answer asks before replacing it. */
   | { kind: "edited"; answerId: string }
+  /** The Question forces a Skill that is off or gone: the Question says which. */
+  | { kind: "skill-unavailable"; skill: string; state: Exclude<SkillAvailability, "enabled"> }
   | { kind: "error"; message: string };
 
 interface AnswersState {
@@ -44,7 +46,13 @@ function settle(questionId: string, result: AskResult | null, error?: unknown): 
       blocked[questionId] =
         result.reason === "not-ready"
           ? { kind: "not-ready", readiness: result.readiness }
-          : { kind: "edited", answerId: result.answerId };
+          : result.reason === "edited"
+            ? { kind: "edited", answerId: result.answerId }
+            : {
+                kind: "skill-unavailable",
+                skill: result.skill,
+                state: result.state === "disabled" ? "disabled" : "removed",
+              };
     }
     return { blocked };
   });

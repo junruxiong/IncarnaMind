@@ -47,6 +47,7 @@ export const Question = Node.create<QuestionOptions>({
     const attributes: Record<Exclude<keyof QuestionAttributes, "id">, object> = {
       providerId: stored(),
       modelId: stored(),
+      forcedSkill: stored(),
     };
     return attributes;
   },
