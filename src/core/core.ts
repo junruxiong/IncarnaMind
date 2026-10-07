@@ -661,6 +661,7 @@ export function createCore(adapters: CoreAdapters): Core {
       await documents.delete(id);
       activity.documentDeleted(id as string);
     },
+    retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: (path) => documents.linkedFolders.add(path),

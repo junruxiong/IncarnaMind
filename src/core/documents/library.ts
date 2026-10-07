@@ -101,8 +101,11 @@ const SECONDS_PER_MEGABYTE: Readonly<Record<DocumentKind, number>> = {
 
 /** A folder is laid out flat when this share of its folders with files hold exactly one. */
 const FLAT_SHARE = 0.9;
-/** …and there are at least this many such folders. */
-const FLAT_MIN_FOLDERS = 3;
+/**
+ * …and there are at least this many such folders: a big, Zotero-like
+ * library. A small one keeps its folders, which the User made on purpose.
+ */
+const FLAT_MIN_FOLDERS = 20;
 
 /** How often Linked folders' progress reaches the UI, at most. */
 const PROGRESS_INTERVAL_MS = 250;

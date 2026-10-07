@@ -1106,6 +1106,24 @@ export function createDocuments(options: DocumentsOptions) {
       library.documentRemoved(row.linked_folder_id);
     },
 
+    /**
+     * Processes a Document that failed again, from its file as it is now (see
+     * `CoreApi.retryDocument`). Only a failed one whose file is there.
+     */
+    retry(idInput: unknown): Document {
+      const id = parseId(idInput);
+      const row = find(id);
+      if (!row) throw new NotFoundError("There is no such Document.");
+      if (row.status !== "failed") {
+        throw new InvalidInputError("Only a Document that failed to process can be retried.");
+      }
+      if (row.file_status !== "available") {
+        throw new NotFoundError("The Document's file isn't there to read.");
+      }
+      process(id);
+      return toDocument(find(id) ?? row);
+    },
+
     /** Opens a live Document's file where it is. Missing and unreachable files are refused (NotFoundError). */
     async openFile(idInput: unknown): Promise<DocumentFile> {
       const row = await openablePath(idInput);

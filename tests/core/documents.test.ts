@@ -201,6 +201,28 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(other?.status).toBe("ready");
   });
 
+  test("a Document that failed is processed again on retry, from its file as it is now", async () => {
+    const sources = await createTempDataFolder();
+    const core = startCore(await createTempDataFolder());
+    const path = await writeSourceFile(sources, "Report.pdf", "This is not a PDF at all.");
+    const [broken] = await addAndProcess(core, [path]);
+    expect(broken?.status).toBe("failed");
+
+    // Only a failed Document can be retried; an unknown one can't.
+    const [fine] = await addAndProcess(core, [
+      await writeSourceFile(sources, "Fine.md", ENGLISH_NOTES),
+    ]);
+    await expect(core.retryDocument(fine?.id as string)).rejects.toThrow(InvalidInputError);
+    await expect(core.retryDocument("no-such-document")).rejects.toThrow(NotFoundError);
+
+    // The User fixes the file, then retries: it is read again, and ready.
+    await writeSourceFile(sources, "Report.pdf", buildPdf([{ lines: ["Quarterly report"] }]));
+    const queued = await core.retryDocument(broken?.id as string);
+    expect(queued).toMatchObject({ id: broken?.id, status: "queued", failure: null });
+    const [retried] = await waitForProcessing(core, [broken?.id as string]);
+    expect(retried).toMatchObject({ status: "ready", failure: null, pageCount: 1 });
+  });
+
   test("keyword search finds Passages in English and Chinese", async () => {
     const sources = await createTempDataFolder();
     const core = startCore(await createTempDataFolder());
