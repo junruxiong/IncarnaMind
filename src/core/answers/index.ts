@@ -338,6 +338,8 @@ export function createAnswers(options: AnswersOptions) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
+    /** Markers the engine put in for records the model gave without them. */
+    let placedMarkers = 0;
     const toolCalls: AnswerToolCall[] = [];
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
@@ -411,6 +413,7 @@ export function createAnswers(options: AnswersOptions) {
           answerId,
           status: written ? outcome.status : "stopped",
           ...session.summary(),
+          placedMarkers,
           citationSupport: support,
         });
       }
@@ -676,6 +679,7 @@ export function createAnswers(options: AnswersOptions) {
         },
         searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
         cite: (records) => session.tools.cite(records),
+        hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
         external,
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
@@ -730,6 +734,9 @@ export function createAnswers(options: AnswersOptions) {
             support = event.support;
             supportByModel.set(learntKey, event.support);
             writeSoon();
+            break;
+          case "markers-placed":
+            placedMarkers += event.count;
             break;
           case "text-delta":
             markdown += event.text;

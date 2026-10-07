@@ -1130,6 +1130,8 @@ export interface AnswerFinished {
   droppedMarkers: number;
   /** Records the model gave for no marker in the text, or naming no Passage it was given: dropped. */
   droppedRecords: number;
+  /** Markers the model left out of its text for records it gave, which the engine put in. */
+  placedMarkers: number;
   /** How the model could give Citations; null when there were no Documents to search. */
   citationSupport: CitationSupport | null;
 }
