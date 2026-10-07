@@ -10,7 +10,8 @@
  * version. When the file changes, the new version is processed and its
  * Passages replace the old ones in search; the old version's page text stays
  * for as long as a Citation quotes it (`collectOldVersions`), so the
- * Citation is still checked against the text it quoted.
+ * Citation is still checked against the text it quoted. A new version that
+ * can't be processed replaces nothing: the last good one stays (`record`).
  *
  * A Document removed from the index is deleted with its Passages and text,
  * except when its Linked folder is unlinked: then the Units the Citations in
@@ -203,6 +204,15 @@ function taggingOf(status: string, stored: string): TaggingState {
   return "pending";
 }
 
+/**
+ * Whether the Document is shown as failed, with its failure and Retry: its
+ * processing failed with no version to keep, or the latest version read
+ * failed while the last good one stays indexed (stored "ready", with the
+ * failure recorded; see `record`).
+ */
+const failedNow = (row: Pick<DocumentRow, "status" | "failure_reason">) =>
+  row.status === "failed" || (row.status === "ready" && row.failure_reason !== null);
+
 /** `searchPassages` options, checked and with their defaults. */
 function parseSearchOptions(options: unknown): {
   mode: SearchMode;
@@ -339,6 +349,7 @@ export function createDocuments(options: DocumentsOptions) {
 
   const toDocument = (row: DocumentRow): Document => {
     const tagging = taggingOf(row.status, row.tagging_status);
+    const failed = failedNow(row);
     return {
       id: row.id,
       name: row.name,
@@ -349,15 +360,14 @@ export function createDocuments(options: DocumentsOptions) {
       linkedFolderId: row.linked_folder_id,
       size: row.size,
       pageCount: row.page_count,
-      status: row.status as DocumentStatus,
+      status: failed ? "failed" : (row.status as DocumentStatus),
       progress: row.status === "embedding" ? progressOf(row) : null,
-      failure:
-        row.status === "failed"
-          ? {
-              reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
-              message: row.failure_message ?? "",
-            }
-          : null,
+      failure: failed
+        ? {
+            reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
+            message: row.failure_message ?? "",
+          }
+        : null,
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
@@ -490,35 +500,47 @@ export function createDocuments(options: DocumentsOptions) {
   }
 
   /**
-   * The status of a Document whose file couldn't be read for processing:
-   * what was indexed before stays, so it is ready again if all of it is
-   * embedded with the current model, otherwise it goes back to embedding.
-   * With nothing indexed, it waits, queued, for its file.
+   * The status of a Document whose new version couldn't be indexed (its file
+   * couldn't be read, or what was read couldn't be processed): the version
+   * indexed before stays, so it is ready again if all of it is embedded with
+   * the current model, otherwise it goes back to embedding. Null if no
+   * version has Passages indexed.
    */
-  function indexedStatus(row: DocumentRow): DocumentStatus {
+  function indexedStatus(row: DocumentRow): DocumentStatus | null {
     const counts = db.get<{ total: number; embedded: number }>(
       `SELECT count(*) AS total, count(embedding) AS embedded FROM passages
        WHERE document_id = ? AND deleted_at IS NULL`,
       [row.id],
     );
-    if (!counts || counts.total === 0) return "queued";
+    if (!counts || counts.total === 0) return null;
     if (counts.embedded === counts.total && row.embedding_model === model.id) return "ready";
     return model.isReady() ? "embedding" : "waiting-for-model";
+  }
+
+  /** What `record` wrote: the Document's status, and whether its Passages were replaced. */
+  interface Recorded {
+    status: DocumentStatus;
+    replaced: boolean;
   }
 
   /**
    * Writes a job's result: the version read replaces the Passages of an
    * earlier processing, and its pages replace those of the same version;
-   * other versions' pages stay for their Citations. Nothing is written if the
-   * Document was deleted or queued again meanwhile. Returns the status it wrote, if it did.
+   * other versions' pages stay for their Citations. A version that can't be
+   * processed (a file a sync client has only half written, a corrupt one)
+   * replaces nothing: the last good version stays indexed and searched, and
+   * the failure is recorded with it (see `failedNow`), until a later version
+   * or a retry is read. Only a Document with no version indexed fails
+   * outright. Nothing is written if the Document was deleted or queued again
+   * meanwhile. Returns what it wrote, if it did.
    */
-  function record(job: ProcessingJob, result: ProcessingResult): DocumentStatus | undefined {
+  function record(job: ProcessingJob, result: ProcessingResult): Recorded | undefined {
     return db.transaction(() => {
       const row = find(job.documentId);
       if (row?.status !== "extracting") return undefined;
       const at = now();
       if (result.outcome === "file-unreadable") {
-        const status = indexedStatus(row);
+        const status = indexedStatus(row) ?? "queued";
         // Gone, or not readable now: the library works out which, and tells.
         // The modified time is forgotten, so the file is read again once it
         // can be, and a version still to process isn't taken as indexed.
@@ -527,7 +549,25 @@ export function createDocuments(options: DocumentsOptions) {
            WHERE id = ?`,
           [status, result.gone ? row.file_status : "unavailable", at, row.id],
         );
-        return status;
+        return { status, replaced: false };
+      }
+      if (result.outcome === "crashed" || result.outcome === "failed") {
+        const kept = indexedStatus(row);
+        if (kept !== null) {
+          // Its content hash, Passages, pages and vectors are the last good version's still.
+          db.run(
+            `UPDATE documents SET status = ?, failure_reason = ?, failure_message = ?, updated_at = ?
+             WHERE id = ?`,
+            [
+              kept,
+              result.outcome === "failed" ? result.reason : "processing-error",
+              result.message,
+              at,
+              row.id,
+            ],
+          );
+          return { status: kept, replaced: false };
+        }
       }
       db.run(
         `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
@@ -540,7 +580,7 @@ export function createDocuments(options: DocumentsOptions) {
              failure_message = ?, updated_at = ? WHERE id = ?`,
           [result.message, at, job.documentId],
         );
-        return "failed";
+        return { status: "failed", replaced: true };
       }
       db.run(
         `UPDATE document_pages SET deleted_at = ?, updated_at = ?
@@ -575,7 +615,7 @@ export function createDocuments(options: DocumentsOptions) {
           job.documentId,
         ],
       );
-      return status;
+      return { status, replaced: true };
     });
   }
 
@@ -589,18 +629,27 @@ export function createDocuments(options: DocumentsOptions) {
       announce(job.documentId);
     },
     onResult(job, result) {
-      const status = record(job, result);
-      if (status === undefined) return; // deleted, or queued again, while processing
-      if (result.outcome !== "file-unreadable") {
-        // Any vectors from an earlier processing went with the old Passages.
-        vectors.removeDocument(job.documentId);
-      } else if (find(job.documentId)?.path !== job.file) {
-        // The file moved while it was being read: read it where it is now.
-        announce(job.documentId);
-        process(job.documentId);
-        return;
-      } else {
+      const recorded = record(job, result);
+      if (recorded === undefined) return; // deleted, or queued again, while processing
+      const { status, replaced } = recorded;
+      // Any vectors from an earlier processing went with the old Passages.
+      if (replaced) vectors.removeDocument(job.documentId);
+      if (result.outcome === "file-unreadable") {
+        if (find(job.documentId)?.path !== job.file) {
+          // The file moved while it was being read: read it where it is now.
+          announce(job.documentId);
+          process(job.documentId);
+          return;
+        }
         checkFile(job.file);
+      }
+      if (status === "ready") {
+        // The version indexed before, ready again: tagged, if it still needs to be.
+        try {
+          options.onReady?.(job.documentId);
+        } catch (error) {
+          reportError(error);
+        }
       }
       announce(job.documentId);
       if (status === "embedding") embedding.enqueue(job.documentId);
@@ -610,14 +659,19 @@ export function createDocuments(options: DocumentsOptions) {
 
   /**
    * Queues a Document for processing, replacing a job not yet started. A
-   * paused Linked folder's Documents wait, queued, until it is resumed.
+   * paused Linked folder's Documents wait, queued, until it is resumed. A
+   * failure recorded with it is forgotten: the result decides again.
    */
   function process(id: string): void {
     const row = find(id);
     if (!row) return;
     processor.cancel(id);
-    if (row.status !== "queued") {
-      setStatus(id, "queued");
+    if (row.status !== "queued" || row.failure_reason !== null) {
+      db.run(
+        `UPDATE documents SET status = 'queued', failure_reason = NULL, failure_message = NULL,
+           updated_at = ? WHERE id = ?`,
+        [now(), id],
+      );
       announce(id);
     }
     if (!isPaused(id)) processor.enqueue(jobFor(row));
@@ -1245,13 +1299,14 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Processes a Document that failed again, from its file as it is now (see
-     * `CoreApi.retryDocument`). Only a failed one whose file is there.
+     * `CoreApi.retryDocument`). Only a failed one whose file is there; one
+     * that kept its last good version keeps it until the file is read.
      */
     retry(idInput: unknown): Document {
       const id = parseId(idInput);
       const row = find(id);
       if (!row) throw new NotFoundError("There is no such Document.");
-      if (row.status !== "failed") {
+      if (!failedNow(row)) {
         throw new InvalidInputError("Only a Document that failed to process can be retried.");
       }
       if (row.file_status !== "available") {
