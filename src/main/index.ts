@@ -13,7 +13,9 @@ import {
   coreApiMethods,
   createCore,
   resolveLanguage,
+  type Settings,
 } from "../core";
+import type { Language } from "../core/language";
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
@@ -123,6 +125,28 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
+/**
+ * The application menu, in the interface language, and again whenever it
+ * changes. Reload and the developer tools only outside a packaged app.
+ */
+function installMenuInLanguage(core: Core): void {
+  const developer = !app.isPackaged;
+  let shown: Language | null = null;
+  const install = (language: Language) => {
+    if (language === shown) return;
+    shown = language;
+    installAppMenu(language, { developer });
+  };
+  install(resolveLanguage("system", app.getPreferredSystemLanguages()));
+  core.getSettings().then(
+    (settings) => install(settings.language),
+    () => undefined,
+  );
+  core.onAnyEvent((name, payload) => {
+    if (name === "settings.changed") install((payload as Settings).language);
+  });
+}
+
 function showStartupError(error: unknown): void {
   logger.exception("app.startFailed", error);
   const language = resolveLanguage("system", app.getPreferredSystemLanguages());
@@ -153,7 +177,7 @@ app.whenReady().then(async () => {
     logger,
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
-  installAppMenu();
+  installMenuInLanguage(core);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);

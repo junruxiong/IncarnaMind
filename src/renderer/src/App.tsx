@@ -9,6 +9,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TagsDialog } from "./components/TagsDialog";
 import { buttonStyle } from "./components/ui";
 import { ViewerPanel } from "./components/ViewerPanel";
+import { files } from "./core";
 import { useLanguage, useT } from "./i18n";
 import { useAppStore } from "./store";
 import { useDevViewerShortcut } from "./viewerControls";
@@ -51,6 +52,25 @@ export function App() {
 }
 
 /**
+ * What the application menu's items do (src/main/menu.ts): New Mind, Close
+ * Tab and Settings…. Nothing while a dialog is open, as for the tab shortcuts.
+ */
+function useMenuCommands(): void {
+  useEffect(
+    () =>
+      files.onMenuCommand((command) => {
+        if (document.querySelector("dialog[open]")) return;
+        const { createMind, closeTab, openMindId, openSettings } = useAppStore.getState();
+        if (command === "new-mind") void createMind();
+        else if (command === "close-tab") {
+          if (openMindId) closeTab(openMindId);
+        } else openSettings();
+      }),
+    [],
+  );
+}
+
+/**
  * Sidebar with Minds and Documents on the left, on the frame, and the open
  * Mind filling the rest, on the sheet; 1px rules divide them. The Document
  * viewer panel appears on the right only while open, narrowing the Mind area.
@@ -68,6 +88,7 @@ function Workspace() {
   const windowWidth = useWindowWidth();
   const openSettings = useAppStore((state) => state.openSettings);
   useDevViewerShortcut();
+  useMenuCommands();
 
   if (!device) return null;
   const { sidebarWidth } = device;
