@@ -8,6 +8,7 @@ What the index keeps is enough for Citations without the file:
 - When a file changes, the new version is indexed and becomes what search and new Answers use. The old version's pages are kept for as long as a Citation points at them, so the Citation is still checked against the text it quoted, and it says the Document changed after it was cited.
 - A file that moves or is renamed is found again by its content fingerprint, so its Citations and Search scopes follow it.
 - A file that disappears leaves a missing Document whose text and Citations remain. Only the rendered page, which needs the file, is lost.
+- Unlinking a Linked folder removes its Documents from the index but keeps the Units (ADR-0011) its Citations point to, so they are still checked; like an old version's pages, that text goes once no Citation quotes it (settled with the User on 2026-10-07).
 
 Settled with the User on 2026-10-07:
 - **A Document is a file at a path.** The same content in two places is two Documents. Search shows each Passage once, preferring the copy inside the Search scope.
