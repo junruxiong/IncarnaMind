@@ -13,7 +13,7 @@ Settled with the User on 2026-10-07:
 - **A Document is a file at a path.** The same content in two places is two Documents. Search shows each Passage once, preferring the copy inside the Search scope.
 - **Missing vs unavailable.** A file removed from a folder that is still there is a missing Document, and new searches leave it out. A Linked folder that can't be reached, such as an unplugged drive, makes its Documents unavailable. They are still searched from their stored text.
 - **Cloud drives.** Online-only placeholder files are never read, because reading downloads them. The Linked folder says how many it skipped, and offers to download and index them.
-- **Flat or nested.** A Linked folder can show its subfolders or a flat list. It starts flat when nearly every subfolder holds one file, which is Zotero's `storage/<key>/` layout.
+- **Flat or nested.** A Linked folder can show its subfolders or a flat list. It starts flat when nearly every subfolder holds one file and there are many of them (at least 20), which is Zotero's `storage/<key>/` layout; a small library keeps its folders. The User picks the layout when linking and can switch it later.
 - **Big folders.** Linking says how many files and roughly how long before indexing starts. Indexing runs newest first, and can be paused and resumed.
 - **Read-only.** IncarnaMind never writes, renames or deletes anything in a Linked folder.
 - **Other Documents.** Files added on their own form the "Other Documents" group, below the Linked folders.
