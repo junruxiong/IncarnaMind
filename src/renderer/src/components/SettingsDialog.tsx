@@ -4,6 +4,7 @@ import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
@@ -68,6 +69,7 @@ export function SettingsDialog() {
           <ChatModelSettings />
           <ConnectorsSettings />
           <SkillsSettings />
+          <ApprovalsSettings />
           <JevSettingsSection />
           <fieldset>
             <legend className="mb-1 text-sm font-medium">{t("settings.language")}</legend>
