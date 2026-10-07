@@ -116,6 +116,12 @@
       @apply text-sky-600 underline;
     }
 
+    /* Highlighted text. */
+    mark {
+      @apply rounded-[2px] bg-yellow-200 text-inherit;
+      box-decoration-break: clone;
+    }
+
     code {
       @apply rounded bg-gray-100 px-1 font-mono text-sm;
     }
@@ -447,6 +453,11 @@
       &[aria-pressed="true"] {
         @apply opacity-100;
       }
+    }
+
+    /* The highlight button looks like highlighted text. */
+    > .format-highlight {
+      @apply my-[0.15rem] rounded-[2px] bg-yellow-200;
     }
   }
 

@@ -192,3 +192,36 @@ test("Latin text is drawn in the bundled Roboto, and Chinese text in a system fo
   expect(lora).toEqual(["loaded"]);
   await app.close();
 });
+
+test("text highlighted with the keyboard stays highlighted after reopening the app", async () => {
+  const first = await launchApp(dataDir);
+  const { window } = first;
+  await dismissChatSetup(window);
+  await window.getByTestId("new-mind").click();
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+
+  // Typing makes quotes curly and "--" a dash.
+  await window.keyboard.type('"Neap" tides -- the weakest');
+  await expect(editor.locator("p")).toHaveText("“Neap” tides — the weakest");
+
+  // Select "strongest" and press Cmd/Ctrl+Shift+H: it is highlighted, and the menu says so.
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Spring tides are the strongest");
+  for (const _ of "strongest") await window.keyboard.press("Shift+ArrowLeft");
+  await expect(window.getByTestId("format-menu")).toBeVisible();
+  await window.keyboard.press("ControlOrMeta+Shift+H");
+  await expect(editor.locator("p mark")).toHaveText("strongest");
+  await expect(window.getByTestId("format-highlight")).toHaveAttribute("aria-pressed", "true");
+  await first.app.close();
+
+  const second = await launchApp(dataDir);
+  await second.window.getByTestId("mind-list-item").click();
+  const reopened = second.window.getByTestId("mind-editor");
+  await expect(reopened.locator("p")).toHaveText([
+    "“Neap” tides — the weakest",
+    "Spring tides are the strongest",
+  ]);
+  await expect(reopened.locator("p").nth(1).locator("mark")).toHaveText("strongest");
+  await second.app.close();
+});

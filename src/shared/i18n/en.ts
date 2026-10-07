@@ -47,6 +47,7 @@ export const en = {
   "editor.format.bold": "Bold",
   "editor.format.italic": "Italic",
   "editor.format.strike": "Strike",
+  "editor.format.highlight": "Highlight",
 
   "viewer.label": "Document viewer",
   "viewer.close": "Close the Document viewer",
