@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
-  addDocuments,
   createDataFolder,
   dismissChatSetup,
   dragBy,
@@ -238,67 +237,4 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await second.window.getByTestId("settings-tab-privacy").click();
   await expect(second.window.getByTestId("consent-settings")).toBeVisible();
   await second.app.close();
-});
-
-test("Documents are filed in nested Folders, filtered by Folder, and kept when their Folder is deleted", async () => {
-  const sources = await createDataFolder();
-  try {
-    const paper = join(sources, "Paper.txt");
-    const notes = join(sources, "Loose notes.txt");
-    await writeFile(paper, "A paper about attention.\n");
-    await writeFile(notes, "Notes kept for later.\n");
-
-    const { app, window } = await launchApp(dataDir);
-    await dismissChatSetup(window);
-    // Wait until both are ready, as the User would see. Until then the sidebar still moves:
-    // the first ready one brings the "tagging waits for a model" notice above the Folders,
-    // which pushes the tree and the list down under a drag already started.
-    await addDocuments(window, [paper, notes]);
-    const documents = window.getByTestId("document-list-item");
-    const paperItem = documents.filter({ hasText: "Paper" });
-    const notesItem = documents.filter({ hasText: "Loose notes" });
-
-    // Create a Folder, then a sub-Folder inside it.
-    await window.getByTestId("new-folder").click();
-    await window.getByTestId("folder-name-input").fill("Projects");
-    await window.keyboard.press("Enter");
-    const folders = window.getByTestId("folder-item");
-    const projects = folders.filter({ hasText: "Projects" });
-    await expect(projects).toHaveCount(1);
-    await projects.getByTestId("new-subfolder").click();
-    await window.getByTestId("folder-name-input").fill("2026");
-    await window.keyboard.press("Enter");
-    const year = folders.filter({ hasText: "2026" });
-    await expect(year).toHaveCount(1);
-    const projectsId = await projects.getAttribute("data-folder-id");
-    const yearId = await year.getAttribute("data-folder-id");
-
-    // Move the paper into the sub-Folder with "Move to…", and drag the notes onto the parent.
-    await paperItem.getByTestId("move-document").click();
-    await window.getByRole("menuitemradio", { name: "2026" }).click();
-    await expect(paperItem).toHaveAttribute("data-folder-id", `${yearId}`);
-    await notesItem.dragTo(projects.getByTestId("folder-filter"));
-    await expect(notesItem).toHaveAttribute("data-folder-id", `${projectsId}`);
-
-    // The sub-Folder shows only the paper; its parent shows the paper too, from the sub-Folder.
-    await year.getByTestId("folder-filter").click();
-    await expect(documents).toHaveCount(1);
-    await expect(documents).toContainText("Paper");
-    await projects.getByTestId("folder-filter").click();
-    await expect(documents).toHaveCount(2);
-    await window.getByTestId("all-documents").getByRole("button").click();
-    await expect(documents).toHaveCount(2);
-
-    // Deleting the parent asks first. Both Documents stay listed, unfiled.
-    await projects.getByTestId("folder-filter").click();
-    await projects.getByTestId("delete-folder").click();
-    await window.getByTestId("confirm-delete-folder").click();
-    await expect(folders).toHaveCount(0);
-    await expect(documents).toHaveCount(2);
-    await expect(paperItem).toHaveAttribute("data-folder-id", "");
-    await expect(notesItem).toHaveAttribute("data-folder-id", "");
-    await app.close();
-  } finally {
-    await removeDataFolder(sources);
-  }
 });

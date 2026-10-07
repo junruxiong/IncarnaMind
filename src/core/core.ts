@@ -5,11 +5,12 @@ import { translate } from "../shared/i18n";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
+import { recheckCitation } from "./answers/citations";
+import { addCitedVersions, type CitedVersions, isCited } from "./answers/citedVersions";
 import type {
   ChatModelChoice,
   CoreApi,
   CoreEventSource,
-  Document,
   EmbeddingSettings,
   ProviderError,
   Unsubscribe,
@@ -18,12 +19,13 @@ import { createApprovals } from "./approvals";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
+import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExports } from "./exports";
-import { createFolders, parseFolderId } from "./folders";
+import { createFolders } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -56,33 +58,30 @@ export const DATABASE_FILE = "incarnamind.db";
 /** The core as its host sees it: the public interface (methods and events) plus host-only hooks. */
 export interface Core extends CoreApi, CoreEventSource {
   /**
-   * Opens a Document's stored file for reading, for the host to serve to the UI
-   * (the desktop app streams it over a custom protocol, so files never cross IPC).
-   * Only live Documents: throws NotFoundError for an unknown or deleted Document,
-   * or if its file is missing from the data folder.
+   * Opens a Document's file where the User keeps it, for the host to serve
+   * to the UI (the desktop app streams it over a custom protocol, so files
+   * never cross IPC). The file is checked first, as any opened file is.
+   * Only live Documents whose file is there: throws NotFoundError for an
+   * unknown or deleted Document, or one whose file is missing or can't be
+   * reached (the UI then shows `readDocumentText` instead).
    */
   openDocumentFile(documentId: string): Promise<DocumentFile>;
   /**
-   * A live Document, and the file name a copy of its file gets: the
-   * Document's name, without characters file systems refuse, and the
-   * extension of its kind, never its content hash. Throws NotFoundError for
-   * an unknown or deleted Document.
+   * Opens a live Document's file, where it is, in the default app for its
+   * type, through the `shell` adapter. Throws NotFoundError as
+   * `openDocumentFile` does.
    */
-  documentCopyName(documentId: string): Promise<{ document: Document; fileName: string }>;
+  openDocumentInApp(documentId: string): Promise<void>;
   /**
-   * Saves a copy of a live Document's file at `path`, an absolute path the
-   * host got from the User (e.g. from a save dialog), replacing any file
-   * there. Throws NotFoundError for an unknown or deleted Document, or if its
-   * file is missing from the data folder, before anything is written.
+   * Shows a live Document's file selected in the system's file manager,
+   * through the `shell` adapter. Throws NotFoundError as `openDocumentFile` does.
    */
-  saveDocumentCopy(documentId: string, path: string): Promise<void>;
+  showDocumentInFolder(documentId: string): Promise<void>;
   /**
-   * Copies a live Document's file into a new folder in the temporary folder,
-   * named as `documentCopyName` says, for the host to open in another app,
-   * and resolves with its path. Throws as `saveDocumentCopy` does. Copies are
-   * removed at a later start, a day on.
+   * Reconciles every Linked folder and single file with the disk now, and
+   * resolves once that, and any change already reported, has been taken in.
    */
-  temporaryDocumentCopy(documentId: string): Promise<string>;
+  reconcileDocuments(): Promise<void>;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -172,22 +171,59 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     onChange: () => embeddingChanged(),
   });
+  const platform = process.platform;
   let documents: ReturnType<typeof createDocuments>;
+  /** Set once created, so a failure after it can close it. */
+  let createdDocuments: ReturnType<typeof createDocuments> | undefined;
   try {
-    documents = createDocuments({
+    documents = createdDocuments = createDocuments({
       db,
       dataDir,
-      tempDir: adapters.paths.tempDir ?? tmpdir(),
       now,
       model: embedding.model,
+      folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
         rebuildMayHaveProgressed();
       },
+      emitMoved: (moved) => events.emit("documents.moved", moved),
+      emitRemoved: (ids) => events.emit("documents.removed", ids),
+      foldersChanged,
+      linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
       onReady: (documentId) => documentReady(documentId),
+      // iCloud Drive before macOS 14 downloads a stub's file when asked by its command-line tool.
+      ...(platform === "darwin" && {
+        downloadStub: async (path: string) => {
+          const child = await adapters.processes.spawn("brctl", ["download", path]);
+          await new Promise<void>((resolve) => {
+            child.once("exit", () => resolve());
+            child.once("error", () => resolve());
+          });
+        },
+      }),
+      linkedFolders: {
+        watch:
+          adapters.linkedFolders?.watch ?? fsWatchFolder(adapters.linkedFolders?.settleMs ?? 300),
+        retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
+        detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
+      },
     });
+    // Old versions' text no Citation quotes any more goes, at startup only:
+    // nothing is being written or undone then, so no Citation is in flight.
+    if (documents.hasOldVersions()) {
+      const cited: CitedVersions = new Map();
+      for (const mind of minds.list()) {
+        content.read(mind.id, (fragment) => addCitedVersions(fragment, cited));
+        content.close(mind.id);
+      }
+      documents.collectOldVersions((documentId, contentHash) =>
+        isCited(cited, documentId, contentHash),
+      );
+    }
   } catch (error) {
     lifetime.abort();
+    // Created, but collecting old versions failed.
+    createdDocuments?.close();
     embeddingModel.close();
     db.close();
     throw error;
@@ -398,7 +434,8 @@ export function createCore(adapters: CoreAdapters): Core {
           documentIds: documentIds ?? undefined,
         }),
       citationSource: (passageId) => documents.citationSource(passageId),
-      pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
+      pageTexts: (documentId, contentHash, from, to) =>
+        documents.pageTexts(documentId, contentHash, from, to),
     },
     connectorTools: (signal) => connectors.toolsForAnswer(signal),
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
@@ -550,6 +587,8 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   // Connectors that are on start with the app.
   connectors.startAll();
+  // Linked folders and single files are compared with the disk, then watched.
+  documents.start();
 
   const ollamaUrl = (input: unknown) => {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
@@ -609,17 +648,42 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addDocuments: (paths) => documents.add(paths),
     listDocuments: async (options) => {
-      const { folderId, includeSubfolders, tagId } = parseListOptions(options);
+      const { folderId, includeSubfolders, tagId, linkedFolderId } = parseListOptions(options);
       const folder = folderId === undefined ? undefined : folders.get(folderId);
       return documents.list({
         folderIds: folder && (includeSubfolders ? folders.subtree(folder.id) : [folder.id]),
         tagId: tagId === undefined ? undefined : tags.get(tagId).id,
+        linkedFolderId,
       });
     },
     renameDocument: async (id, name) => documents.rename(id, name),
     deleteDocument: async (id) => {
       await documents.delete(id);
       activity.documentDeleted(id as string);
+    },
+    readDocumentText: async (id) => documents.readText(id),
+    previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
+    addLinkedFolder: (path) => documents.linkedFolders.add(path),
+    listLinkedFolders: async () => documents.linkedFolders.list(),
+    removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    setLinkedFolderLayout: async (linkedFolderId, layout) =>
+      documents.linkedFolders.setLayout(linkedFolderId, layout),
+    setLinkedFolderPaused: async (linkedFolderId, paused) =>
+      documents.linkedFolders.setPaused(linkedFolderId, paused),
+    downloadOnlineOnlyFiles: async (linkedFolderId) =>
+      documents.linkedFolders.downloadOnlineOnly(linkedFolderId),
+    recheckCitation: async (input) => {
+      if (!isRecord(input) || typeof input.documentId !== "string" || input.documentId === "") {
+        throw new InvalidInputError("recheckCitation needs the Citation's Document id.");
+      }
+      const page = (value: unknown) =>
+        typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+      return recheckCitation(documents, {
+        documentId: input.documentId,
+        quote: typeof input.quote === "string" ? input.quote : "",
+        pageFrom: page(input.pageFrom),
+        pageTo: page(input.pageTo) ?? page(input.pageFrom),
+      });
     },
     searchPassages: (query, options) => documents.search(query, options),
     getEmbeddingModel: async () => embeddingModel.status(),
@@ -737,38 +801,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return updated;
     },
 
-    moveDocument: async (documentId, folderInput) => {
-      const folderId = folderInput === null ? null : parseFolderId(folderInput);
-      const { document, moved } = db.transaction(() => {
-        if (folderId !== null) folders.get(folderId);
-        return documents.move(documentId, folderId);
-      });
-      if (moved) events.emit("documents.moved", [document]);
-      return document;
-    },
-    createFolder: async (input) => {
-      const folder = folders.create(input);
-      foldersChanged();
-      return folder;
-    },
     listFolders: async () => folders.list(),
-    renameFolder: async (folderId, name) => {
-      const folder = folders.rename(folderId, name);
-      foldersChanged();
-      return folder;
-    },
-    moveFolder: async (folderId, parentId) => {
-      const folder = folders.move(folderId, parentId);
-      foldersChanged();
-      return folder;
-    },
-    deleteFolder: async (folderId) => {
-      const at = now();
-      const unfiled = db.transaction(() => documents.unfile(folders.delete(folderId, at), at));
-      // Folders first, so a listener filtering by a deleted Folder hears it's gone before it refreshes.
-      foldersChanged();
-      if (unfiled.length > 0) events.emit("documents.moved", unfiled);
-    },
 
     listTags: async () => tags.list(),
     createTag: async (input) => {
@@ -878,9 +911,18 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
-    documentCopyName: async (documentId) => documents.copyName(documentId),
-    saveDocumentCopy: (documentId, path) => documents.saveCopy(documentId, path),
-    temporaryDocumentCopy: (documentId) => documents.openableCopy(documentId),
+    openDocumentInApp: async (documentId) => {
+      const path = await documents.filePath(documentId);
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      await adapters.shell.openPath(path);
+    },
+    showDocumentInFolder: async (documentId) => {
+      const path = await documents.filePath(documentId);
+      if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
+      adapters.shell.showItemInFolder(path);
+    },
+    reconcileDocuments: () => documents.linkedFolders.sync(),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,

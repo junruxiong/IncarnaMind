@@ -97,14 +97,8 @@ interface AppState {
   downloadEmbeddingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
-  /** Files a Document in a Folder, or unfiles it with null. */
-  moveDocument(documentId: string, folderId: string | null): Promise<void>;
   /** Shows only the Documents in a Folder and its sub-Folders; null shows them all. */
   filterByFolder(folderId: string | null): Promise<void>;
-  createFolder(name: string, parentId: string | null): Promise<void>;
-  renameFolder(id: string, name: string): Promise<void>;
-  moveFolder(id: string, parentId: string | null): Promise<void>;
-  deleteFolder(id: string): Promise<void>;
   /** Shows only the Documents with a Tag (in the filtered Folder, if any); null shows them whatever their Tags. */
   filterByTag(tagId: string | null): Promise<void>;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
@@ -353,38 +347,11 @@ export const useAppStore = create<AppState>()((set, get) => {
         set({ embedding: await core.retryEmbedding() });
       }),
 
-    // The lists follow the core's "documents.moved" and "folders.changed" events, which
-    // arrive before these calls return.
-    moveDocument: (documentId, folderId) =>
-      attempt(async () => {
-        await core.moveDocument(documentId, folderId);
-      }),
-
     async filterByFolder(folderId) {
       if (folderId === get().folderFilter) return;
       set({ folderFilter: folderId, filteredDocumentIds: null });
       await refreshFilter();
     },
-
-    createFolder: (name, parentId) =>
-      attempt(async () => {
-        await core.createFolder({ name, parentId });
-      }),
-
-    renameFolder: (id, name) =>
-      attempt(async () => {
-        await core.renameFolder(id, name);
-      }),
-
-    moveFolder: (id, parentId) =>
-      attempt(async () => {
-        await core.moveFolder(id, parentId);
-      }),
-
-    deleteFolder: (id) =>
-      attempt(async () => {
-        await core.deleteFolder(id);
-      }),
 
     async filterByTag(tagId) {
       if (tagId === get().tagFilter) return;
@@ -520,7 +487,15 @@ core.on("folders.changed", (folders) => {
   refreshFilterIfAny();
 });
 
-// Documents moved between Folders, or unfiled by a Folder's deletion.
+// Documents removed from the index, e.g. with their Linked folder.
+core.on("documents.removed", (removed) => {
+  const gone = new Set(removed);
+  useAppStore.setState((state) => ({
+    documents: state.documents.filter((each) => !gone.has(each.id)),
+  }));
+});
+
+// Documents whose files moved to another Folder on disk.
 core.on("documents.moved", (moved) => {
   useAppStore.setState((state) => ({
     documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
