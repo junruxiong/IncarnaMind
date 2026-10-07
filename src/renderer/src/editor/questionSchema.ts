@@ -1,5 +1,5 @@
 import { Extension, mergeAttributes, Node, type NodeViewRenderer } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, type NodeType, type Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import {
@@ -98,6 +98,8 @@ export const Answer = Node.create<AnswerOptions>({
       errorKind: stored(),
       errorMessage: stored(),
       generatedHash: stored(),
+      citationSupport: stored(),
+      toolCalls: stored(),
     };
     return attributes;
   },
@@ -113,7 +115,49 @@ export const Answer = Node.create<AnswerOptions>({
   addNodeView() {
     return this.options.view;
   },
+
+  addProseMirrorPlugins() {
+    const type = this.type;
+    return [
+      new Plugin({
+        key: new PluginKey("answerPaste"),
+        props: {
+          // Text copied from inside an Answer pastes as Notes, Citations and all.
+          transformPasted: (slice) => unwrapOpenAnswers(slice, type),
+        },
+      }),
+    ];
+  },
 });
+
+/**
+ * A slice copied from inside an Answer carries the Answer around it, which
+ * ProseMirror would recreate when the slice fills an empty line: pasting part
+ * of an Answer into a Note would make another Answer. Answers the slice is
+ * open into are unwrapped to their content; whole Answers (e.g. one dragged by
+ * its handle) are left alone.
+ */
+export function unwrapOpenAnswers(slice: Slice, answer: NodeType): Slice {
+  const { content, openStart, openEnd } = slice;
+  const last = content.childCount - 1;
+  const openFirst = content.firstChild?.type === answer && openStart > 0;
+  const openLast = content.lastChild?.type === answer && openEnd > 0;
+  if (!openFirst && !openLast) return slice;
+  const nodes: ProseMirrorNode[] = [];
+  content.forEach((node, _offset, index) => {
+    const unwrap = (index === 0 && openFirst) || (index === last && openLast);
+    if (unwrap) {
+      node.content.forEach((child) => {
+        nodes.push(child);
+      });
+    } else nodes.push(node);
+  });
+  return new Slice(
+    Fragment.fromArray(nodes),
+    openFirst ? openStart - 1 : openStart,
+    openLast ? openEnd - 1 : openEnd,
+  );
+}
 
 /** Whether a top-level Block is a Note the User switched out of Question context. */
 export const isSwitchedOff = (node: ProseMirrorNode): boolean =>

@@ -347,3 +347,66 @@ export function QuestionIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A magnifying glass: a search of the Documents. */
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <circle cx="7" cy="7" r="4.25" />
+      <path d="M10.2 10.2l3.3 3.3" />
+    </svg>
+  );
+}
+
+/** A circle with a tick: the quote was found on the page. */
+export function QuoteFoundIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
+      <circle cx="8" cy="8" r="6.25" strokeWidth="1.5" />
+      <path
+        d="M5.3 8.2l1.9 1.9 3.6-4"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** A circle with a cross: the quote wasn't found on the page. */
+export function QuoteNotFoundIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
+      <circle cx="8" cy="8" r="6.25" strokeWidth="1.5" />
+      <path d="M5.9 5.9l4.2 4.2M10.1 5.9l-4.2 4.2" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** A dashed circle with a dash: the quote can't be checked. */
+export function CantCheckIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
+      <circle cx="8" cy="8" r="6.25" strokeWidth="1.5" strokeDasharray="2.6 1.8" />
+      <path d="M5.5 8h5" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** A clock: the quote is checked once the Answer is finished. */
+export function CheckingIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
+      <circle cx="8" cy="8" r="6.25" strokeWidth="1.5" />
+      <path d="M8 4.8V8l2.2 1.4" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}

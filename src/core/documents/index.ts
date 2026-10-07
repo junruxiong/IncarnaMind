@@ -25,6 +25,7 @@ import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
 import { createDocumentFiles, kindOf } from "./files";
 import { keywordText } from "./keywords";
+import type { PageText } from "./passages";
 import {
   PROCESSING_VERSION,
   type ProcessedPassage,
@@ -32,7 +33,17 @@ import {
   type ProcessingResult,
 } from "./processing";
 import { createProcessor } from "./processor";
-import { fuseRankings, HYBRID_CANDIDATES, keywordSearch, passagesBySeq } from "./search";
+import {
+  fuseRankingScores,
+  fuseRankings,
+  HYBRID_CANDIDATES,
+  keywordSearch,
+  passagesBySeq,
+  passagesInWindow,
+  type WindowedPassage,
+  windowedPassagesBySeq,
+} from "./search";
+import { type SearchCandidate, type SearchToolOptions, searchDocumentsTool } from "./searchTool";
 import { createVectorIndex } from "./vectors";
 
 const DEFAULT_SEARCH_LIMIT = 20;
@@ -158,6 +169,22 @@ const nameFromPath = (path: string) => basename(path, extname(path)).trim() || b
 const indexedText = (nameKeywords: string, passageKeywords: string) =>
   nameKeywords ? `${nameKeywords} ${passageKeywords}` : passageKeywords;
 
+/** A Passage a Citation names, with its Document: what the Citation check needs. */
+export interface CitationSource {
+  passageId: string;
+  /** The Passage's text, as search returned it. */
+  text: string;
+  /** The pages the Passage covers; null for a Document without pages. */
+  pageFrom: number | null;
+  pageTo: number | null;
+  documentId: string;
+  documentName: string;
+  documentKind: DocumentKind;
+  contentHash: string;
+  /** The Document has been deleted since. */
+  documentDeleted: boolean;
+}
+
 /** A live Document's stored file, opened for reading. */
 export interface DocumentFile {
   document: Document;
@@ -277,6 +304,26 @@ export function createDocuments(options: DocumentsOptions) {
   const index = (seq: number, text: string) =>
     db.run("INSERT INTO passages_fts (rowid, text) VALUES (?, ?)", [BigInt(seq), text]);
 
+  /** Stores the text of a Document's pages, for the Citation check. Run in a transaction. */
+  function insertPages(documentId: string, pages: readonly PageText[]): void {
+    const at = now();
+    for (const { page, text } of pages) {
+      db.run(
+        `INSERT INTO document_pages (id, document_id, page, text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [randomUUID(), documentId, page === null ? null : BigInt(page), text, at, at],
+      );
+    }
+  }
+
+  /** Soft-deletes a Document's stored page text. Run in a transaction. */
+  const removePages = (documentId: string, at: string) =>
+    db.run(
+      `UPDATE document_pages SET deleted_at = ?, updated_at = ?
+       WHERE document_id = ? AND deleted_at IS NULL`,
+      [at, at, documentId],
+    );
+
   /** Stores Passages and indexes them. Run in a transaction. */
   function insertPassages(documentId: string, name: string, passages: ProcessedPassage[]): void {
     const at = now();
@@ -319,9 +366,11 @@ export function createDocuments(options: DocumentsOptions) {
          WHERE document_id = ? AND deleted_at IS NULL`,
         [at, at, job.documentId],
       );
+      removePages(job.documentId, at);
       let status: DocumentStatus;
       if (result.outcome === "ready") {
         insertPassages(job.documentId, row.name, result.passages);
+        insertPages(job.documentId, result.pages);
         status = model.isReady() ? "embedding" : "waiting-for-model";
       } else {
         status = result.outcome;
@@ -480,7 +529,106 @@ export function createDocuments(options: DocumentsOptions) {
     }
   }
 
+  /** Hybrid search for the document-search Tool: the best `limit` live Passages, with fused scores. */
+  async function candidates(
+    query: string,
+    limit: number,
+    documentIds: readonly string[] | undefined,
+  ): Promise<SearchCandidate[]> {
+    if (query.trim() === "") return [];
+    const vector = await queryVector(query, "hybrid");
+    const listed = Math.max(limit, HYBRID_CANDIDATES);
+    const keyword = keywordSearch(db, query, listed, documentIds);
+    const similar = vector ? vectors.search(vector, listed, documentIds).map((hit) => hit.seq) : [];
+    const fused = fuseRankingScores([keyword, similar], limit);
+    const scores = new Map(fused.map((hit) => [hit.seq, hit.score]));
+    return windowedPassagesBySeq(
+      db,
+      fused.map((hit) => hit.seq),
+    ).map((passage) => ({ ...passage, score: scores.get(passage.seq) ?? 0 }));
+  }
+
   return {
+    /**
+     * The document-search Tool (see ./searchTool): hybrid search, grouped by
+     * Document and clustered by sliding window.
+     */
+    searchTool(query: string, options?: SearchToolOptions): Promise<WindowedPassage[]> {
+      return searchDocumentsTool(
+        { candidates, window: (documentId, window) => passagesInWindow(db, documentId, window) },
+        query,
+        options,
+      );
+    },
+
+    /** How many live Documents have Passages to search. */
+    searchableCount(): number {
+      return (
+        db.get<{ count: number }>(
+          `SELECT count(*) AS count FROM documents d
+           WHERE d.deleted_at IS NULL
+             AND EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id AND p.deleted_at IS NULL)`,
+        )?.count ?? 0
+      );
+    },
+
+    /**
+     * A Passage and its Document, for a Citation. Deleted Passages are found
+     * too (processing a Document again replaces its Passages), and a deleted
+     * Document is reported as such. Null for an unknown Passage.
+     */
+    citationSource(passageId: string): CitationSource | null {
+      const row = db.get<{
+        id: string;
+        text: string;
+        page_from: number | null;
+        page_to: number | null;
+        document_id: string;
+        name: string;
+        kind: string;
+        content_hash: string;
+        deleted_at: string | null;
+      }>(
+        `SELECT p.id, p.text, p.page_from, p.page_to, p.document_id, d.name, d.kind,
+           d.content_hash, d.deleted_at
+         FROM passages p JOIN documents d ON d.id = p.document_id
+         WHERE p.id = ?`,
+        [passageId],
+      );
+      if (!row) return null;
+      return {
+        passageId: row.id,
+        text: row.text,
+        pageFrom: row.page_from,
+        pageTo: row.page_to,
+        documentId: row.document_id,
+        documentName: row.name,
+        documentKind: row.kind as DocumentKind,
+        contentHash: row.content_hash,
+        documentDeleted: row.deleted_at !== null,
+      };
+    },
+
+    /**
+     * The stored text of a live Document's pages from `from` to `to`, in
+     * order, as its Passages were built from it. With both null, every row: the
+     * one "page" of a Document without pages. Empty if the Document was
+     * deleted, or hasn't been processed by this version yet.
+     */
+    pageTexts(documentId: string, from: number | null, to: number | null): PageText[] {
+      const range = from === null || to === null ? "" : "AND dp.page BETWEEN ? AND ?";
+      const params = from === null || to === null ? [] : [BigInt(from), BigInt(to)];
+      return db
+        .all<{ page: number | null; text: string }>(
+          `SELECT dp.page, dp.text FROM document_pages dp
+           JOIN documents d ON d.id = dp.document_id
+           WHERE dp.document_id = ? AND dp.deleted_at IS NULL AND d.deleted_at IS NULL ${range}
+           ORDER BY dp.page`,
+          [documentId, ...params],
+        )
+        .map((row) => ({ page: row.page, text: row.text }));
+    },
+
     async add(input: unknown): Promise<AddDocumentsResult> {
       const paths = parsePaths(input);
       const documents: Document[] = [];
@@ -588,6 +736,7 @@ export function createDocuments(options: DocumentsOptions) {
            WHERE document_id = ? AND deleted_at IS NULL`,
           [at, at, id],
         );
+        removePages(id, at);
       });
       vectors.removeDocument(id);
       processor.cancel(id);

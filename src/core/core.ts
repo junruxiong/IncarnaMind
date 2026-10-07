@@ -146,6 +146,12 @@ export function createCore(adapters: CoreAdapters): Core {
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
+    documents: {
+      searchableCount: () => documents.searchableCount(),
+      search: (query, signal) => documents.searchTool(query, { signal, rerank: adapters.reranker }),
+      citationSource: (passageId) => documents.citationSource(passageId),
+      pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
+    },
     reportError: (error) => console.error(error),
   });
 

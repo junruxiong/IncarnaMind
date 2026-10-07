@@ -8,6 +8,7 @@
 import type { ChildProcess } from "node:child_process";
 import type { AnswerEngine } from "./answers/engine";
 import type { SecretProtection } from "./api";
+import type { Reranker } from "./documents/searchTool";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { ChatModelFactory } from "./providers/models";
 
@@ -140,4 +141,9 @@ export interface CoreAdapters {
    * engine; an alternative agent layer plugs in here.
    */
   answerEngine?: AnswerEngine;
+  /**
+   * Reorders the document-search Tool's hybrid hits before they are grouped,
+   * e.g. with a Cohere or Voyage reranking model. None by default.
+   */
+  reranker?: Reranker;
 }
