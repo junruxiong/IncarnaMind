@@ -138,11 +138,22 @@ export interface SettingsPatch {
 export type DocumentKind = "pdf" | "text" | "markdown";
 
 /**
- * Where a Document is in processing: "queued", then "extracting", then "ready".
- * The other end states are "failed" (see `failure`) and "no-text": the file has
- * no text to extract, e.g. a scan without a text layer.
+ * Where a Document is in processing: "queued", then "extracting" its text, then
+ * "embedding" its Passages with the built-in model, then "ready". Before the
+ * model has been downloaded, a Document waits after extracting as
+ * "waiting-for-model", and carries on by itself once the download finishes;
+ * keyword search already finds its Passages. The other end states are
+ * "failed" (see `failure`) and "no-text": the file has no text to extract,
+ * e.g. a scan without a text layer.
  */
-export type DocumentStatus = "queued" | "extracting" | "ready" | "failed" | "no-text";
+export type DocumentStatus =
+  | "queued"
+  | "extracting"
+  | "waiting-for-model"
+  | "embedding"
+  | "ready"
+  | "failed"
+  | "no-text";
 
 export type DocumentFailureReason =
   /** The file isn't a valid PDF, or a text file holds binary data. */
@@ -175,6 +186,8 @@ export interface Document {
   /** PDFs only, once their text has been extracted. */
   pageCount: number | null;
   status: DocumentStatus;
+  /** While `status` is "embedding": the share of its Passages embedded so far, from 0 to 1. Null otherwise. */
+  progress: number | null;
   /** Set when `status` is "failed". */
   failure: DocumentFailure | null;
   /** The Folder the Document is filed in, or null if it is unfiled. A Document is in at most one Folder. */
@@ -226,6 +239,26 @@ export interface AddDocumentsResult {
   skipped: SkippedFile[];
 }
 
+/**
+ * How `searchPassages` finds Passages (ADR-0009):
+ * - "keyword": FTS5 over the words of each Passage and its Document's name,
+ *   ranked by BM25. Finds nothing without a word in common.
+ * - "vector": the built-in embedding model's vectors, by cosine similarity.
+ *   Always ranks every embedded Passage, however unrelated.
+ * - "hybrid": both, each list's top 50 fused by reciprocal rank fusion
+ *   (k = 60). Keyword only until the embedding model is ready.
+ */
+export type SearchMode = "hybrid" | "keyword" | "vector";
+
+export interface SearchPassagesOptions {
+  /** Defaults to "hybrid". */
+  mode?: SearchMode;
+  /** The most results to return, from 1 to 200. Defaults to 20. */
+  limit?: number;
+  /** Only Passages of these Documents (a Search scope). Omitted: every Document. */
+  documentIds?: string[];
+}
+
 export interface PassageSearchResult {
   passageId: string;
   documentId: string;
@@ -237,6 +270,45 @@ export interface PassageSearchResult {
   /** The Passage's position in its Document, from 0. */
   position: number;
   text: string;
+}
+
+// ---------------------------------------------------------------------------
+// The built-in embedding model (ADR-0009)
+
+/**
+ * The built-in embedding model, which Document search uses on this computer.
+ * Its files are downloaded once into the data folder (about 135 MB). The
+ * download sends nothing of the User's, so it needs no consent.
+ * - "not-downloaded": nothing has asked for it yet.
+ * - "downloading": see the byte counts.
+ * - "ready": downloaded and checked. Embedding works offline from here on.
+ * - "failed": see `error`; `downloadEmbeddingModel` tries again.
+ */
+export type EmbeddingModelState = "not-downloaded" | "downloading" | "ready" | "failed";
+
+export interface EmbeddingModelError {
+  /**
+   * "network": the download stopped, e.g. offline; a retry resumes it.
+   * "integrity": a downloaded file didn't match its recorded size and SHA-256, so it was thrown away.
+   * "storage": the files couldn't be written to the data folder, e.g. the disk is full.
+   * "load": the files are there, but the model couldn't start on this computer.
+   */
+  kind: "network" | "integrity" | "storage" | "load";
+  /** Technical detail in English, for logs and tooltips. */
+  message: string;
+}
+
+export interface EmbeddingModelStatus {
+  /** The model's name, e.g. "multilingual-e5-small". */
+  name: string;
+  /** Where the files are downloaded from, e.g. "huggingface.co": traffic that carries no User content. */
+  host: string;
+  state: EmbeddingModelState;
+  /** Bytes downloaded and checked so far. */
+  downloadedBytes: number;
+  totalBytes: number;
+  /** Set when `state` is "failed". */
+  error: EmbeddingModelError | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -618,8 +690,22 @@ export interface CoreApi {
    * file is removed once no Document uses it.
    */
   deleteDocument(id: string): Promise<void>;
-  /** Keyword search over the Passages of all Documents, best match first. `limit` defaults to 20. */
-  searchPassages(query: string, limit?: number): Promise<PassageSearchResult[]>;
+  /**
+   * Searches the Passages of live Documents, best match first: hybrid
+   * (keyword and vector) search by default, over every Document or only the
+   * given ones. A "vector" search throws EmbeddingModelNotReadyError while the
+   * embedding model isn't ready.
+   */
+  searchPassages(query: string, options?: SearchPassagesOptions): Promise<PassageSearchResult[]>;
+  /** The built-in embedding model and its download. */
+  getEmbeddingModel(): Promise<EmbeddingModelStatus>;
+  /**
+   * Starts downloading the built-in embedding model, or tries again after a
+   * failure, resuming what was already downloaded. Returns at once;
+   * "embeddingModel.status" events report progress. The core also starts the
+   * download by itself as soon as a Document needs the model.
+   */
+  downloadEmbeddingModel(): Promise<EmbeddingModelStatus>;
 
   listChatProviders(): Promise<ChatProvider[]>;
   /**
@@ -735,8 +821,10 @@ export interface CoreEvents {
   "minds.changed": Mind[];
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
-  /** A Document was added or its processing status changed. Carries the whole Document. */
+  /** A Document was added or its processing status (or embedding progress) changed. Carries the whole Document. */
   "document.status": Document;
+  /** The built-in embedding model's state changed, or its download made progress. */
+  "embeddingModel.status": EmbeddingModelStatus;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
   /** A data flow needs the User's consent before anything is sent. */
@@ -798,6 +886,8 @@ const methods: Record<CoreApiMethod, true> = {
   renameDocument: true,
   deleteDocument: true,
   searchPassages: true,
+  getEmbeddingModel: true,
+  downloadEmbeddingModel: true,
   listChatProviders: true,
   saveChatProvider: true,
   deleteChatProvider: true,

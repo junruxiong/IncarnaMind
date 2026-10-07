@@ -14,7 +14,7 @@ import type { ChatModelFactory } from "./providers/models";
 export interface Paths {
   /**
    * The app data folder. It holds the SQLite database, the secrets file and, in
-   * later tickets, Document files, Skills, the embedding model and logs.
+   * later tickets, Document files, Skills, the embedding model (`models/`) and logs.
    * Backing up means copying this one folder.
    */
   dataDir: string;
@@ -61,6 +61,52 @@ export interface ProcessLauncher {
   spawn(command: string, args: readonly string[], options?: SpawnOptions): ChildProcess;
 }
 
+/** The built-in embedding model's downloaded files, as the core hands them to an `Embedder`. */
+export interface EmbeddingModelFiles {
+  /** The ONNX model, an absolute path. */
+  model: string;
+  /** The tokenizer's `tokenizer.json` and `tokenizer_config.json`, absolute paths. */
+  tokenizer: string;
+  tokenizerConfig: string;
+  /** Texts are cut to this many tokens, special tokens included. */
+  maxTokens: number;
+}
+
+/**
+ * Runs the built-in embedding model, one text at a time, off the core's
+ * thread: the desktop app runs it in an Electron utility process, and tests
+ * pass a deterministic fake. The core downloads and checks the files first,
+ * and adds the model's "passage: " or "query: " prefix to each text.
+ */
+export interface Embedder {
+  /**
+   * Loads the model, if it isn't loaded already: call before `embed`, and
+   * again after `embed` fails (e.g. the process running it crashed). Rejects
+   * if the model can't start.
+   */
+  load(files: EmbeddingModelFiles): Promise<void>;
+  /** The text's vector. Rejects if the model isn't loaded or fails on it. */
+  embed(text: string): Promise<Float32Array>;
+  /** Stops the model and frees its memory. Loading again starts it afresh. */
+  close(): void;
+}
+
+/** One file of the built-in embedding model, as recorded when the app was built. */
+export interface ModelFile {
+  /** Relative to the source's base URL, and to the model's folder in the data folder. */
+  path: string;
+  size: number;
+  /** SHA-256 of the file, in hex. */
+  sha256: string;
+}
+
+/** Where the built-in embedding model's files are downloaded from. */
+export interface EmbeddingModelSource {
+  /** Ends with "/"; each file's path is resolved against it. */
+  baseUrl: string;
+  files: readonly ModelFile[];
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -68,6 +114,14 @@ export interface CoreAdapters {
   keychain: Keychain;
   browser: Browser;
   processes: ProcessLauncher;
+  /** Runs the built-in embedding model (see `Embedder`). */
+  embedder: Embedder;
+  /**
+   * Where the built-in embedding model's files come from. Defaults to the
+   * pinned Hugging Face revision; tests point it at a local server, or give no
+   * files for a fake embedder that needs none.
+   */
+  embeddingModelSource?: EmbeddingModelSource;
   /** Defaults to the system clock. Tests may pass a fake one. */
   now?: () => Date;
   /**

@@ -5,7 +5,11 @@
 export type {
   Browser,
   CoreAdapters,
+  Embedder,
+  EmbeddingModelFiles,
+  EmbeddingModelSource,
   Keychain,
+  ModelFile,
   Paths,
   ProcessLauncher,
   SpawnOptions,
@@ -20,9 +24,11 @@ export * from "./api";
 export type { DataFlowDefinition, DataFlowRegistry } from "./consent";
 export { type Core, createCore, DATABASE_FILE } from "./core";
 export type { DocumentFile } from "./documents";
+export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
 export {
   ChatNotReadyError,
   ConsentDeclinedError,
+  EmbeddingModelNotReadyError,
   InvalidInputError,
   NotFoundError,
   SecretStorageError,

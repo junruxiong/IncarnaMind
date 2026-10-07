@@ -28,7 +28,10 @@ export interface LaunchOptions {
   fakeChat?: boolean;
 }
 
-/** Launches the built app (`out/`) on the given data folder, with test hooks on. */
+/**
+ * Launches the built app (`out/`) on the given data folder, with test hooks on
+ * and the fake embedding model, which needs no download.
+ */
 export async function launchApp(
   dataDir: string,
   { fakeChat = false }: LaunchOptions = {},
@@ -41,6 +44,7 @@ export async function launchApp(
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
+  env.INCARNAMIND_TEST_EMBEDDER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
   const window = await app.firstWindow();

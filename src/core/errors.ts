@@ -1,4 +1,4 @@
-import type { ChatReadiness, DataFlow, SecretProtection } from "./api";
+import type { ChatReadiness, DataFlow, EmbeddingModelStatus, SecretProtection } from "./api";
 
 /** Thrown when a caller of the core's public interface passes malformed input. */
 export class InvalidInputError extends Error {
@@ -35,6 +35,18 @@ export class ChatNotReadyError extends Error {
   override name = "ChatNotReadyError";
   constructor(readonly readiness: Extract<ChatReadiness, { ready: false }>) {
     super(`Chat isn't set up: ${readiness.reason}.`);
+  }
+}
+
+/** Thrown by a vector search while the built-in embedding model isn't downloaded, or can't start. */
+export class EmbeddingModelNotReadyError extends Error {
+  override name = "EmbeddingModelNotReadyError";
+  constructor(readonly status: EmbeddingModelStatus) {
+    super(
+      status.error
+        ? `The embedding model isn't ready (${status.error.kind}: ${status.error.message}).`
+        : `The embedding model isn't ready (${status.state}).`,
+    );
   }
 }
 
