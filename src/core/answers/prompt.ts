@@ -61,6 +61,10 @@ const NOT_COVERED =
 const RECORD =
   "the Passage's id, the page or two consecutive pages the quote is on (a Passage marks where each new page starts, like [p. 4]; leave pages out for a Passage without pages), and a short quote copied exactly from the Passage, without page marks";
 
+/** The Citation check finds a quote with an ellipsis only part by part (see ../../shared/quoteMatch): best avoided. */
+const UNBROKEN_QUOTE =
+  "- Copy each quote as one unbroken stretch of the Passage: don't leave words out with an ellipsis (... or …); quote less instead.";
+
 /** The most Document names the instructions list: the most recently added. */
 export const LISTED_DOCUMENTS = 50;
 
@@ -124,6 +128,7 @@ export function documentInstructions(
         "",
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
+        UNBROKEN_QUOTE,
         "- In the Answer, put the marker as [^1] right after each claim it supports. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         NOT_COVERED,
@@ -139,6 +144,7 @@ export function documentInstructions(
         'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "pageFrom": 3, "pageTo": 3, "quote": "…"}]}.',
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
+        UNBROKEN_QUOTE,
         NOT_COVERED,
       ].join("\n");
     case "none":

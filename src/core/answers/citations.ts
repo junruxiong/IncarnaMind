@@ -10,10 +10,12 @@
  * stored with it: the cited pages must lie within the Passage's pages and be
  * at most two consecutive ones (the page-range rule), and the quote must be in
  * their text, matched exactly after both are normalised the same way (see
- * `findQuote`). The pages are read as stored when the Document was processed,
- * without running headers, footers and page numbers, so a quote may run across
- * a page break. "Found" means the quote is there, never that it supports the
- * sentence.
+ * `findQuote`: letter case, spacing, hyphenation at line ends, quote marks and
+ * "[^36]" for "[36]" don't count, and a quote with an ellipsis is found when
+ * each part, of at least 3 words, is there in order). The pages are read as
+ * stored when the Document was processed, without running headers, footers and
+ * page numbers, so a quote may run across a page break. "Found" means the quote
+ * is there, never that it supports the sentence.
  */
 import { findQuote } from "../../shared/quoteMatch";
 import {
