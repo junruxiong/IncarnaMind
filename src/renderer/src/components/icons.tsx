@@ -410,3 +410,21 @@ export function CheckingIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A Skill: a four-pointed spark, for packaged know-how. */
+export function SkillIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M8 1.75c.45 2.9 1.35 3.8 4.25 4.25C9.35 6.45 8.45 7.35 8 10.25 7.55 7.35 6.65 6.45 3.75 6 6.65 5.55 7.55 4.65 8 1.75z" />
+      <path d="M12.25 10.5c.2 1.15.6 1.55 1.75 1.75-1.15.2-1.55.6-1.75 1.75-.2-1.15-.6-1.55-1.75-1.75 1.15-.2 1.55-.6 1.75-1.75z" />
+    </svg>
+  );
+}

@@ -18,7 +18,7 @@ import { noteExtensions } from "../editor/noteSchema";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QUESTION_SHORTCUT_LABEL, QuestionCommands } from "../editor/questionCommands";
 import { SlashMenu } from "../editor/SlashMenu";
-import { noteSlashItems } from "../editor/slashItems";
+import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 
@@ -125,7 +125,12 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
           },
         }),
         Focus.configure({ className: "has-focus", mode: "shallowest" }),
-        SlashMenu.configure({ items: () => noteSlashItems }),
+        SlashMenu.configure({
+          items: (place) => {
+            const skills = skillSlashItems(useAppStore.getState().skills);
+            return place === "question" ? skills : [...noteSlashItems, ...skills];
+          },
+        }),
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
         QuestionCommands.configure({
