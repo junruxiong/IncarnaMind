@@ -23,7 +23,7 @@ export type ParsedSkillMd =
   | { ok: false; field: string | null; message: string };
 
 /** The format's limits. */
-const MAX_NAME_LENGTH = 64;
+export const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
 const MAX_COMPATIBILITY_LENGTH = 500;
 /** Lowercase letters and digits, in runs joined by single hyphens. */
@@ -355,4 +355,27 @@ export function parseSkillMd(text: string): ParsedSkillMd {
     },
     body: split.body,
   };
+}
+
+/**
+ * SKILL.md's text with the frontmatter's `name` changed to `name`, everything
+ * else as it was. Null if the name isn't on a `name:` line of its own at the
+ * top level of the frontmatter, or the result wouldn't read back with that name.
+ */
+export function renameSkillMd(text: string, name: string): string | null {
+  // Lines with their line endings, so the rest of the file is kept byte for byte.
+  const lines = text.split(/(?<=\n)/);
+  if (!FENCE.test((lines[0] ?? "").replace(/^﻿/, "").trimEnd())) return null;
+  for (let index = 1; index < lines.length; index++) {
+    const line = lines[index] as string;
+    if (END.test(line.trimEnd())) return null;
+    if (!/^name\s*:/.test(line)) continue;
+    // A value that goes on over the next lines would be left half-changed.
+    if (/:\s*[|>]/.test(line) || /^[ \t]+\S/.test(lines[index + 1] ?? "")) return null;
+    lines[index] = `name: ${name}${/\r?\n$/.exec(line)?.[0] ?? ""}`;
+    const renamed = lines.join("");
+    const parsed = parseSkillMd(renamed);
+    return parsed.ok && parsed.frontmatter.name === name ? renamed : null;
+  }
+  return null;
 }
