@@ -32,3 +32,4 @@ This replaces the spec's original choice (issue #20, story 41: "copied into the 
 - IncarnaMind watches Linked folders while it runs and reconciles them at start-up (size and modified time first, then the content hash), because files change while it is closed.
 - Opening a Document in another app opens the original; no temporary copies.
 - Linked folders on cloud drives can hold placeholder files that aren't downloaded; those wait until they're readable.
+- **Migration 21** from the copy layout drops the in-app Folders: their Documents become unfiled, and Search scopes show those Folders as deleted. Copied Documents become single files at `<data>/documents/<hash>.<ext>` until the User links the folder holding the original; that Linked folder then takes over the Document, keeping its id, and the copy is removed.
