@@ -321,13 +321,18 @@ export async function widthOf(locator: Locator): Promise<number> {
   return box.width;
 }
 
-/** Drags an element horizontally by `dx` CSS pixels. */
+/**
+ * Drags an element horizontally by `dx` CSS pixels, as a person grabs it: a
+ * few pixels off its centre (a divider is a 1px rule with a wider strip to
+ * grab), after sliding the mouse there.
+ */
 export async function dragBy(window: Page, handle: Locator, dx: number): Promise<void> {
   const box = await handle.boundingBox();
   if (!box) throw new Error("The drag handle isn't visible.");
-  const x = box.x + box.width / 2;
+  const x = box.x + box.width / 2 - 3;
   const y = box.y + box.height / 2;
-  await window.mouse.move(x, y);
+  await window.mouse.move(x - 30, y);
+  await window.mouse.move(x, y, { steps: 6 });
   await window.mouse.down();
   await window.mouse.move(x + dx, y, { steps: 5 });
   await window.mouse.up();

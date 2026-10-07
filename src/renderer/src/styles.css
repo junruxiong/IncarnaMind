@@ -149,6 +149,8 @@
     background: var(--color-rule);
     cursor: col-resize;
     outline: none;
+    /* An <hr> clips by default, which would cut the grab strip and the grip down to the 1px rule. */
+    overflow: visible;
     transition: background-color 80ms ease-out;
 
     /* The strip to grab: 4px either side of the rule. */
