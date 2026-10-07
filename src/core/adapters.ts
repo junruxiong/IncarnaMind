@@ -108,6 +108,17 @@ export interface EmbeddingModelSource {
   files: readonly ModelFile[];
 }
 
+/**
+ * Sends crash reports, scrubbed of the User's content, to IncarnaMind's
+ * developers. The desktop app passes one only when it was built with a
+ * crash-report address (a Sentry DSN). The core turns it on only once the User
+ * has opted in, at startup or when they opt in, and off the moment they opt out.
+ */
+export interface CrashReporter {
+  /** Starts reporting, or stops it at once. Must not throw: a reporter that can't start says so in the log. */
+  setEnabled(enabled: boolean): void;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -152,4 +163,9 @@ export interface CoreAdapters {
    * e.g. with a Cohere or Voyage reranking model. None by default.
    */
   reranker?: Reranker;
+  /**
+   * Sends crash reports once the User opts in (see `CrashReporter`). Absent
+   * when this copy can't send any: Settings then doesn't offer them.
+   */
+  crashReporter?: CrashReporter;
 }

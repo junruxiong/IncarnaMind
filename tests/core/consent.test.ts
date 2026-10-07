@@ -3,6 +3,9 @@ import {
   ChatNotReadyError,
   ConsentDeclinedError,
   type Core,
+  type DataFlowId,
+  InvalidInputError,
+  NotFoundError,
   type SaveChatProviderInput,
   type TestChatConnectionInput,
 } from "../../src/core";
@@ -316,5 +319,145 @@ describe("Data-flow consent", () => {
     await expect(prepared).rejects.toThrow(ConsentDeclinedError);
     await expect(core.prepareChatModel()).rejects.toThrow(ChatNotReadyError);
     expect(models.specs).toEqual([]);
+  });
+});
+
+describe("Data flows on the Privacy page", () => {
+  test("every registered flow is listed with what it sends, even one that sends nothing now", async () => {
+    const { core } = await startWithModel();
+
+    expect(await core.listRegisteredDataFlows()).toEqual([
+      { id: "chat", sends: ["blocks", "passages"], services: [] },
+      { id: "tagging", sends: ["tags", "document-excerpts"], services: [] },
+    ]);
+
+    await core.saveChatProvider(OPENAI);
+    expect(await core.listRegisteredDataFlows()).toEqual([
+      {
+        id: "chat",
+        sends: ["blocks", "passages"],
+        services: [
+          {
+            flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
+            consent: "not-asked",
+            decidedAt: null,
+          },
+        ],
+      },
+      expect.objectContaining({ id: "tagging", services: [expect.anything()] }),
+    ]);
+  });
+
+  test("a flow registered later, e.g. by a new feature, is listed too", async () => {
+    const { core } = await startWithModel();
+    const connectors = "connectors" as DataFlowId; // Stands for a later ticket's flow.
+    const service = { id: "https://mcp.example.com", name: "Example MCP" };
+
+    core.dataFlows.register({
+      id: connectors,
+      sends: ["tool-results"],
+      services: async () => [service],
+    });
+
+    const flows = await core.listRegisteredDataFlows();
+    expect(flows.map((flow) => flow.id)).toEqual(["chat", "tagging", "connectors"]);
+    expect(flows.at(-1)).toEqual({
+      id: "connectors",
+      sends: ["tool-results"],
+      services: [
+        {
+          flow: { id: "connectors", service, sends: ["tool-results"] },
+          consent: "not-asked",
+          decidedAt: null,
+        },
+      ],
+    });
+    expect(await core.listDataFlows()).toContainEqual(
+      expect.objectContaining({ flow: expect.objectContaining({ id: "connectors" }) }),
+    );
+  });
+
+  test("a declined flow can be allowed again in Settings: nothing asks, and it is sent", async () => {
+    const { core, models } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+    const declined = await testAndWaitForConsent(core);
+    await core.respondToConsent(declined.request.requestId, false);
+    await declined.result;
+
+    const changed = nextEvent(core, "dataFlows.changed");
+    const readiness = nextEvent(core, "chatReadiness.changed");
+    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
+
+    const chat = (await changed).find((flow) => flow.id === "chat");
+    expect(chat?.services).toEqual([
+      expect.objectContaining({ consent: "accepted", decidedAt: expect.any(String) }),
+    ]);
+    expect(await readiness).toMatchObject({ ready: true, consent: "accepted" });
+    let asked = false;
+    core.on("consent.requested", () => {
+      asked = true;
+    });
+    expect(await core.testChatConnection(OPENAI)).toEqual({ ok: true });
+    expect(asked).toBe(false);
+    expect(models.model.doGenerateCalls).toHaveLength(1);
+  });
+
+  test("revoke and allow again: after revoking the next request asks, after allowing it doesn't", async () => {
+    const { core } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+    const chatStatus = async () =>
+      (await core.listRegisteredDataFlows()).find((flow) => flow.id === "chat")?.services[0];
+
+    // Allowed before ever being asked.
+    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
+    expect(await chatStatus()).toMatchObject({ consent: "accepted" });
+
+    await core.revokeConsent("chat", OPENAI_SERVICE.id);
+    expect(await chatStatus()).toMatchObject({ consent: "not-asked", decidedAt: null });
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "needed" });
+
+    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
+    expect(await chatStatus()).toMatchObject({ consent: "accepted" });
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
+  });
+
+  test("allowing a flow while its dialog is open answers the dialog", async () => {
+    const { core } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+    const { result, request } = await testAndWaitForConsent(core);
+
+    const resolved = nextEvent(core, "consent.resolved");
+    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
+
+    expect(await resolved).toEqual({ requestId: request.requestId, accepted: true });
+    expect(await result).toEqual({ ok: true });
+    expect(await core.listConsentRequests()).toEqual([]);
+  });
+
+  test("allowing also accepts the kinds of data a flow started sending since", async () => {
+    const { core } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
+    const chat = core.dataFlows.get("chat");
+    if (!chat) throw new Error("The chat flow isn't registered.");
+    core.dataFlows.register({ ...chat, sends: [...chat.sends, "tool-results"] });
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "needed" });
+
+    await core.allowDataFlow("chat", OPENAI_SERVICE.id);
+
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "accepted" });
+  });
+
+  test("only a service the flow goes to, or was decided on, can be allowed", async () => {
+    const { core } = await startWithModel();
+    await core.saveChatProvider(OPENAI);
+
+    await expect(core.allowDataFlow("chat", "https://api.anthropic.com")).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(core.allowDataFlow("nonsense" as DataFlowId, OPENAI_SERVICE.id)).rejects.toThrow(
+      InvalidInputError,
+    );
+    expect(await core.getChatReadiness()).toMatchObject({ consent: "needed" });
   });
 });
