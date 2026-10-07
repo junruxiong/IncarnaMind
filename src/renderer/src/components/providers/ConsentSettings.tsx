@@ -23,12 +23,15 @@ export function ConsentSettings() {
     // So does switching the embedding model, or setting rerank up.
     const stopEmbedding = core.on("embedding.changed", refresh);
     const stopRerank = core.on("rerank.changed", refresh);
+    // Each Connector that is on is a service of the "connectors" flow.
+    const stopConnectors = core.on("connectors.changed", refresh);
     return () => {
       stopResolved();
       stopReadiness();
       stopJev();
       stopEmbedding();
       stopRerank();
+      stopConnectors();
     };
   }, [refresh]);
 

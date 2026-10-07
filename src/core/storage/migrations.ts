@@ -319,6 +319,56 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 14,
+    description: "Connectors",
+    sql: `
+      -- Connectors (MCP servers). transport: 'stdio' for a program on this
+      -- computer (remote ones come later), checked in code. config is JSON
+      -- without secrets: for stdio, { command, args, env }, where env lists
+      -- only the names of the environment variables; their values are in the
+      -- keychain, never here. Names are unique among live Connectors, ignoring case.
+      CREATE TABLE connectors (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        transport TEXT NOT NULL,
+        config TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX connectors_by_name ON connectors (name COLLATE NOCASE)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 15,
+    description: "Skills (#40)",
+    sql: `
+      -- Skills the User imported. Their files are in the data folder under
+      -- skills/<id>/, and this row holds what the app shows and lists without
+      -- reading them: the frontmatter fields, and files, a JSON array of
+      -- { path, size, script } with SKILL.md first. Importing a Skill of the
+      -- same name again updates the row in place, so it keeps its id. Removing
+      -- one marks it deleted; its folder goes once nothing uses it. Names are
+      -- unique among live Skills: the core checks it, since a later sync may
+      -- bring two. enabled is 1 for on.
+      CREATE TABLE skills (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        license TEXT,
+        compatibility TEXT,
+        files TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX skills_by_name ON skills (name) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
     version: 17,
     description: "The size of each Document's vectors, beside their embedding model (#32)",
     sql: `

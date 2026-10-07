@@ -1,13 +1,18 @@
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
+import { files } from "../core";
+import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { ConsentSettings } from "./providers/ConsentSettings";
 import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
+import { buttonClass } from "./providers/shared";
+import { SkillsSettings } from "./SkillsSettings";
 import { useModal } from "./useModal";
 
 const languageOptions: readonly { value: LanguagePreference; label: MessageKey }[] = [
@@ -15,6 +20,29 @@ const languageOptions: readonly { value: LanguagePreference; label: MessageKey }
   { value: "en", label: "settings.language.en" },
   { value: "zh-CN", label: "settings.language.zh-CN" },
 ];
+
+/** Settings → Data folder: where everything is kept, opened in the file manager for a backup. */
+function DataFolderSettings() {
+  const t = useT();
+  const open = () =>
+    files.openDataFolder().catch((failure: unknown) => {
+      useAppStore.setState({ actionError: errorMessage(failure) });
+    });
+  return (
+    <section>
+      <h3 className="mb-1 text-sm font-medium">{t("export.dataFolder.title")}</h3>
+      <p className="mb-2 text-sm text-gray-600">{t("export.dataFolder.body")}</p>
+      <button
+        type="button"
+        data-testid="open-data-folder"
+        onClick={() => void open()}
+        className={buttonClass}
+      >
+        {t("export.dataFolder.open")}
+      </button>
+    </section>
+  );
+}
 
 /** A native modal <dialog>, replacing the old MUI modal. */
 export function SettingsDialog() {
@@ -42,6 +70,8 @@ export function SettingsDialog() {
           <ChatModelSettings />
           <EmbeddingSettingsSection />
           <RerankSettingsSection />
+          <ConnectorsSettings />
+          <SkillsSettings />
           <JevSettingsSection />
           <fieldset>
             <legend className="mb-1 text-sm font-medium">{t("settings.language")}</legend>
@@ -59,6 +89,7 @@ export function SettingsDialog() {
             ))}
           </fieldset>
           <ConsentSettings />
+          <DataFolderSettings />
           <ChatGptPlanSettings />
         </div>
       )}

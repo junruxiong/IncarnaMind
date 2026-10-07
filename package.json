@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "electron-vite build --mode test && playwright test",
+    "eval": "vitest run --config eval/vitest.config.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
@@ -33,6 +34,7 @@
     "@ai-sdk/voyage": "2.0.55",
     "@floating-ui/dom": "1.8.0",
     "@huggingface/tokenizers": "0.2.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-code-block": "3.31.4",
     "@tiptap/extension-code-block-lowlight": "3.31.4",
@@ -49,6 +51,7 @@
     "@tiptap/suggestion": "3.31.4",
     "@tiptap/y-tiptap": "3.0.9",
     "ai": "7.0.129",
+    "cross-spawn": "7.0.6",
     "electron-updater": "6.8.10",
     "highlight.js": "11.12.0",
     "katex": "0.18.10",

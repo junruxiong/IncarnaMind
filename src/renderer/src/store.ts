@@ -9,6 +9,7 @@ import type {
   Mind,
   Settings,
   SettingsPatch,
+  Skill,
   Tag,
 } from "../../core/api";
 import type { DocumentLocation } from "../../shared/documentViewer";
@@ -56,6 +57,8 @@ interface AppState {
   /** The Documents matching both filters, by id, as the core last listed them. Null until listed. */
   filteredDocumentIds: ReadonlySet<string> | null;
   tagsDialogOpen: boolean;
+  /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
+  skills: Skill[];
 
   load(): Promise<void>;
   createMind(): Promise<void>;
@@ -103,6 +106,8 @@ interface AppState {
   retagDocuments(documentIds?: string[]): Promise<void>;
   openTagsDialog(): void;
   closeTagsDialog(): void;
+  setSkillEnabled(skillId: string, enabled: boolean): Promise<void>;
+  removeSkill(skillId: string): Promise<void>;
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -154,6 +159,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     tagFilter: null,
     filteredDocumentIds: null,
     tagsDialogOpen: false,
+    skills: [],
 
     async load() {
       try {
@@ -165,6 +171,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           folders,
           embeddingModel,
           tags,
+          skills,
           embedding,
         ] = await Promise.all([
           core.listMinds(),
@@ -174,6 +181,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listFolders(),
           core.getEmbeddingModel(),
           core.listTags(),
+          core.listSkills(),
           core.getEmbeddingSettings(),
         ]);
         set({
@@ -184,6 +192,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           folders,
           embeddingModel,
           tags,
+          skills,
           embedding,
           status: { kind: "ready" },
         });
@@ -389,6 +398,17 @@ export const useAppStore = create<AppState>()((set, get) => {
     closeTagsDialog() {
       set({ tagsDialogOpen: false });
     },
+
+    // The list follows the core's "skills.changed" event, which arrives before these calls return.
+    setSkillEnabled: (skillId, enabled) =>
+      attempt(async () => {
+        await core.setSkillEnabled(skillId, enabled);
+      }),
+
+    removeSkill: (skillId) =>
+      attempt(async () => {
+        await core.removeSkill(skillId);
+      }),
   };
 });
 
@@ -490,6 +510,9 @@ core.on("tags.changed", (tags) => {
     refreshFilterIfAny();
   }
 });
+
+// Skills are imported, turned on or off, or removed, through this window or another.
+core.on("skills.changed", (skills) => useAppStore.setState({ skills }));
 
 // Documents' Tags, or their tagging, changed: by the User, by automatic tagging, or with a deleted Tag.
 core.on("documents.tagged", (tagged) => {

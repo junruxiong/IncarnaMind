@@ -74,8 +74,7 @@ export interface SearchScope {
 }
 
 /**
- * Attributes of a Question Block, as stored in the Mind's Yjs document. A
- * later ticket adds a forced Skill.
+ * Attributes of a Question Block, as stored in the Mind's Yjs document.
  */
 export interface QuestionAttributes {
   id: string | null;
@@ -90,6 +89,13 @@ export interface QuestionAttributes {
   scopeFolderIds: string[] | null;
   scopeTagIds: string[] | null;
   scopeDocumentIds: string[] | null;
+  /**
+   * The name of the Skill the User forced on this Question from the slash
+   * menu: its instructions are loaded up front. Null: the model picks Skills
+   * itself. A name rather than an id, so a Skill removed and imported again
+   * still matches.
+   */
+  forcedSkill: string | null;
 }
 
 /** Where an Answer is: being written, finished, stopped by the User, or failed (see `errorKind`). */
@@ -133,15 +139,31 @@ export interface AnswerAttributes {
 export interface AnswerToolCall {
   /** Unique within its Answer. */
   id: string;
-  /** "search_documents": the document-search Tool. Connectors and Skills add theirs. */
+  /**
+   * "search_documents": the document-search Tool. "use_skill": loading a
+   * Skill's instructions (`{ name }`). "read_skill_file": reading one of a
+   * Skill's files (`{ skill, path }`). A Connector's Tool: its name as the
+   * Connector gives it, e.g. "search_issues".
+   */
   tool: string;
-  /** Where the Tool comes from: "documents" is IncarnaMind's own document search. */
-  source: "documents";
-  /** What the model asked, e.g. `{ query }` for a search. */
+  /**
+   * Where the Tool comes from: "documents" is IncarnaMind's own document
+   * search; "skill", the Skill Tools; "connector", one of the User's
+   * Connectors (see `connector`).
+   */
+  source: "documents" | "skill" | "connector";
+  /** A Connector's Tool: which Connector, with its name when the call was made. */
+  connector?: { id: string; name: string };
+  /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
   input: Record<string, unknown>;
   status: "running" | "done" | "failed";
   /** A search: how many Passages it gave the model. Null otherwise, and while running. */
   resultCount: number | null;
+  /**
+   * "use_skill" only: the Question forced this Skill, so the core loaded it up
+   * front instead of the model calling the Tool. Absent otherwise.
+   */
+  forced?: boolean;
 }
 
 /**
@@ -826,7 +848,12 @@ export type AskResult =
   /** Nothing was sent: Questions can't be asked yet, and `readiness` says why. */
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: the User has edited the Answer. Ask again with `discardEdits` to replace it. */
-  | { asked: false; reason: "edited"; answerId: string };
+  | { asked: false; reason: "edited"; answerId: string }
+  /**
+   * Nothing was sent: the Question forces a Skill (`skill`, its name) that is
+   * turned off or no longer there. Turn it on, or take it off the Question.
+   */
+  | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
 
 /** An Answer started: it is in the Mind with status "streaming". */
 export interface AnswerStarted {
@@ -884,6 +911,116 @@ export interface AnswerFailed {
   answerId: string;
   error: ProviderError;
 }
+
+// ---------------------------------------------------------------------------
+// Skills (CONTEXT.md: Skill)
+
+/**
+ * A Skill: a packaged description of how to do a particular task, in the
+ * standard `SKILL.md` format (https://agentskills.io/specification), with
+ * optional reference files and scripts. Its files are stored in the data
+ * folder, under `skills/<id>/`. The system prompt of every Answer lists the
+ * enabled Skills' names and descriptions; the model loads a Skill's full
+ * instructions when it needs them, or the User forces one on a Question.
+ */
+export interface Skill {
+  /** A random UUID generated on this device. Importing a Skill of the same name again keeps it. */
+  id: string;
+  /** From the frontmatter: lowercase letters, digits and hyphens. Unique among Skills. */
+  name: string;
+  /** From the frontmatter: what the Skill does and when to use it. */
+  description: string;
+  /** From the frontmatter, if given: a licence name, or the name of a bundled licence file. */
+  license: string | null;
+  /** From the frontmatter, if given: what the Skill needs, e.g. "Requires Python 3.14+". */
+  compatibility: string | null;
+  /** Turned on, Answers can use it. New Skills start on. */
+  enabled: boolean;
+  /** Every file in the Skill: SKILL.md first, then the others in path order. */
+  files: SkillFile[];
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface SkillFile {
+  /** Relative to the Skill's folder, with "/" between folders, e.g. "references/guide.md". */
+  path: string;
+  /** In bytes. */
+  size: number;
+  /**
+   * A script: in the Skill's `scripts/` folder, or a script's file type. It is
+   * listed, and the model can read it, but Answers can't run scripts yet.
+   */
+  script: boolean;
+}
+
+/** Whether a Skill can be used: on, turned off, or not there (removed, or never imported). */
+export type SkillAvailability = "enabled" | "disabled" | "removed";
+
+/** What importing a Skill would add, for the User to check before importing it. */
+export interface SkillImportPreview {
+  /** Pass to `importSkill` to import exactly this, or to `cancelSkillImport`. */
+  importId: string;
+  /** The folder or zip it was read from. */
+  source: string;
+  name: string;
+  description: string;
+  license: string | null;
+  compatibility: string | null;
+  /** SKILL.md first, then the others in path order. */
+  files: SkillFile[];
+  /** The files' sizes added up, in bytes. */
+  totalBytes: number;
+  /** The Skill of the same name that importing replaces (keeping its id and whether it's on), or null. */
+  replaces: Skill | null;
+}
+
+/**
+ * Why a folder or zip can't be imported as a Skill.
+ * - "unreadable": it (or a file in it, see `path`) can't be read.
+ * - "not-a-skill": there is no SKILL.md at its top, nor in its one top-level folder.
+ * - "invalid-zip": not a zip file, or one IncarnaMind can't read (encrypted, ZIP64, damaged).
+ * - "invalid-frontmatter": SKILL.md's frontmatter is missing or breaks the format (see `field`).
+ * - "path-traversal": a zip entry's path leads outside the Skill (see `path`).
+ * - "link-outside": a symbolic link points outside the Skill (see `path`).
+ * - "too-large": its files add up to more than `SKILL_LIMITS.maxBytes`, or SKILL.md
+ *   is over `SKILL_LIMITS.maxInstructionsBytes`.
+ * - "too-many-files": more than `SKILL_LIMITS.maxFiles` files.
+ */
+export type SkillImportErrorKind =
+  | "unreadable"
+  | "not-a-skill"
+  | "invalid-zip"
+  | "invalid-frontmatter"
+  | "path-traversal"
+  | "link-outside"
+  | "too-large"
+  | "too-many-files";
+
+export interface SkillImportError {
+  kind: SkillImportErrorKind;
+  /** The file at fault, relative to the Skill (or as named in the zip), when there is one. */
+  path: string | null;
+  /** "invalid-frontmatter": the field at fault, e.g. "name", when there is one. */
+  field: string | null;
+  /** Technical detail in English, for logs and tooltips. */
+  message: string;
+}
+
+export type SkillImportCheck =
+  | { ok: true; preview: SkillImportPreview }
+  | { ok: false; error: SkillImportError };
+
+/** How big a Skill may be. Checked before anything is imported. */
+export const SKILL_LIMITS = {
+  /** All its files together, uncompressed; a zip file itself may be no larger either. */
+  maxBytes: 20 * 1024 * 1024,
+  maxFiles: 1000,
+  /** SKILL.md alone: its instructions are sent whole to the model. */
+  maxInstructionsBytes: 256 * 1024,
+} as const;
 
 // ---------------------------------------------------------------------------
 // ChatGPT plan (experimental)
@@ -1006,6 +1143,7 @@ export const dataKinds = [
   "tool-results",
   "tags",
   "document-excerpts",
+  "tool-arguments",
   "document-text",
   "queries",
 ] as const;
@@ -1017,12 +1155,15 @@ export type DataKind = (typeof dataKinds)[number];
  * - "chat": Questions, to the chat provider they are asked with.
  * - "tagging": automatic tagging, to Jev's service when a Jev key is set up,
  *   otherwise to the default chat model's provider.
+ * - "connectors": the arguments of the Tool calls an Answer makes, to the
+ *   Connector it calls, one service per Connector. A Connector on this
+ *   computer counts too: it can reach the internet itself.
  * - "embeddings": every Document's text and every search query, to a cloud
  *   embedding provider, when the User chose one instead of the built-in model.
  * - "rerank": each search query and its candidate Passages, to Cohere or
  *   Voyage, when a rerank key is set up.
  */
-export const dataFlowIds = ["chat", "tagging", "embeddings", "rerank"] as const;
+export const dataFlowIds = ["chat", "tagging", "connectors", "embeddings", "rerank"] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
@@ -1110,6 +1251,171 @@ export interface TestJevConnectionInput {
   apiKey?: string;
   endpoint?: string | null;
   model?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Connectors (MCP servers)
+
+/**
+ * Where a Connector is:
+ * - "off": the User turned it off, so its process isn't running.
+ * - "connecting": its process is starting, and IncarnaMind is connecting to it.
+ * - "ready": connected; Answers can use its read-only Tools.
+ * - "error": it couldn't start, or it stopped (see `error`).
+ */
+export type ConnectorState = "off" | "connecting" | "ready" | "error";
+
+export type ConnectorErrorKind =
+  /**
+   * Its command, or the runtime the command needs, isn't installed or isn't
+   * on the PATH of the User's login shell (see `command` and `install`).
+   */
+  | "missing-command"
+  /** Its environment variables are kept in the keychain, and can't be read on this device. */
+  | "missing-secrets"
+  /** Its process started but didn't answer in time. */
+  | "timed-out"
+  /** Its process exited, or closed the connection. */
+  | "stopped"
+  /** Anything else, e.g. it doesn't speak MCP. */
+  | "failed";
+
+export interface ConnectorError {
+  kind: ConnectorErrorKind;
+  /** "missing-command": the command that wasn't found, e.g. "npx". Null otherwise. */
+  command: string | null;
+  /** "missing-command": what to install to get it, when known, e.g. "Node.js". */
+  install: string | null;
+  /** Technical detail in English, e.g. the last lines the process wrote to its error output. */
+  message: string;
+  /** IncarnaMind will start it again by itself shortly, waiting longer after each failure. */
+  retrying: boolean;
+}
+
+/** A Tool a Connector offers. */
+export interface ConnectorTool {
+  /** As the Connector names it, e.g. "search_issues". */
+  name: string;
+  /** A display name, when the Connector gives one. */
+  title: string | null;
+  description: string;
+  /**
+   * The Connector says the Tool only reads and changes nothing (its
+   * `readOnlyHint` annotation). That is the Connector's claim, not something
+   * IncarnaMind can check. Answers are offered only these Tools for now.
+   */
+  readOnly: boolean;
+}
+
+/**
+ * An external service the User has connected: an MCP server. Local ones are
+ * programs on this computer, started with the User's login-shell environment
+ * and spoken to over their standard input and output.
+ */
+export interface Connector {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** Unique among Connectors, ignoring case. Answers see its Tools under this name. */
+  name: string;
+  /** "stdio": a program on this computer. Remote Connectors come with #39. */
+  transport: "stdio";
+  /** The program to run, e.g. "npx", found on the PATH of the User's login shell. */
+  command: string;
+  args: string[];
+  /**
+   * The names of the environment variables it is started with, e.g. API keys.
+   * Their values are kept in the keychain, never in the database, and never shown.
+   */
+  env: string[];
+  /** The User turned it on. Off, its process doesn't run and Answers don't use it. */
+  enabled: boolean;
+  state: ConnectorState;
+  /** Set when `state` is "error". */
+  error: ConnectorError | null;
+  /** Its Tools, as of when it last connected; null before it has. Null while it is off. */
+  tools: ConnectorTool[] | null;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+export interface AddConnectorInput {
+  /** Trimmed; must not be empty, nor another Connector's name (ignoring case). */
+  name: string;
+  /** The program to run, e.g. "npx", or a full path. */
+  command: string;
+  /** Defaults to none. */
+  args?: string[];
+  /** Environment variables to start it with, e.g. API keys. Their values go to the keychain, never the database. */
+  env?: Record<string, string>;
+}
+
+/**
+ * One server of an `mcpServers` configuration (from Claude Desktop or
+ * Cursor), and what importing it would do:
+ * - "add": it is added as a Connector;
+ * - "exists": a Connector with its name already exists (or the configuration
+ *   lists the name twice), so it is skipped;
+ * - "remote": it is a remote server (a URL), which IncarnaMind can't connect to yet;
+ * - "invalid": it has no command, or its arguments or environment aren't text.
+ */
+export interface ConnectorImportEntry {
+  name: string;
+  command: string | null;
+  args: string[];
+  /** The names of its environment variables. Their values go to the keychain. */
+  env: string[];
+  action: "add" | "exists" | "remote" | "invalid";
+}
+
+export interface ConnectorImportResult {
+  /** The Connectors added, in the configuration's order. They start right away. */
+  added: Connector[];
+  /** The servers that weren't added, with why. */
+  skipped: ConnectorImportEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Export
+
+/** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
+export type ExportFormat = "markdown" | "docx";
+
+export interface ExportMindOptions {
+  format: ExportFormat;
+  /**
+   * Whether Questions are exported, marked as Questions. Defaults to true for
+   * Markdown, an archive of everything, and to false for .docx: the deliverable
+   * leaves the working material out.
+   */
+  includeQuestions?: boolean;
+}
+
+/** What exporting a Mind will write, for the User to see before the file is written. */
+export interface MindExportPreview {
+  /** A file name for the export, from the Mind's title, e.g. "Tides.docx". */
+  fileName: string;
+  /**
+   * The Citations in the exported text. Each becomes its own footnote, even
+   * when several cite the same page.
+   */
+  citations: number;
+  /**
+   * Of those, the ones not shown as "Quote found": the quote wasn't found on
+   * the cited pages, or it can't be checked (the pages have no text, or the
+   * Document was deleted), or it is still being checked. Their footnotes carry
+   * an "[unverified]" marker.
+   */
+  unverifiedCitations: number;
+  /** The Question Blocks in the Mind, whether the export includes them or not. */
+  questions: number;
+}
+
+/** A Mind exported as a file, for the host to save where the User chooses. */
+export interface MindExport extends MindExportPreview {
+  /** The file's contents: UTF-8 text for Markdown, a ZIP package for .docx. */
+  data: Uint8Array;
 }
 
 // ---------------------------------------------------------------------------
@@ -1370,6 +1676,71 @@ export interface CoreApi {
    * consent first.
    */
   testJevConnection(input?: TestJevConnectionInput): Promise<ConnectionTestResult>;
+
+  /** Connectors that are not deleted, in name order (ignoring case), each with its state. */
+  listConnectors(): Promise<Connector[]>;
+  /**
+   * Adds a local Connector, turned on, and starts it: "connectors.changed"
+   * events follow its state. Its environment's values go to the keychain; if
+   * they can't be stored safely, nothing is added.
+   */
+  addConnector(input: AddConnectorInput): Promise<Connector>;
+  /** Turns a Connector on (starting it) or off (stopping its process). */
+  setConnectorEnabled(connectorId: string, enabled: boolean): Promise<Connector>;
+  /** Starts a Connector that is on again, e.g. after an error. */
+  restartConnector(connectorId: string): Promise<Connector>;
+  /**
+   * Soft-deletes a Connector: stops its process, removes its environment from
+   * the keychain and forgets the User's consent decision for it.
+   */
+  deleteConnector(connectorId: string): Promise<void>;
+  /**
+   * What importing an `mcpServers` configuration (Claude Desktop's or
+   * Cursor's JSON, pasted or read from a file) would add, without adding anything.
+   */
+  previewConnectorImport(json: string): Promise<ConnectorImportEntry[]>;
+  /** Adds every server of an `mcpServers` configuration that the preview marks "add". */
+  importConnectors(json: string): Promise<ConnectorImportResult>;
+
+  /** Skills that are not removed, in name order. */
+  listSkills(): Promise<Skill[]>;
+  /**
+   * Reads a Skill folder, or a zip holding one, given its absolute path, and
+   * checks it: SKILL.md's frontmatter, paths and links that stay inside the
+   * Skill, and its size (`SKILL_LIMITS`). Nothing is imported yet: the preview
+   * says what would be, and `importSkill` imports exactly what was read.
+   */
+  previewSkillImport(path: string): Promise<SkillImportCheck>;
+  /**
+   * Imports a previewed Skill into the data folder, turned on. A Skill of the
+   * same name is replaced, keeping its id and whether it's on. Previews are
+   * kept in memory only: after a restart, or a few newer previews, preview again.
+   */
+  importSkill(importId: string): Promise<Skill>;
+  /** Forgets a preview without importing it. Forgetting one that's gone does nothing. */
+  cancelSkillImport(importId: string): Promise<void>;
+  /** Turns a Skill on or off. Answers list and load only Skills that are on. Returns the Skill. */
+  setSkillEnabled(skillId: string, enabled: boolean): Promise<Skill>;
+  /**
+   * Removes a Skill: soft-deleted in the database (ADR-0003). Its files are
+   * deleted once nothing uses them, e.g. after Answers still being written with it finish.
+   */
+  removeSkill(skillId: string): Promise<void>;
+
+  /**
+   * What `exportMind` will write with these options: the file name, and how
+   * many of the exported Citations are unverified, so the User sees that
+   * before the file is written.
+   */
+  previewMindExport(mindId: string, options: ExportMindOptions): Promise<MindExportPreview>;
+  /**
+   * Exports a Mind as a file, which the host saves: its title, its Notes
+   * (those switched out of Question context too), its Answers and, if
+   * included, its Questions, in order. Each Citation becomes its own footnote
+   * naming its Document and pages, e.g. "Tides, p. 12–13", marked
+   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   */
+  exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
 }
 
 /**
@@ -1422,6 +1793,13 @@ export interface CoreEvents {
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
+  /** Skills were imported, turned on or off, or removed: the list as `listSkills` now returns it. */
+  "skills.changed": Skill[];
+  /**
+   * Connectors were added, turned on or off, or deleted, or one's state
+   * changed (connecting, ready, error): the list as `listConnectors` now returns it.
+   */
+  "connectors.changed": Connector[];
   /**
    * The Answer event stream. The core writes each Answer into its Mind's Yjs
    * document as it streams (its text, Citations and Tool calls), so every
@@ -1520,6 +1898,21 @@ const methods: Record<CoreApiMethod, true> = {
   saveJevSettings: true,
   removeJevSettings: true,
   testJevConnection: true,
+  listConnectors: true,
+  addConnector: true,
+  setConnectorEnabled: true,
+  restartConnector: true,
+  deleteConnector: true,
+  previewConnectorImport: true,
+  importConnectors: true,
+  listSkills: true,
+  previewSkillImport: true,
+  importSkill: true,
+  cancelSkillImport: true,
+  setSkillEnabled: true,
+  removeSkill: true,
+  previewMindExport: true,
+  exportMind: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

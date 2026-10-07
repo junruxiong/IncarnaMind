@@ -73,6 +73,50 @@ export async function useLocalChatModel(window: Page, modelId = "fake-model"): P
   }, modelId);
 }
 
+/**
+ * Test hook for the system save dialog: from now on the main process answers
+ * it with `filePath` instead of showing it, and records what each call asked
+ * (see `saveDialogsAsked`).
+ */
+export async function interceptSaveDialog(app: ElectronApplication, filePath: string) {
+  await app.evaluate(({ dialog }, path) => {
+    const asked: Electron.SaveDialogOptions[] = [];
+    (globalThis as { saveDialogsAsked?: unknown }).saveDialogsAsked = asked;
+    dialog.showSaveDialog = (async (...args: unknown[]) => {
+      asked.push(args.at(-1) as Electron.SaveDialogOptions);
+      return { canceled: false, filePath: path };
+    }) as typeof dialog.showSaveDialog;
+  }, filePath);
+}
+
+/** What the intercepted save dialog was asked, call by call. */
+export function saveDialogsAsked(app: ElectronApplication) {
+  return app.evaluate(
+    () =>
+      (globalThis as { saveDialogsAsked?: Electron.SaveDialogOptions[] }).saveDialogsAsked ?? [],
+  );
+}
+
+/**
+ * Test hook for opening a folder in the system's file manager: from now on
+ * the main process records the path instead (see `pathsOpened`).
+ */
+export async function interceptOpenPath(app: ElectronApplication) {
+  await app.evaluate(({ shell }) => {
+    const opened: string[] = [];
+    (globalThis as { pathsOpened?: unknown }).pathsOpened = opened;
+    shell.openPath = async (path: string) => {
+      opened.push(path);
+      return "";
+    };
+  });
+}
+
+/** The paths the intercepted file manager was asked to open. */
+export function pathsOpened(app: ElectronApplication) {
+  return app.evaluate(() => (globalThis as { pathsOpened?: string[] }).pathsOpened ?? []);
+}
+
 /** Opens the empty Document viewer panel through the test hook. */
 export async function openViewer(window: Page): Promise<void> {
   await window.evaluate(() => {
@@ -89,6 +133,18 @@ export async function openDocumentAt(window: Page, location: DocumentLocation): 
     if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
     hooks.openDocument(at);
   }, location);
+}
+
+/**
+ * The next Skill import in Settings gets this path instead of the system's
+ * open dialog, which a test can't drive, through the test hook.
+ */
+export async function interceptSkillPicker(window: Page, path: string): Promise<void> {
+  await window.evaluate((picked) => {
+    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
+    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
+    hooks.interceptSkillPicker(picked);
+  }, path);
 }
 
 /** Adds files through the sidebar's file picker and waits until each is processed and ready. */
