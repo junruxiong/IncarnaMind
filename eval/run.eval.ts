@@ -16,7 +16,7 @@ import { expect, test } from "vitest";
 import { BUILT_IN_EMBEDDING_MODEL } from "../src/core";
 import { type CitationRun, runCitations } from "./lib/citations";
 import { readConfig } from "./lib/config";
-import { cloudModelSource, createCloudEmbedder, createWorkerEmbedder } from "./lib/embedder";
+import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
 import { loadEvaluationSet } from "./lib/evaluationSet";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
@@ -103,8 +103,8 @@ test("retrieval and Citation evaluation", async () => {
     if (cloud) {
       const library = await openLibrary({
         name: "cloud",
-        embedder: createCloudEmbedder(cloud),
-        embeddingModelSource: cloudModelSource(cloud),
+        embedder: createWorkerEmbedder(),
+        embeddingProvider: cloudEmbeddingProvider(cloud),
         documents: set.documents,
         keep: config.keepData,
         log,

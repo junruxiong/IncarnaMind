@@ -3,8 +3,13 @@
  * vectors, held in memory. Vectors are stored as float32 BLOBs on the Passage
  * rows; the first search loads them, and the core keeps the copy in step as
  * Passages are embedded and Documents are deleted or processed again. At
- * 100,000 Passages that is about 154 MB and 40 ms a query, and a Search scope
- * only scans its own Documents.
+ * 100,000 Passages of 384 numbers that is about 154 MB and 40 ms a query, and
+ * a Search scope only scans its own Documents.
+ *
+ * Only vectors from the current embedding model are held: those of Documents
+ * whose recorded model (documents.embedding_model) is its id. A query is only
+ * compared with vectors of its own size, so vectors from different models are
+ * never mixed, even while Documents are being embedded again after a switch.
  */
 import type { Database } from "../storage";
 
@@ -16,6 +21,8 @@ export interface VectorHit {
 }
 
 interface DocumentVectors {
+  /** The size of each vector: the first one's. Vectors of another size are left out. */
+  dimensions: number;
   seqs: number[];
   /** `count` vectors, one after another, with spare room at the end. */
   data: Float32Array;
@@ -33,19 +40,21 @@ export function decodeVector(blob: Uint8Array): Float32Array {
 }
 
 export interface VectorIndex {
-  /** A Passage was embedded. */
+  /** A Passage was embedded with the current model. */
   add(documentId: string, seq: number, vector: Float32Array): void;
-  /** A Document was deleted, or its Passages replaced. */
+  /** A Document was deleted, or its Passages replaced, or its vectors are being replaced. */
   removeDocument(documentId: string): void;
-  /** The `limit` Passages most similar to `query`, most similar first. Optionally only some Documents' Passages. */
+  /** The embedding model changed: the vectors held are dropped, and the next search loads the new model's. */
+  reset(): void;
+  /**
+   * The `limit` Passages most similar to `query`, most similar first, among
+   * vectors of its size. Optionally only some Documents' Passages.
+   */
   search(query: Float32Array, limit: number, documentIds?: readonly string[]): VectorHit[];
 }
 
-export function createVectorIndex(
-  db: Database,
-  model: { readonly id: string; readonly dimensions: number },
-): VectorIndex {
-  const { dimensions } = model;
+/** `model.id` is read at each load, so it can change (see `reset`). */
+export function createVectorIndex(db: Database, model: { readonly id: string }): VectorIndex {
   /** Loaded on the first search. */
   let documents: Map<string, DocumentVectors> | undefined;
 
@@ -55,12 +64,14 @@ export function createVectorIndex(
     seq: number,
     vector: Float32Array,
   ): void {
-    if (vector.length !== dimensions) return;
+    const dimensions = vector.length;
+    if (dimensions === 0) return;
     let entry = map.get(documentId);
     if (!entry) {
-      entry = { seqs: [], data: new Float32Array(dimensions * 8), count: 0 };
+      entry = { dimensions, seqs: [], data: new Float32Array(dimensions * 8), count: 0 };
       map.set(documentId, entry);
     }
+    if (entry.dimensions !== dimensions) return;
     if ((entry.count + 1) * dimensions > entry.data.length) {
       const grown = new Float32Array(entry.data.length * 2);
       grown.set(entry.data);
@@ -94,11 +105,17 @@ export function createVectorIndex(
       documents?.delete(documentId);
     },
 
+    reset() {
+      documents = undefined;
+    },
+
     search(query, limit, documentIds) {
       documents ??= load();
+      const dimensions = query.length;
       // The best hits so far, best first.
       const top: VectorHit[] = [];
       const scan = (entry: DocumentVectors) => {
+        if (entry.dimensions !== dimensions) return;
         const { data, seqs, count } = entry;
         for (let index = 0; index < count; index++) {
           const offset = index * dimensions;

@@ -8,7 +8,9 @@ import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { ConsentSettings } from "./providers/ConsentSettings";
+import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
+import { RerankSettingsSection } from "./providers/RerankSettings";
 import { buttonClass } from "./providers/shared";
 import { SkillsSettings } from "./SkillsSettings";
 import { useModal } from "./useModal";
@@ -66,6 +68,8 @@ export function SettingsDialog() {
       {open && (
         <div className="mt-4 flex flex-col gap-6">
           <ChatModelSettings />
+          <EmbeddingSettingsSection />
+          <RerankSettingsSection />
           <ConnectorsSettings />
           <SkillsSettings />
           <JevSettingsSection />
