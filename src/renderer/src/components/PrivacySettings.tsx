@@ -46,6 +46,8 @@ export function PrivacySettings() {
       // A new provider or tagger moves a flow to another service.
       core.on("chatReadiness.changed", refreshFlows),
       core.on("jev.changed", refreshFlows),
+      // Each Connector that is on is a service of the "connectors" flow.
+      core.on("connectors.changed", refreshFlows),
       core.on("privacy.changed", (changed) => {
         setChoices(changed);
         refreshTraffic();

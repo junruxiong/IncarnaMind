@@ -10,4 +10,9 @@ export interface TestHooks {
   closeViewer(): void;
   /** What a Citation does: opens a Document in the viewer at a page range, highlighting a quote. */
   openDocument(location: DocumentLocation): void;
+  /**
+   * The next "Import a folder…" or "Import a zip…" in Settings → Skills gets
+   * this path (null: cancelled) instead of showing the system's open dialog.
+   */
+  interceptSkillPicker(path: string | null): void;
 }

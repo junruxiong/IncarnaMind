@@ -325,55 +325,60 @@ describe("Data-flow consent", () => {
 describe("Data flows on the Privacy page", () => {
   test("every registered flow is listed with what it sends, even one that sends nothing now", async () => {
     const { core } = await startWithModel();
+    const flow = async (id: DataFlowId) =>
+      (await core.listRegisteredDataFlows()).find((each) => each.id === id);
 
-    expect(await core.listRegisteredDataFlows()).toEqual([
-      { id: "chat", sends: ["blocks", "passages"], services: [] },
-      { id: "tagging", sends: ["tags", "document-excerpts"], services: [] },
-    ]);
+    // Every flow the core registers, whatever features add theirs.
+    expect((await core.listRegisteredDataFlows()).map((each) => each.id)).toEqual(
+      core.dataFlows.list().map((definition) => definition.id),
+    );
+    expect(await flow("chat")).toEqual({ id: "chat", sends: ["blocks", "passages"], services: [] });
+    expect(await flow("tagging")).toEqual({
+      id: "tagging",
+      sends: ["tags", "document-excerpts"],
+      services: [],
+    });
 
     await core.saveChatProvider(OPENAI);
-    expect(await core.listRegisteredDataFlows()).toEqual([
-      {
-        id: "chat",
-        sends: ["blocks", "passages"],
-        services: [
-          {
-            flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
-            consent: "not-asked",
-            decidedAt: null,
-          },
-        ],
-      },
-      expect.objectContaining({ id: "tagging", services: [expect.anything()] }),
-    ]);
+    expect(await flow("chat")).toEqual({
+      id: "chat",
+      sends: ["blocks", "passages"],
+      services: [
+        {
+          flow: { id: "chat", service: OPENAI_SERVICE, sends: ["blocks", "passages"] },
+          consent: "not-asked",
+          decidedAt: null,
+        },
+      ],
+    });
+    expect(await flow("tagging")).toMatchObject({ services: [expect.anything()] });
   });
 
   test("a flow registered later, e.g. by a new feature, is listed too", async () => {
     const { core } = await startWithModel();
-    const connectors = "connectors" as DataFlowId; // Stands for a later ticket's flow.
-    const service = { id: "https://mcp.example.com", name: "Example MCP" };
+    const later = "a-later-feature" as DataFlowId; // Stands for a flow a later ticket adds.
+    const service = { id: "https://later.example.com", name: "Later" };
 
     core.dataFlows.register({
-      id: connectors,
+      id: later,
       sends: ["tool-results"],
       services: async () => [service],
     });
 
     const flows = await core.listRegisteredDataFlows();
-    expect(flows.map((flow) => flow.id)).toEqual(["chat", "tagging", "connectors"]);
     expect(flows.at(-1)).toEqual({
-      id: "connectors",
+      id: later,
       sends: ["tool-results"],
       services: [
         {
-          flow: { id: "connectors", service, sends: ["tool-results"] },
+          flow: { id: later, service, sends: ["tool-results"] },
           consent: "not-asked",
           decidedAt: null,
         },
       ],
     });
     expect(await core.listDataFlows()).toContainEqual(
-      expect.objectContaining({ flow: expect.objectContaining({ id: "connectors" }) }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: later }) }),
     );
   });
 

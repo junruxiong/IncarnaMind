@@ -4,16 +4,18 @@ import { translate } from "../shared/i18n";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import type { ChatModelChoice, CoreApi, CoreEventSource, Unsubscribe } from "./api";
+import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { InvalidInputError, isRecord } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
+import { createExports } from "./exports";
 import { createFolders, parseFolderId } from "./folders";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
-import { createChat, type PreparedChatModel } from "./providers/chat";
+import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
@@ -27,6 +29,7 @@ import {
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
+import { createSkills } from "./skills";
 import { migrate, openDatabase } from "./storage";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
@@ -117,6 +120,16 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  let skills: ReturnType<typeof createSkills>;
+  try {
+    skills = createSkills({ db, dataDir, now, reportError: (error) => console.error(error) });
+  } catch (error) {
+    documents.close();
+    embeddingModel.close();
+    db.close();
+    throw error;
+  }
+  const skillsChanged = () => events.emit("skills.changed", skills.list());
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
   const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter });
@@ -142,6 +155,38 @@ export function createCore(adapters: CoreAdapters): Core {
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
   });
+
+  /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */
+  let connectorsToggled = () => {};
+  const connectors = createConnectors({
+    db,
+    now,
+    secrets,
+    processes: adapters.processes,
+    consent,
+    onChange: (list) => events.emit("connectors.changed", list),
+    onEnabledChange: () => connectorsToggled(),
+    reportError: (error) => console.error(error),
+  });
+  /**
+   * With a Connector on, Answers send the chat model what its Tools return,
+   * so the chat flow sends "tool-results" too, and asks again for it.
+   *
+   * Skills don't: their Tools (`use_skill`, `read_skill_file`) return only
+   * the text of Skills the User imported, which is sent like the system
+   * prompt, not data fetched from another service. Skill scripts, whose
+   * output could be anything, would need "tool-results" when they land.
+   */
+  const syncChatFlow = () => {
+    const flow = consent.registry.get("chat");
+    if (!flow) return;
+    const sends = connectors.anyEnabled()
+      ? [...CHAT_FLOW_SENDS, "tool-results" as const]
+      : CHAT_FLOW_SENDS;
+    consent.registry.register({ ...flow, sends });
+  };
+  syncChatFlow();
+
   const answers = createAnswers({
     content,
     events,
@@ -169,6 +214,11 @@ export function createCore(adapters: CoreAdapters): Core {
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, from, to) => documents.pageTexts(documentId, from, to),
     },
+    connectorTools: (signal) => connectors.toolsForAnswer(signal),
+    skills: {
+      availability: (name) => skills.availability(name),
+      openSession: (forced) => skills.openSession(forced),
+    },
     resolveScope: (scope) =>
       resolveSearchScope(scope, {
         folderTree: (folderId) => folders.subtree(folderId),
@@ -176,6 +226,14 @@ export function createCore(adapters: CoreAdapters): Core {
       }),
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     reportError: (error) => console.error(error),
+  });
+
+  const mindExports = createExports({
+    mind: (mindId) => minds.get(mindId),
+    read: (mindId, look) => content.read(mindId, look),
+    liveDocuments: () => documents.list(),
+    language: () => settings.get().language,
+    now,
   });
 
   // Automatic tagging: Jev when it is set up on this device, otherwise the
@@ -282,6 +340,13 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("dataFlows.changed", flows);
     await readinessChanged();
   };
+
+  connectorsToggled = () => {
+    syncChatFlow();
+    readinessChanged().catch((error: unknown) => console.error(error));
+  };
+  // Connectors that are on start with the app.
+  connectors.startAll();
 
   const ollamaUrl = (input: unknown) => {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
@@ -515,6 +580,36 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     testJevConnection: (input) => jev.test(input),
 
+    listConnectors: async () => connectors.list(),
+    addConnector: (input) => connectors.add(input),
+    setConnectorEnabled: async (connectorId, enabled) =>
+      connectors.setEnabled(connectorId, enabled),
+    restartConnector: async (connectorId) => connectors.restart(connectorId),
+    deleteConnector: (connectorId) => connectors.delete(connectorId),
+    previewConnectorImport: async (json) => connectors.previewImport(json),
+    importConnectors: (json) => connectors.import(json),
+
+    listSkills: async () => skills.list(),
+    previewSkillImport: (path) => skills.preview(path),
+    importSkill: async (importId) => {
+      const skill = await skills.import(importId);
+      skillsChanged();
+      return skill;
+    },
+    cancelSkillImport: async (importId) => skills.cancel(importId),
+    setSkillEnabled: async (skillId, enabled) => {
+      const skill = skills.setEnabled(skillId, enabled);
+      skillsChanged();
+      return skill;
+    },
+    removeSkill: async (skillId) => {
+      await skills.remove(skillId);
+      skillsChanged();
+    },
+
+    previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
+    exportMind: async (mindId, options) => mindExports.export(mindId, options),
+
     openDocumentFile: (documentId) => documents.openFile(documentId),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
@@ -527,7 +622,9 @@ export function createCore(adapters: CoreAdapters): Core {
       void chatGpt.cancelSignIn();
       // Answers being written keep what they have, marked "stopped".
       answers.stopAll();
+      connectors.close();
       tagger.close();
+      skills.close();
       consent.close();
       documents.close();
       embeddingModel.close();

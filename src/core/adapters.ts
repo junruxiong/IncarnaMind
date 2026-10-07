@@ -50,16 +50,23 @@ export interface Browser {
 
 export interface SpawnOptions {
   cwd?: string;
+  /** Added to (and overriding) the login-shell environment. */
   env?: Readonly<Record<string, string>>;
 }
 
 /**
  * Starts child processes with the User's login-shell environment, so `npx` and
- * `uvx` resolve even when the app was opened from the Dock or Start menu.
- * Used by Connectors and Skill scripts in later tickets.
+ * `uvx` resolve even when the app was opened from the Dock or Start menu. The
+ * command is looked up on that environment's PATH. Used by local Connectors,
+ * and by Skill scripts in a later ticket.
  */
 export interface ProcessLauncher {
-  spawn(command: string, args: readonly string[], options?: SpawnOptions): ChildProcess;
+  /**
+   * Resolves once the process is running, with its standard input, output and
+   * error piped. Rejects if it can't start: a command that isn't found rejects
+   * with an error whose `code` is "ENOENT".
+   */
+  spawn(command: string, args: readonly string[], options?: SpawnOptions): Promise<ChildProcess>;
 }
 
 /** The built-in embedding model's downloaded files, as the core hands them to an `Embedder`. */

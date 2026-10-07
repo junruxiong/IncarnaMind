@@ -1,12 +1,17 @@
 import type { KeyboardEvent } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
+import { files } from "../core";
+import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, useAppStore } from "../store";
+import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
+import { buttonClass } from "./providers/shared";
+import { SkillsSettings } from "./SkillsSettings";
 import { useModal } from "./useModal";
 
 const languageOptions: readonly { value: LanguagePreference; label: MessageKey }[] = [
@@ -111,6 +116,8 @@ function GeneralSettings() {
   return (
     <div className="flex flex-col gap-6">
       <ChatModelSettings />
+      <ConnectorsSettings />
+      <SkillsSettings />
       <JevSettingsSection />
       <fieldset>
         <legend className="mb-1 text-sm font-medium">{t("settings.language")}</legend>
@@ -127,7 +134,31 @@ function GeneralSettings() {
           </label>
         ))}
       </fieldset>
+      <DataFolderSettings />
       <ChatGptPlanSettings />
     </div>
+  );
+}
+
+/** Settings → Data folder: where everything is kept, opened in the file manager for a backup. */
+function DataFolderSettings() {
+  const t = useT();
+  const open = () =>
+    files.openDataFolder().catch((failure: unknown) => {
+      useAppStore.setState({ actionError: errorMessage(failure) });
+    });
+  return (
+    <section>
+      <h3 className="mb-1 text-sm font-medium">{t("export.dataFolder.title")}</h3>
+      <p className="mb-2 text-sm text-gray-600">{t("export.dataFolder.body")}</p>
+      <button
+        type="button"
+        data-testid="open-data-folder"
+        onClick={() => void open()}
+        className={buttonClass}
+      >
+        {t("export.dataFolder.open")}
+      </button>
+    </section>
   );
 }

@@ -16,6 +16,7 @@ import {
   channelFor,
   EVENT_CHANNEL,
   FILES_BRIDGE_KEY,
+  FILES_CHANNELS,
   type FilesBridge,
 } from "../shared/bridge";
 
@@ -59,6 +60,10 @@ contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);
 // A sandboxed renderer can't see where a dropped or picked file lives; Electron's preload can.
 const files: FilesBridge = {
   pathForFile: (file) => webUtils.getPathForFile(file),
+  saveMindExport: (mindId, options) =>
+    ipcRenderer.invoke(FILES_CHANNELS.saveMindExport, mindId, options),
+  openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
+  pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),
 };
 
 contextBridge.exposeInMainWorld(FILES_BRIDGE_KEY, files);

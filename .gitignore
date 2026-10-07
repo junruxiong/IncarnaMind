@@ -20,6 +20,8 @@ test-results/
 playwright-report/
 blob-report/
 coverage/
+# Evaluation reports (npm run eval)
+eval/results/
 
 # Claude Code agent worktrees
 .claude/worktrees/

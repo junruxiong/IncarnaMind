@@ -4,9 +4,10 @@
  */
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
-import type { Browser, CoreAdapters, CrashReporter, Keychain, ProcessLauncher } from "../core";
+import type { Browser, CoreAdapters, CrashReporter, Keychain } from "../core";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
+import { createLoginShellProcesses } from "./processes";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 
 /**
@@ -45,12 +46,14 @@ export const systemBrowser: Browser = {
   },
 };
 
-/** Stub: Connectors and Skill scripts bring login-shell environment resolution and spawning. */
-export const loginShellProcesses: ProcessLauncher = {
-  spawn() {
-    throw new Error("Starting processes isn't available yet.");
-  },
-};
+/**
+ * Local Connectors (and later Skill scripts) start with the User's
+ * login-shell environment, read once (see ./processes).
+ */
+export const loginShellProcesses = createLoginShellProcesses({
+  reportError: (error) =>
+    console.warn("Couldn't read the login shell's environment; using the app's own.", error),
+});
 
 /**
  * Test-only launch flag: the smoke tests run a deterministic fake embedding
