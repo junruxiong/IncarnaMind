@@ -133,6 +133,17 @@ export function ExportIcon(props: IconProps) {
   );
 }
 
+/** Three dots in a row: more actions, in a menu. */
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" {...props}>
+      <circle cx="3.5" cy="8" r="1.25" />
+      <circle cx="8" cy="8" r="1.25" />
+      <circle cx="12.5" cy="8" r="1.25" />
+    </svg>
+  );
+}
+
 /** Six dots: the handle a Block is dragged by, like the old editor's "holder". */
 export function GripIcon(props: IconProps) {
   return (
