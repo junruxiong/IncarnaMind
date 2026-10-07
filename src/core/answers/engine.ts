@@ -16,7 +16,9 @@
  *   a search query that stands on its own (see `searchQuery`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
- * provider refuses Tools or structured output.
+ * provider refuses Tools or structured output. A model may give records but
+ * leave their markers out of its text: the engine then places them (see
+ * ./markerPlacement).
  *
  * For a local model with a fixed context window, every request is kept
  * within it by IncarnaMind's own rules (see ./window), and one that can't fit
@@ -53,6 +55,7 @@ import type { CitationSupport, ProviderError } from "../api";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import { classifyProviderError, contextOverflow } from "../providers/providerErrors";
 import { earlierContext } from "./context";
+import { missingMarkerEvents, textEdits } from "./markerPlacement";
 import { SEARCH_QUERY_INSTRUCTIONS, searchQueryPrompt } from "./prompt";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
@@ -124,6 +127,8 @@ export interface AnswerTools {
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
   cite(records: readonly CitationRecordInput[]): string;
+  /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
+  hasRecord?(marker: number): boolean;
   /** Tools from the User's Connectors, offered to a model that can call Tools. */
   readonly external?: readonly ExternalTool[];
 }
@@ -208,6 +213,8 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
+  /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
+  | { type: "markers-placed"; count: number }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */
   | { type: "text-delta"; text: string }
   /**
@@ -795,6 +802,8 @@ async function* toolLoop(
   const { signal } = request;
   /** Passages each search gave, by Tool call. */
   const results = new Map<string, number>();
+  /** The records the model gave, in order. */
+  const cited: CitationRecordInput[] = [];
   /** The account of the window, once the first request is sized. */
   let loop: ReturnType<WindowBudget["loop"]> | null = null;
   const documentTools: ToolSet = {
@@ -827,7 +836,11 @@ async function* toolLoop(
         properties: { citations: recordsSchema },
         required: ["citations"],
       }),
-      execute: async ({ citations }) => request.tools.cite(parseRecords(citations)),
+      execute: async ({ citations }) => {
+        const records = parseRecords(citations);
+        cited.push(...records);
+        return request.tools.cite(records);
+      },
     }),
   };
   /** External Tools, by the name the model calls them; never one of IncarnaMind's own names. */
@@ -971,7 +984,9 @@ async function* toolLoop(
     yield refused ?? { type: "failed", error: classifyProviderError(error) };
     return;
   }
-  if (!signal.aborted) yield { type: "finished" };
+  if (signal.aborted) return;
+  yield* missingMarkerEvents(keptText, cited, request.tools);
+  yield { type: "finished" };
 }
 
 /** What a shown Tool call was asked, as text fields. */
@@ -1029,14 +1044,9 @@ async function* structured(
 
   let raw = "";
   let emitted = "";
-  const emit = async function* (value: unknown): AsyncGenerator<AnswerEngineEvent> {
+  const emit = function* (value: unknown): Generator<AnswerEngineEvent> {
     if (typeof value !== "string" || value === emitted) return;
-    if (value.startsWith(emitted)) {
-      yield { type: "text-delta", text: value.slice(emitted.length) };
-    } else {
-      if (emitted) yield { type: "text-retracted", length: emitted.length };
-      yield { type: "text-delta", text: value };
-    }
+    yield* textEdits(emitted, value);
     emitted = value;
   };
   const estimated = sized?.estimated;
@@ -1071,12 +1081,15 @@ async function* structured(
     yield { type: "unsupported" };
     return;
   }
-  yield* emit(answer);
+  const records = parseRecords((value as { citations?: unknown } | undefined)?.citations);
   try {
-    request.tools.cite(parseRecords((value as { citations?: unknown } | undefined)?.citations));
+    request.tools.cite(records);
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
+  yield* emit(answer);
+  // A small model often gives the records but leaves their markers out.
+  if (typeof answer === "string") yield* missingMarkerEvents(emitted, records, request.tools);
   yield { type: "finished" };
 }
 

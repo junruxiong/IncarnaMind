@@ -29,7 +29,13 @@ import {
 import { startModelListStub, startOllamaStub, unusedLocalUrl } from "../helpers/ollama";
 
 /** What "answer.finished" says about Citations when there were no Documents to search. */
-const NO_CITATIONS = { citations: [], droppedMarkers: 0, droppedRecords: 0, citationSupport: null };
+const NO_CITATIONS = {
+  citations: [],
+  droppedMarkers: 0,
+  droppedRecords: 0,
+  placedMarkers: 0,
+  citationSupport: null,
+};
 
 /** A core with a local chat model set up (so no consent is needed), and a Mind with two clients. */
 async function setUp(model: MockLanguageModelV4, dataDir?: string) {

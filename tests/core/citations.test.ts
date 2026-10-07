@@ -232,12 +232,12 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     expect(system.length).toBeLessThan(2500);
   });
 
-  test("a marker with no record is removed, and a record with no marker is dropped: both are counted", async () => {
+  test("a marker with no record is removed, and a record naming no Passage is dropped: both are counted", async () => {
     const model = citingModel({
       query: "tides",
       records: (passages) => [
         { marker: 1, passage: first(passages).id, pageFrom: 2, pageTo: 2, quote: SPRING },
-        // No marker [^2] in the text.
+        // No marker [^2] in the text: the engine places it (see answerMarkers.test.ts).
         {
           marker: 2,
           passage: first(passages).id,
@@ -266,9 +266,13 @@ describe("Answers cite Passages", { timeout: 30_000 }, () => {
     expect(answerText(client, answerId)).toBe(
       "Spring tides come at full moon . Neap tides are smaller. The Moon matters.",
     );
-    expect(citationsIn(client, answerId).map((citation) => citation.quote)).toEqual([SPRING]);
-    expect(finished).toMatchObject({ droppedMarkers: 2, droppedRecords: 2 });
-    expect(finished.citations).toHaveLength(1);
+    // [^2] matches no sentence: it went to the end of the paragraph that shares a word ("tides") with it.
+    expect(citationsIn(client, answerId).map((citation) => citation.quote)).toEqual([
+      SPRING,
+      "Most coasts therefore see two high tides every day.",
+    ]);
+    expect(finished).toMatchObject({ droppedMarkers: 2, droppedRecords: 1, placedMarkers: 1 });
+    expect(finished.citations).toHaveLength(2);
     // The model heard about the record it couldn't make.
     expect(citeFeedback(model)).toMatch(/\[\^4\]: there is no Passage "P99"/);
   });
