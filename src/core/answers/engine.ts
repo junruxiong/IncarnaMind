@@ -10,9 +10,10 @@
  * - "tools": a Tool-calling loop (ADR-0007). The model searches the Documents
  *   with `search_documents` as often as it needs, and gives the records of its
  *   Citation markers with `cite`.
- * - "structured-output": for a model that can't call Tools, one search with the
- *   Question's text, its Passages in the instructions, and the Answer and its
- *   records returned as one JSON object.
+ * - "structured-output": for a model that can't call Tools, one search, its
+ *   Passages in the instructions, and the Answer and its records returned as
+ *   one JSON object. A follow-up Question is first rewritten by the model into
+ *   a search query that stands on its own (see `searchQuery`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output.
@@ -28,6 +29,7 @@
  */
 import {
   APICallError,
+  generateText,
   jsonSchema,
   Output,
   parsePartialJson,
@@ -42,6 +44,8 @@ import {
 import type { CitationSupport, ProviderError } from "../api";
 import type { ChatLanguageModel } from "../providers/models";
 import { classifyProviderError } from "../providers/providerErrors";
+import { earlierContext } from "./context";
+import { SEARCH_QUERY_INSTRUCTIONS, searchQueryPrompt } from "./prompt";
 
 /** One message of Question context. */
 export interface AnswerMessage {
@@ -171,7 +175,10 @@ export interface AnswerRequest {
   instructions(mode: CitationSupport | "no-documents", options?: InstructionOptions): string;
   /** The Question context, oldest first; the last message is the User's and ends with the Question. */
   messages: AnswerMessage[];
-  /** The Question's own text: what a model that can't call Tools searches for. */
+  /**
+   * The Question's own text: what a model that can't call Tools searches for,
+   * once it has rewritten it into a query that stands on its own.
+   */
   question: string;
   /** The model to answer with, from `Core.prepareChatModel`. */
   model: ChatLanguageModel;
@@ -322,6 +329,57 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 const parseAnswerJson = (raw: string) =>
   parsePartialJson(raw.replace(/^\s*```(?:json)?[ \t]*\n?/i, "").replace(/\n?```\s*$/, ""));
 
+/** The longest search query a rewrite may give, in characters: a query, not an Answer. */
+const MAX_QUERY_LENGTH = 300;
+
+/** The search query in a model's rewrite: its first line, without its thinking, a label or quotes. */
+function queryIn(reply: string): string {
+  const line =
+    reply
+      // An unclosed block was cut off mid-thought.
+      .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "")
+      .split("\n")
+      .map((each) => each.trim())
+      .find(Boolean) ?? "";
+  return line
+    .replace(/^(?:search )?query:\s*/i, "")
+    .replace(/^["'“”`]+|["'“”`]+$/g, "")
+    .trim()
+    .slice(0, MAX_QUERY_LENGTH);
+}
+
+/**
+ * What a model that can't call Tools searches for: the Question, rewritten by
+ * the model into one query that stands on its own, from the Question context
+ * above it. So "What about its limitations?" searches for what "it" is, as
+ * the old CLI's condense step did, but as one query: there is still one
+ * search (ADR-0007). With nothing above the Question, the Question is the
+ * query; and it is the query when the rewrite fails or comes back empty.
+ */
+async function searchQuery(request: AnswerRequest): Promise<string> {
+  const { question, signal } = request;
+  const earlier = earlierContext(request.messages, question);
+  if (!earlier) return question;
+  try {
+    const { text } = await generateText({
+      model: request.model,
+      instructions: SEARCH_QUERY_INSTRUCTIONS,
+      prompt: searchQueryPrompt(earlier, question),
+      // A short query; a cut-off reply falls back to the Question.
+      maxOutputTokens: 256,
+      // A failure falls back to the Question at once; the Answer's own request still retries.
+      maxRetries: 0,
+      abortSignal: signal,
+    });
+    return queryIn(text) || question;
+  } catch (error) {
+    if (!signal.aborted) {
+      console.error(`The Question couldn't be rewritten for search: ${messageOf(error)}`);
+    }
+    return question;
+  }
+}
+
 /** The engine on the Vercel AI SDK. */
 export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
   const maxSteps = options.maxSteps ?? MAX_STEPS;
@@ -356,20 +414,17 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         return;
       }
 
-      // A model without Tools searches once, with the Question's text; the result is kept
-      // for the next way of answering if the provider refuses this one.
+      // A model without Tools searches once, for the Question rewritten to stand on its own;
+      // the result is kept for the next way of answering if the provider refuses this one.
       let searched: string | undefined;
       async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, string> {
         if (searched !== undefined) return searched;
+        const query = await searchQuery(request);
+        signal.throwIfAborted();
         const id = "question-search";
-        yield {
-          type: "tool-call-started",
-          id,
-          tool: SEARCH_TOOL,
-          input: { query: request.question },
-        };
+        yield { type: "tool-call-started", id, tool: SEARCH_TOOL, input: { query } };
         try {
-          const result = await request.tools.searchDocuments(request.question, signal);
+          const result = await request.tools.searchDocuments(query, signal);
           yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
           searched = result.text;
         } catch (error) {
@@ -513,13 +568,14 @@ async function* toolLoop(
   const documentTools: ToolSet = {
     [SEARCH_TOOL]: tool({
       description:
-        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages.",
+        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and its pages. The search sees only the query, not the conversation: write it to stand on its own.",
       inputSchema: jsonSchema<{ query: string }>({
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "What to look for: words likely to be in the Passages, in their language.",
+            description:
+              'What to look for: words likely to be in the Passages, in their language. Name what the Question refers to instead of pronouns or words that point back, such as "it", "they" or "that paper".',
           },
         },
         required: ["query"],
