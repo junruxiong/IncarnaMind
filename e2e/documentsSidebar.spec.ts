@@ -205,6 +205,9 @@ test("a right-click on a row opens its menu, without selecting its name; a selec
   await addDocuments(window, [join(sources, "Field notes.txt")]);
   await linkFolderFromSidebar(app, window, library);
   const item = window.getByTestId("document-list-item").filter({ hasText: "Field notes" });
+  // Settled: the file added on its own has moved under "Other Documents", so its row stays put.
+  await expect(linkedFolderRow(window, "Library")).toHaveAttribute("data-state", "idle");
+  await expect(item).toHaveAttribute("data-depth", "1");
 
   await item.getByTestId("row-text").click({ button: "right" });
   await expect(item.getByTestId("document-file-actions")).toBeVisible();

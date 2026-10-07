@@ -162,34 +162,33 @@ export function DocumentsSection() {
             <p className="px-2 pt-1 pb-1.5 text-[13px] leading-5 text-ink-meta">
               {t("documents.none")}
             </p>
-            <ul>
-              <li className={rowClass(false)}>
-                <button
-                  type="button"
-                  data-testid="empty-add-linked-folder"
-                  onClick={() => void addLinkedFolder()}
-                  className={rowButtonClass}
-                >
-                  <FolderPlusLineIcon className={rowIconClass(false)} />
-                  <span data-testid="row-text" className="truncate">
-                    {t("linkedFolders.add")}
-                  </span>
-                </button>
-              </li>
-              <li className={rowClass(false)}>
-                <button
-                  type="button"
-                  data-testid="empty-add-documents"
-                  onClick={() => picker.current?.click()}
-                  className={rowButtonClass}
-                >
-                  <PlusLineIcon className={rowIconClass(false)} />
-                  <span data-testid="row-text" className="truncate">
-                    {t("documents.add")}
-                  </span>
-                </button>
-              </li>
-            </ul>
+            {/* Two actions, as rows like "New Mind": not a list of items. */}
+            <div className={rowClass(false)}>
+              <button
+                type="button"
+                data-testid="empty-add-linked-folder"
+                onClick={() => void addLinkedFolder()}
+                className={rowButtonClass}
+              >
+                <FolderPlusLineIcon className={rowIconClass(false)} />
+                <span data-testid="row-text" className="truncate">
+                  {t("linkedFolders.add")}
+                </span>
+              </button>
+            </div>
+            <div className={rowClass(false)}>
+              <button
+                type="button"
+                data-testid="empty-add-documents"
+                onClick={() => picker.current?.click()}
+                className={rowButtonClass}
+              >
+                <PlusLineIcon className={rowIconClass(false)} />
+                <span data-testid="row-text" className="truncate">
+                  {t("documents.add")}
+                </span>
+              </button>
+            </div>
           </div>
         ))}
       <DeleteDocumentDialog target={deleting} onClose={() => setDeleting(null)} />

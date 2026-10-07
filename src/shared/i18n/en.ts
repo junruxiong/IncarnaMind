@@ -236,8 +236,8 @@ export const en = {
   "status.retry": "Retry",
   "status.skipped.one": "Skipped 1 file",
   "status.skipped.other": "Skipped {count} files",
-  "status.alreadyAdded.one": "1 file was already added",
-  "status.alreadyAdded.other": "{count} files were already added",
+  "status.alreadyAdded.one": "1 already added",
+  "status.alreadyAdded.other": "{count} already added",
   "status.more": "+{count}",
   "status.more.label": "{count} more",
 
