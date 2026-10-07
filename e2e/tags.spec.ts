@@ -9,6 +9,7 @@ import {
   filterByTag,
   launchApp,
   openDocumentTags,
+  openViewer,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -154,5 +155,39 @@ test("without a model, Documents are ready to search, and one notice, not one pe
     await expect(items.nth(index)).toHaveAttribute("data-tagging", "tagged");
   }
   await expect(notice).toHaveCount(0);
+  await app.close();
+});
+
+test("a Document's Tags menu near the window's bottom opens upward with its first item focused, and Esc closes only it", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  const files = await Promise.all(
+    ["One", "Two", "Three", "Four", "Five", "Six"].map(async (name) => {
+      const path = join(sources, `${name}.txt`);
+      await writeFile(path, `${name} notes about tides.`);
+      return path;
+    }),
+  );
+  await addDocuments(window, files);
+  await openViewer(window);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 470));
+  await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeLessThan(600);
+
+  const last = window.getByTestId("document-list-item").last();
+  await last.hover();
+  await last.getByTestId("document-tags-menu").click();
+  const menu = last.getByTestId("document-tags-popover");
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  const height = await window.evaluate(() => globalThis.innerHeight);
+  if (!box) throw new Error("The menu isn't visible.");
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(height);
+  await expect(menu.getByTestId("tag-menu-item").first()).toBeFocused();
+
+  // Esc closes the menu, and leaves the Document viewer open.
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(window.getByTestId("viewer")).toBeVisible();
   await app.close();
 });
