@@ -72,6 +72,8 @@ export const zhCN = {
   "viewer.outline.expand": "展开 {title}",
   "viewer.outline.collapse": "收起 {title}",
   "viewer.outline.untitled": "无标题",
+  "viewer.mark.found": "引用 {number}：已找到引文",
+  "viewer.mark.notFound": "引用 {number}：未找到引文",
 
   "documents.title": "文档",
   "documents.add": "添加文档",

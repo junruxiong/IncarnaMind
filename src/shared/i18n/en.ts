@@ -74,6 +74,8 @@ export const en = {
   "viewer.outline.expand": "Expand {title}",
   "viewer.outline.collapse": "Collapse {title}",
   "viewer.outline.untitled": "Untitled",
+  "viewer.mark.found": "Citation {number}: quote found",
+  "viewer.mark.notFound": "Citation {number}: quote not found",
 
   "documents.title": "Documents",
   "documents.add": "Add Documents",

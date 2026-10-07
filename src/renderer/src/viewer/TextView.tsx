@@ -6,6 +6,8 @@ import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import { loadDocumentBytes, MissingDocumentError } from "./documentBytes";
 import { type Block, type Inline, parseMarkdown } from "./markdown";
+import { CitationMark, markTopFor, quoteMarkOf, quoteTone } from "./quoteMark";
+import { ViewerHeader } from "./ViewerHeader";
 import { DocumentRemoved, ViewerMessage } from "./ViewerMessage";
 
 type Loaded =
@@ -18,9 +20,10 @@ type Loaded =
 const NO_HIGHLIGHT: readonly TextRange[] = [];
 
 /**
- * A TXT or Markdown Document, readable in the viewer. Opened with a quote, it
- * highlights the quote (each part of a quote with an ellipsis) and scrolls to
- * it; otherwise it opens at the top.
+ * A TXT or Markdown Document, readable in the viewer: set in the Mind's serif
+ * on a page, like a PDF's. Opened with a quote, it highlights the quote (each
+ * part of a quote with an ellipsis) and scrolls to it; otherwise it opens at
+ * the top.
  */
 export function TextView({ document, target }: { document: Document; target: ViewerTarget }) {
   const t = useT();
@@ -43,16 +46,22 @@ export function TextView({ document, target }: { document: Document; target: Vie
     return () => controller.abort();
   }, [document.id]);
 
-  if (loaded.kind === "loading") return <ViewerMessage>{t("viewer.loading")}</ViewerMessage>;
-  if (loaded.kind === "missing") return <DocumentRemoved quote={target.quote} />;
-  if (loaded.kind === "failed") {
-    return (
-      <ViewerMessage tone="error">
-        {loaded.message ? t("viewer.failed", { message: loaded.message }) : t("viewer.notText")}
-      </ViewerMessage>
-    );
-  }
-  return <TextContent text={loaded.text} markdown={document.kind === "markdown"} target={target} />;
+  return (
+    <>
+      <ViewerHeader openable={loaded.kind !== "missing"} />
+      {loaded.kind === "loading" ? (
+        <ViewerMessage>{t("viewer.loading")}</ViewerMessage>
+      ) : loaded.kind === "missing" ? (
+        <DocumentRemoved quote={target.quote} />
+      ) : loaded.kind === "failed" ? (
+        <ViewerMessage tone="error">
+          {loaded.message ? t("viewer.failed", { message: loaded.message }) : t("viewer.notText")}
+        </ViewerMessage>
+      ) : (
+        <TextContent text={loaded.text} markdown={document.kind === "markdown"} target={target} />
+      )}
+    </>
+  );
 }
 
 function TextContent({
@@ -65,12 +74,34 @@ function TextContent({
   target: ViewerTarget;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const column = useRef<HTMLDivElement>(null);
   const appliedRequest = useRef<number | null>(null);
   const highlight = useMemo(
     () => (target.quote ? findQuote(text, target.quote) : null) ?? NO_HIGHLIGHT,
     [text, target.quote],
   );
   const blocks = useMemo(() => (markdown ? parseMarkdown(text) : null), [text, markdown]);
+  const mark = quoteMarkOf(target.citation);
+  const [markTop, setMarkTop] = useState<number | null>(null);
+
+  // The Citation's mark sits beside the quote's first line, wherever the text wraps it.
+  const showMark = mark !== null && highlight.length > 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-placed for each new highlight
+  useLayoutEffect(() => {
+    const element = column.current;
+    if (!element || !showMark) {
+      setMarkTop(null);
+      return;
+    }
+    const place = () => {
+      const first = element.querySelector("[data-quote-highlight]");
+      setMarkTop(first ? markTopFor(first, element) : null);
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [showMark, highlight]);
 
   // Each open request goes to its quote, or to the top if it has none or it isn't found.
   // Opening the Document again without a quote leaves the reader where they were.
@@ -95,20 +126,28 @@ function TextContent({
     <div
       ref={scroller}
       data-testid="viewer-text"
-      className="h-full overflow-auto px-6 py-4 select-text"
+      data-quote-tone={quoteTone(target.citation)}
+      className="viewer-backdrop viewer-text-backdrop min-h-0 flex-1 overflow-auto select-text"
     >
-      {blocks ? (
-        <div className="document-markdown">
-          {blocks.map((block, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: the blocks never reorder
-            <MarkdownBlock key={index} block={block} source={text} highlight={highlight} />
-          ))}
+      <article className="viewer-page viewer-text-page">
+        <div ref={column} className="relative">
+          {blocks ? (
+            <div className="document-markdown">
+              {blocks.map((block, index) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: the blocks never reorder
+                <MarkdownBlock key={index} block={block} source={text} highlight={highlight} />
+              ))}
+            </div>
+          ) : (
+            <pre className="document-plain">
+              <Slice source={text} start={0} end={text.length} highlight={highlight} />
+            </pre>
+          )}
+          {mark && markTop !== null && (
+            <CitationMark mark={mark} style={{ top: markTop, left: "calc(100% + 12px)" }} />
+          )}
         </div>
-      ) : (
-        <pre className="font-sans text-custom-xs break-words whitespace-pre-wrap text-gray-800">
-          <Slice source={text} start={0} end={text.length} highlight={highlight} />
-        </pre>
-      )}
+      </article>
     </div>
   );
 }
@@ -134,8 +173,12 @@ function Slice({
     const to = Math.min(end, range.end);
     if (from >= to) continue;
     parts.push(source.slice(at, from));
+    // A part split across inlines (e.g. at a line break) joins up square at the seam.
+    const joins = `${from > range.start ? " quote-highlight--joins-before" : ""}${
+      to < range.end ? " quote-highlight--joins-after" : ""
+    }`;
     parts.push(
-      <mark key={from} data-quote-highlight="" className="quote-highlight">
+      <mark key={from} data-quote-highlight="" className={`quote-highlight${joins}`}>
         {source.slice(from, to)}
       </mark>,
     );

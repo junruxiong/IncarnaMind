@@ -6,24 +6,27 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import type { Document } from "../../../core/api";
 import { findQuoteInPages, type TextPiece } from "../../../shared/quoteMatch";
-import {
-  ChevronDownIcon,
-  ChevronIcon,
-  ChevronUpIcon,
-  FitWidthIcon,
-  MinusIcon,
-  OutlineIcon,
-  PlusIcon,
-} from "../components/icons";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import {
+  ExpandIcon,
+  FitWidthIcon,
+  NextPageIcon,
+  OutlineToggleIcon,
+  PreviousPageIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from "./icons";
 import { loadOutline, type OutlineItem } from "./outline";
 import { isMissingDocumentError, loadPdfJs, openPdf, type PdfJs } from "./pdfjs";
+import { CitationMark, type QuoteMark, quoteMarkOf, quoteTone } from "./quoteMark";
+import { HeaderDivider, ViewerHeader } from "./ViewerHeader";
 import { DocumentRemoved, ViewerMessage } from "./ViewerMessage";
 
 /** CSS pixels per PDF point: at 100% a page shows at its printed size. */
@@ -31,8 +34,9 @@ const CSS_UNITS = 96 / 72;
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 const MIN_ZOOM = ZOOM_STEPS[0] as number;
 const MAX_ZOOM = ZOOM_STEPS.at(-1) as number;
-/** Space around and between pages, in CSS pixels. */
-const PAGE_GAP = 12;
+/** Space between pages, and around them, in CSS pixels. */
+const PAGE_GAP = 16;
+const PAGE_PADDING = 24;
 /** A canvas larger than this many pixels is drawn at a lower resolution, to bound memory. */
 const MAX_CANVAS_PIXELS = 2 ** 24;
 /** A zoom or resize re-renders visible pages once it settles, not at every step. */
@@ -105,14 +109,27 @@ export function PdfView({ document, target }: { document: Document; target: View
 
   switch (loaded.kind) {
     case "loading":
-      return <ViewerMessage>{t("viewer.loading")}</ViewerMessage>;
+      return (
+        <>
+          <ViewerHeader />
+          <ViewerMessage>{t("viewer.loading")}</ViewerMessage>
+        </>
+      );
     case "missing":
-      return <DocumentRemoved quote={target.quote} />;
+      return (
+        <>
+          <ViewerHeader openable={false} />
+          <DocumentRemoved quote={target.quote} />
+        </>
+      );
     case "failed":
       return (
-        <ViewerMessage tone="error">
-          {t("viewer.failed", { message: loaded.message })}
-        </ViewerMessage>
+        <>
+          <ViewerHeader />
+          <ViewerMessage tone="error">
+            {t("viewer.failed", { message: loaded.message })}
+          </ViewerMessage>
+        </>
       );
     case "ready":
       return (
@@ -162,7 +179,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   const scale =
     zoom.fit && viewportWidth > 0
       ? clamp(
-          (viewportWidth - 2 * PAGE_GAP) / firstPage.width,
+          (viewportWidth - 2 * PAGE_PADDING) / firstPage.width,
           MIN_ZOOM * CSS_UNITS,
           MAX_ZOOM * CSS_UNITS,
         )
@@ -178,9 +195,10 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
       const container = scroller.current;
       const element = pageElements.current[clamp(page, 1, pageCount) - 1];
       if (!container || !element) return;
-      const scrollTop = Math.max(0, element.offsetTop - PAGE_GAP);
-      container.scrollTop = scrollTop;
       const number = Number(element.dataset.pageNumber);
+      // The page's top edge shows, with the gap above it (the padding, above the first).
+      const above = number === 1 ? PAGE_PADDING : PAGE_GAP;
+      container.scrollTop = Math.max(0, element.offsetTop - above);
       placed.current = { page: number, scrollTop: container.scrollTop };
       anchor.current = {
         page: number,
@@ -390,40 +408,56 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   };
 
   const hasOutline = outline.length > 0;
+  const zoomPercent = Math.round(currentZoom * 100);
+  const mark = useMemo(() => quoteMarkOf(target.citation), [target.citation]);
 
   return (
-    <div className="flex h-full flex-col">
-      <Toolbar
-        currentPage={currentPage}
-        pageCount={pageCount}
-        zoomPercent={Math.round(currentZoom * 100)}
-        fitWidth={zoom.fit}
-        outlineOpen={hasOutline ? outlineOpen : null}
-        onToggleOutline={() => {
-          measure(); // the pages may refit to the narrower view: keep the place
-          setOutlineOpen((open) => !open);
-        }}
-        onGoToPage={goToPage}
-        onZoomIn={() => zoomTo(ZOOM_STEPS.find((step) => step > currentZoom + 0.001) ?? MAX_ZOOM)}
-        onZoomOut={() =>
-          zoomTo(ZOOM_STEPS.findLast((step) => step < currentZoom - 0.001) ?? MIN_ZOOM)
+    <>
+      <ViewerHeader
+        leading={
+          hasOutline && (
+            <OutlineToggle
+              open={outlineOpen}
+              onToggle={() => {
+                measure(); // the pages may refit to the narrower view: keep the place
+                setOutlineOpen((open) => !open);
+              }}
+            />
+          )
         }
-        onFitWidth={() => {
-          measure();
-          setZoom({ fit: true });
-        }}
-      />
+      >
+        <PageNavigation current={currentPage} count={pageCount} onGo={goToPage} />
+        <HeaderDivider />
+        <ZoomControls
+          percent={zoomPercent}
+          fitWidth={zoom.fit}
+          onZoomIn={() => zoomTo(ZOOM_STEPS.find((step) => step > currentZoom + 0.001) ?? MAX_ZOOM)}
+          onZoomOut={() =>
+            zoomTo(ZOOM_STEPS.findLast((step) => step < currentZoom - 0.001) ?? MIN_ZOOM)
+          }
+          onFitWidth={() => {
+            measure();
+            setZoom({ fit: true });
+          }}
+        />
+      </ViewerHeader>
       <div className="flex min-h-0 flex-1">
-        {hasOutline && outlineOpen && <OutlinePanel items={outline} onGoToPage={goToPage} />}
+        {hasOutline && outlineOpen && (
+          <OutlinePanel items={outline} currentPage={currentPage} onGoToPage={goToPage} />
+        )}
         <div
           ref={scroller}
           data-testid="pdf-scroller"
+          data-quote-tone={quoteTone(target.citation)}
           onScroll={onScroll}
-          className="relative min-w-0 flex-1 overflow-auto bg-gray-100 [overflow-anchor:none]"
+          className="viewer-backdrop relative min-w-0 flex-1 overflow-auto [overflow-anchor:none]"
         >
           <div
             className="flex w-max min-w-full flex-col items-center"
-            style={{ gap: PAGE_GAP, padding: PAGE_GAP }}
+            style={{
+              gap: PAGE_GAP,
+              padding: `${PAGE_PADDING}px ${PAGE_PADDING}px ${2 * PAGE_PADDING}px`,
+            }}
           >
             {sizes.map((size, index) => {
               const page = index + 1;
@@ -437,6 +471,7 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
                   scale={scale}
                   nearby={nearby.has(page)}
                   highlights={highlights.get(page)}
+                  mark={page === firstHighlightPage ? mark : null}
                   onSize={onPageSize}
                   onHighlightShown={onHighlightShown}
                   setElement={setPageElement}
@@ -446,51 +481,84 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-/** The outline's indent per level, in CSS pixels, as in the sidebar's Folder tree. */
-const OUTLINE_INDENT = 12;
+/** The outline's indent per level, in CSS pixels. */
+const OUTLINE_INDENT = 16;
+/** The left padding of a top-level entry, in CSS pixels. */
+const OUTLINE_INSET = 8;
+
+/**
+ * The entry for the page in view, as a path of indexes from the top ("1.0"):
+ * the first entry that starts on that page, or else the section running on
+ * from an earlier page (the last entry of the latest page before it).
+ */
+function currentEntry(items: readonly OutlineItem[], page: number): string | null {
+  let onPage: string | null = null;
+  let before: { path: string; page: number } | null = null;
+  const visit = (list: readonly OutlineItem[], prefix: string) => {
+    list.forEach((item, index) => {
+      const path = prefix ? `${prefix}.${index}` : String(index);
+      if (item.page === page) onPage ??= path;
+      else if (item.page !== null && item.page < page && (!before || item.page >= before.page)) {
+        before = { path, page: item.page };
+      }
+      visit(item.items, path);
+    });
+  };
+  visit(items, "");
+  return onPage ?? (before as { path: string } | null)?.path ?? null;
+}
 
 /**
  * The PDF's outline, beside its pages: entries with others under them expand
- * and collapse, and clicking an entry goes to its page.
+ * and collapse, clicking an entry goes to its page, and the entry for the page
+ * in view is marked.
  */
 function OutlinePanel({
   items,
+  currentPage,
   onGoToPage,
 }: {
   items: readonly OutlineItem[];
+  currentPage: number;
   onGoToPage(page: number): void;
 }) {
   const t = useT();
+  const current = useMemo(() => currentEntry(items, currentPage), [items, currentPage]);
   return (
-    <nav
-      data-testid="pdf-outline"
-      aria-label={t("viewer.outline.label")}
-      className="w-56 max-w-[45%] shrink-0 overflow-auto border-r border-gray-200 bg-white p-1 text-[13px] text-gray-700"
-    >
-      <OutlineList items={items} depth={0} onGoToPage={onGoToPage} />
+    <nav data-testid="pdf-outline" aria-label={t("viewer.outline.label")} className="pdf-outline">
+      <OutlineList items={items} path="" current={current} onGoToPage={onGoToPage} />
     </nav>
   );
 }
 
 function OutlineList({
   items,
-  depth,
+  path,
+  current,
   onGoToPage,
 }: {
   items: readonly OutlineItem[];
-  depth: number;
+  /** Where this list is in the outline: "" at the top, else its entry's path. */
+  path: string;
+  current: string | null;
   onGoToPage(page: number): void;
 }) {
   return (
     <ul>
       {items.map((item, index) => (
-        // The outline never changes while shown, so its order is a stable key.
-        // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a title.
-        <OutlineEntry key={index} item={item} depth={depth} onGoToPage={onGoToPage} />
+        <OutlineEntry
+          // The outline never changes while shown, so its order is a stable key.
+          // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a title.
+          key={index}
+          item={item}
+          path={path ? `${path}.${index}` : String(index)}
+          current={current}
+          onGoToPage={onGoToPage}
+        />
       ))}
     </ul>
   );
@@ -498,168 +566,191 @@ function OutlineList({
 
 function OutlineEntry({
   item,
-  depth,
+  path,
+  current,
   onGoToPage,
 }: {
   item: OutlineItem;
-  depth: number;
+  path: string;
+  current: string | null;
   onGoToPage(page: number): void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState(item.open);
   const title = item.title || t("viewer.outline.untitled");
   const hasChildren = item.items.length > 0;
+  const depth = path.split(".").length - 1;
+  // A collapsed entry stands for the entries under it.
+  const isCurrent =
+    current !== null &&
+    (current === path || (hasChildren && !expanded && current.startsWith(`${path}.`)));
+  const toggleLabel = t(expanded ? "viewer.outline.collapse" : "viewer.outline.expand", {
+    title,
+  });
   const { page } = item;
   return (
     <li>
       <div
-        className="flex items-center gap-[2px] rounded-[6px] hover:bg-gray-100"
-        style={{ paddingLeft: 2 + depth * OUTLINE_INDENT }}
+        className={`pdf-outline-row ${depth > 0 ? "pdf-outline-row--nested" : ""} ${
+          isCurrent ? "pdf-outline-row--current" : ""
+        }`}
       >
-        {hasChildren ? (
-          <button
-            type="button"
-            data-testid="pdf-outline-expand"
-            aria-expanded={expanded}
-            aria-label={t(expanded ? "viewer.outline.collapse" : "viewer.outline.expand", {
-              title,
-            })}
-            onClick={() => setExpanded((open) => !open)}
-            className="shrink-0 rounded-[6px] p-[2px] text-gray-400 hover:bg-gray-200 hover:text-gray-700"
-          >
-            <ChevronIcon className={`size-3 transition-transform ${expanded ? "rotate-90" : ""}`} />
-          </button>
-        ) : (
-          <span className="size-4 shrink-0" />
-        )}
         <button
           type="button"
           data-testid="pdf-outline-item"
           data-page={page ?? undefined}
+          aria-current={isCurrent ? "location" : undefined}
           disabled={page === null}
           title={title}
           onClick={() => {
             if (page !== null) onGoToPage(page);
           }}
-          className="min-w-0 flex-1 truncate py-[3px] pr-1 text-left disabled:text-gray-400"
+          className="pdf-outline-title"
+          style={{ paddingLeft: OUTLINE_INSET + depth * OUTLINE_INDENT }}
         >
           {title}
         </button>
+        {hasChildren && (
+          <button
+            type="button"
+            data-testid="pdf-outline-expand"
+            aria-expanded={expanded}
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            onClick={() => setExpanded((open) => !open)}
+            className="pdf-outline-expand"
+          >
+            <ExpandIcon className={`size-3.5 ${expanded ? "rotate-90" : ""}`} />
+          </button>
+        )}
       </div>
       {hasChildren && expanded && (
-        <OutlineList items={item.items} depth={depth + 1} onGoToPage={onGoToPage} />
+        <OutlineList items={item.items} path={path} current={current} onGoToPage={onGoToPage} />
       )}
     </li>
   );
 }
 
-interface ToolbarProps {
-  currentPage: number;
-  pageCount: number;
-  zoomPercent: number;
-  fitWidth: boolean;
-  /** Whether the outline panel is open; null for a PDF without an outline, which has no button. */
-  outlineOpen: boolean | null;
-  onToggleOutline(): void;
-  onGoToPage(page: number): void;
-  onZoomIn(): void;
-  onZoomOut(): void;
-  onFitWidth(): void;
+/** Shows and hides the outline; only a PDF with an outline has it. */
+function OutlineToggle({ open, onToggle }: { open: boolean; onToggle(): void }) {
+  const t = useT();
+  const label = t(open ? "viewer.outline.hide" : "viewer.outline.show");
+  return (
+    <button
+      type="button"
+      data-testid="pdf-outline-button"
+      aria-label={label}
+      aria-pressed={open}
+      title={label}
+      onClick={onToggle}
+      className="viewer-icon-button"
+    >
+      <OutlineToggleIcon className="size-4" />
+    </button>
+  );
 }
 
-const toolButton =
-  "rounded-[6px] p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-800 disabled:pointer-events-none disabled:opacity-40";
-
-function Toolbar(props: ToolbarProps) {
+/** Previous and next page, with the page number and the page count between them. */
+function PageNavigation({
+  current,
+  count,
+  onGo,
+}: {
+  current: number;
+  count: number;
+  onGo(page: number): void;
+}) {
   const t = useT();
-  const { currentPage, pageCount, zoomPercent, fitWidth, outlineOpen } = props;
   return (
-    <div
-      data-testid="pdf-toolbar"
-      className="flex h-9 shrink-0 items-center gap-1 border-b border-gray-200 px-2 text-sm text-gray-600"
-    >
-      {outlineOpen !== null && (
-        <button
-          type="button"
-          data-testid="pdf-outline-button"
-          aria-label={t(outlineOpen ? "viewer.outline.hide" : "viewer.outline.show")}
-          aria-pressed={outlineOpen}
-          title={t(outlineOpen ? "viewer.outline.hide" : "viewer.outline.show")}
-          onClick={props.onToggleOutline}
-          className={`${toolButton} ${outlineOpen ? "bg-gray-200 text-gray-800" : ""}`}
-        >
-          <OutlineIcon className="size-4" />
-        </button>
-      )}
+    <>
       <button
         type="button"
         data-testid="pdf-previous-page"
         aria-label={t("viewer.page.previous")}
         title={t("viewer.page.previous")}
-        disabled={currentPage <= 1}
-        onClick={() => props.onGoToPage(currentPage - 1)}
-        className={toolButton}
+        disabled={current <= 1}
+        onClick={() => onGo(current - 1)}
+        className="viewer-icon-button"
       >
-        <ChevronUpIcon className="size-4" />
+        <PreviousPageIcon className="size-4" />
       </button>
+      <PageNumberInput current={current} count={count} onGo={onGo} />
+      <span data-testid="pdf-page-count" className="viewer-page-count">
+        {t("viewer.page.count", { count })}
+      </span>
       <button
         type="button"
         data-testid="pdf-next-page"
         aria-label={t("viewer.page.next")}
         title={t("viewer.page.next")}
-        disabled={currentPage >= pageCount}
-        onClick={() => props.onGoToPage(currentPage + 1)}
-        className={toolButton}
+        disabled={current >= count}
+        onClick={() => onGo(current + 1)}
+        className="viewer-icon-button"
       >
-        <ChevronDownIcon className="size-4" />
+        <NextPageIcon className="size-4" />
       </button>
-      <PageNumberInput current={currentPage} count={pageCount} onGo={props.onGoToPage} />
-      <span className="whitespace-nowrap text-gray-500">
-        {t("viewer.page.count", { count: pageCount })}
+    </>
+  );
+}
+
+/** Zoom out, the zoom level, zoom in, and fit to the width (the zoom a PDF opens at). */
+function ZoomControls({
+  percent,
+  fitWidth,
+  onZoomIn,
+  onZoomOut,
+  onFitWidth,
+}: {
+  percent: number;
+  fitWidth: boolean;
+  onZoomIn(): void;
+  onZoomOut(): void;
+  onFitWidth(): void;
+}) {
+  const t = useT();
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="pdf-zoom-out"
+        aria-label={t("viewer.zoom.out")}
+        title={t("viewer.zoom.out")}
+        disabled={percent <= MIN_ZOOM * 100}
+        onClick={onZoomOut}
+        className="viewer-icon-button"
+      >
+        <ZoomOutIcon className="size-4" />
+      </button>
+      <span
+        data-testid="pdf-zoom-level"
+        title={t("viewer.zoom.level", { percent })}
+        className="viewer-zoom-level"
+      >
+        {percent}%
       </span>
-      <div className="ml-auto flex items-center gap-1">
-        <button
-          type="button"
-          data-testid="pdf-zoom-out"
-          aria-label={t("viewer.zoom.out")}
-          title={t("viewer.zoom.out")}
-          disabled={zoomPercent <= MIN_ZOOM * 100}
-          onClick={props.onZoomOut}
-          className={toolButton}
-        >
-          <MinusIcon className="size-4" />
-        </button>
-        <span
-          data-testid="pdf-zoom-level"
-          title={t("viewer.zoom.level", { percent: zoomPercent })}
-          className="w-11 text-center text-[12px] tabular-nums"
-        >
-          {zoomPercent}%
-        </span>
-        <button
-          type="button"
-          data-testid="pdf-zoom-in"
-          aria-label={t("viewer.zoom.in")}
-          title={t("viewer.zoom.in")}
-          disabled={zoomPercent >= MAX_ZOOM * 100}
-          onClick={props.onZoomIn}
-          className={toolButton}
-        >
-          <PlusIcon className="size-4" />
-        </button>
-        <button
-          type="button"
-          data-testid="pdf-fit-width"
-          aria-label={t("viewer.zoom.fitWidth")}
-          aria-pressed={fitWidth}
-          title={t("viewer.zoom.fitWidth")}
-          onClick={props.onFitWidth}
-          className={`${toolButton} ${fitWidth ? "bg-gray-200 text-gray-800" : ""}`}
-        >
-          <FitWidthIcon className="size-4" />
-        </button>
-      </div>
-    </div>
+      <button
+        type="button"
+        data-testid="pdf-zoom-in"
+        aria-label={t("viewer.zoom.in")}
+        title={t("viewer.zoom.in")}
+        disabled={percent >= MAX_ZOOM * 100}
+        onClick={onZoomIn}
+        className="viewer-icon-button"
+      >
+        <ZoomInIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        data-testid="pdf-fit-width"
+        aria-label={t("viewer.zoom.fitWidth")}
+        aria-pressed={fitWidth}
+        title={t("viewer.zoom.fitWidth")}
+        onClick={onFitWidth}
+        className="viewer-icon-button"
+      >
+        <FitWidthIcon className="size-4" />
+      </button>
+    </>
   );
 }
 
@@ -696,7 +787,9 @@ function PageNumberInput({
         }
       }}
       onBlur={() => setDraft(null)}
-      className="w-10 rounded-[6px] border border-gray-300 bg-white px-1 py-[1px] text-center text-[12px] tabular-nums outline-none focus:border-gray-400"
+      className="viewer-page-input"
+      // Wide enough for the largest page number.
+      style={{ width: `max(32px, calc(${String(count).length}ch + 12px))` }}
     />
   );
 }
@@ -710,9 +803,40 @@ interface PdfPageProps {
   /** Near the visible area: drawn. Otherwise blank, with its resources released. */
   nearby: boolean;
   highlights: readonly RunHighlight[] | undefined;
+  /** The Citation's mark, for the page the quote starts on. */
+  mark: QuoteMark | null;
   onSize(page: number, size: PageSize): void;
   onHighlightShown(page: number, element: HTMLElement): void;
   setElement(page: number, element: HTMLElement | null): void;
+}
+
+/** Room the mark keeps from the page's right edge (its width and a little more), in CSS pixels. */
+const MARK_ROOM = 40;
+/** Space between the text and the mark, in CSS pixels. */
+const MARK_GAP = 12;
+
+/**
+ * Where the mark goes on a page, as fractions of its size so that it follows
+ * a zoom at once: the middle of the quote's first line, and the right edge of
+ * the page's text (the mark sits in the margin past it).
+ */
+interface MarkPlace {
+  lineMiddle: number;
+  textRight: number;
+}
+
+function markPlace(first: HTMLElement, page: HTMLElement, runs: readonly Element[]): MarkPlace {
+  const box = page.getBoundingClientRect();
+  const line = first.getClientRects()[0] ?? first.getBoundingClientRect();
+  let right = line.right;
+  for (const run of runs) {
+    const rect = run.getBoundingClientRect();
+    if (rect.width > 0 && rect.right > right) right = rect.right;
+  }
+  return {
+    lineMiddle: (line.top + line.height / 2 - box.top) / box.height,
+    textRight: Math.min(1, (right - box.left) / box.width),
+  };
 }
 
 /** One page: a canvas, and a text layer above it for selecting and highlighting text. */
@@ -725,16 +849,21 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
     scale,
     nearby,
     highlights,
+    mark,
     onSize,
     onHighlightShown,
     setElement,
   } = props;
   const t = useT();
+  const section = useRef<HTMLElement | null>(null);
   const canvasHost = useRef<HTMLDivElement>(null);
   const textHost = useRef<HTMLDivElement>(null);
   const textLayer = useRef<TextLayer | null>(null);
+  /** The quote's first highlighted part on this page, once marked. */
+  const firstHighlight = useRef<HTMLElement | null>(null);
   const [drawn, setDrawn] = useState(false);
   const [textLayerVersion, setTextLayerVersion] = useState(0);
+  const [place, setPlace] = useState<MarkPlace | null>(null);
   const hasDrawn = useRef(false);
 
   useEffect(() => {
@@ -852,8 +981,10 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
       }
       div.replaceChildren(...children, text.slice(at));
     }
+    firstHighlight.current = first;
     if (first) onHighlightShown(page, first);
     return () => {
+      firstHighlight.current = null;
       for (const item of marked) {
         const div = divs[item];
         if (!div) continue;
@@ -864,13 +995,25 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
     };
   }, [textLayerVersion, highlights, page, onHighlightShown]);
 
+  // Places the Citation's mark beside the quote's first line, once the quote is marked.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-placed for each new text layer
+  useEffect(() => {
+    const element = section.current;
+    const first = firstHighlight.current;
+    const runs = textLayer.current?.textDivs;
+    setPlace(mark && element && first && runs ? markPlace(first, element, runs) : null);
+  }, [textLayerVersion, highlights, mark]);
+
   return (
     <section
-      ref={(element) => setElement(page, element)}
+      ref={(element) => {
+        section.current = element;
+        setElement(page, element);
+      }}
       data-page-number={page}
       data-drawn={drawn ? "true" : "false"}
       aria-label={t("viewer.page.label", { number: page })}
-      className="pdf-page relative shrink-0 bg-white shadow-custom-unfocus"
+      className="pdf-page viewer-page relative shrink-0"
       style={
         {
           width: Math.floor(size.width * scale),
@@ -881,6 +1024,15 @@ const PdfPage = memo(function PdfPage(props: PdfPageProps) {
     >
       <div ref={canvasHost} className="absolute inset-0" />
       <div ref={textHost} className="absolute inset-0" />
+      {mark && place && (
+        <CitationMark
+          mark={mark}
+          style={{
+            top: `calc(${place.lineMiddle * 100}% - 9px)`,
+            left: `min(calc(${place.textRight * 100}% + ${MARK_GAP}px), calc(100% - ${MARK_ROOM}px))`,
+          }}
+        />
+      )}
     </section>
   );
 });
