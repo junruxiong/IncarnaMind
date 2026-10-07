@@ -131,10 +131,12 @@ describe("Placing a missing marker", () => {
 
   test("not for a record with an empty quote: nothing says where it goes", () => {
     const answer = "Spring tides come at new and full moon.";
-    expect(withMissingMarkers(answer, [{ marker: 1, quote: " " }], () => true)).toEqual({
-      text: answer,
-      placed: [],
-    });
+    for (const quote of [" ", "…", '"..."', "“”"]) {
+      expect(withMissingMarkers(answer, [{ marker: 1, quote }], () => true)).toEqual({
+        text: answer,
+        placed: [],
+      });
+    }
   });
 });
 
