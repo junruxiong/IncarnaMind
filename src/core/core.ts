@@ -471,6 +471,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
+      searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       search: (query, documentIds, signal) =>
         documents.searchTool(query, {
           signal,
