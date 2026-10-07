@@ -393,6 +393,108 @@ describe("While the app runs, a Linked folder is watched", { timeout: 30_000 }, 
   });
 });
 
+describe("While the app runs, files added on their own are watched", { timeout: 30_000 }, () => {
+  test("an edited one is indexed again, a renamed or moved one followed, and a deleted one goes missing", async () => {
+    const downloads = await createSourceFolder();
+    const desk = await createSourceFolder();
+    const notes = await writeSourceFile(downloads, "notes.md", TIDES);
+    const core = startCore(await createTempDataFolder());
+    const [added] = await addAndProcess(core, [
+      notes,
+      await writeSourceFile(desk, "desk.md", NEAP),
+    ]);
+    if (!added) throw new Error("Nothing was added.");
+    const current = (documents: readonly Document[]) =>
+      documents.find((each) => each.id === added.id);
+
+    // Edited: a new version, processed, without a reconcile being asked for.
+    const edited = `${TIDES}Perigean spring tides are the highest.\n`;
+    await writeSourceFile(downloads, "notes.md", edited);
+    await waitForDocuments(core, (documents) => {
+      expect(current(documents)).toMatchObject({ status: "ready", contentHash: sha256(edited) });
+    });
+    expect(await core.searchPassages("Perigean", { mode: "keyword" })).toHaveLength(1);
+
+    // Renamed where it is: the same Document, its name following the file's.
+    const renamed = join(downloads, "tide notes.md");
+    await rename(notes, renamed);
+    await waitForDocuments(core, (documents) => {
+      expect(current(documents)).toMatchObject({
+        path: renamed,
+        name: "tide notes",
+        fileStatus: "available",
+        linkedFolderId: null,
+      });
+    });
+
+    // Moved to the folder of another file added on its own: followed there.
+    const moved = join(desk, "tide notes.md");
+    await rename(renamed, moved);
+    await waitForDocuments(core, (documents) => {
+      expect(current(documents)).toMatchObject({ path: moved, fileStatus: "available" });
+    });
+    expect(await core.searchPassages("Perigean", { documentIds: [added.id] })).toHaveLength(1);
+
+    // A file that was never added, next to one that was, isn't added.
+    const unrelated = await writeSourceFile(desk, "unrelated.md", RIVERS);
+    // Deleted: missing, kept, and left out of new searches.
+    await rm(moved);
+    await waitForDocuments(core, (documents) => {
+      expect(current(documents)).toMatchObject({ fileStatus: "missing", status: "ready" });
+    });
+    expect(pathsOf(await core.listDocuments())).not.toContain(unrelated);
+    expect(await core.searchPassages("Perigean", { mode: "keyword" })).toEqual([]);
+  });
+
+  test("each folder holding one is watched, not below it, for as long as it holds one", async () => {
+    const downloads = await createSourceFolder();
+    const desk = await createSourceFolder();
+    const library = await createSourceFolder();
+    await writeSourceFile(library, "linked.md", RIVERS);
+    const watched: { root: string; recursive: boolean; closed: boolean }[] = [];
+    const core = startCore(await createTempDataFolder(), {
+      linkedFolders: {
+        watch: (root, _listener, options) => {
+          const entry = { root, recursive: options?.recursive ?? true, closed: false };
+          watched.push(entry);
+          return {
+            close: () => {
+              entry.closed = true;
+            },
+          };
+        },
+      },
+    });
+    const open = () =>
+      watched
+        .filter((each) => !each.closed)
+        .map((each) => ({ root: each.root, recursive: each.recursive }))
+        .sort((a, b) => a.root.localeCompare(b.root));
+    await linkAndProcess(core, library);
+    const [, onDesk] = await addAndProcess(core, [
+      await writeSourceFile(downloads, "a.md", TIDES),
+      await writeSourceFile(desk, "b.md", NEAP),
+    ]);
+
+    expect(open()).toEqual(
+      [
+        { root: library, recursive: true },
+        { root: downloads, recursive: false },
+        { root: desk, recursive: false },
+      ].sort((a, b) => a.root.localeCompare(b.root)),
+    );
+
+    // Its last one removed from IncarnaMind, a folder isn't watched any more.
+    await core.deleteDocument(onDesk?.id as string);
+    expect(open()).toEqual(
+      [
+        { root: library, recursive: true },
+        { root: downloads, recursive: false },
+      ].sort((a, b) => a.root.localeCompare(b.root)),
+    );
+  });
+});
+
 describe("Reconciling at a start", { timeout: 30_000 }, () => {
   test("changes made while the app was closed are found: new, edited and deleted files", async () => {
     const dataDir = await createTempDataFolder();
