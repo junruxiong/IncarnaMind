@@ -214,7 +214,7 @@ export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
   /** What the Answer is doing now: searching the Documents, or the model's turn. */
-  | { type: "phase"; phase: Exclude<AnswerPhase, "loading"> }
+  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing"> }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */

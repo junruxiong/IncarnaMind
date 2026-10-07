@@ -1101,11 +1101,13 @@ export interface AnswerDelta {
 }
 
 /**
- * What an Answer being written is doing, for its meta line: "loading", Ollama
+ * What an Answer being written is doing, for its meta line:
+ * "waiting-for-consent", the User is asked whether to send the Question to
+ * the model's service, and nothing is sent until they say; "loading", Ollama
  * is loading the local model; "searching", the User's Documents are being
  * searched; "writing", the model is at work.
  */
-export type AnswerPhase = "loading" | "searching" | "writing";
+export type AnswerPhase = "waiting-for-consent" | "loading" | "searching" | "writing";
 
 /** An Answer being written moved to another phase. */
 export interface AnswerPhaseEvent {
