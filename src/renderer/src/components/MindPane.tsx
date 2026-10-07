@@ -3,14 +3,16 @@ import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
-import { ExportLineIcon, PlusLineIcon } from "./lineIcons";
+import { PlusLineIcon } from "./lineIcons";
 import { MindEditor } from "./MindEditor";
+import { MindTabs } from "./MindTabs";
 import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
 import { buttonStyle } from "./ui";
 
 /**
- * The centre: a 44px header with the open Mind's title and Export, then the
- * Mind itself, its title and its Blocks. With no Mind open, a way to start one.
+ * The centre: a 44px strip of the open Minds as tabs (with "+" and Export),
+ * then the shown Mind, its title and its Blocks. With no tab open, a way to
+ * start a Mind.
  */
 export function MindPane() {
   const t = useT();
@@ -18,7 +20,6 @@ export function MindPane() {
   const createMind = useAppStore((state) => state.createMind);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
-  const title = mind ? mind.title || t("mind.untitled") : "";
 
   return (
     <main
@@ -26,39 +27,20 @@ export function MindPane() {
       className="flex min-w-[300px] flex-1 flex-col overflow-hidden bg-sheet"
     >
       {/* 44px, like every pane header, so it lines up with the sidebar's. */}
-      <header
-        data-testid="mind-header"
-        className="flex h-11 shrink-0 items-center gap-2 border-b border-rule pr-3 pl-4"
-      >
-        {mind && (
-          <>
-            <span
-              data-testid="mind-header-title"
-              title={title}
-              className="min-w-0 flex-1 truncate text-ui font-semibold text-ink-strong"
-            >
-              {title}
-            </span>
-            <button
-              type="button"
-              data-testid="export-mind"
-              aria-label={t("export.action.label")}
-              title={t("export.action.label")}
-              onClick={() => setExportingId(mind.id)}
-              className={buttonStyle("ghost", "sm")}
-            >
-              <ExportLineIcon className="size-4" />
-              <span className="font-normal">{t("export.action")}</span>
-            </button>
-          </>
-        )}
-      </header>
+      <MindTabs onExport={() => setExportingId(mind?.id ?? null)} />
       <ExportDialog
         mind={mind && mind.id === exportingId ? mind : null}
         onClose={() => setExportingId(null)}
       />
 
-      <div className="min-h-0 flex-grow overflow-auto">
+      <div
+        className="min-h-0 flex-grow overflow-auto"
+        {...(mind && {
+          role: "tabpanel",
+          id: "mind-tabpanel",
+          "aria-labelledby": `mind-tab-${mind.id}`,
+        })}
+      >
         {mind ? (
           // Keyed, so switching Minds starts a fresh title field and editor. Every text
           // in it starts at one edge (styles.css, `.mind-column`).

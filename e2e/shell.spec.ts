@@ -174,14 +174,16 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
     expect((await boxOf(row)).height).toBeCloseTo(28, 0);
   }
 
-  // Both pane headers are 44px and line up.
+  // Both pane headers are 44px and line up: the sidebar's, and the Mind pane's strip of tabs.
   const mindHeader = window.getByTestId("mind-header");
   const sidebarHeader = await boxOf(header);
   const mindHeaderBox = await boxOf(mindHeader);
   expect(sidebarHeader.height).toBe(44);
   expect(mindHeaderBox.height).toBe(44);
   expect(mindHeaderBox.y).toBe(sidebarHeader.y);
-  await expect(mindHeader.getByTestId("mind-header-title")).toHaveText("Reading notes: LM scaling");
+  await expect(
+    mindHeader.locator('[role="tab"][aria-selected="true"]').getByTestId("mind-tab-title"),
+  ).toHaveText("Reading notes: LM scaling");
 
   // Folding a Folder hides what's inside it.
   await tree
@@ -311,10 +313,22 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
   const dotBox = await boxOf(dot);
   expect(dotBox.width).toBe(6);
   expect(dotBox.x + dotBox.width).toBeLessThanOrEqual(row.x + row.width - 8);
+  // Its tab shows the same amber dot, in place of the Mind icon; the other tab doesn't.
+  const tripId = await trip.getAttribute("data-mind-id");
+  const tabs = window.getByTestId("mind-tab");
+  const tripTab = tabs.and(window.locator(`[data-mind-id="${tripId}"]`));
+  const tabDot = tripTab.getByRole("img", { name: "Waiting for your approval" });
+  await expect(tabDot).toHaveAttribute("data-status", "waiting-for-approval");
+  await expect(tabs.filter({ hasText: "Other notes" }).getByTestId("mind-tab-status")).toHaveCount(
+    0,
+  );
+  expect((await boxOf(tabDot)).width).toBe(6);
   await screenshot(window, "sidebar-approval", window.getByTestId("sidebar"));
+  await screenshot(window, "tabs-approval", window.getByTestId("mind-header"));
 
   await card.getByTestId("approval-deny").click();
   await expect(dot).toHaveCount(0);
+  await expect(tripTab.getByTestId("mind-tab-status")).toHaveCount(0);
   await app.close();
 });
 

@@ -312,6 +312,13 @@ export interface DeviceSettings {
   sidebarWidth: number;
   /** Width of the right Document viewer pane, in CSS pixels. */
   viewerWidth: number;
+  /**
+   * The Minds open as tabs in the Mind pane, by ID, in their order, so they
+   * open again after a restart. IDs of Minds deleted since are ignored.
+   */
+  openMinds: string[];
+  /** The tab shown, one of `openMinds`, or null when none is open. */
+  activeMind: string | null;
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
   /**
