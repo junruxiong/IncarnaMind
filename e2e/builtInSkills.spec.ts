@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 import {
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openSettings,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -24,7 +26,7 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await useLocalChatModel(window);
 
   // Settings → Skills: installed on first run, turned on, and labelled built-in.
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "skills");
   const section = window.getByTestId("skills-settings");
   const items = section.getByTestId("skill-item");
   await expect(items).toHaveCount(3);
@@ -57,7 +59,7 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await expect(copy.getByTestId("skill-built-in")).toHaveCount(0);
   await expect(copy.getByTestId("skill-duplicate")).toHaveCount(0);
   await expect(items).toHaveCount(4);
-  await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
+  await closeSettings(window);
 
   // In a Question, "/" offers them like any other Skill.
   await window.getByTestId("new-mind").click();

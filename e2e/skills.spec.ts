@@ -4,10 +4,12 @@ import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
+  closeSettings,
   createDataFolder,
   dismissChatSetup,
   interceptSkillPicker,
   launchApp,
+  openSettings,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -46,7 +48,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await useLocalChatModel(window);
 
   // Settings → Skills: the folder (picked through the test hook) is shown first, then imported.
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "skills");
   const section = window.getByTestId("skills-settings");
   // Only the built-in Skills so far (e2e/builtInSkills.spec.ts covers them).
   const item = section.locator('[data-testid="skill-item"][data-skill-name="tide-tables"]');
@@ -74,7 +76,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(item).toContainText(DESCRIPTION);
   await expect(item).toContainText("Licence: MIT · 1 script");
   await expect(section.getByTestId("skill-preview")).toHaveCount(0);
-  await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
+  await closeSettings(window);
 
   // In a Question, "/" offers the Skills only; choosing one shows it as a chip.
   await window.getByTestId("new-mind").click();
@@ -107,10 +109,10 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(answer).toContainText("Following the Skill tide-tables.");
 
   // Turned off, the Skill can't be used: asking says so, and can go ahead without it.
-  await window.getByRole("button", { name: "Settings" }).click();
+  await openSettings(window, "skills");
   await item.getByTestId("skill-enabled").uncheck();
   await expect(item).toHaveAttribute("data-enabled", "false");
-  await window.getByTestId("settings").getByRole("button", { name: "Done" }).click();
+  await closeSettings(window);
   await expect(chip).toHaveAttribute("data-state", "disabled");
   await question.getByTestId("question-ask").click();
   const notice = question.getByTestId("question-skill-unavailable");

@@ -12,8 +12,23 @@ import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { formatSize, pickSkill } from "../skills";
 import { useAppStore } from "../store";
-import { DuplicateIcon, SkillIcon, TrashIcon } from "./icons";
-import { buttonClass, primaryButtonClass } from "./providers/shared";
+import { DuplicateLineIcon, TrashLineIcon } from "./lineIcons";
+import {
+  buttonClass,
+  errorTextClass,
+  ghostButtonClass,
+  iconButtonClass,
+  noticeClass,
+  pageIntroClass,
+  primaryButtonClass,
+  rowStatusClass,
+  rowTextClass,
+  rowTitleClass,
+  ruledListClass,
+  ruledRow,
+  ruledRowClass,
+  sectionTitleClass,
+} from "./ui";
 
 /**
  * Settings → Skills: the Skills there are, each turned on or off or removed,
@@ -82,14 +97,15 @@ export function SkillsSettings() {
   };
 
   return (
-    <section data-testid="skills-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("skills.settings.title")}</h3>
-      <p className="text-sm text-gray-600">{t("skills.settings.body")}</p>
+    <section data-testid="skills-settings" className="flex flex-col gap-4">
+      <p className={pageIntroClass}>{t("skills.settings.body")}</p>
 
       {skills.length === 0 ? (
-        <p className="mt-2 text-sm text-gray-500">{t("skills.settings.empty")}</p>
+        <p className={`${rowStatusClass} border-y border-rule py-3.5`}>
+          {t("skills.settings.empty")}
+        </p>
       ) : (
-        <ul className="mt-2 flex flex-col gap-1">
+        <ul className={ruledListClass}>
           {skills.map((skill) => (
             <SkillRow key={skill.id} skill={skill} />
           ))}
@@ -104,7 +120,7 @@ export function SkillsSettings() {
           onCancel={() => cancel(preview.importId)}
         />
       ) : (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             data-testid="skill-import-folder"
@@ -140,7 +156,7 @@ export function SkillsSettings() {
         </div>
       )}
       {busy === "reading" && (
-        <p className="mt-2 text-sm text-gray-500">{t("skills.import.reading")}</p>
+        <p className="text-[13px] leading-5 text-ink-meta">{t("skills.import.reading")}</p>
       )}
       {error && <ImportError error={error} />}
     </section>
@@ -159,6 +175,7 @@ export function SkillScriptsSettings() {
   const updateSettings = useAppStore((state) => state.updateSettings);
   const [draft, setDraft] = useState<string | null>(null);
   const timeoutId = useId();
+  const enabledId = useId();
   if (enabled === undefined || timeout === undefined) return null;
 
   const { minTimeoutSeconds: min, maxTimeoutSeconds: max } = SKILL_SCRIPT_LIMITS;
@@ -172,43 +189,59 @@ export function SkillScriptsSettings() {
   };
 
   return (
-    <section data-testid="skill-scripts-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("scripts.settings.title")}</h3>
-      <label className="flex items-center gap-2 py-1 text-sm">
-        <input
-          type="checkbox"
-          role="switch"
-          aria-checked={enabled}
-          data-testid="skill-scripts-enabled"
-          checked={enabled}
-          onChange={(event) =>
-            void updateSettings({ device: { skillScriptsEnabled: event.target.checked } })
-          }
-        />
-        {t("scripts.settings.enabled")}
-      </label>
-      <p className="text-sm text-gray-600">{t("scripts.settings.body")}</p>
-      <div className="mt-2 flex items-center gap-2 text-sm">
-        <label htmlFor={timeoutId} className={enabled ? "" : "opacity-60"}>
-          {t("scripts.settings.timeout")}
-        </label>
-        <input
-          id={timeoutId}
-          type="number"
-          data-testid="skill-scripts-timeout"
-          min={min}
-          max={max}
-          step={1}
-          disabled={!enabled}
-          value={draft ?? String(timeout)}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") commit();
-          }}
-          className="w-20 rounded-[6px] border border-gray-300 px-2 py-1 disabled:opacity-60"
-        />
-        <span className={enabled ? "" : "opacity-60"}>{t("scripts.settings.seconds")}</span>
+    <section data-testid="skill-scripts-settings" className="flex flex-col">
+      <h4 className={`mb-2 ${sectionTitleClass}`}>{t("scripts.settings.title")}</h4>
+      <div className={ruledListClass}>
+        <div className={ruledRowClass}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <label htmlFor={enabledId} className={rowTitleClass}>
+              {t("scripts.settings.enabled")}
+            </label>
+            <p id={`${enabledId}-description`} className={rowTextClass}>
+              {t("scripts.settings.body")}
+            </p>
+          </div>
+          <input
+            id={enabledId}
+            type="checkbox"
+            role="switch"
+            aria-checked={enabled}
+            aria-describedby={`${enabledId}-description`}
+            data-testid="skill-scripts-enabled"
+            checked={enabled}
+            onChange={(event) =>
+              void updateSettings({ device: { skillScriptsEnabled: event.target.checked } })
+            }
+            className="switch"
+          />
+        </div>
+        <div className={ruledRow("center")}>
+          <label
+            htmlFor={timeoutId}
+            className={enabled ? "text-ui text-ink" : "text-ui text-ink-placeholder"}
+          >
+            {t("scripts.settings.timeout")}
+          </label>
+          <span className="flex items-center gap-2 text-[13px] leading-5 text-ink-meta">
+            <input
+              id={timeoutId}
+              type="number"
+              data-testid="skill-scripts-timeout"
+              min={min}
+              max={max}
+              step={1}
+              disabled={!enabled}
+              value={draft ?? String(timeout)}
+              onChange={(event) => setDraft(event.target.value)}
+              onBlur={commit}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") commit();
+              }}
+              className="h-8 w-20 rounded-sm border border-rule-strong bg-sheet px-2 text-ui text-ink outline-none focus:border-accent focus:outline-1 focus:outline-accent disabled:opacity-60"
+            />
+            {t("scripts.settings.seconds")}
+          </span>
+        </div>
       </div>
     </section>
   );
@@ -262,59 +295,63 @@ function SkillRow({ skill }: { skill: Skill }) {
       data-skill-name={skill.name}
       data-enabled={skill.enabled}
       data-built-in={skill.builtIn}
-      className="flex items-start gap-2 rounded-[9px] px-2 py-1.5 hover:bg-gray-50"
+      className={ruledRowClass}
     >
-      <input
-        type="checkbox"
-        role="switch"
-        aria-checked={skill.enabled}
-        data-testid="skill-enabled"
-        aria-label={t("skills.settings.enabled", { name: skill.name })}
-        checked={skill.enabled}
-        onChange={(event) => void setSkillEnabled(skill.id, event.target.checked)}
-        className="mt-1"
-      />
-      <div className={`min-w-0 flex-1 text-sm ${skill.enabled ? "" : "opacity-60"}`}>
-        <p className="flex items-center gap-1 font-medium">
-          <SkillIcon className="size-3.5 shrink-0 text-violet-600" />
-          <span className="truncate">{skill.name}</span>
+      <div className={`flex min-w-0 flex-col gap-0.5 ${skill.enabled ? "" : "opacity-60"}`}>
+        <p className="flex min-w-0 items-baseline gap-2">
+          <span className={`truncate ${rowTitleClass}`}>{skill.name}</span>
           {skill.builtIn && (
             <span
               data-testid="skill-built-in"
               title={t("skills.settings.builtIn.hint")}
-              className="shrink-0 rounded-[4px] bg-violet-50 px-1 text-xs font-normal text-violet-700"
+              className="shrink-0 text-label font-semibold text-ink-meta"
             >
               {t("skills.settings.builtIn")}
             </span>
           )}
         </p>
-        <p className="line-clamp-2 text-gray-600" title={skill.description}>
+        <p className={`line-clamp-2 ${rowTextClass}`} title={skill.description}>
           {skill.description}
         </p>
-        {details.length > 0 && <p className="text-xs text-gray-500">{details.join(" · ")}</p>}
+        {details.length > 0 && (
+          <p className="text-[12px] leading-[18px] text-ink-meta">{details.join(" · ")}</p>
+        )}
       </div>
-      {skill.builtIn && (
+      {/* 28px buttons and the switch, centred on the name's 20px line. */}
+      <div className="-my-1 flex items-center gap-1">
+        {skill.builtIn && (
+          <button
+            type="button"
+            data-testid="skill-duplicate"
+            aria-label={t("skills.settings.duplicateLabel", { name: skill.name })}
+            title={t("skills.settings.duplicate")}
+            onClick={() => void duplicateSkill(skill.id)}
+            className={iconButtonClass}
+          >
+            <DuplicateLineIcon className="size-4" />
+          </button>
+        )}
         <button
           type="button"
-          data-testid="skill-duplicate"
-          aria-label={t("skills.settings.duplicateLabel", { name: skill.name })}
-          title={t("skills.settings.duplicate")}
-          onClick={() => void duplicateSkill(skill.id)}
-          className="shrink-0 rounded-[6px] p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+          data-testid="skill-remove"
+          aria-label={t("skills.settings.removeLabel", { name: skill.name })}
+          title={t("skills.settings.remove")}
+          onClick={() => void removeSkill(skill.id)}
+          className={iconButtonClass}
         >
-          <DuplicateIcon className="size-4" />
+          <TrashLineIcon className="size-4" />
         </button>
-      )}
-      <button
-        type="button"
-        data-testid="skill-remove"
-        aria-label={t("skills.settings.removeLabel", { name: skill.name })}
-        title={t("skills.settings.remove")}
-        onClick={() => void removeSkill(skill.id)}
-        className="shrink-0 rounded-[6px] p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-      >
-        <TrashIcon className="size-4" />
-      </button>
+        <input
+          type="checkbox"
+          role="switch"
+          aria-checked={skill.enabled}
+          data-testid="skill-enabled"
+          aria-label={t("skills.settings.enabled", { name: skill.name })}
+          checked={skill.enabled}
+          onChange={(event) => void setSkillEnabled(skill.id, event.target.checked)}
+          className="switch ml-2"
+        />
+      </div>
     </li>
   );
 }
@@ -336,49 +373,45 @@ function SkillPreview({
   return (
     <div
       data-testid="skill-preview"
-      className="mt-3 flex flex-col gap-2 rounded-[9px] border border-gray-200 p-3 text-sm"
+      className="flex flex-col gap-3 rounded-lg border border-rule p-4 text-ui text-ink"
     >
-      <p className="font-medium">{t("skills.preview.title")}</p>
-      <div>
-        <p data-testid="skill-preview-name" className="flex items-center gap-1 font-medium">
-          <SkillIcon className="size-3.5 text-violet-600" />
+      <p className="text-label font-semibold text-ink-meta">{t("skills.preview.title")}</p>
+      <div className="flex flex-col gap-0.5">
+        <p data-testid="skill-preview-name" className={rowTitleClass}>
           {preview.name}
         </p>
-        <p data-testid="skill-preview-description" className="text-gray-700">
+        <p data-testid="skill-preview-description" className={rowTextClass}>
           {preview.description}
         </p>
         {preview.license && (
-          <p className="text-xs text-gray-500">
+          <p className="text-[12px] leading-[18px] text-ink-meta">
             {t("skills.preview.license", { license: preview.license })}
           </p>
         )}
         {preview.compatibility && (
-          <p className="text-xs text-gray-500">
+          <p className="text-[12px] leading-[18px] text-ink-meta">
             {t("skills.preview.compatibility", { compatibility: preview.compatibility })}
           </p>
         )}
       </div>
       {preview.replaces && (
-        <p
-          data-testid="skill-preview-replaces"
-          className="rounded-[6px] bg-amber-50 px-2 py-1 text-amber-900"
-        >
+        <p data-testid="skill-preview-replaces" className={noticeClass}>
           {t("skills.preview.replaces", { name: preview.replaces.name })}
         </p>
       )}
       <details>
-        <summary className="cursor-pointer text-gray-600 select-none">
+        <summary className="cursor-pointer text-[13px] leading-5 text-ink-secondary select-none hover:text-ink">
           {preview.files.length === 1
             ? t("skills.preview.files.one", { size })
             : t("skills.preview.files", { count: preview.files.length, size })}
         </summary>
-        <ul className="mt-1 max-h-40 overflow-y-auto font-mono text-xs text-gray-600">
+        <ul className="mt-1 max-h-40 overflow-y-auto font-mono text-[12px] leading-5 text-ink-secondary">
           {preview.files.map((file) => (
             <li key={file.path} data-testid="skill-preview-file" className="flex gap-2">
               <span className="truncate">{file.path}</span>
-              <span className="shrink-0 text-gray-400">{formatSize(file.size, t)}</span>
+              <span className="shrink-0 text-ink-meta">{formatSize(file.size, t)}</span>
               {file.script && (
-                <span className="shrink-0 font-sans text-amber-700">
+                <span className="shrink-0 font-sans font-semibold text-ink">
                   {t("skills.preview.script")}
                 </span>
               )}
@@ -396,7 +429,7 @@ function SkillPreview({
         >
           {importing ? t("skills.preview.importing") : t("skills.preview.import")}
         </button>
-        <button type="button" disabled={importing} onClick={onCancel} className={buttonClass}>
+        <button type="button" disabled={importing} onClick={onCancel} className={ghostButtonClass}>
           {t("skills.preview.cancel")}
         </button>
       </div>
@@ -409,7 +442,7 @@ function ImportError({ error }: { error: SkillImportError | string }) {
   const t = useT();
   if (typeof error === "string") {
     return (
-      <p role="alert" data-testid="skill-import-error" className="mt-2 text-sm text-red-700">
+      <p role="alert" data-testid="skill-import-error" className={errorTextClass}>
         {t("error.action", { message: error })}
       </p>
     );
@@ -429,10 +462,10 @@ function ImportError({ error }: { error: SkillImportError | string }) {
       role="alert"
       data-testid="skill-import-error"
       data-kind={error.kind}
-      className="mt-2 rounded-[6px] bg-red-50 px-2 py-1.5 text-sm text-red-900"
+      className="flex flex-col gap-1 text-[13px] leading-5 text-danger"
     >
       <p>{message}</p>
-      <details className="text-xs text-red-800/80">
+      <details className="text-[12px] text-ink-meta">
         <summary className="cursor-pointer">{t("skills.error.details")}</summary>
         <p className="mt-1 break-words">{error.message}</p>
       </details>

@@ -4,13 +4,29 @@ import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
+import {
+  buttonClass,
+  fieldLabelClass,
+  inputClass,
+  noticeClass,
+  pageIntroClass,
+  rowButtonsClass,
+  rowTitleClass,
+  ruledListClass,
+  ruledRow,
+  ruledRowClass,
+} from "../ui";
 import { useChatGptPlan } from "./ChatGptPlanSettings";
+import { type ChatProviderChoice, ChatProviderChoices } from "./ChatProviderChoices";
 import { ReadinessExplanation } from "./ChatReadinessNotice";
-import { OllamaCard } from "./OllamaCard";
-import { ProviderForm } from "./ProviderForm";
-import { buttonClass, inputClass, providerLabel } from "./shared";
+import { useOllama } from "./OllamaCard";
+import { providerLabel } from "./shared";
 
-/** Settings → Chat model: the provider in use, the default model, and changing either. */
+/**
+ * Settings → Chat model: the provider in use and the default model, as rows
+ * split by rules, and changing the provider with the same choices as first
+ * run (local models with Ollama, or an API key).
+ */
 export function ChatModelSettings() {
   const t = useT();
   const readiness = useAppStore((state) => state.chatReadiness);
@@ -18,6 +34,7 @@ export function ChatModelSettings() {
   const updateSettings = useAppStore((state) => state.updateSettings);
   const [providers, setProviders] = useState<ChatProvider[]>([]);
   const [changing, setChanging] = useState(false);
+  const [choice, setChoice] = useState<ChatProviderChoice | null>(null);
   const [model, setModel] = useState(chatModel?.modelId ?? "");
   const [chatGptPlan] = useChatGptPlan();
   const modelFieldId = useId();
@@ -25,6 +42,13 @@ export function ChatModelSettings() {
   const refresh = useCallback(() => {
     core.listChatProviders().then(setProviders, () => undefined);
   }, []);
+
+  const done = () => {
+    setChanging(false);
+    setChoice(null);
+    refresh();
+  };
+  const ollama = useOllama(done);
 
   // Readiness changes whenever a provider is saved or removed.
   useEffect(() => {
@@ -52,29 +76,39 @@ export function ChatModelSettings() {
     }
   };
 
-  const done = () => {
-    setChanging(false);
-    refresh();
-  };
-
   return (
-    <section data-testid="chat-model-settings">
-      <h3 className="mb-1 text-sm font-medium">{t("providers.settings.title")}</h3>
+    <section data-testid="chat-model-settings" className="flex flex-col gap-3">
       {readiness && !readiness.ready && readiness.reason !== "no-provider" && (
-        <p className="mb-2 rounded-[9px] bg-amber-50 p-2 text-sm text-amber-900">
+        <p role="note" className={noticeClass}>
           <ReadinessExplanation readiness={readiness} />
         </p>
       )}
 
       {current ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm">
-            <span className="text-gray-600">{t("providers.settings.provider")}</span>
-            {providerLabel(current, t)}
-          </p>
-          <form onSubmit={saveModel} className="flex items-end gap-2">
-            <div className="flex-1 text-sm text-gray-600">
-              <label htmlFor={modelFieldId}>{t("providers.settings.defaultModel")}</label>
+        <div className={ruledListClass}>
+          <div className={ruledRowClass}>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className={rowTitleClass}>{t("providers.settings.provider")}</span>
+              <span data-testid="chat-provider-current" className="text-ui text-ink-secondary">
+                {providerLabel(current, t)}
+              </span>
+            </div>
+            {!changing && (
+              <div className={rowButtonsClass}>
+                <button type="button" onClick={() => setChanging(true)} className={buttonClass}>
+                  {t("providers.settings.change")}
+                </button>
+                <button type="button" onClick={() => void remove()} className={buttonClass}>
+                  {t("providers.settings.remove")}
+                </button>
+              </div>
+            )}
+          </div>
+          <form onSubmit={saveModel} className={ruledRow("end")}>
+            <div className="min-w-0">
+              <label htmlFor={modelFieldId} className={fieldLabelClass}>
+                {t("providers.settings.defaultModel")}
+              </label>
               {current.kind === "chatgpt" ? (
                 // The ChatGPT plan takes only the models its endpoint accepts.
                 <select
@@ -107,31 +141,34 @@ export function ChatModelSettings() {
               {t("providers.settings.saveModel")}
             </button>
           </form>
-          {!changing && (
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setChanging(true)} className={buttonClass}>
-                {t("providers.settings.change")}
-              </button>
-              <button type="button" onClick={() => void remove()} className={buttonClass}>
-                {t("providers.settings.remove")}
-              </button>
-            </div>
-          )}
         </div>
       ) : (
-        <p className="text-sm text-gray-600">{t("providers.settings.none")}</p>
+        <p className={pageIntroClass}>{t("providers.settings.none")}</p>
       )}
 
       {(changing || !current) && (
-        <div className="mt-3 flex flex-col gap-3">
-          <OllamaCard onSaved={done} />
-          <ProviderForm providers={providers} onSaved={done} />
+        <div className="flex flex-col items-start gap-3">
+          <div className="w-full">
+            <ChatProviderChoices
+              choice={choice}
+              onChoose={setChoice}
+              ollama={ollama}
+              providers={providers}
+              onSaved={done}
+              ollamaActionInRow
+            />
+          </div>
           {current && (
-            <div>
-              <button type="button" onClick={() => setChanging(false)} className={buttonClass}>
-                {t("providers.settings.cancel")}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setChanging(false);
+                setChoice(null);
+              }}
+              className={buttonClass}
+            >
+              {t("providers.settings.cancel")}
+            </button>
           )}
         </div>
       )}
