@@ -44,7 +44,7 @@ export interface FakeJev {
 }
 
 /** The Tag name a tagging question asks about: the text between “ and ”. */
-export const tagNameOf = (question: JevQuestion) => /“(.+)”/.exec(question.instructions)?.[1] ?? "";
+const tagNameOf = (question: JevQuestion) => /“(.+)”/.exec(question.instructions)?.[1] ?? "";
 
 /**
  * A local stand-in for TypeSafe's `POST /v1/systemone`, answering Noul

@@ -49,7 +49,7 @@ import type { SettingsStore } from "../settings";
 import type { EmbeddingModel } from "./index";
 
 /** The data the "embeddings" flow sends to a cloud provider. */
-export const EMBEDDINGS_FLOW_SENDS = ["document-text", "queries"] as const;
+const EMBEDDINGS_FLOW_SENDS = ["document-text", "queries"] as const;
 
 /** Device values: only this module changes them. */
 const PROVIDER_VALUE = "embeddingProvider";
@@ -181,8 +181,6 @@ function builtInProvider(model: EmbeddingModel): ProviderModel {
     release: () => model.unload(),
   };
 }
-
-export type ActiveEmbedding = ReturnType<typeof createActiveEmbedding>;
 
 export function createActiveEmbedding(options: {
   /** The built-in model: the default, and what local mode goes back to. */

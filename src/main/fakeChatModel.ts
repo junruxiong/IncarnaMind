@@ -38,7 +38,7 @@ type GenerateOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
 const WORD_DELAY_MS = 60;
 
 /** The scripted Answer to a Question, when there are no Documents; it says which Skill it follows, if any. */
-export function fakeAnswer(question: string, skill: string | null = null): string {
+function fakeAnswer(question: string, skill: string | null = null): string {
   return [
     ...(skill ? [`Following the Skill ${skill}.`, ""] : []),
     `This is a **scripted** Answer to: ${question}`,
@@ -149,7 +149,7 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
  * The scripted tagger: of the Tag names offered, those that appear as a word
  * (ignoring case) in the Document's excerpt, i.e. its name or text.
  */
-export function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
+function fakeTags(prompt: Prompt, offered: readonly string[]): string[] {
   const text = prompt
     .map((message) =>
       typeof message.content === "string"

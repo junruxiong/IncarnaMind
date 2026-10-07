@@ -24,7 +24,7 @@ import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFi
  * no keyring running it falls back to "basic_text", a hard-coded key, which
  * the core treats as plain text.
  */
-export const safeStorageCipher: SecretCipher = {
+const safeStorageCipher: SecretCipher = {
   protection() {
     if (process.platform === "linux" && safeStorage.getSelectedStorageBackend() === "basic_text") {
       return "plain-text";
@@ -40,7 +40,7 @@ export const safeStorageCipher: SecretCipher = {
 };
 
 /** Secrets encrypted with `safeStorage`, kept in a secrets file in the data folder, never in SQLite. */
-export function createSafeStorageKeychain(dataDir: string): Keychain {
+function createSafeStorageKeychain(dataDir: string): Keychain {
   return createFileKeychain(join(dataDir, SECRETS_FILE), safeStorageCipher);
 }
 
@@ -58,7 +58,7 @@ export const systemBrowser: Browser = {
  * Local Connectors (and later Skill scripts) start with the User's
  * login-shell environment, read once (see ./processes).
  */
-export const loginShellProcesses = createLoginShellProcesses({
+const loginShellProcesses = createLoginShellProcesses({
   reportError: (error) =>
     console.warn("Couldn't read the login shell's environment; using the app's own.", error),
 });

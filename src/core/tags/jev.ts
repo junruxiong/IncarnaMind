@@ -114,7 +114,7 @@ function parseReviewBand(value: unknown): JevReviewBand {
 }
 
 /** One yes/no question per Tag, keyed by the Tag's id (Jev doesn't see the keys). */
-export function tagQuestions(tags: readonly TagDefinition[]): Record<string, JevNoulQuestion> {
+function tagQuestions(tags: readonly TagDefinition[]): Record<string, JevNoulQuestion> {
   return Object.fromEntries(
     tags.map((tag) => {
       const question: JevNoulQuestion = {
@@ -129,7 +129,7 @@ export function tagQuestions(tags: readonly TagDefinition[]): Record<string, Jev
 }
 
 /** What Jev reads: the Document's name and type, and the beginning of its text. */
-export const jevState = (excerpt: DocumentExcerpt) => ({
+const jevState = (excerpt: DocumentExcerpt) => ({
   name: excerpt.name,
   type: documentType(excerpt),
   excerpt: excerpt.text,
@@ -147,8 +147,6 @@ export function decisionsFromProbabilities(
     return [{ tagId: tag.id, confidence: probability, needsReview: probability < band.high }];
   });
 }
-
-export type JevTagging = ReturnType<typeof createJevTagging>;
 
 export function createJevTagging(options: {
   settings: SettingsStore;

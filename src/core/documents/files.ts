@@ -122,5 +122,3 @@ export function createDocumentFiles(dataDir: string) {
     },
   };
 }
-
-export type DocumentFiles = ReturnType<typeof createDocumentFiles>;

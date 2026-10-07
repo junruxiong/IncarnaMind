@@ -52,8 +52,6 @@ const AUTOMATIC_UPDATE_CHECKS = "privacy.automaticUpdateChecks";
 
 const PATCH_KEYS = new Set(["crashReports", "automaticUpdateChecks"]);
 
-export type Privacy = ReturnType<typeof createPrivacy>;
-
 export function createPrivacy(options: {
   settings: SettingsStore;
   /** Absent when this copy can't send crash reports. */

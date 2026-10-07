@@ -19,7 +19,7 @@ declare module "@tiptap/core" {
 }
 
 /** Turns the Block into a Question, or back. Shown in the slash menu and placeholders. */
-export const QUESTION_SHORTCUT = "Mod-j";
+const QUESTION_SHORTCUT = "Mod-j";
 export const QUESTION_SHORTCUT_LABEL = isMacOS() ? "⌘J" : "Ctrl+J";
 
 const TURNS_INTO_QUESTION = new Set(["paragraph", "heading"]);
@@ -100,7 +100,7 @@ export async function askInEditor(editor: Editor, mindId: string, questionId: st
 }
 
 /** Puts the cursor in the Block after an Answer, to go on writing or ask the next Question. */
-export function moveBelowAnswer(editor: Editor, answerId: string): void {
+function moveBelowAnswer(editor: Editor, answerId: string): void {
   if (editor.isDestroyed) return;
   const answer = findBlock(editor.state.doc, answerId);
   if (!answer) return;

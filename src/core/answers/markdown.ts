@@ -360,7 +360,7 @@ const linkMark = (href: string): MarkJSON => ({
 const isSafeHref = (href: string) => /^(https?:|mailto:)/i.test(href);
 
 /** Inline Markdown as text with marks, formulas and line breaks. */
-export function parseInline(source: string, open: boolean): NodeJSON[] {
+function parseInline(source: string, open: boolean): NodeJSON[] {
   const tokens = tokenize(source, open);
   matchDelimiters(tokens, open);
   return toNodes(tokens);

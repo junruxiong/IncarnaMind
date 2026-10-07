@@ -94,24 +94,14 @@ import {
 } from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
-export type {
-  AnswerEngine,
-  AnswerEngineEvent,
-  AnswerMessage,
-  AnswerRequest,
-  AnswerSkillTools,
-  AnswerTools,
-  CitationRecordInput,
-  ExternalTool,
-  InstructionOptions,
-} from "./engine";
+export type { ExternalTool } from "./engine";
 export { createAiSdkAnswerEngine } from "./engine";
 
 /**
  * How often a streaming Answer is written into its Mind: often enough to look
  * live, seldom enough not to store one Yjs update per token.
  */
-export const ANSWER_WRITE_INTERVAL_MS = 50;
+const ANSWER_WRITE_INTERVAL_MS = 50;
 
 type Outcome = { status: "done" | "stopped" } | { status: "failed"; error: ProviderError };
 
