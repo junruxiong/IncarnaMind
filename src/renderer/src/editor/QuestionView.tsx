@@ -1,5 +1,10 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { BLOCK_ID_ATTRIBUTE, type ChatModelChoice, type SearchScope } from "../../../core/api";
+import {
+  BLOCK_ID_ATTRIBUTE,
+  type ChatModelChoice,
+  type SearchScope,
+  type SkillAvailability,
+} from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import {
   hasSearchScope,
@@ -9,7 +14,14 @@ import {
   searchScopeOf,
 } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
-import { AskIcon, CloseIcon, DocumentIcon, FolderIcon, TagIcon } from "../components/icons";
+import {
+  AskIcon,
+  CloseIcon,
+  DocumentIcon,
+  FolderIcon,
+  SkillIcon,
+  TagIcon,
+} from "../components/icons";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
 import { providerLabel } from "../components/providers/shared";
 import { useT } from "../i18n";
@@ -22,9 +34,10 @@ const text = (value: unknown) => (typeof value === "string" ? value : null);
 
 /**
  * A Question, as the old editor's query block: the button on its left (or
- * Enter) asks it, and the picker on its right chooses its model. Its Search
- * scope, chosen by typing "@", shows as chips under its text. When it can't
- * be asked, it says why underneath.
+ * Enter) asks it, and the picker on its right chooses its model. A Skill
+ * forced from the slash menu shows as a chip beside its text, and its Search
+ * scope, chosen by typing "@", as chips under it. When it can't be asked, it
+ * says why underneath.
  */
 export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewProps) {
   const t = useT();
@@ -33,8 +46,16 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
   const blocked = useAnswers((state) => (questionId ? state.blocked[questionId] : undefined));
   const loadModels = useAnswers((state) => state.loadModels);
   const openSettings = useAppStore((state) => state.openSettings);
+  const forcedSkill = text(node.attrs.forcedSkill);
+  const skill = useAppStore((state) =>
+    forcedSkill ? state.skills.find((each) => each.name === forcedSkill) : undefined,
+  );
   const empty = node.content.size === 0;
   const canAsk = questionId !== null && node.textContent.trim() !== "";
+  const dropSkill = () => {
+    updateAttributes({ forcedSkill: null });
+    if (questionId) useAnswers.getState().dismiss(questionId);
+  };
   const scope = searchScopeOf(node.attrs);
   const removeFromScope = (kind: ScopeKind, id: string) => {
     const left = scopeIds(scope, kind).filter((each) => each !== id);
@@ -71,6 +92,13 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
           </span>
         )}
         <NodeViewContent className="question-text" />
+        {forcedSkill && (
+          <SkillChip
+            name={forcedSkill}
+            state={!skill ? "removed" : skill.enabled ? "enabled" : "disabled"}
+            onRemove={dropSkill}
+          />
+        )}
         <ModelPicker
           providerId={text(node.attrs.providerId)}
           modelId={text(node.attrs.modelId)}
@@ -98,12 +126,78 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
           </button>
         </p>
       )}
+      {blocked?.kind === "skill-unavailable" && (
+        <p
+          contentEditable={false}
+          data-testid="question-skill-unavailable"
+          className="question-notice"
+        >
+          <span className="flex-1">
+            {t(`skills.unavailable.${blocked.state}`, { name: blocked.skill })}
+          </span>
+          <button type="button" onClick={() => openSettings()} className="question-notice-action">
+            {t("skills.unavailable.settings")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              dropSkill();
+              if (canAsk) void askInEditor(editor, mindId, questionId);
+            }}
+            className="question-notice-action"
+          >
+            {t("skills.unavailable.drop")}
+          </button>
+        </p>
+      )}
       {blocked?.kind === "error" && (
         <p contentEditable={false} role="alert" className="question-notice">
           {t("error.action", { message: blocked.message })}
         </p>
       )}
     </NodeViewWrapper>
+  );
+}
+
+/**
+ * The Skill forced on the Question, chosen in the slash menu, as a chip that
+ * takes it off again. Muted, and saying why, when it is off or gone.
+ */
+function SkillChip({
+  name,
+  state,
+  onRemove,
+}: {
+  name: string;
+  state: SkillAvailability;
+  onRemove(): void;
+}) {
+  const t = useT();
+  const title =
+    state === "enabled" ? t("skills.chip.label", { name }) : t(`skills.chip.${state}`, { name });
+  return (
+    <span
+      contentEditable={false}
+      data-testid="question-skill"
+      data-state={state}
+      title={title}
+      className={`question-skill ${state === "enabled" ? "" : "question-skill--unavailable"}`}
+    >
+      <SkillIcon className="size-3.5 shrink-0" />
+      <span className="truncate">{name}</span>
+      <button
+        type="button"
+        data-testid="question-skill-remove"
+        aria-label={t("skills.chip.remove", { name })}
+        title={t("skills.chip.remove", { name })}
+        // Keep the cursor in the editor.
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={onRemove}
+        className="question-skill-remove"
+      >
+        <CloseIcon className="size-3" />
+      </button>
+    </span>
   );
 }
 

@@ -1,6 +1,6 @@
 import { shift } from "@floating-ui/dom";
 import { Extension } from "@tiptap/core";
-import { PluginKey } from "@tiptap/pm/state";
+import { type EditorState, PluginKey } from "@tiptap/pm/state";
 import { ReactRenderer } from "@tiptap/react";
 import { Suggestion, type SuggestionProps } from "@tiptap/suggestion";
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -8,9 +8,12 @@ import { QUESTION_BLOCK } from "../../../core/api";
 import { useT } from "../i18n";
 import { matchSlashItems, noteSlashItems, type SlashItem } from "./slashItems";
 
+/** Where the menu opens: in a Note, or in a Question, where only Skills make sense. */
+export type SlashPlace = "note" | "question";
+
 export interface SlashMenuOptions {
-  /** Every entry the menu can offer, read each time it opens or the query changes. */
-  items: () => readonly SlashItem[];
+  /** Every entry the menu can offer there, read each time it opens or the query changes. */
+  items: (place: SlashPlace) => readonly SlashItem[];
 }
 
 interface SlashMenuHandle {
@@ -19,16 +22,22 @@ interface SlashMenuHandle {
 
 type SlashMenuListProps = SuggestionProps<SlashItem, SlashItem> & { ref?: Ref<SlashMenuHandle> };
 
+const placeOf = (state: EditorState): SlashPlace =>
+  state.selection.$from.parent.type.name === QUESTION_BLOCK ? "question" : "note";
+
 /**
  * Typing `/` (at the start of a line or after a space) opens a menu of things
  * to insert, filtered by what is typed after it. Arrows choose, Enter inserts,
- * Esc closes.
+ * Esc closes. In a Question it offers only what applies there (Skills), and
+ * only if there is something to offer.
  */
 export const SlashMenu = Extension.create<SlashMenuOptions>({
   name: "slashMenu",
+  // Before Enter asks a Question (see QuestionCommands): while the menu is open, Enter chooses.
+  priority: 1100,
 
   addOptions() {
-    return { items: () => noteSlashItems };
+    return { items: (place) => (place === "note" ? noteSlashItems : []) };
   },
 
   addProseMirrorPlugins() {
@@ -37,12 +46,13 @@ export const SlashMenu = Extension.create<SlashMenuOptions>({
         editor: this.editor,
         pluginKey: new PluginKey("slashMenu"),
         char: "/",
-        // Not in code, where a slash is just a slash, nor in a Question, where Enter asks.
+        // Not in code, where a slash is just a slash.
         allow: ({ state, range }) => {
           const { parent } = state.doc.resolve(range.from);
-          return !parent.type.spec.code && parent.type.name !== QUESTION_BLOCK;
+          if (parent.type.spec.code) return false;
+          return parent.type.name !== QUESTION_BLOCK || this.options.items("question").length > 0;
         },
-        items: () => [...this.options.items()],
+        items: ({ editor }) => [...this.options.items(placeOf(editor.state))],
         command: ({ editor, range, props: item }) => item.run(editor, range),
         floatingUi: { strategy: "fixed", middleware: [shift({ padding: 8 })] },
         render: () => {
@@ -126,6 +136,7 @@ function SlashMenuList({ items, query, command, ref }: SlashMenuListProps) {
           onMouseDown={(event) => event.preventDefault()}
           onMouseEnter={() => setSelected(index)}
           onClick={() => command(item)}
+          title={item.hint}
           className="editor-menu-item"
         >
           <span className="editor-menu-icon">{item.icon}</span>

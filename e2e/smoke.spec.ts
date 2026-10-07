@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  addDocuments,
   createDataFolder,
   dismissChatSetup,
   dragBy,
@@ -249,9 +250,11 @@ test("Documents are filed in nested Folders, filtered by Folder, and kept when t
 
     const { app, window } = await launchApp(dataDir);
     await dismissChatSetup(window);
-    await window.getByTestId("add-documents-input").setInputFiles([paper, notes]);
+    // Wait until both are ready, as the User would see. Until then the sidebar still moves:
+    // the first ready one brings the "tagging waits for a model" notice above the Folders,
+    // which pushes the tree and the list down under a drag already started.
+    await addDocuments(window, [paper, notes]);
     const documents = window.getByTestId("document-list-item");
-    await expect(documents).toHaveCount(2);
     const paperItem = documents.filter({ hasText: "Paper" });
     const notesItem = documents.filter({ hasText: "Loose notes" });
 

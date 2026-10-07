@@ -2,7 +2,8 @@ import { type KeyboardEvent, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { MindIcon, PlusIcon } from "./icons";
+import { ExportDialog } from "./ExportDialog";
+import { ExportIcon, MindIcon, PlusIcon } from "./icons";
 import { MindEditor } from "./MindEditor";
 import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
 
@@ -11,21 +12,40 @@ export function MindPane() {
   const t = useT();
   const mind = useAppStore((state) => state.minds.find((each) => each.id === state.openMindId));
   const createMind = useAppStore((state) => state.createMind);
+  /** The Mind whose export dialog is open: switching to another Mind closes it. */
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const title = mind ? mind.title || t("mind.untitled") : "";
 
   return (
     <main data-testid="mind-area" className="flex min-w-[300px] flex-1 flex-col overflow-hidden">
       <div className="flex h-10 shrink-0 items-end">
         {mind && (
-          <div
-            title={title}
-            className="relative ml-2 flex h-8 max-w-[220px] items-center rounded-t-[9px] bg-white pr-4 pl-8 text-sm text-gray-700"
-          >
-            <MindIcon className="absolute left-[10px] size-4" />
-            <span className="truncate">{title}</span>
-          </div>
+          <>
+            <div
+              title={title}
+              className="relative ml-2 flex h-8 max-w-[220px] items-center rounded-t-[9px] bg-white pr-4 pl-8 text-sm text-gray-700"
+            >
+              <MindIcon className="absolute left-[10px] size-4" />
+              <span className="truncate">{title}</span>
+            </div>
+            <button
+              type="button"
+              data-testid="export-mind"
+              aria-label={t("export.action.label")}
+              title={t("export.action.label")}
+              onClick={() => setExportingId(mind.id)}
+              className="mr-3 mb-1 ml-auto flex items-center gap-1 rounded-[9px] px-2 py-1 text-sm text-gray-600 hover:bg-gray-200 hover:text-gray-800"
+            >
+              <ExportIcon className="size-4" />
+              <span>{t("export.action")}</span>
+            </button>
+          </>
         )}
       </div>
+      <ExportDialog
+        mind={mind && mind.id === exportingId ? mind : null}
+        onClose={() => setExportingId(null)}
+      />
 
       <div className="flex-grow overflow-auto rounded-tl-[6px] bg-white">
         {mind ? (

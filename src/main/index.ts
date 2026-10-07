@@ -10,6 +10,7 @@ import {
 import { channelFor, EVENT_CHANNEL } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
+import { serveFileActions } from "./files";
 import { createElectronAdapters, systemBrowser } from "./platform";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 
@@ -122,6 +123,7 @@ app.whenReady().then(async () => {
   }
   exposeCore(core);
   registerUpdateCheck(core);
+  serveFileActions(core, { dataDir: app.getPath("userData"), trusted: isFromOurRenderer });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.

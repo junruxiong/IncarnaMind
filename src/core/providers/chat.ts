@@ -31,8 +31,9 @@ import { classifyProviderError } from "./providerErrors";
 const MODEL_LIST_TTL_MS = 5 * 60_000;
 
 /**
- * The chat flow: what a Question sends to a cloud chat provider. Connectors
- * (#37, #39) add "tool-results", which makes the core ask again.
+ * The chat flow: what a Question sends to a cloud chat provider. While a
+ * Connector is on, the core adds "tool-results" (what its Tools return),
+ * which makes it ask again.
  */
 export const CHAT_FLOW_SENDS = ["blocks", "passages"] as const;
 

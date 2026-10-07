@@ -97,6 +97,24 @@ export function TrashIcon(props: IconProps) {
   );
 }
 
+/** An arrow out of a tray: exporting a Mind to a file. */
+export function ExportIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M8 10V2.5M5 5.5l3-3 3 3M3 9.5v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+    </svg>
+  );
+}
+
 /** Six dots: the handle a Block is dragged by, like the old editor's "holder". */
 export function GripIcon(props: IconProps) {
   return (
@@ -366,6 +384,26 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
+/** A plug: a Connector, and the calls an Answer makes through one. */
+export function PlugIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M6 2.5v3M10 2.5v3" />
+      <path d="M4.25 5.5h7.5v2a3.75 3.75 0 0 1-7.5 0z" />
+      <path d="M8 11.25v2.25" />
+    </svg>
+  );
+}
+
 /** A circle with a tick: the quote was found on the page. */
 export function QuoteFoundIcon(props: IconProps) {
   return (
@@ -407,6 +445,24 @@ export function CheckingIcon(props: IconProps) {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true" {...props}>
       <circle cx="8" cy="8" r="6.25" strokeWidth="1.5" />
       <path d="M8 4.8V8l2.2 1.4" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** A Skill: a four-pointed spark, for packaged know-how. */
+export function SkillIcon(props: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M8 1.75c.45 2.9 1.35 3.8 4.25 4.25C9.35 6.45 8.45 7.35 8 10.25 7.55 7.35 6.65 6.45 3.75 6 6.65 5.55 7.55 4.65 8 1.75z" />
+      <path d="M12.25 10.5c.2 1.15.6 1.55 1.75 1.75-1.15.2-1.55.6-1.75 1.75-.2-1.15-.6-1.55-1.75-1.75 1.15-.2 1.55-.6 1.75-1.75z" />
     </svg>
   );
 }
