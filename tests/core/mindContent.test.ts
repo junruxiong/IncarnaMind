@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
 import { InvalidInputError, MIND_CONTENT_FIELD, NotFoundError } from "../../src/core";
-import { COMPACT_AFTER_UPDATES } from "../../src/core/mindContent";
+import { COMPACT_AFTER_UPDATES, createMindContent } from "../../src/core/mindContent";
+import { migrate, openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { appendParagraph, connectToMind, typeInto } from "../helpers/mindClient";
 
@@ -140,6 +141,28 @@ describe("Mind content", () => {
     expect(reader.blocks.toString()).toBe(
       "<paragraph>One</paragraph><paragraph>Two</paragraph><paragraph>Three</paragraph>",
     );
+  });
+
+  test("peeking at a Mind that isn't loaded reads what is stored, and loads and writes nothing", () => {
+    const db = openDatabase(":memory:");
+    migrate(db);
+    const now = () => new Date().toISOString();
+    const rows = () =>
+      db.get<{ count: number }>("SELECT count(*) AS count FROM mind_updates")?.count;
+    const writer = createMindContent(db, now, () => {});
+    writer.apply("mind", paragraphUpdate("One"));
+    writer.apply("mind", paragraphUpdate("Two"));
+    expect(rows()).toBe(2);
+
+    // As after a restart: nothing is loaded.
+    const content = createMindContent(db, now, () => {});
+    expect(content.peek("mind", (blocks) => blocks.length)).toBe(2);
+    expect(rows()).toBe(2); // loading would have compacted them into one
+    // A loaded Mind is read as it is in memory.
+    content.apply("mind", paragraphUpdate("Three"));
+    expect(rows()).toBe(2);
+    expect(content.peek("mind", (blocks) => blocks.toString())).toContain("Three");
+    db.close();
   });
 
   test("every stored update is pushed to listeners, and one the Mind already has is ignored", async () => {

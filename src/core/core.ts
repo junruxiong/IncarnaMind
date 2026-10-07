@@ -6,7 +6,13 @@ import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation } from "./answers/citations";
-import { addCitedVersions, type CitedVersions, isCited } from "./answers/citedVersions";
+import {
+  addCitedUnits,
+  addCitedVersions,
+  type CitedUnits,
+  type CitedVersions,
+  isCited,
+} from "./answers/citedVersions";
 import type {
   ChatModelChoice,
   CoreApi,
@@ -192,6 +198,15 @@ export function createCore(adapters: CoreAdapters): Core {
       foldersChanged,
       linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
       onReady: (documentId) => documentReady(documentId),
+      // Citations live in Minds, anywhere: in Answers, or copied into Notes.
+      citedUnits: (documentIds) => {
+        const wanted = new Set(documentIds);
+        const cited: CitedUnits[] = [];
+        for (const mind of minds.list()) {
+          content.peek(mind.id, (fragment) => addCitedUnits(fragment, wanted, cited));
+        }
+        return cited;
+      },
       // iCloud Drive before macOS 14 downloads a stub's file when asked by its command-line tool.
       ...(platform === "darwin" && {
         downloadStub: async (path: string) => {
@@ -668,7 +683,11 @@ export function createCore(adapters: CoreAdapters): Core {
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: (path) => documents.linkedFolders.add(path),
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId) => {
+      documents.linkedFolders.remove(linkedFolderId);
+      events.emit("keptCitationTexts.changed", documents.keptCitationTexts());
+    },
+    listKeptCitationTexts: async () => documents.keptCitationTexts(),
     setLinkedFolderLayout: async (linkedFolderId, layout) =>
       documents.linkedFolders.setLayout(linkedFolderId, layout),
     setLinkedFolderPaused: async (linkedFolderId, paused) =>

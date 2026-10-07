@@ -280,6 +280,20 @@ export interface CitationRecheck {
   location: CitationLocation | null;
 }
 
+/**
+ * Text kept of a Document that left the index with its Linked folder: the
+ * Units of one version that Citations pointed to when the folder was
+ * unlinked. Kept so the Citations that quote it can still be checked (see
+ * `citationState` in src/shared/citations.ts), until no Citation quotes it.
+ */
+export interface KeptCitationText {
+  documentId: string;
+  /** The version it is of. */
+  contentHash: string;
+  /** The numbers of the Units kept (pages, slides…), from 1, in order. */
+  units: number[];
+}
+
 /** At most this many consecutive Units (pages, slides…) per Citation (the Location rule). */
 export const MAX_CITED_PAGES = 2;
 
@@ -2120,9 +2134,13 @@ export interface CoreApi {
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
    * Stops syncing a Linked folder and removes its Documents and Folders from
-   * the index. Nothing on disk is touched.
+   * the index. Nothing on disk is touched. Of their stored text, only the
+   * Units the Citations in Minds point to are kept, so those Citations can
+   * still be checked: "keptCitationTexts.changed" reports them.
    */
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
+  /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
+  listKeptCitationTexts(): Promise<KeptCitationText[]>;
   /** Shows a Linked folder as a tree of Folders or as a flat list. Returns it. */
   setLinkedFolderLayout(linkedFolderId: string, layout: LinkedFolderLayout): Promise<LinkedFolder>;
   /**
@@ -2547,6 +2565,11 @@ export interface CoreEvents {
    * `listLinkedFolders` now returns it.
    */
   "linkedFolders.changed": LinkedFolder[];
+  /**
+   * A Linked folder was unlinked, and the text its Citations quote kept: the
+   * list as `listKeptCitationTexts` now returns it.
+   */
+  "keptCitationTexts.changed": KeptCitationText[];
   /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
   /**
@@ -2634,6 +2657,7 @@ const methods: Record<CoreApiMethod, true> = {
   addLinkedFolder: true,
   listLinkedFolders: true,
   removeLinkedFolder: true,
+  listKeptCitationTexts: true,
   setLinkedFolderLayout: true,
   setLinkedFolderPaused: true,
   downloadOnlineOnlyFiles: true,

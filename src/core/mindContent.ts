@@ -61,10 +61,8 @@ export function createMindContent(
     loaded.delete(mindId);
   };
 
-  const load = (mindId: string): LoadedMind => {
-    const existing = loaded.get(mindId);
-    if (existing) return existing;
-
+  /** A new document holding what is stored for the Mind, and how many rows that took. */
+  const fromStorage = (mindId: string) => {
     const rows = db.all<{ data: Uint8Array }>(
       "SELECT data FROM mind_updates WHERE mind_id = ? AND deleted_at IS NULL ORDER BY rowid",
       [mindId],
@@ -73,7 +71,15 @@ export function createMindContent(
     doc.transact(() => {
       for (const row of rows) Y.applyUpdate(doc, row.data);
     });
-    const mind: LoadedMind = { doc, storedRows: rows.length, outbox: [] };
+    return { doc, rows: rows.length };
+  };
+
+  const load = (mindId: string): LoadedMind => {
+    const existing = loaded.get(mindId);
+    if (existing) return existing;
+
+    const { doc, rows } = fromStorage(mindId);
+    const mind: LoadedMind = { doc, storedRows: rows, outbox: [] };
     // Listening only after loading, so the stored rows aren't stored again. The
     // listener must not throw: Yjs calls it while finishing a transaction.
     doc.on("update", (update: Uint8Array) => {
@@ -133,6 +139,21 @@ export function createMindContent(
      */
     read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T {
       return look(load(mindId).doc.getXmlFragment(MIND_CONTENT_FIELD));
+    },
+
+    /**
+     * Reads the Mind's Blocks as `read` does, but a Mind that isn't loaded is
+     * read from what is stored and left unloaded, writing nothing.
+     */
+    peek<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T {
+      const mind = loaded.get(mindId);
+      if (mind) return look(mind.doc.getXmlFragment(MIND_CONTENT_FIELD));
+      const { doc } = fromStorage(mindId);
+      try {
+        return look(doc.getXmlFragment(MIND_CONTENT_FIELD));
+      } finally {
+        doc.destroy();
+      }
     },
 
     /**

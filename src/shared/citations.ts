@@ -6,7 +6,13 @@
  * sentence is verified: "found" means the quote is there, not that it supports
  * the claim.
  */
-import type { CitationAttributes, CitationCheck, CitationCheckReason, Document } from "../core/api";
+import type {
+  CitationAttributes,
+  CitationCheck,
+  CitationCheckReason,
+  Document,
+  KeptCitationText,
+} from "../core/api";
 import type { MessageKey } from "./i18n";
 import {
   citationLocation,
@@ -24,7 +30,7 @@ export interface CitationState {
   /**
    * The live Document the Citation opens: its own, or one with the same
    * content added again after it was deleted. Null once the Document has
-   * been deleted.
+   * been deleted, or unlinked with its Linked folder.
    */
   documentId: string | null;
   /**
@@ -37,13 +43,40 @@ export interface CitationState {
 }
 
 /**
+ * Whether the stored text a Citation's check read is kept, though its
+ * Document was unlinked with its Linked folder: every Unit it cites, of the
+ * version it quotes (or of any version, if it doesn't say).
+ */
+function textKept(
+  attributes: Partial<CitationAttributes>,
+  kept: readonly KeptCitationText[],
+): boolean {
+  const { documentId, contentHash, pageFrom, pageTo } = attributes;
+  if (!documentId) return false;
+  return kept.some((text) => {
+    if (text.documentId !== documentId) return false;
+    if (contentHash && text.contentHash !== contentHash) return false;
+    // A whole TXT or Markdown file cited before Units: its one text.
+    if (typeof pageFrom !== "number") return text.units.length > 0;
+    const other = typeof pageTo === "number" ? pageTo : pageFrom;
+    const [from, to] = [Math.min(pageFrom, other), Math.max(pageFrom, other)];
+    // Units are numbered without gaps, and each is kept once.
+    return text.units.filter((unit) => unit >= from && unit <= to).length === to - from + 1;
+  });
+}
+
+/**
  * The badge state of a Citation, given the User's live Documents (null while
- * they are loading). The check result stored when the Answer finished stands,
- * unless the Document has been deleted since: then it "can't be checked".
+ * they are loading) and the text kept of Documents unlinked with their Linked
+ * folder. The check result stored when the Answer finished stands, unless the
+ * Document has been deleted since: then it "can't be checked". A Document
+ * unlinked with its folder keeps the text its Citations cite, so their check
+ * stands too.
  */
 export function citationState(
   attributes: Partial<CitationAttributes>,
   documents: readonly Pick<Document, "id" | "contentHash">[] | null,
+  kept: readonly KeptCitationText[] = [],
 ): CitationState {
   const check = attributes.check ?? "checking";
   const reason = attributes.checkReason ?? null;
@@ -61,6 +94,9 @@ export function citationState(
     live.contentHash !== attributes.contentHash;
   if (check === "checking") {
     return { check, reason: null, documentId: live?.id ?? own, changedAfterCited: false };
+  }
+  if (!live && textKept(attributes, kept)) {
+    return { check, reason, documentId: null, changedAfterCited: false };
   }
   if (!live) {
     return { check: "cant-check", reason: "document-removed", documentId: null, changedAfterCited };
