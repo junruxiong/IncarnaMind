@@ -37,8 +37,12 @@ _Avoid_: filter, context
 ### Documents
 
 **Document**:
-A file the User has added for Answers to draw on.
+A file on the User's computer that IncarnaMind has indexed for Answers to draw on. The file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Document whose file has gone is missing: its text, and the Citations that quote it, remain.
 _Avoid_: file, doc, source
+
+**Linked folder**:
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up.
+_Avoid_: workspace, vault, library, source
 
 **Passage**:
 A short span of a Document that can be retrieved and cited.
@@ -49,7 +53,7 @@ A reference, anchored in the text of an Answer, to the Passage a claim was drawn
 _Avoid_: source, reference
 
 **Folder**:
-A place where the User files Documents by hand. Folders can contain other Folders, and each Document is in at most one Folder.
+A folder inside a Linked folder, as it is on disk. A Document is in the Folder its file is in; a file added on its own is in no Folder.
 _Avoid_: collection, directory, category
 
 **Tag**:
