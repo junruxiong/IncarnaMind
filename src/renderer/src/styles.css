@@ -2124,3 +2124,21 @@
     animation: none;
   }
 }
+
+/* Library adapts to its own room, including when the Document viewer opens. */
+.library-pane {
+  container: library / inline-size;
+}
+
+@container library (max-width: 640px) {
+  .library-layout {
+    flex-direction: column;
+  }
+
+  .library-groups {
+    width: 100%;
+    max-height: 11rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-rule);
+  }
+}

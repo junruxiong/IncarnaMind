@@ -84,6 +84,7 @@ const isProcessing = (status: DocumentStatus) =>
  */
 export function DocumentsSection() {
   const t = useT();
+  const libraryOpen = useAppStore((state) => state.libraryOpen);
   // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
   const documents = useAppStore(useShallow(selectVisibleDocuments));
   const filtering = useAppStore((state) => state.tagFilter !== null);
@@ -149,6 +150,17 @@ export function DocumentsSection() {
           className="hidden"
           onChange={addPicked}
         />
+      </div>
+      <div className={rowClass(libraryOpen)}>
+        <button
+          type="button"
+          data-testid="open-library"
+          onClick={() => useAppStore.getState().openLibrary()}
+          className={rowButtonClass}
+        >
+          <DocumentLineIcon kind="text" className="size-4 shrink-0" />
+          <span className="truncate">{t("library.title")}</span>
+        </button>
       </div>
       <ActiveTagFilter />
       <FolderTree

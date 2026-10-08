@@ -371,6 +371,30 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
 }
 
+/** Test-only classifier: chooses a group whose name appears in the excerpt. */
+function fakeStructuredOutput(options: GenerateOptions): string {
+  const format = options.responseFormat;
+  const schema = format?.type === "json" ? format.schema : undefined;
+  if (schema?.properties?.groupId) {
+    const message = options.prompt.find((part) => part.role === "user");
+    const text =
+      message && typeof message.content !== "string"
+        ? message.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("")
+        : "";
+    const input = JSON.parse(text) as {
+      groups: { id: string; name: string }[];
+      document: { name: string; text: string };
+    };
+    const document = `${input.document.name} ${input.document.text}`.toLowerCase();
+    const selected = input.groups.find((group) => document.includes(group.name.toLowerCase()));
+    return JSON.stringify({ groupId: selected?.id ?? "__unsorted__" });
+  }
+  return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
+}
+
 export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
@@ -380,10 +404,7 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
       content: [
         {
           type: "text",
-          text:
-            options.responseFormat?.type === "json"
-              ? JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) })
-              : "OK",
+          text: options.responseFormat?.type === "json" ? fakeStructuredOutput(options) : "OK",
         },
       ],
       finishReason: { unified: "stop", raw: undefined },

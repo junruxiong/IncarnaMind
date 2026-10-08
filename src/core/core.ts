@@ -29,11 +29,15 @@ import { createDocuments, type DocumentFile, parseListOptions } from "./document
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
-import { InvalidInputError, isRecord } from "./errors";
+import { InvalidInputError, isRecord, TaggingNotReadyError } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createExports } from "./exports";
 import { createFolders } from "./folders";
+import { createLibrary } from "./library";
+import { automaticGroupClassifier } from "./library/automatic";
+import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
+import { documentPageImages } from "./library/pageImages";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -154,6 +158,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const tagsChanged = () => events.emit("tags.changed", tags.list());
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
+  let libraryDocumentChanged = (_documentId: string) => {};
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
   const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter });
@@ -193,6 +198,7 @@ export function createCore(adapters: CoreAdapters): Core {
       folders,
       emitStatus: (document) => {
         events.emit("document.status", document);
+        libraryDocumentChanged(document.id);
         rebuildMayHaveProgressed();
       },
       emitMoved: (moved) => events.emit("documents.moved", moved),
@@ -326,6 +332,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const setLocalOnly = async (enabled: unknown) => {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
+    library.resume();
     if (wasLocal !== embedding.localOnly()) await rerankChanged();
     return embeddingSettings();
   };
@@ -538,12 +545,86 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
     background,
   });
+  const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
+  const library = createLibrary({
+    db,
+    now,
+    settings,
+    background,
+    changed: () => events.emit("library.changed", null),
+    providerExists: (id) => chat.exists(id),
+    async pageImages(id, contentHash, signal) {
+      try {
+        return await documentPageImages(await documents.filePath(id), contentHash, signal);
+      } catch (error) {
+        // A missing source file is a visible classification failure, not a retry loop.
+        throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
+      }
+    },
+    async prepare({ classifier }) {
+      if (!classifier) throw new TaggingNotReadyError("Choose a classification model.");
+      if (classifier.kind === "auto") {
+        let automatic = automaticClassifiers.get(classifier.baseUrl);
+        if (!automatic) {
+          automatic = automaticGroupClassifier(classifier.baseUrl);
+          automaticClassifiers.set(classifier.baseUrl, automatic);
+        }
+        return automatic;
+      }
+      if (classifier.kind === "ollama")
+        return decisionGroupClassifier({
+          baseUrl: classifier.baseUrl,
+          model: classifier.modelId,
+          apiKey: "ollama",
+          local: true,
+          usePageImages: classifier.usePageImages,
+        });
+      if (classifier.kind === "jev") {
+        if (embedding.localOnly() && jev.service())
+          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        const prepared = await jev.prepareGroups();
+        if (embedding.localOnly() && !prepared.local)
+          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        return prepared;
+      }
+      const ready = await chat.readiness(classifier.choice, "classification");
+      if (embedding.localOnly() && "provider" in ready && ready.provider.service)
+        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+      const prepared = await chat.prepareModel(classifier.choice, "classification");
+      if (embedding.localOnly() && prepared.provider.service)
+        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+      return {
+        ...chatGroupClassifier(prepared.model, prepared.provider.service === null),
+        model: { id: classifier.choice.modelId, images: false, reason: "selected" as const },
+      };
+    },
+  });
+  consent.registry.register({
+    id: "classification",
+    sends: ["groups", "document-excerpts"],
+    async services() {
+      const selected = library.settings().classifier;
+      if (selected?.kind === "jev") {
+        const service = jev.service();
+        return service ? [service] : [];
+      }
+      if (selected?.kind === "chat") {
+        const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
+        return provider?.service ? [provider.service] : [];
+      }
+      return [];
+    },
+  });
+  libraryDocumentChanged = (id) => library.documentChanged(id);
+  library.start();
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
     if (lifetime.signal.aborted) return status;
     events.emit("jev.changed", status);
     tagger.resume();
+    library.resume();
     return status;
   };
   documentReady = (documentId) => tagger.documentReady(documentId);
@@ -558,7 +639,10 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) throw error;
     }
     // Documents waiting for a chat model may be able to go on now.
-    if (!lifetime.signal.aborted) tagger.resume();
+    if (!lifetime.signal.aborted) {
+      tagger.resume();
+      library.resume();
+    }
   };
   chatGptChanged = () => {
     const report = async () => {
@@ -870,6 +954,15 @@ export function createCore(adapters: CoreAdapters): Core {
 
     listFolders: async () => folders.list(),
 
+    getLibrary: async () => library.snapshot(),
+    createLibraryGroup: async (input) => library.create(input),
+    updateLibraryGroup: async (id, input) => library.update(id, input),
+    deleteLibraryGroup: async (id) => library.delete(id),
+    addLibraryStarterGroups: async (keys) => library.addStarters(keys),
+    saveLibrarySettings: async (input) => library.saveSettings(input),
+    classifyDocuments: async (ids) => library.classify(ids),
+    assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
+
     listTags: async () => tags.list(),
     createTag: async (input) => {
       const tag = tags.create(input);
@@ -1009,6 +1102,7 @@ export function createCore(adapters: CoreAdapters): Core {
       approvals.close();
       connectors.close();
       tagger.close();
+      library.close();
       skills.close();
       consent.close();
       documents.close();

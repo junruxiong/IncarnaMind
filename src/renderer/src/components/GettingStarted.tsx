@@ -182,6 +182,14 @@ export function GetStartedCard() {
           );
         })}
       </ol>
+      <button
+        type="button"
+        data-testid="onboarding-groups"
+        className={`${buttonStyle("ghost", "sm")} mt-1 justify-start`}
+        onClick={() => useAppStore.getState().openLibrary()}
+      >
+        {t("library.chooseStarters")}
+      </button>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
+import { LibraryPane } from "./components/LibraryPane";
 import { MindPane } from "./components/MindPane";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
@@ -81,6 +82,7 @@ function Workspace() {
   const t = useT();
   const device = useAppStore((state) => state.settings?.device);
   const viewerOpen = useAppStore((state) => state.viewerOpen);
+  const libraryOpen = useAppStore((state) => state.libraryOpen);
   const closeViewer = useAppStore((state) => state.closeViewer);
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -117,7 +119,7 @@ function Workspace() {
         onPreview={(width) => previewLayout({ sidebarWidth: width })}
         onCommit={(width) => void updateSettings({ device: { sidebarWidth: width } })}
       />
-      <MindPane />
+      {libraryOpen ? <LibraryPane /> : <MindPane />}
       {viewerOpen && (
         <>
           <ResizeRod
