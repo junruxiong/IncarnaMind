@@ -1,3 +1,5 @@
+import { deflateSync } from "node:zlib";
+
 /**
  * Builds tiny, valid PDFs for tests, so fixtures stay readable and small
  * instead of being committed as binaries.
@@ -13,6 +15,8 @@ export interface PdfPage {
   chineseLines?: readonly string[];
   /** Draws a small greyscale image, like a scanned page. */
   image?: boolean;
+  /** A valid compressed raster for exercising oversized-image limits. */
+  imageDimensions?: readonly [number, number];
 }
 
 /** An entry of a PDF's outline (its bookmarks). */
@@ -73,8 +77,15 @@ function contentStream(page: PdfPage): string {
     y -= LINE_HEIGHT;
   }
   if (page.image) {
+    const [width, height] = page.imageDimensions ?? [2, 2];
+    const data = page.imageDimensions
+      ? deflateSync(Buffer.alloc(width * height, 128)).toString("latin1")
+      : "\x00\xff\xff\x00";
+    const filter = page.imageDimensions ? " /F /Fl" : "";
     // A 2×2 greyscale inline image, scaled up to 300pt square.
-    parts.push(`q 300 0 0 300 150 300 cm BI /W 2 /H 2 /CS /G /BPC 8 ID \x00\xff\xff\x00 EI Q`);
+    parts.push(
+      `q 300 0 0 300 150 300 cm BI /W ${width} /H ${height} /CS /G /BPC 8${filter} ID ${data} EI Q`,
+    );
   }
   return parts.join("\n");
 }

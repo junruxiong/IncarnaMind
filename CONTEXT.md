@@ -77,11 +77,14 @@ A label with a short description that a Document can carry. A Document can have 
 _Avoid_: category, label, class
 
 **Topic**:
-A group of Documents on one subject that IncarnaMind forms, in two levels: a parent Topic holds Topics, and any other Topic holds Documents. A Document is in exactly one Topic, or in none yet. The User can rename Topics, move Documents between them and make new ones, and those corrections are kept when the Topics are regrouped.
+The earlier design for a generated two-level subject tree. The current Library uses flat Groups instead (direction revised 2026-10-08).
 _Avoid_: cluster, category, collection, group
 
+**Group**:
+A user-defined place for Documents in the Library, with a name and description. Users can choose starter Groups or create their own. A Document has one primary Group or is Unsorted. An optional connected classifier suggests its Group from extracted text and, with local Clef-Flash, selected PDF page images; manual assignments take precedence and are saved.
+
 **Library**:
-The view of all of a User's Documents, grouped into Topics and filtered by kind, year, Tag or Linked folder.
+The view of all of a User's Documents, organised into Groups, with Unsorted Documents shown separately. Users can search document names, manage Groups and correct assignments. Organisation never moves or renames files on disk.
 _Avoid_: archive, index, vault
 
 ### Tools

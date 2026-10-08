@@ -113,6 +113,9 @@ interface AppState {
   /** The Documents with that Tag, by id, as the core last listed them. Null until listed. */
   filteredDocumentIds: ReadonlySet<string> | null;
   tagsDialogOpen: boolean;
+  libraryOpen: boolean;
+  openLibrary(): void;
+  closeLibrary(): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The example Mind and its Documents (onboarding). Null until loaded. */
@@ -411,6 +414,9 @@ export const useAppStore = create<AppState>()((set, get) => {
     tagFilter: null,
     filteredDocumentIds: null,
     tagsDialogOpen: false,
+    libraryOpen: false,
+    openLibrary: () => set({ libraryOpen: true }),
+    closeLibrary: () => set({ libraryOpen: false }),
     skills: [],
     examples: null,
     questionToStart: null,
@@ -478,6 +484,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     createMind: (options) =>
       attempt(async () => {
         const mind = await core.createMind();
+        set({ libraryOpen: false });
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
@@ -532,6 +539,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     openMind(id, options) {
+      set({ libraryOpen: false });
       const { tabs, openMindId } = get();
       if (tabs.includes(id)) {
         setTabs({ tabs: [...tabs], openMindId: id });

@@ -16,6 +16,7 @@ import { useOllama } from "./OllamaCard";
  */
 export function ChatSetupDialog() {
   const readiness = useAppStore((state) => state.chatReadiness);
+  const libraryOpen = useAppStore((state) => state.libraryOpen);
   const dismissed = useAppStore((state) => state.settings?.device.chatSetupDismissed);
   // The example Mind works without a model: setting one up is offered once the User moves on.
   const onExample = useAppStore(
@@ -25,7 +26,8 @@ export function ChatSetupDialog() {
     readiness?.ready === false &&
     readiness.reason === "no-provider" &&
     dismissed === false &&
-    !onExample;
+    !onExample &&
+    !libraryOpen;
   // The dialog itself takes focus, so no choice looks picked: none is preselected.
   const dialog = useModal(open, { focusDialog: true });
 

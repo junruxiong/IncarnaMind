@@ -552,6 +552,41 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 25,
+    description: "User-defined Library groups and persistent primary classifications",
+    sql: `
+      CREATE TABLE library_groups (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE TABLE document_groups (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents(id),
+        group_id TEXT REFERENCES library_groups(id),
+        source TEXT NOT NULL CHECK (source IN ('automatic', 'user')),
+        status TEXT NOT NULL,
+        content_hash TEXT,
+        request_id TEXT NOT NULL,
+        error_kind TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX document_groups_live ON document_groups(document_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 26,
+    description: "Record the model and routing reason for Library classifications",
+    sql: `ALTER TABLE document_groups ADD COLUMN classification_model TEXT;`,
+  },
 ];
 
 /**

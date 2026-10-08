@@ -21,6 +21,7 @@ import {
 } from "../api";
 import type { Consent } from "../consent";
 import { InvalidInputError, isRecord, TaggingNotReadyError } from "../errors";
+import { decisionGroupClassifier } from "../library/classifier";
 import {
   askJev,
   JEV_HOSTED_URL,
@@ -269,6 +270,24 @@ export function createJevTagging(options: {
           return decisionsFromProbabilities(tags, probabilities, jev.reviewBand);
         },
       };
+    },
+
+    /** Reuses the saved connection with the Library's separate consent. */
+    async prepareGroups() {
+      const jev = stored();
+      if (!jev) throw new TaggingNotReadyError("Jev isn't set up.");
+      const apiKey = await secrets.tryGet(KEY_NAME);
+      if (!apiKey) throw new TaggingNotReadyError("The Jev key can't be read on this device.");
+      const service = serviceOf(jev.endpoint);
+      if (service) await consent.ensure("classification", service);
+      return decisionGroupClassifier({
+        baseUrl: baseUrlOf(jev.endpoint),
+        apiKey,
+        model: jev.model ?? JEV_DEFAULT_MODEL,
+        local: service === null,
+        // Page images are an explicit Library Ollama setting, not part of the Jev connection.
+        usePageImages: false,
+      });
     },
 
     /**
