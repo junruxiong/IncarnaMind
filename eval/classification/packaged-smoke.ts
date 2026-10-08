@@ -43,7 +43,7 @@ test("production packaged Library renders and classifies an image-only PDF", asy
     INCARNAMIND_DATA_DIR: dataDir,
     INCARNAMIND_TEST_HOOKS: "1",
   };
-  // The flag only suppresses update checks in this production build. No fake embedder/chat.
+  // The flag suppresses update checks. This production build has no fake embedder/chat.
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
   let app: ElectronApplication | undefined;

@@ -101,3 +101,27 @@ slow warm calls and hard deadlines are covered by deterministic tests; performan
 and vision availability on actual 8–16 GiB machines remain unverified. PDF images
 are bounded (embedded rasters above 20 megapixels are rejected); Word and PowerPoint images still use text extraction only. Starter
 groups and arbitrary user-created overlapping groups need broader field testing.
+
+
+## Release checks
+
+- Full unit suite: **1,051 passed, two skipped**. After raising the image limit,
+  all eight PDF-image tests passed again, including both 25-megapixel failures.
+- Type checking and repository lint passed. Five Library UI flows passed during
+  implementation; the final production packaged smoke passed as well.
+- Native canvas is a direct dependency and is unpacked with the app. The final
+  smoke checked migrations, extraction of an image-only PDF, real JPEG rendering
+  in the packaged worker, Auto's Clef route, saved attribution and Library UI.
+- The same smoke passed when launched from the **read-only mounted DMG** (18.7 s).
+  Disk-image checksums and deep code-signature verification passed. The mount was
+  ejected and disposable application data removed afterward.
+- The smoke uses a scripted local decision endpoint, disposable data and a mock
+  macOS Keychain. It does not validate real credentials or model accuracy; real
+  local inference is measured separately above.
+
+Local Apple-silicon artifact: `dist/IncarnaMind-0.1.0-mac-arm64.dmg`,
+1,194,813,631 bytes. Ad-hoc signed; not notarized or published.
+SHA-256: `d407fca191fcf8e4fef7cbf7469279c03d9f5184a96dae53ac891438ed4cb127`.
+
+Review findings and their disposition are recorded separately under Standards
+and Spec in the [design notes](../../docs/designs/library-structure-view.md#final-review-and-packaging-checks--2026-10-08).
