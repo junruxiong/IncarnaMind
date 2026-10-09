@@ -353,7 +353,7 @@ describe("The built-in reranking model", { timeout: 30_000 }, () => {
     expect(shown[0]?.document).toBe("Weather");
     expect(weather.calls).toHaveLength(1);
     expect(weather.calls[0]?.query).toBe("lighthouse");
-    // The fused top 20, each with its Document's name.
+    // Keyword search's top 10 and vector search's, each once, with its Document's name.
     const texts = weather.calls[0]?.texts ?? [];
     expect(texts.length).toBeGreaterThan(1);
     expect(texts.length).toBeLessThanOrEqual(20);
