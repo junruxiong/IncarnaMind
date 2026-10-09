@@ -4,6 +4,7 @@ import {
   actionFor,
   chipsOf,
   pickerOptions,
+  tagIndex,
   tagsOnDocuments,
 } from "../../src/renderer/src/tagEditing";
 
@@ -97,5 +98,10 @@ describe("a Document's chips", () => {
       ["Contract", false],
       ["Slides", false],
     ]);
+  });
+
+  test("are the same from the Tags indexed by id, as a long list looks them up", () => {
+    const links = [link("contract"), link("gone"), link("report", { needsReview: true })];
+    expect(chipsOf(links, tagIndex(tags))).toEqual(chipsOf(links, tags));
   });
 });

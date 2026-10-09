@@ -1,16 +1,18 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Document, DocumentFailureReason, DocumentStatus } from "../../../core/api";
+import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
 import { selectVisibleDocuments, useAppStore } from "../store";
+import { chipsOf, tagIndex } from "../tagEditing";
 import { DocumentFileMenu } from "./DocumentFileMenu";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
 import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
+import { SidebarTags } from "./SidebarTags";
 import {
   openRowMenu,
   rowActionButtonClass,
@@ -21,6 +23,7 @@ import {
   rowInputClass,
   rowPadding,
 } from "./sidebarRows";
+import { TagMarks, TagNamesTip, tagNamesTipListProps } from "./TagMarks";
 import {
   buttonClass,
   dangerButtonClass,
@@ -63,6 +66,15 @@ const failureMessages: Record<DocumentFailureReason, MessageKey> = {
   "processing-error": "documents.failure.processingError",
 };
 
+/** The ways to browse the Documents, in the switcher's order. */
+type BrowseView = "folders" | "tags" | "sources";
+
+const browseLabels: Record<BrowseView, MessageKey> = {
+  folders: "library.groups",
+  tags: "tags.title",
+  sources: "library.sources",
+};
+
 /** Still being processed: the row is muted until it's done. */
 const isProcessing = (status: DocumentStatus) =>
   status === "queued" ||
@@ -74,19 +86,24 @@ const isProcessing = (status: DocumentStatus) =>
  * The sidebar's Documents: under the "Documents" label (with the Tag filter,
  * "Add folder…" to link a folder and adding files), each Linked folder with
  * its Folders as on disk, then "Other Documents", the files added on their
- * own (see `FolderTree`). Each Document is one row: its name and, while it's
- * processed, if it failed, or if its file is missing or can't be reached,
- * its status at the end. Its Tags are in its Tags menu, and the Tags dialog;
- * its "More" menu renames it, opens its file or shows it in its folder, and
- * deletes it. Dropping files anywhere on the window adds them too (see
- * `FileDrop`). Clicking a Document opens it in the viewer. With nothing
- * linked or added yet, the section says how to start: "Add folder…" (which
- * asks first, see `LinkFolderDialog`) or "Add Documents".
+ * own (see `FolderTree`). Once there are Library Folders, or Tags and
+ * something to browse, a switcher offers "Folders | Tags | Source
+ * locations": the Library's Folders (see `LibraryFolders`), the Tags (see
+ * `SidebarTags`), or that tree. Each Document is one row: its name, its Tags' colours (see
+ * `TagMarks`) and, while it's processed, if it failed, or if its file is
+ * missing or can't be reached, its status at the end. Its Tags are in its
+ * Tags menu, and the Tags dialog; its "More" menu renames it, opens its file
+ * or shows it in its folder, and deletes it. Dropping files anywhere on the
+ * window adds them too (see `FileDrop`). Clicking a Document opens it in the
+ * viewer. With nothing linked or added yet, the section says how to start:
+ * "Add folder…" (which asks first, see `LinkFolderDialog`) or "Add Documents".
  */
 export function DocumentsSection() {
   const t = useT();
   const hasLibraryFolders = useAppStore((state) => (state.library?.groups.length ?? 0) > 0);
-  const [showSources, setShowSources] = useState(false);
+  const hasTags = useAppStore((state) => state.tags.length > 0);
+  const hasAnyDocuments = useAppStore((state) => state.documents.length > 0);
+  const [chosenView, setView] = useState<BrowseView>("folders");
   const libraryOpen = useAppStore(
     (state) => state.libraryOpen && ["all", "new"].includes(state.libraryFilter),
   );
@@ -102,6 +119,27 @@ export function DocumentsSection() {
   const picking = useAppStore((state) => state.pickingDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
+  const tags = useAppStore((state) => state.tags);
+  // Built once per change to the Tags, so each row only looks its own up.
+  const tagsById = useMemo(() => tagIndex(tags), [tags]);
+
+  // Folders while there are any, Tags once there is something to browse (a Document or a
+  // Linked folder, so the first Document moves nothing), and always the tree on disk.
+  const views: BrowseView[] = [
+    ...(hasLibraryFolders ? (["folders"] as const) : []),
+    ...(hasTags && (hasAnyDocuments || hasFolders) ? (["tags"] as const) : []),
+    "sources",
+  ];
+  const view = views.includes(chosenView) ? chosenView : "sources";
+  const renderDocument = (item: Document, depth: number): ReactNode => (
+    <DocumentRow
+      key={item.id}
+      item={item}
+      depth={depth}
+      tagsById={tagsById}
+      onDelete={() => setDeleting(item)}
+    />
+  );
 
   const addPicked = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
@@ -113,7 +151,7 @@ export function DocumentsSection() {
   const empty = documents.length === 0 && (filtering || !hasFolders);
 
   return (
-    <section aria-labelledby="documents-heading">
+    <section aria-labelledby="documents-heading" {...tagNamesTipListProps}>
       <div
         data-testid="documents-heading-row"
         className="mt-3 flex h-7 shrink-0 items-end justify-between rounded-md pr-1 pb-0.5 pl-2"
@@ -167,66 +205,49 @@ export function DocumentsSection() {
           <span className="truncate">{t("library.all")}</span>
         </button>
       </div>
-      <ActiveTagFilter />
-      {hasLibraryFolders && (
+      {views.length > 1 && (
         <fieldset
-          className="mx-2 my-2 flex gap-3 border-b border-rule pb-1 text-[12px] text-ink-meta"
+          className="mx-2 my-2 flex items-center gap-3 border-b border-rule pb-1 text-[12px] text-ink-meta"
+          data-testid="browse-views"
           aria-label={t("library.browse")}
         >
-          <button
-            type="button"
-            aria-pressed={!showSources}
-            className={!showSources ? "font-semibold text-ink" : "hover:text-ink"}
-            onClick={() => setShowSources(false)}
-          >
-            {t("library.groups")}
-          </button>
-          <button
-            type="button"
-            aria-pressed={showSources}
-            className={showSources ? "font-semibold text-ink" : "hover:text-ink"}
-            onClick={() => setShowSources(true)}
-          >
-            {t("library.sources")}
-          </button>
-          <button
-            type="button"
-            aria-label={t("library.newGroup")}
-            title={t("library.newGroup")}
-            className={`${rowActionButtonClass} ml-auto`}
-            onClick={() => useAppStore.getState().openLibrary("new")}
-          >
-            <PlusLineIcon className="size-4" />
-          </button>
+          {views.map((each) => (
+            <button
+              key={each}
+              type="button"
+              aria-pressed={view === each}
+              title={t(browseLabels[each])}
+              className={`min-w-0 truncate ${view === each ? "font-semibold text-ink" : "hover:text-ink"}`}
+              onClick={() => setView(each)}
+            >
+              {t(browseLabels[each])}
+            </button>
+          ))}
+          {hasLibraryFolders && (
+            <button
+              type="button"
+              aria-label={t("library.newGroup")}
+              title={t("library.newGroup")}
+              className={`${rowActionButtonClass} ml-auto`}
+              onClick={() => useAppStore.getState().openLibrary("new")}
+            >
+              <PlusLineIcon className="size-4" />
+            </button>
+          )}
         </fieldset>
       )}
-      {hasLibraryFolders && !showSources ? (
-        <LibraryFolders
-          documents={documents}
-          renderDocument={(item, depth) => (
-            <DocumentRow
-              key={item.id}
-              item={item}
-              depth={depth}
-              onDelete={() => setDeleting(item)}
-            />
-          )}
-        />
+      {/* Under the switcher, so it never moves; in the Tags view, the chosen Tags say it. */}
+      {view !== "tags" && <ActiveTagFilter />}
+      {view === "folders" ? (
+        <LibraryFolders documents={documents} renderDocument={renderDocument} />
+      ) : view === "tags" ? (
+        <SidebarTags renderDocument={renderDocument} />
       ) : (
-        <FolderTree
-          documents={documents}
-          filtering={filtering}
-          renderDocument={(item, depth) => (
-            <DocumentRow
-              key={item.id}
-              item={item}
-              depth={depth}
-              onDelete={() => setDeleting(item)}
-            />
-          )}
-        />
+        <FolderTree documents={documents} filtering={filtering} renderDocument={renderDocument} />
       )}
+      {/* The Tags view lists every Tag, whatever the filter. */}
       {empty &&
+        view !== "tags" &&
         (filtering ? (
           <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
         ) : (
@@ -266,27 +287,38 @@ export function DocumentsSection() {
         ))}
       <DeleteDocumentDialog target={deleting} onClose={() => setDeleting(null)} />
       <LinkFolderDialog />
+      <TagNamesTip />
     </section>
   );
 }
 
 /**
- * A Document's row: its icon and name, and its status at the end while it's
- * processed, if it failed, or if its file is missing or can't be reached
- * (then muted too; clicking still opens what IncarnaMind kept of it).
- * Pointed at, it offers its Tags and a menu for the rest. It is in the
- * Folder its file is in, so there is no moving it here.
+ * A Document's row: its icon and name, its Tags' colours right after the
+ * name (their names in its tooltip and description), and its status at the
+ * end while it's processed, if it failed, or if its file is missing or can't
+ * be reached (then muted too; clicking still opens what IncarnaMind kept of
+ * it). The name gives way first; the row stays one 28px line. Pointed at, it
+ * offers its Tags and a menu for the rest. It is in the Folder its file is
+ * in, so there is no moving it here.
  */
 function DocumentRow({
   item,
   depth,
+  tagsById,
   onDelete,
 }: {
   item: Document;
   depth: number;
+  tagsById: ReadonlyMap<string, Tag>;
   onDelete(): void;
 }) {
+  const t = useT();
   const [renaming, setRenaming] = useState(false);
+  const chips = chipsOf(item.tags, tagsById);
+  const tagNames =
+    chips.length > 0
+      ? t("tags.marks", { names: chips.map(({ tag }) => tag.name).join(", ") })
+      : undefined;
   const openDocument = useAppStore((state) => state.openDocument);
   const isOpen = useAppStore(
     (state) => state.viewerOpen && state.viewerTarget?.documentId === item.id,
@@ -319,14 +351,19 @@ function DocumentRow({
           type="button"
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
-          title={item.name}
+          aria-description={tagNames}
+          title={tagNames ? `${item.name}\n${tagNames}` : item.name}
           onClick={() => openDocument({ documentId: item.id })}
           className={rowButtonClass}
           style={rowPadding(depth)}
         >
           <DocumentLineIcon kind={item.kind} className={rowIconClass(isOpen)} />
-          <span data-testid="row-text" className="min-w-0 flex-1 truncate">
-            {item.name}
+          {/* Takes what the status leaves; in it, the name gives way before the colours. */}
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span data-testid="row-text" className="min-w-0 truncate">
+              {item.name}
+            </span>
+            <TagMarks chips={chips} />
           </span>
           <DocumentStatusLabel item={item} />
         </button>
