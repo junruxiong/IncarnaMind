@@ -65,7 +65,7 @@ export function generalNumber(value: number): string {
 }
 
 /** The sections of a format, split at ";" outside literals and brackets. */
-function splitSections(code: string): string[] {
+export function splitSections(code: string): string[] {
   const sections: string[] = [];
   let current = "";
   for (let at = 0; at < code.length; at++) {
@@ -93,7 +93,7 @@ function splitSections(code: string): string[] {
 }
 
 /** Groups an integer's digits in threes with commas. */
-const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+export const group = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
 /** Formats `value` (not negative) with one section of a format; null if this can't. */
 function formatSection(value: number, section: string): string | null {
