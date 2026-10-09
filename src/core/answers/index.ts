@@ -55,7 +55,7 @@ import type { ExecAccess } from "../execution";
 import type { MindContent } from "../mindContent";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
-import type { GateDecision, RunToolCall } from "../runs/engine";
+import type { GateDecision } from "../runs/engine";
 import type { SkillScript, SkillSession } from "../skills";
 import {
   parseScriptArgs,
@@ -87,7 +87,7 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import type { AnswerEngine, AnswerTools, DocumentLanguage } from "./engine";
+import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -530,8 +530,7 @@ export function createAnswers(options: AnswersOptions) {
      */
     const scriptGate = async (
       session: SkillSession,
-      toolCallId: string,
-      input: Record<string, unknown>,
+      { id: toolCallId, input, tainted }: GatedCall,
       effects: Effect[],
     ): Promise<string | null> => {
       const shown = scriptCallInput(input);
@@ -564,6 +563,7 @@ export function createAnswers(options: AnswersOptions) {
           script: script.path,
           args,
           effects,
+          tainted,
         },
         card,
       );
@@ -575,9 +575,11 @@ export function createAnswers(options: AnswersOptions) {
      * The gate the engine awaits before each Tool call (see `RunRequest.gate`):
      * a Connector's Tool asks first unless the User or its Effects say it
      * needn't; a Skill script is checked, then asks unless the Skill's scripts
-     * always run (see `scriptGate`). Every other Tool runs.
+     * always run (see `scriptGate`). Every other Tool runs. Whether the Answer
+     * had read untrusted content first (`tainted`) goes to approvals with the call.
      */
-    const gate = async (tool: Tool, { id, input }: RunToolCall): Promise<GateDecision> => {
+    const gate = async (tool: Tool, call: GatedCall): Promise<GateDecision> => {
+      const { id, input, tainted } = call;
       let denied: string | null = null;
       if (tool.provider.kind === "connector") {
         const connector = { id: tool.provider.id, name: tool.provider.name };
@@ -596,6 +598,7 @@ export function createAnswers(options: AnswersOptions) {
             // Its Connector marks it read-only: it changes nothing.
             readOnly: effects.every((effect) => effect.action !== "write"),
             effects,
+            tainted,
           },
           {
             id,
@@ -608,7 +611,7 @@ export function createAnswers(options: AnswersOptions) {
           },
         );
       } else if (tool.name === SKILL_TOOLS.runScript && skills) {
-        denied = await scriptGate(skills, id, input, tool.effects(input));
+        denied = await scriptGate(skills, call, tool.effects(input));
       }
       return denied === null ? { run: true } : { run: false, result: denied };
     };

@@ -37,11 +37,15 @@
  * those the request brings: the Skills' (`use_skill`, `read_skill_file`,
  * `run_skill_script`, see ../skills/tools) and each Connector's. A call that
  * asks the User first waits in the request's `gate`, which the engine awaits
- * before each call. The loop names none of them but the Documents' own:
- * every call shows as a Tool-call card, from its provider, except `cite`,
- * whose records become Citations; results that aren't Passages are never
- * cited. With Skills or Connector Tools but no Documents, the loop runs with
- * those alone; a model that can't call Tools answers without.
+ * before each call. The gate is told whether the Run had read untrusted
+ * content first (`GatedCall.tainted`): the loop records it, above the engine,
+ * from the results of the Tools that declare them untrusted
+ * (docs/designs/agent-extensibility.md §4.6). The loop names none of the
+ * Tools but the Documents' own: every call shows as a Tool-call card, from
+ * its provider, except `cite`, whose records become Citations; results that
+ * aren't Passages are never cited. With Skills or Connector Tools but no
+ * Documents, the loop runs with those alone; a model that can't call Tools
+ * answers without.
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
 import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
@@ -128,6 +132,16 @@ export interface InstructionOptions {
   connectorTools?: boolean;
 }
 
+/** A Tool call at the Answer's gate. */
+export interface GatedCall extends RunToolCall {
+  /**
+   * The Run had read untrusted content before this call: the result of a
+   * Tool that declares `untrustedResult`, such as a search that found
+   * Passages (docs/designs/agent-extensibility.md §4.6).
+   */
+  tainted: boolean;
+}
+
 export interface AnswerRequest {
   /**
    * The instructions for a way of citing. "no-documents": the User has no
@@ -156,7 +170,7 @@ export interface AnswerRequest {
    * Answer's approvals decide there whether it asks the User first. Without
    * it, every call runs.
    */
-  gate?(tool: Tool, call: RunToolCall): Promise<GateDecision>;
+  gate?(tool: Tool, call: GatedCall): Promise<GateDecision>;
   /** How this model is known to cite, from its capabilities or earlier Answers. Unknown: try Tools first. */
   support?: CitationSupport;
   /**
@@ -696,6 +710,8 @@ export function documentTools(
       },
       shownInput: ({ query }) => ({ query: String(query ?? "") }),
       effects: () => [{ action: "read", scope: { kind: "documents" } }],
+      // The User didn't write their Documents.
+      untrustedResult: true,
       async call({ query }, { toolCallId, signal }) {
         let found: SearchResultForModel;
         try {
@@ -720,6 +736,7 @@ export function documentTools(
         required: ["citations"],
       },
       effects: () => [],
+      untrustedResult: false,
       async call({ citations }) {
         const records = parseRecords(citations);
         hooks.cited(records);
@@ -787,6 +804,26 @@ async function* toolLoop(
       : null;
   const search = documents?.search ?? null;
   const cite = documents?.cite ?? null;
+  /**
+   * Whether this Run has read untrusted content: from the first call of a
+   * Tool with `untrustedResult` that returned some, each call's gate is told.
+   */
+  let tainted = false;
+  /** A Tool as the engine calls it: one with untrusted results taints the Run once it returns some. */
+  const tracked = (tool: Tool): Tool =>
+    tool.untrustedResult
+      ? {
+          ...tool,
+          async call(input, context) {
+            const result = await tool.call(input, context);
+            // A search that found no Passages read nothing of the Documents.
+            const read =
+              tool === search ? (results.get(context.toolCallId) ?? 0) > 0 : result.trim() !== "";
+            if (read) tainted = true;
+            return result;
+          },
+        }
+      : tool;
   /** The Tools offered, by the name the model calls them; never a Connector's with one of ours. */
   const offered = new Map(
     offeredTools([...(documents ? [documents.search, documents.cite] : []), ...request.tools]).map(
@@ -841,11 +878,11 @@ async function* toolLoop(
     model: request.model,
     instructions,
     messages: messages.map(runMessage),
-    tools,
+    tools: tools.map(tracked),
     maxSteps,
     gate: async (call) => {
       const tool = offered.get(call.tool);
-      return tool && request.gate ? request.gate(tool, call) : RUN;
+      return tool && request.gate ? request.gate(tool, { ...call, tainted }) : RUN;
     },
     window,
     temperature,
