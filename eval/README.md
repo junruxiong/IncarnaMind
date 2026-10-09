@@ -7,7 +7,7 @@ It drives the core's public interface in Node, the way the desktop app's UI does
 1. It creates a temporary data folder. It never touches the app's real data folder.
 2. It adds the seven sample PDFs in `data/` and the five Chinese Wikipedia articles in `retrieval/fixtures/` with `addDocuments`, and waits until each is processed: text extracted, Passages built and embedded with the real built-in model, multilingual-e5-small.
 3. It searches for each Question with `searchPassages` in hybrid, keyword and vector mode, and scores the top 5. A cross-lingual Question with a translated query is searched with that too.
-4. When reranking candidates are given, it reranks each hybrid top 20 with each of them and scores the top 5 again.
+4. When reranking candidates are given, it reranks what the search Tool would hand each of them (keyword search's top 10 and vector search's top 10, each Passage once) and scores the top 5 again.
 5. When a chat model is given, it asks each Question with `askQuestion` and scores the Citations of each Answer.
 6. It writes a report under `eval/results/` and prints a summary.
 
@@ -42,10 +42,11 @@ INCARNAMIND_EVAL_RERANK=mmarco-minilm,bge-m3 npm run eval
 | `gte-multilingual` | Alibaba-NLP/gte-multilingual-reranker-base | 358 MB |
 | `bge-m3` | BAAI/bge-reranker-v2-m3 | 588 MB |
 
-- **How:** after the searches, each candidate in turn reranks every hybrid top 20 (and each translated query's), with the core's own reranking code (`createRerankingModel`: what the model reads, its scores) and the model on a worker thread (`lib/rerankerWorker.ts`), as the app's reranking utility process runs it. The evaluation's core keeps reranking off, so the gating mode is unchanged.
+- **Candidates:** with a reranker on, the search Tool doesn't hand it the fused list: it hands it keyword search's top 10 and vector search's top 10, each Passage once, so a hit only one of them found isn't pushed out by fusion first (#31: en-03 and en-14 were keyword-only hits, en-12 and zh-03 vector-only, and all four fell out of the fused top 5). The evaluation builds the same set from `searchPassages` in keyword and vector mode, with the Tool's own `topsOfEach`; a unit test checks that the Tool's reranker gets exactly that set. The report gives how many candidates there were per search: between 10 and 20.
+- **How:** after the searches, each candidate in turn reranks every Question's candidates (and each translated query's), with the core's own reranking code (`createRerankingModel`: what the model reads, its scores) and the model on a worker thread (`lib/rerankerWorker.ts`), as the app's reranking utility process runs it. The evaluation's core keeps reranking off, so the gating mode is unchanged.
 - **Downloads:** the first run downloads each candidate into the model cache, next to the embedding model, checked against its pinned SHA-256 hashes; later runs reuse them. All three come to about 1.1 GB.
-- **Time:** reranking 50 searches, plus 10 translated ones, takes about half a minute with `mmarco-minilm`, a minute and a half with `gte-multilingual` and four minutes with `bge-m3` on an Apple M2 Max.
-- **Reported:** a row per candidate, "hybrid + model", next to the search modes, and each candidate's download and time per search (mean, median, 95th percentile and slowest, after the first search, which loads the model). Reranked modes never gate.
+- **Time:** reranking 50 searches, plus 10 translated ones, at 20 candidates each, takes about half a minute with `mmarco-minilm`, a minute and a half with `gte-multilingual` and four minutes with `bge-m3` on an Apple M2 Max; fewer candidates take less.
+- **Reported:** a row per candidate, "hybrid + model", next to the search modes; how many candidates the reranked searches had (mean, fewest, most); and each candidate's download and time per search (mean, median, 95th percentile and slowest, after the first search, which loads the model). Reranked modes never gate.
 
 ### Citation quality
 

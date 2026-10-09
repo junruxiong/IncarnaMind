@@ -23,7 +23,9 @@ import { createLog, type Log } from "./lib/log";
 import { type EvalReport, terminalSummary, writeReports } from "./lib/report";
 import { openReranker, type RerankerInfo } from "./lib/rerank";
 import {
+  candidateCounts,
   GATING_MODE,
+  RERANK_PER_LIST,
   type RetrievalMode,
   type RetrievalRun,
   retrievalFailures,
@@ -71,7 +73,9 @@ async function retrieve(
   // Reranked modes, one candidate at a time: each is downloaded once into the model cache.
   const rerankers: RerankerInfo[] = [];
   for (const candidate of rerank?.candidates ?? []) {
-    log(`Reranking hybrid search's top 20 with ${candidate.name}`);
+    log(
+      `Reranking keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST} with ${candidate.name}`,
+    );
     const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log);
     try {
       await runReranked(library.core, questions, ids, reranker, results);
@@ -86,6 +90,13 @@ async function retrieve(
     }
   }
 
+  const candidates = candidateCounts(results);
+  if (candidates) {
+    log(
+      `Reranked searches had ${candidates.mean.toFixed(1)} candidates on average (${candidates.min} to ${candidates.max}, over ${candidates.searches} searches)`,
+    );
+  }
+
   return {
     embedding,
     gating,
@@ -94,6 +105,7 @@ async function retrieve(
     questions: results,
     summary: summarise(results),
     ...(rerankers.length > 0 && { rerankers }),
+    ...(candidates && { rerankCandidates: candidates }),
   };
 }
 

@@ -1,7 +1,9 @@
 /**
- * The reranked mode: hybrid search's top 20, reranked by a built-in
- * reranking candidate (src/core/reranking/model.ts), as the search Tool
- * reranks them when the User turns reranking on. It uses the core's own
+ * The reranked mode: the candidates the search Tool hands a reranker
+ * (keyword search's top 10 and vector search's top 10, each Passage once;
+ * see `rerankCandidates` in ./retrieval), reranked by a built-in reranking
+ * candidate (src/core/reranking/model.ts), as the search Tool reranks them
+ * when the User turns reranking on. It uses the core's own
  * reranking code (download and check, what the model reads, its scores)
  * with the model on a worker thread, outside the evaluation's core: one run
  * compares every candidate given in INCARNAMIND_EVAL_RERANK over the same
@@ -40,7 +42,7 @@ export interface RerankerInfo {
   downloadBytes: number;
   /** Loading the model, the first time it reranks. */
   loadSeconds: number;
-  /** Reranking one search's top 20, in milliseconds, after the first. */
+  /** Reranking one search's candidates, in milliseconds, after the first. */
   latency: { queries: number; mean: number; median: number; p95: number; max: number };
 }
 
