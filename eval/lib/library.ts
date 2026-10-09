@@ -17,6 +17,7 @@ import {
   type Embedder,
   type EmbeddingModelStatus,
   type Keychain,
+  type OllamaModels,
   type RerankSettings,
   type SaveEmbeddingProviderInput,
 } from "../../src/core";
@@ -50,6 +51,8 @@ export interface LibraryOptions {
    */
   reranker?: CrossEncoder;
   documents: readonly EvalDocument[];
+  /** Looks up models in Ollama instead of the app's own lookup (see `evalOllamaModels`). */
+  ollamaModels?: OllamaModels;
   /** Keep the data folder afterwards, also when opening fails. */
   keep: boolean;
   log: Log;
@@ -212,6 +215,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       },
     },
     embedder: options.embedder,
+    ...(options.ollamaModels && { ollamaModels: options.ollamaModels }),
     // The core reranks by default: with the real built-in model when asked for, as in the app
     // (Answers' searches); otherwise a fake, with nothing to download.
     ...(options.reranker

@@ -71,7 +71,14 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
     const run = await runCitations(
       library,
       [QUESTION],
-      { kind: "ollama", modelId: "local-model", apiKey: null, baseUrl: null },
+      {
+        kind: "ollama",
+        modelId: "local-model",
+        apiKey: null,
+        baseUrl: null,
+        numCtx: null,
+        citing: null,
+      },
       { minCitations: 4, maxRounds: 2, answerTimeoutMs: 30_000 },
       () => {},
     );
@@ -107,6 +114,8 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
     ]);
     expect(run.summary.en).toMatchObject({
       answers: 2,
+      citedAnswers: 2,
+      citedAnswerShare: 1,
       citations: 6,
       foundShare: 2 / 6,
       falseNotFoundShare: 2 / 6,

@@ -21,7 +21,7 @@ import {
   BUILT_IN_RERANKING_MODEL,
   type RerankingModelDefinition,
 } from "../src/core";
-import { type CitationRun, runCitations, summariseGroup } from "./lib/citations";
+import { type CitationRun, evalOllamaModels, runCitations, summariseGroup } from "./lib/citations";
 import { type EvalConfig, readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
 import { FORMATS_SET, loadEvaluationSet } from "./lib/evaluationSet";
@@ -207,12 +207,14 @@ test("retrieval and Citation evaluation", async () => {
   log(`Embedding model cache: ${config.cacheDir}`);
 
   // The core reranks Answers' searches with the built-in reranking model, as the app does by default.
+  const ollamaModels = evalOllamaModels(config.chat);
   const builtIn = await openLibrary({
     name: "built-in",
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
     reranker: createWorkerCrossEncoder(),
     documents: set.documents,
+    ...(ollamaModels && { ollamaModels }),
     keep: config.keepData,
     log,
   });

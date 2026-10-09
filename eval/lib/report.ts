@@ -210,6 +210,17 @@ function citationTable(
     `| | ${columns.map(([label]) => label).join(" | ")} |${gating ? " Target (per language) |" : ""}`,
     `|---|${columns.map(() => "---|").join("")}${gating ? "---|" : ""}`,
     row("Answers (failed)", (summary) => `${summary.answers} (${summary.failedAnswers})`),
+    row(
+      "Answers with a Citation",
+      (summary) =>
+        `${percent(summary.citedAnswerShare)} (${summary.citedAnswers}/${summary.answers})`,
+      "reported",
+    ),
+    row(
+      "Time per Answer (median)",
+      (summary) => (summary.medianSeconds === null ? "–" : `${summary.medianSeconds.toFixed(1)} s`),
+      "reported",
+    ),
     row("Citations", (summary) => String(summary.citations), `at least ${minCitations}`),
     row(
       OUTCOME_LABELS.found,
@@ -389,7 +400,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     lines.push(`Skipped: ${citations.skipped}`, "");
   } else {
     lines.push(
-      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.gating ? "It is the gating model." : "A local model: reported, not gating."}`,
+      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.gating ? "It is the gating model." : "A local model: reported, not gating."}${citations.overrides.length > 0 ? ` Set by the run: ${citations.overrides.join(", ")}.` : ""}`,
       `- Each Question asked in a Mind of its own; ${citations.rounds} round${citations.rounds === 1 ? "" : "s"} (more rounds ask a language's gating Questions again until it has ${citations.minCitations} Citations).`,
       `- False "not found": the check said "not found", but the quote is on the cited pages once both are compared by letters and digits only, ignoring case, accents and punctuation. The share is of all Citations.`,
       "- Coverage counts every sentence of an Answer (headings and code left out) as drawn from Documents, so it is a lower bound: sentences that only say what the Documents don't cover count as uncited.",
@@ -511,7 +522,7 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
     for (const [group, label] of GROUPS) {
       const summary = citations.summary[group];
       lines.push(
-        `  ${label.padEnd(14)} ${String(summary.citations).padStart(3)} Citations, found ${percent(summary.foundShare)}, false "not found" ${percent(summary.falseNotFoundShare)}, coverage ${percent(summary.coverage)}, dropped ${summary.droppedMarkers} markers and ${summary.droppedRecords} records`,
+        `  ${label.padEnd(14)} ${percent(summary.citedAnswerShare)} of ${summary.answers} Answers cited, ${String(summary.citations).padStart(3)} Citations, found ${percent(summary.foundShare)}, false "not found" ${percent(summary.falseNotFoundShare)}, coverage ${percent(summary.coverage)}, dropped ${summary.droppedMarkers} markers and ${summary.droppedRecords} records, median ${summary.medianSeconds === null ? "–" : `${summary.medianSeconds.toFixed(1)} s`} an Answer`,
       );
     }
   }
