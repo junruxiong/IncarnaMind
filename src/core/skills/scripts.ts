@@ -17,11 +17,13 @@
  *   `SKILL_SCRIPT_LIMITS.maxOutputBytes` per stream (the start of its
  *   standard output, the end of its error output), with a note when cut.
  * - It asks the Executor to allow reading the Skill's folder and the working
- *   folder, writing the working folder, and the network (any, for now).
+ *   folder, writing the working folder, and no network. The Executor leaves
+ *   out the login shell's variables whose names look like secrets.
  *
- * At sandbox level "none" (v1) none of that is enforced: a script can do
- * whatever the User can, including reaching the network (see `access`).
- * That is why each run asks first.
+ * At sandbox level "os" (macOS and Linux, src/main/sandbox.ts) the OS
+ * sandbox enforces that. At "none" (Windows; Linux without bubblewrap)
+ * nothing is enforced: a script can do whatever the User can, including
+ * reaching the network (see `access`). That is why each run asks first.
  */
 import { join } from "node:path";
 import type { ExecAllow, Executor, ScriptRuntimes } from "../adapters";
@@ -192,13 +194,12 @@ export function scriptResultText(script: string, run: SkillScriptRun, timeoutSec
 
 /**
  * What a script of the Skill in `skillDir` may touch: the Skill's folder and
- * its working folder to read, its working folder to write, and the network
- * (any, for now).
+ * its working folder to read, its working folder to write, and no network.
  */
 const scriptAllow = (skillDir: string): ExecAllow => ({
   read: [skillDir, WORKING_FOLDER],
   write: [WORKING_FOLDER],
-  network: "any",
+  network: "none",
 });
 
 export function createScriptRunner(options: ScriptRunnerOptions) {

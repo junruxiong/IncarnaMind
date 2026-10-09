@@ -129,6 +129,12 @@ export interface SpawnOptions {
   /** Added to (and overriding) the login-shell environment. */
   env?: Readonly<Record<string, string>>;
   /**
+   * Leaves out the login-shell environment's variables whose names this
+   * matches: the Executor's, those that look like secrets. `env` is added
+   * afterwards, whatever its names.
+   */
+  omitEnv?: (name: string) => boolean;
+  /**
    * On macOS and Linux, starts the process as the leader of a new process
    * group, so it can be stopped together with every process it starts (see
    * `stopProcessTree` in ./execution). Windows has no process groups; there the tree is
@@ -185,7 +191,11 @@ export interface ExecRequest {
   args: readonly string[];
   /** Its working folder. Not given: a new, empty temporary folder, removed when the run ends. */
   cwd?: string;
-  /** Added to (and overriding) the environment programs get here: the login shell's, on the desktop. */
+  /**
+   * Added to (and overriding) the environment programs get here: the login
+   * shell's, on the desktop, without the variables whose names look like
+   * secrets (see `looksLikeSecret` in ./execution).
+   */
   env: Readonly<Record<string, string>>;
   /**
    * What it may read, write and reach. Enforced from "os" up; at "none" it is
@@ -220,8 +230,10 @@ export interface ExecResult {
  * Runs the programs Tools start (Skill scripts now; later a shell or a
  * converter), as confined as this host can. The core never starts a Tool's
  * process itself, so a sandbox can come later without changing the Tools.
- * The core defaults to the local one at level "none" (./execution).
- * Connectors' own server processes don't come here: they use `ProcessLauncher`.
+ * The core defaults to the local one at level "none" (./execution); the
+ * desktop app gives it the OS sandbox's, at "os", where that can start
+ * (src/main/sandbox.ts). Connectors' own server processes don't come here:
+ * they use `ProcessLauncher`.
  */
 export interface Executor {
   readonly level: SandboxLevel;
@@ -347,7 +359,8 @@ export interface CoreAdapters {
   /**
    * Runs the programs Tools start, such as Skill scripts (see `Executor`).
    * Defaults to the local one at sandbox level "none", starting them through
-   * `processes`, with working folders in `paths.tempDir`.
+   * `processes`, with working folders in `paths.tempDir`. The desktop app
+   * passes the OS sandbox's where it can start.
    */
   executor?: Executor;
   /** What Skill scripts run with (see `ScriptRuntimes`); the defaults suit the desktop app. */
