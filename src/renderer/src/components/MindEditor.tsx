@@ -195,11 +195,12 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
     editor.setOptions({ editorProps: editorPropsFor(label, emptyFormula) });
   }, [editor, label, emptyFormula]);
 
-  // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get started.
-  const questionHere = useAppStore((state) => state.questionToStart === mindId);
+  // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
+  // started, or "Ask about this Folder" in the Library, which gives its Search scope.
+  const questionHere = useAppStore((state) => state.questionToStart?.mindId === mindId);
   useEffect(() => {
     if (!questionHere) return;
-    startQuestionAtEnd(editor);
+    startQuestionAtEnd(editor, useAppStore.getState().questionToStart?.scope ?? null);
     useAppStore.getState().questionStarted();
   }, [questionHere, editor]);
 

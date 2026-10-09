@@ -33,6 +33,18 @@ export function searchScopeOf(attributes: Readonly<Record<string, unknown>>): Se
   };
 }
 
+/** A Search scope as a Question's Block stores it: the inverse of `searchScopeOf`. */
+export function scopeAttributesOf(
+  scope: SearchScope,
+): Pick<QuestionAttributes, (typeof SCOPE_ATTRIBUTES)[ScopeKind]> {
+  const ids = (list: readonly string[]) => (list.length > 0 ? [...list] : null);
+  return {
+    [SCOPE_ATTRIBUTES.folder]: ids(scope.folderIds),
+    [SCOPE_ATTRIBUTES.tag]: ids(scope.tagIds),
+    [SCOPE_ATTRIBUTES.document]: ids(scope.documentIds),
+  };
+}
+
 /** The ids of one kind in a Search scope. */
 export function scopeIds(scope: SearchScope, kind: ScopeKind): string[] {
   return kind === "folder" ? scope.folderIds : kind === "tag" ? scope.tagIds : scope.documentIds;
