@@ -26,7 +26,8 @@ import {
 } from "./sidebarRows";
 
 /**
- * The sidebar, on the frame: a 44px header like every pane's, then "New
+ * The sidebar, on the frame: a 44px header like every pane's (the window's
+ * title bar starts there, with the app's mark or macOS's traffic lights), then "New
  * Mind", the Minds and the Documents in 28px rows, and a footer with the
  * tagging and processing status above Settings. Every row puts its icon at
  * x 16 and its text at x 40; section labels share the icon column.
@@ -109,17 +110,19 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
   );
 }
 
-/** The sidebar's 44px header: the app's mark and name. The startup shell draws it too. */
+/**
+ * The sidebar's 44px header, the start of the window's title bar: macOS's
+ * traffic lights sit here, in place of the app's mark (styles.css, "The title
+ * bar"). The startup shell draws it too.
+ */
 export function SidebarHeader() {
-  const t = useT();
   return (
     <header
       data-testid="sidebar-header"
       // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
-      className="relative flex h-11 shrink-0 items-center gap-2 px-4 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
+      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-4 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
     >
       <AppMark />
-      <span className="truncate text-ui font-semibold text-ink">{t("app.name")}</span>
     </header>
   );
 }

@@ -203,9 +203,12 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   for (const label of [window.locator("#minds-heading"), window.locator("#documents-heading")]) {
     expect((await textLeft(label)) - sidebarLeft).toBeCloseTo(16, 0);
   }
-  // The app's name sits on the same text edge as the rows.
+  // The header starts the window's title bar: macOS's traffic lights there (e2e/titleBar.spec.ts),
+  // or else the app's mark, on the icon column.
   const header = window.getByTestId("sidebar-header");
-  expect((await textLeft(header.locator("span").last())) - sidebarLeft).toBeCloseTo(40, 0);
+  if (process.platform !== "darwin") {
+    expect((await boxOf(header.getByTestId("app-mark"))).x - sidebarLeft).toBeCloseTo(16, 0);
+  }
 
   // Rows are 28px.
   for (const row of [newMind, ...(await rows.all())]) {

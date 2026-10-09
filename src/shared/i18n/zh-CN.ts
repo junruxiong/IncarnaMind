@@ -127,7 +127,6 @@ export const zhCN = {
   "consent.flow.classification": "文档整理",
   "consent.flow.classification.purpose": "将文档整理到文件夹并添加标签",
   "consent.data.groups": "文件夹名称及描述",
-  "app.name": "IncarnaMind",
 
   "sidebar.label": "侧边栏",
   "sidebar.newMind": "新建 Mind",

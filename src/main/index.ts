@@ -23,6 +23,7 @@ import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
 import { installAppMenu } from "./menu";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
+import { reportFullScreen, titleBarOptions } from "./titleBar";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
 
@@ -94,8 +95,11 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     title: "IncarnaMind",
-    // The sheet (DESIGN.md), the window's main surface, behind the page while it resizes.
-    backgroundColor: "#ffffff",
+    // The frame (DESIGN.md), as the approved canvas has it: the sidebar's colour, which the
+    // first paint shows at the top left, under macOS's traffic lights.
+    backgroundColor: "#F4F5F7",
+    // No title row of the system's: its window buttons sit in the app's top band.
+    ...titleBarOptions(process.platform),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -108,6 +112,7 @@ function createWindow(): BrowserWindow {
     window.show();
   });
   keepWindowPlace(window, dataDir);
+  reportFullScreen(window);
 
   // Links open in the User's browser, never inside the app.
   window.webContents.setWindowOpenHandler(({ url }) => {
