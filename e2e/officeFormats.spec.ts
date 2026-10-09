@@ -146,22 +146,27 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
     await expect(window.getByTestId("viewer-title")).toHaveText(document);
   };
 
-  // The slide: the deck's outline, at slide 3, the quote washed and the mark beside it.
+  // The slide: drawn as PowerPoint lays it out, at slide 3, the quote washed on it and the mark beside it.
   await open("Quarterly Research Update");
+  await expect(viewer.getByTestId("viewer-slides")).toHaveAttribute("data-drawn", "yes");
   const slide = viewer.locator('[data-slide="3"]');
   const slideQuote = slide.locator("[data-quote-highlight]");
   await expect(slideQuote).toHaveText([
     "The western region grew fastest, at 18 per cent year on year.",
   ]);
   await expect(slideQuote.first()).toBeInViewport();
-  await expect(slide.getByTestId("viewer-slide-notes")).toContainText(
-    "Point at the red bar: that is the west.",
-  );
+  // At the deck's own 16:9, as wide as the column allows.
+  const drawnSlide = await boxOf(slide.locator(".viewer-deck-sheet"));
+  expect(drawnSlide.width / drawnSlide.height).toBeCloseTo(16 / 9, 1);
+  // Its speaker notes are there, folded, as the quote is on the slide.
+  const notes = slide.getByTestId("viewer-slide-notes");
+  await expect(notes).toContainText("Point at the red bar: that is the west.");
+  await expect(notes).not.toHaveAttribute("open");
   await expect(slide.locator("img")).toHaveCount(1);
   await expect(mark.getByTestId("viewer-quote-mark-label")).toHaveText("slide 3");
   await expect(mark).toHaveAttribute("data-label-shown", "true");
   await expectMarkBeside(mark, slideQuote.first());
-  await screenshot(window, "pptx-outline");
+  await screenshot(window, "pptx-slides");
 
   // The rows: the Revenue sheet's grid, rows 7 and 8 washed, the mark beside them.
   await open("Regional Revenue");
@@ -338,5 +343,55 @@ test("a Markdown file opens at its cited section and a text file at its cited li
   ).toBe("101: ");
   await expect(line).toBeInViewport();
   await screenshot(window, "txt-lines");
+  await app.close();
+});
+
+test("a deck opens at a quote in a slide's speaker notes, which open, and marks a slide whose quote isn't on it", async () => {
+  const deck = join(sources, "Quarterly Research Update.pptx");
+  await copyFile(join(FIXTURES, "Quarterly Research Update.pptx"), deck);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await widen(app, window);
+  await window.getByTestId("add-documents-input").setInputFiles([deck]);
+  await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready");
+  const documentId = await documentIdOf(window, "Quarterly Research Update");
+  const viewer = window.getByTestId("viewer");
+  const mark = viewer.getByTestId("viewer-quote-mark");
+
+  // In the notes: they open under the slide, the quote washed there, the mark beside it.
+  await openDocumentAt(window, {
+    documentId,
+    pageFrom: 3,
+    quote: "Point at the red bar: that is the west.",
+    citation: { check: "found", number: 2, label: "slide 3" },
+  });
+  const notes = viewer.locator('[data-slide="3"]').getByTestId("viewer-slide-notes");
+  await expect(notes).toHaveAttribute("open", "");
+  const washed = notes.locator("[data-quote-highlight]");
+  await expect(washed).toHaveText("Point at the red bar: that is the west.");
+  await expect(washed).toBeInViewport();
+  await expectMarkBeside(mark, washed);
+  await screenshot(window, "pptx-notes");
+  // The notes fold again by hand.
+  await notes.locator("summary").click();
+  await expect(notes).not.toHaveAttribute("open");
+
+  // Not on the slide or anywhere in the deck: the cited slide is shown, its mark at its top.
+  await openDocumentAt(window, {
+    documentId,
+    pageFrom: 4,
+    quote: "Revenue doubled in the north.",
+    citation: { check: "not-found", number: 3, label: "slide 4" },
+  });
+  const cited = viewer.locator('[data-slide="4"]');
+  await expect(cited).toHaveAttribute("data-quote-found", "none");
+  await expect(viewer.locator("[data-quote-highlight]")).toHaveCount(0);
+  await expect(mark).toHaveAttribute("data-check", "not-found");
+  const markBox = await boxOf(mark);
+  const sheetBox = await boxOf(cited.locator(".viewer-deck-sheet"));
+  expect(markBox.x).toBeGreaterThan(sheetBox.x + sheetBox.width);
+  expect(Math.abs(markBox.y - sheetBox.y - 8)).toBeLessThanOrEqual(1);
+  await expect(cited.locator(".viewer-deck-sheet")).toBeInViewport();
+  await screenshot(window, "pptx-slide-mark");
   await app.close();
 });
