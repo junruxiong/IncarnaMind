@@ -1007,43 +1007,69 @@ export interface EmbeddingSettings {
 // ---------------------------------------------------------------------------
 // Rerank (ADR-0005)
 
-/** Reranking services. With a key for one, document search reranks its best matches. */
-export const rerankProviderKinds = ["cohere", "voyage"] as const;
+/**
+ * Where document search reranks its best matches. "built-in", the default, is
+ * a small multilingual reranking model on this computer: nothing is sent, it
+ * needs no key, and local mode doesn't pause it; its files are downloaded
+ * once, when the first Documents are ready to search. The others are
+ * reranking services, used with a key.
+ */
+export const rerankProviderKinds = ["built-in", "cohere", "voyage"] as const;
 
 export type RerankProviderKind = (typeof rerankProviderKinds)[number];
 
-/** The model each provider reranks with unless the User names another: both are multilingual. */
-export const DEFAULT_RERANK_MODELS: Readonly<Record<RerankProviderKind, string>> = {
+/** The reranking services: the search query and the Passages it found are sent to them. */
+export type RerankServiceKind = Exclude<RerankProviderKind, "built-in">;
+
+/** The model each service reranks with unless the User names another: both are multilingual. */
+export const DEFAULT_RERANK_MODELS: Readonly<Record<RerankServiceKind, string>> = {
   cohere: "rerank-v3.5",
   voyage: "rerank-2.5",
 };
 
-/** Rerank on this device. Without a key, search is as before: nothing is reranked. */
+/**
+ * The built-in reranking model's files, downloaded once into the data folder:
+ * the same states as the built-in embedding model's.
+ */
+export type RerankingModelStatus = EmbeddingModelStatus;
+
+/**
+ * Rerank on this device. On by default, with the built-in model: the User can
+ * choose a service instead, or turn it off, and search is then as it was.
+ */
 export interface RerankSettings {
-  /** A Cohere or Voyage key is set up on this device: document search reranks its candidates. */
+  /** Reranking is on, built in or with a key: document search reranks its candidates. False: the User turned it off. */
   enabled: boolean;
+  /** The User hasn't chosen on this device: reranking is on with the built-in model, the default. */
+  byDefault: boolean;
   kind: RerankProviderKind | null;
-  /** The model requests name, e.g. "rerank-v3.5"; null when rerank isn't set up. */
+  /** The model, e.g. "rerank-v3.5" or the built-in model's name; null when rerank isn't set up. */
   modelId: string | null;
-  /** Whether its key can be read on this device. Keys live in the keychain, never in the database. */
+  /** Whether a service's key can be read on this device. Keys live in the keychain, never in the database. Always false for "built-in". */
   hasApiKey: boolean;
-  /** Where the Question and candidate Passages go, while rerank is set up. */
+  /** Where the Question and candidate Passages go, while a service is set up; null for "built-in". */
   service: ExternalService | null;
-  /** Local mode is on: nothing is reranked, though the settings are kept. */
+  /** Local mode is on and a service is set up: nothing is reranked, though the settings are kept. */
   paused: boolean;
+  /**
+   * The built-in model (its name and download size), whichever is chosen, and
+   * its download. While "built-in" is chosen and it isn't "ready", search
+   * keeps its own order.
+   */
+  model: RerankingModelStatus;
 }
 
 export interface SaveRerankSettingsInput {
   kind: RerankProviderKind;
-  /** A new key. Leave it out to keep the stored one (for the same kind); the first save needs one. */
+  /** A new key, for a service. Leave it out to keep the stored one (for the same kind); the first save needs one. */
   apiKey?: string;
-  /** Null or empty: the provider's default model (`DEFAULT_RERANK_MODELS`). Left out: unchanged. */
+  /** Null or empty: the service's default model (`DEFAULT_RERANK_MODELS`). Left out: unchanged. Not for "built-in". */
   modelId?: string | null;
 }
 
-/** Settings to test, which need not be saved; those left out are the saved ones. */
+/** Settings to test, which need not be saved; those left out are the saved ones. Services only. */
 export interface TestRerankConnectionInput {
-  kind?: RerankProviderKind;
+  kind?: RerankServiceKind;
   apiKey?: string;
   modelId?: string | null;
 }
@@ -1568,7 +1594,8 @@ export type DataKind = (typeof dataKinds)[number];
  * - "embeddings": every Document's text and every search query, to a cloud
  *   embedding provider, when the User chose one instead of the built-in model.
  * - "rerank": each search query and its candidate Passages, to Cohere or
- *   Voyage, when a rerank key is set up.
+ *   Voyage, when a rerank key is set up. The built-in reranking model sends
+ *   nothing: with it, the flow has no service.
  */
 export const dataFlowIds = [
   "chat",
@@ -1630,6 +1657,9 @@ export interface RegisteredDataFlow {
  * (`privacy.traffic.<id>`). Features register theirs; later tickets add ids.
  * - "update-check": asks GitHub Releases for a newer version, when IncarnaMind starts.
  * - "embedding-model": downloads the built-in embedding model's files, once.
+ * - "reranking-model": downloads the built-in reranking model's files, once,
+ *   when the first Documents are ready to search, unless reranking is off or
+ *   uses a service.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
  * - "remote-connectors": connecting to each remote Connector that is on, and
@@ -1640,6 +1670,7 @@ export interface RegisteredDataFlow {
 export const networkTrafficIds = [
   "update-check",
   "embedding-model",
+  "reranking-model",
   "ollama-pull",
   "chatgpt-sign-in",
   "remote-connectors",
@@ -2311,23 +2342,35 @@ export interface CoreApi {
    * Turns local mode ("keep everything on this computer") on or off on this
    * device. Turning it on switches a cloud embedding provider back to the
    * built-in model, which embeds every Document again (an embedding provider
-   * on this computer, e.g. Ollama, is kept), and stops reranking.
+   * on this computer, e.g. Ollama, is kept), and pauses a reranking service
+   * (the built-in reranking model carries on).
    */
   setLocalOnly(enabled: boolean): Promise<EmbeddingSettings>;
 
-  /** Rerank on this device: whether a Cohere or Voyage key is set up. */
+  /** Rerank on this device: the built-in model (the default), a Cohere or Voyage key, or off. */
   getRerankSettings(): Promise<RerankSettings>;
   /**
+   * Starts the built-in reranking model's download, or tries it again after
+   * a failure. It also starts by itself when the first Documents are ready
+   * to search, while the built-in model is chosen. "rerank.changed" events
+   * report its progress.
+   */
+  downloadRerankingModel(): Promise<RerankSettings>;
+  /**
    * Sets up rerank, or changes it: from then on document search reranks its
-   * candidates. The "rerank" flow to the service needs consent first: if the
-   * User declines, nothing changes. The key goes to the keychain.
+   * candidates. For a service, the "rerank" flow to it needs consent first:
+   * if the User declines, nothing changes, and the key goes to the keychain.
+   * "built-in" needs neither: it starts downloading the built-in model (or
+   * tries again after a failed download); "rerank.changed" events report
+   * its progress.
    */
   saveRerankSettings(input: SaveRerankSettingsInput): Promise<RerankSettings>;
-  /** Removes rerank's key and settings from this device: search is as before. */
+  /** Turns reranking off on this device and removes a service's key: search keeps its own order. The built-in model's files are kept. */
   removeRerankSettings(): Promise<RerankSettings>;
   /**
    * Reranks two fixed texts against a fixed query, nothing of the User's,
-   * with the given settings or the saved ones. The "rerank" flow needs consent first.
+   * with the given service settings or the saved ones. The "rerank" flow
+   * needs consent first. Not for the built-in model.
    */
   testRerankConnection(input?: TestRerankConnectionInput): Promise<ConnectionTestResult>;
 
@@ -2667,7 +2710,10 @@ export interface CoreEvents {
    * progress (a Document finished) or finished, or the provider failed or recovered.
    */
   "embedding.changed": EmbeddingSettings;
-  /** Rerank was set up, changed or removed on this device, or paused by local mode. */
+  /**
+   * Rerank was set up, changed or removed on this device, or paused by local
+   * mode; or the built-in reranking model's download moved on.
+   */
   "rerank.changed": RerankSettings;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
@@ -2804,6 +2850,7 @@ const methods: Record<CoreApiMethod, true> = {
   retryEmbedding: true,
   setLocalOnly: true,
   getRerankSettings: true,
+  downloadRerankingModel: true,
   saveRerankSettings: true,
   removeRerankSettings: true,
   testRerankConnection: true,

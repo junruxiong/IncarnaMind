@@ -385,6 +385,9 @@ export const zhCN = {
   "status.downloading": "搜索模型：{downloaded} / {total} MB",
   "status.downloadFailed": "搜索模型下载失败",
   "status.modelFailed": "搜索模型无法启动",
+  "status.rerankDownloading": "重排序模型：{downloaded} / {total} MB",
+  "status.rerankDownloadFailed": "重排序模型下载失败",
+  "status.rerankModelFailed": "重排序模型无法启动",
   "status.rebuilding": "正在重建搜索：{done} / {total}",
   "status.searchError": "搜索无法使用 {provider}",
   "status.retry": "重试",
@@ -450,20 +453,32 @@ export const zhCN = {
 
   "rerank.settings.title": "重新排序",
   "rerank.settings.body":
-    "有了 Cohere 或 Voyage AI 的密钥，文档搜索会用重排序模型调整最佳结果的顺序，让最相关的段落排在前面。没有密钥时一切照旧。",
+    "文档搜索会用重排序模型调整最佳结果的顺序，让最相关的段落排在前面。默认开启，使用在这台电脑上运行的内置模型；Cohere 和 Voyage AI 需要密钥。你可以关闭它。",
   "rerank.settings.inUse": "{service} 正在为搜索结果重新排序（{model}）。",
   "rerank.settings.sends": "每次搜索和找到的段落都会发送到 {service}。",
+  "rerank.settings.builtInUse": "内置模型正在为搜索结果重新排序（{model}）。",
+  "rerank.settings.builtInDefault": "默认由内置模型为搜索结果重新排序（{model}）。",
+  "rerank.settings.notDownloaded":
+    "有文档可搜索时，它会下载一次（{total} MB）。在此之前，搜索保持原来的顺序。",
+  "rerank.settings.builtInNote": "所有内容都留在这台电脑上。每次搜索会稍慢一些。",
+  "rerank.settings.downloading":
+    "正在下载重排序模型：{downloaded} / {total} MB。下载完成前，搜索保持原来的顺序。",
+  "rerank.settings.failed": "重排序模型下载失败：{reason}。",
+  "rerank.settings.loadFailed": "重排序模型无法在这台电脑上启动。",
+  "rerank.settings.retry": "重试",
   "rerank.settings.paused": "已暂停：本地模式下，搜索结果留在这台电脑上。",
   "rerank.settings.keyMissing":
     "这台设备上读取不到 {service} 的密钥，因此不会重新排序。请重新输入密钥。",
-  "rerank.settings.setUp": "添加重排序密钥…",
+  "rerank.settings.setUp": "设置重新排序…",
   "rerank.settings.localOnly":
-    "本地模式已开启：重排序会把搜索结果发送到 Cohere 或 Voyage AI。要设置它，请关闭“所有内容都留在这台电脑上”。",
+    "本地模式已开启：Cohere 和 Voyage AI 会收到搜索结果，所以只能选择内置模型。",
   "rerank.settings.change": "更改",
   "rerank.settings.remove": "停止重新排序",
+  "rerank.kind.built-in": "在这台电脑上（内置模型）",
   "rerank.kind.cohere": "Cohere",
   "rerank.kind.voyage": "Voyage AI",
-  "rerank.form.label": "重排序服务",
+  "rerank.form.label": "重新排序方式",
+  "rerank.form.builtInNote": "只需下载一次 {model}（{size} MB）。你的搜索和文档都留在这台电脑上。",
   "rerank.form.model": "模型（可选）",
   "rerank.form.save": "用于重新排序",
 
@@ -757,6 +772,9 @@ export const zhCN = {
   "privacy.traffic.embedding-model": "下载搜索模型",
   "privacy.traffic.embedding-model.description":
     "内置搜索模型只下载一次，在第一次有文档需要它时下载。",
+  "privacy.traffic.reranking-model": "下载重排序模型",
+  "privacy.traffic.reranking-model.description":
+    "内置重排序模型只下载一次，在有文档可搜索时下载，除非重新排序已关闭或使用了在线服务。",
   "privacy.traffic.ollama-pull": "下载本地模型",
   "privacy.traffic.ollama-pull.description":
     "当你选择本地模型时，Ollama 会从它的模型库下载该模型。",
