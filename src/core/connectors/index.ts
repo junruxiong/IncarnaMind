@@ -845,6 +845,8 @@ export function createConnectors(options: ConnectorsOptions) {
       providerTool: tool.name,
       title: tool.title,
       effects: () => connectorToolEffects(service, tool.readOnly),
+      // Its reply comes from the Connector's service, not from the User.
+      untrustedResult: true,
       async call(input, { signal }) {
         try {
           await untilAborted(consent.ensure("connectors", service), signal);

@@ -235,6 +235,8 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
         { action: "write", scope: { kind: "anywhere" } },
         { action: "network", scope: { kind: "anywhere" } },
       ],
+      // Nothing untrusted was read before it: there are no Documents to search.
+      tainted: false,
     } satisfies SkillScriptApprovalRequest);
     expect(await core.listApprovalRequests()).toEqual([request]);
     // Paused: its card waits, and the script hasn't run.
