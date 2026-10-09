@@ -177,6 +177,24 @@ export function PencilLineIcon(props: IconProps) {
   );
 }
 
+/** Merging one thing into another: two paths joining into one. */
+export function MergeLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M6 4v3.5l6 6 6-6V4M12 13.5V20" />
+    </LineIcon>
+  );
+}
+
+/** Applied automatically: a small four-pointed spark, drawn at 10–12px beside a Tag's name. */
+export function SparkLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2} {...props}>
+      <path d="M12 3c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8z" />
+    </LineIcon>
+  );
+}
+
 export function CheckLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>

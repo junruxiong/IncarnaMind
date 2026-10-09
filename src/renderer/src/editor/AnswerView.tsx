@@ -405,14 +405,15 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
 
 /**
  * A Skill script waiting for the User, in the same three sections: which
- * script of which Skill, and that scripts run on this computer with no
- * sandbox; the Skill, script and arguments it would run with; and three
- * choices. "Always run" first shows a warning in the last section, which must
- * be confirmed. The Answer waits meanwhile.
+ * script of which Skill, and what it can reach (in the OS sandbox, or with
+ * no sandbox: `Settings.scriptSandbox`); the Skill, script and arguments it
+ * would run with; and three choices. "Always run" first shows a warning in
+ * the last section, which must be confirmed. The Answer waits meanwhile.
  */
 function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
   const t = useT();
   const respond = useApprovals((state) => state.respond);
+  const sandboxed = useAppStore((state) => state.settings?.scriptSandbox === "os");
   const [warning, setWarning] = useState(false);
   const titleId = useId();
   const warningId = useId();
@@ -435,8 +436,12 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
             code={request.script}
           />
         </p>
-        <p data-testid="approval-no-sandbox" className="approval-explanation">
-          {t("scripts.card.noSandbox")}
+        <p
+          data-testid="approval-sandbox"
+          data-sandbox={sandboxed ? "os" : "none"}
+          className="approval-explanation"
+        >
+          {t(sandboxed ? "scripts.card.sandboxed" : "scripts.card.noSandbox")}
         </p>
       </div>
       <div className="approval-details">
@@ -475,7 +480,9 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
           <p id={warningId} className="approval-warning-title">
             {t("scripts.alwaysRun.title", params)}
           </p>
-          <p className="approval-warning-body">{t("scripts.alwaysRun.body", params)}</p>
+          <p className="approval-warning-body">
+            {t(sandboxed ? "scripts.alwaysRun.bodySandboxed" : "scripts.alwaysRun.body", params)}
+          </p>
           <div className="approval-buttons">
             <button
               type="button"

@@ -456,11 +456,28 @@ export interface DeviceSettings {
   skillScriptTimeoutSeconds: number;
 }
 
+/**
+ * How the programs Tools start (Skill scripts) are confined:
+ * - "none": not at all; they run as the User, with the User's permissions
+ *   (Windows; Linux without bubblewrap).
+ * - "os": in the OS sandbox (macOS Seatbelt, Linux bubblewrap): they can't
+ *   read the User's home or IncarnaMind's data folder, write only their
+ *   working folder, and have no network.
+ * - "container": in a container or virtual machine on this computer.
+ * - "remote": on another machine (the hosted version).
+ */
+export type SandboxLevel = "none" | "os" | "container" | "remote";
+
 export interface Settings {
   user: UserSettings;
   device: DeviceSettings;
   /** The interface language in effect: the User's choice, or the OS language for "system". */
   language: Language;
+  /**
+   * How Skill scripts run on this device, found out when the app starts: not
+   * a setting. The approval card and Settings say what a script can reach by it.
+   */
+  scriptSandbox: SandboxLevel;
 }
 
 export interface SettingsPatch {
@@ -2530,6 +2547,23 @@ export interface CoreApi {
    */
   removeDocumentTag(documentId: string, tagId: string): Promise<Document>;
   /**
+   * The User puts a Tag on several Documents at once, as `addDocumentTag`
+   * does on each, in one change: if one Document or the Tag doesn't exist,
+   * nothing changes. Returns the Documents, in the order given; one
+   * "documents.tagged" event carries those that changed.
+   */
+  addTagToDocuments(documentIds: string[], tagId: string): Promise<Document[]>;
+  /** The User takes a Tag off several Documents at once, as `removeDocumentTag` does on each. */
+  removeTagFromDocuments(documentIds: string[], tagId: string): Promise<Document[]>;
+  /**
+   * Merges a Tag into another: every Document carrying `tagId` carries
+   * `intoTagId` instead, and `tagId` is deleted. Who chose each Tag is kept
+   * (the User's choice wins when a Document had both), and a removal the
+   * User made of the merged Tag carries over to the other. Returns the Tag
+   * merged into, unchanged.
+   */
+  mergeTags(tagId: string, intoTagId: string): Promise<Tag>;
+  /**
    * Recomputes the automatic Tags of these Documents, or of every Document,
    * e.g. after Tag definitions changed. Tags the User added or removed are
    * kept as they are. Returns once the Documents are queued; "documents.tagged"
@@ -2904,6 +2938,9 @@ const methods: Record<CoreApiMethod, true> = {
   deleteTag: true,
   addDocumentTag: true,
   removeDocumentTag: true,
+  addTagToDocuments: true,
+  removeTagFromDocuments: true,
+  mergeTags: true,
   retagDocuments: true,
   getJevSettings: true,
   saveJevSettings: true,

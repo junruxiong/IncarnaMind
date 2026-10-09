@@ -3,7 +3,7 @@
  * interpreter, checks the arguments and writes the result text, and asks the
  * Executor to run it with what it may touch. A fake Executor records each
  * request: the Skill's folder and the working folder to read, the working
- * folder to write, and the network (any, for now).
+ * folder to write, and no network.
  */
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
@@ -85,7 +85,7 @@ describe("The script runner asks the Executor", () => {
         command: "/app/node",
         args: [join(SKILL_DIR, "scripts", "echo.js"), "two words", "--flag"],
         env: { ELECTRON_RUN_AS_NODE: "1", SKILL_DIR },
-        allow: { read: [SKILL_DIR, WORKING_FOLDER], write: [WORKING_FOLDER], network: "any" },
+        allow: { read: [SKILL_DIR, WORKING_FOLDER], write: [WORKING_FOLDER], network: "none" },
         timeoutMs: 7_000,
         maxOutputBytes: SKILL_SCRIPT_LIMITS.maxOutputBytes,
         signal: expect.any(AbortSignal),
@@ -118,7 +118,7 @@ describe("The script runner asks the Executor", () => {
       expect(request.allow).toEqual({
         read: [SKILL_DIR, WORKING_FOLDER],
         write: [WORKING_FOLDER],
-        network: "any",
+        network: "none",
       });
     }
   });
@@ -211,7 +211,7 @@ describe("The script runner asks the Executor", () => {
       confined: true,
       read: [SKILL_DIR, WORKING_FOLDER],
       write: [WORKING_FOLDER],
-      network: "any",
+      network: "none",
     });
   });
 });
@@ -265,7 +265,7 @@ describe("The core runs Skill scripts through its Executor", { timeout: 30_000 }
     expect(requests[0]).toMatchObject({
       args: [join(skillDir, "scripts", "echo.js"), "one"],
       env: { SKILL_DIR: skillDir },
-      allow: { read: [skillDir, WORKING_FOLDER], write: [WORKING_FOLDER], network: "any" },
+      allow: { read: [skillDir, WORKING_FOLDER], write: [WORKING_FOLDER], network: "none" },
       timeoutMs: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds * 1000,
     });
     expect(results).toEqual([

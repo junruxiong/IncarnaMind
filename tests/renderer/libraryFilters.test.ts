@@ -9,8 +9,11 @@ import {
   isFiltering,
   type LibraryFacet,
   libraryStatus,
+  matchesTags,
+  NEEDS_REVIEW,
   NO_DATE,
   statusFacet,
+  tagFacet,
   toggleFilterValue,
   yearFacet,
 } from "../../src/renderer/src/libraryFilters";
@@ -212,5 +215,50 @@ describe("a large Library", () => {
     expect(performance.now() - started).toBeLessThan(250);
     expect(shown).toHaveLength(6667);
     expect(all.get("year")?.reduce((sum, option) => sum + option.count, 0)).toBe(6667);
+  });
+});
+
+describe("the Tags filter", () => {
+  const tags = [
+    { id: "t-report", name: "Report" },
+    { id: "t-invoice", name: "invoice" },
+  ];
+  const link = (tagId: string, needsReview = false) => ({
+    tagId,
+    source: "automatic" as const,
+    confidence: null,
+    needsReview,
+  });
+  type Tagged = Shape & Pick<Document, "tags">;
+  const tagged: Tagged[] = [
+    { ...doc(), tags: [link("t-report"), link("t-invoice", true)] },
+    { ...doc({ kind: "docx" }), tags: [link("t-report")] },
+    { ...doc(), tags: [] },
+  ];
+  const facet = tagFacet(tags);
+  const facets = [...(documentFacets as readonly LibraryFacet<Tagged>[]), facet];
+
+  test("offers each Tag by name, and Needs review first, with counts", () => {
+    expect(options(tagged, facet, {}, facets)).toEqual([
+      [NEEDS_REVIEW, 1, false],
+      ["t-invoice", 1, false],
+      ["t-report", 2, false],
+    ]);
+    expect(facet.label("t-invoice", en)).toBe("invoice");
+    expect(facet.label(NEEDS_REVIEW, en)).toBe("Needs review");
+    expect(facet.label(NEEDS_REVIEW, zh)).toBe("待确认");
+  });
+
+  test("keeps Documents with any Tag chosen, combined with the other filters", () => {
+    expect(filterLibrary(tagged, facets, { tag: ["t-invoice", "t-report"] }).shown).toEqual([
+      tagged[0],
+      tagged[1],
+    ]);
+    expect(filterLibrary(tagged, facets, { tag: [NEEDS_REVIEW] }).shown).toEqual([tagged[0]]);
+    expect(filterLibrary(tagged, facets, { tag: ["t-report"], format: ["docx"] }).shown).toEqual([
+      tagged[1],
+    ]);
+    expect(matchesTags({ tags: [] }, [])).toBe(true);
+    expect(matchesTags({ tags: [] }, ["t-report"])).toBe(false);
   });
 });

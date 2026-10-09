@@ -17,10 +17,17 @@ import { classifyProviderError } from "../providers/providerErrors";
 import { isChatModelChoice, type SettingsStore } from "../settings";
 import type { Database } from "../storage";
 import { sameName, type TagsStore } from "../tags";
-import { excerptFromPassages } from "../tags/classify";
 import type { GroupClassifier } from "./classifier";
+import {
+  ORGANIZE_PASSAGES,
+  type OrganizeSource,
+  type OrganizeUnit,
+  organizeExcerpt,
+  organizeNeedsPageImages,
+  ROUTING_PAGE_CHARACTERS,
+  ROUTING_PAGES,
+} from "./excerpt";
 import type { DocumentPageImage } from "./pdfImages";
-import { pdfNeedsPageImages } from "./routing";
 import type {
   ClassificationModel,
   ClassificationStatus,
@@ -113,15 +120,28 @@ export function createLibrary(options: {
         ]))
     );
   };
+  /** What Organize reads of the indexed version (see ./excerpt). */
+  const source = (doc: DocumentRow, withPassages = true): OrganizeSource => ({
+    name: doc.name,
+    kind: doc.kind,
+    pageCount: doc.page_count,
+    passages: withPassages
+      ? db
+          .all<{ text: string }>(
+            "SELECT text FROM passages WHERE document_id = ? AND deleted_at IS NULL ORDER BY position LIMIT ?",
+            [doc.id, BigInt(ORGANIZE_PASSAGES)],
+          )
+          .map((row) => row.text)
+      : [],
+    units: db
+      .all<{ page: number; kind: OrganizeUnit["kind"]; label: string | null; text: string }>(
+        "SELECT page, kind, label, CASE WHEN page <= ? THEN substr(text, 1, ?) ELSE '' END AS text FROM document_pages WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL ORDER BY page LIMIT 400",
+        [BigInt(ROUTING_PAGES), BigInt(ROUTING_PAGE_CHARACTERS), doc.id, doc.content_hash],
+      )
+      .map((row) => ({ ...row, label: row.label ? JSON.parse(row.label) : null })),
+  });
   const needsPageImages = (doc: DocumentRow) =>
-    doc.kind === "pdf" &&
-    pdfNeedsPageImages(
-      db.all<{ page: number; text: string }>(
-        "SELECT page, substr(text, 1, 4000) AS text FROM document_pages WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL AND page BETWEEN 1 AND 12 ORDER BY page LIMIT 12",
-        [doc.id, doc.content_hash],
-      ),
-      doc.page_count,
-    );
+    doc.kind === "pdf" && organizeNeedsPageImages(source(doc, false));
   const tagState = (id: string, status: ClassificationStatus, error?: ProviderError) => {
     const tagging = {
       pending: "pending",
@@ -227,27 +247,19 @@ export function createLibrary(options: {
           const classifier = await options.prepare(getSettings());
           if (classifier.local) call.runsLocally();
           if (stale()) return;
-          const passages = db.all<{ text: string }>(
-            "SELECT text FROM passages WHERE document_id = ? AND deleted_at IS NULL ORDER BY position LIMIT 6",
-            [id],
-          );
+          const read = source(current);
           const signal = AbortSignal.any([lifetime.signal, call.signal]);
           const images =
             classifier.pageImages &&
             current.kind === "pdf" &&
-            (classifier.pageImages !== "auto" || needsPageImages(current))
+            (classifier.pageImages !== "auto" || organizeNeedsPageImages(read))
               ? await options.pageImages(id, current.content_hash ?? "", signal)
               : [];
           if (stale()) return;
           const result = await classifier.organize(
             definitions,
             tagDefinitions,
-            {
-              name: current.name,
-              kind: current.kind,
-              pageCount: current.page_count,
-              text: excerptFromPassages(passages.map((row) => row.text)),
-            },
+            organizeExcerpt(read),
             signal,
             images,
           );

@@ -2,6 +2,7 @@
  * Electron implementations of the core's adapters. This is the only place that
  * turns Electron APIs into capabilities the core can use.
  */
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
@@ -10,6 +11,7 @@ import {
   BUILT_IN_SKILLS_SOURCE,
   type CoreAdapters,
   type CrashReporter,
+  type Executor,
   type FileShell,
   type Keychain,
   type Logger,
@@ -18,6 +20,7 @@ import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
+import { loadOsSandbox } from "./sandbox";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 
 /**
@@ -72,13 +75,62 @@ const fileShell: FileShell = {
 };
 
 /**
- * Local Connectors (and later Skill scripts) start with the User's
- * login-shell environment, read once (see ./processes).
+ * Local Connectors and Skill scripts start with the User's login-shell
+ * environment, read once (see ./processes).
  */
 const loginShellProcesses = createLoginShellProcesses({
   reportError: (error) =>
     console.warn("Couldn't read the login shell's environment; using the app's own.", error),
 });
+
+/**
+ * In a packaged Linux app, sandbox-runtime's seccomp helper outside app.asar
+ * (electron-builder.yml unpacks it), where bubblewrap can run it.
+ */
+function seccompHelper(): string | undefined {
+  if (process.platform !== "linux" || !app.isPackaged) return undefined;
+  const runtime = join("node_modules", "@anthropic-ai", "sandbox-runtime");
+  return join(
+    process.resourcesPath,
+    "app.asar.unpacked",
+    runtime,
+    "vendor",
+    "seccomp",
+    process.arch,
+    "apply-seccomp",
+  );
+}
+
+/**
+ * The Executor Skill scripts run on (#65): the OS sandbox's, at level "os",
+ * where it can start (macOS; Linux with bubblewrap). Elsewhere none is
+ * given, and the core runs them at level "none", where each run asks first.
+ * Found out once, at startup: the log says which, and why not "os". Call
+ * once `userData` is set.
+ */
+export async function chooseExecutor(log: Logger): Promise<Executor | undefined> {
+  try {
+    const sandbox = await loadOsSandbox({ seccompHelper: seccompHelper() });
+    if (!sandbox.available) {
+      log.info("scripts.sandbox", { level: "none", reason: sandbox.reason });
+      return undefined;
+    }
+    log.info("scripts.sandbox", { level: "os" });
+    return sandbox.createExecutor({
+      processes: loginShellProcesses,
+      environment: () => loginShellProcesses.environment(),
+      tempDir: tmpdir(),
+      denyRead: [app.getPath("home"), app.getPath("userData")],
+      reportError: (error) => console.error(error),
+    });
+  } catch (error) {
+    log.error("scripts.sandbox", {
+      level: "none",
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
 
 /**
  * Test-only launch flag: the smoke tests run a deterministic fake embedding

@@ -8,7 +8,7 @@ import { buttonStyle, fieldLabelClass, hintClass, inputClass, noticeClass } from
 
 /** A text button inside a line, e.g. "Sign out". */
 const linkButtonClass =
-  "text-accent underline-offset-2 outline-none hover:text-accent-strong hover:underline focus-visible:underline";
+  "rounded-sm text-accent underline-offset-2 hover:text-accent-strong hover:underline";
 
 /** Runs an action; a failure shows in the app's error banner. */
 async function act(action: () => Promise<unknown>) {
