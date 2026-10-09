@@ -2085,7 +2085,32 @@ interface ApprovalRequestBase {
   answerId: string;
   /** The call's id among the Answer's `toolCalls`. */
   toolCallId: string;
+  /** What the call can do, as its Tool declares it: why it asks. */
+  effects: Effect[];
 }
+
+/**
+ * An Effect (CONTEXT.md): something a Tool call can do beyond the
+ * conversation it is part of, and where. Whether a call asks the User first
+ * depends on its Effects, and on the User's policy for it.
+ */
+export interface Effect {
+  /**
+   * "read": takes data in. "write": changes something. "execute": runs code
+   * on this computer. "network": sends data off this computer.
+   */
+  action: "read" | "write" | "execute" | "network";
+  scope: EffectScope;
+}
+
+/** Where an Effect happens. "anywhere" when IncarnaMind can't tell, e.g. for an unconfined script. */
+export type EffectScope =
+  | { kind: "documents" } // IncarnaMind's index of the User's Documents
+  | { kind: "skill"; skillId: string } // a Skill's own folder
+  | { kind: "folder"; path: string } // absolute; covers what is inside
+  | { kind: "service"; serviceId: string; name: string } // an external service, as consent names it
+  | { kind: "host"; host: string } // a web host
+  | { kind: "anywhere" };
 
 /**
  * A run of a Skill script waiting for the User's approval: which Skill, which
