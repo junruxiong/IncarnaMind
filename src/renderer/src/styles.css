@@ -152,6 +152,25 @@
   }
 
   /*
+   * The room the top band keeps for the system's window buttons (see "The
+   * title bar" below): macOS's traffic lights at its left end (16px in, three
+   * 14px lights 9px apart, so up to x 76, then 8px), except in full screen,
+   * where they hide; Windows' buttons at its right end, as the Window Controls
+   * Overlay reports them. Linux keeps its own title bar: no room needed.
+   */
+  :root {
+    --window-buttons-left: 0px;
+    --window-buttons-right: calc(
+      100vw -
+      env(titlebar-area-x, 0px) -
+      env(titlebar-area-width, 100vw)
+    );
+  }
+  :root[data-title-bar="inset"]:not([data-full-screen]) {
+    --window-buttons-left: 84px;
+  }
+
+  /*
    * Reached by keyboard, every control shows the blue focus ring (DESIGN.md),
    * not the system's: 2px, 2px out. A component may move it, e.g. inside a
    * row; Tailwind's `outline-none` hides it, so controls don't use that.
@@ -235,6 +254,35 @@
   }
 
   /*
+   * The title bar (src/shared/titleBar.ts): the window has no title row of
+   * the system's; the 44px band of pane headers is its title bar. Its empty
+   * parts move the window when dragged (and a double-click zooms it, on
+   * macOS); what can be clicked in it stays clickable, and so do the pane
+   * dividers, menus and dialogs over it.
+   */
+  .title-bar {
+    -webkit-app-region: drag;
+  }
+  .title-bar :is(button, input, select, textarea, a, [role="tab"]),
+  .pane-divider,
+  .pane-divider::after,
+  [popover],
+  dialog {
+    -webkit-app-region: no-drag;
+  }
+  /* The band starts in the sidebar's header: the app's mark at x 16, or macOS's traffic lights. */
+  .sidebar-header {
+    padding-left: max(16px, var(--window-buttons-left));
+  }
+  /* The band's right end, under Windows' buttons, is the viewer's toolbar while it's open. */
+  main:has(~ .viewer-pane) {
+    --window-buttons-right: 0px;
+  }
+  .library-header {
+    padding-right: calc(16px + var(--window-buttons-right));
+  }
+
+  /*
    * A switch: a native checkbox (role="switch"), so it is checked, focused
    * and labelled like one. The knob is a background, moved when checked.
    */
@@ -291,7 +339,7 @@
     flex-shrink: 0;
     align-items: flex-end;
     height: 44px;
-    padding-right: 8px;
+    padding-right: calc(8px + var(--window-buttons-right));
     background: var(--color-tab-strip);
   }
   /*
@@ -2182,4 +2230,9 @@
   .library-column-labels {
     display: none;
   }
+}
+
+/* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */
+:root[data-title-bar="inset"]:not([data-full-screen]) .app-mark {
+  display: none;
 }

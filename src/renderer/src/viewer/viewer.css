@@ -28,7 +28,19 @@
    */
   .viewer-header {
     @apply flex h-11 shrink-0 items-center gap-1 overflow-x-auto bg-tab-strip px-2 text-[13px] leading-5 text-ink-secondary;
+    /* At the band's right end: clear of Windows' window buttons (styles.css, "The title bar"). */
+    padding-right: calc(8px + var(--window-buttons-right));
     scrollbar-width: none;
+
+    /* On Windows, a divider between the viewer's ✕ and the window's buttons. */
+    :root[data-title-bar="overlay"] &::after {
+      content: "";
+      flex-shrink: 0;
+      width: 1px;
+      height: 16px;
+      margin-left: 6px;
+      background: var(--color-tab-divider);
+    }
 
     /* On the band, a pointed-at button takes the tab strip's hover. */
     .viewer-icon-button:hover:not(:disabled) {

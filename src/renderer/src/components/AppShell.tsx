@@ -49,7 +49,7 @@ export function AppShell() {
       </div>
       <div className="w-px shrink-0 bg-rule" />
       <div className="flex min-w-[300px] flex-1 flex-col">
-        <div className="mind-tabs" />
+        <div className="mind-tabs title-bar" />
       </div>
     </div>
   );

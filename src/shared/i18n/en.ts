@@ -139,7 +139,6 @@ export const en = {
   "consent.flow.classification": "Document organization",
   "consent.flow.classification.purpose": "organize your Documents into folders and tags",
   "consent.data.groups": "The names and descriptions of your folders",
-  "app.name": "IncarnaMind",
 
   "sidebar.label": "Sidebar",
   "sidebar.newMind": "New Mind",
