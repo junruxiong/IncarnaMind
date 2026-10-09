@@ -3,6 +3,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { TextSelection } from "@tiptap/pm/state";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ANSWER_BLOCK, QUESTION_BLOCK, type SearchScope } from "../../../core/api";
 import { scopeAttributesOf } from "../../../shared/searchScope";
 
@@ -101,6 +102,10 @@ export function EndHint({
 
   useEffect(() => {
     let frame = 0;
+    // Measured in a frame, and drawn in that same frame, before it is painted:
+    // the hint never shows over a line that has just moved or been written
+    // on, e.g. under an Answer's error row as it appears.
+    const show: typeof setHint = (next) => flushSync(() => setHint(next));
     const measure = () => {
       frame = 0;
       const origin = layer.current?.parentElement;
@@ -108,7 +113,7 @@ export function EndHint({
       const line = hintLine(editor.state, editor.isFocused);
       const dom = line ? editor.view.nodeDOM(line.pos) : null;
       if (!line || !(dom instanceof HTMLElement)) {
-        setHint(null);
+        show(null);
         return;
       }
       const box = origin.getBoundingClientRect();
@@ -118,7 +123,7 @@ export function EndHint({
         left: Math.round(rect.left - box.left),
         width: Math.round(rect.width),
       };
-      setHint((shown) =>
+      show((shown) =>
         shown &&
         shown.pos === line.pos &&
         shown.place === line.place &&
