@@ -4,17 +4,21 @@
  * the interface language of the time, and the User may edit or delete it
  * afterwards. Adding an interface language without these fails the type-check.
  */
+import type { TagColour } from "../../shared/tagColours";
 import type { Language } from "../language";
 
 export interface PresetTag {
   /** Stored with the Tag (`tags.preset`) and never shown. */
   key: string;
+  /** Its colour when created; Tags often seen together differ (migration 27 has the same). */
+  colour: TagColour;
   text: { readonly [L in Language]: { name: string; description: string } };
 }
 
 export const PRESET_TAGS: readonly PresetTag[] = [
   {
     key: "paper",
+    colour: "violet",
     text: {
       en: {
         name: "Paper",
@@ -29,6 +33,7 @@ export const PRESET_TAGS: readonly PresetTag[] = [
   },
   {
     key: "report",
+    colour: "petrol",
     text: {
       en: {
         name: "Report",
@@ -43,6 +48,7 @@ export const PRESET_TAGS: readonly PresetTag[] = [
   },
   {
     key: "book",
+    colour: "brick",
     text: {
       en: {
         name: "Book",
@@ -56,6 +62,7 @@ export const PRESET_TAGS: readonly PresetTag[] = [
   },
   {
     key: "contract",
+    colour: "indigo",
     text: {
       en: {
         name: "Contract",
@@ -70,6 +77,7 @@ export const PRESET_TAGS: readonly PresetTag[] = [
   },
   {
     key: "invoice",
+    colour: "rose",
     text: {
       en: {
         name: "Invoice",
@@ -84,6 +92,7 @@ export const PRESET_TAGS: readonly PresetTag[] = [
   },
   {
     key: "slides",
+    colour: "orchid",
     text: {
       en: {
         name: "Slides",
@@ -98,6 +107,7 @@ export const PRESET_TAGS: readonly PresetTag[] = [
   },
   {
     key: "notes",
+    colour: "taupe",
     text: {
       en: {
         name: "Notes",

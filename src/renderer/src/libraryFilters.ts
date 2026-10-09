@@ -26,6 +26,8 @@ export interface LibraryFacet<T> {
   label(value: string, t: Translate): string;
   /** The order its options are listed in. */
   compare(a: string, b: string): number;
+  /** An option's colour, shown as a swatch before it (the Tags filter's); none by default. */
+  colour?(value: string): string | null;
 }
 
 /** The options chosen, by filter. A filter with none chosen is left out: it keeps everything. */
@@ -258,8 +260,11 @@ export const matchesTags = (item: TaggedDocument, chosen: readonly string[]): bo
  * By Tag, named as the User named it: "Needs review" first, then the Tags in
  * name order. A Document with several Tags falls under each.
  */
-export function tagFacet(tags: readonly Pick<Tag, "id" | "name">[]): LibraryFacet<TaggedDocument> {
+export function tagFacet(
+  tags: readonly (Pick<Tag, "id" | "name"> & Partial<Pick<Tag, "colour">>)[],
+): LibraryFacet<TaggedDocument> {
   const names = new Map(tags.map((tag) => [tag.id, tag.name]));
+  const colours = new Map(tags.map((tag) => [tag.id, tag.colour ?? null]));
   return {
     id: "tag",
     title: "tags.title",
@@ -274,5 +279,6 @@ export function tagFacet(tags: readonly Pick<Tag, "id" | "name">[]): LibraryFace
           : (names.get(a) ?? a).localeCompare(names.get(b) ?? b, undefined, {
               sensitivity: "base",
             }),
+    colour: (value) => colours.get(value) ?? null,
   };
 }
