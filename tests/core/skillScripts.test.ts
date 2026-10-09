@@ -228,6 +228,13 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
       tool: "run_skill_script",
       script: "scripts/echo.js",
       args: [log, "two words", "--flag"],
+      // What the run can do: run the Skill's code, unconfined (sandbox level "none").
+      effects: [
+        { action: "execute", scope: { kind: "skill", skillId: skill.id } },
+        { action: "read", scope: { kind: "anywhere" } },
+        { action: "write", scope: { kind: "anywhere" } },
+        { action: "network", scope: { kind: "anywhere" } },
+      ],
     } satisfies SkillScriptApprovalRequest);
     expect(await core.listApprovalRequests()).toEqual([request]);
     // Paused: its card waits, and the script hasn't run.

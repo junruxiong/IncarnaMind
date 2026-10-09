@@ -519,15 +519,14 @@ export function createCore(adapters: CoreAdapters): Core {
     toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
-      toolNeedsApproval: (connectorId, tool, readOnly) =>
-        approvals.toolNeedsApproval(connectorId, tool, readOnly),
-      scriptNeedsApproval: (skillId) => approvals.scriptNeedsApproval(skillId),
+      decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
     },
     scripts: {
       enabled: () => settings.get().device.skillScriptsEnabled,
       timeoutSeconds: () => settings.get().device.skillScriptTimeoutSeconds,
       check: (script) => scriptRunner.check(script),
+      access: (skillDir) => scriptRunner.access(skillDir),
       run: (request) => scriptRunner.run(request),
     },
     skills: {
