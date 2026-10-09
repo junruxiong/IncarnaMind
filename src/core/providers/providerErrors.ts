@@ -1,4 +1,4 @@
-import { APICallError, RetryError } from "ai";
+import { APICallError, RetryError, UnsupportedFunctionalityError } from "ai";
 import type { ProviderError, ProviderErrorKind } from "../api";
 import { ConsentDeclinedError } from "../errors";
 import { OAuthTokenError } from "../oauth";
@@ -38,6 +38,40 @@ export function contextOverflow(
     promptTokens: count(/request \((\d+) tokens?\)/i),
     windowTokens: count(/context size \((\d+) tokens?\)/i),
   };
+}
+
+/**
+ * Whether a provider refused a request because the model can't use `feature`:
+ * e.g. Ollama's "model does not support tools", vLLM's "--enable-auto-tool-choice",
+ * a server that rejects `response_format`, or OpenAI's "Unsupported parameter:
+ * 'temperature'" for a reasoning model. Auth, rate limits and outages never count.
+ */
+export function refusesFeature(
+  error: unknown,
+  feature: "tools" | "structured-output" | "temperature",
+): boolean {
+  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  const subject =
+    feature === "tools"
+      ? /tool|function/i
+      : feature === "temperature"
+        ? /temperature/i
+        : /response_format|response format|json_schema|json schema|json mode|json_object|structured output|format/i;
+  if (UnsupportedFunctionalityError.isInstance(cause)) return subject.test(cause.functionality);
+  if (!APICallError.isInstance(cause)) return false;
+  const status = cause.statusCode;
+  if (status === undefined || [401, 403, 404, 408, 429].includes(status) || status >= 502) {
+    return false;
+  }
+  const text = `${cause.message} ${cause.responseBody ?? ""}`;
+  const refusal =
+    /not support|unsupported|doesn't support|does not support|not enabled|not available|isn't available|requires --|requires the --|not allowed|is invalid|invalid value|unknown (?:field|parameter|argument)|unrecognized/i;
+  // A temperature is also refused as deprecated, or as other than the default.
+  const temperatureRefusal = /deprecated|only the default/i;
+  return (
+    subject.test(text) &&
+    (refusal.test(text) || (feature === "temperature" && temperatureRefusal.test(text)))
+  );
 }
 
 /**

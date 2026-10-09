@@ -14,8 +14,8 @@
  * Approvals decide from them whether a call asks the User first (see
  * ../approvals).
  *
- * Nothing here depends on an agent library, or on Answers: the Answer engine
- * turns Tools into its library's own (see `toToolSet` in ../answers/engine),
+ * Nothing here depends on an agent library, or on Answers: the Run engine
+ * turns Tools into its library's own (see `toToolSet` in ../runs/aiSdkEngine),
  * so that library can change without the Tools or their providers.
  */
 import type { Effect } from "../api";
