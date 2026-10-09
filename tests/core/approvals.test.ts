@@ -116,6 +116,11 @@ describe("A Tool that may change something asks first", { timeout: 30_000 }, () 
       title: null,
       input: { place: "Dover" },
       readOnly: false,
+      // What the call can do: change something at the Connector's service, sending it data.
+      effects: ["write", "network"].map((action) => ({
+        action,
+        scope: { kind: "service", serviceId: `connector:${connector.id}`, name: "Tides" },
+      })),
     });
     expect(await core.listApprovalRequests()).toEqual([request]);
     // Paused: the card says it waits, the model wasn't asked again, and the server got nothing.

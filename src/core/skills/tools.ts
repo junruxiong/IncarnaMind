@@ -4,28 +4,52 @@
  * runs one of its scripts. What each call does is given by the Answer that
  * offers them, which opened the Skills it may use (see `SkillSession`) and
  * asks the User before a script runs.
+ *
+ * Their Effects: the first two read the Skill they name. A script's run
+ * executes the Skill's code, and can reach what its Executor allows (see
+ * ../execution): at sandbox level "none" (v1), anything.
  */
+import type { Effect, EffectScope } from "../api";
+import type { ExecAccess } from "../execution";
 import { SKILL_TOOLS, type Tool, type ToolCallContext, type ToolProviderInfo } from "../tools";
+import type { SkillScript } from "./index";
 
 /** Who provides the Skill Tools, for their Tool-call cards. */
 const SKILLS_PROVIDER: ToolProviderInfo = { kind: "skills", id: "skills", name: "Skills" };
+
+/** The Skill a call names: its id, and its folder. */
+type NamedSkill = Pick<SkillScript, "skillId" | "skillDir">;
 
 /** What the Skill Tools do, for one Answer. */
 export interface SkillToolsOptions {
   /** Offer `use_skill`: there are Skills the model may load, listed in the instructions. */
   loadable: boolean;
+  /** The Skill named `name`, if this Answer may use it; null for any other name. */
+  skill(name: string): NamedSkill | null;
   /** A Skill's full instructions and its list of files, for the model. Throws for an unknown Skill. */
   useSkill(name: string): Promise<string>;
   /** One of a Skill's files, as text. Throws for a path outside the Skill. */
   readSkillFile(skill: string, path: string): Promise<string>;
   /**
-   * Runs one of a Skill's scripts (`run_skill_script`, with `{ skill, script,
-   * args }`), asking the User first unless the Skill's scripts always run.
-   * Resolves with what to tell the model (how it ended and what it wrote, or
-   * that the User denied it); rejects with why it couldn't run. Absent when no
-   * script can run: none of the Skills has one, or the User turned scripts off.
+   * Running the Skills' scripts (`run_skill_script`). Absent when no script
+   * can run: none of the Skills has one, or the User turned scripts off.
    */
-  runScript?(input: Record<string, unknown>, context: ToolCallContext): Promise<string>;
+  scripts?: {
+    /** What a run of a script of the Skill in `skillDir` can reach: from the Executor's sandbox level. */
+    access(skillDir: string): ExecAccess;
+    /**
+     * Runs one of a Skill's scripts (`{ skill, script, args }`), asking the
+     * User first, about the call's `effects`, unless the Skill's scripts
+     * always run. Resolves with what to tell the model (how it ended and
+     * what it wrote, or that the User denied it); rejects with why it
+     * couldn't run.
+     */
+    run(
+      input: Record<string, unknown>,
+      context: ToolCallContext,
+      effects: Effect[],
+    ): Promise<string>;
+  };
 }
 
 /** An argument as text: what the Tool-call card shows, and what the call gets. */
@@ -48,6 +72,41 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Reading a Skill: its instructions or one of its files. None for a Skill the Answer can't use: the call fails. */
+const readsSkill = (skill: NamedSkill | null): Effect[] =>
+  skill ? [{ action: "read", scope: { kind: "skill", skillId: skill.skillId } }] : [];
+
+/**
+ * What a run of one of a Skill's scripts can do: execute the Skill's code,
+ * and reach what `access` says (its Executor's). The Skill's own folder is
+ * the Skill; the run's working folder, new, empty and removed afterwards, is
+ * nothing beyond the call.
+ */
+export function scriptEffects(skill: NamedSkill, access: ExecAccess): Effect[] {
+  const own: EffectScope = { kind: "skill", skillId: skill.skillId };
+  const at = (folder: string): EffectScope =>
+    folder === skill.skillDir ? own : { kind: "folder", path: folder };
+  const folders = (action: "read" | "write", allowed: ExecAccess["read"]): Effect[] =>
+    allowed === "anywhere"
+      ? [{ action, scope: { kind: "anywhere" } }]
+      : allowed
+          .filter((folder) => typeof folder === "string")
+          .map((folder) => ({ action, scope: at(folder) }));
+  const { network } = access;
+  const hosts: Effect[] =
+    network === "none"
+      ? []
+      : network === "any"
+        ? [{ action: "network", scope: { kind: "anywhere" } }]
+        : network.map((host) => ({ action: "network", scope: { kind: "host", host } }));
+  return [
+    { action: "execute", scope: own },
+    ...folders("read", access.read),
+    ...folders("write", access.write),
+    ...hosts,
+  ];
+}
+
 /** The Skill Tools one Answer offers: `use_skill` when Skills are listed, and `run_skill_script` when scripts can run. */
 export function skillTools(options: SkillToolsOptions): Tool[] {
   const own = (name: string) => ({ name, provider: SKILLS_PROVIDER, providerTool: name });
@@ -63,6 +122,7 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
         required: ["name"],
       },
       shownInput: ({ name }) => ({ name: text(name) }),
+      effects: ({ name }) => readsSkill(options.skill(text(name))),
       call: async ({ name }) => options.useSkill(text(name)),
     });
   }
@@ -82,10 +142,15 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
       required: ["skill", "path"],
     },
     shownInput: ({ skill, path }) => ({ skill: text(skill), path: text(path) }),
+    effects: ({ skill }) => readsSkill(options.skill(text(skill))),
     call: async ({ skill, path }) => options.readSkillFile(text(skill), text(path)),
   });
-  const { runScript } = options;
-  if (runScript) {
+  const { scripts } = options;
+  if (scripts) {
+    const effects = ({ skill }: Record<string, unknown>): Effect[] => {
+      const found = options.skill(text(skill));
+      return found ? scriptEffects(found, scripts.access(found.skillDir)) : [];
+    };
     tools.push({
       ...own(SKILL_TOOLS.runScript),
       description:
@@ -107,7 +172,8 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
         required: ["skill", "script"],
       },
       shownInput: scriptCallInput,
-      call: async (input, context) => runScript(input, context),
+      effects,
+      call: async (input, context) => scripts.run(input, context, effects(input)),
     });
   }
   return tools;
