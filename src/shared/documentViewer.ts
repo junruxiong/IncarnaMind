@@ -26,6 +26,29 @@ export function documentIdFromUrl(url: string): string | null {
 }
 
 /**
+ * The URL the main process serves a picture a Markdown Document shows from
+ * beside it at: the picture's path, as written in the file, under the
+ * Document's own URL.
+ */
+export const documentImageUrl = (documentId: string, path: string): string =>
+  `${documentFileUrl(documentId)}${path.split("/").map(encodeURIComponent).join("/")}`;
+
+/** The Document and the picture's path a `documentImageUrl` names, or null if it isn't one. */
+export function documentImageFromUrl(url: string): { documentId: string; path: string } | null {
+  const parsed = URL.parse(url);
+  if (parsed?.protocol !== `${DOCUMENT_SCHEME}:` || !parsed.hostname) return null;
+  if (parsed.pathname === "/" || parsed.pathname === "" || parsed.search || parsed.hash) {
+    return null;
+  }
+  try {
+    const path = parsed.pathname.slice(1).split("/").map(decodeURIComponent).join("/");
+    return { documentId: decodeURIComponent(parsed.hostname), path };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Where to open a Document in the viewer. Citations open it at their page range
  * and quote; a click in the sidebar opens it at the top.
  */

@@ -46,7 +46,7 @@ import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
-import { DOCUMENT_EXTENSIONS, isInside, openFile } from "./files";
+import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside } from "./files";
 import { keywordText } from "./keywords";
 import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
@@ -273,6 +273,15 @@ export interface DocumentFile {
   stream: ReadableStream<Uint8Array>;
   /** The file's size now, in bytes. */
   size: number;
+}
+
+/** A picture a Markdown Document shows from beside it. */
+export interface DocumentImage {
+  /** Its bytes. Cancel the stream if it isn't read to the end, so the file is closed. */
+  stream: ReadableStream<Uint8Array>;
+  size: number;
+  /** Its media type, e.g. "image/png". */
+  type: string;
 }
 
 export interface DocumentsOptions {
@@ -1437,6 +1446,26 @@ export function createDocuments(options: DocumentsOptions) {
     /** The path of a live Document's file, checked to be there, to open in another app. */
     async filePath(idInput: unknown): Promise<string> {
       return (await openablePath(idInput)).path;
+    },
+
+    /**
+     * Opens a picture a live Markdown Document shows from beside it, by the
+     * path written in the file (see `openImageBeside`). Anything else is
+     * refused (NotFoundError).
+     */
+    async openImage(idInput: unknown, path: unknown): Promise<DocumentImage> {
+      if (typeof path !== "string" || path.length > 2048) {
+        throw new InvalidInputError("An image's path must be text.");
+      }
+      const row = await openablePath(idInput);
+      if (row.kind !== "markdown") {
+        throw new NotFoundError("Only a Markdown Document shows pictures from beside it.");
+      }
+      try {
+        return await openImageBeside(row.path, path);
+      } catch (error) {
+        throw new NotFoundError("There is no such picture beside the Document.", { cause: error });
+      }
     },
 
     async search(query: unknown, searchOptions: unknown): Promise<PassageSearchResult[]> {

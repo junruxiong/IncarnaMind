@@ -6,8 +6,8 @@
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream, type Stats } from "node:fs";
-import { lstat, readdir, stat } from "node:fs/promises";
-import { basename, dirname, extname, join, relative, sep } from "node:path";
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { Readable } from "node:stream";
 import type { DocumentKind } from "../api";
 
@@ -266,4 +266,45 @@ export async function openFile(
     throw error;
   }
   return { stream: Readable.toWeb(stream) as ReadableStream<Uint8Array>, size };
+}
+
+/** The pictures a Markdown file may show from beside it, by extension, with their media types. */
+const IMAGE_TYPES: Readonly<Record<string, string>> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  svg: "image/svg+xml",
+};
+
+/** The largest picture shown beside a Markdown file, in bytes. */
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Opens a picture a Markdown file shows (`![…](figures/map.png)`): `path`, as
+ * written in the file, from the file's own folder or below it, links
+ * followed and still inside it. Only images; nothing above the folder.
+ * Rejects if it isn't one.
+ */
+export async function openImageBeside(
+  documentPath: string,
+  path: string,
+): Promise<{ stream: ReadableStream<Uint8Array>; size: number; type: string }> {
+  const parts = path.split(/[\\/]/);
+  if (path === "" || isAbsolute(path) || parts.includes("..")) {
+    throw new Error("Only a picture in the file's folder, or below it, is shown.");
+  }
+  const type = IMAGE_TYPES[extname(path).slice(1).toLowerCase()];
+  if (!type) throw new Error("Not a picture.");
+  const folder = await realpath(dirname(documentPath));
+  const target = await realpath(join(folder, ...parts));
+  if (target === folder || !isInside(folder, target)) {
+    throw new Error("Only a picture in the file's folder, or below it, is shown.");
+  }
+  const info = await stat(target);
+  if (!info.isFile() || info.size > MAX_IMAGE_BYTES) throw new Error("Not a picture to show.");
+  return { ...(await openFile(target)), type };
 }
