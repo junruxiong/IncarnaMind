@@ -117,7 +117,6 @@ function frameOf(app: ElectronApplication) {
       title: window.getTitle(),
       background: window.getBackgroundColor(),
       lights: window.getWindowButtonPosition(),
-      fullScreen: window.isFullScreen(),
     };
   });
 }
@@ -227,18 +226,25 @@ test("in full screen the traffic lights hide, so the sidebar's header gives thei
   const paddingLeft = () => header.evaluate((element) => getComputedStyle(element).paddingLeft);
   expect(await paddingLeft()).toBe(`${LIGHTS_ROOM}px`);
 
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setFullScreen(true));
-  await expect(html).toHaveAttribute("data-full-screen", "", { timeout: 10_000 });
-  expect((await frameOf(app)).fullScreen).toBe(true);
+  // What the window says as it finishes going full screen and coming back. macOS takes
+  // a window full screen only while its app is in front, which a test running beside
+  // the User's own apps can't count on (nor take the front from them), so the test
+  // sends the window's own events rather than asking macOS for full screen.
+  const say = (event: "enter-full-screen" | "leave-full-screen") =>
+    app.evaluate(({ BrowserWindow }, name) => {
+      BrowserWindow.getAllWindows()[0]?.emit(name);
+    }, event);
+
+  await say("enter-full-screen");
+  await expect(html).toHaveAttribute("data-full-screen", "");
   expect(await paddingLeft()).toBe("16px");
   const mark = header.getByTestId("app-mark");
   await expect(mark).toBeVisible();
   expect((await boxOf(mark)).x).toBe(16);
   await screenshot(window, "title-bar-full-screen");
 
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setFullScreen(false));
-  await expect(html).not.toHaveAttribute("data-full-screen", { timeout: 10_000 });
-  expect((await frameOf(app)).fullScreen).toBe(false);
+  await say("leave-full-screen");
+  await expect(html).not.toHaveAttribute("data-full-screen");
   expect(await paddingLeft()).toBe(`${LIGHTS_ROOM}px`);
   await expect(mark).toBeHidden();
   await app.close();
