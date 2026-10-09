@@ -38,6 +38,16 @@
   .viewer-title {
     @apply min-w-12 flex-1 truncate text-ui font-semibold text-ink-secondary;
   }
+  /* The Document's Tags after its name: chips while there is room, then only their button. */
+  .viewer-tags {
+    @apply max-w-[45%];
+  }
+  @container viewer (width < 560px) {
+    .viewer-tags [data-testid="tag-chip"],
+    .viewer-tags [data-testid="tag-chip-more"] {
+      @apply hidden;
+    }
+  }
   .viewer-icon-button {
     @apply flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary;
 

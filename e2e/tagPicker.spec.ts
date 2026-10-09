@@ -325,6 +325,23 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     );
     await screenshot(window, "library-review");
 
+    // The viewer's header shows the open Document's Tags too.
+    await slideAndClick(window, march.getByRole("button", { name: "March invoice", exact: true }));
+    const viewer = window.getByTestId("viewer");
+    await expect(viewer).toBeVisible();
+    const headerTags = viewer.getByTestId("viewer-header").getByTestId("document-tags");
+    await expect(headerTags.getByTestId("tag-chip")).toHaveText(/Invoice/);
+    await expect(headerTags.getByTestId("tag-chip")).toHaveAttribute("data-colour", "rose");
+    // In the header, ✓ and × of a Tag awaiting review are always there, and the picker opens.
+    await expect(headerTags.getByTestId("confirm-document-tag")).toBeVisible();
+    await slideAndClick(window, headerTags.getByTestId("document-tags-menu"));
+    await expect(headerTags.getByTestId("tag-picker-input")).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(viewer).toBeVisible();
+    await screenshot(window, "viewer");
+    await slideAndClick(window, viewer.getByTestId("viewer-close"));
+    await expect(viewer).toBeHidden();
+
     // ✓ and × show once the chip is pointed at; ✓ keeps the Tag, as the User's.
     await expect(marchInvoice.getByTestId("confirm-document-tag")).toBeHidden();
     await slideTo(window, marchInvoice);
@@ -351,6 +368,22 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await expect(rows).toHaveCount(2);
     const tagsFilter = library.locator('[data-testid="library-filter"][data-facet="tag"]');
     await expect(tagsFilter).toHaveText("Tags: Report");
+    // Its options show each Tag's colour; "Needs review" has none.
+    await slideAndClick(window, tagsFilter);
+    const tagMenu = library.locator('[data-testid="library-filter-menu"][data-facet="tag"]');
+    await expect(
+      tagMenu.locator(
+        '[data-testid="library-filter-option"][data-value="needs-review"] [data-testid="tag-swatch"]',
+      ),
+    ).toHaveCount(0);
+    await expect(
+      tagMenu
+        .getByTestId("library-filter-option")
+        .filter({ hasText: "Report" })
+        .getByTestId("tag-swatch"),
+    ).toHaveAttribute("data-colour", "petrol");
+    await screenshot(window, "filter-colours");
+    await window.keyboard.press("Escape");
     await expect(window.getByTestId("tag-filter-active")).toContainText("Report");
     // With a Tag filter, a Question from here asks about exactly these Documents.
     await expect(library.getByTestId("library-ask")).toHaveAttribute("data-scope", "documents");
@@ -388,6 +421,9 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await expect(picker.getByTestId("tag-option-create")).toHaveText(/新建“新”/);
     await screenshot(window, "picker-zh");
     await window.keyboard.press("Escape");
+    await slideAndClick(window, q1.getByRole("button", { name: "Q1 report", exact: true }));
+    await expect(window.getByTestId("viewer")).toBeVisible();
+    await screenshot(window, "viewer-zh");
   } finally {
     await app.close();
     server.closeAllConnections();
@@ -426,11 +462,31 @@ test("Manage Tags shows how many Documents carry each, edits, merges and deletes
     await expect(row("Notes").getByTestId("tag-count")).toHaveText("2 Documents");
     await expect(row("Report").getByTestId("tag-count")).toHaveText("1 Document");
 
-    // Editing says that the description guides automatic tagging.
+    // The explanation names Organize's routes as they are.
+    await expect(dialog).toContainText("your connected chat model, Auto · local models");
+    // Each Tag has its colour; editing says the description guides automatic tagging, and
+    // offers the palette.
+    await expect(row("Report").getByTestId("tag-row-name")).toHaveAttribute(
+      "data-colour",
+      "petrol",
+    );
     await slideAndClick(window, row("Report").getByTestId("edit-tag"));
     await expect(dialog).toContainText("Automatic tagging goes by the name and description");
+    const swatches = row("Report").getByTestId("tag-colour");
+    await expect(swatches).toHaveCount(8);
+    await slideAndClick(window, row("Report").locator('label:has([data-colour="rose"])'));
+    await expect(
+      row("Report").locator('[data-testid="tag-colour"][data-colour="rose"]'),
+    ).toBeChecked();
+    await screenshot(window, "manage-tags-colour");
+    await slideAndClick(window, row("Report").getByTestId("save-tag"));
+    await expect(row("Report").getByTestId("tag-row-name")).toHaveAttribute("data-colour", "rose");
     await window.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
+    // The Library's chips take it.
+    await expect(
+      library.locator('[data-testid="tag-chip"]').filter({ hasText: "Report" }),
+    ).toHaveAttribute("data-colour", "rose");
     await slideAndClick(window, library.getByRole("button", { name: "Manage tags" }));
 
     // Merging Report into Notes: its Document keeps one Tag, Notes.
