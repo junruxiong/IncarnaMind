@@ -3,7 +3,8 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 import { TextSelection } from "@tiptap/pm/state";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { ANSWER_BLOCK } from "../../../core/api";
+import { ANSWER_BLOCK, QUESTION_BLOCK, type SearchScope } from "../../../core/api";
+import { scopeAttributesOf } from "../../../shared/searchScope";
 
 /** Where the hint shows: on an empty Mind's line, or on the empty line after an Answer. */
 export type HintPlace = "empty" | "afterAnswer";
@@ -53,9 +54,9 @@ export function hintLine(state: EditorState, focused: boolean): HintLine | null 
 
 /**
  * Starts a Question at the end of the Mind: on its empty last line, or on a
- * new line after its last Block.
+ * new line after its last Block, with a Search scope if given.
  */
-export function startQuestionAtEnd(editor: Editor): void {
+export function startQuestionAtEnd(editor: Editor, scope: SearchScope | null = null): void {
   if (editor.isDestroyed) return;
   editor
     .chain()
@@ -74,6 +75,7 @@ export function startQuestionAtEnd(editor: Editor): void {
       return true;
     })
     .setQuestion()
+    .updateAttributes(QUESTION_BLOCK, scope ? scopeAttributesOf(scope) : {})
     .scrollIntoView()
     .run();
 }
