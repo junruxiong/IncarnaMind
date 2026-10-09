@@ -212,24 +212,32 @@ export function TagPicker({
       ? store().removeDocumentTag(ids[0] as string, tagId)
       : store().removeTagFromDocuments(ids, tagId);
 
-  const choose = (state: TagOnDocuments) =>
-    run(async () => {
-      const action = actionFor(state);
-      if (action === "remove") await remove(state.tag.id);
+  // The field empties at once, so keys typed while the change is saved go to the next Tag.
+  const choose = (state: TagOnDocuments) => {
+    setQuery("");
+    setPicked(null);
+    return run(async () => {
+      if (actionFor(state) === "remove") await remove(state.tag.id);
       else await add(state.tag.id);
-      setQuery("");
-      setPicked(null);
       field.current?.focus();
     });
-  const createTag = (name: string, description = "") =>
-    run(async () => {
-      const tag = await store().createTag(name, description);
-      await add(tag.id);
-      setQuery("");
+  };
+  const createTag = (name: string, description = "") => {
+    setQuery("");
+    setActive(0);
+    return run(async () => {
+      try {
+        const tag = await store().createTag(name, description);
+        await add(tag.id);
+      } catch (failure) {
+        // Not created (e.g. the name is taken): the name comes back to correct.
+        setQuery(name);
+        throw failure;
+      }
       setDescribing(null);
-      setActive(0);
       field.current?.focus();
     });
+  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
