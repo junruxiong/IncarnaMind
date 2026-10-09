@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   removeDataFolder,
-  useLocalChatModel,
 } from "./app";
 
 let dataDir: string;
@@ -37,7 +37,7 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   );
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  await useLocalChatModel(window);
+  await connectLocalChatModel(window);
   await window.evaluate(async (path) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.addLinkedFolder(path);
@@ -118,4 +118,69 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   await chip.getByTestId("scope-chip-remove").click();
   await expect(question.getByTestId("question-scope")).toHaveCount(0);
   await app.close();
+});
+
+test("an in-app folder scopes answers and deleting it never broadens the search", async () => {
+  const ocean = join(sources, "Tide tables.txt");
+  const kitchen = join(sources, "Spring menu.txt");
+  await writeFile(
+    ocean,
+    "Neap tides are the smallest of the month.\nSpring tides happen at new moon and at full moon.\n",
+  );
+  await writeFile(kitchen, "Spring tides happen when the market sells mussels.");
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await dismissChatSetup(window);
+    await connectLocalChatModel(window);
+    const folderId = await window.evaluate(
+      async (paths) => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const folder = await core.createLibraryGroup({
+          name: "Ocean research",
+          description: "Research about tides",
+        });
+        const added = await core.addDocuments(paths);
+        const doc = added.documents.find((doc) => doc.name === "Tide tables");
+        if (!doc) throw new Error("No tide document");
+        await core.assignDocumentGroup(doc.id, folder.id);
+        return folder.id;
+      },
+      [ocean, kitchen],
+    );
+    await expect(
+      window.locator('[data-testid="document-list-item"][data-status="ready"]'),
+    ).toHaveCount(2);
+    await window.getByTestId("new-mind").click();
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("@Ocean");
+    const choices = window.getByTestId("scope-choice");
+    await expect(choices).toHaveCount(1);
+    await window.keyboard.press("Enter");
+    const chip = editor.getByTestId("scope-chip");
+    await expect(chip).toHaveText("Ocean research");
+    await window.keyboard.type("When do spring tides happen?");
+    await window.keyboard.press("Enter");
+    const answer = editor.getByTestId("answer");
+    await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(answer.getByTestId("citation")).toHaveCount(1);
+    await expect(answer.getByTestId("citation-chip")).toHaveAttribute(
+      "aria-label",
+      /^Citation 1: Tide tables/,
+    );
+    await window.evaluate(
+      async (id) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.deleteLibraryGroup(id),
+      folderId,
+    );
+    await expect(chip).toHaveAttribute("data-deleted", "true");
+    await answer.hover();
+    await answer.getByTestId("answer-regenerate").click();
+    await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(answer).toContainText("has no Documents to search");
+    await expect(answer.getByTestId("citation")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
 });

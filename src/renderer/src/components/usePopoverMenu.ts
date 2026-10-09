@@ -12,7 +12,7 @@ const itemsOf = (menu: HTMLElement | null) =>
 function place(button: HTMLElement | null, menu: HTMLElement | null): void {
   const anchor = button?.getBoundingClientRect();
   if (!anchor || !menu) return;
-  menu.style.left = `${Math.max(EDGE_PX, anchor.left)}px`;
+  menu.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - menu.offsetWidth - EDGE_PX))}px`;
   const below = anchor.bottom + GAP_PX;
   const height = menu.offsetHeight;
   menu.style.top =

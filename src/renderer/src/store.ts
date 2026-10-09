@@ -9,6 +9,7 @@ import type {
   Folder,
   GettingStarted,
   KeptCitationText,
+  LibrarySnapshot,
   LinkedFolder,
   LinkedFolderLayout,
   LinkedFolderPreview,
@@ -28,6 +29,7 @@ export const settingsPages = [
   "general",
   "chat-model",
   "search",
+  "organization",
   "connectors",
   "skills",
   "approvals",
@@ -114,7 +116,10 @@ interface AppState {
   filteredDocumentIds: ReadonlySet<string> | null;
   tagsDialogOpen: boolean;
   libraryOpen: boolean;
-  openLibrary(): void;
+  library: LibrarySnapshot | null;
+  libraryFilter: string;
+  refreshLibrary(): Promise<void>;
+  openLibrary(filter?: string): void;
   closeLibrary(): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
@@ -283,6 +288,7 @@ export const selectVisibleDocuments = (state: AppState): Document[] => {
 };
 
 export const useAppStore = create<AppState>()((set, get) => {
+  let libraryRequest = 0;
   /** Runs an action, reporting a failure instead of throwing. */
   const attempt = async (action: () => Promise<void>) => {
     try {
@@ -415,7 +421,23 @@ export const useAppStore = create<AppState>()((set, get) => {
     filteredDocumentIds: null,
     tagsDialogOpen: false,
     libraryOpen: false,
-    openLibrary: () => set({ libraryOpen: true }),
+    library: null,
+    libraryFilter: "all",
+    refreshLibrary: async () => {
+      const ticket = ++libraryRequest;
+      const library = await core.getLibrary();
+      if (ticket === libraryRequest)
+        set({
+          library,
+          ...(get().libraryFilter !== "all" &&
+          get().libraryFilter !== "unsorted" &&
+          get().libraryFilter !== "new" &&
+          !library.groups.some((g) => g.id === get().libraryFilter)
+            ? { libraryFilter: "all" }
+            : {}),
+        });
+    },
+    openLibrary: (filter = "all") => set({ libraryOpen: true, libraryFilter: filter }),
     closeLibrary: () => set({ libraryOpen: false }),
     skills: [],
     examples: null,
@@ -475,6 +497,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           examples,
           status: { kind: "ready" },
         });
+        await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
         set({ status: { kind: "failed", message: messageOf(error) } });
@@ -975,4 +998,11 @@ core.on("documents.tagged", (tagged) => {
     documents: tagged.reduce((documents, item) => upsert(documents, item), state.documents),
   }));
   if (useAppStore.getState().tagFilter !== null) void refreshFilter();
+});
+
+core.on("library.changed", () => {
+  void useAppStore
+    .getState()
+    .refreshLibrary()
+    .catch((error) => useAppStore.getState().reportError(error));
 });

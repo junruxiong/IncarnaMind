@@ -24,9 +24,19 @@ test("production packaged Library renders and classifies an image-only PDF", asy
       response.end(JSON.stringify({ models: [{ name: "clef-flash:latest" }] }));
     else if (request.url === "/api/ps") response.end(JSON.stringify({ models: [] }));
     else if (request.url === "/v1/systemone") {
-      requests.push(JSON.parse(raw));
+      const body = JSON.parse(raw);
+      requests.push(body);
       response.end(
-        JSON.stringify({ answers: { group: { type: "choice", choice: "__unsorted__" } } }),
+        JSON.stringify({
+          answers: Object.fromEntries(
+            Object.keys(body.questions).map((id) => [
+              id,
+              id === "group"
+                ? { type: "choice", choice: "__unsorted__" }
+                : { type: "noul", noul: 0.01 },
+            ]),
+          ),
+        }),
       );
     } else {
       response.statusCode = 404;

@@ -10,6 +10,8 @@ import type { SearchScope } from "./api";
 import type { DocumentFilter } from "./documents";
 
 export interface ScopeSources {
+  /** Documents assigned to a live in-app folder; none when it was deleted. */
+  organizedFolderDocuments?(folderId: string): string[];
   /** A live Folder's id and those of its live sub-Folders, at any depth; none for a deleted Folder. */
   folderTree(folderId: string): string[];
   /** The ids of the live Documents a filter keeps (a deleted Tag keeps none). */
@@ -28,6 +30,7 @@ export function resolveSearchScope(scope: SearchScope, sources: ScopeSources): s
   const add = (ids: readonly string[]) => {
     for (const id of ids) found.add(id);
   };
+  for (const id of scope.folderIds) add(sources.organizedFolderDocuments?.(id) ?? []);
   const folderIds = [...new Set(scope.folderIds.flatMap((id) => sources.folderTree(id)))];
   if (folderIds.length > 0) add(sources.documentIds({ folderIds }));
   for (const tagId of scope.tagIds) add(sources.documentIds({ tagId }));

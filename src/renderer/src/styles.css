@@ -2125,20 +2125,24 @@
   }
 }
 
-/* Library adapts to its own room, including when the Document viewer opens. */
+/* Folder contents stay readable beside an open document viewer. */
 .library-pane {
-  container: library / inline-size;
+  container-type: inline-size;
 }
-
-@container library (max-width: 640px) {
-  .library-layout {
-    flex-direction: column;
+.library-columns {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.7fr) minmax(130px, 1fr) minmax(120px, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+@container (max-width: 540px) {
+  .library-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-
-  .library-groups {
-    width: 100%;
-    max-height: 11rem;
-    border-right: 0;
-    border-bottom: 1px solid var(--color-rule);
+  .library-document-name {
+    grid-column: 1 / -1;
+  }
+  .library-column-labels {
+    display: none;
   }
 }

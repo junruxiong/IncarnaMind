@@ -8,6 +8,7 @@ import { selectVisibleDocuments, useAppStore } from "../store";
 import { DocumentFileMenu } from "./DocumentFileMenu";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
+import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
 import { DocumentLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
 import {
@@ -84,7 +85,11 @@ const isProcessing = (status: DocumentStatus) =>
  */
 export function DocumentsSection() {
   const t = useT();
-  const libraryOpen = useAppStore((state) => state.libraryOpen);
+  const hasLibraryFolders = useAppStore((state) => (state.library?.groups.length ?? 0) > 0);
+  const [showSources, setShowSources] = useState(false);
+  const libraryOpen = useAppStore(
+    (state) => state.libraryOpen && ["all", "new"].includes(state.libraryFilter),
+  );
   // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
   const documents = useAppStore(useShallow(selectVisibleDocuments));
   const filtering = useAppStore((state) => state.tagFilter !== null);
@@ -159,17 +164,68 @@ export function DocumentsSection() {
           className={rowButtonClass}
         >
           <DocumentLineIcon kind="text" className="size-4 shrink-0" />
-          <span className="truncate">{t("library.title")}</span>
+          <span className="truncate">{t("library.all")}</span>
         </button>
       </div>
       <ActiveTagFilter />
-      <FolderTree
-        documents={documents}
-        filtering={filtering}
-        renderDocument={(item, depth) => (
-          <DocumentRow key={item.id} item={item} depth={depth} onDelete={() => setDeleting(item)} />
-        )}
-      />
+      {hasLibraryFolders && (
+        <fieldset
+          className="mx-2 my-2 flex gap-3 border-b border-rule pb-1 text-[12px] text-ink-meta"
+          aria-label={t("library.browse")}
+        >
+          <button
+            type="button"
+            aria-pressed={!showSources}
+            className={!showSources ? "font-semibold text-ink" : "hover:text-ink"}
+            onClick={() => setShowSources(false)}
+          >
+            {t("library.groups")}
+          </button>
+          <button
+            type="button"
+            aria-pressed={showSources}
+            className={showSources ? "font-semibold text-ink" : "hover:text-ink"}
+            onClick={() => setShowSources(true)}
+          >
+            {t("library.sources")}
+          </button>
+          <button
+            type="button"
+            aria-label={t("library.newGroup")}
+            title={t("library.newGroup")}
+            className={`${rowActionButtonClass} ml-auto`}
+            onClick={() => useAppStore.getState().openLibrary("new")}
+          >
+            <PlusLineIcon className="size-4" />
+          </button>
+        </fieldset>
+      )}
+      {hasLibraryFolders && !showSources ? (
+        <LibraryFolders
+          documents={documents}
+          renderDocument={(item, depth) => (
+            <DocumentRow
+              key={item.id}
+              item={item}
+              depth={depth}
+              onDelete={() => setDeleting(item)}
+            />
+          )}
+        />
+      ) : (
+        <FolderTree
+          documents={documents}
+          filtering={filtering}
+          renderDocument={(item, depth) => (
+            <DocumentRow
+              key={item.id}
+              item={item}
+              depth={depth}
+              onDelete={() => setDeleting(item)}
+            />
+          )}
+        />
+      )}
       {empty &&
         (filtering ? (
           <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>

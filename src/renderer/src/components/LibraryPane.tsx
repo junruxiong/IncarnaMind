@@ -1,29 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import type {
-  ChatProvider,
-  LibraryClassifier,
-  LibraryGroup,
-  LibrarySettings,
-  LibrarySnapshot,
-} from "../../../core/api";
-import { supportsLibraryImages } from "../../../shared/libraryModels";
+import { useShallow } from "zustand/react/shallow";
+import type { LibraryGroup } from "../../../core/api";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
-import { buttonStyle, errorTextClass, fieldLabelClass, inputClass, navRowClass } from "./ui";
+import { selectVisibleDocuments, useAppStore } from "../store";
+import { ActiveTagFilter, DocumentTagMenu } from "./DocumentTags";
+import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
+import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
 
-/** Flat groups, a reviewable document list, and an optional connected classifier. */
+/** The sidebar chooses a folder; this sheet shows its documents and editable tags. */
 export function LibraryPane() {
   const t = useT();
-  const documents = useAppStore((state) => state.documents);
-  const openDocument = useAppStore((state) => state.openDocument);
-  const close = useAppStore((state) => state.closeLibrary);
-  const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null);
-  const [filter, setFilter] = useState("all");
+  const documents = useAppStore(useShallow(selectVisibleDocuments));
+  const hasDocuments = useAppStore((state) => state.documents.length > 0);
+  const snapshot = useAppStore((state) => state.library);
+  const filter = useAppStore((state) => state.libraryFilter);
+  const tags = useAppStore((state) => state.tags);
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(100);
   const [editing, setEditing] = useState<LibraryGroup | "new" | null>(null);
@@ -31,34 +27,18 @@ export function LibraryPane() {
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const refresh = useRef<() => Promise<void>>(async () => {});
-
   useEffect(() => {
-    let stopped = false;
-    let request = 0;
-    refresh.current = async () => {
-      const ticket = ++request;
-      try {
-        const value = await core.getLibrary();
-        if (!stopped && ticket === request) setSnapshot(value);
-      } catch (failure) {
-        if (!stopped) setError(messageOf(failure));
-      }
-    };
-    const unsubscribe = core.on("library.changed", () => void refresh.current());
-    void refresh.current();
-    return () => {
-      stopped = true;
-      unsubscribe();
-    };
-  }, []);
-
+    setLimit(100);
+    setSearch("");
+    setDeleting(false);
+    setEditing(filter === "new" ? "new" : null);
+  }, [filter]);
   const act: Action = async (work) => {
     setError(null);
     setBusy(true);
     try {
       await work();
-      await refresh.current();
+      await useAppStore.getState().refreshLibrary();
       return true;
     } catch (failure) {
       setError(messageOf(failure));
@@ -72,88 +52,80 @@ export function LibraryPane() {
   const selected = groups.find((group) => group.id === filter);
   const shown = documents.filter((doc) => {
     const groupId = assignments.get(doc.id)?.groupId ?? null;
+    const terms = [
+      doc.name,
+      ...doc.tags.map((link) => tags.find((tag) => tag.id === link.tagId)?.name ?? ""),
+    ].join(" ");
     return (
-      (filter === "all" || (filter === "unsorted" ? groupId === null : groupId === filter)) &&
-      doc.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())
+      ((!selected && filter !== "unsorted") ||
+        (filter === "unsorted" ? groupId === null : groupId === selected?.id)) &&
+      terms.toLocaleLowerCase().includes(search.toLocaleLowerCase())
     );
   });
-  const counts = new Map<string | null, number>();
-  for (const doc of documents) {
-    const id = assignments.get(doc.id)?.groupId ?? null;
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  const count = (id: string | null) => counts.get(id) ?? 0;
   const pending =
     snapshot?.assignments.filter(
       (item) => item.status === "pending" || item.status === "classifying",
     ).length ?? 0;
   const waiting = snapshot?.assignments.filter((item) => item.status === "waiting").length ?? 0;
   const failed = snapshot?.assignments.filter((item) => item.status === "failed").length ?? 0;
-  const needsClassification = shown.filter((doc) => {
+  const needsOrganization = shown.filter((doc) => {
     const item = assignments.get(doc.id);
-    return (
-      item?.source !== "user" &&
-      (!item || item.groupId === null || item.status === "failed" || item.status === "waiting")
-    );
+    return item?.status !== "classified" || doc.tagging !== "tagged";
   });
-
+  const organize = () => {
+    if (!snapshot?.settings.classifier) {
+      useAppStore.getState().openSettings("organization");
+      return;
+    }
+    void act(() =>
+      core.classifyDocuments(
+        (needsOrganization.length ? needsOrganization : shown).map((doc) => doc.id),
+      ),
+    );
+  };
+  const closeForm = () => {
+    setEditing(null);
+    if (filter === "new") useAppStore.getState().openLibrary();
+  };
   return (
     <main
       data-testid="library"
       className="library-pane flex min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
     >
       <header className="flex h-11 shrink-0 items-center justify-between bg-tab-strip px-4">
-        <h1 className="font-semibold">{t("library.title")}</h1>
-        <button type="button" className={buttonStyle("ghost", "sm")} onClick={close}>
+        <span className="font-semibold">{t("library.title")}</span>
+        <button
+          type="button"
+          className={buttonStyle("ghost", "sm")}
+          onClick={() => useAppStore.getState().closeLibrary()}
+        >
           {t("library.back")}
         </button>
       </header>
-      {error && (
-        <p role="alert" className={`${errorTextClass} border-b border-rule px-4 py-3`}>
-          {error}
-        </p>
-      )}
-      {!snapshot ? (
-        <p role="status" className="p-6 text-ink-meta">
-          {t("library.loading")}
-        </p>
-      ) : (
-        <div className="library-layout flex min-h-0 flex-1">
-          <nav
-            aria-label={t("library.groups")}
-            className="library-groups flex w-52 shrink-0 flex-col gap-1 overflow-y-auto border-r border-rule bg-frame p-3"
-          >
-            <span className="px-2 pb-1 text-label font-semibold text-ink-meta">
-              {t("library.groups")}
-            </span>
-            {[
-              { id: "all", name: t("library.all"), count: documents.length },
-              ...groups.map((group) => ({ ...group, count: count(group.id) })),
-              { id: "unsorted", name: t("library.unsorted"), count: count(null) },
-            ].map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                aria-current={filter === item.id ? "page" : undefined}
-                className={`${navRowClass(filter === item.id)} gap-2`}
-                onClick={() => {
-                  setFilter(item.id);
-                  setLimit(100);
-                  setEditing(null);
-                  setDeleting(false);
-                }}
-              >
-                <span className="min-w-0 flex-1 truncate" title={item.name}>
-                  {item.name}
-                </span>
-                <span className="text-[12px] font-normal tabular-nums text-ink-meta">
-                  {item.count}
-                </span>
-              </button>
-            ))}
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto max-w-[1040px]">
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h1 className="break-words font-serif text-heading font-semibold">
+                {selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all")}
+              </h1>
+              <p className="mt-1 text-[13px] text-ink-meta">
+                {selected?.description || t("library.intro")}
+              </p>
+            </div>
             <button
               type="button"
-              className={`${buttonStyle("ghost", "sm")} mt-3 justify-start`}
+              className={buttonStyle("primary")}
+              disabled={busy || pending > 0 || groups.length === 0 || shown.length === 0}
+              onClick={organize}
+            >
+              {t(pending ? "library.working" : "library.classify")}
+            </button>
+          </div>
+          <div className="mb-5 flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              className={buttonStyle("ghost", "sm")}
               onClick={() => {
                 setEditing("new");
                 setStarters(false);
@@ -163,7 +135,7 @@ export function LibraryPane() {
             </button>
             <button
               type="button"
-              className={`${buttonStyle("ghost", "sm")} justify-start`}
+              className={buttonStyle("ghost", "sm")}
               onClick={() => {
                 setStarters(!starters);
                 setEditing(null);
@@ -171,208 +143,202 @@ export function LibraryPane() {
             >
               {t("library.chooseStarters")}
             </button>
-          </nav>
-          <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="break-words font-serif text-[22px] leading-[30px] font-semibold">
-                  {selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all")}
-                </h2>
-                <p className="mt-1 max-w-[65ch] break-words text-[13px] text-ink-meta">
-                  {selected?.description || t("library.intro")}
-                </p>
-              </div>
-              {selected && (
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    className={buttonStyle("ghost", "sm")}
-                    onClick={() => {
-                      setEditing(selected);
-                      setDeleting(false);
-                    }}
-                  >
-                    {t("library.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonStyle("ghost", "sm")}
-                    onClick={() => setDeleting(!deleting)}
-                  >
-                    {t("library.delete")}
-                  </button>
-                </div>
-              )}
-            </div>
-            {deleting && selected && (
-              <div className="mb-5 border-y border-rule py-3">
-                <p className="mb-2 text-ink-secondary">{t("library.deleteNotice")}</p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className={buttonStyle("danger")}
-                    onClick={() =>
-                      void act(async () => {
-                        await core.deleteLibraryGroup(selected.id);
-                        setFilter("all");
-                        setDeleting(false);
-                      })
-                    }
-                  >
-                    {t("library.delete")}
-                  </button>
-                  <button
-                    type="button"
-                    className={buttonStyle("ghost")}
-                    onClick={() => setDeleting(false)}
-                  >
-                    {t("library.cancel")}
-                  </button>
-                </div>
-              </div>
-            )}
-            {editing && (
-              <GroupForm
-                key={editing === "new" ? "new" : editing.id}
-                group={editing}
-                busy={busy}
-                act={act}
-                close={() => setEditing(null)}
-              />
-            )}
-            {(starters || groups.length === 0) && !editing && (
-              <StarterGroups busy={busy} act={act} close={() => setStarters(false)} />
-            )}
-            <details className="mb-5 border-y border-rule py-3">
-              <summary className="cursor-pointer font-semibold text-ink-secondary">
-                {t("library.modelSettings")}
-              </summary>
-              <ClassifierForm
-                key={JSON.stringify(snapshot.settings)}
-                settings={snapshot.settings}
-                act={act}
-                busy={busy}
-              />
-            </details>
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-              <input
-                aria-label={t("library.search")}
-                placeholder={t("library.search")}
-                type="search"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setLimit(100);
-                }}
-                className={`${inputClass} mt-0 min-w-32 flex-1`}
-              />
-              <button
-                type="button"
-                disabled={
-                  busy ||
-                  pending > 0 ||
-                  groups.length === 0 ||
-                  !snapshot.settings.classifier ||
-                  needsClassification.length === 0
-                }
-                className={buttonStyle("primary")}
-                onClick={() =>
-                  void act(() => core.classifyDocuments(needsClassification.map((doc) => doc.id)))
-                }
-              >
-                {t("library.classify")}
-              </button>
-              {selected && (
+            {selected && (
+              <>
                 <button
                   type="button"
-                  disabled={
-                    busy || pending > 0 || !snapshot.settings.classifier || shown.length === 0
-                  }
-                  className={buttonStyle("secondary")}
-                  onClick={() => void act(() => core.classifyDocuments(shown.map((doc) => doc.id)))}
+                  className={buttonStyle("ghost", "sm")}
+                  onClick={() => setEditing(selected)}
                 >
-                  {t("library.reclassify")}
+                  {t("library.edit")}
                 </button>
-              )}
+                <button
+                  type="button"
+                  className={buttonStyle("ghost", "sm")}
+                  onClick={() => setDeleting(!deleting)}
+                >
+                  {t("library.delete")}
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className={`${buttonStyle("ghost", "sm")} ml-auto`}
+              aria-label={t("library.settingsTitle")}
+              title={t("library.settingsTitle")}
+              onClick={() => useAppStore.getState().openSettings("organization")}
+            >
+              <SettingsLineIcon className="size-4" />
+            </button>
+          </div>
+          {error && (
+            <p role="alert" className={`${errorTextClass} mb-4`}>
+              {error}
+            </p>
+          )}
+          {deleting && selected && (
+            <div className="mb-5 border-y border-rule py-4">
+              <p className="mb-3 text-ink-secondary">{t("library.deleteNotice")}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className={buttonStyle("danger")}
+                  onClick={() =>
+                    void act(async () => {
+                      await core.deleteLibraryGroup(selected.id);
+                      useAppStore.getState().openLibrary();
+                    })
+                  }
+                >
+                  {t("library.delete")}
+                </button>
+                <button
+                  type="button"
+                  className={buttonStyle("ghost")}
+                  onClick={() => setDeleting(false)}
+                >
+                  {t("library.cancel")}
+                </button>
+              </div>
             </div>
-            <p role="status" className="mb-3 text-[13px] text-ink-meta">
-              {pending
-                ? t("library.progress", { count: pending })
-                : waiting
-                  ? t("library.waiting", { count: waiting })
+          )}
+          {editing && (
+            <GroupForm
+              key={editing === "new" ? "new" : editing.id}
+              group={editing}
+              busy={busy}
+              act={act}
+              close={closeForm}
+            />
+          )}
+          {(starters || groups.length === 0) && !editing && snapshot && (
+            <StarterGroups busy={busy} act={act} close={() => setStarters(false)} />
+          )}
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <input
+              aria-label={t("library.search")}
+              placeholder={t("library.search")}
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setLimit(100);
+              }}
+              className={`${inputClass} mt-0 min-w-32 flex-1`}
+            />
+            <button
+              type="button"
+              className={buttonStyle("secondary")}
+              onClick={() => void useAppStore.getState().pickDocuments()}
+            >
+              {t("documents.add")}
+            </button>
+          </div>
+          <ActiveTagFilter />
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-meta">
+            <p role="status">
+              {!snapshot
+                ? t("library.loading")
+                : pending
+                  ? t("library.progress", { count: pending })
                   : failed
                     ? t("library.failed", { count: failed })
-                    : t(shown.length === 1 ? "library.count.one" : "library.count", {
-                        count: shown.length,
-                      })}
+                    : waiting
+                      ? t("library.waiting", { count: waiting })
+                      : t(shown.length === 1 ? "library.count.one" : "library.count", {
+                          count: shown.length,
+                        })}
             </p>
-            {!snapshot.settings.classifier && (
-              <p className="mb-4 text-[13px] text-ink-secondary">{t("library.manualHint")}</p>
-            )}
-            {shown.length === 0 ? (
-              <p className="border-t border-rule py-8 text-ink-meta">
-                {t(documents.length === 0 ? "library.empty" : "library.noMatches")}
-              </p>
-            ) : (
-              <ul className="border-t border-rule">
+            <button
+              type="button"
+              className="hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+              onClick={() => useAppStore.getState().openTagsDialog()}
+            >
+              {t("library.manageTags")}
+            </button>
+          </div>
+          {shown.length === 0 ? (
+            <p className="border-t border-rule py-10 text-ink-meta">
+              {t(hasDocuments ? "library.noMatches" : "library.empty")}
+            </p>
+          ) : (
+            <>
+              <div
+                aria-hidden="true"
+                className="library-columns library-column-labels border-y border-rule py-2 text-label font-semibold text-ink-meta"
+              >
+                <span>{t("library.document")}</span>
+                <span>{t("library.folder")}</span>
+                <span>{t("tags.title")}</span>
+              </div>
+              <ul>
                 {shown.slice(0, limit).map((doc) => {
                   const item = assignments.get(doc.id);
+                  const labels = doc.tags.flatMap((link) => {
+                    const tag = tags.find((tag) => tag.id === link.tagId);
+                    return tag ? [{ ...tag, needsReview: link.needsReview }] : [];
+                  });
+                  const status =
+                    item?.status === "classifying" || item?.status === "pending"
+                      ? "library.working"
+                      : item?.status === "waiting" || item?.status === "failed"
+                        ? "library.needsAttention"
+                        : item?.source === "user"
+                          ? "library.manual"
+                          : item?.status === "classified"
+                            ? "library.saved"
+                            : "library.notClassified";
                   return (
                     <li
                       key={doc.id}
                       data-testid="library-document"
                       data-document-id={doc.id}
-                      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule py-3"
+                      className="library-columns border-b border-rule py-3"
                     >
-                      <div className="min-w-28 flex-1">
+                      <div className="library-document-name min-w-0">
                         <button
                           type="button"
                           title={doc.name}
-                          className="block max-w-full truncate text-left font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-                          onClick={() => openDocument({ documentId: doc.id })}
+                          className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+                          onClick={() =>
+                            useAppStore.getState().openDocument({ documentId: doc.id })
+                          }
                         >
-                          {doc.name}
+                          <DocumentLineIcon
+                            kind={doc.kind}
+                            className="size-4 shrink-0 text-ink-meta"
+                          />
+                          <span className="truncate font-semibold">{doc.name}</span>
                         </button>
-                        <p className="mt-0.5 text-[12px] text-ink-meta">
-                          {doc.kind.toUpperCase()} ·{" "}
-                          {t(
-                            item?.source === "user"
-                              ? "library.manual"
-                              : item?.status === "classified"
-                                ? "library.saved"
-                                : item?.status === "classifying"
-                                  ? "library.working"
-                                  : "library.notClassified",
-                          )}
-                        </p>
-                        {item?.model && (
-                          <p className="mt-0.5 text-[12px] text-ink-meta">
-                            {item.model.id} ·{" "}
-                            {t(item.model.images ? "library.usedPages" : "library.usedText")}
-                            {["slow", "memory", "unavailable"].includes(item.model.reason) && (
-                              <>
-                                {" "}
-                                ·{" "}
-                                {t(
-                                  `library.route.${item.model.reason}` as
-                                    | "library.route.slow"
-                                    | "library.route.memory"
-                                    | "library.route.unavailable",
-                                )}
-                              </>
-                            )}
+                        <details className="mt-1 text-[12px] text-ink-meta">
+                          <summary className="w-fit cursor-pointer">{t(status)}</summary>
+                          <p className="mt-1">
+                            {doc.kind.toUpperCase()} · {t("library.originalsStay")}
                           </p>
-                        )}
-                        {item?.error && (
-                          <p className={`${errorTextClass} mt-1`}>{item.error.message}</p>
-                        )}
+                          {item?.model && (
+                            <p>
+                              {item.model.id} ·{" "}
+                              {t(item.model.images ? "library.usedPages" : "library.usedText")}
+                              {item.model.reason === "slow"
+                                ? ` · ${t("library.route.slow")}`
+                                : item.model.reason === "memory"
+                                  ? ` · ${t("library.route.memory")}`
+                                  : item.model.reason === "unavailable"
+                                    ? ` · ${t("library.route.unavailable")}`
+                                    : ""}
+                            </p>
+                          )}
+                          {item?.error && (
+                            <p className={`${errorTextClass} mt-1`}>{item.error.message}</p>
+                          )}
+                        </details>
                       </div>
                       <select
                         aria-label={t("library.groupFor", { name: doc.name })}
                         disabled={busy}
                         value={item?.groupId ?? ""}
-                        className={`${inputClass.replace("w-full", "")} mt-0 w-44 max-w-full`}
+                        className={`${inputClass} mt-0 min-w-0`}
                         onChange={(event) =>
                           void act(() =>
                             core.assignDocumentGroup(doc.id, event.target.value || null),
@@ -386,23 +352,42 @@ export function LibraryPane() {
                           </option>
                         ))}
                       </select>
+                      <DocumentTagMenu
+                        item={doc}
+                        buttonClassName="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-sm text-left text-[12px] text-ink-secondary outline-none hover:bg-frame focus-visible:outline-2 focus-visible:outline-accent"
+                      >
+                        {labels.length ? (
+                          labels.map((tag) => (
+                            <span
+                              key={tag.id}
+                              className="max-w-full truncate rounded-sm bg-chip px-2 py-0.5"
+                              title={tag.needsReview ? t("jev.chip.needsReview") : tag.description}
+                            >
+                              {tag.name}
+                              {tag.needsReview ? " · ?" : ""}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="px-2 text-ink-meta">{t("library.addTags")}</span>
+                        )}
+                      </DocumentTagMenu>
                     </li>
                   );
                 })}
               </ul>
-            )}
-            {shown.length > limit && (
-              <button
-                type="button"
-                className={`${buttonStyle("secondary")} mt-4`}
-                onClick={() => setLimit(limit + 100)}
-              >
-                {t("library.showMore")}
-              </button>
-            )}
-          </div>
+            </>
+          )}
+          {shown.length > limit && (
+            <button
+              type="button"
+              className={`${buttonStyle("secondary")} mt-4`}
+              onClick={() => setLimit(limit + 100)}
+            >
+              {t("library.showMore")}
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </main>
   );
 }
@@ -419,6 +404,10 @@ function GroupForm({
   close(): void;
 }) {
   const t = useT();
+  const nameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    nameInput.current?.focus();
+  }, []);
   const [name, setName] = useState(group === "new" ? "" : group.name);
   const [description, setDescription] = useState(group === "new" ? "" : group.description);
   return (
@@ -437,6 +426,7 @@ function GroupForm({
       <label className={fieldLabelClass}>
         {t("library.name")}
         <input
+          ref={nameInput}
           required
           maxLength={100}
           value={name}
@@ -511,199 +501,5 @@ function StarterGroups({ busy, act, close }: { busy: boolean; act: Action; close
         {t("library.addSelected")}
       </button>
     </section>
-  );
-}
-
-function ClassifierForm({
-  settings,
-  act,
-  busy,
-}: {
-  settings: LibrarySettings;
-  act: Action;
-  busy: boolean;
-}) {
-  const t = useT();
-  const [providers, setProviders] = useState<ChatProvider[]>([]);
-  const initial = settings.classifier;
-  const [selection, setSelection] = useState(
-    initial?.kind === "chat" ? initial.choice.providerId : (initial?.kind ?? ""),
-  );
-  const [modelId, setModelId] = useState(
-    initial?.kind === "chat"
-      ? initial.choice.modelId
-      : initial?.kind === "ollama"
-        ? initial.modelId
-        : "",
-  );
-  const [baseUrl, setBaseUrl] = useState(
-    initial?.kind === "ollama" || initial?.kind === "auto"
-      ? initial.baseUrl
-      : "http://localhost:11434",
-  );
-  const [automatic, setAutomatic] = useState(settings.automatic);
-  const [usePageImages, setUsePageImages] = useState(
-    initial?.kind === "ollama" && initial.usePageImages === true,
-  );
-  const [jevEnabled, setJevEnabled] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  useEffect(() => {
-    let stopped = false;
-    const reload = () => {
-      void Promise.all([core.listChatProviders(), core.getJevSettings()]).then(
-        ([list, jev]) => {
-          if (!stopped) {
-            setProviders(list);
-            setJevEnabled(jev.enabled);
-          }
-        },
-        (failure) => {
-          if (!stopped) setLoadError(messageOf(failure));
-        },
-      );
-    };
-    reload();
-    const stopChat = core.on("chatReadiness.changed", reload);
-    const stopJev = core.on("jev.changed", reload);
-    return () => {
-      stopped = true;
-      stopChat();
-      stopJev();
-    };
-  }, []);
-  return (
-    <form
-      className="mt-4 max-w-xl"
-      onSubmit={(event) => {
-        event.preventDefault();
-        let classifier: LibraryClassifier | null = null;
-        if (selection === "jev") classifier = { kind: "jev" };
-        else if (selection === "auto") classifier = { kind: "auto", baseUrl };
-        else if (selection === "ollama")
-          classifier = {
-            kind: "ollama",
-            baseUrl,
-            modelId: modelId.trim(),
-            usePageImages: supportsLibraryImages(modelId) && usePageImages,
-          };
-        else if (selection)
-          classifier = { kind: "chat", choice: { providerId: selection, modelId: modelId.trim() } };
-        void act(() =>
-          core.saveLibrarySettings({ classifier, automatic: !!classifier && automatic }),
-        );
-      }}
-    >
-      <p className="mb-3 text-[13px] text-ink-meta">{t("library.modelHint")}</p>
-      {loadError && (
-        <p role="alert" className={errorTextClass}>
-          {loadError}
-        </p>
-      )}
-      <label className={fieldLabelClass}>
-        {t("library.connection")}
-        <select
-          aria-label={t("library.connection")}
-          className={inputClass}
-          value={selection}
-          onChange={(event) => {
-            const value = event.target.value;
-            setSelection(value);
-            const current = useAppStore.getState().settings?.user.chatModel;
-            setModelId(
-              value === "ollama"
-                ? "tev1:0.8b"
-                : value === current?.providerId
-                  ? current.modelId
-                  : "",
-            );
-          }}
-        >
-          <option value="">{t("library.manualOnly")}</option>
-          <option value="auto">{t("library.auto")}</option>
-          {providers.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.service?.name ?? (provider.kind === "ollama" ? "Ollama" : provider.kind)}
-              {provider.baseUrl ? ` · ${provider.baseUrl}` : ""}
-            </option>
-          ))}
-          <option value="jev" disabled={!jevEnabled}>
-            {t("library.jev")}
-          </option>
-          <option value="ollama">{t("library.ollama")}</option>
-        </select>
-      </label>
-      {selection && selection !== "jev" && selection !== "auto" && (
-        <label className={`${fieldLabelClass} mt-3`}>
-          {t("library.model")}
-          <input
-            list="library-model-suggestions"
-            className={inputClass}
-            required
-            maxLength={200}
-            value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-          />
-        </label>
-      )}
-      <datalist id="library-model-suggestions">
-        {(selection === "ollama" ? ["tev1:0.8b", "clef-flash", "tev1:4b"] : []).map((model) => (
-          <option key={model} value={model} />
-        ))}
-      </datalist>
-      {(selection === "ollama" || selection === "auto") && (
-        <>
-          <label className={`${fieldLabelClass} mt-3`}>
-            {t("library.server")}
-            <input
-              required
-              type="url"
-              className={inputClass}
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-          </label>
-          <p className="mt-2 text-[13px] text-ink-meta">
-            {t(selection === "auto" ? "library.autoHint" : "library.localHint")}
-          </p>
-          {selection === "auto" && (
-            <p className="mt-2 text-[13px] text-ink-meta">{t("library.autoModels")}</p>
-          )}
-          {selection === "ollama" && supportsLibraryImages(modelId) && (
-            <label className="mt-4 flex items-start gap-2 text-[13px] text-ink-secondary">
-              <input
-                type="checkbox"
-                checked={usePageImages}
-                onChange={(event) => setUsePageImages(event.target.checked)}
-                className="mt-0.5 size-4 accent-ink"
-              />
-              {t("library.pageImages")}
-            </label>
-          )}
-        </>
-      )}
-      {selection && (
-        <label className="mt-4 flex items-start gap-2 text-[13px] text-ink-secondary">
-          <input
-            type="checkbox"
-            checked={automatic}
-            onChange={(event) => setAutomatic(event.target.checked)}
-            className="mt-0.5 size-4 accent-ink"
-          />
-          {t("library.automatic")}
-        </label>
-      )}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="submit" disabled={busy} className={buttonStyle("primary")}>
-          {t("library.saveModel")}
-        </button>
-        <button
-          type="button"
-          className={buttonStyle("ghost")}
-          onClick={() => useAppStore.getState().openSettings("chat-model")}
-        >
-          {t("library.connectModel")}
-        </button>
-      </div>
-    </form>
   );
 }

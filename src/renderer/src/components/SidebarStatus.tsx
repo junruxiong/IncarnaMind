@@ -184,6 +184,8 @@ function useStatuses(): Status[] {
   const alreadyAdded = useAppStore((state) => state.alreadyAdded);
   const model = useAppStore((state) => state.embeddingModel);
   const embedding = useAppStore((state) => state.embedding);
+  const library = useAppStore((state) => state.library);
+  const organizing = !!library?.groups.length || !!library?.settings.classifier;
   const counts = useAppStore(
     useShallow((state) => {
       let processing = 0;
@@ -270,7 +272,7 @@ function useStatuses(): Status[] {
     });
   }
 
-  if (counts.waitingForTagger > 0) {
+  if (!organizing && counts.waitingForTagger > 0) {
     statuses.push({
       testId: "tagging-waiting",
       tone: "waiting",
@@ -319,7 +321,7 @@ function useStatuses(): Status[] {
     statuses.push({ testId: "processing-status", tone: "progress", short: text, full: text });
   }
 
-  if (counts.tagging > 0) {
+  if (!organizing && counts.tagging > 0) {
     const text =
       counts.tagging === 1
         ? t("status.tagging.one")
@@ -327,5 +329,28 @@ function useStatuses(): Status[] {
     statuses.push({ testId: "tagging-status", tone: "progress", short: text, full: text });
   }
 
+  if (organizing && library) {
+    const pending = library.assignments.filter(
+      (item) => item.status === "pending" || item.status === "classifying",
+    ).length;
+    const attention = library.assignments.filter(
+      (item) => item.status === "waiting" || item.status === "failed",
+    ).length;
+    if (attention)
+      statuses.push({
+        testId: "organization-attention",
+        tone: "waiting",
+        short: t("library.needsAttention"),
+        full: t("library.waiting", { count: attention }),
+        action: { label: t("library.review"), run: () => useAppStore.getState().openLibrary() },
+      });
+    if (pending)
+      statuses.push({
+        testId: "organization-progress",
+        tone: "progress",
+        short: t("library.progress", { count: pending }),
+        full: t("library.progress", { count: pending }),
+      });
+  }
   return statuses;
 }

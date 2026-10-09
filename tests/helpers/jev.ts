@@ -27,6 +27,7 @@ export interface JevRequest {
 }
 
 export interface FakeJev {
+  chooseGroup(id: string): void;
   readonly unloadedModels: string[];
   /** The base URL, e.g. "http://127.0.0.1:51234". */
   readonly url: string;
@@ -63,6 +64,7 @@ export async function startFakeJev({
   let probabilities: Readonly<Record<string, number>> = {};
   let failure: { status: number; message: string; headers?: Record<string, string> } | null = null;
   let garbled: unknown = null;
+  let group = "__unsorted__";
   let gate: Promise<void> | null = null;
   let open = () => {};
   const waiting: { count: number; resolve: () => void }[] = [];
@@ -117,9 +119,12 @@ export async function startFakeJev({
       const answers = Object.fromEntries(
         Object.entries(body.questions ?? {}).map(([id, question]) => [
           id,
-          { type: "noul", noul: probabilities[tagNameOf(question)] ?? 0.02 },
+          question.type === "choice"
+            ? { type: "choice", choice: group }
+            : { type: "noul", noul: probabilities[tagNameOf(question)] ?? 0.02 },
         ]),
       );
+      loadedModels.add(body.model);
       send(response, 200, {
         model: "jev-1.13.0",
         answers,
@@ -139,6 +144,9 @@ export async function startFakeJev({
   const { port } = server.address() as AddressInfo;
 
   return {
+    chooseGroup(id) {
+      group = id;
+    },
     url: `http://127.0.0.1:${port}`,
     requests,
     unloadedModels,
