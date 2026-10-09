@@ -50,38 +50,49 @@
   --color-warning-wash: #fef3e2;
   /* Something waiting for the User, e.g. an approval. */
   --color-attention: #d97706;
+  /* A Tag awaiting review where Tags are dots: a hollow ring, darker than the orange dot. */
+  --color-review: #b45f06;
   --color-danger: #b42318;
   --color-danger-wash: #fef0ee;
   /*
-   * Tag colours (DESIGN.md, Tags; src/shared/tagColours.ts): a pale fill and its
-   * text, 6.6:1 or better, for named chips; and a brighter dot, as in Finder, 3:1 or
-   * better on the frame, a hovered row and the sheet. No green or amber (Citation
-   * checks, "needs review"), no accent blue.
+   * Tag colours (DESIGN.md, Tags; src/shared/tagColours.ts), bright and Finder-like:
+   * a pale fill and its text, 7:1 or better, for named chips; a dot, for where a
+   * Tag has no room for its name; and the dot's edge, a hairline darker where the
+   * dot alone is under 3:1 on the frame, a hovered row or the sheet (the edge is 3:1
+   * or better). A Tag awaiting review is a ring in `--color-review`, not a dot.
    */
-  --color-tag-stone: #eef0f3;
-  --color-tag-stone-dot: #838991;
-  --color-tag-stone-ink: #4a4f57;
-  --color-tag-taupe: #f2eeea;
-  --color-tag-taupe-dot: #968574;
-  --color-tag-taupe-ink: #5c5248;
-  --color-tag-brick: #f5eae6;
-  --color-tag-brick-dot: #c0573c;
-  --color-tag-brick-ink: #7a3d2d;
-  --color-tag-rose: #f9e9ec;
-  --color-tag-rose-dot: #d0506f;
-  --color-tag-rose-ink: #8e2d45;
-  --color-tag-orchid: #f6e8f2;
-  --color-tag-orchid-dot: #b84f9c;
-  --color-tag-orchid-ink: #843270;
-  --color-tag-violet: #f1eaf7;
-  --color-tag-violet-dot: #8a5bbf;
-  --color-tag-violet-ink: #633c86;
-  --color-tag-indigo: #ebebf8;
-  --color-tag-indigo-dot: #5b57d1;
-  --color-tag-indigo-ink: #43409b;
-  --color-tag-petrol: #e2eff3;
-  --color-tag-petrol-dot: #2f84a3;
-  --color-tag-petrol-ink: #22566a;
+  --color-tag-red: #fbe3e2;
+  --color-tag-red-ink: #91201a;
+  --color-tag-red-dot: #f25c54;
+  --color-tag-red-edge: #f14e46;
+  --color-tag-orange: #fbefe2;
+  --color-tag-orange-ink: #734714;
+  --color-tag-orange-dot: #f7a03c;
+  --color-tag-orange-edge: #cc7108;
+  --color-tag-yellow: #f9f1d7;
+  --color-tag-yellow-ink: #624f11;
+  --color-tag-yellow-dot: #f5c836;
+  --color-tag-yellow-edge: #a88308;
+  --color-tag-green: #e6f7ef;
+  --color-tag-green-ink: #1f5c3e;
+  --color-tag-green-dot: #4cc38a;
+  --color-tag-green-edge: #339968;
+  --color-tag-teal: #e5f6f8;
+  --color-tag-teal-ink: #1b5962;
+  --color-tag-teal-dot: #3db8c9;
+  --color-tag-teal-edge: #2d95a3;
+  --color-tag-blue: #e2ebfb;
+  --color-tag-blue-ink: #1b4a98;
+  --color-tag-blue-dot: #4a8cf7;
+  --color-tag-blue-edge: #3e84f6;
+  --color-tag-purple: #ebe2fb;
+  --color-tag-purple-ink: #5921bd;
+  --color-tag-purple-dot: #9b6cf0;
+  --color-tag-purple-edge: #9b6cf0;
+  --color-tag-gray: #eef0f3;
+  --color-tag-gray-ink: #4a4f57;
+  --color-tag-gray-dot: #9aa0a8;
+  --color-tag-gray-edge: #818993;
 
   /* The type scale (DESIGN.md, Typography). */
   --text-display: 34px;

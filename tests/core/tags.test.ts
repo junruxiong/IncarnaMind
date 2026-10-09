@@ -153,7 +153,7 @@ describe("Managing Tags", () => {
       description: "Covers one quarter of a year.",
       preset: false,
       // The one colour no preset has.
-      colour: "stone",
+      colour: "teal",
       createdAt: "2026-10-06T12:00:00.000Z",
       updatedAt: "2026-10-06T12:00:00.000Z",
     });
@@ -212,7 +212,7 @@ describe("Managing Tags", () => {
     });
     await expect(core.updateTag(paper.id, { name: "report" })).rejects.toThrow(InvalidInputError);
     await expect(core.updateTag(paper.id, { name: " " })).rejects.toThrow(InvalidInputError);
-    await expect(core.updateTag(paper.id, { colour: "red" } as never)).rejects.toThrow(
+    await expect(core.updateTag(paper.id, { colour: "crimson" } as never)).rejects.toThrow(
       InvalidInputError,
     );
     await expect(core.updateTag(randomUUID(), { name: "Lost" })).rejects.toThrow(NotFoundError);
