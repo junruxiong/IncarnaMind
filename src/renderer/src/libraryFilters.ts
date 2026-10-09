@@ -26,8 +26,10 @@ export interface LibraryFacet<T> {
   label(value: string, t: Translate): string;
   /** The order its options are listed in. */
   compare(a: string, b: string): number;
-  /** An option's colour, shown as a swatch before it (the Tags filter's); none by default. */
+  /** An option's colour, shown as a dot before it (the Tags filter's); none by default. */
   colour?(value: string): string | null;
+  /** Whether an option stands for what awaits the User's review: a hollow ring marks it. */
+  review?(value: string): boolean;
 }
 
 /** The options chosen, by filter. A filter with none chosen is left out: it keeps everything. */
@@ -250,6 +252,23 @@ export function tagValues({ tags }: TaggedDocument): string[] {
 }
 
 /**
+ * Each Tags filter option's Documents, in their order: a Tag's id, and
+ * `NEEDS_REVIEW` for those with a Tag awaiting review. An option no Document
+ * falls under isn't in it. One pass over the Documents (the sidebar's Tags view).
+ */
+export function documentsByTag<T extends TaggedDocument>(items: readonly T[]): Map<string, T[]> {
+  const byTag = new Map<string, T[]>();
+  for (const item of items) {
+    for (const value of new Set(tagValues(item))) {
+      const list = byTag.get(value);
+      if (list) list.push(item);
+      else byTag.set(value, [item]);
+    }
+  }
+  return byTag;
+}
+
+/**
  * Whether a Document passes a Tag filter: any chosen option (either-or, like
  * every filter's options). Nothing chosen keeps everything.
  */
@@ -280,5 +299,6 @@ export function tagFacet(
               sensitivity: "base",
             }),
     colour: (value) => colours.get(value) ?? null,
+    review: (value) => value === NEEDS_REVIEW,
   };
 }
