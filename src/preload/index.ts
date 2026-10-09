@@ -20,6 +20,7 @@ import {
   type FilesBridge,
   type MenuCommand,
 } from "../shared/bridge";
+import { titleBarOf } from "../shared/titleBar";
 
 const methods = Object.fromEntries(
   coreApiMethods.map((method) => [
@@ -81,6 +82,14 @@ const files: FilesBridge = {
     ipcRenderer.on(FILES_CHANNELS.menuCommand, receive);
     return () => {
       ipcRenderer.removeListener(FILES_CHANNELS.menuCommand, receive);
+    };
+  },
+  titleBar: titleBarOf(process.platform),
+  onFullScreenChange: (listener) => {
+    const receive = (_event: unknown, fullScreen: boolean) => listener(fullScreen);
+    ipcRenderer.on(FILES_CHANNELS.fullScreen, receive);
+    return () => {
+      ipcRenderer.removeListener(FILES_CHANNELS.fullScreen, receive);
     };
   },
 };

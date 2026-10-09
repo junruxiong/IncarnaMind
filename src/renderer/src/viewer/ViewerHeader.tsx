@@ -54,7 +54,7 @@ export function ViewerHeader({
   };
 
   return (
-    <header data-testid="viewer-header" className="viewer-header">
+    <header data-testid="viewer-header" className="viewer-header title-bar">
       {leading}
       {document ? (
         <span
