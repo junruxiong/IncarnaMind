@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { InvalidInputError } from "../../src/core";
+import { type Executor, InvalidInputError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
 describe("Settings", () => {
@@ -25,7 +25,24 @@ describe("Settings", () => {
         skillScriptTimeoutSeconds: 60,
       },
       language: "en",
+      scriptSandbox: "none",
     });
+  });
+
+  test("say how Skill scripts run here: at the level of the Executor the app gave the core", async () => {
+    const executor: Executor = {
+      level: "os",
+      run: async () => {
+        throw new Error("Nothing runs in this test.");
+      },
+    };
+    const core = startCore(await createTempDataFolder(), { executor });
+
+    expect((await core.getSettings()).scriptSandbox).toBe("os");
+    // Not a setting: it can't be changed.
+    await expect(
+      core.updateSettings({ device: { scriptSandbox: "none" } } as never),
+    ).rejects.toThrow(InvalidInputError);
   });
 
   test.each([
@@ -130,6 +147,7 @@ describe("Settings", () => {
       user: { language: "zh-CN", chatModel: null },
       device,
       language: "zh-CN",
+      scriptSandbox: "none",
     });
   });
 

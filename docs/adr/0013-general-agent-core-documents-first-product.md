@@ -8,7 +8,7 @@ The core is built from four parts:
 - **Approvals by Effect.** Approvals are decided from Effects, with the existing policies, requests and "always allow". A policy can trust a Tool, or a scope such as "write inside ~/Reports". Once a Run has read untrusted content (Passages, web pages, Connector results), only scope policies let side effects run without asking. Documents are untrusted input and the User's data is private, so an injected instruction must never meet an unbounded "always".
 - **Runs.** The Tool-calling loop is a Run: instructions, Tools, a model, events, stop and steer. An Answer is one kind of Run. A Task is a later kind, which runs in the background, survives a restart from its journal in SQLite, and outputs its Effects and a log.
 
-Every process a Tool starts goes through an `Executor` with a sandbox level. Skill scripts use level "none" today. The OS sandbox (Seatbelt, bubblewrap), a container, or a remote machine come later, without changing the Tools that use them.
+Every process a Tool starts goes through an `Executor` with a sandbox level. Skill scripts use level "os", the OS sandbox (Seatbelt, bubblewrap), on macOS and Linux (#65), and "none" on Windows (and on Linux without bubblewrap). A container or a remote machine come later, without changing the Tools that use them.
 
 The loop library sits behind a `RunEngine` interface. Today AI SDK 7 implements it, with `streamText`, `stopWhen` and `prepareStep`: the loop its `ToolLoopAgent` wraps. Which library implements it is decided by measurement: the bake-off on `prototype/engine-bakeoff` (AI SDK 7, pi-coding-agent, pi-agent-core with pi-ai), run behind this same interface and recorded in ADR-0007.
 
