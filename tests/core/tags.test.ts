@@ -592,6 +592,122 @@ describe("Re-tagging", { timeout: 30_000 }, () => {
   });
 });
 
+describe("Tagging many Documents at once", { timeout: 30_000 }, () => {
+  test("the User adds a Tag to several Documents, or takes it off, in one change pushed once", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const a = await addDocument(core, "A.txt", "Notes about A, kept for later.");
+    const b = await addDocument(core, "B.txt", "Notes about B, kept for later.");
+    const c = await addDocument(core, "C.txt", "Notes about C, kept for later.");
+    const paper = await tagNamed(core, "Paper");
+    await core.addDocumentTag(b.id, paper.id);
+
+    const pushed: Document[][] = [];
+    const stop = core.on("documents.tagged", (documents) => pushed.push(documents));
+    const added = await core.addTagToDocuments([a.id, b.id, c.id], paper.id);
+    // Each Document comes back; only those that changed are pushed, in one event.
+    expect(ids(added)).toEqual([a.id, b.id, c.id]);
+    expect(added.every((document) => document.tags.some((link) => link.tagId === paper.id))).toBe(
+      true,
+    );
+    expect(pushed.map(ids)).toEqual([[a.id, c.id]]);
+    expect(
+      (await core.listDocuments()).map((document) => document.tags.map((link) => link.source)),
+    ).toEqual([["user"], ["user"], ["user"]]);
+
+    pushed.length = 0;
+    const removed = await core.removeTagFromDocuments([a.id, b.id], paper.id);
+    expect(removed.map((document) => document.tags)).toEqual([[], []]);
+    expect(pushed.map(ids)).toEqual([[a.id, b.id]]);
+    // The removals are the User's: kept as deleted links, so automatic tagging leaves them off.
+    const links = queryDatabase(
+      dataDir,
+      "SELECT document_id AS id, source, deleted_at IS NOT NULL AS deleted FROM document_tags WHERE tag_id = ?",
+      [paper.id],
+    );
+    expect(links).toHaveLength(3);
+    expect(links).toEqual(
+      expect.arrayContaining([
+        { id: a.id, source: "user", deleted: 1 },
+        { id: b.id, source: "user", deleted: 1 },
+        { id: c.id, source: "user", deleted: 0 },
+      ]),
+    );
+    stop();
+
+    // Nothing changes when one id is wrong.
+    await expect(core.addTagToDocuments([a.id, randomUUID()], paper.id)).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(core.addTagToDocuments([a.id], randomUUID())).rejects.toThrow(NotFoundError);
+    await expect(core.addTagToDocuments("nope" as unknown as string[], paper.id)).rejects.toThrow(
+      InvalidInputError,
+    );
+    expect(ids(await core.listDocuments({ tagId: paper.id }))).toEqual([c.id]);
+  });
+
+  test("adding a Tag automatic tagging applied makes it the User's, as confirming it does", async () => {
+    const { core } = await startTagging(["Paper"]);
+    await core.saveChatProvider(LOCAL);
+    const document = await addDocument(core, "Attention.md", PAPER_TEXT);
+    await waitForTagging(core, [document.id]);
+    const paper = await tagNamed(core, "Paper");
+    expect((await core.listDocuments())[0]?.tags[0]?.source).toBe("automatic");
+    const [confirmed] = await core.addTagToDocuments([document.id], paper.id);
+    expect(confirmed?.tags).toEqual([
+      { tagId: paper.id, source: "user", confidence: null, needsReview: false },
+    ]);
+  });
+});
+
+describe("Merging Tags", { timeout: 30_000 }, () => {
+  test("merging moves every Document to the other Tag, keeps who chose it, and deletes the merged Tag", async () => {
+    const { core, tagging } = await startTagging();
+    // Automatic tagging applies Report to the paper only.
+    tagging.choose((request) => (request.text.includes("Attention") ? ["Report"] : []));
+    await core.saveChatProvider(LOCAL);
+    const auto = await addDocument(core, "Auto.md", PAPER_TEXT);
+    const user = await addDocument(core, "User.txt", "Notes about the user, kept for later.");
+    const both = await addDocument(core, "Both.txt", "Notes about both, kept for later.");
+    const removed = await addDocument(core, "Removed.txt", "Notes about removal, kept.");
+    await waitForTagging(core, [auto.id, user.id, both.id, removed.id]);
+    const report = await tagNamed(core, "Report");
+    const findings = await core.createTag({ name: "Findings", description: "Results written up" });
+    await core.addDocumentTag(removed.id, report.id);
+    await core.addDocumentTag(user.id, findings.id);
+    await core.addDocumentTag(both.id, findings.id);
+    await core.addDocumentTag(both.id, report.id);
+    // The User took Report off this one: after the merge, Findings stays off it too.
+    await core.removeDocumentTag(removed.id, report.id);
+
+    const tagsChanged = nextEvent(core, "tags.changed");
+    const tagged = nextEvent(core, "documents.tagged");
+    const merged = await core.mergeTags(report.id, findings.id);
+
+    expect(merged).toMatchObject({ id: findings.id, name: "Findings" });
+    expect(ids(await tagsChanged)).not.toContain(report.id);
+    expect(ids(await tagged).sort()).toEqual([auto.id, both.id].sort());
+    const tagsOf = async (id: string) =>
+      (await core.listDocuments())
+        .find((document) => document.id === id)
+        ?.tags.map((link) => [link.tagId, link.source]);
+    // An automatic link stays automatic; the User's stay the User's; one link per Document.
+    expect(await tagsOf(auto.id)).toEqual([[findings.id, "automatic"]]);
+    expect(await tagsOf(user.id)).toEqual([[findings.id, "user"]]);
+    expect(await tagsOf(both.id)).toEqual([[findings.id, "user"]]);
+    expect(await tagsOf(removed.id)).toEqual([]);
+    expect(names(await core.listTags())).not.toContain("Report");
+
+    // A removal the User made carries over: re-tagging doesn't put Findings on that one.
+    tagging.choose(["Findings"]);
+    await retag(core, [removed.id]);
+    expect(await tagsOf(removed.id)).toEqual([]);
+
+    await expect(core.mergeTags(findings.id, findings.id)).rejects.toThrow(InvalidInputError);
+    await expect(core.mergeTags(report.id, findings.id)).rejects.toThrow(NotFoundError);
+  });
+});
+
 describe("Filtering by Tag", { timeout: 30_000 }, () => {
   test("listDocuments filters by Tag, and by Tag and Folder together", async () => {
     const core = startCore(await createTempDataFolder());
