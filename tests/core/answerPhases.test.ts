@@ -9,7 +9,14 @@ import type { Core, CoreEvents } from "../../src/core";
 import { translate } from "../../src/shared/i18n";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
-import { answering, askAndEnd, QWEN35, setUpLocalModel, TIDES } from "../helpers/localModels";
+import {
+  answering,
+  askAndEnd,
+  QWEN35,
+  QWEN35_9B,
+  setUpLocalModel,
+  TIDES,
+} from "../helpers/localModels";
 import { connectToMind } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
 import { scriptedModels, streamingModel } from "../helpers/models";
@@ -42,7 +49,7 @@ const phasesOf = (core: Core) => {
 describe("What the meta line shows while an Answer is written", () => {
   test("loading while Ollama loads the model, searching the Documents, then writing", async () => {
     const ollama = await startOllamaServer({
-      models: [QWEN35],
+      models: [QWEN35_9B],
       reply: answering((_body, index) =>
         index === 0
           ? { toolCalls: [{ name: "search_documents", arguments: { query: "spring tides" } }] }
@@ -51,7 +58,7 @@ describe("What the meta line shows while an Answer is written", () => {
       // A request waits for its model to load.
       loadMs: 300,
     });
-    const { core, mind, client } = await setUpLocalModel(ollama, QWEN35.name, {
+    const { core, mind, client } = await setUpLocalModel(ollama, QWEN35_9B.name, {
       documents: [{ name: "Tides.md", contents: TIDES }],
     });
     // Tagging the Document loaded the model; since then, Ollama has unloaded it.
@@ -64,6 +71,32 @@ describe("What the meta line shows while an Answer is written", () => {
 
     // Nothing was loaded: the model loads, starts, searches, then writes.
     expect(phases).toEqual(["loading", "writing", "searching", "writing"]);
+  });
+
+  test("a small local model, which cites with structured output: searching first, then loading, then writing", async () => {
+    const ollama = await startOllamaServer({
+      models: [QWEN35],
+      reply: answering(() => ({
+        content: JSON.stringify({ answer: "At new and full moon.", citations: [] }),
+      })),
+      loadMs: 300,
+    });
+    const { core, mind, client } = await setUpLocalModel(ollama, QWEN35.name, {
+      documents: [{ name: "Tides.md", contents: TIDES }],
+    });
+    ollama.loaded.splice(0);
+    const phases = phasesOf(core);
+    const asked = question("When are spring tides?");
+    writeMind(client, [asked]);
+
+    const { ended } = await askAndEnd(core, client, mind.id, asked.attrs.id);
+
+    expect(ended.payload).toMatchObject({ citationSupport: "structured-output" });
+    // The one search needs no model; then the model loads, and writes. (Whether "writing" shows
+    // for a moment between the search and "loading" depends on when Ollama says it is loading.)
+    expect(phases[0]).toBe("searching");
+    expect(phases.slice(1).filter((phase) => phase !== "writing")).toEqual(["loading"]);
+    expect(phases.at(-1)).toBe("writing");
   });
 
   test("a model Ollama has loaded already goes straight to writing", async () => {

@@ -19,7 +19,9 @@ import {
   DEFAULT_OLLAMA_SETTINGS,
   kvBytesPerToken,
   kvCacheBytes,
+  parameterCount,
   profileOf,
+  SMALL_MODEL_PARAMETERS,
   thinkFor,
 } from "../../src/core/providers/ollamaModels";
 import { askAndEnd, BGE_M3, GIB, MISTRAL, QWEN35, setUpLocalModel } from "../helpers/localModels";
@@ -111,6 +113,49 @@ describe("What a local model can do, from its capabilities", () => {
     expect(citingMode(["completion"])).toBe("structured-output");
     expect(citingMode(["embedding"])).toBe("none");
     expect(citingMode(null)).toBeNull();
+  });
+
+  test("a small model cites with structured output even when it can call Tools; 7 billion parameters and up, or an unknown size, keeps the Tool loop", () => {
+    const tools = ["completion", "vision", "thinking", "tools"];
+    expect(citingMode(tools, 4_538_986_496)).toBe("structured-output");
+    expect(citingMode(tools, SMALL_MODEL_PARAMETERS - 1)).toBe("structured-output");
+    expect(citingMode(tools, SMALL_MODEL_PARAMETERS)).toBe("tools");
+    expect(citingMode(tools, 9_653_104_368)).toBe("tools");
+    expect(citingMode(tools, null)).toBe("tools");
+    expect(citingMode(["completion"], 70_000_000_000)).toBe("structured-output");
+    expect(citingMode(["embedding"], 566_700_000)).toBe("none");
+  });
+
+  test("the size is /api/show's parameter count, else its parameter size", () => {
+    // qwen3.5:4b, an MLX build: /api/tags gives no parameter size, /api/show both.
+    const tag = { name: "qwen3.5:4b", size: 3_973_305_013, details: { parameter_size: "" } };
+    const show = {
+      capabilities: ["completion", "vision", "thinking", "tools"],
+      details: { parameter_size: "4.5B" },
+      model_info: { "general.architecture": "qwen3_5", "general.parameter_count": 4_538_986_496 },
+    };
+    const profile = profileOf(tag, show, { totalBytes: 32 * GIB });
+    expect(profile).toMatchObject({ parameters: 4_538_986_496, support: "structured-output" });
+    expect(parameterCount({}, { parameter_size: "3.2B" })).toBe(3.2e9);
+    expect(parameterCount({}, { parameter_size: "751.63M" })).toBeCloseTo(751_630_000);
+    expect(parameterCount({}, { parameter_size: "" })).toBeNull();
+    expect(parameterCount({}, {})).toBeNull();
+    // Only /api/tags says (an older server): its details count.
+    expect(
+      profileOf(
+        { name: "llama3.2:latest", details: { parameter_size: "3.2B" } },
+        { capabilities: ["completion", "tools"] },
+        { totalBytes: 32 * GIB },
+      ),
+    ).toMatchObject({ parameters: 3.2e9, support: "structured-output" });
+    // Neither says: the Tool loop, as before.
+    expect(
+      profileOf(
+        { name: "a-model" },
+        { capabilities: ["completion", "tools"] },
+        { totalBytes: GIB },
+      ),
+    ).toMatchObject({ parameters: null, support: "tools" });
   });
 
   test("thinking stays off, unless the model can only think", () => {

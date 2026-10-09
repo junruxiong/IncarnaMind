@@ -12,10 +12,12 @@
  *   Citation markers with `cite`. The Answer keeps what is its own on top of
  *   the engine's events: the search phase, preambles taken back, the records
  *   and the markers they place.
- * - "structured-output": for a model that can't call Tools, one search, its
- *   Passages in the instructions, and the Answer and its records returned as
- *   one JSON object. A follow-up Question is first rewritten by the model into
- *   a search query that stands on its own (see `searchQuery`).
+ * - "structured-output": for a model that can't call Tools, or a small local
+ *   model, which doesn't cite in the loop (see `citingMode` in
+ *   ../providers/ollamaModels): one search, its Passages in the instructions,
+ *   and the Answer and its records returned as one JSON object. A follow-up
+ *   Question is first rewritten by the model into a search query that stands
+ *   on its own (see `searchQuery`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output. A model may give records but
