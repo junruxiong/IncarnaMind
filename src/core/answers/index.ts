@@ -58,6 +58,14 @@ import {
   scriptNotRun,
   scriptResultText,
 } from "../skills/scripts";
+import { scriptCallInput, skillTools } from "../skills/tools";
+import {
+  SKILL_TOOLS,
+  type Tool,
+  type ToolCallContext,
+  type ToolProvider,
+  type ToolProviderKind,
+} from "../tools";
 import {
   contentHash,
   createElement,
@@ -74,15 +82,7 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import {
-  type AnswerEngine,
-  type AnswerSkillTools,
-  type AnswerTools,
-  type DocumentLanguage,
-  type ExternalTool,
-  RUN_SKILL_SCRIPT_TOOL,
-  scriptCallInput,
-} from "./engine";
+import type { AnswerEngine, AnswerTools, DocumentLanguage } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -96,7 +96,6 @@ import {
 } from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
-export type { ExternalTool } from "./engine";
 export { createAiSdkAnswerEngine } from "./engine";
 
 /**
@@ -133,8 +132,12 @@ export interface AnswersOptions {
   emptyScopeAnswer(): string;
   /** The User's Skills. */
   skills: AnswerSkills;
-  /** The Connector Tools an Answer may call: the Tools of every Connector that is on and ready. */
-  connectorTools(signal: AbortSignal): Promise<ExternalTool[]>;
+  /**
+   * The Tool providers the core registers beside the Documents and the
+   * Skills: the User's Connectors, offering the Tools of every Connector that
+   * is on and ready. Their Tools are offered to every Answer.
+   */
+  toolProviders: readonly ToolProvider[];
   /** The Connectors that are on but wait for the User to sign in: their Tools are skipped. */
   connectorsNeedingSignIn?(): { id: string; name: string }[];
   /** Asking the User before a Connector Tool or a Skill script runs. */
@@ -184,8 +187,15 @@ export interface AnswerSkills {
 const FORCED_SKILL_CALL = "forced-skill";
 
 /** What the model is told when the User denies a call: a Tool result, so the Answer carries on. */
-const deniedResult = (tool: ExternalTool) =>
-  `The User denied this call of ${tool.source.tool} (from the Connector "${tool.source.connectorName}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
+const deniedResult = (tool: Tool) =>
+  `The User denied this call of ${tool.providerTool} (from the Connector "${tool.provider.name}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
+
+/** Where a Tool-call card says a call's Tool comes from: its provider's kind, as Minds store it. */
+const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
+  documents: "documents",
+  skills: "skill",
+  connector: "connector",
+};
 
 /** What the model is told when the User denies running a Skill script. */
 const deniedScriptResult = (script: SkillScript) =>
@@ -486,14 +496,15 @@ export function createAnswers(options: AnswersOptions) {
      * The model's call reaches here before the engine reports it, so its card
      * is recorded here, waiting; the engine's report of it then changes nothing.
      */
-    const withApproval = (tool: ExternalTool): ExternalTool => ({
+    const withApproval = (tool: Tool): Tool => ({
       ...tool,
-      async call(input, signal, call) {
-        const { connectorId, connectorName, tool: name } = tool.source;
-        if (!options.approvals.toolNeedsApproval(connectorId, name, tool.readOnly)) {
-          return tool.call(input, signal, call);
+      async call(input, context) {
+        const { id: connectorId, name: connectorName } = tool.provider;
+        const name = tool.providerTool;
+        if (!options.approvals.toolNeedsApproval(connectorId, name, tool.readOnly === true)) {
+          return tool.call(input, context);
         }
-        const toolCallId = call?.toolCallId ?? randomUUID();
+        const { toolCallId, signal } = context;
         callStarted({
           id: toolCallId,
           tool: name,
@@ -516,12 +527,12 @@ export function createAnswers(options: AnswersOptions) {
             tool: name,
             title: tool.title ?? null,
             input,
-            readOnly: tool.readOnly,
+            readOnly: tool.readOnly === true,
           },
           AbortSignal.any([signal, controller.signal]),
         );
         setApproval(toolCallId, allowed ? "allowed" : "denied");
-        return allowed ? tool.call(input, signal, call) : deniedResult(tool);
+        return allowed ? tool.call(input, context) : deniedResult(tool);
       },
     });
 
@@ -536,14 +547,12 @@ export function createAnswers(options: AnswersOptions) {
     const runScript = async (
       skills: SkillSession,
       input: Record<string, unknown>,
-      signal: AbortSignal,
-      call: { toolCallId: string },
+      { toolCallId, signal }: ToolCallContext,
     ): Promise<string> => {
-      const { toolCallId } = call;
       const shown = scriptCallInput(input);
       callStarted({
         id: toolCallId,
-        tool: RUN_SKILL_SCRIPT_TOOL,
+        tool: SKILL_TOOLS.runScript,
         source: "skill",
         input: shown,
         status: "running",
@@ -575,7 +584,7 @@ export function createAnswers(options: AnswersOptions) {
             toolCallId,
             subject: { kind: "skill-script", skillId: script.skillId },
             skill: { id: script.skillId, name: script.skillName },
-            tool: RUN_SKILL_SCRIPT_TOOL,
+            tool: SKILL_TOOLS.runScript,
             script: script.path,
             args,
           },
@@ -610,7 +619,7 @@ export function createAnswers(options: AnswersOptions) {
       if (forcedSkill) {
         callStarted({
           id: FORCED_SKILL_CALL,
-          tool: "use_skill",
+          tool: SKILL_TOOLS.use,
           source: "skill",
           input: { name: forcedSkill },
           status: "running",
@@ -690,15 +699,24 @@ export function createAnswers(options: AnswersOptions) {
       if (!(await openSkills()) || !skills) return;
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
-      // The Tools of the Connectors that are on, next to document search and the Skills.
-      let external: ExternalTool[] = [];
-      try {
-        external = (await options.connectorTools(controller.signal)).map(withApproval);
-      } catch (error) {
-        if (finished) return;
-        options.reportError(error);
+      // The Tools of the providers the core registered (the Connectors that are on), next to
+      // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't.
+      const provided: Tool[] = [];
+      for (const provider of options.toolProviders) {
+        try {
+          const tools = await provider.tools(controller.signal);
+          provided.push(
+            ...tools.map((tool) =>
+              tool.provider.kind === "connector" ? withApproval(tool) : tool,
+            ),
+          );
+        } catch (error) {
+          if (finished) return;
+          options.reportError(error);
+        }
       }
       if (finished) return;
+      const fromConnectors = provided.filter((tool) => tool.provider.kind === "connector");
       // Connectors waiting for a sign-in offer nothing. The Answer shows a card for each, which
       // didn't run, and the model is told, so the Answer can say why.
       const signInNeeded = options.connectorsNeedingSignIn?.() ?? [];
@@ -716,7 +734,7 @@ export function createAnswers(options: AnswersOptions) {
         });
         callFinished(id, false, null);
       }
-      const tools: AnswerTools = {
+      const documents: AnswerTools = {
         get documentCount() {
           return session.tools.documentCount;
         },
@@ -725,22 +743,21 @@ export function createAnswers(options: AnswersOptions) {
         searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
         cite: (records) => session.tools.cite(records),
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
-        external,
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
       const scripts = opened.hasScripts && options.scripts.enabled();
-      const skillTools: AnswerSkillTools | null =
+      const fromSkills: Tool[] =
         listed.length > 0 || (forced && forced.files.length > 1)
-          ? {
+          ? skillTools({
               loadable: listed.length > 0,
               useSkill: async (name) =>
                 loadedSkillText(await opened.load(name), { withFiles: true, scripts }),
               readSkillFile: (skill, path) => opened.readFile(skill, path),
               ...(scripts && {
-                runScript: (input, signal, call) => runScript(opened, input, signal, call),
+                runScript: (input, call) => runScript(opened, input, call),
               }),
-            }
-          : null;
+            })
+          : [];
       const watchLoading = async (loaded: () => Promise<boolean | null>) => {
         for (let first = true; !finished && !responded; first = false) {
           const ready = await loaded().catch(() => null);
@@ -778,7 +795,7 @@ export function createAnswers(options: AnswersOptions) {
                   documentIds !== null,
                 ),
             skillInstructions(listed, forced, withSkillTools, scripts),
-            connectorTools ? connectorInstructions(external, mode === "no-documents") : "",
+            connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
           ]
             .filter(Boolean)
@@ -786,8 +803,8 @@ export function createAnswers(options: AnswersOptions) {
         messages: context.messages,
         question: context.question,
         model: prepared.model,
-        tools,
-        skills: skillTools,
+        documents,
+        tools: [...provided, ...fromSkills],
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         window: prepared.window,
         signal: controller.signal,
@@ -820,28 +837,22 @@ export function createAnswers(options: AnswersOptions) {
             markdown = markdown.slice(0, Math.max(0, markdown.length - event.length));
             writeSoon();
             break;
-          case "tool-call-started":
-            callStarted(
-              event.source
-                ? {
-                    id: event.id,
-                    tool: event.tool,
-                    source: "connector",
-                    connector: { id: event.source.connectorId, name: event.source.connectorName },
-                    input: event.input,
-                    status: "running",
-                    resultCount: null,
-                  }
-                : {
-                    id: event.id,
-                    tool: event.tool,
-                    source: event.tool === "search_documents" ? "documents" : "skill",
-                    input: event.input,
-                    status: "running",
-                    resultCount: null,
-                  },
-            );
+          case "tool-call-started": {
+            // The card says where the Tool comes from, from its provider, as Minds store it.
+            const { provider } = event;
+            callStarted({
+              id: event.id,
+              tool: event.tool,
+              source: CARD_SOURCES[provider.kind],
+              ...(provider.kind === "connector" && {
+                connector: { id: provider.id, name: provider.name },
+              }),
+              input: event.input,
+              status: "running",
+              resultCount: null,
+            });
             break;
+          }
           case "tool-call-finished":
             callFinished(event.id, event.ok, event.resultCount);
             break;

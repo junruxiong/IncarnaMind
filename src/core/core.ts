@@ -516,7 +516,7 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
     },
-    connectorTools: (signal) => connectors.toolsForAnswer(signal),
+    toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
       toolNeedsApproval: (connectorId, tool, readOnly) =>

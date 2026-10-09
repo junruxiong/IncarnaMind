@@ -31,11 +31,11 @@ export function answerInstructions(question: string): string {
  * something ask the User first, who may deny the call.
  */
 export function connectorInstructions(
-  tools: readonly { source: { connectorName: string } }[],
+  tools: readonly { provider: { name: string } }[],
   alone: boolean,
 ): string {
   if (tools.length === 0) return "";
-  const names = [...new Set(tools.map((each) => `"${each.source.connectorName}"`))].join(", ");
+  const names = [...new Set(tools.map((each) => `"${each.provider.name}"`))].join(", ");
   return [
     `You can ${alone ? "" : "also "}call Tools from the User's Connectors (${names}): other services the User has connected. Each Tool's name starts with its Connector's. Use them to look things up when the Question needs what they have.`,
     "- Call a Tool that changes something (creates, sends, books, deletes…) only when the Question asks for that change. The User approves such calls first and may deny one: then carry on without it, don't call it again, and say what wasn't done.",
