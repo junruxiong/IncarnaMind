@@ -171,7 +171,7 @@ function gated(each: RunTool, { gate, window, signal }: RunRequest): RunTool {
 }
 
 /** A Run's messages as the AI SDK takes them; the results of one step's calls go in one message. */
-export function toModelMessages(messages: readonly RunMessage[]): ModelMessage[] {
+function toModelMessages(messages: readonly RunMessage[]): ModelMessage[] {
   const out: ModelMessage[] = [];
   for (const message of messages) {
     if (message.role === "user") {
@@ -218,7 +218,7 @@ const outputText = (output: unknown): string => {
 };
 
 /** The AI SDK's messages in IncarnaMind's form: text, Tool calls and Tool results. */
-export function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
+function fromModelMessages(messages: readonly ModelMessage[]): RunMessage[] {
   const out: RunMessage[] = [];
   const textOf = (content: ModelMessage["content"]) =>
     typeof content === "string"

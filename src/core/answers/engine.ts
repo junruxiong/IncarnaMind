@@ -882,8 +882,8 @@ async function* toolLoop(
         break;
       }
       case "tool-result": {
-        // A Skill or file that isn't there is the model's problem; a Connector's failure (or a
-        // declined consent) is told to the model.
+        // A failed call (a Skill or file that isn't there, a Connector's failure or a declined
+        // consent) is told to the model; its card says it failed.
         const called = calls.get(event.id);
         if (called && called !== cite) {
           yield {
