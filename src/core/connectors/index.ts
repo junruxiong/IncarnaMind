@@ -22,7 +22,7 @@
  *   can reach the internet.
  */
 import { randomUUID } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool as McpTool } from "@modelcontextprotocol/sdk/types.js";
@@ -61,7 +61,7 @@ import {
   signInError,
   signInRemote,
 } from "./remote";
-import { ChildProcessTransport } from "./transport";
+import type { ChildProcessTransport } from "./transport";
 
 /** What the "connectors" flow sends to each Connector. */
 const CONNECTORS_FLOW_SENDS = ["tool-arguments"] as const;
@@ -529,6 +529,7 @@ export function createConnectors(options: ConnectorsOptions) {
   ): Promise<{ client: Client; tools: ToolInfo[]; ready(): void }> {
     const current = () => !closed && runtime.generation === generation;
     let ready = false;
+    const { Client } = await import("./sdk");
     const client = new Client(CLIENT_INFO, {
       capabilities: {},
       listChanged: {
@@ -588,6 +589,8 @@ export function createConnectors(options: ConnectorsOptions) {
     let transport: ChildProcessTransport | null = null;
     try {
       const env = await readEnv(id, envNames);
+      // Loaded before the process starts, so its output is read from the first line.
+      const { ChildProcessTransport } = await import("./sdk");
       if (!current()) return;
       const child = await processes.spawn(command, args, { env });
       transport = new ChildProcessTransport(child);
@@ -656,7 +659,8 @@ export function createConnectors(options: ConnectorsOptions) {
       // An access token that has expired is renewed first, rather than sent to be refused.
       await auth.refreshIfStale();
       if (!current()) return;
-      const connection = remoteTransport(url, auth);
+      const connection = await remoteTransport(url, auth);
+      if (!current()) return;
       transport = connection;
       runtime.session = { close: () => connection.close(), kill: () => void connection.close() };
       const { client, tools, ready } = await handshake(runtime, generation, connection, () =>
