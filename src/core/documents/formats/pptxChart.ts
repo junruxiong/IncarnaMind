@@ -12,6 +12,7 @@ import {
   css,
   fillElement,
   numberAttr,
+  PX_PER_PT,
   readFill,
 } from "./drawingml";
 import { child, descendants, elements, local, parseXml, textOf, type XmlElement } from "./xml";
@@ -37,6 +38,46 @@ export interface ChartData {
   gridlines: boolean;
   /** The text colour of the axes and labels, if the chart sets one. */
   textColour: string | null;
+  /** The axes' text size, CSS pixels, if the chart sets one. */
+  textSize: number | null;
+  /** The data labels' size and colour, if set apart from the axes'. */
+  labelSize: number | null;
+  labelColour: string | null;
+  /** The gridlines' and the axis line's colours, if the chart sets them. */
+  gridColour: string | null;
+  axisColour: string | null;
+  /** Number formats (Excel's) for the data labels and the value axis, e.g. "#,##0"; null for General. */
+  labelFormat: string | null;
+  axisFormat: string | null;
+}
+
+/** A text properties element's (c:txPr) first run size and colour. */
+function textStyle(
+  holder: XmlElement | undefined,
+  context: ColourContext,
+): { size: number | null; colour: string | null } {
+  const txPr = holder && child(holder, "c:txPr");
+  const run = txPr ? descendants(txPr, "a:defRPr")[0] : undefined;
+  const size = run?.attrs.sz !== undefined ? (Number(run.attrs.sz) / 100) * PX_PER_PT : null;
+  return {
+    size: size !== null && Number.isFinite(size) ? size : null,
+    colour: run ? containerColour(fillElement(run), context) : null,
+  };
+}
+
+/** A line's colour from a holder's c:spPr/a:ln, e.g. gridlines'. */
+function lineColour(holder: XmlElement | undefined, context: ColourContext): string | null {
+  const spPr = holder && child(holder, "c:spPr");
+  const ln = spPr && child(spPr, "a:ln");
+  return ln ? containerColour(fillElement(ln), context) : null;
+}
+
+/** A number format a c:numFmt sets itself (not linked to the source), unless General. */
+function ownFormat(holder: XmlElement | undefined): string | null {
+  const format = holder && child(holder, "c:numFmt");
+  if (!format || format.attrs.sourceLinked === "1") return null;
+  const code = format.attrs.formatCode ?? "";
+  return code && code !== "General" ? code : null;
 }
 
 /** Office's default series colours: accent 1–6, then the same shaded. */
@@ -179,9 +220,23 @@ export function readChart(xml: string, context: ColourContext): ChartData | null
       child(each, "c:showPercent")?.attrs.val === "1",
   );
   const valueAxis = child(plot, "c:valAx");
+  const categoryAxis = child(plot, "c:catAx") ?? child(plot, "c:dateAx");
   const gridlines = valueAxis ? child(valueAxis, "c:majorGridlines") !== undefined : false;
-  const axisText = valueAxis && descendants(valueAxis, "a:defRPr")[0];
-  const textColour = axisText ? containerColour(fillElement(axisText), context) : null;
+  const axisText = textStyle(valueAxis, context);
+  const categoryText = textStyle(categoryAxis, context);
+  // Data labels: the series' own, else the chart group's.
+  const labelHolder =
+    descendants(group, "c:ser")
+      .map((ser) => child(ser, "c:dLbls"))
+      .find((each) => each !== undefined) ?? child(group, "c:dLbls");
+  const labelText = textStyle(labelHolder, context);
+  const sourceFormat = (() => {
+    const firstValues = descendants(group, "c:val")[0];
+    const code = firstValues ? descendants(firstValues, "c:formatCode")[0] : undefined;
+    const text = code ? textOf(code).trim() : "";
+    return text && text !== "General" ? text : null;
+  })();
+  const valueFormat = valueAxis ? child(valueAxis, "c:numFmt") : undefined;
   return {
     kind,
     grouping,
@@ -191,7 +246,15 @@ export function readChart(xml: string, context: ColourContext): ChartData | null
     legend,
     dataLabels: labels,
     gridlines,
-    textColour: textColour ?? defaultTextColour(context),
+    textColour: axisText.colour ?? categoryText.colour ?? defaultTextColour(context),
+    textSize: axisText.size ?? categoryText.size,
+    labelSize: labelText.size,
+    labelColour: labelText.colour,
+    gridColour: lineColour(valueAxis && child(valueAxis, "c:majorGridlines"), context),
+    axisColour: lineColour(categoryAxis, context),
+    labelFormat: ownFormat(labelHolder) ?? sourceFormat,
+    axisFormat:
+      ownFormat(valueAxis) ?? (valueFormat?.attrs.sourceLinked === "1" ? sourceFormat : null),
   };
 }
 

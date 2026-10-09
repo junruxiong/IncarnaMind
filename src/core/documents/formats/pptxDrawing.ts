@@ -41,8 +41,10 @@ import {
   readColourMap,
   readFill,
   readLine,
+  readShadow,
   readTheme,
   resolveColour,
+  type Shadow,
   type Theme,
 } from "./drawingml";
 import { ExtractionError } from "./errors";
@@ -50,7 +52,7 @@ import { type ChartData, chartLines, readChart } from "./pptxChart";
 import { child, descendants, elements, local, parseXml, textOf, type XmlElement } from "./xml";
 import { openPackage, resolvePart, type ZipArchive } from "./zip";
 
-export type { Fill, Line } from "./drawingml";
+export type { Fill, Line, Shadow } from "./drawingml";
 export type { ChartData, ChartSeries } from "./pptxChart";
 
 /** Where an item is, in its parent's space: the slide's, or its group's. */
@@ -156,6 +158,8 @@ export interface ShapeItem extends ItemBase {
   textBox: { x: number; y: number; w: number; h: number } | null;
   /** The slide's title placeholder. */
   title: boolean;
+  /** An outer shadow, from its effects or its style's. */
+  shadow: Shadow | null;
 }
 
 export interface PictureItem extends ItemBase {
@@ -167,6 +171,7 @@ export interface PictureItem extends ItemBase {
   geometry: Geometry;
   line: Line | null;
   alt: string;
+  shadow: Shadow | null;
 }
 
 export interface GroupItem extends ItemBase {
@@ -957,6 +962,21 @@ function styleLine(style: XmlElement | undefined, scope: Scope): Line | null | u
   return readLine(ln, { ...scope.colours, placeholder });
 }
 
+/** A shape's outer shadow: its own effect list's, else its style's effect reference's from the theme. */
+function shadowOf(
+  spPr: XmlElement | undefined,
+  style: XmlElement | undefined,
+  scope: Scope,
+): Shadow | null {
+  const own = spPr && child(spPr, "a:effectLst");
+  if (own) return readShadow(own, scope.colours);
+  const ref = style && child(style, "a:effectRef");
+  const index = numberAttr(ref, "idx", 0);
+  if (!ref || index === 0) return null;
+  const placeholder = resolveColour(colourElement(ref), scope.colours);
+  return readShadow(scope.colours.theme.effects[index - 1], { ...scope.colours, placeholder });
+}
+
 /** The fill a properties element gives, with `grpFill` taken from the group. */
 function ownFill(spPr: XmlElement | undefined, scope: Scope): Fill | undefined {
   const element = fillElement(spPr);
@@ -1071,6 +1091,7 @@ function readShape(shape: XmlElement, scope: Scope): ShapeItem | undefined {
     line,
     text,
     textBox: textBox ? { x: textBox.x, y: textBox.y, w: textBox.w, h: textBox.h } : null,
+    shadow: shadowOf(spPr, style, scope),
     title: ph !== undefined && normalType(ph.type) === "title" && scope.origin === "slide",
   };
 }
@@ -1360,6 +1381,7 @@ function readPicture(pic: XmlElement, scope: Scope, frame?: Box): PictureItem | 
       readLine(spPr && child(spPr, "a:ln"), scope.colours, styleLine(child(pic, "style"), scope)) ??
       null,
     alt: (nv && child(nv, "cNvPr")?.attrs.descr) ?? "",
+    shadow: shadowOf(spPr, child(pic, "style"), scope),
   };
 }
 

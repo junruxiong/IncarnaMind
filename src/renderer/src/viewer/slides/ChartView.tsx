@@ -1,4 +1,5 @@
 import { Children, type ReactNode } from "react";
+import { formatNumber } from "../../../../core/documents/formats/numbers";
 import type { ChartData } from "../../../../core/documents/formats/pptxDrawing";
 import { niceScale } from "./chartScale";
 
@@ -12,10 +13,40 @@ const AXIS = "#BFBFBF";
 /** Roughly how wide a label is, for the space it takes: a chart isn't measured. */
 const textWidth = (text: string, size = TEXT) => text.length * size * 0.55;
 
-const format = (value: number) => {
+const plain = (value: number) => {
   const rounded = Math.round(value * 1e6) / 1e6;
   return Math.abs(rounded) >= 1000 ? rounded.toLocaleString("en-US") : String(rounded);
 };
+
+/** How a chart's text and lines look: the file's own sizes, colours and number formats, else Office's. */
+interface ChartStyle {
+  size: number;
+  colour: string;
+  labelSize: number;
+  labelColour: string;
+  grid: string;
+  axis: string;
+  /** A data label's text, and a value axis tick's. */
+  label(value: number): string;
+  tick(value: number): string;
+}
+
+function chartStyle(chart: ChartData): ChartStyle {
+  const size = chart.textSize ?? TEXT;
+  const colour = chart.textColour ?? "#595959";
+  const formatted = (code: string | null) => (value: number) =>
+    code ? formatNumber(value, code) : plain(value);
+  return {
+    size,
+    colour,
+    labelSize: chart.labelSize ?? size,
+    labelColour: chart.labelColour ?? colour,
+    grid: chart.gridColour ?? GRID,
+    axis: chart.axisColour ?? AXIS,
+    label: formatted(chart.labelFormat),
+    tick: formatted(chart.axisFormat),
+  };
+}
 
 /**
  * A chart drawn from its cached values, as Office draws it by default:
@@ -31,7 +62,8 @@ export function ChartView({
   width: number;
   height: number;
 }) {
-  const colour = chart.textColour ?? "#595959";
+  const style = chartStyle(chart);
+  const { colour, size } = style;
   const pad = 8;
   let top = pad;
   let bottom = height - pad;
@@ -53,11 +85,11 @@ export function ChartView({
     : chart.series.map((series) => ({ name: series.name, colour: series.colour }));
   let legend: ReactNode = null;
   if (chart.legend && legendEntries.length > 0) {
-    const swatch = TEXT * 0.7;
+    const swatch = size * 0.7;
     if (chart.legend === "bottom" || chart.legend === "top") {
-      const widths = legendEntries.map((entry) => swatch + 6 + textWidth(entry.name) + 16);
+      const widths = legendEntries.map((entry) => swatch + 6 + textWidth(entry.name, size) + 16);
       const total = widths.reduce((sum, each) => sum + each, 0);
-      const y = chart.legend === "bottom" ? bottom - TEXT : top + TEXT * 0.2;
+      const y = chart.legend === "bottom" ? bottom - size : top + size * 0.2;
       let x = Math.max(left, width / 2 - total / 2);
       legend = legendEntries.map((entry, at) => {
         const at0 = x;
@@ -66,33 +98,33 @@ export function ChartView({
           // biome-ignore lint/suspicious/noArrayIndexKey: entries never reorder
           <g key={at}>
             <rect x={at0} y={y} width={swatch} height={swatch} fill={entry.colour} />
-            <text x={at0 + swatch + 6} y={y + swatch} fontSize={TEXT} fill={colour}>
+            <text x={at0 + swatch + 6} y={y + swatch} fontSize={size} fill={colour}>
               {entry.name}
             </text>
           </g>
         );
       });
-      if (chart.legend === "bottom") bottom -= TEXT * 2;
-      else top += TEXT * 1.8;
+      if (chart.legend === "bottom") bottom -= size * 2;
+      else top += size * 1.8;
     } else {
-      const widest = Math.max(...legendEntries.map((entry) => textWidth(entry.name)));
+      const widest = Math.max(...legendEntries.map((entry) => textWidth(entry.name, size)));
       const blockWidth = swatch + 6 + widest;
       const x = chart.legend === "right" ? right - blockWidth : left;
-      const startY = (top + bottom) / 2 - (legendEntries.length * TEXT * 1.5) / 2;
+      const startY = (top + bottom) / 2 - (legendEntries.length * size * 1.5) / 2;
       legend = legendEntries.map((entry, at) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: entries never reorder
         <g key={at}>
           <rect
             x={x}
-            y={startY + at * TEXT * 1.5}
+            y={startY + at * size * 1.5}
             width={swatch}
             height={swatch}
             fill={entry.colour}
           />
           <text
             x={x + swatch + 6}
-            y={startY + at * TEXT * 1.5 + swatch}
-            fontSize={TEXT}
+            y={startY + at * size * 1.5 + swatch}
+            fontSize={size}
             fill={colour}
           >
             {entry.name}
@@ -105,8 +137,8 @@ export function ChartView({
   }
 
   const plot = round
-    ? roundChart(chart, { left, top, right, bottom }, colour)
-    : axisChart(chart, { left, top, right, bottom }, colour);
+    ? roundChart(chart, { left, top, right, bottom }, style)
+    : axisChart(chart, { left, top, right, bottom }, style);
   return (
     <svg
       className="slide-chart"
@@ -130,7 +162,7 @@ interface Area {
   bottom: number;
 }
 
-function roundChart(chart: ChartData, area: Area, colour: string) {
+function roundChart(chart: ChartData, area: Area, style: ChartStyle) {
   const series = chart.series[0];
   if (!series) return null;
   const values = series.values.map((value) => Math.max(0, value ?? 0));
@@ -168,12 +200,12 @@ function roundChart(chart: ChartData, area: Area, colour: string) {
         {chart.dataLabels && value > 0 && (
           <text
             x={cx + labelRadius * Math.cos(mid)}
-            y={cy + labelRadius * Math.sin(mid) + TEXT / 3}
+            y={cy + labelRadius * Math.sin(mid) + style.labelSize / 3}
             textAnchor="middle"
-            fontSize={TEXT}
-            fill={colour}
+            fontSize={style.labelSize}
+            fill={style.labelColour}
           >
-            {format(series.values[at] ?? 0)}
+            {style.label(series.values[at] ?? 0)}
           </text>
         )}
       </g>
@@ -181,7 +213,7 @@ function roundChart(chart: ChartData, area: Area, colour: string) {
   });
 }
 
-function axisChart(chart: ChartData, area: Area, colour: string) {
+function axisChart(chart: ChartData, area: Area, style: ChartStyle) {
   const horizontal = chart.kind === "bar";
   const stacked = chart.grouping === "stacked" || chart.grouping === "percentStacked";
   const percent = chart.grouping === "percentStacked";
@@ -219,16 +251,17 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
   const ticks: number[] = [];
   for (let value = scale.min; value <= scale.max + scale.step / 2; value += scale.step)
     ticks.push(value);
-  const tickLabels = ticks.map((value) => (percent ? `${format(value)}%` : format(value)));
+  const tickLabels = ticks.map((value) => (percent ? `${style.tick(value)}%` : style.tick(value)));
 
   // Room for the axes' labels.
-  const valueLabelWidth = Math.max(...tickLabels.map((label) => textWidth(label))) + 8;
-  const categoryLabelWidth = Math.max(...chart.categories.map((label) => textWidth(label))) + 8;
+  const valueLabelWidth = Math.max(...tickLabels.map((label) => textWidth(label, style.size))) + 8;
+  const categoryLabelWidth =
+    Math.max(...chart.categories.map((label) => textWidth(label, style.size))) + 8;
   const plot = {
     left: area.left + (horizontal ? categoryLabelWidth : valueLabelWidth),
     right: area.right - 4,
     top: area.top + 4,
-    bottom: area.bottom - TEXT * 1.6,
+    bottom: area.bottom - style.size * 1.6,
   };
   if (plot.right - plot.left < 10 || plot.bottom - plot.top < 10) return null;
   const valueSpan = scale.max - scale.min || 1;
@@ -255,7 +288,7 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
             x2={position}
             y1={plot.top}
             y2={plot.bottom}
-            stroke={GRID}
+            stroke={style.grid}
             strokeWidth={1}
           />
         ) : (
@@ -264,7 +297,7 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
             x2={plot.right}
             y1={position}
             y2={position}
-            stroke={GRID}
+            stroke={style.grid}
             strokeWidth={1}
           />
         ),
@@ -274,20 +307,20 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
       horizontal ? (
         <text
           x={position}
-          y={plot.bottom + TEXT * 1.3}
+          y={plot.bottom + style.size * 1.3}
           textAnchor="middle"
-          fontSize={TEXT}
-          fill={colour}
+          fontSize={style.size}
+          fill={style.colour}
         >
           {tickLabels[at]}
         </text>
       ) : (
         <text
           x={plot.left - 6}
-          y={position + TEXT / 3}
+          y={position + style.size / 3}
           textAnchor="end"
-          fontSize={TEXT}
-          fill={colour}
+          fontSize={style.size}
+          fill={style.colour}
         >
           {tickLabels[at]}
         </text>
@@ -301,20 +334,20 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
       horizontal ? (
         <text
           x={plot.left - 6}
-          y={middle + TEXT / 3}
+          y={middle + style.size / 3}
           textAnchor="end"
-          fontSize={TEXT}
-          fill={colour}
+          fontSize={style.size}
+          fill={style.colour}
         >
           {label}
         </text>
       ) : (
         <text
           x={middle}
-          y={plot.bottom + TEXT * 1.3}
+          y={plot.bottom + style.size * 1.3}
           textAnchor="middle"
-          fontSize={TEXT}
-          fill={colour}
+          fontSize={style.size}
+          fill={style.colour}
         >
           {label}
         </text>
@@ -323,9 +356,23 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
   });
   parts.push(
     horizontal ? (
-      <line x1={zero} x2={zero} y1={plot.top} y2={plot.bottom} stroke={AXIS} strokeWidth={1} />
+      <line
+        x1={zero}
+        x2={zero}
+        y1={plot.top}
+        y2={plot.bottom}
+        stroke={style.axis}
+        strokeWidth={1}
+      />
     ) : (
-      <line x1={plot.left} x2={plot.right} y1={zero} y2={zero} stroke={AXIS} strokeWidth={1} />
+      <line
+        x1={plot.left}
+        x2={plot.right}
+        y1={zero}
+        y2={zero}
+        stroke={style.axis}
+        strokeWidth={1}
+      />
     ),
   );
 
@@ -363,21 +410,21 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
             horizontal ? (
               <text
                 x={Math.max(a, b) + 4}
-                y={along + barSize / 2 + TEXT / 3}
-                fontSize={TEXT}
-                fill={colour}
+                y={along + barSize / 2 + style.labelSize / 3}
+                fontSize={style.labelSize}
+                fill={style.labelColour}
               >
-                {format(series.values[at] ?? 0)}
+                {style.label(series.values[at] ?? 0)}
               </text>
             ) : (
               <text
                 x={along + barSize / 2}
                 y={Math.min(a, b) - 4}
                 textAnchor="middle"
-                fontSize={TEXT}
-                fill={colour}
+                fontSize={style.labelSize}
+                fill={style.labelColour}
               >
-                {format(series.values[at] ?? 0)}
+                {style.label(series.values[at] ?? 0)}
               </text>
             ),
           );
@@ -424,8 +471,14 @@ function axisChart(chart: ChartData, area: Area, colour: string) {
       if (chart.dataLabels) {
         points.forEach(([x, y], at) => {
           parts.push(
-            <text x={x} y={y - 8} textAnchor="middle" fontSize={TEXT} fill={colour}>
-              {format(series.values[at] ?? 0)}
+            <text
+              x={x}
+              y={y - 8}
+              textAnchor="middle"
+              fontSize={style.labelSize}
+              fill={style.labelColour}
+            >
+              {style.label(series.values[at] ?? 0)}
             </text>,
           );
         });

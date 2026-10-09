@@ -54,6 +54,8 @@ export interface Theme {
   fills: XmlElement[];
   lines: XmlElement[];
   backgrounds: XmlElement[];
+  /** Each effect style's effect list (a:effectLst), for effect references. */
+  effects: (XmlElement | undefined)[];
 }
 
 /** Office's own theme, for a package without one. */
@@ -82,6 +84,7 @@ export function readTheme(xml: string | undefined): Theme {
     fills: [],
     lines: [],
     backgrounds: [],
+    effects: [],
   };
   if (!xml) return theme;
   const root = parseXml(xml);
@@ -112,6 +115,7 @@ export function readTheme(xml: string | undefined): Theme {
   theme.fills = list("a:fillStyleLst");
   theme.lines = list("a:lnStyleLst");
   theme.backgrounds = list("a:bgFillStyleLst");
+  theme.effects = list("a:effectStyleLst").map((style) => child(style, "a:effectLst"));
   return theme;
 }
 
@@ -530,5 +534,32 @@ export function readLine(
     dash: dashName !== undefined ? (DASHES[dashName] ?? null) : (base?.dash ?? null),
     head: child(ln, "a:headEnd") ? end("a:headEnd") : (base?.head ?? null),
     tail: child(ln, "a:tailEnd") ? end("a:tailEnd") : (base?.tail ?? null),
+  };
+}
+
+/** An outer shadow (a:outerShdw): its offset and blur, CSS pixels, and colour. */
+export interface Shadow {
+  x: number;
+  y: number;
+  blur: number;
+  colour: string;
+}
+
+/** An effect list's outer shadow; null when it has none (other effects aren't drawn). */
+export function readShadow(
+  effectLst: XmlElement | undefined,
+  context: ColourContext,
+): Shadow | null {
+  const shadow = effectLst && child(effectLst, "a:outerShdw");
+  if (!shadow) return null;
+  const colour = resolveColour(colourElement(shadow), context);
+  if (!colour || colour.a <= 0) return null;
+  const distance = emu(shadow.attrs.dist);
+  const direction = (numberAttr(shadow, "dir", 0) / 60000) * (Math.PI / 180);
+  return {
+    x: Math.round(distance * Math.cos(direction) * 100) / 100,
+    y: Math.round(distance * Math.sin(direction) * 100) / 100,
+    blur: emu(shadow.attrs.blurRad),
+    colour: css(colour),
   };
 }
