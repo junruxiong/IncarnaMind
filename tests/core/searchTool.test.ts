@@ -5,6 +5,9 @@ import {
   clusterByOverlap,
   documentWindows,
   SEARCH_TOOL_PARAMETERS,
+  type SearchToolSources,
+  searchDocumentsTool,
+  topsOfEach,
   type WindowedHit,
 } from "../../src/core/documents/searchTool";
 import {
@@ -158,6 +161,8 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
         contents: "The lighthouse keeper lit the lamp at dusk, and kept it burning all night.",
       },
     ]);
+    // This is about grouping by fused scores: no reranker (the default one is on).
+    await core.removeRerankSettings();
     // The note's Passage is the best match, by keyword and by vector search alike.
     for (const mode of ["keyword", "vector"] as const) {
       const [best] = await core.searchPassages("lighthouse keeper", { mode });
@@ -209,5 +214,102 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
 
     expect(reranked).toEqual(["lighthouse"]);
     expect(shown[0]?.document).toBe("Weather");
+  });
+
+  test("with a reranker, it sees keyword search's top 10 and vector search's top 10, not the fused list", async () => {
+    const asked: string[] = [];
+    const reranked: string[][] = [];
+    const candidate = (index: number) => ({
+      seq: index,
+      passageId: `p${index}`,
+      documentId: `d${index}`,
+      documentName: `Document ${index}`,
+      documentKind: "markdown" as const,
+      contentHash: "hash",
+      pageFrom: 1,
+      pageTo: 1,
+      position: 0,
+      windowFrom: 0,
+      windowTo: 0,
+      text: `Passage ${index}`,
+      score: 1 / (60 + index + 1),
+    });
+    const sources: SearchToolSources = {
+      candidates: async (_query, limit) => {
+        asked.push(`fused ${limit}`);
+        return Array.from({ length: limit }, (_, index) => candidate(index));
+      },
+      rerankCandidates: async (_query, perList) => {
+        asked.push(`each list's ${perList}`);
+        return [3, 7, 40].map(candidate);
+      },
+      window: () => [],
+    };
+    const reranker: Reranker = async (_query, candidates) => {
+      reranked.push(candidates.map((each) => each.passageId));
+      return [...candidates].reverse();
+    };
+
+    await searchDocumentsTool(sources, "lighthouse");
+    await searchDocumentsTool(sources, "lighthouse", { rerank: reranker });
+
+    expect(SEARCH_TOOL_PARAMETERS.rerankPerList).toBe(10);
+    expect(asked).toEqual([`fused ${SEARCH_TOOL_PARAMETERS.candidates}`, "each list's 10"]);
+    expect(reranked).toEqual([["p3", "p7", "p40"]]);
+  });
+});
+
+describe("The candidates a reranker sees, through the core", { timeout: 30_000 }, () => {
+  test("are keyword search's top 10 and vector search's top 10, as searchPassages gives them, in fused order", async () => {
+    const seen: { passageId: string; score: number }[][] = [];
+    const reranker: Reranker = async (_query, candidates) => {
+      seen.push(candidates.map(({ passageId, score }) => ({ passageId, score })));
+      return [...candidates];
+    };
+    const query = "ordinary coastal weather lighthouse";
+    const model = citingModel({ query, records: () => [], answer: "There is a lighthouse." });
+    const { core, client, mind } = await setUpWithDocuments(
+      model,
+      [
+        { name: "Coast.md", contents: sections(24, 12, "red") },
+        { name: "Weather.md", contents: sections(6, 0, "") },
+      ],
+      { reranker },
+    );
+
+    await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
+
+    const keyword = await core.searchPassages(query, { mode: "keyword", limit: 10 });
+    const vector = await core.searchPassages(query, { mode: "vector", limit: 10 });
+    expect(keyword).toHaveLength(10);
+    expect(vector).toHaveLength(10);
+    const union = new Set([...keyword, ...vector].map((passage) => passage.passageId));
+    const candidates = seen[0] ?? [];
+    expect(new Set(candidates.map((each) => each.passageId))).toEqual(union);
+    expect(candidates).toHaveLength(union.size);
+    // In fused order, so a reranker that fails leaves search's own order.
+    const scores = candidates.map((each) => each.score);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+  });
+});
+
+describe("The candidates a reranker sees", () => {
+  test("each list's best few, once each, in the order they first appear", () => {
+    const keyword = ["a", "b", "c", "d", "e"];
+    const vector = ["c", "x", "a", "y", "z"];
+
+    expect(topsOfEach([keyword, vector], 3)).toEqual(["a", "b", "c", "x"]);
+    expect(topsOfEach([keyword, []], 3)).toEqual(["a", "b", "c"]);
+    expect(topsOfEach([[], vector], 10)).toEqual(vector);
+    expect(
+      topsOfEach(
+        [
+          [{ id: 1 }, { id: 2 }],
+          [{ id: 2 }, { id: 3 }],
+        ],
+        2,
+        (each) => each.id,
+      ).map((each) => each.id),
+    ).toEqual([1, 2, 3]);
   });
 });

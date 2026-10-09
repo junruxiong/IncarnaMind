@@ -94,6 +94,48 @@ export const en = {
   "library.preset.finance.description": "Invoices, budgets, accounts and financial statements.",
   "library.preset.meetings": "Meeting notes",
   "library.preset.meetings.description": "Meeting minutes, discussions and action items.",
+  "library.filter.label": "Filter Documents",
+  "library.filter.year": "Year",
+  "library.filter.format": "Format",
+  "library.filter.status": "Status",
+  "library.filter.noDate": "No date",
+  "library.filter.chosen": "{filter}: {value}",
+  "library.filter.chosenMore": "{filter}: {value} +{more}",
+  "library.filter.option": "{value}, {count} Documents",
+  "library.filter.option.one": "{value}, 1 Document",
+  "library.filter.clear": "Clear filters",
+  "library.countFiltered": "{count} of {total} Documents",
+  "library.format.pdf": "PDF",
+  "library.format.docx": "Word",
+  "library.format.pptx": "PowerPoint",
+  "library.format.xlsx": "Excel",
+  "library.format.csv": "CSV",
+  "library.format.markdown": "Markdown",
+  "library.format.text": "Plain text",
+  "library.status.available": "Available",
+  "library.status.notIndexed": "Not indexed yet",
+  "library.status.failed": "Failed",
+  "library.status.noText": "No text",
+  "library.status.missing": "Missing",
+  "library.status.unavailable": "Unavailable",
+  "library.ask.folder": "Ask about this Folder",
+  "library.ask.documents": "Ask about these {count} Documents",
+  "library.ask.document": "Ask about this Document",
+  "library.ask.folderHint":
+    "Adds a Question that searches only this Folder to your most recent Mind.",
+  "library.ask.documentsHint":
+    "Adds a Question that searches only the {count} Documents shown to your most recent Mind.",
+  "library.start.folder": "Start a Mind from this Folder",
+  "library.start.documents": "Start a Mind from these {count} Documents",
+  "library.start.document": "Start a Mind from this Document",
+  "library.start.folderHint":
+    "Makes a Mind named after this Folder, starting with a Question that searches only this Folder.",
+  "library.start.documentsHint":
+    "Makes a Mind starting with a Question that searches only the {count} Documents shown.",
+  "library.ask.documentHint":
+    "Adds a Question that searches only the Document shown to your most recent Mind.",
+  "library.start.documentHint":
+    "Makes a Mind starting with a Question that searches only the Document shown.",
   "consent.flow.classification": "Document organization",
   "consent.flow.classification.purpose": "organize your Documents into folders and tags",
   "consent.data.groups": "The names and descriptions of your folders",
@@ -198,6 +240,15 @@ export const en = {
   "viewer.sheet.empty": "This sheet is empty.",
   "viewer.sheet.truncated": "Only the first {rows} rows are read, searched and shown.",
   "viewer.sheet.csv": "CSV",
+  "viewer.sheet.chart": "Chart",
+  "viewer.sheet.picture": "Picture",
+  "viewer.markdown.source": "Source",
+  "viewer.markdown.showSource": "Show the Markdown source",
+  "viewer.markdown.showFormatted": "Show it formatted",
+  "viewer.markdown.image": "Image",
+  "viewer.markdown.imageWeb": "Images from the web aren't loaded",
+  "viewer.markdown.imageMissing": "Image not found",
+  "viewer.docx.comment": "Comment by {author}",
   "viewer.section.start": "Start",
 
   "location.page": "p. {range}",
@@ -363,6 +414,9 @@ export const en = {
   "status.downloading": "Search model: {downloaded} of {total} MB",
   "status.downloadFailed": "Search model download failed",
   "status.modelFailed": "Search model couldn't start",
+  "status.rerankDownloading": "Reranking model: {downloaded} of {total} MB",
+  "status.rerankDownloadFailed": "Reranking model download failed",
+  "status.rerankModelFailed": "Reranking model couldn't start",
   "status.rebuilding": "Rebuilding search: {done} of {total}",
   "status.searchError": "Search can't use {provider}",
   "status.retry": "Retry",
@@ -437,20 +491,34 @@ export const en = {
 
   "rerank.settings.title": "Reranking",
   "rerank.settings.body":
-    "With a Cohere or Voyage AI key, document search reorders its best matches with a reranking model, so the most relevant Passages come first. Without a key, nothing changes.",
+    "Document search reorders its best matches with a reranking model, so the most relevant Passages come first. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off.",
   "rerank.settings.inUse": "{service} reranks search results ({model}).",
   "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
+  "rerank.settings.builtInUse": "The built-in model reranks search results ({model}).",
+  "rerank.settings.builtInDefault":
+    "By default, the built-in model reranks search results ({model}).",
+  "rerank.settings.notDownloaded":
+    "It downloads once ({total} MB) when there are Documents to search. Until then, search keeps its own order.",
+  "rerank.settings.builtInNote": "Nothing leaves this computer. Each search takes a little longer.",
+  "rerank.settings.downloading":
+    "Downloading the reranking model: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
+  "rerank.settings.failed": "The reranking model couldn't be downloaded: {reason}.",
+  "rerank.settings.loadFailed": "The reranking model couldn't start on this computer.",
+  "rerank.settings.retry": "Try again",
   "rerank.settings.paused": "Paused: local mode keeps search results on this computer.",
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
-  "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.setUp": "Set up reranking…",
   "rerank.settings.localOnly":
-    'Local mode is on: reranking would send search matches to Cohere or Voyage AI. Turn off "Keep everything on this computer" to set it up.',
+    "Local mode is on: Cohere and Voyage AI would receive search matches, so only the built-in model can be chosen.",
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Stop reranking",
+  "rerank.kind.built-in": "On this computer (built-in model)",
   "rerank.kind.cohere": "Cohere",
   "rerank.kind.voyage": "Voyage AI",
-  "rerank.form.label": "Reranking service",
+  "rerank.form.label": "Rerank with",
+  "rerank.form.builtInNote":
+    "Downloads {model} ({size} MB) once. Your searches and Documents stay on this computer.",
   "rerank.form.model": "Model (optional)",
   "rerank.form.save": "Use for reranking",
 
@@ -720,6 +788,9 @@ export const en = {
   "privacy.traffic.embedding-model": "Search model download",
   "privacy.traffic.embedding-model.description":
     "The built-in search model is downloaded once, the first time a Document needs it.",
+  "privacy.traffic.reranking-model": "Reranking model download",
+  "privacy.traffic.reranking-model.description":
+    "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",
@@ -761,6 +832,9 @@ export const en = {
   "scope.chip.deleted.document": "Deleted Document",
   "scope.chip.deleted": "It has been deleted, so the search ignores it.",
   "scope.chip.remove": "Remove {name} from the Search scope",
+  "scope.chip.more": "+{count} more",
+  "scope.chip.moreLabel": "Show the other {count} Documents in the Search scope",
+  "scope.chip.fewer": "Show fewer",
   "scope.answer.empty":
     "This Question's Search scope has no Documents to search, so nothing was searched. Add Documents to its Folders or Tags, or remove the scope to search all your Documents.",
 

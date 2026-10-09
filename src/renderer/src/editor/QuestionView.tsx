@@ -1,4 +1,5 @@
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
+import { useState } from "react";
 import {
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
@@ -210,10 +211,13 @@ const DELETED_NAMES: Record<ScopeKind, MessageKey> = {
   document: "scope.chip.deleted.document",
 };
 
+/** Beyond this many chips (the Documents a Library filter showed, say), the rest fold behind "+N more". */
+const CHIPS_SHOWN = 8;
+
 /**
  * The Question's Search scope: a chip for each Folder, Tag and Document (its
  * title says which), with a × that takes it out. One deleted since is struck
- * through: the search ignores it.
+ * through: the search ignores it. A long scope shows its first chips and "+N more".
  */
 function ScopeChips({
   scope,
@@ -228,11 +232,15 @@ function ScopeChips({
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
   const chips = scopeChips({ folders, groups, tags, documents }, scope);
+  const [expanded, setExpanded] = useState(false);
+  const long = chips.length > CHIPS_SHOWN;
+  const shown = long && !expanded ? chips.slice(0, CHIPS_SHOWN - 1) : chips;
+  const more = chips.length - shown.length;
   return (
     <div contentEditable={false} data-testid="question-scope" className="question-scope">
       <span className="question-scope-label">{t("scope.label")}</span>
       <ul aria-label={t("scope.picker.label")} className="contents">
-        {chips.map((chip) => {
+        {shown.map((chip) => {
           const deleted = chip.name === null;
           const name = chip.name ?? t(DELETED_NAMES[chip.kind]);
           const remove = t("scope.chip.remove", { name });
@@ -269,6 +277,22 @@ function ScopeChips({
             </li>
           );
         })}
+        {long && (
+          <li>
+            <button
+              type="button"
+              data-testid="scope-chips-more"
+              aria-expanded={expanded}
+              aria-label={expanded ? undefined : t("scope.chip.moreLabel", { count: more })}
+              // Keep the cursor in the editor.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setExpanded(!expanded)}
+              className="scope-chip scope-chip-more"
+            >
+              {expanded ? t("scope.chip.fewer") : t("scope.chip.more", { count: more })}
+            </button>
+          </li>
+        )}
       </ul>
     </div>
   );

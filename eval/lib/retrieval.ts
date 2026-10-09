@@ -4,20 +4,61 @@
  * one of the top 5 Passages (a) belongs to the expected Document, (b) covers
  * the expected pages, and (c) contains the expected quote, matched as the
  * Citation check matches quotes (both normalised by the shared normaliser).
+ *
+ * Reranked modes: the candidates the search Tool hands a reranker (keyword
+ * search's top 10 and vector search's top 10, each Passage once, built with
+ * the Tool's own `topsOfEach`), reordered by a reranking model (see
+ * ./rerank), as the search Tool does. The built-in reranking model's is the
+ * gating mode, since the search Tool reranks with it by default; the other
+ * candidates', and the plain search modes, are reported only.
+ *
+ * Also reported:
+ * - A translated second query: a cross-lingual Question's own search, and a
+ *   second one with the Question translated into its Document's language, as
+ *   an Answer is told to search again. A hit in either top 5 counts: the
+ *   model sees both searches' Passages. The translation is written by hand,
+ *   so this is the most the approach can bring.
  */
-import type { Core, PassageSearchResult, SearchMode } from "../../src/core";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type Core,
+  type PassageSearchResult,
+  type RerankingModelDefinition,
+  type SearchMode,
+} from "../../src/core";
+import { SEARCH_TOOL_PARAMETERS, topsOfEach } from "../../src/core/documents/searchTool";
 import { findQuote } from "../../src/shared/quoteMatch";
 import type { EvalLanguage, EvalQuestion, ExpectedPassage } from "./evaluationSet";
+import type { OpenReranker, RerankerInfo } from "./rerank";
 
 export const TOP_K = 5;
 
 /** Ranks are looked for this deep, to show near misses; only the top 5 count as hits. */
 export const RANK_DEPTH = 20;
 
+/** A reranker sees this many of keyword search's best Passages, and of vector search's: the search Tool's. */
+export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
+
 export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
-/** The gating mode: what the search Tool runs. */
-export const GATING_MODE: SearchMode = "hybrid";
+/** Hybrid search: what the search Tool runs before it reranks, and the second query's search. */
+export const HYBRID: SearchMode = "hybrid";
+
+/** A mode of the report: one of the core's search modes, or hybrid search reranked by a candidate. */
+export type RetrievalMode = SearchMode | `rerank:${string}`;
+
+/** The reranked mode of a reranking model. */
+export const rerankMode = (definition: RerankingModelDefinition): RetrievalMode =>
+  `rerank:${definition.id}`;
+
+/**
+ * The gating mode: what the search Tool runs by default, hybrid search
+ * reranked by the built-in reranking model (#31).
+ */
+export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
+
+/** The gating mode, as people read it. */
+export const GATING_LABEL = `${HYBRID} + ${BUILT_IN_RERANKING_MODEL.name}`;
 
 /** The v1 design's bar: 80% of the gating Questions overall and in each language (32 of 40, and 16 of 20 per language, with today's set). */
 const RETRIEVAL_TARGET = { share: 0.8 } as const;
@@ -46,7 +87,24 @@ export interface QuestionResult {
   language: EvalLanguage;
   crossLingual: boolean;
   question: string;
-  modes: Partial<Record<SearchMode, ModeResult>>;
+  modes: Partial<Record<RetrievalMode, ModeResult>>;
+  /** The hand-written translation searched as a second query, if the Question has one. */
+  translatedQuery?: string;
+  /** That second query's results: hybrid, and each reranked mode. */
+  translated?: Partial<Record<RetrievalMode, ModeResult>>;
+  /** How many candidates a reranker saw for the Question, and for its translation, when reranked modes ran. */
+  rerankCandidates?: { question: number; translated?: number };
+}
+
+/** How many candidates a reranker saw per search: keyword search's top 10 and vector search's, each Passage once. */
+export interface CandidateCounts {
+  /** How many of each list's best: 10. */
+  perList: number;
+  /** Searches reranked: the Questions, and the translated queries. */
+  searches: number;
+  mean: number;
+  min: number;
+  max: number;
 }
 
 export interface Tally {
@@ -60,6 +118,12 @@ export interface ModeSummary {
   zh: Tally;
   core: Tally;
   crossLingual: Tally;
+  /**
+   * The cross-lingual Questions with a translated query, searched twice: a
+   * hit when either search's top 5 has one. Null for modes the translated
+   * query isn't searched in (keyword, vector).
+   */
+  crossLingualTranslated: Tally | null;
 }
 
 export interface RetrievalRun {
@@ -70,7 +134,11 @@ export interface RetrievalRun {
   passageCount: number;
   processingSeconds: number;
   questions: QuestionResult[];
-  summary: Partial<Record<SearchMode, ModeSummary>>;
+  summary: Partial<Record<RetrievalMode, ModeSummary>>;
+  /** The reranking candidates of the reranked modes, if any were given. */
+  rerankers?: RerankerInfo[];
+  /** How many Passages they reranked per search, if any were given. */
+  rerankCandidates?: CandidateCounts;
 }
 
 export function checkPassage(
@@ -96,7 +164,74 @@ export function checkPassage(
 export const isHit = (passage: RetrievedPassage) =>
   passage.rightDocument && passage.coversPages && passage.hasQuote;
 
-/** Searches each Question in each mode and scores the top 5 (and finds the first hit in the top 20). */
+/** Scores a ranked list: a hit in the top 5, and the first hit's rank in the top 20. */
+export function scoreRanking(
+  found: readonly PassageSearchResult[],
+  expected: ExpectedPassage,
+  expectedDocumentId: string,
+): ModeResult {
+  const checked = found
+    .slice(0, RANK_DEPTH)
+    .map((passage) => checkPassage(passage, expected, expectedDocumentId));
+  const index = checked.findIndex(isHit);
+  return {
+    hit: index >= 0 && index < TOP_K,
+    rank: index >= 0 ? index + 1 : null,
+    top: checked.slice(0, TOP_K),
+  };
+}
+
+function expectedIdOf(question: EvalQuestion, documentIds: ReadonlyMap<string, string>): string {
+  const expectedId = documentIds.get(question.expected.document);
+  if (!expectedId) throw new Error(`${question.id}: its Document wasn't added.`);
+  return expectedId;
+}
+
+/** Hybrid search's top 20 for a query. */
+const hybridTop = (core: Core, query: string) =>
+  core.searchPassages(query, { mode: HYBRID, limit: RANK_DEPTH });
+
+/**
+ * What the search Tool hands its reranker for a query: keyword search's top
+ * 10 and vector search's top 10, each Passage once, put together by the
+ * Tool's own `topsOfEach`. The Tool orders them by their fused score first,
+ * which only matters to a reranker for ties.
+ */
+export async function rerankCandidates(core: Core, query: string): Promise<PassageSearchResult[]> {
+  const [keyword, vector] = await Promise.all(
+    (["keyword", "vector"] as const).map((mode) =>
+      core.searchPassages(query, { mode, limit: RERANK_PER_LIST }),
+    ),
+  );
+  return topsOfEach([keyword ?? [], vector ?? []], RERANK_PER_LIST, (passage) => passage.passageId);
+}
+
+/** How many candidates the reranked searches had, from the counts `runReranked` recorded; null if none ran. */
+export function candidateCounts(results: readonly QuestionResult[]): CandidateCounts | null {
+  const counts = results.flatMap((result) =>
+    result.rerankCandidates
+      ? [
+          result.rerankCandidates.question,
+          ...(result.rerankCandidates.translated === undefined
+            ? []
+            : [result.rerankCandidates.translated]),
+        ]
+      : [],
+  );
+  if (counts.length === 0) return null;
+  return {
+    perList: RERANK_PER_LIST,
+    searches: counts.length,
+    mean: counts.reduce((sum, count) => sum + count, 0) / counts.length,
+    min: Math.min(...counts),
+    max: Math.max(...counts),
+  };
+}
+
+/**
+ * Searches each Question in each mode and scores the top 5 (and finds the
+ * first hit in the top 20); a translated query is searched in hybrid mode too.
+ */
 export async function runRetrieval(
   core: Core,
   questions: readonly EvalQuestion[],
@@ -105,8 +240,7 @@ export async function runRetrieval(
 ): Promise<QuestionResult[]> {
   const results: QuestionResult[] = [];
   for (const question of questions) {
-    const expectedId = documentIds.get(question.expected.document);
-    if (!expectedId) throw new Error(`${question.id}: its Document wasn't added.`);
+    const expectedId = expectedIdOf(question, documentIds);
     const result: QuestionResult = {
       id: question.id,
       language: question.language,
@@ -117,12 +251,16 @@ export async function runRetrieval(
     for (const mode of modes) {
       // A deeper search returns the same top 5: each list's top 50 is fused before the limit.
       const found = await core.searchPassages(question.question, { mode, limit: RANK_DEPTH });
-      const checked = found.map((passage) => checkPassage(passage, question.expected, expectedId));
-      const index = checked.findIndex(isHit);
-      result.modes[mode] = {
-        hit: index >= 0 && index < TOP_K,
-        rank: index >= 0 ? index + 1 : null,
-        top: checked.slice(0, TOP_K),
+      result.modes[mode] = scoreRanking(found, question.expected, expectedId);
+    }
+    if (question.translatedQuery) {
+      result.translatedQuery = question.translatedQuery;
+      result.translated = {
+        [HYBRID]: scoreRanking(
+          await hybridTop(core, question.translatedQuery),
+          question.expected,
+          expectedId,
+        ),
       };
     }
     results.push(result);
@@ -130,18 +268,68 @@ export async function runRetrieval(
   return results;
 }
 
-const tally = (results: readonly QuestionResult[], mode: SearchMode): Tally => ({
+/**
+ * Adds a reranked mode to `results`: each Question's reranking candidates
+ * (and its translated query's; see `rerankCandidates`), reordered by the
+ * candidate model, scored like the others. Records how many candidates each
+ * search had.
+ */
+export async function runReranked(
+  core: Core,
+  questions: readonly EvalQuestion[],
+  documentIds: ReadonlyMap<string, string>,
+  reranker: OpenReranker,
+  results: readonly QuestionResult[],
+): Promise<void> {
+  const mode = reranker.mode as RetrievalMode;
+  for (const question of questions) {
+    const result = results.find((each) => each.id === question.id);
+    if (!result) throw new Error(`${question.id}: no results to add the reranked mode to.`);
+    const expectedId = expectedIdOf(question, documentIds);
+    const reranked = async (query: string) => {
+      const candidates = await rerankCandidates(core, query);
+      const ranking = scoreRanking(
+        await reranker.rerank(query, candidates),
+        question.expected,
+        expectedId,
+      );
+      return { ranking, count: candidates.length };
+    };
+    const own = await reranked(question.question);
+    result.modes[mode] = own.ranking;
+    result.rerankCandidates = { question: own.count };
+    if (question.translatedQuery && result.translated) {
+      const translated = await reranked(question.translatedQuery);
+      result.translated[mode] = translated.ranking;
+      result.rerankCandidates.translated = translated.count;
+    }
+  }
+}
+
+const tally = (results: readonly QuestionResult[], mode: RetrievalMode): Tally => ({
   hits: results.filter((result) => result.modes[mode]?.hit).length,
   total: results.length,
 });
 
+/** The modes the results have, the core's search modes first, in the order they were run. */
+export function modesOf(results: readonly QuestionResult[]): RetrievalMode[] {
+  const modes = new Set<RetrievalMode>();
+  for (const result of results) {
+    for (const mode of Object.keys(result.modes) as RetrievalMode[]) modes.add(mode);
+  }
+  return [...modes];
+}
+
 export function summarise(
   results: readonly QuestionResult[],
-  modes: readonly SearchMode[] = SEARCH_MODES,
-): Partial<Record<SearchMode, ModeSummary>> {
+  modes: readonly RetrievalMode[] = modesOf(results),
+): Partial<Record<RetrievalMode, ModeSummary>> {
   const core = results.filter((result) => !result.crossLingual);
-  const summary: Partial<Record<SearchMode, ModeSummary>> = {};
+  const crossLingual = results.filter((result) => result.crossLingual);
+  const withTranslation = crossLingual.filter((result) => result.translated);
+  const summary: Partial<Record<RetrievalMode, ModeSummary>> = {};
   for (const mode of modes) {
+    const translatedSearched = withTranslation.some((result) => result.translated?.[mode]);
     summary[mode] = {
       en: tally(
         core.filter((result) => result.language === "en"),
@@ -152,10 +340,15 @@ export function summarise(
         mode,
       ),
       core: tally(core, mode),
-      crossLingual: tally(
-        results.filter((result) => result.crossLingual),
-        mode,
-      ),
+      crossLingual: tally(crossLingual, mode),
+      crossLingualTranslated: translatedSearched
+        ? {
+            hits: withTranslation.filter(
+              (result) => result.modes[mode]?.hit || result.translated?.[mode]?.hit,
+            ).length,
+            total: withTranslation.length,
+          }
+        : null,
     };
   }
   return summary;
@@ -166,7 +359,7 @@ const meets = ({ hits, total }: Tally) =>
 
 /** Why the gating mode misses the bar; empty when it passes. */
 export function retrievalFailures(summary: ModeSummary | undefined): string[] {
-  if (!summary) return [`No ${GATING_MODE} results.`];
+  if (!summary) return [`No ${GATING_LABEL} results.`];
   const failures: string[] = [];
   const need = ({ total }: Tally) => Math.ceil(total * RETRIEVAL_TARGET.share);
   for (const [label, count] of [
@@ -176,7 +369,7 @@ export function retrievalFailures(summary: ModeSummary | undefined): string[] {
   ] as const) {
     if (!meets(count)) {
       failures.push(
-        `Retrieval (${GATING_MODE}, built-in model), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
+        `Retrieval (${GATING_LABEL}, the built-in models), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
       );
     }
   }

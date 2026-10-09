@@ -46,7 +46,7 @@ import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
-import { DOCUMENT_EXTENSIONS, isInside, openFile } from "./files";
+import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside } from "./files";
 import { keywordText } from "./keywords";
 import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
@@ -70,12 +70,22 @@ import {
   type WindowedPassage,
   windowedPassagesBySeq,
 } from "./search";
-import { type SearchCandidate, type SearchToolOptions, searchDocumentsTool } from "./searchTool";
+import {
+  type SearchCandidate,
+  type SearchToolOptions,
+  searchDocumentsTool,
+  topsOfEach,
+} from "./searchTool";
+import { detectLanguage, languageList, type TextLanguage } from "./textLanguage";
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
+
+/** A Document's language is told from the start of its first few Passages: a few thousand characters. */
+const LANGUAGE_SAMPLE_PASSAGES = 4;
+const LANGUAGE_SAMPLE_CHARACTERS = 1000;
 const MAX_NAME_LENGTH = 500;
 const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
@@ -273,6 +283,15 @@ export interface DocumentFile {
   stream: ReadableStream<Uint8Array>;
   /** The file's size now, in bytes. */
   size: number;
+}
+
+/** A picture a Markdown Document shows from beside it. */
+export interface DocumentImage {
+  /** Its bytes. Cancel the stream if it isn't read to the end, so the file is closed. */
+  stream: ReadableStream<Uint8Array>;
+  size: number;
+  /** Its media type, e.g. "image/png". */
+  type: string;
 }
 
 export interface DocumentsOptions {
@@ -1114,12 +1133,57 @@ export function createDocuments(options: DocumentsOptions) {
     };
   }
 
+  /** Each Document's language, by its version: told once from its first Passages (see ./textLanguage). */
+  const languages = new Map<string, { contentHash: string; language: TextLanguage | null }>();
+
+  function documentLanguage(id: string, contentHash: string): TextLanguage | null {
+    const known = languages.get(id);
+    if (known?.contentHash === contentHash) return known.language;
+    const sample = db
+      .all<{ text: string }>(
+        `SELECT substr(text, 1, ?) AS text FROM passages
+         WHERE document_id = ? AND deleted_at IS NULL ORDER BY position LIMIT ?`,
+        [BigInt(LANGUAGE_SAMPLE_CHARACTERS), id, BigInt(LANGUAGE_SAMPLE_PASSAGES)],
+      )
+      .map((row) => row.text)
+      .join("\n");
+    const language = detectLanguage(sample);
+    languages.set(id, { contentHash, language });
+    return language;
+  }
+
   function searchableCount(documentIds?: readonly string[]): number {
     const { where, params } = searchable(documentIds);
     return (
       db.get<{ count: number }>(`SELECT count(*) AS count FROM documents d WHERE ${where}`, params)
         ?.count ?? 0
     );
+  }
+
+  /**
+   * Keyword search's and vector search's rankings of the live Passages, each
+   * `listed` long, copies of one file merged (see `distinctPassages`). Vector
+   * search's is empty while the embedding model can't embed the query.
+   */
+  async function rankings(
+    query: string,
+    listed: number,
+    documentIds: readonly string[] | undefined,
+  ): Promise<number[][]> {
+    const scope = searchScope(documentIds);
+    const vector = await queryVector(query, "hybrid");
+    const keyword = keywordSearch(db, query, listed, scope);
+    const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
+    return distinctPassages(db, [keyword, similar]);
+  }
+
+  /** The Passages of these fused hits, in their order, each with its fused score. */
+  function scored(hits: readonly { seq: number; score: number }[]): SearchCandidate[] {
+    const scores = new Map(hits.map((hit) => [hit.seq, hit.score]));
+    return windowedPassagesBySeq(
+      db,
+      hits.map((hit) => hit.seq),
+    ).map((passage) => ({ ...passage, score: scores.get(passage.seq) ?? 0 }));
   }
 
   /** Hybrid search for the document-search Tool: the best `limit` live Passages, with fused scores. */
@@ -1129,17 +1193,26 @@ export function createDocuments(options: DocumentsOptions) {
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
-    const scope = searchScope(documentIds);
-    const vector = await queryVector(query, "hybrid");
-    const listed = Math.max(limit, HYBRID_CANDIDATES);
-    const keyword = keywordSearch(db, query, listed, scope);
-    const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
-    const fused = fuseRankingScores(distinctPassages(db, [keyword, similar]), limit);
-    const scores = new Map(fused.map((hit) => [hit.seq, hit.score]));
-    return windowedPassagesBySeq(
-      db,
-      fused.map((hit) => hit.seq),
-    ).map((passage) => ({ ...passage, score: scores.get(passage.seq) ?? 0 }));
+    const lists = await rankings(query, Math.max(limit, HYBRID_CANDIDATES), documentIds);
+    return scored(fuseRankingScores(lists, limit));
+  }
+
+  /**
+   * For the search Tool's reranker: keyword search's best `perList` and
+   * vector search's, each Passage once, in fused order with fused scores, so
+   * a reranker that fails leaves search's own order.
+   */
+  async function rerankCandidates(
+    query: string,
+    perList: number,
+    documentIds: readonly string[] | undefined,
+  ): Promise<SearchCandidate[]> {
+    if (query.trim() === "") return [];
+    const lists = await rankings(query, Math.max(perList, HYBRID_CANDIDATES), documentIds);
+    const chosen = new Set(topsOfEach(lists, perList));
+    return scored(
+      fuseRankingScores(lists, Number.POSITIVE_INFINITY).filter((hit) => chosen.has(hit.seq)),
+    );
   }
 
   /** The live Document whose file is to be opened, checked against the disk first. */
@@ -1175,7 +1248,11 @@ export function createDocuments(options: DocumentsOptions) {
      */
     searchTool(query: string, toolOptions?: SearchToolOptions): Promise<WindowedPassage[]> {
       return searchDocumentsTool(
-        { candidates, window: (documentId, window) => passagesInWindow(db, documentId, window) },
+        {
+          candidates,
+          rerankCandidates,
+          window: (documentId, window) => passagesInWindow(db, documentId, window),
+        },
         query,
         toolOptions,
       );
@@ -1217,6 +1294,27 @@ export function createDocuments(options: DocumentsOptions) {
         )
         .map((row) => row.name);
       return { total: searchableCount(documentIds), names };
+    },
+
+    /**
+     * The languages the live Documents with Passages to search are in (of all
+     * of them, or only of these), the most common first, with how many
+     * Documents are in each. A Document whose language can't be told isn't counted.
+     */
+    searchableLanguages(
+      documentIds: readonly string[] | undefined,
+    ): { language: TextLanguage; documents: number }[] {
+      const { where, params } = searchable(documentIds);
+      const rows = db.all<{ id: string; content_hash: string }>(
+        `SELECT d.id, d.content_hash FROM documents d WHERE ${where}`,
+        params,
+      );
+      if (!documentIds) {
+        // Every searchable Document is here: forget the others.
+        const live = new Set(rows.map((row) => row.id));
+        for (const id of languages.keys()) if (!live.has(id)) languages.delete(id);
+      }
+      return languageList(rows.map((row) => documentLanguage(row.id, row.content_hash)));
     },
 
     /**
@@ -1437,6 +1535,26 @@ export function createDocuments(options: DocumentsOptions) {
     /** The path of a live Document's file, checked to be there, to open in another app. */
     async filePath(idInput: unknown): Promise<string> {
       return (await openablePath(idInput)).path;
+    },
+
+    /**
+     * Opens a picture a live Markdown Document shows from beside it, by the
+     * path written in the file (see `openImageBeside`). Anything else is
+     * refused (NotFoundError).
+     */
+    async openImage(idInput: unknown, path: unknown): Promise<DocumentImage> {
+      if (typeof path !== "string" || path.length > 2048) {
+        throw new InvalidInputError("An image's path must be text.");
+      }
+      const row = await openablePath(idInput);
+      if (row.kind !== "markdown") {
+        throw new NotFoundError("Only a Markdown Document shows pictures from beside it.");
+      }
+      try {
+        return await openImageBeside(row.path, path);
+      } catch (error) {
+        throw new NotFoundError("There is no such picture beside the Document.", { cause: error });
+      }
     },
 
     async search(query: unknown, searchOptions: unknown): Promise<PassageSearchResult[]> {

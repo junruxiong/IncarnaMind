@@ -6,9 +6,15 @@ export type {
   Browser,
   CoreAdapters,
   CrashReporter,
+  CrossEncoder,
   Embedder,
   EmbeddingModelFiles,
   EmbeddingModelSource,
+  ExecAllow,
+  ExecFolder,
+  ExecRequest,
+  ExecResult,
+  Executor,
   FileShell,
   Keychain,
   LinkedFolderOptions,
@@ -18,12 +24,14 @@ export type {
   ModelFile,
   Paths,
   ProcessLauncher,
+  RerankingModelFiles,
+  SandboxLevel,
   ScriptRuntimes,
   SpawnOptions,
 } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
-export type { DocumentFile } from "./documents";
+export type { DocumentFile, DocumentImage } from "./documents";
 export type { Reranker } from "./documents/searchTool";
 export type { FolderWatcher, WatchFolder, WatchListener } from "./documents/watcher";
 export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
@@ -52,4 +60,10 @@ export {
   type OllamaModels,
 } from "./providers/ollamaModels";
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
+export {
+  BUILT_IN_RERANKING_MODEL,
+  downloadSize,
+  RERANKING_MODEL_CANDIDATES,
+  type RerankingModelDefinition,
+} from "./reranking";
 export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";

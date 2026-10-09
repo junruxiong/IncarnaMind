@@ -4,8 +4,9 @@
  * It drives the core's public interface in Node, as the desktop app's UI
  * would: a new temporary data folder, the evaluation set's Documents added
  * and processed with the real built-in embedding model (on a worker thread),
- * then searches for each Question, and, when a chat model is given, Answers
- * and their Citations. It runs under Vitest only for its TypeScript and
+ * then searches for each Question, reranked by the real built-in reranking
+ * model as the search Tool does by default (the gate), and, when a chat model
+ * is given, Answers and their Citations. It runs under Vitest only for its TypeScript and
  * worker-thread handling (eval/vitest.config.ts); `npm test` never runs it.
  */
 import { execFileSync } from "node:child_process";
@@ -13,7 +14,11 @@ import { arch, cpus, platform } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { BUILT_IN_EMBEDDING_MODEL } from "../src/core";
+import {
+  BUILT_IN_EMBEDDING_MODEL,
+  BUILT_IN_RERANKING_MODEL,
+  type RerankingModelDefinition,
+} from "../src/core";
 import { type CitationRun, runCitations } from "./lib/citations";
 import { readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
@@ -21,10 +26,16 @@ import { loadEvaluationSet } from "./lib/evaluationSet";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
 import { type EvalReport, terminalSummary, writeReports } from "./lib/report";
+import { createWorkerCrossEncoder, openReranker, type RerankerInfo } from "./lib/rerank";
 import {
+  candidateCounts,
   GATING_MODE,
+  HYBRID,
+  RERANK_PER_LIST,
+  type RetrievalMode,
   type RetrievalRun,
   retrievalFailures,
+  runReranked,
   runRetrieval,
   summarise,
   TOP_K,
@@ -51,23 +62,61 @@ async function retrieve(
   gating: boolean,
   questions: Parameters<typeof runRetrieval>[1],
   log: Log,
+  rerank: { candidates: readonly RerankingModelDefinition[]; cacheDir: string } | null = null,
 ): Promise<RetrievalRun> {
   const ids = new Map([...library.documents].map(([key, document]) => [key, document.id]));
   const results = await runRetrieval(library.core, questions, ids);
-  const summary = summarise(results);
-  const gate = summary[GATING_MODE];
-  if (gate) {
+  const line = (mode: RetrievalMode, label: string) => {
+    const summary = summarise(results, [mode])[mode];
+    if (!summary) return;
+    const translated = summary.crossLingualTranslated;
     log(
-      `${embedding}, ${GATING_MODE}: English ${gate.en.hits}/${gate.en.total}, Chinese ${gate.zh.hits}/${gate.zh.total}, cross-lingual ${gate.crossLingual.hits}/${gate.crossLingual.total}`,
+      `${embedding}, ${label}: English ${summary.en.hits}/${summary.en.total}, Chinese ${summary.zh.hits}/${summary.zh.total}, cross-lingual ${summary.crossLingual.hits}/${summary.crossLingual.total}${translated ? ` (${translated.hits}/${translated.total} with a translated second query)` : ""}`,
+    );
+  };
+  line(HYBRID, HYBRID);
+
+  // Reranked modes, one model at a time: each is downloaded once into the model cache.
+  const rerankers: RerankerInfo[] = [];
+  for (const candidate of rerank?.candidates ?? []) {
+    log(
+      `Reranking keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST} with ${candidate.name}`,
+    );
+    const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log);
+    try {
+      await runReranked(library.core, questions, ids, reranker, results);
+      const info = reranker.info();
+      rerankers.push(info);
+      line(
+        info.mode as RetrievalMode,
+        info.mode === GATING_MODE
+          ? `${HYBRID} + ${candidate.name} (gating)`
+          : `${HYBRID} + ${candidate.name}`,
+      );
+      log(
+        `${candidate.name}: ${info.latency.mean.toFixed(0)} ms a query on average (95th percentile ${info.latency.p95.toFixed(0)} ms), loaded in ${info.loadSeconds.toFixed(1)} s`,
+      );
+    } finally {
+      reranker.close();
+    }
+  }
+
+  const candidates = candidateCounts(results);
+  if (candidates) {
+    log(
+      `Reranked searches had ${candidates.mean.toFixed(1)} candidates on average (${candidates.min} to ${candidates.max}, over ${candidates.searches} searches)`,
     );
   }
+
   return {
     embedding,
     gating,
     passageCount: library.passageCount,
     processingSeconds: library.processingSeconds,
     questions: results,
-    summary,
+    summary: summarise(results),
+    ...(rerankers.length > 0 && { rerankers }),
+    ...(candidates && { rerankCandidates: candidates }),
   };
 }
 
@@ -79,16 +128,23 @@ test("retrieval and Citation evaluation", async () => {
   log(`${set.questions.length} Questions over ${set.documents.length} Documents`);
   log(`Embedding model cache: ${config.cacheDir}`);
 
+  // The core reranks Answers' searches with the built-in reranking model, as the app does by default.
   const builtIn = await openLibrary({
     name: "built-in",
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
+    reranker: createWorkerCrossEncoder(),
     documents: set.documents,
     keep: config.keepData,
     log,
   });
   let report: EvalReport;
   try {
+    // The built-in reranking model gates; the other candidates given are compared with it.
+    const rerankWith = [
+      BUILT_IN_RERANKING_MODEL,
+      ...config.rerank.filter((candidate) => candidate.id !== BUILT_IN_RERANKING_MODEL.id),
+    ];
     const runs = [
       await retrieve(
         builtIn,
@@ -96,6 +152,7 @@ test("retrieval and Citation evaluation", async () => {
         true,
         set.questions,
         log,
+        { candidates: rerankWith, cacheDir: config.cacheDir },
       ),
     ];
 
