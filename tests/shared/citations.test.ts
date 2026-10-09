@@ -147,6 +147,56 @@ describe("A Citation's badge", () => {
     ).toMatchObject({ changedAfterCited: false });
   });
 
+  test("finds its Document by ID first, else the first in the list with the same content", () => {
+    const documents = [
+      { id: "rivers", contentHash: "xyz" },
+      { id: "tides-copy", contentHash: "abc" },
+      { id: "tides-again", contentHash: "abc" },
+      { id: "tides", contentHash: "abc" },
+    ];
+    expect(citationState(found, documents).documentId).toBe("tides");
+    expect(citationState({ ...found, documentId: "gone" }, documents).documentId).toBe(
+      "tides-copy",
+    );
+    expect(citationState({ ...found, documentId: null }, documents).documentId).toBe("tides-copy");
+    // A Document with no content yet is no match for a Citation that doesn't say its content.
+    expect(
+      citationState({ ...found, documentId: "gone", contentHash: "" }, [
+        { id: "new", contentHash: "" },
+      ]),
+    ).toMatchObject({ check: "cant-check", documentId: null });
+  });
+
+  test("reads each new list of Documents afresh, and a long one once for all its Citations", () => {
+    const before = [{ id: "tides", contentHash: "abc" }];
+    expect(citationState(found, before).documentId).toBe("tides");
+    // The store replaces the list when a Document goes or comes.
+    expect(citationState(found, []).check).toBe("cant-check");
+    expect(citationState(found, before).check).toBe("found");
+
+    // 300 Citations against 2,000 Documents, as a long Mind is drawn: one pass over the list.
+    const documents = Array.from({ length: 2000 }, (_, i) => ({
+      id: `document-${i}`,
+      contentHash: `content-${i}`,
+    }));
+    const citations = Array.from({ length: 300 }, (_, i) => ({
+      ...found,
+      documentId: `document-${i * 6}`,
+      contentHash: `content-${i * 6}`,
+    }));
+    let visits = 0;
+    const counted = new Proxy(documents, {
+      get(target, key, receiver) {
+        if (typeof key === "string" && /^\d+$/.test(key)) visits++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    for (const citation of citations) {
+      expect(citationState(citation, counted).documentId).toBe(citation.documentId);
+    }
+    expect(visits).toBeLessThanOrEqual(documents.length);
+  });
+
   test("names its source in plain text, for copying and for Question context", () => {
     expect(citedLocation(found, in_("en"))).toBe("p. 12–13");
     expect(citationReference(found)).toBe("[Tides, p. 12–13]");

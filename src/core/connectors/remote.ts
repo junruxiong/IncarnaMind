@@ -10,11 +10,7 @@
  * The User signs in in their browser, which comes back to a one-off loopback
  * redirect on 127.0.0.1 (../oauth), and the SDK exchanges the code.
  */
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import {
-  StreamableHTTPClientTransport,
-  StreamableHTTPError,
-} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Browser } from "../adapters";
 import type { ConnectorError, ConnectorSignInError, ExternalService } from "../api";
 import { SecretStorageError } from "../errors";
@@ -41,8 +37,20 @@ export function remoteService(url: string): ExternalService {
   return { id: origin, name: host };
 }
 
+/** The MCP SDK, once a connection or sign-in has loaded it (see ./sdk). */
+let sdk: typeof import("./sdk") | null = null;
+
+async function loadSdk(): Promise<typeof import("./sdk")> {
+  sdk ??= await import("./sdk");
+  return sdk;
+}
+
 /** A transport to the server that signs its requests with the stored tokens, renewing them as needed. */
-export function remoteTransport(url: string, auth: ConnectorAuth): StreamableHTTPClientTransport {
+export async function remoteTransport(
+  url: string,
+  auth: ConnectorAuth,
+): Promise<StreamableHTTPClientTransport> {
+  const { StreamableHTTPClientTransport } = await loadSdk();
   return new StreamableHTTPClientTransport(new URL(url), {
     authProvider: auth.provider(null),
     fetch: auth.fetch,
@@ -90,7 +98,8 @@ export function remoteError(error: unknown): ConnectorError {
     };
   }
   const message = messageOf(error);
-  if (error instanceof StreamableHTTPError) {
+  // The SDK's errors come from a connection, which loaded it.
+  if (sdk && error instanceof sdk.StreamableHTTPError) {
     return { ...base, kind: "failed", message: `The server answered ${error.code}: ${message}` };
   }
   return { ...base, kind: /timed out|timeout/i.test(message) ? "timed-out" : "failed", message };
@@ -160,6 +169,7 @@ export async function signInRemote(options: RemoteSignInOptions): Promise<void> 
       state: redirect.state,
       openBrowser: (url) => options.browser.open(url),
     });
+    const { StreamableHTTPClientTransport, Client } = await loadSdk();
     const transport = new StreamableHTTPClientTransport(new URL(options.url), {
       authProvider: provider,
       fetch: options.auth.fetch,
