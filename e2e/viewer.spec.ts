@@ -770,7 +770,7 @@ test("the viewer has one 44px header, level with the Mind's, holding every contr
   expect(headerBox.height).toBe(44);
   expect(headerBox.y).toBe((await boxOf(mindHeader)).y);
 
-  // In order: the outline toggle, the name, page navigation, zoom, open, close.
+  // In order: the outline toggle, the name, its Tags, page navigation, zoom, open, close.
   const controls = header.locator("button, input, [data-testid='viewer-title']");
   expect(
     await controls.evaluateAll((elements) =>
@@ -779,6 +779,7 @@ test("the viewer has one 44px header, level with the Mind's, holding every contr
   ).toEqual([
     "pdf-outline-button",
     "viewer-title",
+    "document-tags-menu",
     "pdf-previous-page",
     "pdf-page-number",
     "pdf-next-page",
@@ -797,13 +798,14 @@ test("the viewer has one 44px header, level with the Mind's, holding every contr
   // Every control is reached with Tab, in that order (Previous page is off on page 1).
   await header.getByTestId("pdf-outline-button").focus();
   const reached: (string | null)[] = [];
-  for (let step = 0; step < 7; step++) {
+  for (let step = 0; step < 8; step++) {
     await window.keyboard.press("Tab");
     reached.push(
       await window.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null),
     );
   }
   expect(reached).toEqual([
+    "document-tags-menu",
     "pdf-page-number",
     "pdf-next-page",
     "pdf-zoom-out",
