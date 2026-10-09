@@ -81,12 +81,16 @@ export function pickerOptions(
   return { matches, create: exists ? null : query.trim() };
 }
 
-/** A Document's Tags as chips: those awaiting review first, then the rest in name order. */
+/**
+ * A Document's Tags as chips: those awaiting review first, then the rest in
+ * name order. The Tags may come indexed by id (`tagIndex`), so a list of many
+ * Documents looks each up without building the index again.
+ */
 export function chipsOf(
   links: readonly DocumentTag[],
-  tags: readonly Tag[],
+  tags: readonly Tag[] | ReadonlyMap<string, Tag>,
 ): { tag: Tag; link: DocumentTag }[] {
-  const byId = new Map(tags.map((tag) => [tag.id, tag]));
+  const byId = "get" in tags ? tags : tagIndex(tags);
   const chips = links.flatMap((link) => {
     const tag = byId.get(link.tagId);
     return tag ? [{ tag, link }] : [];
@@ -96,3 +100,7 @@ export function chipsOf(
     ...chips.filter((chip) => !chip.link.needsReview),
   ];
 }
+
+/** The Tags by id. */
+export const tagIndex = (tags: readonly Tag[]): ReadonlyMap<string, Tag> =>
+  new Map(tags.map((tag) => [tag.id, tag]));

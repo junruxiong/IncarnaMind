@@ -1,20 +1,20 @@
 /**
- * Tag colours (DESIGN.md, Tags; approved by the User on 2026-10-09): a small
- * fixed palette of muted colours, each a pale fill with dark text that reads
- * at AA (6.6:1 or better). None is green or amber, so a Tag never looks like
- * a Citation check or the amber "needs review" dot, and none is the accent
- * blue. Stored with the Tag as its key; the renderer maps keys to tokens
- * (`--color-tag-*` in styles.css).
+ * Tag colours (DESIGN.md, Tags; the bright, Finder-like palette the User chose
+ * on 2026-10-09), in Finder's order. Each is a bright dot, for where a Tag has
+ * no room for its name, and a pale fill with dark text (7:1 or better) for its
+ * named chip. Stored with the Tag as its key (migration 28 moved the first
+ * palette's keys here); the renderer maps keys to tokens (`--color-tag-*` in
+ * styles.css).
  */
 export const TAG_COLOURS = [
-  "stone",
-  "taupe",
-  "brick",
-  "rose",
-  "orchid",
-  "violet",
-  "indigo",
-  "petrol",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "teal",
+  "blue",
+  "purple",
+  "gray",
 ] as const;
 
 export type TagColour = (typeof TAG_COLOURS)[number];

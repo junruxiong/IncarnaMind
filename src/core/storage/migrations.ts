@@ -617,6 +617,33 @@ export const migrations: readonly Migration[] = [
       WHERE preset IS NULL;
     `,
   },
+  {
+    version: 28,
+    description: "Tag colours: the bright, Finder-like palette",
+    // A preset still on its first colour takes its new one (src/core/tags/presets.ts);
+    // any other colour takes the nearest bright hue, each a different one, so Tags that
+    // differed still do. The column's default, 'stone', is never used: every insert
+    // names its colour.
+    sql: `
+      UPDATE tags SET colour = CASE
+        WHEN preset = 'paper' AND colour = 'violet' THEN 'purple'
+        WHEN preset = 'report' AND colour = 'petrol' THEN 'blue'
+        WHEN preset = 'book' AND colour = 'brick' THEN 'orange'
+        WHEN preset = 'contract' AND colour = 'indigo' THEN 'red'
+        WHEN preset = 'invoice' AND colour = 'rose' THEN 'green'
+        WHEN preset = 'slides' AND colour = 'orchid' THEN 'yellow'
+        WHEN preset = 'notes' AND colour = 'taupe' THEN 'gray'
+        WHEN colour = 'stone' THEN 'gray'
+        WHEN colour = 'taupe' THEN 'yellow'
+        WHEN colour = 'brick' THEN 'orange'
+        WHEN colour = 'rose' THEN 'red'
+        WHEN colour = 'orchid' THEN 'purple'
+        WHEN colour = 'violet' THEN 'teal'
+        WHEN colour = 'indigo' THEN 'blue'
+        WHEN colour = 'petrol' THEN 'green'
+        ELSE colour END;
+    `,
+  },
 ];
 
 /**
