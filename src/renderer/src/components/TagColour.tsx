@@ -15,16 +15,16 @@ const CHIP: Record<TagColour, string> = {
   petrol: "bg-tag-petrol text-tag-petrol-ink",
 };
 
-/** A swatch: the fill, edged in its text colour. */
-const SWATCH: Record<TagColour, string> = {
-  stone: "bg-tag-stone border-tag-stone-ink/40",
-  taupe: "bg-tag-taupe border-tag-taupe-ink/40",
-  brick: "bg-tag-brick border-tag-brick-ink/40",
-  rose: "bg-tag-rose border-tag-rose-ink/40",
-  orchid: "bg-tag-orchid border-tag-orchid-ink/40",
-  violet: "bg-tag-violet border-tag-violet-ink/40",
-  indigo: "bg-tag-indigo border-tag-indigo-ink/40",
-  petrol: "bg-tag-petrol border-tag-petrol-ink/40",
+/** A dot's colour: the brighter tone, as Finder's. */
+const DOT: Record<TagColour, string> = {
+  stone: "bg-tag-stone-dot",
+  taupe: "bg-tag-taupe-dot",
+  brick: "bg-tag-brick-dot",
+  rose: "bg-tag-rose-dot",
+  orchid: "bg-tag-orchid-dot",
+  violet: "bg-tag-violet-dot",
+  indigo: "bg-tag-indigo-dot",
+  petrol: "bg-tag-petrol-dot",
 };
 
 const known = (colour: string | undefined): TagColour => (isTagColour(colour) ? colour : "stone");
@@ -33,29 +33,50 @@ const known = (colour: string | undefined): TagColour => (isTagColour(colour) ? 
 export const tagChipColour = (colour: string | undefined) => CHIP[known(colour)];
 
 /**
- * A Tag's colour as a small square, beside its name in a list. Square, so it
- * never reads as the round amber "needs review" dot.
+ * A Tag as a solid round dot in its colour, as Finder shows one where there
+ * is no room for its name: 10px on a row, in a menu or the picker; 11px in
+ * the sidebar's Tags view. "Needs review" is a hollow ring (`ReviewRing`), so
+ * it never reads as a Tag.
  */
-export function TagSwatch({
+export function TagDot({
   colour,
   size = "sm",
+  className = "",
 }: {
   colour: string | undefined;
   size?: "sm" | "md";
+  className?: string;
 }) {
   return (
     <span
       aria-hidden="true"
-      data-testid="tag-swatch"
+      data-testid="tag-dot"
       data-colour={known(colour)}
-      className={`inline-block shrink-0 border ${SWATCH[known(colour)]} ${
-        size === "md" ? "size-3 rounded-[3px]" : "size-2.5 rounded-[2px]"
-      }`}
+      className={`inline-block shrink-0 rounded-full ${DOT[known(colour)]} ${
+        size === "md" ? "size-[11px]" : "size-2.5"
+      } ${className}`}
     />
   );
 }
 
-/** Choosing a Tag's colour: a row of swatches, one choice, arrow keys between them. */
+/**
+ * A Tag awaiting the User's review, where Tags are dots (the sidebar, filter
+ * menus, picker options): a hollow `attention` ring, 9px with a 1.5px stroke,
+ * in a dot's 10px place. Inside a named chip it is the 6px amber dot (`ReviewDot`).
+ */
+export function ReviewRing() {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="review-ring"
+      className="flex size-2.5 shrink-0 items-center justify-center"
+    >
+      <span className="size-[9px] rounded-full border-[1.5px] border-attention" />
+    </span>
+  );
+}
+
+/** Choosing a Tag's colour: a row of its dots, one choice, arrow keys between them. */
 export function TagColourPicker({
   value,
   onChange,
@@ -89,7 +110,7 @@ export function TagColourPicker({
               className="peer sr-only"
             />
             <span
-              className={`flex size-6 items-center justify-center rounded-sm border ${SWATCH[colour]} ${CHIP[colour]} peer-checked:shadow-[0_0_0_2px_var(--color-sheet),0_0_0_3px_var(--color-ink-meta)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
+              className={`flex size-6 items-center justify-center rounded-full text-sheet ${DOT[colour]} peer-checked:shadow-[0_0_0_2px_var(--color-sheet),0_0_0_3px_var(--color-ink-meta)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
             >
               {value === colour && <CheckLineIcon className="size-3.5" />}
             </span>

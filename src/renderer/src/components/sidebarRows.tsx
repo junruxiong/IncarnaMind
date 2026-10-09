@@ -27,13 +27,14 @@ const rowTones: Record<RowTone, string> = {
  * an inset rule and weight 600. Its actions (`rowActionsClass`) sit on its
  * right end and take its background. Names of Documents and Folders are a
  * shade darker than the app's own rows. A row's words can't be selected, so
- * a right-click (see `openRowMenu`) never selects them.
+ * a right-click (see `openRowMenu`) never selects them. `--row-bg` follows
+ * its background, for a mark that rings itself in it (a Document's Tag dots).
  */
 export const rowClass = (selected: boolean, tone: RowTone = "app") =>
   `group relative flex h-7 shrink-0 items-center rounded-md text-ui select-none ${
     selected
-      ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]"
-      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover`
+      ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)] [--row-bg:var(--color-sheet)]"
+      : `${rowTones[tone]} hover:bg-hover has-[:focus-visible]:bg-hover hover:[--row-bg:var(--color-hover)] has-[:focus-visible]:[--row-bg:var(--color-hover)]`
   }`;
 
 /**

@@ -3,7 +3,9 @@
  * fixed palette of muted colours, each a pale fill with dark text that reads
  * at AA (6.6:1 or better). None is green or amber, so a Tag never looks like
  * a Citation check or the amber "needs review" dot, and none is the accent
- * blue. Stored with the Tag as its key; the renderer maps keys to tokens
+ * blue. Each also has a brighter dot tone (3:1 or better on the sidebar), for
+ * the round dot that stands for a Tag where there is no room for its name.
+ * Stored with the Tag as its key; the renderer maps keys to tokens
  * (`--color-tag-*` in styles.css).
  */
 export const TAG_COLOURS = [

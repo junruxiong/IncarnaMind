@@ -368,19 +368,18 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await expect(rows).toHaveCount(2);
     const tagsFilter = library.locator('[data-testid="library-filter"][data-facet="tag"]');
     await expect(tagsFilter).toHaveText("Tags: Report");
-    // Its options show each Tag's colour; "Needs review" has none.
+    // Its options show each Tag's dot. Nothing awaits review now, so "Needs review" is gone
+    // (sidebarTags.spec shows it with its ring).
     await slideAndClick(window, tagsFilter);
     const tagMenu = library.locator('[data-testid="library-filter-menu"][data-facet="tag"]');
     await expect(
-      tagMenu.locator(
-        '[data-testid="library-filter-option"][data-value="needs-review"] [data-testid="tag-swatch"]',
-      ),
+      tagMenu.locator('[data-testid="library-filter-option"][data-value="needs-review"]'),
     ).toHaveCount(0);
     await expect(
       tagMenu
         .getByTestId("library-filter-option")
         .filter({ hasText: "Report" })
-        .getByTestId("tag-swatch"),
+        .getByTestId("tag-dot"),
     ).toHaveAttribute("data-colour", "petrol");
     await screenshot(window, "filter-colours");
     await window.keyboard.press("Escape");

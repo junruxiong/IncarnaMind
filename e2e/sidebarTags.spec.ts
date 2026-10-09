@@ -192,7 +192,7 @@ async function decisionServer(): Promise<Server> {
   return server;
 }
 
-/** Each Tag row's name, count and colour (null for "Needs review", which has the amber dot). */
+/** Each Tag row's name, count and dot's colour (null for "Needs review", which has the review ring). */
 const tagRowsListed = (rows: Locator) =>
   rows.evaluateAll((all) =>
     all.map((row) => {
@@ -200,7 +200,7 @@ const tagRowsListed = (rows: Locator) =>
       return [
         head.querySelector('[data-testid="row-text"]')?.textContent,
         Number(head.querySelector('[data-testid="browse-count"]')?.textContent),
-        head.querySelector('[data-testid="tag-swatch"]')?.getAttribute("data-colour") ?? null,
+        head.querySelector('[data-testid="tag-dot"]')?.getAttribute("data-colour") ?? null,
       ];
     }),
   );
@@ -210,8 +210,8 @@ const marksOf = (row: Locator) =>
   row.evaluate((element) => {
     const marks = element.querySelector('[data-testid="tag-marks"]');
     return {
-      colours: Array.from(marks?.querySelectorAll('[data-testid="tag-swatch"]') ?? []).map(
-        (swatch) => swatch.getAttribute("data-colour"),
+      colours: Array.from(marks?.querySelectorAll('[data-testid="tag-dot"]') ?? []).map((dot) =>
+        dot.getAttribute("data-colour"),
       ),
       more: marks?.querySelector('[data-testid="tag-marks-more"]')?.textContent ?? null,
     };
@@ -254,7 +254,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     const attentionInFolders = folders
       .getByTestId("document-list-item")
       .filter({ hasText: "Attention" });
-    await expect(attentionInFolders.getByTestId("tag-swatch")).toHaveCount(3);
+    await expect(attentionInFolders.getByTestId("tag-dot")).toHaveCount(3);
 
     // The Tags tab: "Needs review" first, then every Tag in name order, with its colour
     // and how many Documents carry it, a Tag no Document has too.
@@ -284,11 +284,30 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       tagRows.filter({
         has: window.locator(':scope > div [data-testid="row-text"]', { hasText: name }),
       });
-    // A Tag's colour is a square; "Needs review" has the round amber dot instead.
-    const swatch = byName("Paper").locator(":scope > div").getByTestId("tag-swatch");
+    // A Tag is an 11px solid dot, as in Finder's Tags; "Needs review" a hollow amber ring.
+    const paperDot = byName("Paper").locator(":scope > div").getByTestId("tag-dot");
+    expect(await paperDot.evaluate(dotShape)).toEqual({
+      width: 11,
+      height: 11,
+      round: true,
+      filled: true,
+      border: 0,
+    });
+    const reviewHead = byName("Needs review").locator(":scope > div");
+    await expect(reviewHead.getByTestId("tag-dot")).toHaveCount(0);
+    expect(await reviewHead.getByTestId("review-ring").locator("span").evaluate(dotShape)).toEqual({
+      width: 9,
+      height: 9,
+      round: true,
+      filled: false,
+      border: 1.5,
+    });
     expect(
-      await swatch.evaluate((element) => Number.parseFloat(getComputedStyle(element).borderRadius)),
-    ).toBeLessThanOrEqual(3);
+      await reviewHead
+        .getByTestId("review-ring")
+        .locator("span")
+        .evaluate((element) => getComputedStyle(element).borderTopColor),
+    ).toBe("rgb(217, 119, 6)");
     // Rows are 28px, their marks in the icon column and their names on the text edge.
     const sidebarLeft = (await window.getByTestId("sidebar").boundingBox())?.x ?? 0;
     for (const row of await tagRows.all()) {
@@ -366,6 +385,44 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(tagFilter).toHaveText("Tags: Needs review");
     await expect(library.getByTestId("library-document")).toHaveCount(1);
     await expect(library.getByTestId("library-document")).toContainText("March invoice");
+    // The Library's Tags filter, too: each Tag after its dot, "Needs review" after the ring.
+    await slideAndClick(window, tagFilter);
+    const libraryTagMenu = library.locator('[data-testid="library-filter-menu"][data-facet="tag"]');
+    const reviewOption = libraryTagMenu.locator(
+      '[data-testid="library-filter-option"][data-value="needs-review"]',
+    );
+    await expect(reviewOption.getByTestId("review-ring")).toHaveCount(1);
+    await expect(reviewOption.getByTestId("tag-dot")).toHaveCount(0);
+    await expect(
+      libraryTagMenu
+        .getByTestId("library-filter-option")
+        .filter({ hasText: "Report" })
+        .getByTestId("tag-dot"),
+    ).toHaveAttribute("data-colour", "petrol");
+    await screenshot(window, "library-filter-menu-en");
+    await window.keyboard.press("Escape");
+    await expect(libraryTagMenu).toBeHidden();
+
+    // The sidebar's Tags menu, the same filter: each Tag after its dot, "Needs review" after
+    // the hollow ring.
+    const openFilterMenu = async () => {
+      await slideAndClick(window, window.getByTestId("tag-filter-menu"));
+      const menu = window.getByTestId("tag-filters");
+      await expect(menu).toBeVisible();
+      const review = menu.locator('[data-testid="tag-filter"][data-tag-id="needs-review"]');
+      await expect(review.getByTestId("review-ring")).toHaveCount(1);
+      await expect(review.getByTestId("tag-dot")).toHaveCount(0);
+      expect(
+        await menu
+          .getByTestId("tag-filter")
+          .getByTestId("tag-dot")
+          .evaluateAll((all) => all.map((each) => each.getAttribute("data-colour"))),
+      ).toEqual(["brick", "indigo", "rose", "taupe", "violet", "petrol", "orchid"]);
+    };
+    await openFilterMenu();
+    await screenshot(window, "tag-filter-menu-en");
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("tag-filters")).toBeHidden();
 
     // The other views say the filter in a row under the switcher, and clear it there.
     await slideAndClick(window, browse.getByRole("button", { name: "Folders", exact: true }));
@@ -386,6 +443,13 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(openTag("Paper")).toHaveAttribute("aria-pressed", "true");
     await window.mouse.move(700, 400, { steps: 6 });
     await screenshot(window, "tags-tab-zh");
+    await openFilterMenu();
+    await screenshot(window, "tag-filter-menu-zh");
+    await window.keyboard.press("Escape");
+    await slideAndClick(window, tagFilter);
+    await expect(reviewOption.getByTestId("review-ring")).toHaveCount(1);
+    await screenshot(window, "library-filter-menu-zh");
+    await window.keyboard.press("Escape");
   } finally {
     await app.close();
     server.close();
@@ -414,7 +478,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
       "Q1 report": ["Report"],
       [long]: ["Paper", "Notes"],
     });
-    await expect(row("Attention").getByTestId("tag-swatch")).toHaveCount(3);
+    await expect(row("Attention").getByTestId("tag-dot")).toHaveCount(3);
     expect(await marksOf(row("Attention"))).toEqual({
       colours: ["brick", "indigo", "violet"],
       more: "+1",
@@ -425,7 +489,10 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     // Nothing moved: every row where it was, 28px, its name on one line.
     expect(await boxes()).toEqual(before);
 
-    /** The marks right after the name, small squares, inside the row. */
+    /**
+     * The marks right after the name, inside the row: 10px round dots, each
+     * overlapping the one before by 4px, ringed in the row's background.
+     */
     const expectMarksInRow = async (name: string) => {
       const box = await row(name).boundingBox();
       const marks = await row(name).getByTestId("tag-marks").boundingBox();
@@ -437,10 +504,19 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
       expect(marks.y).toBeGreaterThanOrEqual(box.y);
       expect(marks.y + marks.height).toBeLessThanOrEqual(box.y + box.height);
       expect(marks.x + marks.width).toBeLessThanOrEqual(box.x + box.width - 8);
-      for (const each of await row(name).getByTestId("tag-swatch").all()) {
-        const square = await each.boundingBox();
-        expect(square?.width).toBeCloseTo(10, 0);
-        expect(square?.height).toBeCloseTo(10, 0);
+      const dots = await row(name).getByTestId("tag-dot").all();
+      let previous: number | null = null;
+      for (const each of dots) {
+        expect(await each.evaluate(dotShape)).toEqual({
+          width: 10,
+          height: 10,
+          round: true,
+          filled: true,
+          border: 0,
+        });
+        const x = (await each.boundingBox())?.x ?? 0;
+        if (previous !== null) expect(x - previous).toBeCloseTo(6, 0);
+        previous = x;
       }
     };
     await expectMarksInRow("Attention");
@@ -461,11 +537,19 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     );
     await expect(attention).toHaveAccessibleDescription("Tags: Book, Contract, Paper, Report");
     expect(await row("Attention").boundingBox()).toEqual(before[await indexOf(items, "Attention")]);
+    // The dots' ring follows the row: the hover wash while pointed at, the sidebar's frame after.
+    const ringOf = () =>
+      row("Attention")
+        .getByTestId("tag-dot")
+        .nth(1)
+        .evaluate((element) => getComputedStyle(element).boxShadow);
+    await expect.poll(ringOf).toContain("rgb(235, 237, 240)");
+    await window.mouse.move(700, 400, { steps: 6 });
+    await expect.poll(ringOf).toContain("rgb(244, 245, 247)");
 
-    // Reached by keyboard, the row shows its Tags' names, each with its colour, under it.
+    // Reached by keyboard, the row shows its Tags' names, each after its dot, under it.
     const tip = window.getByTestId("tag-names-tip");
     await expect(tip).toBeHidden();
-    await window.mouse.move(700, 400, { steps: 6 });
     await slideAndClick(
       window,
       window.getByTestId("browse-views").getByRole("button", {
@@ -483,7 +567,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     ]);
     expect(
       await tip
-        .getByTestId("tag-swatch")
+        .getByTestId("tag-dot")
         .evaluateAll((all) => all.map((each) => each.getAttribute("data-colour"))),
     ).toEqual(["brick", "indigo", "violet", "petrol"]);
     const rowBox = await row("Attention").boundingBox();
@@ -530,6 +614,19 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     await app.close();
   }
 });
+
+/** A dot's size, whether it is round, solid or hollow, and its edge's width. */
+function dotShape(element: Element) {
+  const style = getComputedStyle(element);
+  const box = element.getBoundingClientRect();
+  return {
+    width: Math.round(box.width * 10) / 10,
+    height: Math.round(box.height * 10) / 10,
+    round: Number.parseFloat(style.borderTopLeftRadius) >= box.width / 2,
+    filled: style.backgroundColor !== "rgba(0, 0, 0, 0)",
+    border: Number.parseFloat(style.borderTopWidth),
+  };
+}
 
 /** Where the row with this name is among `items`. */
 async function indexOf(items: Locator, name: string): Promise<number> {

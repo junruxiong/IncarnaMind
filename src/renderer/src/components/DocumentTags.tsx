@@ -5,7 +5,7 @@ import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { CheckLineIcon, CloseLineIcon, TagLineIcon } from "./lineIcons";
 import { rowActionButtonClass, rowClass } from "./sidebarRows";
-import { TagSwatch } from "./TagColour";
+import { ReviewRing, TagDot } from "./TagColour";
 import { pickerLabel, TagPicker, tagPopoverClass, useTagPopover } from "./TagPicker";
 import { menuClass, menuItemClass, menuRuleClass, menuTitleClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
@@ -194,7 +194,7 @@ export function TagFilterMenu() {
                   <CheckLineIcon
                     className={`size-3.5 shrink-0 ${selected ? "text-ink" : "invisible"}`}
                   />
-                  {tag && <TagSwatch colour={tag.colour} />}
+                  {tag ? <TagDot colour={tag.colour} /> : value === NEEDS_REVIEW && <ReviewRing />}
                   <span className="truncate">{name(value)}</span>
                 </button>
               );
