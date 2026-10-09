@@ -1,26 +1,18 @@
 import type { ReactNode } from "react";
-import type { Document, DocumentTag, Tag } from "../../../core/api";
+import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
+import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { CheckLineIcon, CloseLineIcon, TagLineIcon } from "./lineIcons";
 import { rowActionButtonClass, rowClass } from "./sidebarRows";
+import { pickerLabel, TagPicker, tagPopoverClass, useTagPopover } from "./TagPicker";
 import { menuClass, menuItemClass, menuRuleClass, menuTitleClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
-/** A Tag's tooltip on a Document: who added it and, with Jev, how likely it is. */
-function tagTitle(link: DocumentTag, tag: Tag, t: ReturnType<typeof useT>): string {
-  if (link.source === "user") return t("tags.chip.user", { tag: tag.name });
-  if (link.confidence === null) return t("tags.chip.automatic", { tag: tag.name });
-  const percent = Math.round(link.confidence * 100);
-  return t(link.needsReview ? "jev.chip.review" : "jev.chip.likely", { tag: tag.name, percent });
-}
-
 /**
- * A Document's Tags button and its menu, where its Tags are shown now that its
- * row is one line: every Tag, checked when the Document has it, to add or
- * take off (automatic tagging then leaves a removed one off). A Tag Jev wasn't
- * sure about says "needs review", with an item to confirm it (it becomes the
- * User's). Then "Re-tag automatically" and "Manage Tags…".
+ * A Document's Tags button and the Tag picker it opens (see `TagPicker`):
+ * the sidebar's row offers it when pointed at. Under the picker, "Re-tag
+ * automatically" (or Organize) and "Manage Tags…".
  */
 export function DocumentTagMenu({
   item,
@@ -32,15 +24,50 @@ export function DocumentTagMenu({
   children?: ReactNode;
 }) {
   const t = useT();
-  const tags = useAppStore((state) => state.tags);
-  const addDocumentTag = useAppStore((state) => state.addDocumentTag);
-  const removeDocumentTag = useAppStore((state) => state.removeDocumentTag);
+  const popover = useTagPopover();
+  const label = pickerLabel(t, [item]);
+  return (
+    <>
+      <button
+        {...popover.buttonProps}
+        type="button"
+        data-testid="document-tags-menu"
+        aria-label={label}
+        title={label}
+        className={buttonClassName}
+      >
+        {children ?? <TagLineIcon className="size-[15px]" />}
+      </button>
+      <div
+        {...popover.popoverProps}
+        role="dialog"
+        aria-label={label}
+        data-testid="document-tags-popover"
+        className={tagPopoverClass}
+      >
+        {/* Only while open: every Document has this popover, and Tag names in each would read as its own text. */}
+        {popover.open && (
+          <TagPicker
+            documentIds={[item.id]}
+            label={label}
+            onReposition={popover.reposition}
+            footer={<DocumentTagFooter item={item} close={popover.close} />}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Under a Document's Tag picker: where automatic tagging is (waiting,
+ * working, failed), "Re-tag automatically" (Organize, once Folders are in
+ * use) and "Manage Tags…".
+ */
+export function DocumentTagFooter({ item, close }: { item: Document; close(): void }) {
+  const t = useT();
   const library = useAppStore((state) => state.library);
   const organizing = !!library?.groups.length || !!library?.settings.classifier;
-  const retagDocuments = useAppStore((state) => state.retagDocuments);
-  const openTagsDialog = useAppStore((state) => state.openTagsDialog);
-  const menu = usePopoverMenu();
-  const links = new Map(item.tags.map((link) => [link.tagId, link]));
   const taggingLine =
     item.status !== "ready" || organizing
       ? null
@@ -51,135 +78,76 @@ export function DocumentTagMenu({
           : item.tagging === "failed"
             ? t("tags.state.failed")
             : null;
-
+  const footerButton =
+    "h-7 shrink-0 rounded-md px-2 text-[12px] font-semibold text-ink-secondary outline-none hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent";
   return (
     <>
+      {taggingLine && (
+        <span
+          data-testid="document-tagging"
+          title={item.taggingError?.message}
+          className={`max-w-28 truncate px-1 text-[12px] ${
+            item.tagging === "failed" ? "text-danger" : "text-ink-meta"
+          }`}
+        >
+          {taggingLine}
+        </span>
+      )}
+      {item.status === "ready" && (
+        <button
+          type="button"
+          data-testid="retag-document"
+          onClick={() => {
+            close();
+            if (organizing && !library?.settings.classifier)
+              useAppStore.getState().openSettings("organization");
+            else void useAppStore.getState().retagDocuments([item.id]);
+          }}
+          className={footerButton}
+        >
+          {t(organizing ? "library.classify" : "tags.menu.retag")}
+        </button>
+      )}
       <button
-        {...menu.buttonProps}
         type="button"
-        data-testid="document-tags-menu"
-        aria-label={t("tags.menu.open", { name: item.name })}
-        title={t("tags.menu.open", { name: item.name })}
-        className={buttonClassName}
+        data-testid="open-tags-dialog"
+        onClick={() => {
+          close();
+          useAppStore.getState().openTagsDialog();
+        }}
+        className={footerButton}
       >
-        {children ?? <TagLineIcon className="size-[15px]" />}
+        {t("tags.menu.manage")}
       </button>
-      <div
-        {...menu.menuProps}
-        role="menu"
-        aria-label={t("tags.menu.title")}
-        data-testid="document-tags-popover"
-        className={menuClass}
-      >
-        {/* Only while open: every Document has this menu, and Tag names in each would read as its own text. */}
-        {menu.open && (
-          <>
-            <p className={menuTitleClass}>{t("tags.menu.title")}</p>
-            {taggingLine && (
-              <p
-                data-testid="document-tagging"
-                title={item.taggingError?.message}
-                className={`px-2 pb-1 text-[12px] leading-[18px] ${
-                  item.tagging === "failed" ? "text-danger" : "text-ink-meta"
-                }`}
-              >
-                {taggingLine}
-              </p>
-            )}
-            {tags.length === 0 && <p className="px-2 py-1 text-ink-meta">{t("tags.menu.none")}</p>}
-            {tags.map((tag) => {
-              const link = links.get(tag.id);
-              return [
-                <button
-                  key={tag.id}
-                  type="button"
-                  role="menuitemcheckbox"
-                  aria-checked={link !== undefined}
-                  data-testid="tag-menu-item"
-                  data-tag-id={tag.id}
-                  data-source={link?.source}
-                  data-needs-review={link?.needsReview ? "true" : undefined}
-                  title={link ? tagTitle(link, tag, t) : tag.description || undefined}
-                  onClick={() =>
-                    void (link
-                      ? removeDocumentTag(item.id, tag.id)
-                      : addDocumentTag(item.id, tag.id))
-                  }
-                  className={`${menuItemClass} pl-2`}
-                >
-                  <CheckLineIcon
-                    className={`size-3.5 shrink-0 ${link ? "text-ink" : "invisible"}`}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{tag.name}</span>
-                  {link?.needsReview && (
-                    <span className="shrink-0 text-[12px] text-ink-meta">
-                      {t("jev.chip.needsReview")}
-                    </span>
-                  )}
-                </button>,
-                link?.needsReview && (
-                  <button
-                    key={`${tag.id}-confirm`}
-                    type="button"
-                    role="menuitem"
-                    data-testid="confirm-document-tag"
-                    data-tag-id={tag.id}
-                    aria-label={t("jev.chip.confirm", { tag: tag.name, name: item.name })}
-                    onClick={() => void addDocumentTag(item.id, tag.id)}
-                    className={`${menuItemClass} pl-[30px] text-ink-secondary`}
-                  >
-                    {t("tags.menu.confirm", { tag: tag.name })}
-                  </button>
-                ),
-              ];
-            })}
-            <div className={menuRuleClass} />
-            {item.status === "ready" && (
-              <button
-                type="button"
-                role="menuitem"
-                data-testid="retag-document"
-                onClick={() => {
-                  menu.close();
-                  if (organizing && !library?.settings.classifier)
-                    useAppStore.getState().openSettings("organization");
-                  else void retagDocuments([item.id]);
-                }}
-                className={`${menuItemClass} pl-[30px]`}
-              >
-                {t(organizing ? "library.classify" : "tags.menu.retag")}
-              </button>
-            )}
-            <button
-              type="button"
-              role="menuitem"
-              data-testid="open-tags-dialog"
-              onClick={() => {
-                menu.close();
-                openTagsDialog();
-              }}
-              className={`${menuItemClass} pl-[30px]`}
-            >
-              {t("tags.menu.manage")}
-            </button>
-          </>
-        )}
-      </div>
     </>
   );
 }
 
+/** A Tag filter value in words: a Tag's name, or "Needs review". */
+function useFilterName(): (value: string) => string {
+  const t = useT();
+  const tags = useAppStore((state) => state.tags);
+  return (value) =>
+    value === NEEDS_REVIEW
+      ? t("tags.filter.review")
+      : (tags.find((tag) => tag.id === value)?.name ?? value);
+}
+
 /**
  * The Documents label's Tags button: a menu to show only the Documents with
- * a Tag (choosing it again shows them all), and "Manage Tags…".
+ * any of the Tags chosen (choosing one again takes it out), and "Manage
+ * Tags…". The Library's Tags filter is the same filter.
  */
 export function TagFilterMenu() {
   const t = useT();
   const tags = useAppStore((state) => state.tags);
   const tagFilter = useAppStore((state) => state.tagFilter);
-  const filterByTag = useAppStore((state) => state.filterByTag);
-  const openTagsDialog = useAppStore((state) => state.openTagsDialog);
+  const reviewing = useAppStore((state) =>
+    state.documents.some((item) => item.tags.some((link) => link.needsReview)),
+  );
   const menu = usePopoverMenu();
+  const values = [...(reviewing || tagFilter.includes(NEEDS_REVIEW) ? [NEEDS_REVIEW] : [])];
+  const name = useFilterName();
 
   return (
     <>
@@ -204,27 +172,28 @@ export function TagFilterMenu() {
           <>
             <p className={menuTitleClass}>{t("tags.filter.title")}</p>
             {tags.length === 0 && <p className="px-2 py-1 text-ink-meta">{t("tags.menu.none")}</p>}
-            {tags.map((tag) => {
-              const selected = tag.id === tagFilter;
+            {[...values, ...tags.map((tag) => tag.id)].map((value) => {
+              const selected = tagFilter.includes(value);
+              const tag = tags.find((each) => each.id === value);
               return (
                 <button
-                  key={tag.id}
+                  key={value}
                   type="button"
-                  role="menuitemradio"
+                  role="menuitemcheckbox"
                   aria-checked={selected}
                   data-testid="tag-filter"
-                  data-tag-id={tag.id}
-                  title={tag.description || undefined}
+                  data-tag-id={value}
+                  title={tag?.description || undefined}
                   onClick={() => {
                     menu.close();
-                    void filterByTag(selected ? null : tag.id);
+                    useAppStore.getState().toggleTagFilter(value);
                   }}
                   className={`${menuItemClass} pl-2`}
                 >
                   <CheckLineIcon
                     className={`size-3.5 shrink-0 ${selected ? "text-ink" : "invisible"}`}
                   />
-                  <span className="truncate">{tag.name}</span>
+                  <span className="truncate">{name(value)}</span>
                 </button>
               );
             })}
@@ -235,7 +204,7 @@ export function TagFilterMenu() {
               data-testid="manage-tags"
               onClick={() => {
                 menu.close();
-                openTagsDialog();
+                useAppStore.getState().openTagsDialog();
               }}
               className={`${menuItemClass} pl-[30px]`}
             >
@@ -248,25 +217,29 @@ export function TagFilterMenu() {
   );
 }
 
-/** While the Documents are filtered by a Tag: a row that says which, to clear it. */
+/** While the Documents are filtered by Tags: a row that says which, to clear it. */
 export function ActiveTagFilter() {
   const t = useT();
-  const tag = useAppStore((state) => state.tags.find((each) => each.id === state.tagFilter));
-  const filterByTag = useAppStore((state) => state.filterByTag);
-  if (!tag) return null;
+  const tagFilter = useAppStore((state) => state.tagFilter);
+  const name = useFilterName();
+  if (tagFilter.length === 0) return null;
   return (
-    <div data-testid="tag-filter-active" data-tag-id={tag.id} className={rowClass(false)}>
+    <div
+      data-testid="tag-filter-active"
+      data-tag-id={tagFilter.join(" ")}
+      className={rowClass(false)}
+    >
       <div className="flex h-full w-full min-w-0 items-center gap-2 pr-1 pl-2">
         <TagLineIcon className="size-4 shrink-0 text-ink-meta" />
         <span className="min-w-0 flex-1 truncate">
-          {t("tags.filter.active", { tag: tag.name })}
+          {t("tags.filter.active", { tag: tagFilter.map(name).join(", ") })}
         </span>
         <button
           type="button"
           data-testid="tag-filter-clear"
           aria-label={t("tags.filter.clear")}
           title={t("tags.filter.clear")}
-          onClick={() => void filterByTag(null)}
+          onClick={() => useAppStore.getState().setTagFilter([])}
           className={rowActionButtonClass}
         >
           <CloseLineIcon className="size-3.5" />

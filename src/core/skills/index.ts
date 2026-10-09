@@ -106,6 +106,12 @@ export interface SkillSession {
   forced: LoadedSkill | null;
   /** Whether any Skill this Answer may use has scripts. */
   hasScripts: boolean;
+  /**
+   * The Skill named `name`, if this Answer may use it: its id and its folder
+   * in the data folder (absolute), for what a call naming it can do (its
+   * Effects, see ./tools). Null for any other name.
+   */
+  skill(name: string): Pick<SkillScript, "skillId" | "skillDir"> | null;
   /** A Skill's instructions (`use_skill`). Throws for a Skill this Answer can't use. */
   load(name: string): Promise<LoadedSkill>;
   /** One of a Skill's files, as text (`read_skill_file`). Throws for anything outside the Skill. */
@@ -769,6 +775,10 @@ export function createSkills(options: SkillsOptions) {
             .map((row) => ({ name: row.name, description: row.description })),
           forced: forcedRow ? await load(forcedRow) : null,
           hasScripts: [...usable.values()].some((row) => filesOf(row).some((file) => file.script)),
+          skill: (name) => {
+            const row = usable.get(name);
+            return row ? { skillId: row.id, skillDir: folderOf(row.id) } : null;
+          },
           load: (name) => load(usableRow(name)),
           readFile: (name, path) => readSkillFile(usableRow(name), path),
           script: (name, path) => scriptOf(usableRow(name), path),

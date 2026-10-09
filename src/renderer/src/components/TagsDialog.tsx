@@ -1,10 +1,11 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { Tag } from "../../../core/api";
 import { core } from "../core";
 import { errorMessage } from "../errors";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
+import { formatCount } from "../linkedFolders";
 import { useAppStore } from "../store";
-import { PencilLineIcon, TrashLineIcon } from "./lineIcons";
+import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
 import {
   buttonClass,
   dangerButtonClass,
@@ -27,25 +28,48 @@ import { useModal } from "./useModal";
 /** Runs a change, showing its failure in the dialog. Resolves with whether it worked. */
 type Run = (action: () => Promise<unknown>) => Promise<boolean>;
 
+/** How many Documents carry each Tag, and how many of those await review. */
+interface Usage {
+  count: number;
+  review: number;
+}
+
 /**
- * Managing Tags, in a native modal <dialog>: each Tag's name and description,
- * in rows split by rules, to edit or delete, a form for a new one, and
- * "Re-tag all Documents". The list follows the core's "tags.changed" event.
+ * Managing Tags, in a native modal <dialog>: each Tag's name, description and
+ * how many Documents carry it (a click shows them in the Library), in rows
+ * split by rules, to edit, merge into another Tag, or delete; a field to find
+ * one; a form for a new one; and "Re-tag all Documents". The list follows the
+ * core's "tags.changed" event, and the counts the Documents' Tags.
  */
 export function TagsDialog() {
   const t = useT();
   const open = useAppStore((state) => state.tagsDialogOpen);
   const close = useAppStore((state) => state.closeTagsDialog);
   const tags = useAppStore((state) => state.tags);
+  const documents = useAppStore((state) => state.documents);
   const dialog = useModal(open);
   const [error, setError] = useState<string | null>(null);
   const [retagStarted, setRetagStarted] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setError(null);
     setRetagStarted(false);
+    setSearch("");
   }, [open]);
+
+  const usage = useMemo(() => {
+    const counts = new Map<string, Usage>();
+    for (const document of documents)
+      for (const link of document.tags) {
+        const each = counts.get(link.tagId) ?? { count: 0, review: 0 };
+        each.count++;
+        if (link.needsReview) each.review++;
+        counts.set(link.tagId, each);
+      }
+    return counts;
+  }, [documents]);
 
   const run: Run = async (action) => {
     setError(null);
@@ -58,13 +82,18 @@ export function TagsDialog() {
     }
   };
 
+  const wanted = search.trim().toLocaleLowerCase();
+  const shown = wanted
+    ? tags.filter((tag) => `${tag.name} ${tag.description}`.toLocaleLowerCase().includes(wanted))
+    : tags;
+
   return (
     <dialog
       ref={dialog}
       onClose={close}
       data-testid="tags-dialog"
       aria-labelledby="tags-title"
-      className={`${dialogClass} w-[36rem]`}
+      className={`${dialogClass} w-[38rem]`}
     >
       <div className="flex flex-col gap-5 px-6 pt-6 pb-5">
         <div className="flex flex-col gap-2">
@@ -76,12 +105,31 @@ export function TagsDialog() {
         {/* Rendered only while open, so forms start empty each time. */}
         {open && (
           <>
+            {tags.length > 6 && (
+              <input
+                type="search"
+                data-testid="tag-search"
+                aria-label={t("tags.dialog.search")}
+                placeholder={t("tags.dialog.search")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className={`${inputClass} mt-0`}
+              />
+            )}
             {tags.length === 0 ? (
               <p className="text-[13px] leading-5 text-ink-meta">{t("tags.dialog.empty")}</p>
+            ) : shown.length === 0 ? (
+              <p className="text-[13px] leading-5 text-ink-meta">{t("tags.dialog.noMatch")}</p>
             ) : (
               <ul className={ruledListClass}>
-                {tags.map((tag) => (
-                  <TagRow key={tag.id} tag={tag} run={run} />
+                {shown.map((tag) => (
+                  <TagRow
+                    key={tag.id}
+                    tag={tag}
+                    tags={tags}
+                    usage={usage.get(tag.id) ?? { count: 0, review: 0 }}
+                    run={run}
+                  />
                 ))}
               </ul>
             )}
@@ -118,9 +166,21 @@ export function TagsDialog() {
   );
 }
 
-function TagRow({ tag, run }: { tag: Tag; run: Run }) {
+function TagRow({
+  tag,
+  tags,
+  usage,
+  run,
+}: {
+  tag: Tag;
+  tags: readonly Tag[];
+  usage: Usage;
+  run: Run;
+}) {
   const t = useT();
-  const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
+  const language = useLanguage();
+  const [mode, setMode] = useState<"view" | "edit" | "delete" | "merge">("view");
+  const [into, setInto] = useState("");
 
   if (mode === "edit") {
     return (
@@ -128,6 +188,7 @@ function TagRow({ tag, run }: { tag: Tag; run: Run }) {
         <TagForm
           initial={tag}
           submitLabel={t("tags.dialog.save")}
+          note={t("tags.dialog.descriptionNote")}
           onSubmit={async (name, description) => {
             if (await run(() => core.updateTag(tag.id, { name, description }))) setMode("view");
           }}
@@ -141,7 +202,12 @@ function TagRow({ tag, run }: { tag: Tag; run: Run }) {
     return (
       <li data-testid="tag-row" data-tag-id={tag.id} className="flex items-center gap-2 py-2.5">
         <p className="min-w-0 flex-1 text-ui break-words text-ink">
-          {t("tags.dialog.delete.body", { name: tag.name })}
+          {usage.count > 0
+            ? t("tags.dialog.delete.bodyCount", {
+                name: tag.name,
+                count: formatCount(usage.count, language),
+              })
+            : t("tags.dialog.delete.body", { name: tag.name })}
         </p>
         <button type="button" onClick={() => setMode("view")} className={buttonClass}>
           {t("tags.dialog.cancel")}
@@ -154,6 +220,51 @@ function TagRow({ tag, run }: { tag: Tag; run: Run }) {
         >
           {t("tags.dialog.delete.confirm")}
         </button>
+      </li>
+    );
+  }
+
+  if (mode === "merge") {
+    const target = tags.find((each) => each.id === into);
+    return (
+      <li data-testid="tag-row" data-tag-id={tag.id} className="flex flex-col gap-2 py-3">
+        <label className={fieldLabelClass}>
+          {t("tags.dialog.merge.label", { name: tag.name })}
+          <select
+            data-testid="merge-target"
+            value={into}
+            onChange={(event) => setInto(event.target.value)}
+            className={inputClass}
+          >
+            <option value="">{t("tags.dialog.merge.choose")}</option>
+            {tags
+              .filter((each) => each.id !== tag.id)
+              .map((each) => (
+                <option key={each.id} value={each.id}>
+                  {each.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        {target && (
+          <p className={hintClass}>
+            {t("tags.dialog.merge.body", { name: tag.name, into: target.name })}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setMode("view")} className={ghostButtonClass}>
+            {t("tags.dialog.cancel")}
+          </button>
+          <button
+            type="button"
+            data-testid="confirm-merge-tag"
+            disabled={!target}
+            onClick={() => void run(() => core.mergeTags(tag.id, into))}
+            className={buttonClass}
+          >
+            {t("tags.dialog.merge.confirm")}
+          </button>
+        </div>
       </li>
     );
   }
@@ -175,6 +286,28 @@ function TagRow({ tag, run }: { tag: Tag; run: Run }) {
       </div>
       <button
         type="button"
+        data-testid="tag-count"
+        data-count={usage.count}
+        disabled={usage.count === 0}
+        aria-label={t("tags.dialog.show", { name: tag.name })}
+        title={t("tags.dialog.show", { name: tag.name })}
+        onClick={() => {
+          const store = useAppStore.getState();
+          store.setTagFilter([tag.id]);
+          store.closeTagsDialog();
+          store.openLibrary();
+        }}
+        className="mt-1 shrink-0 rounded-sm px-1 text-right text-[12px] leading-5 text-ink-meta tabular-nums outline-none hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent disabled:hover:no-underline"
+      >
+        {usage.count === 1
+          ? t("tags.dialog.count.one")
+          : t("tags.dialog.count", { count: formatCount(usage.count, language) })}
+        {usage.review > 0 && (
+          <span className="block">{t("tags.dialog.toReview", { count: usage.review })}</span>
+        )}
+      </button>
+      <button
+        type="button"
         data-testid="edit-tag"
         aria-label={t("tags.dialog.edit", { name: tag.name })}
         title={t("tags.dialog.edit", { name: tag.name })}
@@ -183,6 +316,18 @@ function TagRow({ tag, run }: { tag: Tag; run: Run }) {
       >
         <PencilLineIcon className="size-4" />
       </button>
+      {tags.length > 1 && (
+        <button
+          type="button"
+          data-testid="merge-tag"
+          aria-label={t("tags.dialog.merge", { name: tag.name })}
+          title={t("tags.dialog.merge", { name: tag.name })}
+          onClick={() => setMode("merge")}
+          className={iconButtonClass}
+        >
+          <MergeLineIcon className="size-4" />
+        </button>
+      )}
       <button
         type="button"
         data-testid="delete-tag"
@@ -208,6 +353,7 @@ function NewTag({ run }: { run: Run }) {
         key={added}
         initial={{ name: "", description: "" }}
         submitLabel={t("tags.dialog.create")}
+        note={t("tags.dialog.descriptionNote")}
         onSubmit={async (name, description) => {
           if (await run(() => core.createTag({ name, description }))) setAdded((n) => n + 1);
         }}
@@ -219,10 +365,12 @@ function NewTag({ run }: { run: Run }) {
 function TagForm(props: {
   initial: { name: string; description: string };
   submitLabel: string;
+  /** Under the description: what it is for. */
+  note: string;
   onSubmit(name: string, description: string): Promise<void>;
   onCancel?(): void;
 }) {
-  const { initial, submitLabel, onSubmit, onCancel } = props;
+  const { initial, submitLabel, note, onSubmit, onCancel } = props;
   const t = useT();
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -262,6 +410,7 @@ function TagForm(props: {
           onChange={(event) => setDescription(event.target.value)}
           className={`${inputClass} resize-y`}
         />
+        <span className={hintClass}>{note}</span>
       </label>
       <div className="flex justify-end gap-2">
         {onCancel && (
