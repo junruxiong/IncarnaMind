@@ -2462,6 +2462,23 @@ export interface CoreApi {
    */
   removeDocumentTag(documentId: string, tagId: string): Promise<Document>;
   /**
+   * The User puts a Tag on several Documents at once, as `addDocumentTag`
+   * does on each, in one change: if one Document or the Tag doesn't exist,
+   * nothing changes. Returns the Documents, in the order given; one
+   * "documents.tagged" event carries those that changed.
+   */
+  addTagToDocuments(documentIds: string[], tagId: string): Promise<Document[]>;
+  /** The User takes a Tag off several Documents at once, as `removeDocumentTag` does on each. */
+  removeTagFromDocuments(documentIds: string[], tagId: string): Promise<Document[]>;
+  /**
+   * Merges a Tag into another: every Document carrying `tagId` carries
+   * `intoTagId` instead, and `tagId` is deleted. Who chose each Tag is kept
+   * (the User's choice wins when a Document had both), and a removal the
+   * User made of the merged Tag carries over to the other. Returns the Tag
+   * merged into, unchanged.
+   */
+  mergeTags(tagId: string, intoTagId: string): Promise<Tag>;
+  /**
    * Recomputes the automatic Tags of these Documents, or of every Document,
    * e.g. after Tag definitions changed. Tags the User added or removed are
    * kept as they are. Returns once the Documents are queued; "documents.tagged"
@@ -2832,6 +2849,9 @@ const methods: Record<CoreApiMethod, true> = {
   deleteTag: true,
   addDocumentTag: true,
   removeDocumentTag: true,
+  addTagToDocuments: true,
+  removeTagFromDocuments: true,
+  mergeTags: true,
   retagDocuments: true,
   getJevSettings: true,
   saveJevSettings: true,
