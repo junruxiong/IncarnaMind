@@ -55,6 +55,21 @@
       outline-offset: 0;
     }
   }
+  /* A toggle with a word for its label (Markdown's "Source"), as an icon button is. */
+  .viewer-text-button {
+    @apply flex h-7 shrink-0 items-center rounded-md px-2 text-[13px] leading-5 whitespace-nowrap text-ink-secondary;
+
+    &:hover {
+      @apply bg-tab-hover text-ink;
+    }
+    &[aria-pressed="true"] {
+      @apply bg-chip font-semibold text-ink;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 0;
+    }
+  }
   .viewer-divider {
     @apply mx-1 h-4 w-px shrink-0 bg-rule;
   }
@@ -164,12 +179,23 @@
   .document-plain {
     @apply m-0 font-serif text-body break-words whitespace-pre-wrap text-ink;
   }
+  /* Code, columns lined up with spaces, or a Markdown file's source: as an editor sets it. */
+  .document-plain--code {
+    @apply font-mono text-[13px] leading-5;
+  }
 
   .document-markdown {
     @apply font-serif text-body break-words text-ink;
 
+    :is(blockquote, li) > * + * {
+      margin-top: 16px;
+    }
     > * + * {
       margin-top: 16px;
+    }
+    /* A list inside an item sits close under it. */
+    li > :is(ul, ol) {
+      margin-top: 4px;
     }
     /* Headings get 16px more above. */
     > :is(h1, h2, h3, h4, h5, h6):not(:first-child) {
@@ -219,10 +245,90 @@
       code {
         @apply bg-transparent p-0 text-[1em];
       }
+
+      /* Syntax highlighting (lowlight), as in the Mind's code blocks: weight and tone, not colour. */
+      .hljs-comment,
+      .hljs-quote {
+        @apply text-ink-meta italic;
+      }
+      :is(
+          .hljs-keyword,
+          .hljs-selector-tag,
+          .hljs-built_in,
+          .hljs-literal,
+          .hljs-type,
+          .hljs-title,
+          .hljs-section
+        ) {
+        @apply font-semibold;
+      }
+      :is(
+          .hljs-string,
+          .hljs-symbol,
+          .hljs-bullet,
+          .hljs-regexp,
+          .hljs-link,
+          .hljs-attribute,
+          .hljs-variable,
+          .hljs-template-variable,
+          .hljs-meta
+        ) {
+        @apply text-ink-secondary;
+      }
+    }
+    /* Front matter: the file's metadata, quietly, as written. */
+    pre.document-front-matter {
+      @apply bg-transparent px-0 py-0 text-ink-meta;
+      box-shadow: none;
     }
 
     hr {
       @apply my-8 border-0 border-t border-rule;
+    }
+
+    del {
+      @apply text-ink-secondary;
+    }
+
+    /* Task lists: their boxes where the bullets would be. */
+    ul.document-tasks {
+      @apply list-none pl-1;
+    }
+    li.document-task > input {
+      @apply mr-2 size-3.5 translate-y-[1px] accent-ink;
+    }
+
+    /* Tables as GitHub draws them: ruled cells, a heading row in weight 600. */
+    .document-table {
+      @apply overflow-x-auto;
+    }
+    table {
+      @apply border-collapse font-sans text-ui;
+    }
+    th,
+    td {
+      @apply border border-rule px-3 py-1.5 align-top;
+    }
+    th {
+      @apply bg-frame font-semibold;
+    }
+
+    /* A picture beside the file; a placeholder for one from the web, or one not found. */
+    .document-image {
+      @apply inline-block max-w-full rounded-sm align-top;
+    }
+    .document-image-loading {
+      @apply inline-block h-24 w-40 rounded-sm bg-frame align-top;
+    }
+    .document-image-placeholder {
+      @apply inline-flex max-w-full flex-col gap-0.5 rounded-sm bg-frame px-3 py-2 align-top font-sans text-ui;
+      box-shadow: inset 0 0 0 1px var(--color-rule);
+    }
+    .document-image-placeholder-label {
+      @apply truncate text-ink-secondary;
+    }
+    .document-image-placeholder-note {
+      @apply text-[12px] leading-4 text-ink-meta;
     }
   }
 
@@ -348,9 +454,17 @@
     }
   }
 
-  /* A sheet: a plain grid, its headers on frame, Excel's sheet tabs at the bottom. */
+  /*
+   * A sheet: its headers on frame, Excel's sheet tabs at the bottom. A CSV is a
+   * plain grid; a workbook's cells keep their own look (SheetView), on Excel's
+   * light gridlines, with a darker line where its panes are frozen.
+   */
   .viewer-sheet {
     @apply bg-sheet;
+    --grid-line: var(--color-rule);
+    --grid-freeze: var(--color-ink-placeholder);
+    /* The quote's wash over a cell's own fill. */
+    --quote-overlay: color-mix(in srgb, var(--quote-wash) 70%, transparent);
   }
   .viewer-grid-scroll {
     @apply bg-sheet;
@@ -366,14 +480,15 @@
         inset -1px 0 0 var(--color-rule),
         inset 0 -1px 0 var(--color-rule);
     }
+    /* Above frozen panes (z 2–4), pictures (1) and the Citation's mark (5). */
     thead th {
-      @apply top-0 z-[2] h-6 text-center;
+      @apply top-0 z-[8] h-6 text-center;
     }
     thead th:first-child {
-      @apply left-0 z-[3];
+      @apply left-0 z-[10];
     }
     tbody th {
-      @apply left-0 z-[1] text-right;
+      @apply left-0 z-[6] text-right;
     }
     tbody th.viewer-row--cited {
       @apply font-semibold text-ink;
@@ -391,12 +506,52 @@
       background: var(--quote-wash);
     }
     td.viewer-grid-corner {
-      @apply sticky top-0 left-0 z-[3] bg-frame p-0;
+      @apply sticky top-0 left-0 z-[10] bg-frame p-0;
     }
     td.viewer-grid-spacer {
       @apply p-0;
       box-shadow: none;
     }
+  }
+  /* A workbook's cells: Excel's text colour and spacing, each cell's look inline. */
+  .viewer-grid--styled td {
+    @apply relative p-0 text-clip;
+    color: #000;
+    line-height: 1.2;
+  }
+  .viewer-cell-box {
+    @apply flex flex-col overflow-hidden;
+  }
+  .viewer-cell-text {
+    @apply overflow-hidden;
+  }
+  /* An accounting format's fill: the currency at the left edge, the number at the right. */
+  .viewer-cell-fill {
+    @apply flex justify-between whitespace-pre;
+  }
+  /* A note, as Excel marks one: a small red triangle in the cell's top-right corner. */
+  .viewer-grid td.viewer-cell--note::after {
+    @apply pointer-events-none absolute top-0 right-0 size-0;
+    content: "";
+    border-top: 6px solid #e8202a;
+    border-left: 6px solid transparent;
+  }
+  /* Pictures and shapes over the cells, and a chart's placeholder. */
+  .viewer-sheet-drawing {
+    @apply absolute z-[1] max-w-none;
+  }
+  .viewer-sheet-shape {
+    @apply overflow-hidden border border-rule-strong bg-sheet p-2 font-sans text-[13px] leading-5 whitespace-pre-line text-ink;
+  }
+  .viewer-sheet-placeholder {
+    @apply flex flex-col items-center justify-center gap-0.5 overflow-hidden bg-frame p-3 text-center font-sans;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+  }
+  .viewer-sheet-placeholder-kind {
+    @apply text-label text-ink-meta;
+  }
+  .viewer-sheet-placeholder-title {
+    @apply max-w-full truncate text-ui text-ink-secondary;
   }
   .viewer-sheet-empty {
     @apply flex flex-1 items-center justify-center px-6 text-center text-ui text-ink-meta;
@@ -408,15 +563,19 @@
     @apply flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-t border-rule bg-frame px-2;
     scrollbar-width: none;
   }
+  /* A sheet's own tab colour, if the workbook gives it one, is a bar along the tab's foot. */
   .viewer-sheet-tab {
     @apply h-7 max-w-[200px] shrink-0 truncate rounded-md px-3 text-[13px] leading-5 text-ink-secondary;
+    box-shadow: inset 0 -3px 0 var(--sheet-tab-color, transparent);
 
     &:hover {
       @apply bg-hover;
     }
     &[aria-selected="true"] {
       @apply bg-sheet font-semibold text-ink;
-      box-shadow: inset 0 0 0 1px var(--color-rule);
+      box-shadow:
+        inset 0 0 0 1px var(--color-rule),
+        inset 0 -3px 0 var(--sheet-tab-color, transparent);
     }
     &:focus-visible {
       outline: 2px solid var(--color-accent);
@@ -521,6 +680,7 @@
  * shadow. Unlayered, as docx-preview's own styles are, so these win.
  */
 .docx-view .docx-wrapper {
+  position: relative;
   background: transparent;
   padding: 24px 24px 48px;
   gap: 16px;
@@ -530,6 +690,51 @@
   box-shadow:
     0 0 0 1px var(--color-rule),
     0 1px 2px rgb(23 25 28 / 0.06);
+  /* Word's own defaults for what a document leaves unset: Times New Roman, 10pt, single spacing. */
+  font-family: "Times New Roman", var(--font-serif);
+  font-size: 10pt;
+  line-height: normal;
+}
+/* A document with comments keeps a margin for their notes beside its pages, as Word does. */
+.docx-view.docx-view--notes .docx-wrapper {
+  padding-right: calc(24px + 16px + 220px);
+}
+/* The commented text, washed as Word marks it. */
+::highlight(docx-comments) {
+  background-color: rgb(246 214 150 / 0.55);
+}
+.docx-notes {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.docx-note {
+  position: absolute;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-sheet);
+  box-shadow: 0 0 0 1px var(--color-rule-strong);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-ink);
+}
+.docx-note-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.docx-note-author {
+  font-weight: 600;
+}
+.docx-note-date {
+  font-size: 11px;
+  color: var(--color-ink-meta);
+}
+.docx-note .docx-note-body p {
+  font-size: inherit;
+  line-height: inherit;
 }
 .docx-view a[href] {
   color: var(--color-accent);
