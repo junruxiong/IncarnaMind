@@ -138,7 +138,7 @@ export function GetStartedCard() {
           aria-label={t("gettingStarted.hide")}
           title={t("gettingStarted.hide")}
           onClick={() => updateGettingStarted({ hidden: true })}
-          className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta outline-none hover:bg-chip hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+          className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
         >
           <CloseLineIcon strokeWidth={2.5} className="size-3" />
         </button>
@@ -163,7 +163,7 @@ export function GetStartedCard() {
                 <button
                   type="button"
                   onClick={go[step.key]}
-                  className={`${rowClass} font-semibold text-ink outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent`}
+                  className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
                 >
                   {mark}
                   <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -392,7 +392,7 @@ export function StartGuide() {
             type="button"
             data-testid="start-open-example"
             onClick={() => void openExamples()}
-            className="rounded-sm text-accent underline-offset-2 outline-none hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+            className="rounded-sm text-accent underline-offset-2 hover:underline focus-visible:outline-offset-0"
           >
             {t("startGuide.example.open")}
           </button>

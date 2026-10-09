@@ -237,7 +237,7 @@ export function SkillScriptsSettings() {
               onKeyDown={(event) => {
                 if (event.key === "Enter") commit();
               }}
-              className="h-8 w-20 rounded-sm border border-rule-strong bg-sheet px-2 text-ui text-ink outline-none focus:border-accent focus:outline-1 focus:outline-accent disabled:opacity-60"
+              className="h-8 w-20 rounded-sm border border-rule-strong bg-sheet px-2 text-ui text-ink focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60"
             />
             {t("scripts.settings.seconds")}
           </span>
