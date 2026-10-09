@@ -16,7 +16,9 @@ import {
 } from "./citations";
 import {
   type CandidateCounts,
+  GATING_LABEL,
   GATING_MODE,
+  HYBRID,
   type ModeResult,
   type ModeSummary,
   type QuestionResult,
@@ -48,7 +50,7 @@ export interface EvalReport {
   documents: { key: string; name: string; pageCount: number | null }[];
   retrieval: {
     topK: number;
-    gatingMode: SearchMode;
+    gatingMode: RetrievalMode;
     /** The built-in model first; then a cloud model, when one was given. */
     runs: RetrievalRun[];
   };
@@ -86,7 +88,8 @@ const modesIn = (run: RetrievalRun): RetrievalMode[] =>
 /** "hybrid", or "hybrid + <reranking model>" for a reranked mode. */
 function modeLabel(run: RetrievalRun, mode: RetrievalMode): string {
   const reranker = run.rerankers?.find((each) => each.mode === mode);
-  return reranker ? `${GATING_MODE} + ${reranker.name}` : mode;
+  if (reranker) return `${HYBRID} + ${reranker.name}`;
+  return mode === GATING_MODE ? GATING_LABEL : mode;
 }
 
 function retrievalTable(runs: readonly RetrievalRun[]): string[] {
@@ -99,10 +102,11 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
       const summary = run.summary[mode] as ModeSummary | undefined;
       if (!summary) continue;
       const gating = run.gating && mode === GATING_MODE;
-      const label = gating ? `**${mode} (gating)**` : modeLabel(run, mode);
+      const label = gating ? `**${modeLabel(run, mode)} (gating)**` : modeLabel(run, mode);
       const translated = summary.crossLingualTranslated;
+      const cell = (tally: Tally) => (gating ? `**${fraction(tally)}**` : fraction(tally));
       lines.push(
-        `| ${run.embedding} | ${label} | ${fraction(summary.en)} | ${fraction(summary.zh)} | ${gating ? `**${fraction(summary.core)}**` : fraction(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} |`,
+        `| ${run.embedding} | ${label} | ${cell(summary.en)} | ${cell(summary.zh)} | ${cell(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} |`,
       );
     }
   }
@@ -245,9 +249,9 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is ${GATING_MODE} search with the built-in model: at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). Cross-lingual Questions, cloud embedding models and reranked modes are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, ${GATING_LABEL}: hybrid search with the built-in embedding model, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, the other reranking candidates, cross-lingual Questions and cloud embedding models are reported only.`,
     "",
-    `- **Reranked modes** ("${GATING_MODE} + model"): what the search Tool hands a reranker when the User turns reranking on, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a built-in reranking candidate.`,
+    `- **Reranked modes** ("${HYBRID} + model"): what the search Tool hands a reranker, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a reranking model.`,
     "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
     "",
     ...retrievalTable(retrieval.runs),
@@ -274,7 +278,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     ...perQuestionTable(retrieval.runs),
     "",
-    `### Misses of ${GATING_MODE} search with the built-in model`,
+    `### Misses of ${GATING_LABEL} (gating)`,
     "",
     ...(misses(builtIn).length ? misses(builtIn) : ["None."]),
     "",
@@ -370,7 +374,10 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
     for (const mode of modesIn(run)) {
       const summary = run.summary[mode];
       if (!summary) continue;
-      const label = run.gating && mode === GATING_MODE ? `${mode} (gating)` : modeLabel(run, mode);
+      const label =
+        run.gating && mode === GATING_MODE
+          ? `${modeLabel(run, mode)} (gating)`
+          : modeLabel(run, mode);
       const translated = summary.crossLingualTranslated;
       lines.push(
         `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}`,
