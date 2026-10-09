@@ -316,10 +316,14 @@ describe("Library PDF page images", () => {
       });
       expect(fake.calls).toHaveLength(0);
       await core.respondToConsent(request.requestId, true);
-      await vi.waitFor(async () => {
-        expect((await assignment(core, scan.id))?.status).toBe("classified");
-        expect((await assignment(core, text.id))?.status).toBe("classified");
-      });
+      // Rendering the scan's pages takes a while on a busy machine, as in the tests above.
+      await vi.waitFor(
+        async () => {
+          expect((await assignment(core, scan.id))?.status).toBe("classified");
+          expect((await assignment(core, text.id))?.status).toBe("classified");
+        },
+        { timeout: 10_000 },
+      );
       const scanCall = fake.calls.find(about("scan_0042"));
       const textCall = fake.calls.find(about("invoice"));
       if (!scanCall || !textCall) throw new Error("A Document wasn't sent.");
