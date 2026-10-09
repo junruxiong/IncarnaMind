@@ -1068,6 +1068,19 @@
     box-shadow: inset 0 0 0 1px var(--color-rule);
     color: #2e3238;
   }
+  /* "+N more" after the first chips of a long Search scope, and "Show fewer". */
+  .scope-chip-more {
+    padding: 0 8px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
   /* Deleted since: struck through, and ignored by the search. */
   .scope-chip--deleted {
     background: transparent;

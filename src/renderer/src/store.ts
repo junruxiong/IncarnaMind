@@ -14,6 +14,7 @@ import type {
   LinkedFolderLayout,
   LinkedFolderPreview,
   Mind,
+  SearchScope,
   Settings,
   SettingsPatch,
   Skill,
@@ -21,6 +22,7 @@ import type {
 } from "../../core/api";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
+import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -125,21 +127,39 @@ interface AppState {
   skills: Skill[];
   /** The example Mind and its Documents (onboarding). Null until loaded. */
   examples: Examples | null;
-  /** The Mind whose editor should start a Question at its end once it shows, e.g. a new one. */
-  questionToStart: string | null;
+  /**
+   * The Mind whose editor should start a Question at its end once it shows,
+   * e.g. a new one, with the Search scope it starts with (from the Library), if any.
+   */
+  questionToStart: { mindId: string; scope: SearchScope | null } | null;
 
   load(): Promise<void>;
   /**
    * Creates a Mind and opens it in a new tab, at the end, with its title
-   * focused, or with a Question started in it.
+   * focused, or with a Question started in it (with a Search scope, if given).
    */
-  createMind(options?: { startQuestion?: boolean }): Promise<void>;
+  createMind(options?: {
+    startQuestion?: boolean;
+    title?: string;
+    scope?: SearchScope | null;
+  }): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
   startQuestion(): void;
   /** Called once the Question asked for is started. */
   questionStarted(): void;
+  /**
+   * "Ask about this Folder" in the Library: a Question with the bridge's
+   * Search scope at the end of the most recent Mind (see `mindToAskIn`), or
+   * of a new Mind if there is none, with the cursor in it.
+   */
+  askAbout(bridge: LibraryBridge): Promise<void>;
+  /**
+   * "Start a Mind from this Folder": a new Mind titled as the Library's
+   * sheet, whose first Block is a Question with the bridge's Search scope.
+   */
+  startMindFrom(bridge: LibraryBridge): Promise<void>;
   /** Opens the example Mind, making the examples again if they were removed. */
   openExamples(): Promise<void>;
   /** Deletes the example Mind and its Documents. */
@@ -506,12 +526,14 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     createMind: (options) =>
       attempt(async () => {
-        const mind = await core.createMind();
+        const mind = await core.createMind(options?.title ? { title: options.title } : undefined);
         set({ libraryOpen: false });
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
-          ...(options?.startQuestion ? { questionToStart: mind.id } : { titleToFocus: mind.id }),
+          ...(options?.startQuestion
+            ? { questionToStart: { mindId: mind.id, scope: options.scope ?? null } }
+            : { titleToFocus: mind.id }),
         }));
         const { tabs } = get();
         setTabs({
@@ -524,11 +546,21 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     startQuestion() {
       const { openMindId, createMind } = get();
-      if (openMindId) set({ questionToStart: openMindId });
+      if (openMindId) set({ questionToStart: { mindId: openMindId, scope: null } });
       else void createMind({ startQuestion: true });
     },
 
     questionStarted: () => set({ questionToStart: null }),
+
+    async askAbout({ scope }) {
+      const { minds, openMindId, examples } = get();
+      const mindId = mindToAskIn({ minds, openMindId, exampleMindId: examples?.mindId ?? null });
+      if (!mindId) return get().createMind({ startQuestion: true, scope });
+      get().openMind(mindId);
+      set({ questionToStart: { mindId, scope } });
+    },
+
+    startMindFrom: ({ scope, title }) => get().createMind({ startQuestion: true, title, scope }),
 
     openExamples: () =>
       attempt(async () => {
