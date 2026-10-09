@@ -275,11 +275,15 @@ function useTabShortcuts() {
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey) return;
+      const cycle = event.key === "Tab" && event.ctrlKey && !event.metaKey;
+      const command = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      // Typed keys leave here, before the search for an open dialog through the whole page.
+      if (!cycle && (!command || event.shiftKey)) return;
       if (document.querySelector("dialog[open]")) return;
       const { tabs, openMindId, openMind, closeTab, createMind } = useAppStore.getState();
       const current = openMindId === null ? -1 : tabs.indexOf(openMindId);
 
-      if (event.key === "Tab" && event.ctrlKey && !event.metaKey) {
+      if (cycle) {
         event.preventDefault();
         if (tabs.length === 0) return;
         const step = event.shiftKey ? -1 : 1;
@@ -287,9 +291,6 @@ function useTabShortcuts() {
         if (next) openMind(next);
         return;
       }
-
-      const command = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-      if (!command || event.shiftKey) return;
       if (event.code === "KeyT") {
         event.preventDefault();
         void createMind();
