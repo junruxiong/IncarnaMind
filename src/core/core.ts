@@ -25,13 +25,19 @@ import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
+import {
+  createDocuments,
+  type DocumentFile,
+  type DocumentImage,
+  parseListOptions,
+} from "./documents";
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord, TaggingNotReadyError } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
+import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { createFolders } from "./folders";
 import { createLibrary } from "./library";
@@ -55,6 +61,7 @@ import {
 } from "./providers/ollama";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
@@ -79,6 +86,13 @@ export interface Core extends CoreApi, CoreEventSource {
    * reached (the UI then shows `readDocumentText` instead).
    */
   openDocumentFile(documentId: string): Promise<DocumentFile>;
+  /**
+   * Opens a picture a live Markdown Document shows from beside it, by the
+   * relative path written in the file ("figures/map.png"), for the host to
+   * serve to the viewer: only images, only from the file's folder or below
+   * it. Throws NotFoundError for anything else.
+   */
+  openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
    * Opens a live Document's file, where it is, in the default app for its
    * type, through the `shell` adapter. Throws NotFoundError as
@@ -158,6 +172,8 @@ export function createCore(adapters: CoreAdapters): Core {
   const tagsChanged = () => events.emit("tags.changed", tags.list());
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
+  /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
+  let prepareRerank = () => {};
   let libraryDocumentChanged = (_documentId: string) => {};
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
@@ -206,7 +222,11 @@ export function createCore(adapters: CoreAdapters): Core {
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
       linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
-      onReady: (documentId) => documentReady(documentId),
+      onReady: (documentId) => {
+        // There is something to search now: the built-in reranking model downloads, if it reranks.
+        prepareRerank();
+        documentReady(documentId);
+      },
       // Citations live in Minds, anywhere: in Answers, or copied into Notes.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
@@ -314,12 +334,23 @@ export function createCore(adapters: CoreAdapters): Core {
     embeddingChanged();
   };
 
-  // Rerank, with a Cohere or Voyage key: paused in local mode.
+  /** Reports rerank's settings again; set once rerank exists. */
+  let reportRerank = () => {};
+  // The built-in reranking model, the default: downloaded once there are Documents to search.
+  const rerankingModel = createRerankingModel({
+    definition: BUILT_IN_RERANKING_MODEL,
+    source: adapters.rerankingModelSource,
+    dataDir,
+    crossEncoder: adapters.crossEncoder,
+    emitStatus: () => reportRerank(),
+  });
+  // Rerank: the built-in model by default, a Cohere or Voyage key (paused in local mode), or off.
   const rerank = createRerank({
     settings,
     secrets,
     consent,
     createModel: adapters.createRerankingModel ?? createAiSdkRerankingModel,
+    builtIn: rerankingModel,
     localOnly: () => embedding.localOnly(),
     signal: lifetime.signal,
   });
@@ -328,6 +359,17 @@ export function createCore(adapters: CoreAdapters): Core {
     if (!lifetime.signal.aborted) events.emit("rerank.changed", status);
     return status;
   };
+  reportRerank = () => {
+    if (!rerank.usesBuiltIn()) return;
+    rerankChanged().catch((error: unknown) => {
+      // Reading the keychain is async, so the core may have closed meanwhile.
+      if (!lifetime.signal.aborted) console.error(error);
+    });
+  };
+  prepareRerank = () => rerank.prepare();
+  // Documents to search from an earlier run: the built-in reranking model downloads now, or
+  // carries on from where the app quit, if it reranks them.
+  if (documents.searchableCount() > 0) rerank.prepare();
   /** Local mode on or off: embeddings may switch back to the built-in model, and rerank pauses. */
   const setLocalOnly = async (enabled: unknown) => {
     const wasLocal = embedding.localOnly();
@@ -416,13 +458,17 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   syncChatFlow();
 
+  // The programs Tools start go through one Executor (#61): by default the local one, at
+  // sandbox level "none".
+  const executor =
+    adapters.executor ??
+    createLocalExecutor({
+      processes: adapters.processes,
+      tempDir: adapters.paths.tempDir ?? tmpdir(),
+      reportError: (error) => console.error(error),
+    });
   // Running Skill scripts (#41), each in its own temporary folder.
-  const scriptRunner = createScriptRunner({
-    processes: adapters.processes,
-    runtimes: adapters.scriptRuntimes,
-    tempDir: adapters.paths.tempDir ?? tmpdir(),
-    reportError: (error) => console.error(error),
-  });
+  const scriptRunner = createScriptRunner({ executor, runtimes: adapters.scriptRuntimes });
 
   // Asking the User before a Connector Tool that may change something runs (#38).
   const approvals = createApprovals({
@@ -459,10 +505,11 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
+      searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       search: (query, documentIds, signal) =>
         documents.searchTool(query, {
           signal,
-          rerank: adapters.reranker ?? rerank.reranker,
+          rerank: adapters.reranker ?? rerank.active(),
           documentIds: documentIds ?? undefined,
         }),
       citationSource: (passageId) => documents.citationSource(passageId),
@@ -680,6 +727,17 @@ export function createCore(adapters: CoreAdapters): Core {
     // A model with no files to download (the tests' fake) makes no traffic.
     listed: () => modelSource.files.length > 0,
   });
+  const rerankingSource = adapters.rerankingModelSource ?? BUILT_IN_RERANKING_MODEL.source;
+  const rerankingHost = new URL(rerankingSource.baseUrl);
+  privacy.traffic.register({
+    id: "reranking-model",
+    service: {
+      id: rerankingHost.origin,
+      name: rerankingHost.host === "huggingface.co" ? "Hugging Face" : rerankingHost.host,
+    },
+    // While the built-in reranking model reranks: by default, unless the User chose otherwise.
+    listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
+  });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
     adapters.chatGptPlan?.authorizeUrl ?? CHATGPT_PLAN_ENDPOINTS.authorizeUrl,
@@ -862,6 +920,10 @@ export function createCore(adapters: CoreAdapters): Core {
     setLocalOnly: (enabled) => setLocalOnly(enabled),
 
     getRerankSettings: () => rerank.status(),
+    downloadRerankingModel: async () => {
+      await rerank.download();
+      return rerankChanged();
+    },
     saveRerankSettings: async (input) => {
       await rerank.save(input);
       return rerankChanged();
@@ -1084,6 +1146,7 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
+    openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
       const path = await documents.filePath(documentId);
       if (!adapters.shell)
@@ -1119,6 +1182,7 @@ export function createCore(adapters: CoreAdapters): Core {
       consent.close();
       documents.close();
       embeddingModel.close();
+      rerankingModel.close();
       activity.stop();
       events.clear();
       content.closeAll();

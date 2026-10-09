@@ -50,6 +50,8 @@ export function PrivacySettings() {
     refreshFlows();
     refreshTraffic();
     core.getPrivacySettings().then(setChoices, reportError);
+    /** Rerank's kind, last seen: its download's progress changes neither flows nor traffic. */
+    let rerankKind: string | null | undefined;
     const stops = [
       core.on("dataFlows.changed", setFlows),
       core.on("consent.resolved", refreshFlows),
@@ -58,7 +60,13 @@ export function PrivacySettings() {
       core.on("jev.changed", refreshFlows),
       // So does switching the embedding model, or setting rerank up.
       core.on("embedding.changed", refreshFlows),
-      core.on("rerank.changed", refreshFlows),
+      // The built-in reranking model also downloads its files.
+      core.on("rerank.changed", (rerank) => {
+        if (rerank.kind === rerankKind) return;
+        rerankKind = rerank.kind;
+        refreshFlows();
+        refreshTraffic();
+      }),
       // Each Connector that is on is a service of the "connectors" flow.
       core.on("connectors.changed", refreshFlows),
       core.on("privacy.changed", (changed) => {

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import {
   type Core,
   type CoreAdapters,
+  type CrossEncoder,
   createCore,
   DATABASE_FILE,
   type Document,
@@ -16,8 +17,10 @@ import {
   type Embedder,
   type EmbeddingModelStatus,
   type Keychain,
+  type RerankSettings,
   type SaveEmbeddingProviderInput,
 } from "../../src/core";
+import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase } from "../../src/core/storage";
 import type { EvalDocument } from "./evaluationSet";
 import type { Log } from "./log";
@@ -36,9 +39,16 @@ export interface LibraryOptions {
   embeddingProvider?: SaveEmbeddingProviderInput;
   /**
    * A folder kept between runs that the data folder's `models/` points to, so
-   * the built-in model is downloaded (and checked) by the core once.
+   * the built-in models are downloaded (and checked) by the core once.
    */
   modelCache?: string;
+  /**
+   * Runs the built-in reranking model, which the core reranks with by
+   * default, as in the app: the library waits until it is downloaded (into
+   * `modelCache`) and checked. Absent: a fake with nothing to download, for
+   * checks that never search through the search Tool.
+   */
+  reranker?: CrossEncoder;
   documents: readonly EvalDocument[];
   /** Keep the data folder afterwards, also when opening fails. */
   keep: boolean;
@@ -108,6 +118,42 @@ function modelReady(core: Core, log: Log): Promise<void> {
   });
 }
 
+/**
+ * Resolves once the built-in reranking model, which the core reranks with
+ * by default, is downloaded and checked: at once when the model cache has
+ * it, with no network. Rejects, saying so, if it can't be downloaded.
+ */
+function rerankingModelReady(core: Core, modelCache: string | undefined, log: Log): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let lastLogged = 0;
+    const settle = (settings: RerankSettings) => {
+      const { model } = settings;
+      if (settings.kind !== "built-in") {
+        stop();
+        reject(new Error(`The core doesn't rerank with the built-in model by default.`));
+      } else if (model.state === "ready") {
+        stop();
+        resolve();
+      } else if (model.state === "failed") {
+        stop();
+        reject(
+          new Error(
+            `The built-in reranking model, ${model.name}, couldn't be downloaded from ${model.host}: ${model.error?.message ?? "unknown error"}. Retrieval is gated on it: run once with a connection, and it is kept in ${modelCache ?? "the data folder"} for later runs.`,
+          ),
+        );
+      } else if (model.state === "downloading" && Date.now() - lastLogged > 5000) {
+        lastLogged = Date.now();
+        const mb = (bytes: number) => Math.round(bytes / 1e6);
+        log(
+          `Downloading ${model.name}: ${mb(model.downloadedBytes)} of ${mb(model.totalBytes)} MB`,
+        );
+      }
+    };
+    const stop = core.on("rerank.changed", settle);
+    void core.downloadRerankingModel().then(settle, reject);
+  });
+}
+
 /** Resolves with the Documents once each has finished processing, logging progress. */
 function processed(core: Core, ids: readonly string[], log: Log): Promise<Document[]> {
   return new Promise<Document[]>((resolve, reject) => {
@@ -166,6 +212,14 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       },
     },
     embedder: options.embedder,
+    // The core reranks by default: with the real built-in model when asked for, as in the app
+    // (Answers' searches); otherwise a fake, with nothing to download.
+    ...(options.reranker
+      ? { crossEncoder: options.reranker }
+      : {
+          crossEncoder: createFakeCrossEncoder(),
+          rerankingModelSource: { baseUrl: "http://127.0.0.1/", files: [] },
+        }),
   };
   const core = createCore(adapters);
   const close = async () => {
@@ -192,6 +246,11 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     } else {
       await modelReady(core, log);
       log(`The embedding model is ready (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+    }
+    if (options.reranker) {
+      const begun = Date.now();
+      await rerankingModelReady(core, options.modelCache, log);
+      log(`The reranking model is ready (${((Date.now() - begun) / 1000).toFixed(1)} s)`);
     }
 
     const begun = Date.now();

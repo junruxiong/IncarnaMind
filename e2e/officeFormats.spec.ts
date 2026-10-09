@@ -13,6 +13,7 @@ import { type ElectronApplication, expect, type Locator, type Page, test } from 
 import type { CoreBridge } from "../src/core/api";
 import { footnotesOf, part, unzip } from "../tests/helpers/docx";
 import {
+  addDocuments,
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
@@ -393,5 +394,139 @@ test("a deck opens at a quote in a slide's speaker notes, which open, and marks 
   expect(Math.abs(markBox.y - sheetBox.y - 8)).toBeLessThanOrEqual(1);
   await expect(cited.locator(".viewer-deck-sheet")).toBeInViewport();
   await screenshot(window, "pptx-slide-mark");
+  await app.close();
+});
+
+/** A one-pixel PNG: a picture beside a Markdown file. */
+const PIXEL = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** A computed style of the first element a locator finds. */
+const styleOf = (locator: Locator, property: string) =>
+  locator.evaluate((element, name) => getComputedStyle(element).getPropertyValue(name), property);
+
+/*
+ * "Field Station Budget.xlsx" and "Field Report.docx" were written once with
+ * openpyxl 3.1.5 and python-docx 1.2.0, for their styles, frozen panes, a
+ * note, a picture and a chart, and a comment, headers, footers and lists.
+ */
+test("previews look like the files: a workbook's own styles and panes, a Word file's comments beside its pages, and Markdown formatted with its pictures", async () => {
+  for (const file of ["Field Station Budget.xlsx", "Field Report.docx"]) {
+    await copyFile(join(FIXTURES, file), join(sources, file));
+  }
+  const notes = join(sources, "Survey.md");
+  await writeFile(join(sources, "site map.png"), PIXEL);
+  await writeFile(
+    notes,
+    [
+      "# Survey",
+      "",
+      "![The site](site%20map.png) ![From the web](https://example.com/a.png)",
+      "",
+      "| Site | Gauges |",
+      "|:-----|-------:|",
+      "| Mid estuary | 4 |",
+      "",
+      "- [x] Calibrate",
+      "",
+    ].join("\n"),
+  );
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await widen(app, window);
+  await addDocuments(window, [
+    join(sources, "Field Station Budget.xlsx"),
+    join(sources, "Field Report.docx"),
+    notes,
+  ]);
+  const viewer = window.getByTestId("viewer");
+
+  // The workbook: its fills, fonts, formats, frozen panes, hidden column and row, note and drawings.
+  await openDocumentAt(window, { documentId: await documentIdOf(window, "Field Station Budget") });
+  const grid = viewer.getByTestId("viewer-grid");
+  const title = grid.locator('td[data-ref="A1"]');
+  await expect(title).toHaveText("Field Station Budget, 2026");
+  await expect(title).toHaveAttribute("colspan", "6");
+  expect(await styleOf(title, "background-color")).toBe("rgb(31, 56, 100)");
+  expect(await styleOf(title, "color")).toBe("rgb(255, 255, 255)");
+  expect(await styleOf(title, "font-weight")).toBe("700");
+  await expect(grid).toHaveAttribute("data-frozen", "4,1");
+  expect(await styleOf(grid.locator('td[data-ref="C4"]'), "position")).toBe("sticky");
+  expect(await styleOf(grid.locator('td[data-ref="A6"]'), "position")).toBe("sticky");
+  await expect(grid.locator("thead th", { hasText: /^G$/ })).toHaveCount(0);
+  await expect(grid.locator('th[data-row-header="8"]')).toHaveCount(0);
+  await expect(grid.locator('td[data-ref="A5"]')).toHaveText("15-Jan-26");
+  await expect(grid.locator('td[data-ref="C5"]')).toHaveText("$18,450.50");
+  await expect(grid.locator('td[data-ref="D5"]')).toHaveText("31.2%");
+  const variance = grid.locator('td[data-ref="F6"]');
+  await expect(variance).toHaveText("-830");
+  expect(await styleOf(variance, "color")).toBe("rgb(255, 0, 0)");
+  await expect(grid.locator('td[data-ref="C5"]')).toHaveAttribute("title", /Hydro Instruments/);
+  await expect(viewer.getByTestId("viewer-sheet-picture")).toHaveCount(1);
+  const chart = viewer.getByTestId("viewer-sheet-placeholder");
+  await expect(chart).toHaveAttribute("data-kind", "chart");
+  await expect(chart).toContainText("Cost by item");
+  await screenshot(window, "xlsx-styled");
+  // The second sheet: no gridlines, rich text.
+  await viewer.getByRole("tab", { name: "Notes" }).click();
+  await expect(grid).toHaveAttribute("data-gridlines", "off");
+  const run = grid.locator('td[data-ref="A1"] span', { hasText: /^over budget$/ });
+  expect(await styleOf(run, "font-weight")).toBe("700");
+  expect(await styleOf(run, "color")).toBe("rgb(192, 0, 0)");
+
+  // The Word file: its header, footer, list bullets and its comment as a note beside the page.
+  await openDocumentAt(window, { documentId: await documentIdOf(window, "Field Report") });
+  const docx = viewer.getByTestId("viewer-docx");
+  await expect(docx).toHaveAttribute("data-rendered", "yes");
+  await expect(docx.locator("section.docx header").first()).toHaveText(
+    "Field Report — Draft for the steering group",
+  );
+  await expect(docx.locator("section.docx footer").first()).toHaveText(
+    "Coastal Monitoring Programme · Confidential",
+  );
+  const comment = docx.getByTestId("viewer-docx-comment");
+  await expect(comment).toHaveCount(1);
+  await expect(comment).toContainText("J. Moreau");
+  await expect(comment).toContainText("Confirm with the hydrology team before release.");
+  const page = await docx.locator("section.docx").first().boundingBox();
+  const note = await comment.boundingBox();
+  expect(note && page && note.x).toBeGreaterThan((page?.x ?? 0) + (page?.width ?? 0));
+  // Word's Symbol-font bullets are drawn as bullets, not as missing glyphs.
+  const styles = await docx.evaluate((element) =>
+    [...element.querySelectorAll("style")].map((style) => style.textContent).join(""),
+  );
+  expect(styles).not.toContain("");
+  expect(styles).toContain("•");
+  await screenshot(window, "docx-comments");
+
+  // The Markdown file: formatted, its picture beside it shown, one from the web not loaded.
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Survey"),
+    quote: "Mid estuary",
+  });
+  const text = viewer.getByTestId("viewer-text");
+  await expect(text).toHaveAttribute("data-view", "formatted");
+  const picture = text.getByTestId("viewer-markdown-image");
+  await expect(picture).toHaveAttribute("alt", "The site");
+  expect(await picture.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1);
+  await expect(text.getByTestId("viewer-markdown-image-placeholder")).toHaveAttribute(
+    "data-reason",
+    "web",
+  );
+  await expect(text.locator("table th")).toHaveText(["Site", "Gauges"]);
+  await expect(text.locator("td [data-quote-highlight]")).toHaveText("Mid estuary");
+  await expect(text.locator('li input[type="checkbox"]')).toBeChecked();
+  // "Source" shows the text as written, the quote still washed; again, formatted.
+  const source = viewer.getByTestId("viewer-markdown-source");
+  await source.click();
+  await expect(source).toHaveAttribute("aria-pressed", "true");
+  await expect(text).toHaveAttribute("data-view", "source");
+  await expect(text.locator("pre")).toContainText("![The site](site%20map.png)");
+  await expect(text.locator("[data-quote-highlight]")).toHaveText("Mid estuary");
+  await source.click();
+  await expect(text).toHaveAttribute("data-view", "formatted");
+  await screenshot(window, "markdown-formatted");
   await app.close();
 });

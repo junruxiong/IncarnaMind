@@ -15,10 +15,16 @@ import {
   type GroupSummary,
 } from "./citations";
 import {
+  type CandidateCounts,
+  GATING_LABEL,
   GATING_MODE,
+  HYBRID,
+  type ModeResult,
   type ModeSummary,
   type QuestionResult,
   RANK_DEPTH,
+  RERANK_PER_LIST,
+  type RetrievalMode,
   type RetrievalRun,
   SEARCH_MODES,
   type Tally,
@@ -44,7 +50,7 @@ export interface EvalReport {
   documents: { key: string; name: string; pageCount: number | null }[];
   retrieval: {
     topK: number;
-    gatingMode: SearchMode;
+    gatingMode: RetrievalMode;
     /** The built-in model first; then a cloud model, when one was given. */
     runs: RetrievalRun[];
   };
@@ -71,45 +77,89 @@ const OUTCOME_LABELS: Record<CitationOutcome, string> = {
   "cant-check": '"Can\'t check"',
 };
 
+/** A run's modes as the report lists them: the core's search modes, then the reranked ones. */
+const modesIn = (run: RetrievalRun): RetrievalMode[] =>
+  (Object.keys(run.summary) as RetrievalMode[]).sort(
+    (a, b) =>
+      (SEARCH_MODES.indexOf(a as SearchMode) + 1 || 99) -
+      (SEARCH_MODES.indexOf(b as SearchMode) + 1 || 99),
+  );
+
+/** "hybrid", or "hybrid + <reranking model>" for a reranked mode. */
+function modeLabel(run: RetrievalRun, mode: RetrievalMode): string {
+  const reranker = run.rerankers?.find((each) => each.mode === mode);
+  if (reranker) return `${HYBRID} + ${reranker.name}`;
+  return mode === GATING_MODE ? GATING_LABEL : mode;
+}
+
 function retrievalTable(runs: readonly RetrievalRun[]): string[] {
   const lines = [
-    "| Embedding model | Mode | English | Chinese | Gating set | Cross-lingual |",
-    "|---|---|---|---|---|---|",
+    "| Embedding model | Mode | English | Chinese | Gating set | Cross-lingual | Cross-lingual, with a translated second query |",
+    "|---|---|---|---|---|---|---|",
   ];
   for (const run of runs) {
-    for (const mode of SEARCH_MODES) {
+    for (const mode of modesIn(run)) {
       const summary = run.summary[mode] as ModeSummary | undefined;
       if (!summary) continue;
       const gating = run.gating && mode === GATING_MODE;
-      const label = gating ? `**${mode} (gating)**` : mode;
+      const label = gating ? `**${modeLabel(run, mode)} (gating)**` : modeLabel(run, mode);
+      const translated = summary.crossLingualTranslated;
+      const cell = (tally: Tally) => (gating ? `**${fraction(tally)}**` : fraction(tally));
       lines.push(
-        `| ${run.embedding} | ${label} | ${fraction(summary.en)} | ${fraction(summary.zh)} | ${gating ? `**${fraction(summary.core)}**` : fraction(summary.core)} | ${fraction(summary.crossLingual)} |`,
+        `| ${run.embedding} | ${label} | ${cell(summary.en)} | ${cell(summary.zh)} | ${cell(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} |`,
       );
     }
   }
   return lines;
 }
 
+/** How many Passages a reranker saw per search. */
+export const candidatesLine = (counts: CandidateCounts) =>
+  `Candidates per reranked search (keyword search's top ${counts.perList} and vector search's top ${counts.perList}, each Passage once): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches.`;
+
+/** What each reranking candidate costs: its download, and the time it adds to a search. */
+function rerankerTable(run: RetrievalRun): string[] {
+  if (!run.rerankers?.length) return [];
+  const ms = (value: number) => `${value.toFixed(0)} ms`;
+  return [
+    "| Reranking model | Licence | Download | Per search: mean | median | 95th percentile | slowest | Loading |",
+    "|---|---|---|---|---|---|---|---|",
+    ...run.rerankers.map(
+      (each) =>
+        `| ${each.name} | ${each.licence} | ${(each.downloadBytes / 1e6).toFixed(0)} MB | ${ms(each.latency.mean)} | ${ms(each.latency.median)} | ${ms(each.latency.p95)} | ${ms(each.latency.max)} | ${each.loadSeconds.toFixed(1)} s |`,
+    ),
+  ];
+}
+
 function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
-  const columns = runs.flatMap((run) =>
-    SEARCH_MODES.filter((mode) => run.summary[mode]).map((mode) => ({ run, mode })),
-  );
+  const columns = runs.flatMap((run) => modesIn(run).map((mode) => ({ run, mode })));
   const header = columns.map(({ run, mode }) =>
-    runs.length > 1 ? `${mode} (${run.gating ? "built-in" : "cloud"})` : mode,
+    runs.length > 1
+      ? `${modeLabel(run, mode)} (${run.gating ? "built-in" : "cloud"})`
+      : modeLabel(run, mode),
   );
   const lines = [
     `| Question | ${header.join(" | ")} | Text |`,
     `|---|${columns.map(() => "---|").join("")}---|`,
   ];
+  const rank = (result: ModeResult | undefined) => {
+    if (!result?.rank) return "–";
+    return result.hit ? String(result.rank) : `(${result.rank})`;
+  };
   const first = runs[0] as RetrievalRun;
   first.questions.forEach((question, index) => {
     const cells = columns.map(({ run, mode }) => {
-      const result = run.questions[index]?.modes[mode];
-      if (!result?.rank) return "–";
-      return result.hit ? String(result.rank) : `(${result.rank})`;
+      const result = run.questions[index];
+      const translated = result?.translated?.[mode];
+      return translated
+        ? `${rank(result?.modes[mode])} / ${rank(translated)}`
+        : rank(result?.modes[mode]);
     });
     const id = question.crossLingual ? `${question.id} (cross-lingual)` : question.id;
-    lines.push(`| ${id} | ${cells.join(" | ")} | ${question.question} |`);
+    const text = question.translatedQuery
+      ? `${question.question} / ${question.translatedQuery}`
+      : question.question;
+    lines.push(`| ${id} | ${cells.join(" | ")} | ${text} |`);
   });
   return lines;
 }
@@ -199,7 +249,10 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is ${GATING_MODE} search with the built-in model: at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). Cross-lingual Questions and cloud embedding models are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, ${GATING_LABEL}: hybrid search with the built-in embedding model, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, the other reranking candidates, cross-lingual Questions and cloud embedding models are reported only.`,
+    "",
+    `- **Reranked modes** ("${HYBRID} + model"): what the search Tool hands a reranker, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a reranking model.`,
+    "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
     "",
     ...retrievalTable(retrieval.runs),
     "",
@@ -208,13 +261,24 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
         `- ${each.embedding}: ${each.passageCount} Passages, added and processed (text extraction and embedding) in ${each.processingSeconds.toFixed(0)} s.`,
     ),
     "",
+    ...(builtIn.rerankers?.length
+      ? [
+          "### Reranking models",
+          "",
+          ...(builtIn.rerankCandidates ? [candidatesLine(builtIn.rerankCandidates), ""] : []),
+          "Time to rerank one search's candidates on this machine, one Passage at a time on a worker thread, after the first search (which loads the model).",
+          "",
+          ...rerankerTable(builtIn),
+          "",
+        ]
+      : []),
     "### Per Question",
     "",
-    `The rank of the first Passage that meets the hit rule. Only the top ${retrieval.topK} count as hits: a rank in brackets is a near miss, within the top ${RANK_DEPTH}, and "–" means none in the top ${RANK_DEPTH}.`,
+    `The rank of the first Passage that meets the hit rule. Only the top ${retrieval.topK} count as hits: a rank in brackets is a near miss, within the top ${RANK_DEPTH}, and "–" means none in the top ${RANK_DEPTH}. For a cross-lingual Question with a translated query, "a / b" is the rank for the Question, then for its translation.`,
     "",
     ...perQuestionTable(retrieval.runs),
     "",
-    `### Misses of ${GATING_MODE} search with the built-in model`,
+    `### Misses of ${GATING_LABEL} (gating)`,
     "",
     ...(misses(builtIn).length ? misses(builtIn) : ["None."]),
     "",
@@ -307,12 +371,22 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
   const lines = ["", `Retrieval, top ${report.retrieval.topK} (hit rule of ADR-0009)`];
   for (const run of report.retrieval.runs) {
     lines.push(`  ${run.embedding}${run.gating ? "" : " (reported, not gating)"}`);
-    for (const mode of SEARCH_MODES) {
+    for (const mode of modesIn(run)) {
       const summary = run.summary[mode];
       if (!summary) continue;
-      const label = run.gating && mode === GATING_MODE ? `${mode} (gating)` : mode;
+      const label =
+        run.gating && mode === GATING_MODE
+          ? `${modeLabel(run, mode)} (gating)`
+          : modeLabel(run, mode);
+      const translated = summary.crossLingualTranslated;
       lines.push(
-        `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}`,
+        `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}`,
+      );
+    }
+    if (run.rerankCandidates) lines.push(`    ${candidatesLine(run.rerankCandidates)}`);
+    for (const each of run.rerankers ?? []) {
+      lines.push(
+        `    ${each.name}: ${(each.downloadBytes / 1e6).toFixed(0)} MB, ${each.latency.mean.toFixed(0)} ms per search on average (95th percentile ${each.latency.p95.toFixed(0)} ms)`,
       );
     }
   }

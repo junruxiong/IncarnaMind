@@ -78,6 +78,7 @@ import {
   type AnswerEngine,
   type AnswerSkillTools,
   type AnswerTools,
+  type DocumentLanguage,
   type ExternalTool,
   RUN_SKILL_SCRIPT_TOOL,
   scriptCallInput,
@@ -201,6 +202,8 @@ export interface DocumentsForAnswers extends Pick<AnswerDocuments, "citationSour
   searchableCount(documentIds: readonly string[] | null): number;
   /** How many Documents there are to search, and the names of the `limit` most recently added, newest first. */
   searchableNames(documentIds: readonly string[] | null, limit: number): ListedDocuments;
+  /** The languages the Documents to search are in, the most common first, with how many are in each. */
+  searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   search(
     query: string,
     documentIds: readonly string[] | null,
@@ -717,6 +720,8 @@ export function createAnswers(options: AnswersOptions) {
         get documentCount() {
           return session.tools.documentCount;
         },
+        // So the model can search again in the Documents' language (see the search Tool).
+        documentLanguages: options.documents.searchableLanguages(documentIds),
         searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
         cite: (records) => session.tools.cite(records),
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,

@@ -124,10 +124,23 @@ export interface ExternalTool {
   ): Promise<string>;
 }
 
+/** A language the Documents to search are in, and how many of them are. */
+export interface DocumentLanguage {
+  /** In English, e.g. "Chinese". */
+  language: string;
+  documents: number;
+}
+
 /** The Tools' work, done by the core: the engine only connects them to the model. */
 export interface AnswerTools {
   /** Documents with Passages to search. With none, there is no document search. */
   readonly documentCount: number;
+  /**
+   * The languages the Documents to search are in, the most common first: the
+   * search Tool names them, so the model searches again in theirs when the
+   * Question is in another language. Empty or absent when they can't be told.
+   */
+  readonly documentLanguages?: readonly DocumentLanguage[];
   /** The document-search Tool. */
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
@@ -316,6 +329,26 @@ type FittedAttempt = AsyncGenerator<AnswerEngineEvent | Unsupported>;
 
 const SEARCH_TOOL = "search_documents";
 const CITE_TOOL = "cite";
+
+/** "English", "English and Chinese", "English, Chinese and French". */
+const listed = (items: readonly string[]) =>
+  items.length < 2 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+/**
+ * The search Tool's description: what it returns, and the languages the
+ * Documents are in, with how many are in each. Search finds a query best in
+ * a Document's own language (ADR-0009), so a Question in another language is
+ * searched in theirs too.
+ */
+export function searchToolDescription(languages: readonly DocumentLanguage[]): string {
+  const base =
+    "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.";
+  if (languages.length === 0) return base;
+  const names = languages.map((each) =>
+    languages.length > 1 ? `${each.language} (${each.documents})` : each.language,
+  );
+  return `${base} The Documents are in ${listed(names)}. Search finds Passages best in their own language: when the Question is in another language than the Documents it may be about, search with the query translated into their language too.`;
+}
 const USE_SKILL_TOOL = "use_skill";
 const READ_SKILL_FILE_TOOL = "read_skill_file";
 /** Tool calls the Answer shows, and text before which was a preamble. `cite` isn't one: its records become Citations. */
@@ -832,8 +865,7 @@ async function* toolLoop(
   let loop: ReturnType<WindowBudget["loop"]> | null = null;
   const documentTools: ToolSet = {
     [SEARCH_TOOL]: tool({
-      description:
-        "Search the User's Documents. Returns the Passages that best match, each with an id, its Document and where it is (pages, slides, sections, rows or lines). The search sees only the query, not the conversation: write it to stand on its own.",
+      description: searchToolDescription(request.tools.documentLanguages ?? []),
       inputSchema: jsonSchema<{ query: string }>({
         type: "object",
         properties: {

@@ -4,7 +4,13 @@
  *
  * 1. Hybrid search: keyword (FTS5) and vector search, fused by reciprocal rank
  *    fusion, over the Search scope.
- * 2. Rerank, if a reranker is plugged in (a hook: none is built in yet).
+ * 2. Rerank, unless the User turned reranking off: with the built-in reranking
+ *    model by default, or a Cohere or Voyage key (see ../providers/rerank),
+ *    which the retrieval evaluation gates on (#31). The reranker sees
+ *    keyword search's top 10 and vector search's top 10, each Passage once,
+ *    instead of the fused list: fusion can push a hit that only one of them
+ *    found below others that both found middlingly (#31: en-03, en-12, en-14
+ *    and zh-03). Those are then all the hits.
  * 3. Group the hits by Document.
  * 4. The old backend's sliding-window clustering (its `find_overlaps`), ported:
  *    each Passage belongs to the overlapping windows of 3 consecutive Passages
@@ -23,8 +29,15 @@
 import type { WindowedPassage } from "./search";
 
 export interface SearchToolParameters {
-  /** How many fused hits hybrid search hands on to the reranker and the clustering. */
+  /** How many fused hits hybrid search hands on to the clustering, without a reranker. */
   candidates: number;
+  /**
+   * With a reranker: how many of keyword search's best, and of vector
+   * search's, it sees (each Passage once, so 10 to 20 with 10), and then
+   * the clustering. Each costs the built-in reranking model tens of
+   * milliseconds.
+   */
+  rerankPerList: number;
   /** The most Documents one search returns Passages from. */
   maxDocuments: number;
   /** The most windows (clusters) one search returns from a Document. */
@@ -39,6 +52,7 @@ export interface SearchToolParameters {
  */
 export const SEARCH_TOOL_PARAMETERS: SearchToolParameters = {
   candidates: 30,
+  rerankPerList: 10,
   maxDocuments: 4,
   maxWindowsPerDocument: 2,
   maxPassages: 8,
@@ -50,8 +64,33 @@ export interface SearchCandidate extends WindowedPassage {
 }
 
 /**
- * Reorders (and may rescore or drop) the hybrid hits, best first, e.g. with a
- * Cohere or Voyage reranking model. Scores must stay comparable: higher is better.
+ * The best `perList` of each ranked list, each item once, in the order they
+ * first appear (the first list's, then what the next adds): the candidates a
+ * reranker sees, from keyword and vector search. The evaluation's reranked
+ * modes build theirs with it too.
+ */
+export function topsOfEach<Item>(
+  lists: readonly (readonly Item[])[],
+  perList: number,
+  key: (item: Item) => unknown = (item) => item,
+): Item[] {
+  const seen = new Set<unknown>();
+  const union: Item[] = [];
+  for (const list of lists) {
+    for (const item of list.slice(0, perList)) {
+      const id = key(item);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      union.push(item);
+    }
+  }
+  return union;
+}
+
+/**
+ * Reorders (and may rescore or drop) the hybrid hits, best first, e.g. with
+ * the built-in reranking model or a Cohere or Voyage one. Scores must stay
+ * comparable and positive: higher is better.
  */
 export type Reranker = (
   query: string,
@@ -170,6 +209,16 @@ export interface SearchToolSources {
     limit: number,
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]>;
+  /**
+   * For a reranker: keyword search's best `perList` live Passages and vector
+   * search's, each once (see `topsOfEach`), with their fused scores, in
+   * fused order.
+   */
+  rerankCandidates(
+    query: string,
+    perList: number,
+    documentIds: readonly string[] | undefined,
+  ): Promise<SearchCandidate[]>;
   /** The live Passages of a Document's window, in reading order. */
   window(documentId: string, window: number): WindowedPassage[];
 }
@@ -178,6 +227,7 @@ export interface SearchToolOptions {
   /** Only these Documents (a Search scope). Omitted: every Document. */
   documentIds?: readonly string[];
   parameters?: Partial<SearchToolParameters>;
+  /** The reranker, while reranking is on; undefined otherwise. */
   rerank?: Reranker;
   signal?: AbortSignal;
 }
@@ -192,7 +242,9 @@ export async function searchDocumentsTool(
   options: SearchToolOptions = {},
 ): Promise<WindowedPassage[]> {
   const parameters = { ...SEARCH_TOOL_PARAMETERS, ...options.parameters };
-  let candidates = await sources.candidates(query, parameters.candidates, options.documentIds);
+  let candidates = options.rerank
+    ? await sources.rerankCandidates(query, parameters.rerankPerList, options.documentIds)
+    : await sources.candidates(query, parameters.candidates, options.documentIds);
   if (options.rerank && candidates.length > 0) {
     candidates = await options.rerank(query, candidates, options.signal);
   }

@@ -38,8 +38,9 @@ export interface Paths {
    */
   examples?: string;
   /**
-   * Where each Skill script run gets its own temporary working folder,
-   * removed when the run ends. Defaults to the OS's temporary folder.
+   * Where each program a Tool runs (a Skill script) gets its own temporary
+   * working folder from the local `Executor`, removed when the run ends.
+   * Defaults to the OS's temporary folder.
    */
   tempDir?: string;
 }
@@ -130,7 +131,7 @@ export interface SpawnOptions {
   /**
    * On macOS and Linux, starts the process as the leader of a new process
    * group, so it can be stopped together with every process it starts (see
-   * `stopProcessTree`). Windows has no process groups; there the tree is
+   * `stopProcessTree` in ./execution). Windows has no process groups; there the tree is
    * found by parent process instead.
    */
   processGroup?: boolean;
@@ -139,8 +140,8 @@ export interface SpawnOptions {
 /**
  * Starts child processes with the User's login-shell environment, so `npx` and
  * `uvx` resolve even when the app was opened from the Dock or Start menu. The
- * command is looked up on that environment's PATH. Used by local Connectors
- * and by Skill scripts.
+ * command is looked up on that environment's PATH. Used by local Connectors,
+ * and by the local `Executor` for the programs Tools run (Skill scripts).
  */
 export interface ProcessLauncher {
   /**
@@ -149,6 +150,88 @@ export interface ProcessLauncher {
    * with an error whose `code` is "ENOENT".
    */
   spawn(command: string, args: readonly string[], options?: SpawnOptions): Promise<ChildProcess>;
+}
+
+/**
+ * How the programs an `Executor` runs are confined:
+ * - "none": not at all; they run as the User, as Skill scripts do in v1.
+ * - "os": in the OS sandbox (macOS Seatbelt, Linux bubblewrap), with only
+ *   what each request allows.
+ * - "container": in a container or virtual machine on this computer.
+ * - "remote": on another machine (the hosted version).
+ */
+export type SandboxLevel = "none" | "os" | "container" | "remote";
+
+/**
+ * A folder an `ExecRequest` allows: an absolute path, or the run's own
+ * working folder (its `cwd`, or the new one the Executor makes), whose path
+ * the caller can't know beforehand. `WORKING_FOLDER` in ./execution.
+ */
+export type ExecFolder = string | { readonly kind: "working-folder" };
+
+/** What a program may touch. A folder allowed covers everything inside it. */
+export interface ExecAllow {
+  read: readonly ExecFolder[];
+  write: readonly ExecFolder[];
+  /** Any host, none, or only these hosts. */
+  network: "none" | "any" | readonly string[];
+}
+
+/** A program for an `Executor` to run, and what it may touch. */
+export interface ExecRequest {
+  /** The program: looked up on the PATH of the environment it runs with, unless a path. */
+  command: string;
+  /** Its arguments, as they are: no shell comes in between. */
+  args: readonly string[];
+  /** Its working folder. Not given: a new, empty temporary folder, removed when the run ends. */
+  cwd?: string;
+  /** Added to (and overriding) the environment programs get here: the login shell's, on the desktop. */
+  env: Readonly<Record<string, string>>;
+  /**
+   * What it may read, write and reach. Enforced from "os" up; at "none" it is
+   * only declared, for approvals (see `declaredAccess` in ./execution).
+   */
+  allow: ExecAllow;
+  /** How long it may run before it is stopped, with every process it started. */
+  timeoutMs: number;
+  /** How much of each output is kept: the start of its standard output, the end of its error output. */
+  maxOutputBytes: number;
+  /** Stops it at once, with every process it started (e.g. the User stops the Answer). */
+  signal: AbortSignal;
+}
+
+/** How a program an `Executor` ran ended, and what it wrote (see `SkillScriptRun`, which adds `error`). */
+export interface ExecResult {
+  /** Its exit code; null when it was stopped (its timeout, or its signal). */
+  exitCode: number | null;
+  /** It ran longer than its timeout, so it was stopped with every process it started. */
+  timedOut: boolean;
+  /** The start of its standard output, up to `maxOutputBytes`; a character cut in half is left out. */
+  stdout: string;
+  /** The end of its error output, up to `maxOutputBytes`; a character cut in half is left out. */
+  stderr: string;
+  /** It wrote more to its standard output than is kept. */
+  stdoutTruncated: boolean;
+  /** It wrote more to its error output than is kept. */
+  stderrTruncated: boolean;
+}
+
+/**
+ * Runs the programs Tools start (Skill scripts now; later a shell or a
+ * converter), as confined as this host can. The core never starts a Tool's
+ * process itself, so a sandbox can come later without changing the Tools.
+ * The core defaults to the local one at level "none" (./execution).
+ * Connectors' own server processes don't come here: they use `ProcessLauncher`.
+ */
+export interface Executor {
+  readonly level: SandboxLevel;
+  /**
+   * Runs a program to its end, with no input, and resolves with how it ended
+   * and what it wrote. Rejects if it can't start: a command that isn't found
+   * rejects with an error whose `code` is "ENOENT", and a signal stopped
+   * already with its reason, before anything runs.
+   */
+  run(request: ExecRequest): Promise<ExecResult>;
 }
 
 /**
@@ -200,6 +283,26 @@ export interface Embedder {
   close(): void;
 }
 
+/** The built-in reranking model's downloaded files: the same kinds as the embedding model's. */
+export type RerankingModelFiles = EmbeddingModelFiles;
+
+/**
+ * Runs the built-in reranking model, a cross-encoder, off the core's thread:
+ * the desktop app runs it in an Electron utility process of its own, and tests
+ * pass a deterministic fake. The core downloads and checks the files first.
+ */
+export interface CrossEncoder {
+  /** Loads the model, if it isn't loaded already. Rejects if the model can't start. */
+  load(files: RerankingModelFiles): Promise<void>;
+  /**
+   * How well each text answers the query, in the order given: the model's own
+   * scores, higher is better. Rejects if the model isn't loaded or fails.
+   */
+  score(query: string, texts: readonly string[]): Promise<number[]>;
+  /** Stops the model and frees its memory. Loading again starts it afresh. */
+  close(): void;
+}
+
 /** One file of the built-in embedding model, as recorded when the app was built. */
 export interface ModelFile {
   /** Relative to the source's base URL, and to the model's folder in the data folder. */
@@ -241,6 +344,12 @@ export interface CoreAdapters {
   /** How Linked folders are watched (see `LinkedFolderOptions`). */
   linkedFolders?: LinkedFolderOptions;
   processes: ProcessLauncher;
+  /**
+   * Runs the programs Tools start, such as Skill scripts (see `Executor`).
+   * Defaults to the local one at sandbox level "none", starting them through
+   * `processes`, with working folders in `paths.tempDir`.
+   */
+  executor?: Executor;
   /** What Skill scripts run with (see `ScriptRuntimes`); the defaults suit the desktop app. */
   scriptRuntimes?: ScriptRuntimes;
   /** Runs the built-in embedding model (see `Embedder`). */
@@ -251,6 +360,13 @@ export interface CoreAdapters {
    * files for a fake embedder that needs none.
    */
   embeddingModelSource?: EmbeddingModelSource;
+  /** Runs the built-in reranking model (see `CrossEncoder`), when the User turns it on. */
+  crossEncoder: CrossEncoder;
+  /**
+   * Where the built-in reranking model's files come from. Defaults to the
+   * pinned Hugging Face revision; tests give no files for a fake that needs none.
+   */
+  rerankingModelSource?: EmbeddingModelSource;
   /** Defaults to the system clock. Tests may pass a fake one. */
   now?: () => Date;
   /**
@@ -299,8 +415,8 @@ export interface CoreAdapters {
   createRerankingModel?: RerankingModelFactory;
   /**
    * Reorders the document-search Tool's hybrid hits before they are grouped,
-   * replacing the rerank the User sets up with a Cohere or Voyage key (an
-   * alternative search layer plugs in here). None by default.
+   * replacing the rerank the User sets up, built in or with a Cohere or
+   * Voyage key (an alternative search layer plugs in here). None by default.
    */
   reranker?: Reranker;
   /**
