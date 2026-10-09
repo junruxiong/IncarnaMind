@@ -20,6 +20,7 @@ import {
   type OrganizeSource,
   organizeExcerpt,
   organizeNeedsPageImages,
+  organizeReadsPages,
 } from "../../src/core/library/excerpt";
 import { documentPageImages } from "../../src/core/library/pageImages";
 import type { DocumentPageImage } from "../../src/core/library/pdfImages";
@@ -48,6 +49,7 @@ async function codeFingerprint(): Promise<string> {
   const files = [
     "src/core/tags/classify.ts",
     "src/core/tags/presets.ts",
+    "src/core/providers/imageInput.ts",
     "src/core/providers/jev.ts",
     "src/shared/i18n/en.ts",
     "src/shared/i18n/zh-CN.ts",
@@ -225,16 +227,12 @@ test("Organize on the labelled set", async () => {
         };
         const { classifier } = route;
         try {
-          const readsPages = classifier.pageImages === true || classifier.pageImages === "auto";
-          // As the Library: a PDF without text waits unless the classifier reads pages.
-          if (item.noText && !(readsPages && item.doc.kind === "pdf"))
+          const readsPages = organizeReadsPages(classifier.pageImages, item.source);
+          // As the Library: a PDF without text waits unless the classifier reads its pages.
+          if (item.noText && !readsPages)
             throw new Error("Not organized: no text, and this route can't read page images.");
           let images: DocumentPageImage[] = [];
-          if (
-            classifier.pageImages &&
-            item.doc.kind === "pdf" &&
-            (classifier.pageImages !== "auto" || item.visual)
-          ) {
+          if (readsPages) {
             const rendering = performance.now();
             images = await documentPageImages(item.file, item.doc.sha256, signal);
             prediction.renderMs = Math.round(performance.now() - rendering);
