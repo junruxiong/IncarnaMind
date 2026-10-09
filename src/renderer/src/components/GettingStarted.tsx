@@ -147,14 +147,15 @@ export function GetStartedCard() {
         {steps.map((step, index) => {
           const label = t(`gettingStarted.step.${step.key}`);
           const mark = <StepMark number={index + 1} done={step.done} next={step.key === next} />;
+          // 28px, or taller when a long step wraps (as on the canvas): it isn't cut short.
           const rowClass =
-            "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5";
+            "flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-5";
           return (
             <li key={step.key} data-testid="get-started-step" data-step={step.key}>
               {step.done ? (
                 <span data-done="" className={`${rowClass} text-ink-meta line-through`}>
                   {mark}
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0">
                     <span className="sr-only">{t("gettingStarted.done")}</span>
                     {label}
                   </span>
@@ -166,7 +167,7 @@ export function GetStartedCard() {
                   className={`${rowClass} font-semibold text-ink hover:bg-hover focus-visible:outline-offset-0`}
                 >
                   {mark}
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <span className="min-w-0 flex-1">{label}</span>
                   <ChevronRightLineIcon
                     strokeWidth={2}
                     className="size-3.5 shrink-0 text-ink-meta"
@@ -175,7 +176,7 @@ export function GetStartedCard() {
               ) : (
                 <span className={`${rowClass} text-ink-secondary`}>
                   {mark}
-                  <span className="min-w-0 truncate">{label}</span>
+                  <span className="min-w-0">{label}</span>
                 </span>
               )}
             </li>

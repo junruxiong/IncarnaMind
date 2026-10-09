@@ -389,7 +389,7 @@ export const zhCN = {
   "status.processing.other": "正在处理 {count} 个文档…",
   "status.tagging.one": "正在为 1 个文档打标签…",
   "status.tagging.other": "正在为 {count} 个文档打标签…",
-  "status.taggingWaiting": "自动打标签需要模型",
+  "status.taggingWaiting": "打标签需要模型",
   "status.setUp": "设置",
   "status.downloading": "搜索模型：{downloaded} / {total} MB",
   "status.downloadFailed": "搜索模型下载失败",
@@ -1216,7 +1216,7 @@ export const zhCN = {
   "examples.banner.label": "关于这个示例",
   "examples.banner.title": "这是一个示例 Mind。",
   "examples.banner.body":
-    "你可以像在任何文档里一样在这里写作，就你的文档提问；回答中的每个论断都链接到它出自的那一页。点击绿色的勾即可查看引文。",
+    "你可以像在任何文档里一样在这里写作，就你的文档提问；回答中的每个论断都链接到它出自的那一页。点击勾号即可查看引文，绿色表示找到了这段引文。",
   "examples.banner.addOwn": "添加你的文档或应用",
   "examples.banner.remove": "移除示例",
   "examples.answer": "示例回答，预先写好：无需模型即可试用",
