@@ -24,6 +24,7 @@ export type {
  * This file must stay free of imports with side effects: the preload script and
  * the renderer import it.
  */
+import type { TagColour } from "../shared/tagColours";
 import type { UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
 
@@ -679,6 +680,8 @@ export interface Tag {
   description: string;
   /** Created on first run as one of the preset Tags, rather than by the User. Editing one keeps it a preset. */
   preset: boolean;
+  /** Its colour, from a small fixed palette (src/shared/tagColours.ts); the User can change it. */
+  colour: TagColour;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -690,12 +693,15 @@ export interface CreateTagInput {
   name: string;
   /** Trimmed. Defaults to empty. */
   description?: string;
+  /** Defaults to the colour fewest Tags have. */
+  colour?: TagColour;
 }
 
 /** The fields to change; the others are kept. */
 export interface UpdateTagInput {
   name?: string;
   description?: string;
+  colour?: TagColour;
 }
 
 /**
