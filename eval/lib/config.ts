@@ -44,7 +44,10 @@ export interface EvalConfig {
   keepData: boolean;
   chat: ChatSettings | null;
   cloudEmbedding: CloudEmbeddingSettings | null;
-  /** The built-in reranking candidates whose reranked mode to report (INCARNAMIND_EVAL_RERANK); none by default. */
+  /**
+   * Reranking candidates whose reranked modes to report next to the built-in
+   * one's, which always runs and gates (INCARNAMIND_EVAL_RERANK); none by default.
+   */
   rerank: RerankingModelDefinition[];
   /** Each language needs at least this many Citations for the Citation targets to count. */
   minCitations: number;

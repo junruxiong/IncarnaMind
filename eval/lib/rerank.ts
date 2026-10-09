@@ -18,8 +18,8 @@ import { createRerankingModel, downloadSize } from "../../src/core/reranking/ind
 import type { Log } from "./log";
 import startRerankerWorker from "./rerankerWorker?nodeWorker";
 
-/** A candidate, run on a worker thread so it never blocks the core's thread. */
-function createWorkerCrossEncoder(): CrossEncoder {
+/** A reranking model, run on a worker thread so it never blocks the core's thread. */
+export function createWorkerCrossEncoder(): CrossEncoder {
   return createChannelCrossEncoder(() => {
     const worker = startRerankerWorker({ name: "incarnamind-eval-reranking" });
     worker.on("error", (error) => console.error("The reranking worker failed:", error));
@@ -79,7 +79,9 @@ export async function openReranker(
       if (status.state === "ready") ready.resolve();
       else if (status.state === "failed") {
         ready.reject(
-          new Error(`${definition.name} couldn't be downloaded: ${status.error?.message}`),
+          new Error(
+            `The reranking model ${definition.name} couldn't be downloaded from ${status.host}: ${status.error?.message ?? "unknown error"}. Run once with a connection, and it is kept in ${cacheDir} for later runs.`,
+          ),
         );
       } else if (status.state === "downloading" && Date.now() - lastLogged > 5000) {
         lastLogged = Date.now();

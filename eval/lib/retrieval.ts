@@ -5,18 +5,27 @@
  * the expected pages, and (c) contains the expected quote, matched as the
  * Citation check matches quotes (both normalised by the shared normaliser).
  *
- * Two more measurements, reported only:
- * - Reranked modes: the candidates the search Tool hands a reranker (keyword
- *   search's top 10 and vector search's top 10, each Passage once, built
- *   with the Tool's own `topsOfEach`), reordered by a built-in reranking
- *   candidate (see ./rerank), as the search Tool does with reranking on.
+ * Reranked modes: the candidates the search Tool hands a reranker (keyword
+ * search's top 10 and vector search's top 10, each Passage once, built with
+ * the Tool's own `topsOfEach`), reordered by a reranking model (see
+ * ./rerank), as the search Tool does. The built-in reranking model's is the
+ * gating mode, since the search Tool reranks with it by default; the other
+ * candidates', and the plain search modes, are reported only.
+ *
+ * Also reported:
  * - A translated second query: a cross-lingual Question's own search, and a
  *   second one with the Question translated into its Document's language, as
  *   an Answer is told to search again. A hit in either top 5 counts: the
  *   model sees both searches' Passages. The translation is written by hand,
  *   so this is the most the approach can bring.
  */
-import type { Core, PassageSearchResult, SearchMode } from "../../src/core";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type Core,
+  type PassageSearchResult,
+  type RerankingModelDefinition,
+  type SearchMode,
+} from "../../src/core";
 import { SEARCH_TOOL_PARAMETERS, topsOfEach } from "../../src/core/documents/searchTool";
 import { findQuote } from "../../src/shared/quoteMatch";
 import type { EvalLanguage, EvalQuestion, ExpectedPassage } from "./evaluationSet";
@@ -32,11 +41,24 @@ export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
 
 export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
-/** The gating mode: what the search Tool runs. */
-export const GATING_MODE: SearchMode = "hybrid";
+/** Hybrid search: what the search Tool runs before it reranks, and the second query's search. */
+export const HYBRID: SearchMode = "hybrid";
 
 /** A mode of the report: one of the core's search modes, or hybrid search reranked by a candidate. */
 export type RetrievalMode = SearchMode | `rerank:${string}`;
+
+/** The reranked mode of a reranking model. */
+export const rerankMode = (definition: RerankingModelDefinition): RetrievalMode =>
+  `rerank:${definition.id}`;
+
+/**
+ * The gating mode: what the search Tool runs by default, hybrid search
+ * reranked by the built-in reranking model (#31).
+ */
+export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
+
+/** The gating mode, as people read it. */
+export const GATING_LABEL = `${HYBRID} + ${BUILT_IN_RERANKING_MODEL.name}`;
 
 /** The v1 design's bar: 80% of the gating Questions overall and in each language (32 of 40, and 16 of 20 per language, with today's set). */
 const RETRIEVAL_TARGET = { share: 0.8 } as const;
@@ -167,7 +189,7 @@ function expectedIdOf(question: EvalQuestion, documentIds: ReadonlyMap<string, s
 
 /** Hybrid search's top 20 for a query. */
 const hybridTop = (core: Core, query: string) =>
-  core.searchPassages(query, { mode: GATING_MODE, limit: RANK_DEPTH });
+  core.searchPassages(query, { mode: HYBRID, limit: RANK_DEPTH });
 
 /**
  * What the search Tool hands its reranker for a query: keyword search's top
@@ -234,7 +256,7 @@ export async function runRetrieval(
     if (question.translatedQuery) {
       result.translatedQuery = question.translatedQuery;
       result.translated = {
-        [GATING_MODE]: scoreRanking(
+        [HYBRID]: scoreRanking(
           await hybridTop(core, question.translatedQuery),
           question.expected,
           expectedId,
@@ -337,7 +359,7 @@ const meets = ({ hits, total }: Tally) =>
 
 /** Why the gating mode misses the bar; empty when it passes. */
 export function retrievalFailures(summary: ModeSummary | undefined): string[] {
-  if (!summary) return [`No ${GATING_MODE} results.`];
+  if (!summary) return [`No ${GATING_LABEL} results.`];
   const failures: string[] = [];
   const need = ({ total }: Tally) => Math.ceil(total * RETRIEVAL_TARGET.share);
   for (const [label, count] of [
@@ -347,7 +369,7 @@ export function retrievalFailures(summary: ModeSummary | undefined): string[] {
   ] as const) {
     if (!meets(count)) {
       failures.push(
-        `Retrieval (${GATING_MODE}, built-in model), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
+        `Retrieval (${GATING_LABEL}, the built-in models), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
       );
     }
   }

@@ -36,18 +36,21 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
 
 import { readConfig } from "../../eval/lib/config";
 import { loadEvaluationSet } from "../../eval/lib/evaluationSet";
-import { reviewerSheet } from "../../eval/lib/report";
+import { type EvalReport, reviewerSheet, terminalSummary } from "../../eval/lib/report";
 import {
   candidateCounts,
   checkPassage,
+  GATING_LABEL,
+  GATING_MODE,
   isHit,
   modesOf,
   type QuestionResult,
   rerankCandidates,
+  retrievalFailures,
   scoreRanking,
   summarise,
 } from "../../eval/lib/retrieval";
-import { type Core, RERANKING_MODEL_CANDIDATES } from "../../src/core";
+import { BUILT_IN_RERANKING_MODEL, type Core, RERANKING_MODEL_CANDIDATES } from "../../src/core";
 
 const MARK = "\uE000";
 
@@ -252,6 +255,72 @@ describe("What the reranked modes rerank", () => {
         result(),
       ]),
     ).toEqual({ perList: 10, searches: 3, mean: 16, min: 12, max: 20 });
+  });
+});
+
+describe("The retrieval gate", () => {
+  const tally = (hits: number, total = 20) => ({ hits, total });
+  const summary = (en: number, zh: number) => ({
+    en: tally(en),
+    zh: tally(zh),
+    core: tally(en + zh, 40),
+    crossLingual: tally(2, 10),
+    crossLingualTranslated: tally(7, 10),
+  });
+
+  test("is what the search Tool does by default: hybrid search reranked by the built-in model", () => {
+    expect(GATING_MODE).toBe(`rerank:${BUILT_IN_RERANKING_MODEL.id}`);
+    expect(GATING_LABEL).toBe(`hybrid + ${BUILT_IN_RERANKING_MODEL.name}`);
+    expect(retrievalFailures(summary(16, 20))).toEqual([]);
+    expect(retrievalFailures(summary(13, 19))).toEqual([
+      `Retrieval (hybrid + ${BUILT_IN_RERANKING_MODEL.name}, the built-in models), English: 13 of 20, needs 16.`,
+    ]);
+    expect(retrievalFailures(undefined)).toEqual([
+      `No hybrid + ${BUILT_IN_RERANKING_MODEL.name} results.`,
+    ]);
+  });
+
+  test("the summary marks the gating row, and reports plain hybrid search next to it", () => {
+    const report = {
+      result: "pass",
+      failures: [],
+      run: {
+        startedAt: "2026-10-09T08:00:00.000Z",
+        seconds: 60,
+        commit: "abc1234",
+        node: "v25",
+        platform: "darwin arm64",
+        cpu: "M2",
+      },
+      evaluationSet: {
+        source: "eval/retrieval/questions.json",
+        hitRule: "",
+        questions: { gating: { en: 20, zh: 20 }, crossLingual: 10 },
+      },
+      documents: [],
+      retrieval: {
+        topK: 5,
+        gatingMode: GATING_MODE,
+        runs: [
+          {
+            embedding: "multilingual-e5-small (built-in)",
+            gating: true,
+            passageCount: 1199,
+            processingSeconds: 60,
+            questions: [],
+            summary: { hybrid: summary(13, 19), [GATING_MODE]: summary(16, 20) },
+          },
+        ],
+      },
+      citations: { skipped: "no chat model" },
+    } satisfies EvalReport;
+
+    const lines = terminalSummary(report, "/repo/eval/results/x", "/repo").split("\n");
+
+    expect(lines.find((line) => line.includes("(gating)"))).toContain(
+      `hybrid + ${BUILT_IN_RERANKING_MODEL.name} (gating) English 16/20`,
+    );
+    expect(lines.find((line) => line.trim().startsWith("hybrid "))).toContain("English 13/20");
   });
 });
 
