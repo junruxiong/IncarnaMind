@@ -24,6 +24,7 @@
     "eval": "vitest run --config eval/vitest.config.ts",
     "eval:grouping": "vitest run --config eval/grouping/vitest.config.ts",
     "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
+    "eval:organize": "vitest run --config eval/organize/vitest.config.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
