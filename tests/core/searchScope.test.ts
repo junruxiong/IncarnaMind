@@ -152,6 +152,25 @@ describe("Resolving a Search scope", { timeout: 30_000 }, () => {
     expect(searches).toEqual([ALL]);
   });
 
+  test("an in-app folder scopes by assignment, including files from different source locations", async () => {
+    const { core, client, mind, searches, id } = await setUpLibrary();
+    const folder = await core.createLibraryGroup({
+      name: "Research",
+      description: "Ocean science",
+    });
+    await core.assignDocumentGroup(id("Moon"), folder.id);
+    await core.assignDocumentGroup(id("Harbour"), folder.id);
+    await askScoped(core, client, mind.id, { folderIds: [folder.id] });
+    expect(searches).toEqual([["Harbour", "Moon"]]);
+    await core.assignDocumentGroup(id("Moon"), null);
+    await askScoped(core, client, mind.id, { folderIds: [folder.id] });
+    expect(searches.at(-1)).toEqual(["Harbour"]);
+    await core.deleteLibraryGroup(folder.id);
+    const before = searches.length;
+    await askScoped(core, client, mind.id, { folderIds: [folder.id] });
+    expect(searches).toHaveLength(before);
+  });
+
   test("a Folder covers its Documents and those of its sub-Folders, at any depth", async () => {
     const { core, client, mind, searches, folders } = await setUpLibrary();
 

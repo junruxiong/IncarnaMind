@@ -9,6 +9,7 @@ import type {
   Folder,
   GettingStarted,
   KeptCitationText,
+  LibrarySnapshot,
   LinkedFolder,
   LinkedFolderLayout,
   LinkedFolderPreview,
@@ -28,6 +29,7 @@ export const settingsPages = [
   "general",
   "chat-model",
   "search",
+  "organization",
   "connectors",
   "skills",
   "approvals",
@@ -113,6 +115,12 @@ interface AppState {
   /** The Documents with that Tag, by id, as the core last listed them. Null until listed. */
   filteredDocumentIds: ReadonlySet<string> | null;
   tagsDialogOpen: boolean;
+  libraryOpen: boolean;
+  library: LibrarySnapshot | null;
+  libraryFilter: string;
+  refreshLibrary(): Promise<void>;
+  openLibrary(filter?: string): void;
+  closeLibrary(): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The example Mind and its Documents (onboarding). Null until loaded. */
@@ -280,6 +288,7 @@ export const selectVisibleDocuments = (state: AppState): Document[] => {
 };
 
 export const useAppStore = create<AppState>()((set, get) => {
+  let libraryRequest = 0;
   /** Runs an action, reporting a failure instead of throwing. */
   const attempt = async (action: () => Promise<void>) => {
     try {
@@ -411,6 +420,25 @@ export const useAppStore = create<AppState>()((set, get) => {
     tagFilter: null,
     filteredDocumentIds: null,
     tagsDialogOpen: false,
+    libraryOpen: false,
+    library: null,
+    libraryFilter: "all",
+    refreshLibrary: async () => {
+      const ticket = ++libraryRequest;
+      const library = await core.getLibrary();
+      if (ticket === libraryRequest)
+        set({
+          library,
+          ...(get().libraryFilter !== "all" &&
+          get().libraryFilter !== "unsorted" &&
+          get().libraryFilter !== "new" &&
+          !library.groups.some((g) => g.id === get().libraryFilter)
+            ? { libraryFilter: "all" }
+            : {}),
+        });
+    },
+    openLibrary: (filter = "all") => set({ libraryOpen: true, libraryFilter: filter }),
+    closeLibrary: () => set({ libraryOpen: false }),
     skills: [],
     examples: null,
     questionToStart: null,
@@ -469,6 +497,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           examples,
           status: { kind: "ready" },
         });
+        await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
         set({ status: { kind: "failed", message: messageOf(error) } });
@@ -478,6 +507,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     createMind: (options) =>
       attempt(async () => {
         const mind = await core.createMind();
+        set({ libraryOpen: false });
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
@@ -532,6 +562,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     openMind(id, options) {
+      set({ libraryOpen: false });
       const { tabs, openMindId } = get();
       if (tabs.includes(id)) {
         setTabs({ tabs: [...tabs], openMindId: id });
@@ -967,4 +998,11 @@ core.on("documents.tagged", (tagged) => {
     documents: tagged.reduce((documents, item) => upsert(documents, item), state.documents),
   }));
   if (useAppStore.getState().tagFilter !== null) void refreshFilter();
+});
+
+core.on("library.changed", () => {
+  void useAppStore
+    .getState()
+    .refreshLibrary()
+    .catch((error) => useAppStore.getState().reportError(error));
 });

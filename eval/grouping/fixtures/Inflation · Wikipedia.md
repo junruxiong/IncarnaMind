@@ -1,0 +1,35 @@
+# Inflation
+
+In economics, inflation is an increase in the average price of goods and services in terms of money, though it originally referred to the increase of the money supply (monetary inflation) that can cause such a universal shift. This increase is measured using a price index, typically a consumer price index (CPI). When the general price level rises, each unit of currency buys fewer goods and services; consequently, inflation corresponds to a reduction in the purchasing power of money. The opposite of inflation is deflation, a decrease in the general price level of goods and services. The common measure of inflation is the inflation rate, the annualized percentage change in a general price index.
+
+Changes in inflation are widely attributed to increases in the money supply, fluctuations in real demand for goods and services (also known as demand shocks, including changes in fiscal or monetary policy), changes in available supplies such as during energy crises (also known as supply shocks), significant decreases in interest rates set by the central bank, or changes in inflation expectations, which may be self-fulfilling. 
+
+Moderate inflation affects economies in both positive and negative ways. The negative effects would include an increase in the opportunity cost of holding money; incentivizing workers to switch jobs unnecessarily, making labor markets appear tight while average real wages fall; forcing workers into risky wage negotiations to keep pace, as purchasing power erodes between contracts; uncertainty over future inflation, which may discourage investment and savings; and, if inflation were rapid enough, shortages of goods as consumers begin hoarding out of concern that prices will increase in the future. Positive effects include reducing unemployment due to nominal wage rigidity,allowing the central bank greater freedom in carrying out monetary policy, encouraging loans and investment instead of money hoarding, and avoiding the inefficiencies associated with deflation.
+
+Today, most economists favour a low and steady rate of inflation. Low (as opposed to zero or negative) inflation reduces the likelihood of economic recessions by enabling the labor market to adjust more quickly and reduces the risk that a liquidity trap prevents monetary policy from stabilizing the economy, while also avoiding the costs associated with high inflation. The task of keeping the rate of inflation low and stable is usually given to central banks that control monetary policy, normally through the setting of interest rates and by carrying out open market operations.
+
+## Terminology
+
+The term originates from the Latin inflare (to blow into or inflate). Conceptually, inflation refers to the general trend of prices, not changes in any specific price. For example, if people choose to buy more cucumbers than tomatoes, cucumbers consequently become more expensive and tomatoes less expensive. These changes are not related to inflation; they reflect a shift in tastes. Inflation is related to the value of currency itself. When currency was linked with gold, if new gold deposits were found, the price of gold and the value of currency would fall, and consequently, the prices of all other goods would become higher.
+
+### Classical economics
+
+By the nineteenth century, economists categorised three separate factors that cause a rise or fall in the price of goods: a change in the value or production costs of the good, a change in the price of money which then was usually a fluctuation in the commodity price of the metallic content in the currency, and currency depreciation resulting from an increased supply of currency relative to the quantity of redeemable metal backing the currency. Following the proliferation of private banknote currency printed during the American Civil War, the term "inflation" started to appear as a direct reference to the currency depreciation that occurred as the quantity of redeemable banknotes outstripped the quantity of metal available for their redemption. At that time, the term inflation referred to the devaluation of the currency, and not to a rise in the price of goods. This relationship between the over-supply of banknotes and a resulting depreciation in their value was noted by earlier classical economists such as David Hume and David Ricardo, who would go on to examine and debate what effect a currency devaluation has on the price of goods.
+
+### Related concepts
+
+Other economic concepts related to inflation include: deflation – a fall in the general price level; disinflation – a decrease in the rate of inflation; hyperinflation – an out-of-control inflationary spiral; stagflation – a combination of inflation, slow economic growth and high unemployment; reflation – an attempt to raise the general level of prices to counteract deflationary pressures; asset price inflation – a general rise in the prices of financial assets without a corresponding increase in the prices of goods or services; and agflation – an advanced increase in the price for food and industrial agricultural crops when compared with the general rise in prices.
+
+More specific forms of inflation refer to sectors whose prices vary semi-independently from the general trend. "House price inflation" applies to changes in the house price index while "energy inflation" is dominated by the costs of oil and gas.
+
+## History
+
+### Overview
+
+Inflation has been a feature of history during the entire period when money has been used as a means of payment. One of the earliest documented inflations occurred in Alexander the Great's empire 330 BC. Historically, when commodity money was used, periods of inflation and deflation would alternate depending on the condition of the economy. However, when large, prolonged infusions of gold or silver into an economy occurred, this could lead to long periods of inflation.
+
+The adoption of fiat currency by many countries, from the 18th century onwards, made much larger variations in the supply of money possible. Rapid increases in the money supply have taken place a number of times in countries experiencing political crises, producing hyperinflations – episodes of extreme inflation rates much higher than those observed in earlier periods of commodity money. The hyperinflation in the Weimar Republic of Germany is a notable example. The hyperinflation in Venezuela is the highest in the world, with an annual inflation rate of 833,997% as of October 2018.
+
+Historically, inflations of varying magnitudes have occurred, interspersed with corresponding deflationary periods, from the price revolution of the 16th century, which was driven by the flood of gold and particularly silver seized and mined by the Spaniards in Latin America, to the largest paper money inflation of all time in Hungary after World War II.
+
+However, since the 1980s, inflation has been held low and stable in countries with independent central banks. This has led to a moderation of the business cycle and a reduction in variation in most macroeconomic indicators – an event known as the Great Moderation.

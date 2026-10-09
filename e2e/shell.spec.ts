@@ -473,6 +473,7 @@ test("first run and every Settings page", async () => {
     "general",
     "chat-model",
     "search",
+    "organization",
     "connectors",
     "skills",
     "approvals",

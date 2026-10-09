@@ -122,7 +122,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
  */
 function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
   const t = useT();
-  const isOpen = useAppStore((state) => state.openMindId === mind.id);
+  const isOpen = useAppStore((state) => state.openMindId === mind.id && !state.libraryOpen);
   const openMind = useAppStore((state) => state.openMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
   const isExample = useIsExample(mind.id);

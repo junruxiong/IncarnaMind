@@ -224,9 +224,10 @@ function ScopeChips({
 }) {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
+  const groups = useAppStore((state) => state.library?.groups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  const chips = scopeChips({ folders, tags, documents }, scope);
+  const chips = scopeChips({ folders, groups, tags, documents }, scope);
   return (
     <div contentEditable={false} data-testid="question-scope" className="question-scope">
       <span className="question-scope-label">{t("scope.label")}</span>
