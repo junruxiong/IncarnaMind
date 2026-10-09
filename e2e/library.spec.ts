@@ -73,9 +73,9 @@ test("folders, tags, search, edits and removal update the index while originals 
         }),
       )
       .toBe(true);
-    await row.getByRole("menuitemcheckbox", { name: "Report", exact: true }).click();
+    await row.getByRole("option", { name: "Report", exact: true }).click();
     await window.keyboard.press("Escape");
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Report");
+    await expect(row.getByTestId("document-tags")).toContainText("Report");
     await folders.getByRole("button", { name: /^Client work/ }).click();
     await expect(library.getByRole("heading", { name: "Client work", exact: true })).toBeVisible();
     await library.getByRole("button", { name: "Edit folder" }).click();
@@ -95,7 +95,7 @@ test("folders, tags, search, edits and removal update the index while originals 
     await library.getByRole("button", { name: "Delete folder", exact: true }).click();
     await library.getByRole("button", { name: "Delete folder", exact: true }).last().click();
     await expect(assignment).toHaveValue("");
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Report");
+    await expect(row.getByTestId("document-tags")).toContainText("Report");
     expect(await readFile(path, "utf8")).toBe(text);
     await window.setViewportSize({ width: 1000, height: 760 });
     await window.screenshot({ path: "/tmp/incarnamind-organize-manual.png" });
@@ -140,20 +140,20 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     await library.getByRole("button", { name: "Organize", exact: true }).click();
     const row = library.getByTestId("library-document");
     await expect(row.locator("summary")).toHaveText("Organized");
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Report");
-    const assignment = row.getByRole("combobox");
+    await expect(row.getByTestId("document-tags")).toContainText("Report");
+    const assignment = row.getByRole("combobox", { name: /^Folder for/ });
     await expect(assignment.locator("option:checked")).toHaveText("Research");
     await expect(library.getByLabel("Model name", { exact: true })).toHaveCount(0);
     await row.getByTestId("document-tags-menu").click();
-    await row.getByRole("menuitemcheckbox", { name: "Report", exact: true }).click();
-    await row.getByRole("menuitemcheckbox", { name: "Invoice", exact: true }).click();
+    await row.getByRole("option", { name: "Report", exact: true }).click();
+    await row.getByRole("option", { name: "Invoice", exact: true }).click();
     await window.keyboard.press("Escape");
     await assignment.selectOption("");
     await library.getByRole("button", { name: "Organize", exact: true }).click();
     await expect(row.locator("summary")).toHaveText("Your choice");
     await expect(assignment).toHaveValue("");
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Invoice");
-    await expect(row.getByTestId("document-tags-menu")).not.toContainText("Report");
+    await expect(row.getByTestId("document-tags")).toContainText("Invoice");
+    await expect(row.getByTestId("document-tags")).not.toContainText("Report");
     await library.getByRole("button", { name: "Manage tags" }).click();
     const dialog = window.getByTestId("tags-dialog");
     await dialog.getByTestId("tag-name-input").fill("Membrane");
@@ -161,7 +161,7 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     await dialog.getByTestId("save-tag").click();
     await dialog.getByRole("button", { name: "Done" }).click();
     await library.getByRole("button", { name: "Organize", exact: true }).click();
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Membrane");
+    await expect(row.getByTestId("document-tags")).toContainText("Membrane");
     await library.getByLabel("Find by name or tag").fill("Membrane");
     await expect(row).toHaveCount(1);
     await window.screenshot({ path: "/tmp/incarnamind-organize-tags.png" });
@@ -172,8 +172,8 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
   try {
     await reopened.window.getByTestId("open-library").click();
     const row = reopened.window.getByTestId("library-document");
-    await expect(row.getByRole("combobox")).toHaveValue("");
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Membrane");
+    await expect(row.getByRole("combobox", { name: /^Folder for/ })).toHaveValue("");
+    await expect(row.getByTestId("document-tags")).toContainText("Membrane");
     const settings = await organizationSettings(reopened.window);
     await expect(settings.getByLabel("Model name", { exact: true })).toHaveValue(
       "small-classifier",
@@ -383,7 +383,7 @@ test("organized folders remain separate from source locations and follow changes
     const row = library
       .getByTestId("library-document")
       .filter({ has: window.getByRole("button", { name: "Membrane separation", exact: true }) });
-    await row.getByRole("combobox").selectOption({ label: "Finance" });
+    await row.getByRole("combobox", { name: /^Folder for/ }).selectOption({ label: "Finance" });
     await window.getByRole("button", { name: "Source locations", exact: true }).click();
     await expect(window.getByTestId("folder-item")).toHaveCount(1);
     await window.getByRole("button", { name: "Folders", exact: true }).click();
@@ -391,10 +391,12 @@ test("organized folders remain separate from source locations and follow changes
     const path = join(sources, "Membrane separation.txt");
     const revised = "Research report: membrane invoice for laboratory services. Total GBP 250.";
     await writeFile(path, revised);
-    await expect(row.getByTestId("document-tags-menu")).toContainText("Invoice", {
+    await expect(row.getByTestId("document-tags")).toContainText("Invoice", {
       timeout: 15_000,
     });
-    await expect(row.getByRole("combobox").locator("option:checked")).toHaveText("Finance");
+    await expect(
+      row.getByRole("combobox", { name: /^Folder for/ }).locator("option:checked"),
+    ).toHaveText("Finance");
     expect(await readFile(path, "utf8")).toBe(revised);
     await expect(window.getByTestId("sidebar-status")).not.toContainText("Tags need a model");
     await window.setViewportSize({ width: 1000, height: 760 });

@@ -11,13 +11,16 @@ import {
   type FilterSelection,
   filterLibrary,
   isFiltering,
+  type LibraryFacet,
+  tagFacet,
   toggleFilterValue,
 } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
-import { selectVisibleDocuments, useAppStore } from "../store";
-import { ActiveTagFilter, DocumentTagMenu } from "./DocumentTags";
+import { useAppStore } from "../store";
 import { LibraryFilterBar } from "./LibraryFilterBar";
+import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
+import { DocumentTagChips } from "./TagChips";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
@@ -26,15 +29,25 @@ type Action = (work: () => Promise<unknown>) => Promise<boolean>;
 export function LibraryPane() {
   const t = useT();
   const language = useLanguage();
-  const documents = useAppStore(useShallow(selectVisibleDocuments));
+  // Every Document: the Tags filter below is the sidebar's, and counts its options from all.
+  const documents = useAppStore((state) => state.documents);
   const hasDocuments = useAppStore((state) => state.documents.length > 0);
   const snapshot = useAppStore((state) => state.library);
   const filter = useAppStore((state) => state.libraryFilter);
   const tags = useAppStore((state) => state.tags);
-  const tagFiltering = useAppStore((state) => state.tagFilter !== null);
+  const tagFilter = useAppStore(useShallow((state) => state.tagFilter));
   const [search, setSearch] = useState("");
   /** The year, format and status filters' choices (see `LibraryFilterBar`). */
   const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
+  /** The filters, the Tags one last; its choice is the store's Tag filter, shared with the sidebar. */
+  const facets = useMemo<LibraryFacet<Document>[]>(
+    () => [...documentFacets, tagFacet(tags)],
+    [tags],
+  );
+  const selection = useMemo<FilterSelection>(
+    () => (tagFilter.length ? { ...facetFilter, tag: tagFilter } : facetFilter),
+    [facetFilter, tagFilter],
+  );
   const [limit, setLimit] = useState(100);
   const [editing, setEditing] = useState<LibraryGroup | "new" | null>(null);
   const [starters, setStarters] = useState(false);
@@ -82,18 +95,18 @@ export function LibraryPane() {
     });
   }, [documents, snapshot, tags, filter, search]);
   const { shown, options } = useMemo(
-    () => filterLibrary<Document>(inView, documentFacets, facetFilter),
-    [inView, facetFilter],
+    () => filterLibrary<Document>(inView, facets, selection),
+    [inView, facets, selection],
   );
   const shownIds = useMemo(() => shown.map((doc) => doc.id), [shown]);
-  const filtering = isFiltering(facetFilter);
+  const filtering = isFiltering(selection);
   const view: LibraryView = selected
     ? { kind: "folder", id: selected.id, name: selected.name }
     : filter === "unsorted"
       ? { kind: "unsorted", name: t("library.unsorted") }
       : { kind: "all", name: t("library.all") };
   // With anything narrowing the list, a Question from here searches exactly what it shows.
-  const bridge = bridgeFrom(view, shownIds, filtering || search.trim() !== "" || tagFiltering);
+  const bridge = bridgeFrom(view, shownIds, filtering || search.trim() !== "");
   const pending =
     snapshot?.assignments.filter(
       (item) => item.status === "pending" || item.status === "classifying",
@@ -270,18 +283,19 @@ export function LibraryPane() {
               {t("documents.add")}
             </button>
           </div>
-          <ActiveTagFilter />
           {(inView.length > 0 || filtering) && (
             <LibraryFilterBar
-              facets={documentFacets}
+              facets={facets}
               options={options}
-              selection={facetFilter}
+              selection={selection}
               onToggle={(facetId, value) => {
-                setFacetFilter((current) => toggleFilterValue(current, facetId, value));
+                if (facetId === "tag") useAppStore.getState().toggleTagFilter(value);
+                else setFacetFilter((current) => toggleFilterValue(current, facetId, value));
                 setLimit(100);
               }}
               onClear={() => {
                 setFacetFilter({});
+                useAppStore.getState().setTagFilter([]);
                 setLimit(100);
               }}
             />
@@ -319,6 +333,7 @@ export function LibraryPane() {
             </p>
           ) : (
             <>
+              <LibrarySelectionBar shownIds={shownIds} />
               <div
                 aria-hidden="true"
                 className="library-columns library-column-labels border-y border-rule py-2 text-label font-semibold text-ink-meta"
@@ -330,10 +345,6 @@ export function LibraryPane() {
               <ul>
                 {shown.slice(0, limit).map((doc) => {
                   const item = assignments.get(doc.id);
-                  const labels = doc.tags.flatMap((link) => {
-                    const tag = tags.find((tag) => tag.id === link.tagId);
-                    return tag ? [{ ...tag, needsReview: link.needsReview }] : [];
-                  });
                   const status =
                     item?.status === "classifying" || item?.status === "pending"
                       ? "library.working"
@@ -349,8 +360,9 @@ export function LibraryPane() {
                       key={doc.id}
                       data-testid="library-document"
                       data-document-id={doc.id}
-                      className="library-columns border-b border-rule py-3"
+                      className="group/row library-columns relative border-b border-rule py-3"
                     >
+                      <LibrarySelectBox document={doc} shownIds={shownIds} />
                       <div className="library-document-name min-w-0">
                         <button
                           type="button"
@@ -407,25 +419,7 @@ export function LibraryPane() {
                           </option>
                         ))}
                       </select>
-                      <DocumentTagMenu
-                        item={doc}
-                        buttonClassName="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-sm text-left text-[12px] text-ink-secondary hover:bg-frame focus-visible:outline-offset-0"
-                      >
-                        {labels.length ? (
-                          labels.map((tag) => (
-                            <span
-                              key={tag.id}
-                              className="max-w-full truncate rounded-sm bg-chip px-2 py-0.5"
-                              title={tag.needsReview ? t("jev.chip.needsReview") : tag.description}
-                            >
-                              {tag.name}
-                              {tag.needsReview ? " · ?" : ""}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="px-2 text-ink-meta">{t("library.addTags")}</span>
-                        )}
-                      </DocumentTagMenu>
+                      <DocumentTagChips document={doc} />
                     </li>
                   );
                 })}

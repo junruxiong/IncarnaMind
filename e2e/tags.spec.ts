@@ -44,12 +44,12 @@ test("a new Document is tagged automatically, and a Tag the User removes stays r
   await expect(tags).toHaveText(["Report"]);
   await expect(tags).toHaveAttribute("data-source", "automatic");
 
-  // The User takes it off, and adds another, in the same menu.
-  await item.getByRole("menuitemcheckbox", { name: "Report", exact: true }).click();
+  // The User takes it off, and adds another, in the same picker.
+  await item.getByRole("option", { name: "Report", exact: true }).click();
   await expect(tags).toHaveCount(0);
-  const invoice = item.getByRole("menuitemcheckbox", { name: "Invoice", exact: true });
+  const invoice = item.getByRole("option", { name: "Invoice", exact: true });
   await invoice.click();
-  await expect(invoice).toHaveAttribute("aria-checked", "true");
+  await expect(invoice).toHaveAttribute("aria-selected", "true");
   await expect(tags).toHaveText(["Invoice"]);
   await expect(tags).toHaveAttribute("data-source", "user");
   await window.keyboard.press("Escape");
@@ -77,20 +77,24 @@ test("a new Document is tagged automatically, and a Tag the User removes stays r
   await expect(tags).toHaveText(["Invoice", "Quarterly"]);
   await window.keyboard.press("Escape");
 
-  // The sidebar filters by Tag, and says which; choosing it again shows them all.
+  // The sidebar filters by Tags, showing Documents with any chosen, and says which;
+  // choosing one again takes it out.
   await filterByTag(window, "Report");
   await expect(item).toHaveCount(0);
   await expect(window.getByTestId("tag-filter-active")).toContainText("Report");
   await filterByTag(window, "Quarterly");
   await expect(item).toHaveCount(1);
-  await expect(window.getByTestId("tag-filter-active")).toContainText("Quarterly");
+  await expect(window.getByTestId("tag-filter-active")).toContainText("Report, Quarterly");
+  await filterByTag(window, "Report");
+  await expect(window.getByTestId("tag-filter-active")).toHaveText("Tagged Quarterly");
+  await expect(item).toHaveCount(1);
   await filterByTag(window, "Quarterly");
   await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
   await window.getByTestId("tag-filter-menu").click();
   await expect(
     window
       .getByTestId("tag-filters")
-      .getByRole("menuitemradio", { name: "Quarterly", exact: true }),
+      .getByRole("menuitemcheckbox", { name: "Quarterly", exact: true }),
   ).toHaveAttribute("aria-checked", "false");
   await window.keyboard.press("Escape");
   await expect(item).toHaveCount(1);
@@ -203,7 +207,8 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   );
   expect(firstFrame.top).toBeCloseTo(box.y, 0);
   expect(firstFrame.bottom).toBeCloseTo(box.y + box.height, 0);
-  await expect(menu.getByTestId("tag-menu-item").first()).toBeFocused();
+  // The picker takes the focus into its field, ready to type a Tag.
+  await expect(menu.getByTestId("tag-picker-input")).toBeFocused();
 
   // Esc closes the menu, and leaves the Document viewer open.
   await window.keyboard.press("Escape");

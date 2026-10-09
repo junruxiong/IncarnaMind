@@ -3,6 +3,7 @@ import {
   type ChatModelChoice,
   type DeviceSettings,
   type GettingStarted,
+  type SandboxLevel,
   type Settings,
   SKILL_SCRIPT_LIMITS,
   type UserSettings,
@@ -168,15 +169,18 @@ function write(db: Database, table: string, key: string, value: unknown, at: str
 
 export type SettingsStore = ReturnType<typeof createSettings>;
 
+/** `scriptSandbox`: the level of the Executor Skill scripts run on (`Settings.scriptSandbox`). */
 export function createSettings(
   db: Database,
   now: () => string,
   systemLanguages: () => readonly string[],
+  scriptSandbox: SandboxLevel,
 ) {
   const get = (): Settings => {
     const user = read(db, userScope);
     const device = read(db, deviceScope);
-    return { user, device, language: resolveLanguage(user.language, systemLanguages()) };
+    const language = resolveLanguage(user.language, systemLanguages());
+    return { user, device, language, scriptSandbox };
   };
 
   return {
