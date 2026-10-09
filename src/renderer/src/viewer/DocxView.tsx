@@ -2,9 +2,19 @@ import { renderAsync } from "docx-preview";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { type DocxResult, extractDocx } from "../../../core/documents/formats/docx";
+import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
+import {
+  type DocxComment,
+  fixSymbols,
+  NOTE_GAP,
+  NOTE_WIDTH,
+  placeComments,
+  takeComments,
+} from "./docxPages";
 import { markQuote, textNodes, unmarkQuote } from "./domQuote";
 import { FileStates } from "./FileStates";
+import "./officeFonts.css";
 import { CitationMark, quoteMarkOf, quoteTone } from "./quoteMark";
 import { OutlineButton, type OutlineEntry, UnitOutline } from "./UnitOutline";
 import { useDocumentFile } from "./useDocumentFile";
@@ -30,12 +40,14 @@ interface Loaded {
 
 /**
  * The zoom that fits the drawn pages to the width there is beside the
- * outline, if it is open, never larger than they are.
+ * outline, if it is open, never larger than they are; with the comments'
+ * margin beside them, if they have comments, as Word shows it.
  */
-function fitZoom(outer: HTMLElement | null, body: HTMLElement): number {
+function fitZoom(outer: HTMLElement | null, body: HTMLElement, notes: boolean): number {
   const page = body.querySelector<HTMLElement>(`section.${CLASS_NAME}`);
   if (!outer || !page || page.offsetWidth === 0) return 1;
-  return Math.min(1, Math.max(0.05, (outer.clientWidth - 2 * PADDING) / page.offsetWidth));
+  const width = page.offsetWidth + (notes ? NOTE_GAP + NOTE_WIDTH : 0);
+  return Math.min(1, Math.max(0.05, (outer.clientWidth - 2 * PADDING) / width));
 }
 
 const read = async (bytes: Uint8Array): Promise<Loaded> => ({
@@ -83,9 +95,12 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
   const [marks, setMarks] = useState<HTMLElement[]>([]);
   const [place, setPlace] = useState<MarkPlace | null>(null);
   const mark = useMemo(() => quoteMarkOf(target.citation), [target.citation]);
+  const comments = useRef<DocxComment[]>([]);
+  const t = useT();
   const { docx } = loaded;
 
   // Draw the pages once.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: drawn again only for new bytes
   useEffect(() => {
     const body = host.current;
     const style = styles.current;
@@ -97,10 +112,16 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
       breakPages: true,
       ignoreLastRenderedPageBreak: false,
       experimental: true,
+      // Everything Word puts on its pages: headers, footers, footnotes and endnotes.
+      renderHeaders: true,
+      renderFooters: true,
+      renderFootnotes: true,
+      renderEndnotes: true,
       // Images and fonts as data: URLs: the app's policy allows those, not blob: ones.
       useBase64URL: true,
       renderChanges: false,
-      renderComments: false,
+      // Comments become notes in the margin (takeComments); their text stays highlighted.
+      renderComments: true,
       renderAltChunks: false,
       trimXmlDeclaration: true,
     }).then(
@@ -113,8 +134,13 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
             link.rel = "noreferrer";
           } else link.removeAttribute("href");
         }
+        fixSymbols(style, body);
+        comments.current = takeComments(body, CLASS_NAME, (author) =>
+          t("viewer.docx.comment", { author }),
+        );
+        body.classList.toggle("docx-view--notes", comments.current.length > 0);
         // Fitted before anything is placed or scrolled to.
-        setZoom(fitZoom(scroller.current, body));
+        setZoom(fitZoom(scroller.current, body, comments.current.length > 0));
         setRendered("yes");
       },
       (error: unknown) => {
@@ -125,10 +151,20 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     );
     return () => {
       cancelled = true;
+      comments.current = [];
       body.replaceChildren();
       style.replaceChildren();
+      // docx-preview names the comments' highlight for the whole page.
+      globalThis.CSS?.highlights?.delete(`${CLASS_NAME}-comments`);
     };
   }, [loaded.bytes]);
+
+  // The comments' notes, beside the pages, placed again as the pages zoom.
+  useLayoutEffect(() => {
+    const wrapper = host.current?.querySelector<HTMLElement>(`.${CLASS_NAME}-wrapper`);
+    if (!wrapper || rendered !== "yes" || comments.current.length === 0) return;
+    placeComments(wrapper, comments.current, zoom);
+  }, [rendered, zoom]);
 
   /** The heading elements docx-preview drew, in order: those with text, as the outline lists them. */
   const headingElements = useCallback((): HTMLElement[] => {
@@ -145,7 +181,9 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     const outer = scroller.current;
     const body = host.current;
     if (!outer || !body || rendered !== "yes") return;
-    const observer = new ResizeObserver(() => setZoom(fitZoom(outer, body)));
+    const observer = new ResizeObserver(() =>
+      setZoom(fitZoom(outer, body, comments.current.length > 0)),
+    );
     observer.observe(outer);
     return () => observer.disconnect();
   }, [rendered]);
