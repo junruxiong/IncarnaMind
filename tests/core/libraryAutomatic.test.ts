@@ -237,7 +237,7 @@ describe("automatic local classification", () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir);
     const group = await core.createLibraryGroup({ name: "Research", description: "Papers" });
-    server.garble({ answers: { group: { type: "choice", choice: group.id } } });
+    server.chooseGroup(group.id);
     const dir = await createTempDataFolder();
     const files = [
       await writeSourceFile(dir, "scan.pdf", buildPdf([{ image: true }])),

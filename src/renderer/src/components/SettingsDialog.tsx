@@ -8,6 +8,7 @@ import { type SettingsPage, settingsPages, useAppStore } from "../store";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
+import { OrganizationSettings } from "./OrganizationSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
@@ -37,6 +38,7 @@ const pageLabels: Record<SettingsPage, MessageKey> = {
   general: "privacy.tabs.general",
   "chat-model": "providers.settings.title",
   search: "embeddingProviders.settings.title",
+  organization: "library.settingsTitle",
   connectors: "connectors.settings.title",
   skills: "skills.settings.title",
   approvals: "approvals.settings.title",
@@ -163,6 +165,8 @@ function PageContent({ page }: { page: SettingsPage }) {
           <RerankSettingsSection />
         </Page>
       );
+    case "organization":
+      return <OrganizationSettings />;
     case "connectors":
       return (
         <Page>

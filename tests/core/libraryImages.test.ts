@@ -124,7 +124,7 @@ describe("Library PDF page images", () => {
       name: "Diagrams",
       description: "Illustrated diagrams",
     });
-    server.garble({ answers: { group: { type: "choice", choice: group.id } } });
+    server.chooseGroup(group.id);
     await core.saveLibrarySettings({
       classifier: {
         kind: "ollama",
@@ -155,7 +155,7 @@ describe("Library PDF page images", () => {
     const server = await startFakeJev({ apiKey: "ollama" });
     const core = startCore(await createTempDataFolder());
     await core.createLibraryGroup({ name: "Research", description: "Papers" });
-    server.garble({ answers: { group: { type: "choice", choice: "__unsorted__" } } });
+    server.chooseGroup("__unsorted__");
     const classifier = {
       kind: "ollama" as const,
       baseUrl: server.url,
@@ -188,7 +188,7 @@ describe("Library PDF page images", () => {
 
   test("Tev1 and hosted connections never receive images even if supplied to the classifier", async () => {
     const server = await startFakeJev({ apiKey: "test" });
-    server.garble({ answers: { group: { type: "choice", choice: "__unsorted__" } } });
+    server.chooseGroup("__unsorted__");
     for (const connection of [
       { model: "tev1:0.8b", local: true },
       { model: "clef-flash", local: false },
@@ -211,7 +211,7 @@ describe("Library PDF page images", () => {
 
   test("a saved local Jev connection stays text-only even when its model is Clef", async () => {
     const server = await startFakeJev({ apiKey: "test" });
-    server.garble({ answers: { group: { type: "choice", choice: "__unsorted__" } } });
+    server.chooseGroup("__unsorted__");
     const core = startCore(await createTempDataFolder());
     await core.createLibraryGroup({ name: "Research", description: "Papers" });
     const [doc] = await addAndProcess(core, [

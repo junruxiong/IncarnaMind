@@ -386,11 +386,17 @@ function fakeStructuredOutput(options: GenerateOptions): string {
         : "";
     const input = JSON.parse(text) as {
       groups: { id: string; name: string }[];
+      tags?: { id: string; name: string }[];
       document: { name: string; text: string };
     };
     const document = `${input.document.name} ${input.document.text}`.toLowerCase();
     const selected = input.groups.find((group) => document.includes(group.name.toLowerCase()));
-    return JSON.stringify({ groupId: selected?.id ?? "__unsorted__" });
+    return JSON.stringify({
+      groupId: selected?.id ?? "__unsorted__",
+      tags: (input.tags ?? [])
+        .filter((tag) => document.includes(tag.name.toLowerCase()))
+        .map((tag) => tag.id),
+    });
   }
   return JSON.stringify({ tags: fakeTags(options.prompt, offeredTags(options)) });
 }

@@ -16,7 +16,7 @@ import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
 import { isChatModelChoice, type SettingsStore } from "../settings";
 import type { Database } from "../storage";
-import { sameName } from "../tags";
+import { sameName, type TagsStore } from "../tags";
 import { excerptFromPassages } from "../tags/classify";
 import type { GroupClassifier } from "./classifier";
 import type { DocumentPageImage } from "./pdfImages";
@@ -58,6 +58,8 @@ export function createLibrary(options: {
   settings: SettingsStore;
   background: BackgroundQueue;
   changed(): void;
+  tags: TagsStore;
+  tagged(ids: string[]): void;
   prepare(settings: LibrarySettings): Promise<GroupClassifier>;
   providerExists(id: string): boolean;
   pageImages(id: string, contentHash: string, signal: AbortSignal): Promise<DocumentPageImage[]>;
@@ -120,11 +122,26 @@ export function createLibrary(options: {
       ),
       doc.page_count,
     );
+  const tagState = (id: string, status: ClassificationStatus, error?: ProviderError) => {
+    const tagging = {
+      pending: "pending",
+      classifying: "tagging",
+      classified: "tagged",
+      waiting: "waiting-for-provider",
+      failed: "failed",
+    }[status];
+    db.run(
+      "UPDATE documents SET tagging_status = ?, tagging_error_kind = ?, tagging_error_message = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+      [tagging, error?.kind ?? null, error?.message ?? null, now(), id],
+    );
+  };
   const state = (id: string, status: ClassificationStatus, error?: ProviderError) => {
     db.run(
-      "UPDATE document_groups SET status = ?, error_kind = ?, error_message = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL AND source = 'automatic'",
+      "UPDATE document_groups SET status = ?, error_kind = ?, error_message = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
       [status, error?.kind ?? null, error?.message ?? null, now(), id],
     );
+    tagState(id, status, error);
+    options.tagged([id]);
     changed();
   };
   const write = (
@@ -170,20 +187,18 @@ export function createLibrary(options: {
   };
 
   function enqueue(id: string): void {
-    if (
-      lifetime.signal.aborted ||
-      queued.has(id) ||
-      !getSettings().classifier ||
-      groups().length === 0
-    )
+    if (lifetime.signal.aborted || queued.has(id)) return;
+    if (!getSettings().classifier || groups().length === 0) {
+      if (assignment(id)?.status === "pending") state(id, "waiting");
       return;
+    }
     let doc: DocumentRow;
     try {
       doc = document(id);
     } catch {
       return;
     }
-    if (!hasContent(doc) || assignment(id)?.source !== "automatic") return;
+    if (!hasContent(doc) || !assignment(id)) return;
     queued.add(id);
     background.add({
       kind: "classification",
@@ -194,16 +209,16 @@ export function createLibrary(options: {
           lifetime.signal.aborted ||
           call.signal.aborted ||
           version !== revision ||
-          assignment(id)?.request_id !== initial?.request_id ||
-          assignment(id)?.source === "user";
+          assignment(id)?.request_id !== initial?.request_id;
         try {
-          if (!initial || initial.source === "user" || initial.status === "classified") return;
+          if (!initial || initial.status === "classified") return;
           const current = document(id);
           if (!hasContent(current)) {
             state(id, "waiting");
             return;
           }
           const definitions = groups();
+          const tagDefinitions = options.tags.list();
           if (!getSettings().classifier || definitions.length === 0) {
             state(id, "waiting");
             return;
@@ -224,8 +239,9 @@ export function createLibrary(options: {
               ? await options.pageImages(id, current.content_hash ?? "", signal)
               : [];
           if (stale()) return;
-          const groupId = await classifier.decide(
+          const result = await classifier.organize(
             definitions,
+            tagDefinitions,
             {
               name: current.name,
               kind: current.kind,
@@ -241,17 +257,28 @@ export function createLibrary(options: {
             state(id, "pending");
             return;
           }
+          // Definition changes make the complete result stale, including tags.
+          if (JSON.stringify(tagDefinitions) !== JSON.stringify(options.tags.list())) {
+            state(id, "pending");
+            return;
+          }
+          const { groupId } = result;
           if (groupId !== null && !definitions.some((item) => item.id === groupId))
             throw new Error("The classifier returned an unknown group.");
-          write(
-            latest,
-            groupId,
-            "automatic",
-            "classified",
-            classifier.model
-              ? { ...classifier.model, images: images.length > 0 && classifier.model.images }
-              : null,
-          );
+          db.transaction(() => {
+            write(
+              latest,
+              initial.source === "user" ? initial.group_id : groupId,
+              initial.source,
+              "classified",
+              classifier.model
+                ? { ...classifier.model, images: images.length > 0 && classifier.model.images }
+                : null,
+            );
+            options.tags.applyAutomatic(id, result.tags);
+            tagState(id, "classified");
+          });
+          options.tagged([id]);
           changed();
         } catch (error) {
           if (!stale()) {
@@ -278,7 +305,7 @@ export function createLibrary(options: {
   function resume(): void {
     if (lifetime.signal.aborted) return;
     const waiting = db.all<{ document_id: string }>(
-      "SELECT g.document_id FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL AND g.source = 'automatic' AND g.status IN ('pending', 'waiting')",
+      "SELECT g.document_id FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL AND g.status IN ('pending', 'waiting')",
     );
     // Existing batches run text first, then PDFs needing images, avoiding model churn.
     const ordered =
@@ -306,7 +333,7 @@ export function createLibrary(options: {
 
   function parseGroup(input: unknown, exceptId?: string) {
     if (!isRecord(input) || typeof input.name !== "string" || typeof input.description !== "string")
-      throw new InvalidInputError("Enter a group name and description.");
+      throw new InvalidInputError("Enter a folder name and description.");
     const name = input.name.trim();
     const description = input.description.trim();
     if (!name || name.length > 100 || description.length > 500)
@@ -314,14 +341,22 @@ export function createLibrary(options: {
         "Use a name of 1–100 characters and a description of at most 500 characters.",
       );
     if (groups().some((item) => item.id !== exceptId && sameName(item.name, name)))
-      throw new InvalidInputError("A group with this name already exists.");
+      throw new InvalidInputError("A folder with this name already exists.");
     if (!exceptId && groups().length >= 100)
-      throw new InvalidInputError("The Library supports up to 100 groups.");
+      throw new InvalidInputError("The Library supports up to 100 folders.");
     return { name, description };
   }
 
   return {
     settings: getSettings,
+    documentIds(folderId: string): string[] {
+      return db
+        .all<{ document_id: string }>(
+          "SELECT a.document_id FROM document_groups a JOIN library_groups g ON g.id = a.group_id JOIN documents d ON d.id = a.document_id WHERE g.id = ? AND g.deleted_at IS NULL AND a.deleted_at IS NULL AND d.deleted_at IS NULL",
+          [folderId],
+        )
+        .map((row) => row.document_id);
+    },
     snapshot(): LibrarySnapshot {
       const assignments: DocumentGroupAssignment[] = db
         .all<AssignmentRow>(
@@ -426,7 +461,7 @@ export function createLibrary(options: {
       settings.writeDeviceValue("library", { classifier: selected, automatic: input.automatic });
       if (selected === null) {
         db.run(
-          "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE source = 'automatic' AND status IN ('pending', 'classifying') AND deleted_at IS NULL",
+          "UPDATE document_groups SET status = 'waiting', updated_at = ? WHERE status IN ('pending', 'classifying') AND deleted_at IS NULL",
           [now()],
         );
       }
@@ -437,7 +472,7 @@ export function createLibrary(options: {
     classify(input: unknown) {
       if (!getSettings().classifier)
         throw new InvalidInputError("Choose a classification model first.");
-      if (groups().length === 0) throw new InvalidInputError("Create or choose groups first.");
+      if (groups().length === 0) throw new InvalidInputError("Create or choose folders first.");
       if (
         input !== undefined &&
         (!Array.isArray(input) || !input.every((id) => typeof id === "string" && id !== ""))
@@ -453,15 +488,16 @@ export function createLibrary(options: {
       db.transaction(() => {
         for (const doc of docs) {
           const existing = assignment(doc.id);
-          if (existing?.source === "user") continue;
           write(
             doc,
             existing?.group_id ?? null,
-            "automatic",
+            existing?.source ?? "automatic",
             hasContent(doc) ? "pending" : "waiting",
           );
+          tagState(doc.id, hasContent(doc) ? "pending" : "waiting");
         }
       });
+      options.tagged(docs.map((doc) => doc.id));
       changed();
       resume();
     },
@@ -469,19 +505,25 @@ export function createLibrary(options: {
       const doc = document(id);
       if (groupId !== null) group(groupId);
       write(doc, groupId as string | null, "user", "classified");
+      // A manual correction cancels an in-flight suggestion, including its busy indicator.
+      db.run(
+        "UPDATE documents SET tagging_status = 'waiting-for-provider' WHERE id = ? AND tagging_status IN ('pending', 'tagging')",
+        [doc.id],
+      );
+      options.tagged([doc.id]);
       changed();
     },
     documentChanged(id: string) {
       if (lifetime.signal.aborted) return;
       const doc = document(id);
       const existing = assignment(id);
-      if (existing?.source === "user" || !hasContent(doc)) return;
+      if (!hasContent(doc)) return;
       if (
         getSettings().automatic &&
         groups().length > 0 &&
         (!existing || existing.content_hash !== doc.content_hash)
       ) {
-        write(doc, existing?.group_id ?? null, "automatic", "pending");
+        write(doc, existing?.group_id ?? null, existing?.source ?? "automatic", "pending");
         changed();
       }
       const status = assignment(id)?.status;

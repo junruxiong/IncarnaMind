@@ -8,6 +8,7 @@ import { startFakeJev } from "../helpers/jev";
 function classifierModel() {
   const calls: string[] = [];
   let chosen: string | undefined;
+  let selectedTags: string[] = [];
   let gate: Promise<void> | null = null;
   let release = () => {};
   const model = new MockLanguageModelV4({
@@ -20,8 +21,9 @@ function classifierModel() {
       if (group) {
         calls.push(JSON.stringify(options.prompt));
         const choice = chosen ?? group.enum[0];
+        const tagIds = selectedTags;
         if (gate) await gate;
-        text = JSON.stringify({ groupId: choice });
+        text = JSON.stringify({ groupId: choice, tags: tagIds });
       }
       return {
         content: [{ type: "text", text }],
@@ -37,6 +39,9 @@ function classifierModel() {
   return {
     model,
     calls,
+    tag: (ids: string[]) => {
+      selectedTags = ids;
+    },
     choose: (id: string) => {
       chosen = id;
     },
@@ -147,7 +152,85 @@ describe("Library groups", () => {
       source: "user",
       groupId: null,
     });
-    expect(fake.calls).toHaveLength(1);
+    await settled(core, doc.id);
+    expect(fake.calls).toHaveLength(2);
+  });
+
+  test("Organize saves folder and tags together, respects manual tags, and uses no other tagger", async () => {
+    const { core, fake, group, specs } = await setup();
+    const relevant = await core.createTag({ name: "Membrane", description: "Membrane science" });
+    const manual = await core.createTag({ name: "My project", description: "My own label" });
+    const doc = await add(core);
+    fake.tag([relevant.id]);
+    await core.addDocumentTag(doc.id, manual.id);
+    await core.classifyDocuments([doc.id]);
+    await settled(core, doc.id);
+    expect((await core.listDocuments())[0]?.tags.map((t) => t.tagId).sort()).toEqual(
+      [relevant.id, manual.id].sort(),
+    );
+    expect((await core.getLibrary()).assignments[0]?.groupId).toBe(group.id);
+    expect(specs).not.toContain("main-model");
+    await core.removeDocumentTag(doc.id, relevant.id);
+    await core.assignDocumentGroup(doc.id, null);
+    await core.retagDocuments([doc.id]);
+    await settled(core, doc.id);
+    expect((await core.listDocuments())[0]?.tags.map((t) => t.tagId)).toEqual([manual.id]);
+    expect((await core.getLibrary()).assignments[0]).toMatchObject({
+      groupId: null,
+      source: "user",
+    });
+  });
+
+  test("manual organization never invokes the old chat tagger", async () => {
+    const { core, fake, specs } = await setup();
+    await core.saveLibrarySettings({ classifier: null, automatic: false });
+    const doc = await add(core);
+    await expect(core.retagDocuments([doc.id])).rejects.toThrow(/model first/);
+    expect(fake.calls).toHaveLength(0);
+    expect(specs).toHaveLength(0);
+  });
+
+  test("removing the last folder during inference stops progress until a folder exists", async () => {
+    const { core, fake, group } = await setup();
+    const doc = await add(core);
+    fake.hold();
+    await core.classifyDocuments([doc.id]);
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(1));
+    await core.deleteLibraryGroup(group.id);
+    fake.release();
+    await settled(core, doc.id, "waiting");
+    expect((await core.listDocuments())[0]?.tagging).toBe("waiting-for-provider");
+    const replacement = await core.createLibraryGroup({
+      name: "Papers",
+      description: "Scientific papers",
+    });
+    expect(await settled(core, doc.id)).toMatchObject({ groupId: replacement.id });
+  });
+
+  test("editing tags during inference reruns the complete organization decision", async () => {
+    const { core, fake } = await setup();
+    const doc = await add(core);
+    fake.hold();
+    await core.classifyDocuments([doc.id]);
+    await vi.waitFor(() => expect(fake.calls).toHaveLength(1));
+    const tag = await core.createTag({
+      name: "New topic",
+      description: "A new classification criterion",
+    });
+    fake.tag([tag.id]);
+    fake.release();
+    await settled(core, doc.id);
+    expect(fake.calls).toHaveLength(2);
+    expect((await core.listDocuments())[0]?.tags.map((t) => t.tagId)).toContain(tag.id);
+  });
+
+  test("unknown tag output fails without saving a partial folder assignment", async () => {
+    const { core, fake } = await setup();
+    const doc = await add(core);
+    fake.tag(["invented-tag"]);
+    await core.classifyDocuments([doc.id]);
+    expect(await settled(core, doc.id, "failed")).toMatchObject({ groupId: null });
+    expect((await core.listDocuments())[0]?.tags).toEqual([]);
   });
 
   test("changing definitions during a request discards its result and runs with the new description", async () => {
@@ -270,7 +353,7 @@ describe("Library groups", () => {
     const request = await requested;
     expect(request.flow).toMatchObject({
       id: "classification",
-      sends: ["groups", "document-excerpts"],
+      sends: ["groups", "tags", "document-excerpts"],
     });
     expect(fake.calls).toHaveLength(0);
     await core.respondToConsent(request.requestId, false);
@@ -328,7 +411,7 @@ describe("Library groups", () => {
       name: "Membranes",
       description: "膜分离与水处理研究",
     });
-    server.garble({ answers: { group: { type: "choice", choice: group.id } } });
+    server.chooseGroup(group.id);
     await core.saveLibrarySettings({
       classifier: { kind: "ollama", baseUrl: server.url, modelId: "tev1:4b" },
       automatic: false,

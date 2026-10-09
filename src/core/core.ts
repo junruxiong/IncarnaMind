@@ -490,6 +490,7 @@ export function createCore(adapters: CoreAdapters): Core {
     resolveScope: (scope) =>
       resolveSearchScope(scope, {
         folderTree: (folderId) => folders.subtree(folderId),
+        organizedFolderDocuments: (folderId) => library.documentIds(folderId),
         documentIds: (filter) => documents.ids(filter),
       }),
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
@@ -528,10 +529,16 @@ export function createCore(adapters: CoreAdapters): Core {
     const live = documents.getMany(documentIds);
     if (live.length > 0) events.emit("documents.tagged", live);
   };
+  // Existing installations keep the legacy tagger until organization is configured.
+  // Once folders are in use, only the selected organizer may suggest tags.
+  const organizationConfigured = () =>
+    !!settings.readDeviceValue("library") ||
+    !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
   const tagger = createTagger({
     db,
     now,
     tags,
+    enabled: () => !organizationConfigured(),
     canRun: async () =>
       jev.enabled() ? jev.canRun() : (await chat.readiness(undefined, "tagging")).ready,
     mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
@@ -548,6 +555,8 @@ export function createCore(adapters: CoreAdapters): Core {
   const automaticClassifiers = new Map<string, ReturnType<typeof automaticGroupClassifier>>();
   const library = createLibrary({
     db,
+    tags,
+    tagged: announceTagged,
     now,
     settings,
     background,
@@ -601,7 +610,7 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   consent.registry.register({
     id: "classification",
-    sends: ["groups", "document-excerpts"],
+    sends: ["groups", "tags", "document-excerpts"],
     async services() {
       const selected = library.settings().classifier;
       if (selected?.kind === "jev") {
@@ -1000,7 +1009,10 @@ export function createCore(adapters: CoreAdapters): Core {
       events.emit("documents.tagged", [updated]);
       return updated;
     },
-    retagDocuments: async (documentIds) => tagger.retag(documentIds),
+    retagDocuments: async (documentIds) => {
+      if (organizationConfigured()) return library.classify(documentIds);
+      tagger.retag(documentIds);
+    },
 
     getJevSettings: () => jev.status(),
     saveJevSettings: async (input) => {

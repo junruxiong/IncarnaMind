@@ -1,10 +1,18 @@
-import type { Document, DocumentKind, Folder, SearchScope, Tag } from "../../core/api";
+import type {
+  Document,
+  DocumentKind,
+  Folder,
+  LibraryGroup,
+  SearchScope,
+  Tag,
+} from "../../core/api";
 import { SCOPE_KINDS, type ScopeKind, scopeIds } from "../../shared/searchScope";
 import { buildFolderTree, flattenFolderTree } from "./folders";
 
 /** The Folders, Tags and Documents a Search scope can name, as the app store holds them. */
 export interface ScopeLibrary {
   folders: readonly Folder[];
+  groups?: readonly LibraryGroup[];
   tags: readonly Tag[];
   documents: readonly Document[];
 }
@@ -16,6 +24,7 @@ export interface ScopeChoice {
   name: string;
   /** A Folder's parent Folders' names, outermost first: where it is. Empty otherwise. */
   path: string[];
+  sourceLocation?: boolean;
   /** A Document's kind, for its icon. */
   documentKind: DocumentKind | null;
 }
@@ -48,12 +57,22 @@ function everything(library: ScopeLibrary): ScopeChoice[] {
     return path;
   };
   return [
+    ...(library.groups ?? []).map(
+      (group): ScopeChoice => ({
+        kind: "folder",
+        id: group.id,
+        name: group.name,
+        path: [],
+        documentKind: null,
+      }),
+    ),
     ...flattenFolderTree(buildFolderTree(library.folders)).map(
       ({ folder }): ScopeChoice => ({
         kind: "folder",
         id: folder.id,
         name: folder.name,
         path: pathOf(folder),
+        sourceLocation: (library.groups?.length ?? 0) > 0,
         documentKind: null,
       }),
     ),
@@ -110,7 +129,9 @@ export function scopeChoices(
 
 /** A Question's Search scope as chips, Folders first, then Tags, then Documents, each in the order chosen. */
 export function scopeChips(library: ScopeLibrary, scope: SearchScope): ScopeChip[] {
-  const folders = new Map(library.folders.map((folder) => [folder.id, folder]));
+  const folders = new Map(
+    [...library.folders, ...(library.groups ?? [])].map((folder) => [folder.id, folder]),
+  );
   const tags = new Map(library.tags.map((tag) => [tag.id, tag]));
   const documents = new Map(library.documents.map((document) => [document.id, document]));
   return [

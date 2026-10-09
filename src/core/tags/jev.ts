@@ -287,6 +287,7 @@ export function createJevTagging(options: {
         local: service === null,
         // Page images are an explicit Library Ollama setting, not part of the Jev connection.
         usePageImages: false,
+        reviewBand: jev.reviewBand,
       });
     },
 

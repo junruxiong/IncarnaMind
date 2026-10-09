@@ -32,6 +32,9 @@ export function automaticGroupClassifier(
     local: true,
     pageImages: "auto",
     async decide(groups, excerpt, signal, images = []) {
+      return (await this.organize(groups, [], excerpt, signal, images)).groupId;
+    },
+    async organize(groups, tags, excerpt, signal, images = []) {
       signal.throwIfAborted();
       const status = await detectOllama(baseUrl);
       signal.throwIfAborted();
@@ -92,8 +95,9 @@ export function automaticGroupClassifier(
           model,
           local: true,
           usePageImages: visual,
-        }).decide(
+        }).organize(
           groups,
+          tags,
           excerpt,
           model === TEXT ? AbortSignal.any([signal, deadline]) : signal,
           images,

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Document, DocumentTag, Tag } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -24,20 +25,24 @@ function tagTitle(link: DocumentTag, tag: Tag, t: ReturnType<typeof useT>): stri
 export function DocumentTagMenu({
   item,
   buttonClassName,
+  children,
 }: {
   item: Document;
   buttonClassName: string;
+  children?: ReactNode;
 }) {
   const t = useT();
   const tags = useAppStore((state) => state.tags);
   const addDocumentTag = useAppStore((state) => state.addDocumentTag);
   const removeDocumentTag = useAppStore((state) => state.removeDocumentTag);
+  const library = useAppStore((state) => state.library);
+  const organizing = !!library?.groups.length || !!library?.settings.classifier;
   const retagDocuments = useAppStore((state) => state.retagDocuments);
   const openTagsDialog = useAppStore((state) => state.openTagsDialog);
   const menu = usePopoverMenu();
   const links = new Map(item.tags.map((link) => [link.tagId, link]));
   const taggingLine =
-    item.status !== "ready"
+    item.status !== "ready" || organizing
       ? null
       : item.tagging === "pending"
         ? t("tags.state.pending")
@@ -57,7 +62,7 @@ export function DocumentTagMenu({
         title={t("tags.menu.open", { name: item.name })}
         className={buttonClassName}
       >
-        <TagLineIcon className="size-[15px]" />
+        {children ?? <TagLineIcon className="size-[15px]" />}
       </button>
       <div
         {...menu.menuProps}
@@ -136,11 +141,13 @@ export function DocumentTagMenu({
                 data-testid="retag-document"
                 onClick={() => {
                   menu.close();
-                  void retagDocuments([item.id]);
+                  if (organizing && !library?.settings.classifier)
+                    useAppStore.getState().openSettings("organization");
+                  else void retagDocuments([item.id]);
                 }}
                 className={`${menuItemClass} pl-[30px]`}
               >
-                {t("tags.menu.retag")}
+                {t(organizing ? "library.classify" : "tags.menu.retag")}
               </button>
             )}
             <button

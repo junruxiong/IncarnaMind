@@ -69,22 +69,25 @@ Where in a Document a Citation points, in the unit the Document's own readers us
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
-A folder inside a Linked folder, as it is on disk. A Document is in the Folder its file is in; a file added on its own is in no Folder.
-_Avoid_: collection, directory, category
+A named place for Documents inside IncarnaMind, with a description of what belongs there. Each Document belongs to one Folder or is Unsorted; this does not change where its original file is stored.
+_Avoid_: group, collection, category
+
+**Source location**:
+The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.
 
 **Tag**:
 A label with a short description that a Document can carry. A Document can have many Tags. IncarnaMind applies Tags automatically, and the User can add or remove them.
 _Avoid_: category, label, class
 
 **Topic**:
-The earlier design for a generated two-level subject tree. The current Library uses flat Groups instead (direction revised 2026-10-08).
+The earlier design for a generated two-level subject tree. The current Library uses flat Folders instead (direction revised 2026-10-08).
 _Avoid_: cluster, category, collection, group
 
 **Group**:
-A user-defined place for Documents in the Library, with a name and description. Users can choose starter Groups or create their own. A Document has one primary Group or is Unsorted. An optional connected classifier suggests its Group from extracted text and, with local Clef-Flash, selected PDF page images; manual assignments take precedence and are saved.
+The former name for an in-app Folder. Users now see Folders throughout document organisation.
 
 **Library**:
-The view of all of a User's Documents, organised into Groups, with Unsorted Documents shown separately. Users can search document names, manage Groups and correct assignments. Organisation never moves or renames files on disk.
+The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.
 _Avoid_: archive, index, vault
 
 ### Tools
