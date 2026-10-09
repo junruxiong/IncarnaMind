@@ -163,7 +163,9 @@ export function createCore(adapters: CoreAdapters): Core {
     events.emit("mind.update", { mindId, update });
     if (minds.markEdited(mindId)) mindsChanged();
   });
-  const settings = createSettings(db, now, adapters.systemLanguages);
+  // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
+  const scriptSandbox = adapters.executor?.level ?? "none";
+  const settings = createSettings(db, now, adapters.systemLanguages, scriptSandbox);
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
   const tags = createTags(db, now);
