@@ -409,7 +409,7 @@ export function LibraryPane() {
                       </select>
                       <DocumentTagMenu
                         item={doc}
-                        buttonClassName="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-sm text-left text-[12px] text-ink-secondary outline-none hover:bg-frame focus-visible:outline-2 focus-visible:outline-accent"
+                        buttonClassName="flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-sm text-left text-[12px] text-ink-secondary hover:bg-frame focus-visible:outline-offset-0"
                       >
                         {labels.length ? (
                           labels.map((tag) => (

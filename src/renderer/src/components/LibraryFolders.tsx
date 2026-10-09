@@ -51,7 +51,7 @@ export function LibraryFolders({
                     name: folder.name,
                   })}
                   aria-expanded={!folded}
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-meta hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-ink-meta hover:text-ink focus-visible:outline-offset-0"
                   onClick={() =>
                     setCollapsed((previous) => {
                       const next = new Set(previous);
