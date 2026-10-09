@@ -91,7 +91,8 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     title: "IncarnaMind",
-    backgroundColor: "#e5e7eb",
+    // The sheet (DESIGN.md), the window's main surface, behind the page while it resizes.
+    backgroundColor: "#ffffff",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -159,6 +160,9 @@ function showStartupError(error: unknown): void {
 
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
+  // The window's page starts loading while the core starts. Its calls reach the core once
+  // `exposeCore` has run, below: they wait until this synchronous run is done.
+  createWindow();
   try {
     core = createCore({
       ...createElectronAdapters(logger),
@@ -178,7 +182,6 @@ app.whenReady().then(async () => {
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   installMenuInLanguage(core);
-  createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);
 

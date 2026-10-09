@@ -27,10 +27,9 @@
  * - a dynamic registration says it is a native app.
  */
 import { randomBytes } from "node:crypto";
-import {
-  auth,
-  type OAuthClientProvider,
-  type OAuthDiscoveryState,
+import type {
+  OAuthClientProvider,
+  OAuthDiscoveryState,
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
   AuthorizationServerMetadata,
@@ -504,7 +503,8 @@ export function createConnectorAuth(options: ConnectorAuthOptions) {
       const stored = tokenRecord;
       if (!hasTokens(stored) || !stored.tokens.refresh_token || stored.expiresAt === null) return;
       if (stored.expiresAt - now() > REFRESH_WINDOW_MS) return;
-      refreshing ??= auth(provider(null), { serverUrl: options.url, fetchFn: fetch })
+      refreshing ??= import("./sdk")
+        .then(({ auth }) => auth(provider(null), { serverUrl: options.url, fetchFn: fetch }))
         .then(() => undefined)
         .finally(() => {
           refreshing = null;
