@@ -513,6 +513,7 @@ export const zhCN = {
   "tags.chip.filter": "只显示带“{tag}”标签的文档",
   "tags.chip.unfilter": "取消按“{tag}”筛选",
   "tags.chip.more": "另有 {count} 个：{names}",
+  "tags.marks": "标签：{names}",
   "tags.chip.reviewTitle": "{tag}：自动添加，但不太确定。确认即可保留，也可以移除。",
   "tags.review.confirm": "确认“{tag}”",
   "tags.review.reject": "移除“{tag}”",

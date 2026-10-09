@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { Document } from "../../src/core/api";
 import {
   documentFacets,
+  documentsByTag,
   documentYear,
   type FilterSelection,
   filterLibrary,
@@ -260,5 +261,26 @@ describe("the Tags filter", () => {
     ]);
     expect(matchesTags({ tags: [] }, [])).toBe(true);
     expect(matchesTags({ tags: [] }, ["t-report"])).toBe(false);
+  });
+
+  test("lists each Tag's Documents, and Needs review's, in one pass, in their order", () => {
+    const byTag = documentsByTag(tagged);
+    expect([...byTag.keys()].sort()).toEqual([NEEDS_REVIEW, "t-invoice", "t-report"].sort());
+    expect(byTag.get("t-report")).toEqual([tagged[0], tagged[1]]);
+    expect(byTag.get("t-invoice")).toEqual([tagged[0]]);
+    expect(byTag.get(NEEDS_REVIEW)).toEqual([tagged[0]]);
+    // A Tag no Document has isn't there; the sidebar shows it with 0.
+    expect(byTag.has("t-unused")).toBe(false);
+  });
+
+  test("lists 2,000 Documents' Tags quickly", () => {
+    const many = Array.from({ length: 2_000 }, (_, index) => ({
+      tags: [link(`t-${index % 7}`), link(`t-${(index + 3) % 7}`, index % 50 === 0)],
+    }));
+    const started = performance.now();
+    const byTag = documentsByTag(many);
+    expect(performance.now() - started).toBeLessThan(50);
+    expect(byTag.get("t-0")).toHaveLength(572);
+    expect(byTag.get(NEEDS_REVIEW)).toHaveLength(40);
   });
 });

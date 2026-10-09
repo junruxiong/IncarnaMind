@@ -543,6 +543,7 @@ export const en = {
   "tags.chip.filter": "Show only Documents tagged {tag}",
   "tags.chip.unfilter": "Stop filtering by {tag}",
   "tags.chip.more": "{count} more: {names}",
+  "tags.marks": "Tags: {names}",
   "tags.chip.reviewTitle":
     "{tag}: added automatically, not sure. Confirm to keep it, or remove it.",
   "tags.review.confirm": "Confirm {tag}",
