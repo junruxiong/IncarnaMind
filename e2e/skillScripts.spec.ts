@@ -50,6 +50,17 @@ async function importSkill(window: Page, folder: string): Promise<void> {
   }, folder);
 }
 
+/**
+ * How scripts run in this app: "os" in the OS sandbox (macOS; Linux with
+ * bubblewrap), "none" elsewhere. The cards and Settings say what they can reach by it.
+ */
+async function scriptSandbox(window: Page): Promise<string> {
+  return window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.getSettings()).scriptSandbox;
+  });
+}
+
 /** Writes a Question on a new line of the Mind and asks it. */
 async function ask(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+j");
@@ -78,7 +89,17 @@ test("a Skill script asks first with an approval card: Allow once runs it, and t
   await expect(card.getByTestId("approval-script-skill")).toHaveText("greeter");
   await expect(card.getByTestId("approval-script-path")).toHaveText("scripts/hello.js");
   await expect(card.getByTestId("approval-argument")).toHaveText(["Dover"]);
-  await expect(card.getByTestId("approval-no-sandbox")).toContainText("no sandbox");
+  // What the script can reach, as it runs here: in the OS sandbox on macOS (and Linux with
+  // bubblewrap), with no sandbox elsewhere.
+  const sandbox = await scriptSandbox(window);
+  if (process.platform === "darwin") expect(sandbox).toBe("os");
+  const reach = card.getByTestId("approval-sandbox");
+  await expect(reach).toHaveAttribute("data-sandbox", sandbox);
+  await expect(reach).toContainText(
+    sandbox === "os"
+      ? "This script runs in a sandbox: it can't open your home folder or IncarnaMind's data"
+      : "no sandbox",
+  );
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer.getByTestId("answer-writing")).toHaveText("Waiting for your approval");
 
@@ -117,7 +138,12 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await card.getByTestId("approval-always-run").click();
   const warning = card.getByTestId("always-run-warning");
   await expect(warning).toContainText("Always run the scripts of greeter?");
-  await expect(warning).toContainText("Scripts aren't sandboxed");
+  const sandboxed = (await scriptSandbox(window)) === "os";
+  await expect(warning).toContainText(
+    sandboxed
+      ? "Scripts run in a sandbox: they can't open your home folder"
+      : "Scripts aren't sandboxed",
+  );
   await warning.getByTestId("always-run-cancel").click();
   await expect(warning).toHaveCount(0);
   await expect(card.getByTestId("approval-allow-once")).toBeVisible();
@@ -148,6 +174,9 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   const toggle = scripts.getByTestId("skill-scripts-enabled");
   await expect(toggle).toBeChecked();
   await expect(scripts.getByTestId("skill-scripts-timeout")).toHaveValue("60");
+  await expect(scripts.getByTestId("skill-scripts-sandbox")).toContainText(
+    sandboxed ? "Scripts run on this computer in a sandbox" : "with no sandbox",
+  );
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();
   await closeSettings(window);

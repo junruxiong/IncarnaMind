@@ -24,6 +24,7 @@
     "eval": "vitest run --config eval/vitest.config.ts",
     "eval:grouping": "vitest run --config eval/grouping/vitest.config.ts",
     "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
+    "eval:organize": "vitest run --config eval/organize/vitest.config.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
@@ -34,6 +35,7 @@
     "@ai-sdk/openai": "4.0.85",
     "@ai-sdk/openai-compatible": "3.0.64",
     "@ai-sdk/voyage": "2.0.55",
+    "@anthropic-ai/sandbox-runtime": "0.0.79",
     "@floating-ui/dom": "1.8.0",
     "@huggingface/tokenizers": "0.2.0",
     "@modelcontextprotocol/sdk": "1.32.1",
@@ -70,6 +72,7 @@
     "react-dom": "19.3.0",
     "y-protocols": "1.0.7",
     "yjs": "13.6.33",
+    "zod": "4.6.5",
     "zustand": "5.0.15"
   },
   "devDependencies": {

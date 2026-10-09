@@ -96,10 +96,8 @@ function ChatSetup() {
           {t("providers.setup.later")}
         </button>
         <div className="ml-auto flex items-center gap-2">
-          {/* With Ollama running, local models are one click away, though nothing is chosen. */}
-          {(choice === "ollama" || (choice === null && ollama.status?.running)) && (
-            <OllamaAction ollama={ollama} large />
-          )}
+          {/* The button says what was chosen: none is until the User picks a row. */}
+          {choice === "ollama" && <OllamaAction ollama={ollama} large />}
           {choice === "chatgpt" && (
             <button
               type="button"

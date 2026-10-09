@@ -165,12 +165,14 @@ export function SkillsSettings() {
 
 /**
  * Settings → Skill scripts: the switch that lets Skills run their scripts at
- * all (each run still asks, unless the Skill's scripts always run), and how
- * long a script may run before it is stopped. Both belong to this device.
+ * all (each run still asks, unless the Skill's scripts always run), with
+ * what a script can reach here (`Settings.scriptSandbox`), and how long a
+ * script may run before it is stopped. Both belong to this device.
  */
 export function SkillScriptsSettings() {
   const t = useT();
   const enabled = useAppStore((state) => state.settings?.device.skillScriptsEnabled);
+  const sandboxed = useAppStore((state) => state.settings?.scriptSandbox === "os");
   const timeout = useAppStore((state) => state.settings?.device.skillScriptTimeoutSeconds);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const [draft, setDraft] = useState<string | null>(null);
@@ -197,8 +199,13 @@ export function SkillScriptsSettings() {
             <label htmlFor={enabledId} className={rowTitleClass}>
               {t("scripts.settings.enabled")}
             </label>
-            <p id={`${enabledId}-description`} className={rowTextClass}>
-              {t("scripts.settings.body")}
+            <p
+              id={`${enabledId}-description`}
+              data-testid="skill-scripts-sandbox"
+              data-sandbox={sandboxed ? "os" : "none"}
+              className={rowTextClass}
+            >
+              {t(sandboxed ? "scripts.settings.bodySandboxed" : "scripts.settings.body")}
             </p>
           </div>
           <input
@@ -237,7 +244,7 @@ export function SkillScriptsSettings() {
               onKeyDown={(event) => {
                 if (event.key === "Enter") commit();
               }}
-              className="h-8 w-20 rounded-sm border border-rule-strong bg-sheet px-2 text-ui text-ink outline-none focus:border-accent focus:outline-1 focus:outline-accent disabled:opacity-60"
+              className="h-8 w-20 rounded-sm border border-rule-strong bg-sheet px-2 text-ui text-ink focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60"
             />
             {t("scripts.settings.seconds")}
           </span>
