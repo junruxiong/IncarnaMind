@@ -130,6 +130,28 @@ describe("The login-shell environment", () => {
     expect(await count()).toBe(1);
   });
 
+  test("variables it is told to leave out are left out of what it inherits, not of a process's own", async () => {
+    const processes = createProcessLauncher(async () => ({
+      PATH: process.env.PATH ?? "",
+      GITHUB_TOKEN: "inherited",
+      KEPT: "inherited",
+    }));
+    const print =
+      "process.stdout.write(JSON.stringify([process.env.GITHUB_TOKEN, process.env.KEPT, process.env.OWN_TOKEN]))";
+
+    const child = await processes.spawn(process.execPath, ["-e", print], {
+      env: { OWN_TOKEN: "own" },
+      omitEnv: (name) => name.endsWith("TOKEN"),
+    });
+    let output = "";
+    child.stdout?.on("data", (chunk) => {
+      output += chunk;
+    });
+    await new Promise((resolve) => child.on("close", resolve));
+
+    expect(JSON.parse(output)).toEqual([null, "inherited", "own"]);
+  });
+
   test("a command that isn't on its PATH is refused with ENOENT", async () => {
     const empty = await createTempDataFolder();
     const processes = createProcessLauncher(async () => ({ PATH: empty }));

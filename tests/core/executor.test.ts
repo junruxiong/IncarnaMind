@@ -4,28 +4,32 @@
  * (tests/core/skillScripts.test.ts), run against the Executor directly:
  * a new temporary working folder, removed afterwards; a timeout and a stop
  * that end every process the program started; output caps; a missing
- * command. Today's only Executor is the local one at level "none"; a later
- * "os" one runs this same contract.
+ * command; no variables that look like secrets. It runs against the local
+ * Executor at level "none", and the OS sandbox's at "os" (#65) where it can
+ * start; what only the sandbox does is in tests/main/sandbox.test.ts.
  */
 import { existsSync } from "node:fs";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
-import type { ExecRequest, Executor, ProcessLauncher } from "../../src/core";
+import type { ExecAllow, ExecRequest, Executor, ProcessLauncher } from "../../src/core";
 import { createLocalExecutor, declaredAccess, WORKING_FOLDER } from "../../src/core/execution";
 import { createProcessLauncher } from "../../src/main/processes";
+import { loadOsSandbox } from "../../src/main/sandbox";
 import { isRunning } from "../helpers/connectors";
 import { createTempDataFolder } from "../helpers/core";
 
-/** Starts processes with PATH, HOME and the temporary folders of the test process only. */
-function smallEnvironment(extra: Record<string, string> = {}): ProcessLauncher {
+type Environment = Record<string, string>;
+
+/** PATH, HOME and the temporary folders of the test process only, plus `extra`. */
+function smallEnvironment(extra: Environment = {}): Environment {
   const keep = ["PATH", "Path", "HOME", "USERPROFILE", "TMPDIR", "TEMP", "TMP", "SystemRoot"];
-  const env: Record<string, string> = {};
+  const env: Environment = {};
   for (const name of keep) {
     const value = process.env[name];
     if (value !== undefined) env[name] = value;
   }
-  return createProcessLauncher(async () => ({ ...env, ...extra }));
+  return { ...env, ...extra };
 }
 
 /** Node.js running `code`, with `args` after it: `process.argv[1]` is the first. */
@@ -92,7 +96,7 @@ function request(
   return {
     ...program,
     env: {},
-    allow: { read: [WORKING_FOLDER], write: [WORKING_FOLDER], network: "any" },
+    allow: { read: [WORKING_FOLDER], write: [WORKING_FOLDER], network: "none" },
     timeoutMs: 10_000,
     maxOutputBytes: 20_000,
     signal: new AbortController().signal,
@@ -100,26 +104,42 @@ function request(
   };
 }
 
+/** What a program that also writes into `folder` (a case's own record of what ran) is allowed. */
+const writingTo = (folder: string): ExecAllow => ({
+  read: [WORKING_FOLDER, folder],
+  write: [WORKING_FOLDER, folder],
+  network: "none",
+});
+
 /** What a contract case needs: an Executor whose temporary working folders go into `tempDir`. */
 interface Subject {
   executor: Executor;
   tempDir: string;
 }
 
+/** What an Executor in the contract is built with. */
+interface ExecutorParts {
+  /** Where its temporary working folders go. */
+  tempDir: string;
+  /** Starts its processes, with `environment`'s variables. */
+  processes: ProcessLauncher;
+  environment(): Promise<Environment>;
+}
+
 /**
- * The cases every Executor must pass. `make` builds one whose temporary
- * working folders go into `tempDir`, starting processes with `processes`.
+ * The cases every Executor must pass. `make` builds one from `ExecutorParts`;
+ * `skip` says why it can't run here, when it can't.
  */
-function executorContract(
-  name: string,
-  make: (options: { tempDir: string; processes: ProcessLauncher }) => Executor,
-) {
-  const setUp = async (processes = smallEnvironment()): Promise<Subject> => {
+function executorContract(name: string, make: (parts: ExecutorParts) => Executor, skip?: string) {
+  const setUp = async (env = smallEnvironment()): Promise<Subject> => {
     const tempDir = await createTempDataFolder();
-    return { executor: make({ tempDir, processes }), tempDir };
+    const environment = async () => env;
+    const processes = createProcessLauncher(environment);
+    return { executor: make({ tempDir, processes, environment }), tempDir };
   };
 
-  describe(`The Executor contract: ${name}`, { timeout: 30_000 }, () => {
+  const title = `The Executor contract: ${name}${skip === undefined ? "" : ` (skipped: ${skip})`}`;
+  describe.skipIf(skip !== undefined)(title, { timeout: 30_000 }, () => {
     test("it runs the program with its arguments as they are, its environment added, in a new, empty temporary folder that is removed afterwards", async () => {
       const { executor, tempDir } = await setUp();
       const args = ["two words", "--flag", "ünïcode $HOME"];
@@ -141,6 +161,28 @@ function executorContract(
       expect(report.before).toEqual([]);
       expect(existsSync(report.cwd)).toBe(false);
       expect(await readdir(tempDir)).toEqual([]);
+    });
+
+    test("variables whose names look like secrets aren't passed on; those the request sets are", async () => {
+      const secrets = {
+        GITHUB_TOKEN: "t",
+        AWS_SECRET_ACCESS_KEY: "s",
+        OPENAI_API_KEY: "k",
+        PGPASSWORD: "p",
+        GOOGLE_APPLICATION_CREDENTIALS: "c",
+        npm_config__authToken: "lower case too",
+      };
+      const { executor } = await setUp(smallEnvironment({ ...secrets, PLAIN_SETTING: "kept" }));
+      const names = "console.log(JSON.stringify(Object.keys(process.env)))";
+
+      const run = await executor.run(
+        request(node(names), { env: { REQUEST_TOKEN: "the caller's own" } }),
+      );
+
+      const seen: string[] = JSON.parse(run.stdout);
+      expect(seen).toContain("PLAIN_SETTING");
+      expect(seen).toContain("REQUEST_TOKEN");
+      for (const name of Object.keys(secrets)) expect(seen).not.toContain(name);
     });
 
     test("a working folder it is given is used, and kept", async () => {
@@ -181,10 +223,13 @@ function executorContract(
 
     test("one that runs past its timeout is stopped with every process it started; what it wrote is kept", async () => {
       const { executor, tempDir } = await setUp();
-      const pidFile = join(await createTempDataFolder(), "pids.json");
+      const pidFolder = await createTempDataFolder();
+      const pidFile = join(pidFolder, "pids.json");
 
       const started = Date.now();
-      const run = await executor.run(request(node(SLEEP, pidFile), { timeoutMs: 1_000 }));
+      const run = await executor.run(
+        request(node(SLEEP, pidFile), { timeoutMs: 1_000, allow: writingTo(pidFolder) }),
+      );
 
       expect(Date.now() - started).toBeLessThan(10_000);
       expect(run).toMatchObject({ exitCode: null, timedOut: true, stdout: "started\n" });
@@ -194,10 +239,13 @@ function executorContract(
 
     test("its signal stops it at once, with every process it started", async () => {
       const { executor, tempDir } = await setUp();
-      const pidFile = join(await createTempDataFolder(), "pids.json");
+      const pidFolder = await createTempDataFolder();
+      const pidFile = join(pidFolder, "pids.json");
       const stop = new AbortController();
 
-      const running = executor.run(request(node(SLEEP, pidFile), { signal: stop.signal }));
+      const running = executor.run(
+        request(node(SLEEP, pidFile), { signal: stop.signal, allow: writingTo(pidFolder) }),
+      );
       const pids = await pidsIn(pidFile);
       expect(isRunning(pids.pid)).toBe(true);
       const stoppedAt = Date.now();
@@ -212,7 +260,8 @@ function executorContract(
 
     test("a signal stopped already: it doesn't run", async () => {
       const { executor, tempDir } = await setUp();
-      const log = join(await createTempDataFolder(), "ran.log");
+      const logFolder = await createTempDataFolder();
+      const log = join(logFolder, "ran.log");
       const stop = new AbortController();
       stop.abort(new Error("Stopped before it started."));
 
@@ -220,6 +269,7 @@ function executorContract(
         executor.run(
           request(node('require("node:fs").writeFileSync(process.argv[1], "ran")', log), {
             signal: stop.signal,
+            allow: writingTo(logFolder),
           }),
         ),
       ).rejects.toThrow("Stopped before it started.");
@@ -233,10 +283,13 @@ function executorContract(
       "a process that escapes the stop (a session of its own) doesn't keep the run waiting",
       async () => {
         const { executor } = await setUp();
-        const pidFile = join(await createTempDataFolder(), "pids.json");
+        const pidFolder = await createTempDataFolder();
+        const pidFile = join(pidFolder, "pids.json");
 
         const started = Date.now();
-        const run = await executor.run(request(node(ESCAPE, pidFile), { timeoutMs: 1_000 }));
+        const run = await executor.run(
+          request(node(ESCAPE, pidFile), { timeoutMs: 1_000, allow: writingTo(pidFolder) }),
+        );
         const pids = await pidsIn(pidFile);
         // The test's own clean-up: what escaped is beyond the Executor.
         onTestFinished(() => {
@@ -299,14 +352,29 @@ function executorContract(
   });
 }
 
+const failOnError = (error: unknown) => {
+  throw error;
+};
+
 executorContract("the local executor (sandbox level none)", ({ tempDir, processes }) =>
-  createLocalExecutor({
-    processes,
-    tempDir,
-    reportError: (error) => {
-      throw error;
-    },
-  }),
+  createLocalExecutor({ processes, tempDir, reportError: failOnError }),
+);
+
+const osSandbox = await loadOsSandbox();
+executorContract(
+  "the OS sandbox (sandbox level os)",
+  ({ tempDir, processes, environment }) => {
+    if (!osSandbox.available) throw new Error(osSandbox.reason);
+    // The folders it denies are stand-ins: the real home is never read or written.
+    return osSandbox.createExecutor({
+      processes,
+      environment,
+      tempDir,
+      denyRead: [join(tempDir, "stand-in-home"), join(tempDir, "stand-in-data")],
+      reportError: failOnError,
+    });
+  },
+  osSandbox.available ? undefined : osSandbox.reason,
 );
 
 describe("Declared access, from the sandbox level", () => {
@@ -318,7 +386,7 @@ describe("Declared access, from the sandbox level", () => {
 
   test('the local executor is at level "none"', async () => {
     const executor = createLocalExecutor({
-      processes: smallEnvironment(),
+      processes: createProcessLauncher(async () => smallEnvironment()),
       tempDir: await createTempDataFolder(),
       reportError: () => undefined,
     });
