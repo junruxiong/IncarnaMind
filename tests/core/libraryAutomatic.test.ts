@@ -224,6 +224,11 @@ describe("automatic local classification", () => {
     expect(pdfNeedsPageImages([], 3)).toBe(true);
     expect(pdfNeedsPageImages([{ page: 1, text: "Title" }], 1)).toBe(true);
     expect(pdfNeedsPageImages([{ page: 1, text: "膜分离研究".repeat(150) }], 1)).toBe(false);
+    // A Chinese character says about as much as a short English word: a one-page invoice of
+    // 250 characters is readable text, while a scan's 60-character stamp is not.
+    expect(pdfNeedsPageImages([{ page: 1, text: "增值税电子普通发票".repeat(28) }], 1)).toBe(false);
+    expect(pdfNeedsPageImages([{ page: 1, text: "增值税电子普通发票".repeat(7) }], 1)).toBe(true);
+    expect(pdfNeedsPageImages([{ page: 1, text: "Invoice ".repeat(36) }], 1)).toBe(true);
     expect(pdfNeedsPageImages([{ page: 1, text: "Abstract ".repeat(500) }], 4)).toBe(true);
     const text = Array.from({ length: 12 }, (_, i) => ({
       page: i + 1,
