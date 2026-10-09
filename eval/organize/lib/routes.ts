@@ -7,7 +7,8 @@
  *   machines), PDFs with sparse text to Clef-Flash with page images.
  * - "tev-0.8b": the local decision model Tev1 0.8B, chosen by name.
  * - "clef-flash": Clef-Flash chosen by name with PDF page images on.
- * - "chat": the connected chat model, from INCARNAMIND_EVAL_CHAT_* (see eval/lib/config.ts).
+ * - "chat": the connected chat model, from INCARNAMIND_EVAL_CHAT_* (see eval/lib/config.ts),
+ *   with the page images of PDFs without text when the model reads images.
  *
  * Local routes share this computer's Ollama with other work, so each waits
  * until no other model is loaded and unloads its own models afterwards.
@@ -19,6 +20,7 @@ import {
   decisionGroupClassifier,
   type GroupClassifier,
 } from "../../../src/core/library/classifier";
+import { chatModelReadsImages } from "../../../src/core/providers/imageInput";
 import { serviceForUrl } from "../../../src/core/providers/kinds";
 import { createAiSdkChatModel } from "../../../src/core/providers/models";
 import { DEFAULT_OLLAMA_SETTINGS } from "../../../src/core/providers/ollamaModels";
@@ -97,14 +99,15 @@ export function buildRoute(
         // Local chat models keep within an 8K window, like the app's default.
         ollama: DEFAULT_OLLAMA_SETTINGS,
       });
+      const images = chatModelReadsImages(chat.kind, chat.modelId);
       return {
         name,
-        label: `Chat model ${chat.kind}/${chat.modelId}`,
+        label: `Chat model ${chat.kind}/${chat.modelId}${images ? ", with page images of scans" : ""}`,
         models: chat.kind === "ollama" ? [chat.modelId] : [],
         local,
         classifier: {
-          ...chatGroupClassifier(model, local),
-          model: { id: chat.modelId, images: false, reason: "selected" },
+          ...chatGroupClassifier(model, local, images),
+          model: { id: chat.modelId, images, reason: "selected" },
         },
       };
     }

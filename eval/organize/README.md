@@ -13,7 +13,7 @@ For every Document, the app's own code path, without the app's database or embed
    - `auto`: **Auto · local models**, one controller for the run. Text goes to Tev1 4B, PDFs with sparse text to Clef-Flash with page images.
    - `tev-0.8b`: the local decision model Tev1 0.8B, chosen by name.
    - `clef-flash`: Clef-Flash chosen by name, with PDF page images on.
-   - `chat`: the connected chat model, from `INCARNAMIND_EVAL_CHAT_*` (as `npm run eval` reads them).
+   - `chat`: the connected chat model, from `INCARNAMIND_EVAL_CHAT_*` (as `npm run eval` reads them). A model that reads images (`src/core/providers/imageInput.ts`) also gets the page images of a PDF without text, as in the app.
 
 The Folders and Tags are the app's starter Folders (`library.preset.*` in `src/shared/i18n/`) and preset Tags (`src/core/tags/presets.ts`), read from the source, so a change to their descriptions is measured. A PDF without text is left for a route that can't read pages, as the Library leaves it; it counts as a miss.
 
@@ -51,7 +51,7 @@ Needs Ollama on `http://127.0.0.1:11434` with `tev1:4b`, `tev1:0.8b` and `clef-f
 | `INCARNAMIND_ORGANIZE_PREPARE_ONLY` | off | `1` extracts and writes the excerpts, with no model. |
 | `INCARNAMIND_ORGANIZE_SHOW_HELDOUT` | off | `1` lists the held-out half's mistakes too. |
 | `INCARNAMIND_ORGANIZE_BATCH` | `10` | A local route stops its models after this many Documents, then loads them again. |
-| `INCARNAMIND_EVAL_CHAT_KIND`, `_MODEL`, `_KEY`, `_BASE_URL` | none | The chat route's model, as for `npm run eval`. Setting them is the consent to send the excerpts, Folder and Tag definitions to it. |
+| `INCARNAMIND_EVAL_CHAT_KIND`, `_MODEL`, `_KEY`, `_BASE_URL` | none | The chat route's model, as for `npm run eval`. Setting them is the consent to send the excerpts, Folder and Tag definitions to it, and the scans' page images to a model that reads images. |
 
 The chat route with a cloud model, for example:
 

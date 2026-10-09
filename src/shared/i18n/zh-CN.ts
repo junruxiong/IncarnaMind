@@ -55,7 +55,7 @@ export const zhCN = {
   "library.startersHint": "选择需要的文件夹，之后随时可以改名或添加自己的文件夹。",
   "library.addSelected": "添加选中的文件夹",
   "library.modelHint":
-    "选择用于分配文件夹和标签的模型，可与聊天模型不同。云端模型发送文档文本、文件夹和标签信息前会征求同意。",
+    "选择用于分配文件夹和标签的模型，可与聊天模型不同。云端模型接收文档文本、文件夹和标签信息，以及（若能读取图片）扫描版 PDF 的前几页图片之前，会先征求同意。",
   "library.connection": "连接",
   "library.manualOnly": "手动整理",
   "library.jev": "Jev · 已保存的连接",
@@ -748,6 +748,7 @@ export const zhCN = {
   "consent.flow.tagging.purpose": "自动为你的文档打标签",
   "consent.data.tags": "你的标签的名称和描述",
   "consent.data.document-excerpts": "每个要打标签的文档的名称、类型，以及开头的一小段摘录",
+  "consent.data.page-images": "没有文字的扫描版 PDF 开头最多 3 页的图片（仅当模型能读取图片时）",
   "consent.flow.embeddings": "文档搜索",
   "consent.flow.embeddings.purpose": "按含义搜索你的文档",
   "consent.data.document-text": "每个文档的全文，在处理时发送",
