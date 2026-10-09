@@ -1,0 +1,38 @@
+PLOTLINE TERMS OF SERVICE
+Last updated: 1 January 2026
+
+These Terms of Service ("Terms") form a binding agreement between you and Plotline Software Ltd ("Plotline",
+"we", "us") about your use of the Plotline garden-planning app and website (the "Service"). By creating an
+account you agree to these Terms. If you do not agree, do not use the Service.
+
+1. ACCOUNTS
+You must be at least 16 years old. You are responsible for keeping your password secure and for all activity
+under your account. Tell us at once at support@example.com if you suspect unauthorised use.
+
+2. SUBSCRIPTIONS AND PAYMENT
+The basic plan is free. Premium plans are billed monthly or annually in advance and renew automatically until
+cancelled. You can cancel at any time in your account settings; cancellation takes effect at the end of the
+current billing period. Fees are not refundable except where required by law.
+
+3. YOUR CONTENT
+You keep ownership of the garden plans, photos and notes you upload. You grant us a licence to store and
+display them only to provide the Service to you and the people you choose to share them with.
+
+4. ACCEPTABLE USE
+You must not misuse the Service, including by attempting to access other users' data, uploading malware,
+or using automated tools to scrape content.
+
+5. AVAILABILITY AND CHANGES
+We aim to keep the Service available but do not guarantee uninterrupted access. We may change features. We
+will give 30 days' notice of material changes to these Terms by email.
+
+6. LIABILITY
+To the extent permitted by law, our total liability to you is limited to the amount you paid us in the 12
+months before the claim. Nothing in these Terms limits liability for death or personal injury caused by
+negligence, or for fraud.
+
+7. TERMINATION
+We may suspend or close accounts that breach these Terms. You may delete your account at any time.
+
+8. LAW
+These Terms are governed by the laws of Exampleland.
