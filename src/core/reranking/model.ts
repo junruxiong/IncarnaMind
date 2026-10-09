@@ -2,7 +2,8 @@
  * The built-in reranking model's candidates: multilingual cross-encoders with
  * permissive licences, as int8 ONNX, each pinned to a revision with its files'
  * sizes and SHA-256 hashes. The retrieval evaluation (eval/README.md, #31)
- * compares them over the fused top 20 of hybrid search; the one Settings
+ * compares them over what the search Tool hands a reranker (keyword search's
+ * top 10 and vector search's top 10, each Passage once); the one Settings
  * offers is `BUILT_IN_RERANKING_MODEL`.
  *
  * Measured on an Apple M2 Max, one pair at a time, 20 Passages of about 500

@@ -70,7 +70,12 @@ import {
   type WindowedPassage,
   windowedPassagesBySeq,
 } from "./search";
-import { type SearchCandidate, type SearchToolOptions, searchDocumentsTool } from "./searchTool";
+import {
+  type SearchCandidate,
+  type SearchToolOptions,
+  searchDocumentsTool,
+  topsOfEach,
+} from "./searchTool";
 import { detectLanguage, languageList, type TextLanguage } from "./textLanguage";
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
@@ -1146,6 +1151,32 @@ export function createDocuments(options: DocumentsOptions) {
     );
   }
 
+  /**
+   * Keyword search's and vector search's rankings of the live Passages, each
+   * `listed` long, copies of one file merged (see `distinctPassages`). Vector
+   * search's is empty while the embedding model can't embed the query.
+   */
+  async function rankings(
+    query: string,
+    listed: number,
+    documentIds: readonly string[] | undefined,
+  ): Promise<number[][]> {
+    const scope = searchScope(documentIds);
+    const vector = await queryVector(query, "hybrid");
+    const keyword = keywordSearch(db, query, listed, scope);
+    const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
+    return distinctPassages(db, [keyword, similar]);
+  }
+
+  /** The Passages of these fused hits, in their order, each with its fused score. */
+  function scored(hits: readonly { seq: number; score: number }[]): SearchCandidate[] {
+    const scores = new Map(hits.map((hit) => [hit.seq, hit.score]));
+    return windowedPassagesBySeq(
+      db,
+      hits.map((hit) => hit.seq),
+    ).map((passage) => ({ ...passage, score: scores.get(passage.seq) ?? 0 }));
+  }
+
   /** Hybrid search for the document-search Tool: the best `limit` live Passages, with fused scores. */
   async function candidates(
     query: string,
@@ -1153,17 +1184,26 @@ export function createDocuments(options: DocumentsOptions) {
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
-    const scope = searchScope(documentIds);
-    const vector = await queryVector(query, "hybrid");
-    const listed = Math.max(limit, HYBRID_CANDIDATES);
-    const keyword = keywordSearch(db, query, listed, scope);
-    const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
-    const fused = fuseRankingScores(distinctPassages(db, [keyword, similar]), limit);
-    const scores = new Map(fused.map((hit) => [hit.seq, hit.score]));
-    return windowedPassagesBySeq(
-      db,
-      fused.map((hit) => hit.seq),
-    ).map((passage) => ({ ...passage, score: scores.get(passage.seq) ?? 0 }));
+    const lists = await rankings(query, Math.max(limit, HYBRID_CANDIDATES), documentIds);
+    return scored(fuseRankingScores(lists, limit));
+  }
+
+  /**
+   * For the search Tool's reranker: keyword search's best `perList` and
+   * vector search's, each Passage once, in fused order with fused scores, so
+   * a reranker that fails leaves search's own order.
+   */
+  async function rerankCandidates(
+    query: string,
+    perList: number,
+    documentIds: readonly string[] | undefined,
+  ): Promise<SearchCandidate[]> {
+    if (query.trim() === "") return [];
+    const lists = await rankings(query, Math.max(perList, HYBRID_CANDIDATES), documentIds);
+    const chosen = new Set(topsOfEach(lists, perList));
+    return scored(
+      fuseRankingScores(lists, Number.POSITIVE_INFINITY).filter((hit) => chosen.has(hit.seq)),
+    );
   }
 
   /** The live Document whose file is to be opened, checked against the disk first. */
@@ -1199,7 +1239,11 @@ export function createDocuments(options: DocumentsOptions) {
      */
     searchTool(query: string, toolOptions?: SearchToolOptions): Promise<WindowedPassage[]> {
       return searchDocumentsTool(
-        { candidates, window: (documentId, window) => passagesInWindow(db, documentId, window) },
+        {
+          candidates,
+          rerankCandidates,
+          window: (documentId, window) => passagesInWindow(db, documentId, window),
+        },
         query,
         toolOptions,
       );
