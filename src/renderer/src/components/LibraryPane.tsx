@@ -1,12 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { LibraryGroup } from "../../../core/api";
+import type { Document, LibraryGroup } from "../../../core/api";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
+import { bridgeFrom, type LibraryBridge, type LibraryView } from "../libraryBridges";
+import {
+  documentFacets,
+  type FilterSelection,
+  filterLibrary,
+  isFiltering,
+  toggleFilterValue,
+} from "../libraryFilters";
+import { formatCount } from "../linkedFolders";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { ActiveTagFilter, DocumentTagMenu } from "./DocumentTags";
+import { LibraryFilterBar } from "./LibraryFilterBar";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
 
@@ -15,12 +25,16 @@ type Action = (work: () => Promise<unknown>) => Promise<boolean>;
 /** The sidebar chooses a folder; this sheet shows its documents and editable tags. */
 export function LibraryPane() {
   const t = useT();
+  const language = useLanguage();
   const documents = useAppStore(useShallow(selectVisibleDocuments));
   const hasDocuments = useAppStore((state) => state.documents.length > 0);
   const snapshot = useAppStore((state) => state.library);
   const filter = useAppStore((state) => state.libraryFilter);
   const tags = useAppStore((state) => state.tags);
+  const tagFiltering = useAppStore((state) => state.tagFilter !== null);
   const [search, setSearch] = useState("");
+  /** The year, format and status filters' choices (see `LibraryFilterBar`). */
+  const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
   const [limit, setLimit] = useState(100);
   const [editing, setEditing] = useState<LibraryGroup | "new" | null>(null);
   const [starters, setStarters] = useState(false);
@@ -30,6 +44,7 @@ export function LibraryPane() {
   useEffect(() => {
     setLimit(100);
     setSearch("");
+    setFacetFilter({});
     setDeleting(false);
     setEditing(filter === "new" ? "new" : null);
   }, [filter]);
@@ -50,18 +65,35 @@ export function LibraryPane() {
   const groups = snapshot?.groups ?? [];
   const assignments = new Map(snapshot?.assignments.map((item) => [item.documentId, item]));
   const selected = groups.find((group) => group.id === filter);
-  const shown = documents.filter((doc) => {
-    const groupId = assignments.get(doc.id)?.groupId ?? null;
-    const terms = [
-      doc.name,
-      ...doc.tags.map((link) => tags.find((tag) => tag.id === link.tagId)?.name ?? ""),
-    ].join(" ");
-    return (
-      ((!selected && filter !== "unsorted") ||
-        (filter === "unsorted" ? groupId === null : groupId === selected?.id)) &&
-      terms.toLocaleLowerCase().includes(search.toLocaleLowerCase())
-    );
-  });
+  // The sheet's Documents: its Folder's, found by the search; then those the filters keep.
+  const inView = useMemo(() => {
+    const groupOf = new Map(snapshot?.assignments.map((item) => [item.documentId, item.groupId]));
+    const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
+    const folder = snapshot?.groups.find((group) => group.id === filter);
+    const wanted = search.toLocaleLowerCase();
+    return documents.filter((doc) => {
+      const groupId = groupOf.get(doc.id) ?? null;
+      const terms = [doc.name, ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")].join(" ");
+      return (
+        ((!folder && filter !== "unsorted") ||
+          (filter === "unsorted" ? groupId === null : groupId === folder?.id)) &&
+        terms.toLocaleLowerCase().includes(wanted)
+      );
+    });
+  }, [documents, snapshot, tags, filter, search]);
+  const { shown, options } = useMemo(
+    () => filterLibrary<Document>(inView, documentFacets, facetFilter),
+    [inView, facetFilter],
+  );
+  const shownIds = useMemo(() => shown.map((doc) => doc.id), [shown]);
+  const filtering = isFiltering(facetFilter);
+  const view: LibraryView = selected
+    ? { kind: "folder", id: selected.id, name: selected.name }
+    : filter === "unsorted"
+      ? { kind: "unsorted", name: t("library.unsorted") }
+      : { kind: "all", name: t("library.all") };
+  // With anything narrowing the list, a Question from here searches exactly what it shows.
+  const bridge = bridgeFrom(view, shownIds, filtering || search.trim() !== "" || tagFiltering);
   const pending =
     snapshot?.assignments.filter(
       (item) => item.status === "pending" || item.status === "classifying",
@@ -113,14 +145,17 @@ export function LibraryPane() {
                 {selected?.description || t("library.intro")}
               </p>
             </div>
-            <button
-              type="button"
-              className={buttonStyle("primary")}
-              disabled={busy || pending > 0 || groups.length === 0 || shown.length === 0}
-              onClick={organize}
-            >
-              {t(pending ? "library.working" : "library.classify")}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {bridge && <WritingBridges bridge={bridge} />}
+              <button
+                type="button"
+                className={buttonStyle("primary")}
+                disabled={busy || pending > 0 || groups.length === 0 || shown.length === 0}
+                onClick={organize}
+              >
+                {t(pending ? "library.working" : "library.classify")}
+              </button>
+            </div>
           </div>
           <div className="mb-5 flex flex-wrap items-center gap-1">
             <button
@@ -236,19 +271,39 @@ export function LibraryPane() {
             </button>
           </div>
           <ActiveTagFilter />
+          {(inView.length > 0 || filtering) && (
+            <LibraryFilterBar
+              facets={documentFacets}
+              options={options}
+              selection={facetFilter}
+              onToggle={(facetId, value) => {
+                setFacetFilter((current) => toggleFilterValue(current, facetId, value));
+                setLimit(100);
+              }}
+              onClear={() => {
+                setFacetFilter({});
+                setLimit(100);
+              }}
+            />
+          )}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-meta">
-            <p role="status">
+            <p role="status" data-testid="library-count">
               {!snapshot
                 ? t("library.loading")
                 : pending
                   ? t("library.progress", { count: pending })
-                  : failed
-                    ? t("library.failed", { count: failed })
-                    : waiting
-                      ? t("library.waiting", { count: waiting })
-                      : t(shown.length === 1 ? "library.count.one" : "library.count", {
-                          count: shown.length,
-                        })}
+                  : filtering
+                    ? t("library.countFiltered", {
+                        count: formatCount(shown.length, language),
+                        total: formatCount(inView.length, language),
+                      })
+                    : failed
+                      ? t("library.failed", { count: failed })
+                      : waiting
+                        ? t("library.waiting", { count: waiting })
+                        : t(shown.length === 1 ? "library.count.one" : "library.count", {
+                            count: shown.length,
+                          })}
             </p>
             <button
               type="button"
@@ -389,6 +444,61 @@ export function LibraryPane() {
         </div>
       </div>
     </main>
+  );
+}
+
+/**
+ * From the sheet into writing: "Ask about this Folder" adds a Question that
+ * searches only the Folder to the most recent Mind, and "Start a Mind from
+ * this Folder" makes a Mind named after it, starting with that Question.
+ * With the list narrowed, they say how many Documents the Question searches:
+ * exactly those shown.
+ */
+function WritingBridges({ bridge }: { bridge: LibraryBridge }) {
+  const t = useT();
+  const language = useLanguage();
+  const count = formatCount(bridge.count, language);
+  const [ask, start, askHint, startHint] =
+    bridge.kind === "folder"
+      ? [
+          t("library.ask.folder"),
+          t("library.start.folder"),
+          t("library.ask.folderHint"),
+          t("library.start.folderHint"),
+        ]
+      : [
+          t(bridge.count === 1 ? "library.ask.document" : "library.ask.documents", { count }),
+          t(bridge.count === 1 ? "library.start.document" : "library.start.documents", { count }),
+          t(bridge.count === 1 ? "library.ask.documentHint" : "library.ask.documentsHint", {
+            count,
+          }),
+          t(bridge.count === 1 ? "library.start.documentHint" : "library.start.documentsHint", {
+            count,
+          }),
+        ];
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="library-ask"
+        data-scope={bridge.kind}
+        title={askHint}
+        className={buttonStyle("secondary")}
+        onClick={() => void useAppStore.getState().askAbout(bridge)}
+      >
+        {ask}
+      </button>
+      <button
+        type="button"
+        data-testid="library-start-mind"
+        data-scope={bridge.kind}
+        title={startHint}
+        className={buttonStyle("secondary")}
+        onClick={() => void useAppStore.getState().startMindFrom(bridge)}
+      >
+        {start}
+      </button>
+    </>
   );
 }
 
