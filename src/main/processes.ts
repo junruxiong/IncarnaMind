@@ -198,16 +198,19 @@ export function readLoginShellEnvironment(options: LoginShellOptions = {}): Prom
 }
 
 /**
- * A `ProcessLauncher` that starts each process with `environment()` plus the
- * caller's variables, looking the command up on that environment's PATH. On
- * Windows, cross-spawn runs `.cmd` shims such as `npx.cmd`. A process asked to
- * lead its own process group is started detached, on macOS and Linux only:
- * on Windows that would give it a console of its own.
+ * A `ProcessLauncher` that starts each process with `environment()` (less
+ * what the caller leaves out) plus the caller's variables, looking the
+ * command up on that environment's PATH. On Windows, cross-spawn runs `.cmd`
+ * shims such as `npx.cmd`. A process asked to lead its own process group is
+ * started detached, on macOS and Linux only: on Windows that would give it a
+ * console of its own.
  */
 export function createProcessLauncher(environment: () => Promise<Environment>): ProcessLauncher {
   return {
     async spawn(command, args, options = {}) {
-      const env = { ...(await environment()), ...options.env };
+      const { omitEnv } = options;
+      const inherited = Object.entries(await environment()).filter(([name]) => !omitEnv?.(name));
+      const env = { ...Object.fromEntries(inherited), ...options.env };
       return new Promise<ChildProcess>((resolve, reject) => {
         let child: ChildProcess;
         try {
