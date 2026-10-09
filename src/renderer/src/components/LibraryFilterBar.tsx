@@ -46,7 +46,7 @@ export function LibraryFilterBar<T>({
           type="button"
           data-testid="library-filters-clear"
           onClick={onClear}
-          className="ml-1 h-7 rounded-md px-1.5 text-[13px] text-ink-meta outline-none hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+          className="ml-1 h-7 rounded-md px-1.5 text-[13px] text-ink-meta hover:text-ink hover:underline focus-visible:outline-offset-0"
         >
           {t("library.filter.clear")}
         </button>

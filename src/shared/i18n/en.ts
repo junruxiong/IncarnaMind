@@ -409,7 +409,7 @@ export const en = {
   "status.processing.other": "Processing {count} Documents…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
-  "status.taggingWaiting": "Tagging needs a model",
+  "status.taggingWaiting": "Tags need a model",
   "status.setUp": "Set up",
   "status.downloading": "Search model: {downloaded} of {total} MB",
   "status.downloadFailed": "Search model download failed",
@@ -1051,6 +1051,8 @@ export const en = {
   "scripts.settings.enabled": "Let Skills run their scripts",
   "scripts.settings.body":
     "Scripts run on this computer, with no sandbox. Each run asks you first, unless you chose “Always run” for its Skill. Turned off, no Skill script runs at all.",
+  "scripts.settings.bodySandboxed":
+    "Scripts run on this computer in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. Each run asks you first, unless you chose “Always run” for its Skill. Turned off, no Skill script runs at all.",
   "scripts.settings.timeout": "Stop a script that runs longer than",
   "scripts.settings.seconds": "seconds",
   "scripts.card.title": "{skill} wants to run {script}",
@@ -1061,6 +1063,8 @@ export const en = {
   "scripts.card.noArgs": "No arguments.",
   "scripts.card.noSandbox":
     "Scripts run on this computer with no sandbox: this one could read, change or delete your files and use the internet, as you can. Nothing runs until you choose.",
+  "scripts.card.sandboxed":
+    "This script runs in a sandbox: it can't open your home folder or IncarnaMind's data, can only write in its own working folder, and has no internet. Nothing runs until you choose.",
   "scripts.card.allowOnce": "Allow once",
   "scripts.card.alwaysRun": "Always run",
   "scripts.card.alwaysRunHint":
@@ -1069,6 +1073,8 @@ export const en = {
   "scripts.alwaysRun.title": "Always run the scripts of {skill}?",
   "scripts.alwaysRun.body":
     "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts aren't sandboxed: they can read, change or delete your files, install software and send your data over the internet. Only do this for a Skill you trust completely. You can revoke it in Settings, under Approvals.",
+  "scripts.alwaysRun.bodySandboxed":
+    "From now on, every script of {skill} runs whenever an Answer wants it, without asking you. Scripts run in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. They can still read files elsewhere on this computer, such as on an external drive. Only do this for a Skill you trust. You can revoke it in Settings, under Approvals.",
   "scripts.alwaysRun.confirm": "Always run {skill}'s scripts",
   "scripts.alwaysRun.cancel": "Cancel",
   "scripts.call.waiting": "Waiting for your approval: {script} ({skill})",
@@ -1337,7 +1343,7 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a green check to see the quote.",
+    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents or apps",
   "examples.banner.remove": "Remove the examples",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",

@@ -395,7 +395,7 @@ function Tools({
                 aria-label={t("approvals.tools.select", { tool: tool.name })}
                 value={ask ? "ask" : "always"}
                 onChange={(event) => choose(tool, event.target.value === "ask")}
-                className="h-7 shrink-0 rounded-sm border border-rule-strong bg-sheet px-1.5 text-[12px] text-ink outline-none focus:border-accent focus:outline-1 focus:outline-accent"
+                className="h-7 shrink-0 rounded-sm border border-rule-strong bg-sheet px-1.5 text-[12px] text-ink focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent"
               >
                 <option value="ask">{t("approvals.tools.ask")}</option>
                 <option value="always">{t("approvals.tools.always")}</option>
