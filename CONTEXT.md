@@ -96,6 +96,10 @@ _Avoid_: archive, index, vault
 A single action an Answer can call while it is being generated, provided by Document search, a Connector or a Skill.
 _Avoid_: function, action
 
+**Effect**:
+What a Tool call can do beyond the conversation it is part of: read data, write (change something), run code on a computer, or send data over the network, and where (some of the User's folders, a web host, a Connector's service, the Documents, a Mind). Whether a call asks the User first depends on its Effects.
+_Avoid_: permission, capability, side effect
+
 **Connector**:
 An external service the User has connected, through which Answers can look things up or make changes.
 _Avoid_: MCP server, plugin, integration, connection

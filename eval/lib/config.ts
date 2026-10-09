@@ -6,7 +6,12 @@
  */
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { type ChatProviderKind, chatProviderKinds } from "../../src/core";
+import {
+  type ChatProviderKind,
+  chatProviderKinds,
+  RERANKING_MODEL_CANDIDATES,
+  type RerankingModelDefinition,
+} from "../../src/core";
 
 /** The chat model the Citation part asks Questions with. */
 export interface ChatSettings {
@@ -39,6 +44,11 @@ export interface EvalConfig {
   keepData: boolean;
   chat: ChatSettings | null;
   cloudEmbedding: CloudEmbeddingSettings | null;
+  /**
+   * Reranking candidates whose reranked modes to report next to the built-in
+   * one's, which always runs and gates (INCARNAMIND_EVAL_RERANK); none by default.
+   */
+  rerank: RerankingModelDefinition[];
   /** Each language needs at least this many Citations for the Citation targets to count. */
   minCitations: number;
   /** At most this many rounds of Questions to reach `minCitations`. */
@@ -118,6 +128,23 @@ function cloudEmbeddingSettings(env: Env): CloudEmbeddingSettings | null {
   return { kind: found, modelId, apiKey, baseUrl };
 }
 
+/** "all", or candidates' ids separated by commas, e.g. "mmarco-minilm,bge-m3". */
+function rerankCandidates(env: Env): RerankingModelDefinition[] {
+  const raw = value(env, "RERANK");
+  if (raw === null) return [];
+  if (raw === "all") return [...RERANKING_MODEL_CANDIDATES];
+  return raw.split(",").map((each) => {
+    const id = each.trim();
+    const found = RERANKING_MODEL_CANDIDATES.find((candidate) => candidate.id === id);
+    if (!found) {
+      throw new Error(
+        `${PREFIX}RERANK takes "all" or some of ${RERANKING_MODEL_CANDIDATES.map((candidate) => candidate.id).join(", ")}, not "${id}".`,
+      );
+    }
+    return found;
+  });
+}
+
 export function readConfig(root: string, env: Env = process.env): EvalConfig {
   return {
     root,
@@ -126,6 +153,7 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     keepData: value(env, "KEEP_DATA") === "1",
     chat: chatSettings(env),
     cloudEmbedding: cloudEmbeddingSettings(env),
+    rerank: rerankCandidates(env),
     minCitations: positiveInteger(env, "MIN_CITATIONS", 30),
     maxRounds: positiveInteger(env, "MAX_ROUNDS", 3),
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,

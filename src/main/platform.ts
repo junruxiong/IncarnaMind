@@ -17,6 +17,7 @@ import {
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
 import { createLoginShellProcesses } from "./processes";
+import { createUtilityProcessCrossEncoder } from "./reranker";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
 
 /**
@@ -157,7 +158,11 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       node: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } },
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
-    // The fake model has no files to download.
-    ...(fakeEmbedder && { embeddingModelSource: { baseUrl: "http://localhost/", files: [] } }),
+    crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
+    // The fake models have no files to download.
+    ...(fakeEmbedder && {
+      embeddingModelSource: { baseUrl: "http://localhost/", files: [] },
+      rerankingModelSource: { baseUrl: "http://localhost/", files: [] },
+    }),
   };
 }

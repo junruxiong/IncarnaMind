@@ -13,6 +13,7 @@ import {
   type SecretProtection,
 } from "../../src/core";
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
+import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase, type SqlValue } from "../../src/core/storage";
 
 /** A model source with nothing to download: the fake embedding model needs no files. */
@@ -63,7 +64,7 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
 /**
  * Starts the core on `dataDir` with test adapters: an English OS, an in-memory
  * keychain, no browser, shell or processes, the deterministic fake embedding
- * model, which has no files to download, Linked folders that settle quickly,
+ * and reranking models, which have no files to download, Linked folders that settle quickly,
  * and no lookups of models in Ollama. Closed when the current test finishes; call `close()` yourself to
  * simulate quitting the app.
  */
@@ -89,6 +90,8 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     ollamaModels: { describe: async () => null, loaded: async () => null },
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
+    crossEncoder: createFakeCrossEncoder(),
+    rerankingModelSource: NO_MODEL_FILES,
     ...overrides,
     // Linked folders settle and retry quickly in tests.
     linkedFolders: { settleMs: 30, retryMs: 300, ...overrides.linkedFolders },
