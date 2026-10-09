@@ -17,6 +17,8 @@ directories:
 
 # Only the bundled app goes in. The production dependencies in node_modules are added
 # automatically; the rest of the repo (sources, tests, the sample PDFs in data/) stays out.
+# electron-builder arranges them itself, and a direct dependency's version wins the top
+# level: so zod is one (4.6.5, as the AI SDK uses it), and sandbox-runtime's zod 3 nests.
 files:
   - out/**/*
   # Library classification renders PDF pages in Node with @napi-rs/canvas.
@@ -41,6 +43,9 @@ extraResources:
 asarUnpack:
   - "**/node_modules/onnxruntime-node/bin/**"
   - "**/node_modules/@napi-rs/canvas*/**"
+  # The OS sandbox's seccomp helper, which bubblewrap runs on Linux: it can't run one inside
+  # app.asar (src/main/platform.ts points sandbox-runtime at this copy).
+  - "**/node_modules/@anthropic-ai/sandbox-runtime/vendor/seccomp/**"
 
 # No spaces in file names, and the architecture in every name: the auto-updater tells the
 # Apple silicon and Intel macOS downloads apart by it.

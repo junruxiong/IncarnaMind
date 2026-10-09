@@ -1,10 +1,13 @@
 /**
  * The execution seam (ADR-0013; docs/designs/agent-extensibility.md §4.7):
  * every program a Tool starts goes through an `Executor` with a sandbox
- * level. This module has the local one, at level "none" (v1):
+ * level. This module has the local one, at level "none" unless it is given
+ * a `Confinement` (the desktop app's OS sandbox, at "os": src/main/sandbox.ts):
  *
  * - The program runs as the User, started through the core's
- *   `ProcessLauncher` with the login-shell environment plus the request's.
+ *   `ProcessLauncher` with the login-shell environment plus the request's,
+ *   less the variables whose names look like secrets (`looksLikeSecret`),
+ *   at every level.
  * - Without a `cwd`, each run gets a new, empty temporary working folder,
  *   removed afterwards.
  * - It runs with no input, until it exits or its timeout. On a timeout or its
@@ -15,9 +18,9 @@
  *   are), each flagged when cut.
  *
  * Nothing it was allowed is enforced at "none": `declaredAccess` says what a
- * program can then reach, for approvals. An OS sandbox (Seatbelt,
- * bubblewrap), a container or a remote machine are later levels, behind the
- * same `Executor`, so the Tools that use it don't change.
+ * program can then reach, for approvals. A `Confinement` enforces it: the OS
+ * sandbox (Seatbelt, bubblewrap) now; a container or a remote machine later,
+ * behind the same `Executor`, so the Tools that use it don't change.
  */
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -35,6 +38,48 @@ import type {
 
 /** The run's own working folder, in an `ExecRequest`'s `allow` sets. */
 export const WORKING_FOLDER = { kind: "working-folder" } as const satisfies ExecFolder;
+
+/** A folder of an `allow` set as a path, given the run's working folder. */
+export const folderPath = (folder: ExecFolder, workingFolder: string): string =>
+  typeof folder === "string" ? folder : workingFolder;
+
+/**
+ * Whether an environment variable's name looks like it holds a secret: it
+ * contains KEY, SECRET, TOKEN, PASSWORD or CREDENTIAL, in any case
+ * (`GITHUB_TOKEN`, `OPENAI_API_KEY`, `PGPASSWORD`). Programs that Tools run
+ * don't get these from the login shell, at any level: a sandbox confines
+ * files and the network, not what a program is handed.
+ */
+export const looksLikeSecret = (name: string): boolean =>
+  /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL/i.test(name);
+
+/** A program as an Executor starts it: what it runs, and the variables added to its environment. */
+export interface Program {
+  command: string;
+  args: readonly string[];
+  env: Readonly<Record<string, string>>;
+}
+
+/**
+ * How an Executor above level "none" confines the programs it runs: the
+ * desktop app's OS sandbox (src/main/sandbox.ts).
+ */
+export interface Confinement {
+  readonly level: Exclude<SandboxLevel, "none">;
+  /**
+   * The program to start in place of the request's, so that it, and every
+   * process it starts, can touch only what the request allows, its working
+   * folder being `workingFolder`.
+   *
+   * Rejects when the program can't be confined (the sandbox can't start, or
+   * it can't give what the request asks): the run fails with that error, and
+   * nothing runs unconfined. A command that isn't found rejects with an
+   * error whose `code` is "ENOENT".
+   */
+  confine(request: ExecRequest, workingFolder: string): Promise<Program>;
+  /** Called once for each program `confine` gave, when it has ended or couldn't start. */
+  release(): void;
+}
 
 /**
  * What a program can reach, as approvals see it: what it was allowed, or
@@ -200,25 +245,35 @@ export interface LocalExecutorOptions {
   tempDir: string;
   /** Told when a run's temporary working folder can't be removed. */
   reportError(error: unknown): void;
+  /** Confines each program, at its level. Not given: level "none", nothing confined. */
+  confinement?: Confinement;
 }
 
-/** The Executor at sandbox level "none": programs run as the User, on this computer. */
+/**
+ * The Executor on this computer: programs run as the User, at sandbox level
+ * "none", or confined by its `confinement` at that one's level.
+ */
 export function createLocalExecutor(options: LocalExecutorOptions): Executor {
+  const { confinement } = options;
   return {
-    level: "none",
+    level: confinement?.level ?? "none",
     async run(request) {
       request.signal.throwIfAborted();
-      const temporary =
-        request.cwd === undefined
-          ? await mkdtemp(join(options.tempDir, "incarnamind-script-"))
-          : undefined;
+      const cwd = request.cwd ?? (await mkdtemp(join(options.tempDir, "incarnamind-script-")));
+      const temporary = request.cwd === undefined ? cwd : undefined;
       try {
-        const child = await options.processes.spawn(request.command, request.args, {
-          cwd: request.cwd ?? temporary,
-          env: request.env,
-          processGroup: true,
-        });
-        return await collect(child, request);
+        const program = confinement ? await confinement.confine(request, cwd) : request;
+        try {
+          const child = await options.processes.spawn(program.command, program.args, {
+            cwd,
+            env: program.env,
+            omitEnv: looksLikeSecret,
+            processGroup: true,
+          });
+          return await collect(child, request);
+        } finally {
+          confinement?.release();
+        }
       } finally {
         if (temporary !== undefined) {
           await rm(temporary, { recursive: true, force: true, maxRetries: 3 }).catch(

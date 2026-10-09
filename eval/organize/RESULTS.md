@@ -5,7 +5,7 @@ How well Organize files each Document in the right Folder with the right Tags, o
 - **Before:** commit `b40994b`, the classifier as it was, with the benchmark and the set added.
 - **After:** commit `4fe33f8`.
 
-The connected-chat-model route wasn't run here: it needs the User's model and key (see "The chat route" below).
+The connected-chat-model route was run separately with the User's Anthropic key and `claude-sonnet-5-5` (see "The chat route, measured" below).
 
 ## Held-out half: the measurement
 
@@ -87,3 +87,17 @@ Each run sends the 75 Documents with text (up to about 1,500 tokens of excerpt e
 ## Limits
 
 80 synthetic Documents, labelled by one person (an agent), are a small set: one Document moves Folder accuracy by 2.5 points on a half. Some labels are debatable (a research-talk deck in Research papers; an expense claim as an Invoice). The set has no real user's files. Only this Mac was measured.
+
+## The chat route, measured
+
+Run on 2026-10-09 by the main session with the User's Anthropic key, `claude-sonnet-5-5`, before (`b40994b`) and after (`31d936b`), about 160,000 input tokens each (the run doesn't record exact usage).
+
+| Half | Folder | Tag F1 (P / R) | Exact Tag set | Median s |
+|---|---|---|---|---|
+| Held-out, before → after | 35 → 36 of 40 | 0.87 → 0.87 (1.00 / 0.78) | 30 → 31 of 40 | 1.6 → 1.6 |
+| Tuning, before → after | 36 → 36 of 40 | 0.97 → 0.97 (1.00 / 0.94) | 37 → 37 of 40 | 1.6 → 1.3 |
+
+- The chat route is as good as Clef-Flash on Folders (36 of 40) and close on Tags (F1 0.87 against 0.89), at about a quarter of its time per Document.
+- Telling the model that Tags aren't exclusive didn't raise recall on the held-out half: it never adds a wrong Tag (precision 1.00) but still leaves out some that fit.
+- The five scans count as misses ("no text, and this route can't read page images"), although the model can read images; sending page images on this route when the model supports them is a possible follow-up.
+
