@@ -1,8 +1,11 @@
 import { readFile, rm } from "node:fs/promises";
+import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
+import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
+import type { Core } from "../../src/core";
 import { decisionGroupClassifier } from "../../src/core/library/classifier";
 import { documentPageImages } from "../../src/core/library/pageImages";
-import { createTempDataFolder, startCore } from "../helpers/core";
+import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, sha256, writeSourceFile } from "../helpers/documents";
 import { startFakeJev } from "../helpers/jev";
 import { buildPdf } from "../helpers/pdf";
@@ -231,5 +234,119 @@ describe("Library PDF page images", () => {
     const request = server.requests.find(({ body }) => body.questions.group);
     expect(request?.body.images).toBeUndefined();
     expect(request?.body.state).toMatchObject({ text: "Research paper" });
+  });
+
+  describe("with the connected chat model", () => {
+    /** A chat model that files everything in the first Folder, recording what it was sent. */
+    function chatModel() {
+      const calls: LanguageModelV4CallOptions[] = [];
+      const model = new MockLanguageModelV4({
+        doGenerate: async (options) => {
+          calls.push(options);
+          const format = options.responseFormat;
+          const schema = (format?.type === "json" ? format.schema : undefined) as
+            | { properties: { groupId: { enum: string[] } } }
+            | undefined;
+          const groupId = schema?.properties.groupId.enum[0];
+          return {
+            content: [{ type: "text", text: JSON.stringify({ groupId, tags: [] }) }],
+            finishReason: { unified: "stop", raw: undefined },
+            warnings: [],
+            usage: {
+              inputTokens: { total: 5, noCache: 5, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 1, text: 1, reasoning: undefined },
+            },
+          };
+        },
+      });
+      return { model, calls };
+    }
+    /** What one call sent as images. */
+    const imagesIn = (call: LanguageModelV4CallOptions) =>
+      call.prompt.flatMap((message) =>
+        typeof message.content === "string"
+          ? []
+          : message.content.filter((part) => part.type === "file"),
+      );
+    /** Whether one call was about the Document named `name`. */
+    const about = (name: string) => (call: LanguageModelV4CallOptions) =>
+      JSON.stringify(call.prompt).includes(name);
+    const assignment = async (core: Core, id: string) =>
+      (await core.getLibrary()).assignments.find((each) => each.documentId === id);
+
+    /** A scan and a Document with text, to be organized with `modelId` on the provider `kind`. */
+    async function setup(provider: { kind: "anthropic" | "ollama"; modelId: string }) {
+      const fake = chatModel();
+      const core = startCore(await createTempDataFolder(), { createChatModel: () => fake.model });
+      const saved = await core.saveChatProvider({
+        ...provider,
+        ...(provider.kind === "anthropic" ? { apiKey: "test-key" } : {}),
+      });
+      await core.createLibraryGroup({ name: "Finance", description: "Invoices and receipts" });
+      await core.saveLibrarySettings({
+        classifier: { kind: "chat", choice: { providerId: saved.id, modelId: provider.modelId } },
+        automatic: false,
+      });
+      const folder = await createTempDataFolder();
+      const [scan, text] = await addAndProcess(core, [
+        await writeSourceFile(
+          folder,
+          "scan_0042.pdf",
+          buildPdf([{ image: true }, { image: true }]),
+        ),
+        await writeSourceFile(folder, "invoice.txt", "Invoice 42 for office supplies."),
+      ]);
+      if (!scan || !text) throw new Error("Missing Documents");
+      expect(scan.status).toBe("no-text");
+      return { core, fake, scan, text };
+    }
+
+    test("a cloud model that reads images gets a scan's page images, after consent; text goes as text", async () => {
+      const { core, fake, scan, text } = await setup({
+        kind: "anthropic",
+        modelId: "claude-sonnet-5-5",
+      });
+      const requested = nextEvent(core, "consent.requested");
+      await core.classifyDocuments([scan.id, text.id]);
+      // Organizing's consent names page images, and nothing is sent before it.
+      const request = await requested;
+      expect(request.flow).toMatchObject({
+        id: "classification",
+        sends: ["groups", "tags", "document-excerpts", "page-images"],
+      });
+      expect(fake.calls).toHaveLength(0);
+      await core.respondToConsent(request.requestId, true);
+      // Rendering the scan's pages takes a while on a busy machine, as in the tests above.
+      await vi.waitFor(
+        async () => {
+          expect((await assignment(core, scan.id))?.status).toBe("classified");
+          expect((await assignment(core, text.id))?.status).toBe("classified");
+        },
+        { timeout: 10_000 },
+      );
+      const scanCall = fake.calls.find(about("scan_0042"));
+      const textCall = fake.calls.find(about("invoice"));
+      if (!scanCall || !textCall) throw new Error("A Document wasn't sent.");
+      // The scan's two pages, as JPEGs; the Document with text, without images.
+      expect(imagesIn(scanCall).map((part) => part.mediaType)).toEqual([
+        "image/jpeg",
+        "image/jpeg",
+      ]);
+      expect(imagesIn(textCall)).toEqual([]);
+      expect((await assignment(core, scan.id))?.model).toMatchObject({ images: true });
+      expect((await assignment(core, text.id))?.model).toMatchObject({ images: false });
+    });
+
+    test("a model that can't read images leaves a scan waiting, as before, and gets no images", async () => {
+      const { core, fake, scan, text } = await setup({ kind: "ollama", modelId: "small" });
+      await core.classifyDocuments([scan.id, text.id]);
+      await vi.waitFor(async () =>
+        expect((await assignment(core, text.id))?.status).toBe("classified"),
+      );
+      expect((await assignment(core, scan.id))?.status).toBe("waiting");
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls.some(about("scan_0042"))).toBe(false);
+      expect(fake.calls.flatMap(imagesIn)).toEqual([]);
+    });
   });
 });

@@ -1,0 +1,74 @@
+NIGHT SHIFT HANDBOOK - MEDICAL WARDS
+Revised September 2026. Keep this copy at the nurses' station.
+
+1. WHO IS ON
+
+Ward      Lead nurse          Handover   Beds
+Ward 3    Priya Nandakumar    19:30      24
+Ward 5    Tomasz Wieczorek    19:45      18
+Ward 7    Aileen Doherty      20:00      30
+Ward 9    Samuel Osei         20:15      22
+
+The site manager covers all four wards from 22:00 and carries the red bleep.
+
+2. HANDOVER CHECKLIST
+
+At every handover, the incoming nurse and the outgoing nurse together:
+  - count the controlled drugs and sign the register,
+  - check the resuscitation trolley's seal number against the log,
+  - list every patient on 15-minute observations,
+  - confirm which patients are nil by mouth after midnight.
+
+Do not start the drug round until the checklist is signed.
+
+3. ESCALATION
+
+Call the on-call registrar for a NEWS2 score of 5 or more, or a rise of 3 in one hour.
+Call the outreach team for any patient who needs oxygen above 6 litres a minute.
+For a cardiac arrest, dial 2222 and say the ward and bed number twice.
+
+4. PAGER SETUP
+
+New pagers are set up by the switchboard. If one needs resetting, the settings are:
+
+    PAGER_GROUP=nights-medical
+    ESCALATE_AFTER=10
+    FALLBACK=switchboard
+    QUIET_HOURS=none
+
+A page that is not acknowledged within ESCALATE_AFTER minutes goes to the fallback.
+
+5. BREAKS
+
+Each nurse takes a 45-minute break between 01:00 and 04:00; breaks are agreed at the 22:00 huddle.
+Never leave a ward with fewer than two registered nurses on the floor.
+
+6. VISITORS
+
+Visiting ends at 20:00 on every ward.
+A relative may stay overnight with a patient who is dying or confused, with the nurse in charge's agreement.
+Give them a fold-out chair and a visitor's pass from the drawer under the station desk.
+
+7. FIRE
+
+The fire assembly point for wards 3 to 9 is the staff car park by the incinerator.
+Close every door you pass. Do not use the lifts.
+Horizontal evacuation comes first: move patients through two sets of fire doors before going downstairs.
+The night fire warden is the site manager unless the rota says otherwise.
+
+8. IT SYSTEMS
+
+If the electronic record is down, use the paper observation charts in the blue folder.
+Enter the paper charts into the record within two hours of it coming back.
+The IT service desk is staffed overnight only for problems that stop patient care.
+
+9. SUPPLIES
+
+The night store on the ground floor holds linen, fluids and dressings.
+Its door code changes on the first day of each month and is in the site manager's handover.
+Order blood gas cartridges before 02:00 so that they arrive with the morning delivery.
+
+10. END OF SHIFT
+
+Write up the night report before 07:15 so that the day team can read it at 07:30.
+Return the controlled drug keys to the site manager in person.

@@ -353,7 +353,7 @@ describe("Library groups", () => {
     const request = await requested;
     expect(request.flow).toMatchObject({
       id: "classification",
-      sends: ["groups", "tags", "document-excerpts"],
+      sends: ["groups", "tags", "document-excerpts", "page-images"],
     });
     expect(fake.calls).toHaveLength(0);
     await core.respondToConsent(request.requestId, false);
