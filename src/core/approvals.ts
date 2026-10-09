@@ -1,11 +1,15 @@
 /**
  * Approvals (#38): a Tool call that could change something asks the User
- * before it runs.
+ * before it runs. Whether it asks is decided from its Effects (what it can
+ * do, see ./tools) and the User's policy for it (`decide`;
+ * docs/designs/agent-extensibility.md §4.3).
  *
- * - Read-only marks are hints. A Connector says which of its Tools only read
- *   (MCP's `readOnlyHint`); IncarnaMind can't check that. Such a Tool runs
- *   without asking unless the User switched it to "ask"; every other Tool
- *   asks first, unless the User always allows it.
+ * - Reading the Documents or a Skill runs without asking. So does a
+ *   Connector's Tool its Connector marks read-only (MCP's `readOnlyHint`):
+ *   it only reads from the Connector's service and sends to it, which the
+ *   User's consent to that service covers. The mark is a hint IncarnaMind
+ *   can't check, so the User can switch such a Tool to "ask". Every other
+ *   Connector Tool asks first, unless the User always allows it.
  * - Skill scripts (#41) always ask, unless the User chose "always run" for
  *   the Skill, which they must confirm after a risk warning (`riskAccepted`):
  *   a script runs on this computer with no sandbox.
@@ -25,6 +29,7 @@ import type {
   ApprovalRequest,
   ApprovalSubject,
   ApprovalSubjectKind,
+  Effect,
   SkillScriptApprovalRequest,
   ToolApprovalRequest,
 } from "./api";
@@ -51,6 +56,19 @@ export interface ApprovalsOptions {
 export type ToolCallToApprove =
   | Omit<ToolApprovalRequest, "requestId">
   | Omit<SkillScriptApprovalRequest, "requestId">;
+
+/** What decides whether a call asks: what it is (for the User's policy), and what it can do. */
+export type CallToDecide = Pick<ToolCallToApprove, "subject" | "effects">;
+
+/**
+ * Whether an Effect runs without asking: reading the Documents, a Skill, or
+ * a Connector's service; sending to a Connector's service, which the User's
+ * consent to it covers (the call asks for that first).
+ */
+const runsByDefault = ({ action, scope }: Effect): boolean =>
+  scope.kind === "service"
+    ? action === "read" || action === "network"
+    : action === "read" && (scope.kind === "documents" || scope.kind === "skill");
 
 const RISK_NOT_ACCEPTED =
   "Always running a Skill's scripts needs the User to confirm the risk warning first (riskAccepted).";
@@ -258,17 +276,16 @@ export function createApprovals(options: ApprovalsOptions) {
     list,
 
     /**
-     * Whether a call of a Connector's Tool must ask first: the User's policy
-     * for it, or else its Connector's read-only claim.
+     * Whether a call runs or asks the User first. The first rule that applies wins:
+     * 1. it asks if the User chose to be asked about it ("ask");
+     * 2. it runs if the User always allows it ("always"), or if each of its
+     *    Effects runs without asking (`runsByDefault`);
+     * 3. otherwise it asks.
      */
-    toolNeedsApproval(connectorId: string, tool: string, readOnly: boolean): boolean {
-      const policy = policyOf({ kind: "tool", connectorId, tool });
-      return policy === "ask" || (policy !== "always" && !readOnly);
-    },
-
-    /** Whether a run of one of a Skill's scripts must ask first: always, unless they always run. */
-    scriptNeedsApproval(skillId: string): boolean {
-      return policyOf({ kind: "skill-script", skillId }) !== "always";
+    decide(call: CallToDecide): "run" | "ask" {
+      const policy = policyOf(call.subject);
+      if (policy === "ask") return "ask";
+      return policy === "always" || call.effects.every(runsByDefault) ? "run" : "ask";
     },
 
     /**
