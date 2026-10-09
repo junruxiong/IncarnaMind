@@ -1592,6 +1592,7 @@ export const dataKinds = [
   "tags",
   "groups",
   "document-excerpts",
+  "page-images",
   "tool-arguments",
   "document-text",
   "queries",

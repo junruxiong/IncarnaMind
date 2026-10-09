@@ -23,6 +23,7 @@ import type { SettingsStore } from "../settings";
 import type { Database } from "../storage";
 import { isChatGptPlanModel } from "./chatgpt/codexEndpoint";
 import type { ChatGptPlan } from "./chatgpt/plan";
+import { chatModelReadsImages } from "./imageInput";
 import { acceptsApiKey, baseUrlFor, isChatProviderKind, requiresApiKey, serviceFor } from "./kinds";
 import { listProviderModels } from "./modelLists";
 import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
@@ -355,6 +356,14 @@ export function createChat(options: {
     },
 
     exists: (id: string) => rowById(id) !== undefined,
+
+    /** Whether `choice`'s model reads images (see ./imageInput); false when its provider is gone. */
+    readsImages(choice: ChatModelChoice): boolean {
+      const row = rowById(choice.providerId);
+      return (
+        !!row && isChatProviderKind(row.kind) && chatModelReadsImages(row.kind, choice.modelId)
+      );
+    },
 
     /**
      * Whether Questions can be asked with `choice`, or with the default model
