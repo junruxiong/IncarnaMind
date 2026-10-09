@@ -124,11 +124,12 @@ function ChoiceIcon({ choice }: { choice: ScopeChoice }) {
 function ScopePickerList({ editor, range, query, command, ref }: ScopePickerListProps) {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
+  const groups = useAppStore((state) => state.library?.groups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  const library = { folders, tags, documents };
+  const library = { folders, groups, tags, documents };
   const shown = scopeChoices(library, scopeAt(editor.state, range.from), query);
-  const nothing = folders.length + tags.length + documents.length === 0;
+  const nothing = folders.length + (groups?.length ?? 0) + tags.length + documents.length === 0;
   // The choice belongs to a query: typing more starts again from the top.
   const [choice, setChoice] = useState({ query, index: 0 });
   const selected = choice.query === query ? Math.min(choice.index, shown.length - 1) : 0;
@@ -202,8 +203,12 @@ function ScopePickerList({ editor, range, query, command, ref }: ScopePickerList
                     <ChoiceIcon choice={item} />
                   </span>
                   <span className="truncate">{item.name}</span>
-                  {item.path.length > 0 && (
-                    <span className="scope-picker-path">{item.path.join(" / ")}</span>
+                  {(item.path.length > 0 || item.sourceLocation) && (
+                    <span className="scope-picker-path">
+                      {[...(item.sourceLocation ? [t("library.sources")] : []), ...item.path].join(
+                        " / ",
+                      )}
+                    </span>
                   )}
                 </button>
               );

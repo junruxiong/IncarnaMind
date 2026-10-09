@@ -52,6 +52,8 @@ const EXCERPT_ROWS = 6;
 
 export interface TaggerOptions {
   db: Database;
+  /** The folder organizer owns tagging while it is configured. */
+  enabled?(): boolean;
   now: () => string;
   tags: TagsStore;
   /** Whether the tagger in use can take a request now. Asks the User nothing. */
@@ -168,7 +170,10 @@ export function createTagger(options: TaggerOptions) {
      * meanwhile: the run that comes next decides instead.
      */
     const stale = () =>
-      lifetime.signal.aborted || call.signal.aborted || (requests.get(id) ?? 0) !== request;
+      options.enabled?.() === false ||
+      lifetime.signal.aborted ||
+      call.signal.aborted ||
+      (requests.get(id) ?? 0) !== request;
     const row = rowOf(id);
     if (row?.status !== "ready") return;
     const definitions = tags.list();
@@ -222,6 +227,10 @@ export function createTagger(options: TaggerOptions) {
   async function tagNext(call: BackgroundCall): Promise<void> {
     try {
       if (queue.length === 0 || lifetime.signal.aborted) return;
+      if (options.enabled?.() === false) {
+        queue.length = 0;
+        return;
+      }
       const ready = await options.canRun();
       if (lifetime.signal.aborted) return;
       if (!ready) {
@@ -285,7 +294,7 @@ export function createTagger(options: TaggerOptions) {
 
   /** Queues every ready Document that still needs tagging, or marks them waiting if no tagger can be used. */
   function resume(): void {
-    if (lifetime.signal.aborted) return;
+    if (lifetime.signal.aborted || options.enabled?.() === false) return;
     const ids = db
       .all<{ id: string }>(
         `SELECT id FROM documents
@@ -317,6 +326,7 @@ export function createTagger(options: TaggerOptions) {
      * so that event already says whether it waits for a tagger.
      */
     documentReady(id: string): void {
+      if (options.enabled?.() === false) return;
       const row = rowOf(id);
       // Processed again (e.g. by a newer pipeline): the same file keeps its Tags.
       if (!row || row.tagging_status === "tagged") return;

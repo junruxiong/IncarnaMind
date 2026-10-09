@@ -19,8 +19,7 @@ directories:
 # automatically; the rest of the repo (sources, tests, the sample PDFs in data/) stays out.
 files:
   - out/**/*
-  # pdf.js's optional native canvas (about 27 MB) only renders pages in Node; text extraction doesn't use it.
-  - "!**/node_modules/@napi-rs/canvas*{,/**}"
+  # Library classification renders PDF pages in Node with @napi-rs/canvas.
 
 # The built-in Skills (SKILL.md folders), next to app.asar in the app's resources folder,
 # where the main process finds them (src/main/platform.ts). The core installs them into
@@ -41,6 +40,7 @@ extraResources:
 # keeps only its own libraries: the package ships them for every platform (about 250 MB).
 asarUnpack:
   - "**/node_modules/onnxruntime-node/bin/**"
+  - "**/node_modules/@napi-rs/canvas*/**"
 
 # No spaces in file names, and the architecture in every name: the auto-updater tells the
 # Apple silicon and Intel macOS downloads apart by it.

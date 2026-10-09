@@ -2124,3 +2124,25 @@
     animation: none;
   }
 }
+
+/* Folder contents stay readable beside an open document viewer. */
+.library-pane {
+  container-type: inline-size;
+}
+.library-columns {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.7fr) minmax(130px, 1fr) minmax(120px, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+@container (max-width: 540px) {
+  .library-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .library-document-name {
+    grid-column: 1 / -1;
+  }
+  .library-column-labels {
+    display: none;
+  }
+}

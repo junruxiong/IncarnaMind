@@ -15,3 +15,7 @@ eval/results/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Local environment files never belong in the repository
+.env
+.env.*

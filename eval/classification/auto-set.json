@@ -1,0 +1,362 @@
+{
+  "description": "Follow-up Auto validation. No sample appeared in the earlier 26-document classifier comparison. Existing Wikipedia excerpts/decks/sheets retain their original provenance; public PDFs are newly downloaded. Not an independent training holdout. All model-facing filenames are neutral. Labels fixed before inference.",
+  "groups": [
+    {
+      "id": "e0787d272a439bb74b762d96f1cef3d0",
+      "name": "Attention and the Transformer",
+      "description": "Attention mechanisms and the Transformer architecture, rather than language models in general.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "59608e925221b2a97e2a6f13b624ec91",
+      "name": "Gradient descent",
+      "description": "Gradient descent, stochastic gradient descent and optimisation algorithms.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "a43a82a5e0b2fb98666eda0a9d313612",
+      "name": "Large language models",
+      "description": "Large language models, GPT systems, their capabilities and training.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "9af408c54bd252ac96390744d02f589c",
+      "name": "The UN and the Sustainable Development Goals",
+      "description": "United Nations programmes, sustainable development goals and international development.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "a43c64178463a63a84ad7be880565d74",
+      "name": "ESG",
+      "description": "Corporate environmental, social and governance reporting or socially responsible investing.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "0a2ad928707a5106261f6dc694d1cdde",
+      "name": "Medicines and the pharmaceutical industry",
+      "description": "Medicines, pharmaceutical companies and rules for pharmaceutical marketing.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "a9f74d1ec36ebdeb2da3f6e5868090cd",
+      "name": "Tea",
+      "description": "Tea plants, beverages, production, processing and cultural history.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "70602e3dbd38c352c40f00f8afab742a",
+      "name": "Earthquakes",
+      "description": "Earthquakes, seismic events and seismology.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "10db699812d02cc570ad3bdef9113809",
+      "name": "Climate change",
+      "description": "Climate change, greenhouse gases, carbon emissions and atmospheric warming.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "d158be41db87d7055fa9548fe9c0e3cb",
+      "name": "Mars",
+      "description": "The planet Mars, its physical characteristics and exploration.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "97f64d5e88390efc86be5942bfd74fda",
+      "name": "Photosynthesis",
+      "description": "Photosynthesis in plants, chlorophyll and conversion of light to chemical energy.",
+      "createdAt": "",
+      "updatedAt": ""
+    },
+    {
+      "id": "6d731a5ed145ab6d2e88bbd4dc6caa88",
+      "name": "Inflation",
+      "description": "Economic inflation, consumer prices and the consumer price index.",
+      "createdAt": "",
+      "updatedAt": ""
+    }
+  ],
+  "samples": [
+    {
+      "id": "attention-deck",
+      "path": "eval/grouping/fixtures/Transformer architecture.pptx",
+      "subject": "attention",
+      "language": "en",
+      "kind": "pptx",
+      "source": "existing-held-out",
+      "sha256": "0ac97440a4559f4fda200bd203bf8729701e7ccaf0e0a4d7484a0f82445ef0ee"
+    },
+    {
+      "id": "attention-zh2",
+      "path": "eval/grouping/fixtures/维基百科-Transformer架构.md",
+      "subject": "attention",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "6492906a44fd331a3402fe4652f8cf0c2e92b26cdfd7f676dee62e959dd152a8"
+    },
+    {
+      "id": "gd-deck",
+      "path": "eval/grouping/fixtures/梯度下降法讲义.pptx",
+      "subject": "gradient-descent",
+      "language": "zh",
+      "kind": "pptx",
+      "source": "existing-held-out",
+      "sha256": "898bc778ddbc0c94cee08edf5fe8bca829922d8fb9581c25cdbc4154336a92b0"
+    },
+    {
+      "id": "gd-sgd",
+      "path": "eval/grouping/fixtures/Stochastic gradient descent · Wikipedia.md",
+      "subject": "gradient-descent",
+      "language": "en",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "42c566ece2842227ce7b37c38ba52607eb3e70d7acdce93dd7d65f24b2f6044a"
+    },
+    {
+      "id": "lm-zh2",
+      "path": "eval/grouping/fixtures/维基百科-GPT-3.md",
+      "subject": "language-models",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "23fa3bcc87dbfe4b4c9d8aa3a3523cbf77e6486d3bed5b1804be9f487520d0b5"
+    },
+    {
+      "id": "sdg-deck",
+      "path": "eval/grouping/fixtures/SDGs overview.pptx",
+      "subject": "sdgs",
+      "language": "en",
+      "kind": "pptx",
+      "source": "existing-held-out",
+      "sha256": "59cc05039aceb15854c2ee54a5c60e889ef79aab996ae151acb3f053e5b3e22c"
+    },
+    {
+      "id": "sdg-zh2",
+      "path": "eval/grouping/fixtures/维基百科-千年发展目标.md",
+      "subject": "sdgs",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "c48b6b6da47ed56949507166bfa590b1312fb2dd954fa011bbfb5d371ea24455"
+    },
+    {
+      "id": "esg-deck",
+      "path": "eval/grouping/fixtures/ESG reporting basics.pptx",
+      "subject": "esg",
+      "language": "en",
+      "kind": "pptx",
+      "source": "existing-held-out",
+      "sha256": "9ea0f1e6d92a763c19b74ab42d80f36bda78bbca5e49549b1b2984b708dfd7ac"
+    },
+    {
+      "id": "esg-sri",
+      "path": "eval/grouping/fixtures/Socially responsible investing · Wikipedia.md",
+      "subject": "esg",
+      "language": "en",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "d1b45598beed7650db9ab90e32beec49f2b8e49290ca6ae527a7fbd9a09f2ac6"
+    },
+    {
+      "id": "pharma-marketing",
+      "path": "eval/grouping/fixtures/Pharmaceutical marketing · Wikipedia.md",
+      "subject": "pharma",
+      "language": "en",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "c308328310e209317e85589fc5efbbe4fc17f51e35d980e56a0dec9128313ef7"
+    },
+    {
+      "id": "pharma-zh",
+      "path": "eval/grouping/fixtures/维基百科-药品.md",
+      "subject": "pharma",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "8bc0145ad6e07610b8cd608fcfb85746d18b20cc92e7b933365140da33e51d6e"
+    },
+    {
+      "id": "tea-deck",
+      "path": "eval/grouping/fixtures/茶叶加工流程.pptx",
+      "subject": "tea",
+      "language": "zh",
+      "kind": "pptx",
+      "source": "existing-held-out",
+      "sha256": "ca0fd7bcde673e8fdd62ce210dc57c2f662b85c46c4a615e42ae3fa65b8b96da"
+    },
+    {
+      "id": "tea-green",
+      "path": "eval/grouping/fixtures/Green tea · Wikipedia.md",
+      "subject": "tea",
+      "language": "en",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "2ae9adc9f150997ef01c9a286dde2451f1148264f09d1bdec684843f58c14c37"
+    },
+    {
+      "id": "quake-sheet",
+      "path": "eval/grouping/fixtures/usgs_significant_quakes_2023.csv",
+      "subject": "earthquakes",
+      "language": "en",
+      "kind": "csv",
+      "source": "existing-held-out",
+      "sha256": "9c7625c61ec566f7097d7049ed0572755e27751e0880376fc14d5610f0389832"
+    },
+    {
+      "id": "quake-zh2",
+      "path": "eval/grouping/fixtures/维基百科-地震学.md",
+      "subject": "earthquakes",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "363708161dd6c5934eda7b3ca06349affbdf3b17103058878881f8769e64effc"
+    },
+    {
+      "id": "climate-sheet",
+      "path": "eval/grouping/fixtures/co2_annmean_mlo.xlsx",
+      "subject": "climate",
+      "language": "en",
+      "kind": "xlsx",
+      "source": "existing-held-out",
+      "sha256": "fa911cadb61df3b34898137cea7e8f63096b6e5db08b5a6709223334d699bc3f"
+    },
+    {
+      "id": "climate-zh2",
+      "path": "eval/grouping/fixtures/维基百科-温室气体.md",
+      "subject": "climate",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "d3069f2b22c4d14a114debb69726eb25c247e283ea824d2c0140b30f4a1f4f9d"
+    },
+    {
+      "id": "mars-sheet",
+      "path": "eval/grouping/fixtures/Mars fact sheet (NASA).xlsx",
+      "subject": "mars",
+      "language": "en",
+      "kind": "xlsx",
+      "source": "existing-held-out",
+      "sha256": "abbb65f0376a755837daa5b628f7d15b1b96382f0182cb77bb58b74d302495ef"
+    },
+    {
+      "id": "mars-zh2",
+      "path": "eval/grouping/fixtures/维基百科-火星探测.md",
+      "subject": "mars",
+      "language": "zh",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "d1c2e3546603f358df20bd03fec01e0ff5c0634cc79978c7316076ebc769d69b"
+    },
+    {
+      "id": "photo-deck",
+      "path": "eval/grouping/fixtures/光合作用课件.pptx",
+      "subject": "photosynthesis",
+      "language": "zh",
+      "kind": "pptx",
+      "source": "existing-held-out",
+      "sha256": "411605eb0b14596692ff8ec09b53e59aaa0d309fbd55fba5f5f01a9ffb496079"
+    },
+    {
+      "id": "photo-chlorophyll",
+      "path": "eval/grouping/fixtures/Chlorophyll · Wikipedia.md",
+      "subject": "photosynthesis",
+      "language": "en",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "6c7a57207d9bf58ded95748b2e6ef6930c6ac8c6f349d70c7acd390044aece41"
+    },
+    {
+      "id": "inflation-sheet",
+      "path": "eval/grouping/fixtures/CPI-U 2015-2024.xlsx",
+      "subject": "inflation",
+      "language": "en",
+      "kind": "xlsx",
+      "source": "existing-held-out",
+      "sha256": "3d4d6e5e389c8a013b75c04b14d0ab3877b278f0ea7d1b465e3d47aded4954ce"
+    },
+    {
+      "id": "inflation-cpi",
+      "path": "eval/grouping/fixtures/Consumer price index · Wikipedia.md",
+      "subject": "inflation",
+      "language": "en",
+      "kind": "markdown",
+      "source": "existing-held-out",
+      "sha256": "59de145aa3846546214f136f2dce0366dfe743700b971f1c35d74184f4aed2f0"
+    },
+    {
+      "id": "nasa-perseverance",
+      "url": "https://assets.science.nasa.gov/content/dam/science/psd/mars/downloadable_items/4/4/44889_Mars2020Perseverance_Poster_without_crops.pdf",
+      "path": "eval/results/classification-auto/inputs/nasa-perseverance.pdf",
+      "subject": "mars",
+      "language": "en",
+      "kind": "pdf",
+      "sha256": "b897c1836f01db2333169d3c763979668485d57691aaddeeb6b2bc16e0435e5e",
+      "bytes": 6238224,
+      "source": "public-pdf"
+    },
+    {
+      "id": "nasa-red-planet",
+      "url": "https://www.nasa.gov/wp-content/uploads/2009/07/173749main_Mars_Poster.pdf",
+      "path": "eval/results/classification-auto/inputs/nasa-red-planet.pdf",
+      "subject": "mars",
+      "language": "en",
+      "kind": "pdf",
+      "sha256": "682c7bd6368aea04911a0e90cb70f63363d5ea07742a5c0134fdb63681106b34",
+      "bytes": 1356427,
+      "source": "public-pdf"
+    },
+    {
+      "id": "noaa-ocean-acidification",
+      "url": "https://coast.noaa.gov/coral_storage/assets/visual-media/infographics/ocean-acidification/fknms-infographic.pdf",
+      "path": "eval/results/classification-auto/inputs/noaa-ocean-acidification.pdf",
+      "subject": "climate",
+      "language": "en",
+      "kind": "pdf",
+      "sha256": "e7b82119108f863cadba6c5d154bcb918ed196a16dd73afd2f25ca764579c876",
+      "bytes": 746877,
+      "source": "public-pdf"
+    },
+    {
+      "id": "usgs-honshu-poster",
+      "url": "https://earthquake.usgs.gov/product/poster/20110710/us/1481141108501/poster.pdf",
+      "path": "eval/results/classification-auto/inputs/usgs-honshu-poster.pdf",
+      "subject": "earthquakes",
+      "language": "en",
+      "kind": "pdf",
+      "sha256": "551632dd772fbe93170ce00050c7ac8c252407bbf33fc89251524456d32c21df",
+      "bytes": 6424328,
+      "source": "public-pdf"
+    },
+    {
+      "id": "nasa-surviving-mars",
+      "url": "https://science.nasa.gov/wp-content/uploads/2023/10/Surviving_on_Mars.pdf",
+      "path": "eval/results/classification-auto/inputs/nasa-surviving-mars.pdf",
+      "subject": "mars",
+      "language": "en",
+      "kind": "pdf",
+      "sha256": "ef625b650ffb39b27bac1097931291e36535a83623862002f30615527e8d6ff0",
+      "bytes": 5313035,
+      "source": "public-pdf"
+    },
+    {
+      "id": "regional-revenue",
+      "path": "tests/fixtures/formats/Regional Revenue.xlsx",
+      "subject": null,
+      "language": "en",
+      "kind": "xlsx",
+      "source": "synthetic-control",
+      "sha256": "4bc1fcb178984d6fe30f3f58746529b4883195fadfb240f7445c403fed5ec24e"
+    }
+  ]
+}

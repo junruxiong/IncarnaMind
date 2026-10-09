@@ -14,6 +14,7 @@ export interface JevQuestion {
 export interface JevRequestBody {
   state: unknown;
   model: string;
+  images?: string[];
   questions: Record<string, JevQuestion>;
 }
 
@@ -26,6 +27,8 @@ export interface JevRequest {
 }
 
 export interface FakeJev {
+  chooseGroup(id: string): void;
+  readonly unloadedModels: string[];
   /** The base URL, e.g. "http://127.0.0.1:51234". */
   readonly url: string;
   /** Every request, in order. */
@@ -51,11 +54,17 @@ const tagNameOf = (question: JevQuestion) => /“(.+)”/.exec(question.instruct
  * questions as https://docs.typesafe.ai/api documents them. It checks the
  * bearer key, and is stopped when the current test finishes.
  */
-export async function startFakeJev({ apiKey = JEV_KEY } = {}): Promise<FakeJev> {
+export async function startFakeJev({
+  apiKey = JEV_KEY,
+  ollamaModels = [] as string[],
+} = {}): Promise<FakeJev> {
   const requests: JevRequest[] = [];
+  const unloadedModels: string[] = [];
+  const loadedModels = new Set<string>();
   let probabilities: Readonly<Record<string, number>> = {};
   let failure: { status: number; message: string; headers?: Record<string, string> } | null = null;
   let garbled: unknown = null;
+  let group = "__unsorted__";
   let gate: Promise<void> | null = null;
   let open = () => {};
   const waiting: { count: number; resolve: () => void }[] = [];
@@ -74,6 +83,20 @@ export async function startFakeJev({ apiKey = JEV_KEY } = {}): Promise<FakeJev> 
     let text = "";
     for await (const chunk of request) text += chunk;
     const body = (text ? JSON.parse(text) : {}) as JevRequestBody;
+    if (request.method === "GET" && request.url === "/api/tags") {
+      send(response, 200, { models: ollamaModels.map((name) => ({ name })) });
+      return;
+    }
+    if (request.method === "GET" && request.url === "/api/ps") {
+      send(response, 200, { models: [...loadedModels].map((name) => ({ name })) });
+      return;
+    }
+    if (request.method === "POST" && request.url === "/api/generate") {
+      unloadedModels.push(body.model);
+      loadedModels.delete(body.model);
+      send(response, 200, { done: true });
+      return;
+    }
     requests.push({
       method: request.method ?? "",
       path: request.url ?? "",
@@ -90,14 +113,18 @@ export async function startFakeJev({ apiKey = JEV_KEY } = {}): Promise<FakeJev> 
     } else if (failure) {
       send(response, failure.status, { detail: failure.message }, failure.headers);
     } else if (garbled !== null) {
+      loadedModels.add(body.model);
       send(response, 200, garbled);
     } else {
       const answers = Object.fromEntries(
         Object.entries(body.questions ?? {}).map(([id, question]) => [
           id,
-          { type: "noul", noul: probabilities[tagNameOf(question)] ?? 0.02 },
+          question.type === "choice"
+            ? { type: "choice", choice: group }
+            : { type: "noul", noul: probabilities[tagNameOf(question)] ?? 0.02 },
         ]),
       );
+      loadedModels.add(body.model);
       send(response, 200, {
         model: "jev-1.13.0",
         answers,
@@ -117,8 +144,12 @@ export async function startFakeJev({ apiKey = JEV_KEY } = {}): Promise<FakeJev> 
   const { port } = server.address() as AddressInfo;
 
   return {
+    chooseGroup(id) {
+      group = id;
+    },
     url: `http://127.0.0.1:${port}`,
     requests,
+    unloadedModels,
     answer(next) {
       probabilities = next;
     },

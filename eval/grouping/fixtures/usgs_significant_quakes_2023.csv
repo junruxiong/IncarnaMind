@@ -1,0 +1,20 @@
+time_utc,latitude,longitude,depth_km,magnitude,magnitude_type,place
+2023-01-08T12:32:42.372Z,-14.9467,166.8791,29,7,mww,"23 km WNW of Port-Olry, Vanuatu"
+2023-01-09T17:47:35.037Z,-7.0586,130.009,104.95,7.6,mww,"Pulau Pulau Tanimbar, Indonesia"
+2023-01-18T06:06:11.454Z,2.7306,127.0221,29.708,7,mwc,"156 km NW of Tobelo, Indonesia"
+2023-02-06T01:17:34.342Z,37.2256,37.0143,10,7.8,mww,"Pazarcik earthquake, Kahramanmaras earthquake sequence"
+2023-02-06T10:24:48.811Z,38.0106,37.1962,7.432,7.5,mww,"Elbistan earthquake, Kahramanmaras earthquake sequence"
+2023-03-16T00:56:00.149Z,-30.1741,-176.2047,10,7,mww,Kermadec Islands region
+2023-04-02T18:04:11.261Z,-4.3229,143.1658,70,7,mww,"40 km ESE of Ambunti, Papua New Guinea"
+2023-04-14T09:55:45.220Z,-6.0413,112.0478,597,7,mww,"Java, Indonesia"
+2023-04-24T00:41:55.894Z,-29.9574,-177.8386,46.755,7.1,mww,"Kermadec Islands, New Zealand"
+2023-04-24T20:00:57.265Z,-0.8082,98.5112,34,7.1,mww,"171 km SSE of Teluk Dalam, Indonesia"
+2023-05-10T16:02:00.334Z,-15.6278,-174.4925,210,7.6,mww,"82 km WNW of Hihifo, Tonga"
+2023-05-19T02:57:03.172Z,-23.2063,170.7423,18.053,7.7,mww,southeast of the Loyalty Islands
+2023-05-20T01:50:59.158Z,-23.0421,170.5603,27.309,7.1,mww,southeast of the Loyalty Islands
+2023-06-15T18:06:28.572Z,-22.9936,-177.1067,179,7.2,mww,"274 km SW of Houma, Tonga"
+2023-07-16T06:48:21.158Z,54.3926,-160.762,25,7.2,mww,"2023 Sand Point, Alaska Earthquake"
+2023-08-28T19:55:30.875Z,-6.7888,116.5211,500,7.1,mww,"180 km NNE of Gili Air, Indonesia"
+2023-11-08T04:53:49.631Z,-6.416,129.5466,6,7.1,mww,Banda Sea
+2023-12-02T14:37:04.454Z,8.5266,126.4161,40,7.6,mww,"19 km E of Gamut, Philippines"
+2023-12-07T12:56:30.184Z,-20.6152,169.3089,48,7.1,mww,"118 km S of Isangel, Vanuatu"

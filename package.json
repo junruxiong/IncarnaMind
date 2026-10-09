@@ -22,6 +22,8 @@
     "test:watch": "vitest",
     "test:smoke": "electron-vite build --mode test && playwright test",
     "eval": "vitest run --config eval/vitest.config.ts",
+    "eval:grouping": "vitest run --config eval/grouping/vitest.config.ts",
+    "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
@@ -35,6 +37,7 @@
     "@floating-ui/dom": "1.8.0",
     "@huggingface/tokenizers": "0.2.0",
     "@modelcontextprotocol/sdk": "1.32.1",
+    "@napi-rs/canvas": "1.0.10",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-code-block": "3.31.4",
     "@tiptap/extension-code-block-lowlight": "3.31.4",

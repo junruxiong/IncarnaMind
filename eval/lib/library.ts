@@ -44,6 +44,12 @@ export interface LibraryOptions {
   /** Keep the data folder afterwards, also when opening fails. */
   keep: boolean;
   log: Log;
+  /**
+   * Go on when some files aren't added or don't process (no text, or
+   * failed), as in a User's own library, instead of failing; they are
+   * counted in the log, and skipped files are left out of `documents`.
+   */
+  allowUnprocessed?: boolean;
 }
 
 export interface Library {
@@ -196,9 +202,14 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     const { documents: added, skipped } = await core.addDocuments(
       options.documents.map((document) => document.path),
     );
-    if (skipped.length > 0) {
+    if (skipped.length > 0 && options.allowUnprocessed) {
+      log(`${skipped.length} files weren't added; going on without them`);
+    } else if (skipped.length > 0) {
       throw new Error(`Files weren't added: ${skipped.map((file) => file.path).join(", ")}`);
     }
+    // The Documents come in the order of the files given, without those skipped.
+    const skippedPaths = new Set(skipped.map((file) => file.path));
+    const kept = options.documents.filter((document) => !skippedPaths.has(document.path));
     const done = await processed(
       core,
       added.map((document) => document.id),
@@ -206,13 +217,17 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
     );
     const processingSeconds = (Date.now() - begun) / 1000;
     const notReady = done.filter((document) => document.status !== "ready");
-    if (notReady.length > 0) {
+    if (notReady.length > 0 && options.allowUnprocessed) {
+      log(
+        `${notReady.length} Documents didn't process (no text, or failed); going on without them`,
+      );
+    } else if (notReady.length > 0) {
       throw new Error(
         `Documents didn't process: ${notReady.map((document) => `${document.name} (${document.status}: ${document.failure?.message ?? ""})`).join(", ")}`,
       );
     }
     const documents = new Map(
-      options.documents.map((document, index) => [document.key, done[index] as Document]),
+      kept.map((document, index) => [document.key, done[index] as Document]),
     );
 
     const db = openDatabase(join(dataDir, DATABASE_FILE));

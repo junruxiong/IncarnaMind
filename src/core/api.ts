@@ -1,3 +1,20 @@
+import type {
+  LibraryGroup,
+  LibraryGroupInput,
+  LibrarySettings,
+  LibrarySnapshot,
+} from "./library/types";
+
+export type {
+  ClassificationStatus,
+  DocumentGroupAssignment,
+  LibraryClassifier,
+  LibraryGroup,
+  LibraryGroupInput,
+  LibrarySettings,
+  LibrarySnapshot,
+} from "./library/types";
+
 /**
  * The core's public interface: the only API the UI uses.
  *
@@ -1550,6 +1567,7 @@ export const dataKinds = [
   "passages",
   "tool-results",
   "tags",
+  "groups",
   "document-excerpts",
   "tool-arguments",
   "document-text",
@@ -1573,7 +1591,14 @@ export type DataKind = (typeof dataKinds)[number];
  *   Voyage, when a rerank key is set up. The built-in reranking model sends
  *   nothing: with it, the flow has no service.
  */
-export const dataFlowIds = ["chat", "tagging", "connectors", "embeddings", "rerank"] as const;
+export const dataFlowIds = [
+  "chat",
+  "tagging",
+  "classification",
+  "connectors",
+  "embeddings",
+  "rerank",
+] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
@@ -2134,6 +2159,17 @@ export interface MindExport extends MindExportPreview {
 // ---------------------------------------------------------------------------
 
 export interface CoreApi {
+  getLibrary(): Promise<LibrarySnapshot>;
+  createLibraryGroup(input: LibraryGroupInput): Promise<LibraryGroup>;
+  updateLibraryGroup(groupId: string, input: LibraryGroupInput): Promise<LibraryGroup>;
+  deleteLibraryGroup(groupId: string): Promise<void>;
+  addLibraryStarterGroups(keys: string[]): Promise<void>;
+  saveLibrarySettings(settings: LibrarySettings): Promise<void>;
+  /** Queues selected documents, or all; manual assignments are preserved. */
+  classifyDocuments(documentIds?: string[]): Promise<void>;
+  /** A manual choice, including Unsorted (null), wins over in-flight classification. */
+  assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+
   createMind(input?: CreateMindInput): Promise<Mind>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
@@ -2682,6 +2718,8 @@ export interface CoreEvents {
   "keptCitationTexts.changed": KeptCitationText[];
   /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
+  /** Library definitions, settings or assignments changed; read the current snapshot. */
+  "library.changed": null;
   /**
    * Documents' Tags changed, or where automatic tagging is for them: the User
    * added or removed a Tag, automatic tagging started, waited, finished or
@@ -2812,6 +2850,14 @@ const methods: Record<CoreApiMethod, true> = {
   getPrivacySettings: true,
   updatePrivacySettings: true,
   listFolders: true,
+  getLibrary: true,
+  createLibraryGroup: true,
+  updateLibraryGroup: true,
+  deleteLibraryGroup: true,
+  addLibraryStarterGroups: true,
+  saveLibrarySettings: true,
+  classifyDocuments: true,
+  assignDocumentGroup: true,
   listTags: true,
   createTag: true,
   updateTag: true,
