@@ -396,7 +396,7 @@ test("organized folders remain separate from source locations and follow changes
     });
     await expect(row.getByRole("combobox").locator("option:checked")).toHaveText("Finance");
     expect(await readFile(path, "utf8")).toBe(revised);
-    await expect(window.getByTestId("sidebar-status")).not.toContainText("Tagging needs a model");
+    await expect(window.getByTestId("sidebar-status")).not.toContainText("Tags need a model");
     await window.setViewportSize({ width: 1000, height: 760 });
     await row.getByRole("button", { name: "Membrane separation", exact: true }).click();
     await expect(window.getByTestId("viewer")).toBeVisible();
