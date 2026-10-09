@@ -9,24 +9,24 @@
  *   Node.js (Electron's, as plain Node), so nothing needs installing for it.
  *   Shell scripts on Windows, TypeScript and other kinds give a plain error,
  *   and so does an interpreter that isn't installed, naming what to install.
- * - Each run gets a new, empty temporary working folder, removed afterwards.
- *   The script finds its Skill's folder in the `SKILL_DIR` environment variable.
- * - It runs with no input, until it exits or its timeout. On a timeout, a
- *   Stop, or IncarnaMind closing, it is stopped with every process it started
- *   (its process group on macOS and Linux, its process tree on Windows).
- * - What it writes is kept up to `SKILL_SCRIPT_LIMITS.maxOutputBytes` per
- *   stream: the start of its standard output, the end of its error output
- *   (where errors usually are), with a note when cut.
+ * - The script finds its Skill's folder in the `SKILL_DIR` environment variable.
+ * - The core's `Executor` (see ../execution) runs it: in a new, empty
+ *   temporary working folder, removed afterwards; with no input, until it
+ *   exits or its timeout; stopped with every process it started on a
+ *   timeout, a Stop, or IncarnaMind closing; what it writes kept up to
+ *   `SKILL_SCRIPT_LIMITS.maxOutputBytes` per stream (the start of its
+ *   standard output, the end of its error output), with a note when cut.
+ * - It asks the Executor to allow reading the Skill's folder and the working
+ *   folder, writing the working folder, and the network (any, for now).
  *
- * There is no sandbox (v1): a script can do whatever the User can, including
- * reaching the network. That is why each run asks first.
+ * At sandbox level "none" (v1) none of that is enforced: a script can do
+ * whatever the User can, including reaching the network (see `access`).
+ * That is why each run asks first.
  */
-import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { StringDecoder } from "node:string_decoder";
-import type { ProcessLauncher, ScriptRuntimes } from "../adapters";
+import type { ExecAllow, Executor, ScriptRuntimes } from "../adapters";
 import { SKILL_SCRIPT_LIMITS, type SkillScriptRun } from "../api";
+import { declaredAccess, type ExecAccess, WORKING_FOLDER } from "../execution";
 
 /**
  * Why a script can't run, in plain language: for the model, and for the
@@ -57,11 +57,9 @@ export interface ScriptToRun {
 }
 
 export interface ScriptRunnerOptions {
-  processes: ProcessLauncher;
+  /** Runs the scripts: the core's, at its sandbox level. */
+  executor: Executor;
   runtimes?: ScriptRuntimes;
-  /** Where each run's working folder is made. */
-  tempDir: string;
-  reportError(error: unknown): void;
 }
 
 const extensionOf = (path: string): string => {
@@ -159,85 +157,6 @@ const isNotFound = (error: unknown) =>
 const commandName = (command: string) =>
   (command.split(/[\\/]/).at(-1) ?? command).replace(/\.(exe|cmd|bat)$/i, "");
 
-/**
- * Stops a process and every process it started, at once: its process group
- * on macOS and Linux (it was started as the group's leader), its process
- * tree on Windows. Best effort: one that has gone already is fine.
- */
-function stopProcessTree(child: ChildProcess): void {
-  const { pid } = child;
-  if (pid === undefined) return;
-  const killChild = () => {
-    try {
-      child.kill("SIGKILL");
-    } catch {
-      // Gone already.
-    }
-  };
-  if (process.platform === "win32") {
-    try {
-      const taskkill = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      taskkill.on("error", killChild);
-    } catch {
-      killChild();
-    }
-    return;
-  }
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    // Not a group leader after all (a launcher that ignored `processGroup`), or gone.
-    killChild();
-  }
-}
-
-/** The first `limit` bytes of a stream, and whether there was more. */
-class Head {
-  private readonly chunks: Buffer[] = [];
-  private kept = 0;
-  truncated = false;
-  constructor(private readonly limit: number) {}
-  push(chunk: Buffer): void {
-    if (this.kept >= this.limit) {
-      if (chunk.length > 0) this.truncated = true;
-      return;
-    }
-    const room = this.limit - this.kept;
-    if (chunk.length > room) this.truncated = true;
-    const part = chunk.subarray(0, room);
-    this.chunks.push(part);
-    this.kept += part.length;
-  }
-  /** As text; a character cut in half at the end is left out. */
-  text(): string {
-    return new StringDecoder("utf8").write(Buffer.concat(this.chunks));
-  }
-}
-
-/** The last `limit` bytes of a stream, and whether there was more. */
-class Tail {
-  private buffer = Buffer.alloc(0);
-  truncated = false;
-  constructor(private readonly limit: number) {}
-  push(chunk: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    if (this.buffer.length > this.limit) {
-      this.truncated = true;
-      this.buffer = Buffer.from(this.buffer.subarray(this.buffer.length - this.limit));
-    }
-  }
-  /** As text; a character cut in half at the start is left out. */
-  text(): string {
-    let start = 0;
-    // UTF-8 continuation bytes are 10xxxxxx.
-    while (start < this.buffer.length && ((this.buffer[start] as number) & 0xc0) === 0x80) start++;
-    return this.buffer.subarray(start).toString("utf8");
-  }
-}
-
 /** A run that couldn't start, for the Tool-call card: why, in plain language. */
 export const scriptNotRun = (error: string): SkillScriptRun => ({
   exitCode: null,
@@ -271,76 +190,37 @@ export function scriptResultText(script: string, run: SkillScriptRun, timeoutSec
   ].join("\n");
 }
 
-/** How long a stopped script's output may stay open before the run ends without it. */
-const STOP_GRACE_MS = 2000;
-
-/** A run going on, as `stopAll` and `close` stop it: at once, or as soon as it has started. */
-interface Running {
-  stopAsked: boolean;
-  stop(): void;
-}
+/**
+ * What a script of the Skill in `skillDir` may touch: the Skill's folder and
+ * its working folder to read, its working folder to write, and the network
+ * (any, for now).
+ */
+const scriptAllow = (skillDir: string): ExecAllow => ({
+  read: [skillDir, WORKING_FOLDER],
+  write: [WORKING_FOLDER],
+  network: "any",
+});
 
 export function createScriptRunner(options: ScriptRunnerOptions) {
+  const { executor } = options;
   const runtimes = runtimesFrom(options.runtimes);
-  const running = new Set<Running>();
+  /** The runs going on, as `stopAll` and `close` stop them. */
+  const running = new Set<AbortController>();
   let closed = false;
-
-  /** Waits for the process to end, keeping what it writes; stops it on a timeout or `signal`. */
-  const collect = (child: ChildProcess, request: ScriptToRun, entry: Running) =>
-    new Promise<SkillScriptRun>((resolve) => {
-      const stdout = new Head(SKILL_SCRIPT_LIMITS.maxOutputBytes);
-      const stderr = new Tail(SKILL_SCRIPT_LIMITS.maxOutputBytes);
-      let timedOut = false;
-      let stopped = false;
-      let settled = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        stop();
-      }, request.timeoutMs);
-      const finish = (code: number | null) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        request.signal.removeEventListener("abort", stop);
-        resolve({
-          exitCode: stopped ? null : code,
-          timedOut,
-          stdout: stdout.text(),
-          stderr: stderr.text(),
-          stdoutTruncated: stdout.truncated,
-          stderrTruncated: stderr.truncated,
-          error: null,
-        });
-      };
-      function stop() {
-        if (stopped) return;
-        stopped = true;
-        stopProcessTree(child);
-        // A process that escaped (e.g. it started a session of its own) may keep the output
-        // open: after a grace period the run ends anyway, without it.
-        setTimeout(() => {
-          if (settled) return;
-          child.stdout?.destroy();
-          child.stderr?.destroy();
-          finish(child.exitCode);
-        }, STOP_GRACE_MS).unref();
-      }
-      entry.stop = stop;
-      // It gets no input.
-      child.stdin?.on("error", () => undefined);
-      child.stdin?.end();
-      child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));
-      child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
-      request.signal.addEventListener("abort", stop, { once: true });
-      // Once it has exited and its output has closed (a process it started may keep that open).
-      child.once("close", (code) => finish(code));
-      if (request.signal.aborted || entry.stopAsked || closed) stop();
-    });
 
   return {
     /** Throws `SkillScriptError` if a script like this can't run here, before anyone is asked. */
     check(script: string): void {
       interpreterFor(script, runtimes);
+    },
+
+    /**
+     * What a run of a script of the Skill in `skillDir` can reach, as
+     * `run_skill_script` declares it: from the Executor's sandbox level. At
+     * "none", anything, whatever the script was allowed.
+     */
+    access(skillDir: string): ExecAccess {
+      return declaredAccess(executor.level, scriptAllow(skillDir));
     },
 
     /**
@@ -352,52 +232,48 @@ export function createScriptRunner(options: ScriptRunnerOptions) {
       const interpreter = interpreterFor(request.script, runtimes);
       if (closed) throw new SkillScriptError("IncarnaMind is closing, so the script didn't run.");
       request.signal.throwIfAborted();
-      const scriptPath = join(request.skillDir, ...request.script.split("/"));
-      const workDir = await mkdtemp(join(options.tempDir, "incarnamind-script-"));
-      // Until it has started there is nothing to stop: `collect` stops it then.
-      const entry: Running = {
-        stopAsked: false,
-        stop: () => {
-          entry.stopAsked = true;
-        },
-      };
-      running.add(entry);
+      // Stopped by `stopAll` or `close`, as well as by the request's own signal.
+      const stop = new AbortController();
+      running.add(stop);
       try {
-        let child: ChildProcess;
-        try {
-          child = await options.processes.spawn(
-            interpreter.command,
-            [scriptPath, ...request.args],
-            {
-              cwd: workDir,
-              env: { ...interpreter.env, SKILL_DIR: request.skillDir },
-              processGroup: true,
-            },
-          );
-        } catch (error) {
-          if (!isNotFound(error)) throw error;
-          throw new SkillScriptError(
-            `${commandName(interpreter.command)} not found: install ${interpreter.install} to run ${request.script}.`,
-          );
-        }
-        return await collect(child, request, entry);
-      } finally {
-        running.delete(entry);
-        await rm(workDir, { recursive: true, force: true, maxRetries: 3 }).catch(
-          options.reportError,
+        const run = await executor.run({
+          command: interpreter.command,
+          args: [join(request.skillDir, ...request.script.split("/")), ...request.args],
+          env: { ...interpreter.env, SKILL_DIR: request.skillDir },
+          allow: scriptAllow(request.skillDir),
+          timeoutMs: request.timeoutMs,
+          maxOutputBytes: SKILL_SCRIPT_LIMITS.maxOutputBytes,
+          signal: AbortSignal.any([request.signal, stop.signal]),
+        });
+        // Field by field: the card stores exactly these in the Mind.
+        return {
+          exitCode: run.exitCode,
+          timedOut: run.timedOut,
+          stdout: run.stdout,
+          stderr: run.stderr,
+          stdoutTruncated: run.stdoutTruncated,
+          stderrTruncated: run.stderrTruncated,
+          error: null,
+        };
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+        throw new SkillScriptError(
+          `${commandName(interpreter.command)} not found: install ${interpreter.install} to run ${request.script}.`,
         );
+      } finally {
+        running.delete(stop);
       }
     },
 
     /** Stops every script running, e.g. when the User turns scripts off; their folders go once they have. */
     stopAll(): void {
-      for (const entry of [...running]) entry.stop();
+      for (const stop of [...running]) stop.abort();
     },
 
     /** Stops every script running, and runs no more, e.g. when the app quits. */
     close(): void {
       closed = true;
-      for (const entry of [...running]) entry.stop();
+      for (const stop of [...running]) stop.abort();
     },
   };
 }
