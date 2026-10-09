@@ -142,13 +142,20 @@ export async function openDocumentTags(item: Locator): Promise<Locator> {
   await item.getByTestId("document-tags-menu").click();
   const menu = item.getByTestId("document-tags-popover");
   await expect(menu).toBeVisible();
-  return menu.locator('[data-testid="tag-menu-item"][aria-checked="true"]');
+  // The Tags it has, in the picker's field.
+  return menu.getByTestId("tag-token");
 }
 
-/** Shows only the Documents with a Tag, or, choosing the same Tag again, all of them. */
+/**
+ * Adds a Tag to the sidebar's filter (Documents with any Tag chosen show), or,
+ * choosing a Tag already chosen, takes it out.
+ */
 export async function filterByTag(window: Page, name: string): Promise<void> {
   await window.getByTestId("tag-filter-menu").click();
-  await window.getByTestId("tag-filters").getByRole("menuitemradio", { name, exact: true }).click();
+  await window
+    .getByTestId("tag-filters")
+    .getByRole("menuitemcheckbox", { name, exact: true })
+    .click();
 }
 
 /**

@@ -92,7 +92,7 @@ export function DocumentsSection() {
   );
   // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
   const documents = useAppStore(useShallow(selectVisibleDocuments));
-  const filtering = useAppStore((state) => state.tagFilter !== null);
+  const filtering = useAppStore((state) => state.tagFilter.length > 0);
   const hasFolders = useAppStore(
     (state) => state.folders.length > 0 || state.linkedFolders.length > 0,
   );

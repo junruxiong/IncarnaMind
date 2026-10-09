@@ -6,7 +6,7 @@
  * Document) is one more entry. Pure: no store, no bridge, so the tests import it.
  */
 
-import type { Document, DocumentKind } from "../../core/api";
+import type { Document, DocumentKind, Tag } from "../../core/api";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -229,3 +229,50 @@ export const documentFacets: readonly LibraryFacet<LibraryDocument>[] = [
   formatFacet,
   statusFacet,
 ];
+
+// Tags -------------------------------------------------------------------------
+
+/**
+ * The Tags filter's option for Documents with a Tag that automatic tagging
+ * wasn't sure of: it is applied, marked "needs review" until the User
+ * confirms or removes it. Never a Tag's id, which is a UUID.
+ */
+export const NEEDS_REVIEW = "needs-review";
+
+type TaggedDocument = Pick<Document, "tags">;
+
+/** The Tags filter's options for a Document: its Tags, and `NEEDS_REVIEW` if one awaits review. */
+export function tagValues({ tags }: TaggedDocument): string[] {
+  const values = tags.map((link) => link.tagId);
+  return tags.some((link) => link.needsReview) ? [NEEDS_REVIEW, ...values] : values;
+}
+
+/**
+ * Whether a Document passes a Tag filter: any chosen option (either-or, like
+ * every filter's options). Nothing chosen keeps everything.
+ */
+export const matchesTags = (item: TaggedDocument, chosen: readonly string[]): boolean =>
+  chosen.length === 0 || tagValues(item).some((value) => chosen.includes(value));
+
+/**
+ * By Tag, named as the User named it: "Needs review" first, then the Tags in
+ * name order. A Document with several Tags falls under each.
+ */
+export function tagFacet(tags: readonly Pick<Tag, "id" | "name">[]): LibraryFacet<TaggedDocument> {
+  const names = new Map(tags.map((tag) => [tag.id, tag.name]));
+  return {
+    id: "tag",
+    title: "tags.title",
+    values: tagValues,
+    label: (value, t) =>
+      value === NEEDS_REVIEW ? t("tags.filter.review") : (names.get(value) ?? value),
+    compare: (a, b) =>
+      a === NEEDS_REVIEW
+        ? -1
+        : b === NEEDS_REVIEW
+          ? 1
+          : (names.get(a) ?? a).localeCompare(names.get(b) ?? b, undefined, {
+              sensitivity: "base",
+            }),
+  };
+}

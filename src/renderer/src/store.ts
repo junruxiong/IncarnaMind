@@ -24,6 +24,7 @@ import type {
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
+import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -115,10 +116,13 @@ interface AppState {
   linkQueue: LinkingFolder[];
   /** Every Tag, in name order. */
   tags: Tag[];
-  /** The Tag whose Documents the sidebar shows. Null: any. */
-  tagFilter: string | null;
-  /** The Documents with that Tag, by id, as the core last listed them. Null until listed. */
-  filteredDocumentIds: ReadonlySet<string> | null;
+  /**
+   * The Tags whose Documents the sidebar and the Library show: those with any
+   * of them (`NEEDS_REVIEW` stands for a Tag awaiting review). Empty: all.
+   */
+  tagFilter: readonly string[];
+  /** The Library's Documents the User selected, e.g. to tag them at once. */
+  selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
   libraryOpen: boolean;
   library: LibrarySnapshot | null;
@@ -255,10 +259,20 @@ interface AppState {
   showLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Unlinks a folder: its Documents leave the index; nothing on disk changes. */
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
-  /** Shows only the Documents with a Tag; null shows them whatever their Tags. */
-  filterByTag(tagId: string | null): Promise<void>;
+  /** Adds a Tag to the filter, or takes it out if it is in it. */
+  toggleTagFilter(tagId: string): void;
+  /** Shows the Documents with any of these Tags; none shows them whatever their Tags. */
+  setTagFilter(tagIds: readonly string[]): void;
   addDocumentTag(documentId: string, tagId: string): Promise<void>;
   removeDocumentTag(documentId: string, tagId: string): Promise<void>;
+  /** Puts a Tag on several Documents at once, or takes it off them. */
+  addTagToDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
+  removeTagFromDocuments(documentIds: readonly string[], tagId: string): Promise<void>;
+  /** Creates a Tag; the list follows the core's event. Throws what the core throws. */
+  createTag(name: string, description?: string): Promise<Tag>;
+  /** Selects Documents in the Library, or deselects them. */
+  selectDocuments(documentIds: readonly string[], selected: boolean): void;
+  clearSelection(): void;
   /** Recomputes the automatic Tags of these Documents, or of all of them. */
   retagDocuments(documentIds?: string[]): Promise<void>;
   openTagsDialog(): void;
@@ -305,12 +319,15 @@ function saveTabs(tabs: readonly string[], openMindId: string | null): void {
     .catch(() => undefined);
 }
 
-/** The Documents the sidebar lists: all of them, or those with the Tag it filters by. */
-export const selectVisibleDocuments = (state: AppState): Document[] => {
-  const ids = state.filteredDocumentIds;
-  if (state.tagFilter === null || ids === null) return state.documents;
-  return state.documents.filter((item) => ids.has(item.id));
-};
+/** The Documents the sidebar lists: all of them, or those with a Tag it filters by. */
+export const selectVisibleDocuments = (state: AppState): Document[] =>
+  state.tagFilter.length === 0
+    ? state.documents
+    : state.documents.filter((item) => matchesTags(item, state.tagFilter));
+
+/** What the Tag filter is, as a key: folds made while filtering belong to it. Null without one. */
+export const selectTagFilterKey = (state: AppState): string | null =>
+  state.tagFilter.length === 0 ? null : [...state.tagFilter].sort().join(" ");
 
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
@@ -443,8 +460,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     linking: null,
     linkQueue: [],
     tags: [],
-    tagFilter: null,
-    filteredDocumentIds: null,
+    tagFilter: [],
+    selectedDocuments: new Set(),
     tagsDialogOpen: false,
     libraryOpen: false,
     library: null,
@@ -463,7 +480,13 @@ export const useAppStore = create<AppState>()((set, get) => {
             : {}),
         });
     },
-    openLibrary: (filter = "all") => set({ libraryOpen: true, libraryFilter: filter }),
+    openLibrary: (filter = "all") =>
+      set((state) => ({
+        libraryOpen: true,
+        libraryFilter: filter,
+        // Another Folder: what was selected in this one isn't in view any more.
+        ...(filter !== state.libraryFilter && { selectedDocuments: new Set<string>() }),
+      })),
     closeLibrary: () => set({ libraryOpen: false }),
     skills: [],
     examples: null,
@@ -828,10 +851,17 @@ export const useAppStore = create<AppState>()((set, get) => {
         await core.removeLinkedFolder(linkedFolderId);
       }),
 
-    async filterByTag(tagId) {
-      if (tagId === get().tagFilter) return;
-      set({ tagFilter: tagId, filteredDocumentIds: null });
-      await refreshFilter();
+    toggleTagFilter(tagId) {
+      const current = get().tagFilter;
+      set({
+        tagFilter: current.includes(tagId)
+          ? current.filter((each) => each !== tagId)
+          : [...current, tagId],
+      });
+    },
+
+    setTagFilter(tagIds) {
+      set({ tagFilter: [...new Set(tagIds)] });
     },
 
     // The Documents follow the core's "documents.tagged" event, which arrives before these calls return.
@@ -844,6 +874,42 @@ export const useAppStore = create<AppState>()((set, get) => {
       attempt(async () => {
         await core.removeDocumentTag(documentId, tagId);
       }),
+
+    addTagToDocuments: (documentIds, tagId) =>
+      attempt(async () => {
+        await core.addTagToDocuments([...documentIds], tagId);
+      }),
+
+    removeTagFromDocuments: (documentIds, tagId) =>
+      attempt(async () => {
+        await core.removeTagFromDocuments([...documentIds], tagId);
+      }),
+
+    async createTag(name, description = "") {
+      const tag = await core.createTag({ name, description });
+      // The list follows "tags.changed"; this makes the new Tag usable at once.
+      set((state) => ({
+        tags: state.tags.some((each) => each.id === tag.id)
+          ? state.tags
+          : [...state.tags, tag].sort((a, b) =>
+              a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+            ),
+      }));
+      return tag;
+    },
+
+    selectDocuments(documentIds, selected) {
+      const next = new Set(get().selectedDocuments);
+      for (const id of documentIds) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      set({ selectedDocuments: next });
+    },
+
+    clearSelection() {
+      if (get().selectedDocuments.size > 0) set({ selectedDocuments: new Set() });
+    },
 
     retagDocuments: (documentIds) =>
       attempt(async () => {
@@ -910,40 +976,6 @@ const isOwnDocument = (document: Document) => {
 function tickIndexed(connectors: number): void {
   const { documents, updateGettingStarted } = useAppStore.getState();
   if (connectors > 0 || documents.some(isOwnDocument)) updateGettingStarted({ indexed: true });
-}
-
-/** Counts filter requests, so a slow answer to an old one never overwrites a newer one. */
-let filterRequests = 0;
-
-/** Asks the core which Documents have the Tag the sidebar filters by. */
-async function refreshFilter(): Promise<void> {
-  const request = ++filterRequests;
-  const { tagFilter: tagId } = useAppStore.getState();
-  if (tagId === null) {
-    useAppStore.setState({ filteredDocumentIds: null });
-    return;
-  }
-  try {
-    const listed = await core.listDocuments({ tagId });
-    if (request === filterRequests) {
-      useAppStore.setState({ filteredDocumentIds: new Set(listed.map((item) => item.id)) });
-    }
-  } catch (error) {
-    if (request !== filterRequests) return;
-    // The Tag was deleted meanwhile: drop the filter. Anything else is a failure.
-    if (useAppStore.getState().tags.some((tag) => tag.id === tagId)) {
-      useAppStore.setState({ actionError: messageOf(error) });
-      return;
-    }
-    useAppStore.setState({ tagFilter: null, filteredDocumentIds: null });
-    filterRequests++; // nothing to filter by: an answer still to come is for an old filter
-  }
-}
-
-/** Refreshes the filtered list, if the sidebar is filtered. */
-function refreshFilterIfAny(): void {
-  if (useAppStore.getState().tagFilter !== null) void refreshFilter();
-  else filterRequests++; // nothing to filter by: an answer still to come is for an old filter
 }
 
 // Settings can change outside this window (another window, or the core itself), so follow the core's event.
@@ -1028,14 +1060,13 @@ core.on("documents.moved", (moved) => {
   }));
 });
 
-// Tags change through this window or another: follow the list, and drop a filter by a deleted Tag.
+// Tags change through this window or another: follow the list, and drop a deleted Tag from the filter.
 core.on("tags.changed", (tags) => {
   const { tagFilter } = useAppStore.getState();
-  useAppStore.setState({ tags });
-  if (tagFilter !== null && !tags.some((tag) => tag.id === tagFilter)) {
-    useAppStore.setState({ tagFilter: null, filteredDocumentIds: null });
-    refreshFilterIfAny();
-  }
+  const kept = tagFilter.filter(
+    (value) => value === NEEDS_REVIEW || tags.some((tag) => tag.id === value),
+  );
+  useAppStore.setState({ tags, ...(kept.length !== tagFilter.length && { tagFilter: kept }) });
 });
 
 // Skills are imported, turned on or off, or removed, through this window or another.
@@ -1046,7 +1077,6 @@ core.on("documents.tagged", (tagged) => {
   useAppStore.setState((state) => ({
     documents: tagged.reduce((documents, item) => upsert(documents, item), state.documents),
   }));
-  if (useAppStore.getState().tagFilter !== null) void refreshFilter();
 });
 
 core.on("library.changed", () => {
