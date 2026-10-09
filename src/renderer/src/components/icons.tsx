@@ -1,55 +1,6 @@
 import type { SVGProps } from "react";
-import type { DocumentKind } from "../../../core/api";
 
 type IconProps = SVGProps<SVGSVGElement>;
-
-export function LogoIcon(props: IconProps) {
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" {...props}>
-      <defs>
-        <linearGradient id="incarnamind-logo" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0.1" stopColor="#6366f1" />
-          <stop offset="0.45" stopColor="#0ea5e9" />
-          <stop offset="0.9" stopColor="#10b981" />
-        </linearGradient>
-      </defs>
-      <circle cx="16" cy="16" r="15" fill="url(#incarnamind-logo)" />
-      <path
-        d="M10.5 21.5v-11M16 21.5v-6.5M21.5 21.5v-9"
-        stroke="#fff"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/** A notebook, in the old app's flat colour style. */
-export function MindIcon(props: IconProps) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
-      <rect x="2.5" y="1.5" width="11" height="13" rx="2" fill="#bfdbfe" stroke="#3b82f6" />
-      <path d="M5.5 5h5M5.5 8h5M5.5 11h3" stroke="#3b82f6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** A page with a folded corner: red for PDFs, indigo for text and Markdown. */
-export function DocumentIcon({ kind, ...props }: IconProps & { kind: DocumentKind }) {
-  const [fill, stroke] = kind === "pdf" ? ["#fee2e2", "#ef4444"] : ["#e0e7ff", "#6366f1"];
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
-      <path
-        d="M4.5 1.5h5l3 3v9a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"
-        fill={fill}
-        stroke={stroke}
-        strokeLinejoin="round"
-      />
-      <path d="M9.5 1.5v3h3" fill="none" stroke={stroke} strokeLinejoin="round" />
-      <path d="M6 8.5h4M6 11h4" stroke={stroke} strokeLinecap="round" />
-    </svg>
-  );
-}
 
 export function PencilIcon(props: IconProps) {
   return (
@@ -248,32 +199,6 @@ export function GitHubIcon(props: IconProps) {
   );
 }
 
-/** A folder, in the same flat colour style as the Mind and Document icons. */
-export function FolderIcon(props: IconProps) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
-      <path
-        d="M1.5 4a1 1 0 0 1 1-1h3.4l1.5 1.5h6.1a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"
-        fill="#fef3c7"
-        stroke="#f59e0b"
-        strokeLinejoin="round"
-      />
-      <path d="M1.5 6.5h13" stroke="#f59e0b" />
-    </svg>
-  );
-}
-
-/** A stack of pages: every Document, whatever its Folder. */
-export function AllDocumentsIcon(props: IconProps) {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" {...props}>
-      <rect x="4.5" y="1.5" width="9" height="11" rx="1" fill="#f3f4f6" stroke="#9ca3af" />
-      <rect x="2.5" y="3.5" width="9" height="11" rx="1" fill="#e0e7ff" stroke="#6366f1" />
-      <path d="M5 7.5h4M5 10h4" stroke="#6366f1" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function FolderPlusIcon(props: IconProps) {
   return (
     <svg
@@ -307,25 +232,6 @@ export function MoveToFolderIcon(props: IconProps) {
     >
       <path d="M1.5 4a1 1 0 0 1 1-1h3.4l1.5 1.5h6.1a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" />
       <path d="M5.5 9h5M8.5 7l2 2-2 2" />
-    </svg>
-  );
-}
-
-/** A label tag with a hole: Tags. */
-export function TagIcon(props: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M2.5 3.5a1 1 0 0 1 1-1h3.6l6.2 6.2a1 1 0 0 1 0 1.4l-3.2 3.2a1 1 0 0 1-1.4 0L2.5 7.1z" />
-      <circle cx="5.5" cy="5.5" r="1" />
     </svg>
   );
 }

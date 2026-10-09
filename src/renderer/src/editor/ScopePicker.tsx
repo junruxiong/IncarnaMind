@@ -14,7 +14,7 @@ import {
   scopeIds,
   searchScopeOf,
 } from "../../../shared/searchScope";
-import { DocumentIcon, FolderIcon, TagIcon } from "../components/icons";
+import { DocumentLineIcon, FolderLineIcon, TagLineIcon } from "../components/lineIcons";
 import { useT } from "../i18n";
 import { type ScopeChoice, scopeChoices } from "../scope";
 import { useAppStore } from "../store";
@@ -115,10 +115,12 @@ export const ScopePicker = Extension.create({
   },
 });
 
+/** A choice's icon: the sidebar's line icons, in its muted ink. */
 function ChoiceIcon({ choice }: { choice: ScopeChoice }) {
-  if (choice.kind === "folder") return <FolderIcon className="size-4" />;
-  if (choice.kind === "tag") return <TagIcon className="size-4 text-ink-meta" />;
-  return <DocumentIcon kind={choice.documentKind ?? "text"} className="size-4" />;
+  const className = "size-4 text-ink-meta";
+  if (choice.kind === "folder") return <FolderLineIcon className={className} />;
+  if (choice.kind === "tag") return <TagLineIcon className={className} />;
+  return <DocumentLineIcon kind={choice.documentKind ?? "text"} className={className} />;
 }
 
 function ScopePickerList({ editor, range, query, command, ref }: ScopePickerListProps) {
