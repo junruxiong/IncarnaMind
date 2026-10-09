@@ -137,10 +137,10 @@ export function ViewerPanel({ width, onClose }: { width: number; onClose(): void
               <DocumentRemoved quote={target.quote} unlinked={unlinked} />
             </>
           ) : (
-            // While its view loads, the header alone: the page comes a moment later.
-            <Suspense fallback={<ViewerHeader />}>
-              {/* Keyed, so another Document, or a new read of its file, starts afresh. */}
-              <DocumentView key={fileKey} document={document} target={target} />
+            // Keyed, so another Document, or a new read of its file, starts afresh (the last one
+            // goes at once). While its view loads, the header alone: the page comes a moment later.
+            <Suspense key={fileKey} fallback={<ViewerHeader />}>
+              <DocumentView document={document} target={target} />
             </Suspense>
           )}
         </PlaceMemoryContext.Provider>
