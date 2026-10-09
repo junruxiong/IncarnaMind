@@ -409,7 +409,7 @@ export const en = {
   "status.processing.other": "Processing {count} Documents…",
   "status.tagging.one": "Tagging 1 Document…",
   "status.tagging.other": "Tagging {count} Documents…",
-  "status.taggingWaiting": "Tagging needs a model",
+  "status.taggingWaiting": "Tags need a model",
   "status.setUp": "Set up",
   "status.downloading": "Search model: {downloaded} of {total} MB",
   "status.downloadFailed": "Search model download failed",
@@ -1334,7 +1334,7 @@ export const en = {
   "examples.banner.label": "About this example",
   "examples.banner.title": "This is an example Mind.",
   "examples.banner.body":
-    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a green check to see the quote.",
+    "You write here like in any document, ask Questions about your Documents, and every claim in an Answer links to the page it came from. Click a check to see the quote; green means it was found.",
   "examples.banner.addOwn": "Add your Documents or apps",
   "examples.banner.remove": "Remove the examples",
   "examples.answer": "Example Answer, written in advance: no model needed to try it",

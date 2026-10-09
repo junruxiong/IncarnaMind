@@ -131,8 +131,12 @@
     @apply bg-sheet font-sans text-ink antialiased;
   }
 
-  /* Reached by keyboard, a radio or checkbox gets the blue focus outline, not the system's. */
-  input:is([type="radio"], [type="checkbox"]):focus-visible {
+  /*
+   * Reached by keyboard, every control shows the blue focus ring (DESIGN.md),
+   * not the system's: 2px, 2px out. A component may move it, e.g. inside a
+   * row; Tailwind's `outline-none` hides it, so controls don't use that.
+   */
+  :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
@@ -590,9 +594,10 @@
 
   /*
    * The hint drawn over an empty Mind's line or the empty line after an
-   * Answer (EndHint): placeholder grey, in the writing's type. Once the
-   * cursor is on the line, its "press ⌘J…" part is underlined and takes the
-   * pointer, to start a Question there; before, a click is for the line.
+   * Answer (EndHint): meta grey (4.5:1, as it holds a link), in the writing's
+   * type. Once the cursor is on the line, its "press ⌘J…" part is underlined
+   * and takes the pointer, to start a Question there; before, a click is for
+   * the line.
    */
   .end-hint {
     position: absolute;
@@ -601,7 +606,7 @@
     font-family: var(--font-serif);
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
-    color: var(--color-ink-placeholder);
+    color: var(--color-ink-meta);
   }
   .end-hint-ask {
     padding: 0;
@@ -622,7 +627,7 @@
     pointer-events: auto;
 
     &:hover {
-      color: var(--color-ink-meta);
+      color: var(--color-ink-secondary);
       text-decoration-color: currentColor;
     }
   }
@@ -862,7 +867,6 @@
     font-size: 12px;
     line-height: 20px;
     color: var(--color-ink-meta);
-    outline: none;
     field-sizing: content;
 
     &:hover,
@@ -999,7 +1003,6 @@
     line-height: 20px;
     color: inherit;
     text-overflow: ellipsis;
-    outline: none;
     cursor: pointer;
 
     &:hover,
@@ -1742,7 +1745,8 @@
     background: var(--check-wash);
     color: var(--check-ink);
 
-    &[data-check="checking"] {
+    /* Only the dot pulses while it is checked: the number keeps its contrast. */
+    &[data-check="checking"] .margin-check-icon {
       animation: mind-pulse 1.6s ease-in-out infinite;
     }
   }
@@ -2130,7 +2134,7 @@
 
 /* Reduced motion: checks appear at once, and nothing pulses. */
 @media (prefers-reduced-motion: reduce) {
-  .margin-check,
+  .margin-check-icon,
   .margin-check--reveal,
   .answer-writing::before,
   .citation-marker-icon {
