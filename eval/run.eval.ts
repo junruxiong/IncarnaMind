@@ -6,8 +6,10 @@
  * and processed with the real built-in embedding model (on a worker thread),
  * then searches for each Question, reranked by the real built-in reranking
  * model as the search Tool does by default (the gate), and, when a chat model
- * is given, Answers and their Citations. It runs under Vitest only for its TypeScript and
- * worker-thread handling (eval/vitest.config.ts); `npm test` never runs it.
+ * is given, Answers and their Citations. Then the same for the every-format
+ * set (#70), on a library of its own, reported per format and never gating.
+ * It runs under Vitest only for its TypeScript and worker-thread handling
+ * (eval/vitest.config.ts); `npm test` never runs it.
  */
 import { execFileSync } from "node:child_process";
 import { arch, cpus, platform } from "node:os";
@@ -19,10 +21,11 @@ import {
   BUILT_IN_RERANKING_MODEL,
   type RerankingModelDefinition,
 } from "../src/core";
-import { type CitationRun, runCitations } from "./lib/citations";
-import { readConfig } from "./lib/config";
+import { type CitationRun, runCitations, summariseGroup } from "./lib/citations";
+import { type EvalConfig, readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
-import { loadEvaluationSet } from "./lib/evaluationSet";
+import { FORMATS_SET, loadEvaluationSet } from "./lib/evaluationSet";
+import { type FormatsReport, formatOf, summariseFormats } from "./lib/formats";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
 import { type EvalReport, terminalSummary, writeReports } from "./lib/report";
@@ -118,6 +121,81 @@ async function retrieve(
     ...(rerankers.length > 0 && { rerankers }),
     ...(candidates && { rerankCandidates: candidates }),
   };
+}
+
+/**
+ * The every-format set (#70): its own library of Word, PowerPoint, Excel,
+ * CSV, Markdown, text and PDF Documents, searched as the gating set is and,
+ * with a chat model, each Question asked once. Reported per format; it never
+ * gates, so its Citation targets aren't failures either.
+ */
+async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> {
+  const set = loadEvaluationSet(root, FORMATS_SET);
+  log(`Every format: ${set.questions.length} Questions over ${set.documents.length} Documents`);
+  const library = await openLibrary({
+    name: "formats",
+    embedder: createWorkerEmbedder(),
+    modelCache: join(config.cacheDir, "models"),
+    reranker: createWorkerCrossEncoder(),
+    documents: set.documents,
+    keep: config.keepData,
+    log,
+    // A scanned page has no text: the Questions about it are known gaps.
+    allowUnprocessed: true,
+  });
+  try {
+    const unprocessed = set.documents.filter(
+      ({ key }) =>
+        library.documents.get(key)?.status !== "ready" &&
+        !set.questions.some((question) => question.expected.document === key && question.knownGap),
+    );
+    if (unprocessed.length > 0) {
+      throw new Error(
+        `Documents didn't process: ${unprocessed.map(({ path }) => path).join(", ")}`,
+      );
+    }
+    const retrieval = await retrieve(
+      library,
+      `${BUILT_IN_EMBEDDING_MODEL.name} (built-in)`,
+      false,
+      set.questions,
+      log,
+      { candidates: [BUILT_IN_RERANKING_MODEL], cacheDir: config.cacheDir },
+    );
+    const citations: CitationRun | { skipped: string } = config.chat
+      ? {
+          ...(await runCitations(
+            library,
+            set.questions,
+            config.chat,
+            { ...config, maxRounds: 1 },
+            log,
+          )),
+          failures: [],
+        }
+      : { skipped: "no chat model was given." };
+    return {
+      source: set.source,
+      documents: set.documents.map(({ key, path }) => {
+        const document = library.documents.get(key);
+        return {
+          key,
+          name: document?.name ?? key,
+          format: formatOf(path),
+          status: document?.status ?? "failed",
+        };
+      }),
+      retrieval,
+      formats: summariseFormats(set, retrieval, citations),
+      crossLingualCitations:
+        "skipped" in citations
+          ? null
+          : summariseGroup(citations.answers.filter((answer) => answer.crossLingual)),
+      citations,
+    };
+  } finally {
+    await library.close();
+  }
 }
 
 test("retrieval and Citation evaluation", async () => {
@@ -220,6 +298,8 @@ test("retrieval and Citation evaluation", async () => {
   } finally {
     await builtIn.close();
   }
+  report.formats = await runFormats(config, log);
+  report.run.seconds = (Date.now() - started.getTime()) / 1000;
 
   const dir = await writeReports(report, config.resultsDir, root);
   console.log(terminalSummary(report, dir, root));

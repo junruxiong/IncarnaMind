@@ -1,0 +1,621 @@
+{
+  "source": "Written by hand on 2026-10-09, before any chat model was asked the every-format set (eval/retrieval/formats.json), as models write Citations: the quote copied from a Passage, sometimes with its cells' tabs read as spaces, its numbers written another way, or a Markdown table's pipes left out. Citations a run records (report.json: formats.citations.answers[].citations[]) can be added in the same shape, with the document's key in formats.json.",
+  "citations": [
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "Surface temperatures in the Eastgate district peaked at 47.2 °C on 19 July, the highest of the six districts measured.",
+      "outcome": "found",
+      "case": "two columns: a sentence over four lines of one column"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 1,
+      "pageTo": 2,
+      "quote": "In our model a street tree costs about £22 a year to look after from its fifth year, mostly for watering in dry summers.",
+      "outcome": "found",
+      "case": "two columns: a sentence from the foot of page 1's right column to the top of page 2"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "In our model a street tree costs about £22 a year to look after from its fifth year",
+      "outcome": "wrong-page",
+      "case": "the same sentence, citing only the first of its two pages"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "Misting stations 12 sites 3.1 £9,800 per site",
+      "outcome": "found",
+      "case": "a table row"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "1 Ambulance figures from the regional ambulance service's 2025 heat report.",
+      "outcome": "found",
+      "case": "a footnote, with its number"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "Figure 1. Hours above 30 °C on the hottest day, by district; Eastgate stayed above 30 °C for 9.5 hours.",
+      "outcome": "found",
+      "case": "a figure caption over two lines"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Water use was read from each station's meter weekly.",
+      "outcome": "wrong-page",
+      "case": "a footnote cited on the page after its own"
+    },
+    {
+      "kind": "page",
+      "document": "urban-heat",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "Eastgate's surface temperature reached a peak of 47.2 °C on 19 July.",
+      "outcome": "not-in-document",
+      "case": "a paraphrase"
+    },
+    {
+      "kind": "page",
+      "document": "城市绿地",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "老城区正午地表温度最高达到46.8°C，出现在7月22日，是五个城区中最高的。",
+      "outcome": "found",
+      "case": "two columns: a sentence over a line break, with °C for the page's ℃"
+    },
+    {
+      "kind": "page",
+      "document": "城市绿地",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "喷雾降温设施 15处 3.4 每处7.5万元",
+      "outcome": "found",
+      "case": "a table row the page reads as one line with its neighbours"
+    },
+    {
+      "kind": "page",
+      "document": "城市绿地",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "成本按2026年价格计算，不含维护费用，维护费每年约为建设成本的6%。",
+      "outcome": "found",
+      "case": "a footnote"
+    },
+    {
+      "kind": "page",
+      "document": "城市绿地",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "图2 各项措施旁正午实测降温幅度（℃），为12条试验道路的平均值；透水铺装在高新区体育中心停车场测量。",
+      "outcome": "found",
+      "case": "a figure caption"
+    },
+    {
+      "kind": "page",
+      "document": "城市绿地",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "测量期间有两处记录仪被移动过位置，相关数据已从分析中剔除。",
+      "outcome": "wrong-page",
+      "case": "a sentence of page 2 cited on page 1"
+    },
+
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Paid subscribers reached 9,420 by the end of September.",
+      "outcome": "found",
+      "case": "a slide's text"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 4,
+      "pageTo": 4,
+      "quote": "Regular 2 £22.00 3,960",
+      "outcome": "found",
+      "case": "a table row, its cells' tabs read as spaces"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 4,
+      "pageTo": 4,
+      "quote": "Regular | 2 | £22.00 | 3,960",
+      "outcome": "false-not-found",
+      "case": "a table row written with pipes between its cells: the check doesn't read the pipes as cell breaks"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 6,
+      "pageTo": 6,
+      "quote": "Apr: 820, May: 1140, Jun: 1560",
+      "outcome": "found",
+      "case": "a chart's series, from its cached values"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 6,
+      "pageTo": 6,
+      "quote": "Jun: 1,560",
+      "outcome": "false-not-found",
+      "case": "a chart's value written with a thousands separator: numbers are matched however they are written in sheets' rows only"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 8,
+      "pageTo": 8,
+      "quote": "Subscribers by region (%)",
+      "outcome": "found",
+      "case": "a chart's title"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "the Leeds roastery starts shipping on 3 November, which halves delivery times in the north.",
+      "outcome": "found",
+      "case": "speaker notes, which count as part of their slide"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "the Leeds roastery starts shipping on 3 November",
+      "outcome": "wrong-page",
+      "case": "speaker notes cited on the next slide"
+    },
+    {
+      "kind": "slide",
+      "document": "coffee-subscription",
+      "pageFrom": 7,
+      "pageTo": 7,
+      "quote": "Sponsoring the podcast cost £18,000 over eight weeks.",
+      "outcome": "not-in-document",
+      "case": "a paraphrase"
+    },
+    {
+      "kind": "slide",
+      "document": "新能源公交",
+      "pageFrom": 4,
+      "pageTo": 4,
+      "quote": "9路 28 11,300 91.8%",
+      "outcome": "found",
+      "case": "a table row"
+    },
+    {
+      "kind": "slide",
+      "document": "新能源公交",
+      "pageFrom": 7,
+      "pageTo": 7,
+      "quote": "手机扫码: 64, 公交卡: 29, 现金: 7",
+      "outcome": "found",
+      "case": "a pie chart's series"
+    },
+    {
+      "kind": "slide",
+      "document": "新能源公交",
+      "pageFrom": 4,
+      "pageTo": 4,
+      "quote": "26路下月起延伸到高铁西站。",
+      "outcome": "found",
+      "case": "speaker notes"
+    },
+    {
+      "kind": "slide",
+      "document": "新能源公交",
+      "pageFrom": 5,
+      "pageTo": 6,
+      "quote": "电池质保期为8年或60万公里，以先到者为准。",
+      "outcome": "found",
+      "case": "two consecutive slides, the quote in the first one's notes"
+    },
+
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "The Riverside Library opened in 1968 and last had a major refurbishment in 1994.",
+      "outcome": "found",
+      "case": "Word: body text"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "Lifts and ramps Ascend Access £385,000 March 2027",
+      "outcome": "found",
+      "case": "Word: a table row, its cells' tabs read as spaces"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 11,
+      "pageTo": 11,
+      "quote": "The works cost excludes VAT, which the council recovers in full.",
+      "outcome": "found",
+      "case": "Word: a footnote, in the footnotes' section"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "The works cost excludes VAT, which the council recovers in full.",
+      "outcome": "wrong-page",
+      "case": "Word: a footnote cited at the section of the sentence it notes"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 5,
+      "pageTo": 5,
+      "quote": "2.2 South wing\nTemporary closure starts on 6 September 2027 and lasts seven weeks.",
+      "outcome": "found",
+      "case": "Word: a section, its heading quoted with it"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 5,
+      "pageTo": 5,
+      "quote": "Staff move to the mobile library van during the works.",
+      "outcome": "wrong-page",
+      "case": "Word: the north wing's sentence cited at the south wing's section"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "Finance has asked to lower the contingency to 8 per cent once the roof tender is signed.",
+      "outcome": "not-in-document",
+      "case": "Word: a comment, which isn't read (a known gap)"
+    },
+    {
+      "kind": "section",
+      "document": "社区食堂",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "老街食堂 福寿团餐 180 91%",
+      "outcome": "found",
+      "case": "Word: a table row"
+    },
+    {
+      "kind": "section",
+      "document": "社区食堂",
+      "pageFrom": 10,
+      "pageTo": 10,
+      "quote": "配送中心每周一、三、五送货",
+      "outcome": "found",
+      "case": "Word: a footnote"
+    },
+    {
+      "kind": "section",
+      "document": "社区食堂",
+      "pageFrom": 4,
+      "pageTo": 5,
+      "quote": "片区现有志愿者送餐员7人",
+      "outcome": "found",
+      "case": "Word: two consecutive sections"
+    },
+    {
+      "kind": "section",
+      "document": "field-kit",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "| Water filter | 0.4 kg | Bag B | Replace the cartridge after 1,000 litres |",
+      "outcome": "found",
+      "case": "Markdown: a table row as written"
+    },
+    {
+      "kind": "section",
+      "document": "field-kit",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Water filter 0.4 kg Bag B",
+      "outcome": "false-not-found",
+      "case": "Markdown: a table row without its pipes: the check matches the file's text, pipes included"
+    },
+    {
+      "kind": "section",
+      "document": "field-kit",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "2. Test the satellite messenger by sending a check-in on channel 7.",
+      "outcome": "found",
+      "case": "Markdown: a numbered list item, with its number"
+    },
+    {
+      "kind": "section",
+      "document": "field-kit",
+      "pageFrom": 4,
+      "pageTo": 4,
+      "quote": "port = 8443\ninterval_minutes = 20",
+      "outcome": "found",
+      "case": "Markdown: lines of a code block"
+    },
+    {
+      "kind": "section",
+      "document": "field-kit",
+      "pageFrom": 5,
+      "pageTo": 5,
+      "quote": "interval_minutes = 20",
+      "outcome": "wrong-page",
+      "case": "Markdown: a code line cited at the next section"
+    },
+    {
+      "kind": "section",
+      "document": "实验室数据",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "| 显微图像 | 影像服务器 | 5年 | 王丽华 |",
+      "outcome": "found",
+      "case": "Markdown: a table row"
+    },
+    {
+      "kind": "section",
+      "document": "实验室数据",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "- 单个文件超过200GB时，须先联系平台工程师分卷。",
+      "outcome": "found",
+      "case": "Markdown: a bulleted list item, with its bullet"
+    },
+    {
+      "kind": "section",
+      "document": "实验室数据",
+      "pageFrom": 4,
+      "pageTo": 4,
+      "quote": "KEEP_DAYS=45",
+      "outcome": "found",
+      "case": "Markdown: a code line"
+    },
+
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Westbury East 19 7 1077 £1,453,300",
+      "outcome": "found",
+      "case": "a row in a block that repeats the header, its cells' tabs read as spaces"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Westbury East 19 7 1,077 1453300",
+      "outcome": "found",
+      "case": "the same row with its numbers written another way"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Clinic Region Nurses Doctors Weekly hours Budget\nSandown North 14 6 812 £1,152,800",
+      "outcome": "found",
+      "case": "the repeated header and the row under it"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Total budget £50,929,200",
+      "outcome": "found",
+      "case": "a labelled value"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "Ultrasound scanner Sonaris Imaging £18,200 4 March 2027",
+      "outcome": "found",
+      "case": "a row of the second sheet"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "ECG machine Cardiotech Supplies £4,850",
+      "outcome": "wrong-page",
+      "case": "a row of the second sheet cited in the first"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 3,
+      "quote": "Ultrasound scanner Sonaris Imaging £18,200",
+      "outcome": "page-range",
+      "case": "two blocks of different sheets, which can't be cited together"
+    },
+    {
+      "kind": "rows",
+      "document": "clinic-staffing",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Westbury East 19 8 1077",
+      "outcome": "not-in-document",
+      "case": "a number changed"
+    },
+    {
+      "kind": "rows",
+      "document": "门店销售",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "长江路旗舰店 温州 ¥621,383 1.0%",
+      "outcome": "found",
+      "case": "a row in a block that repeats the header"
+    },
+    {
+      "kind": "rows",
+      "document": "门店销售",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "人民路二店 宁波 417919 17%",
+      "outcome": "found",
+      "case": "a row, its currency and trailing zeros left out"
+    },
+    {
+      "kind": "rows",
+      "document": "门店销售",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "冷冻水饺 萧山冷链仓 6,300 2,500 7",
+      "outcome": "found",
+      "case": "a row of the second sheet, with thousands separators the cells don't show"
+    },
+    {
+      "kind": "rows",
+      "document": "bike-share",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "BS-1042 New Quay Docklands 17 4447 11.5",
+      "outcome": "found",
+      "case": "CSV: a row in a block that repeats the header"
+    },
+    {
+      "kind": "rows",
+      "document": "orders",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "1039 2026-09-12 Evergreen Labs West 1,582.5",
+      "outcome": "found",
+      "case": "CSV: a row with its amount written another way"
+    },
+    {
+      "kind": "rows",
+      "document": "bike-share",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "BS-1042 New Quay Docklands 17 4447 11.5",
+      "outcome": "wrong-page",
+      "case": "CSV: a row cited in the block before its own"
+    },
+    {
+      "kind": "rows",
+      "document": "垃圾分类",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "海棠苑 西溪街道 753 85%",
+      "outcome": "found",
+      "case": "CSV: a row in a block that repeats the header"
+    },
+    {
+      "kind": "rows",
+      "document": "垃圾分类",
+      "pageFrom": 1,
+      "pageTo": 2,
+      "quote": "春晓家园 东湖街道 488 92% 46.0 冯海燕\n小区 街道 户数 9月分类准确率 厨余垃圾（吨） 督导员\n春晓新村 西溪街道 541 78%",
+      "outcome": "found",
+      "case": "CSV: the last row of a block and the first of the next, across the header the next repeats"
+    },
+
+    {
+      "kind": "lines",
+      "document": "night-shift",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "Ward 5 Tomasz Wieczorek 19:45 18",
+      "outcome": "found",
+      "case": "a table aligned with spaces, its spacing collapsed"
+    },
+    {
+      "kind": "lines",
+      "document": "night-shift",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "- count the controlled drugs and sign the register,",
+      "outcome": "found",
+      "case": "a list item, with its dash"
+    },
+    {
+      "kind": "lines",
+      "document": "night-shift",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "PAGER_GROUP=nights-medical\nESCALATE_AFTER=10",
+      "outcome": "found",
+      "case": "indented code lines"
+    },
+    {
+      "kind": "lines",
+      "document": "night-shift",
+      "pageFrom": 2,
+      "pageTo": 2,
+      "quote": "Order blood gas cartridges before 02:00 so that they arrive with the morning delivery.",
+      "outcome": "found",
+      "case": "the second block of lines"
+    },
+    {
+      "kind": "lines",
+      "document": "night-shift",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "Order blood gas cartridges before 02:00",
+      "outcome": "wrong-page",
+      "case": "a line of the second block cited in the first"
+    },
+    {
+      "kind": "lines",
+      "document": "冷链仓库",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "中班 孙雅琴 16:00 5",
+      "outcome": "found",
+      "case": "a table aligned with spaces"
+    },
+    {
+      "kind": "lines",
+      "document": "冷链仓库",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "ALARM_DELAY=90",
+      "outcome": "found",
+      "case": "an indented code line"
+    },
+    {
+      "kind": "lines",
+      "document": "冷链仓库",
+      "pageFrom": 1,
+      "pageTo": 1,
+      "quote": "叉车电量低于百分之三十时立即充电",
+      "outcome": "not-in-document",
+      "case": "a paraphrase"
+    }
+  ]
+}

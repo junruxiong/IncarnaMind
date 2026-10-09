@@ -1,6 +1,8 @@
 /**
- * The evaluation set (eval/retrieval/questions.json): the Documents to add,
- * and the Questions with the Passage each one should find (ADR-0009).
+ * An evaluation set: the Documents to add, and the Questions with the
+ * Passage each one should find (ADR-0009). The gating set is
+ * eval/retrieval/questions.json; the every-format set (#70), reported per
+ * format and never gating, is eval/retrieval/formats.json.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,7 +12,10 @@ export type EvalLanguage = "en" | "zh";
 export interface ExpectedPassage {
   /** A key of `EvaluationSet.documents`. */
   document: string;
-  /** The first and last page the Passage must cover, from 1 (pdf.js's page index, not the printed label). */
+  /**
+   * The first and last Unit the Passage must cover, from 1: a PDF's page as pdf.js
+   * indexes it (not the printed label), or another kind's Unit (src/shared/units.ts).
+   */
   pages: [number, number];
   /** Text the Passage must contain, after both are normalised. */
   quote: string;
@@ -30,6 +35,13 @@ export interface EvalQuestion {
    * searching again in the Documents' language can bring.
    */
   translatedQuery?: string;
+  /** Every-format set only: the hard place the answer sits in, e.g. "footnote" or "speaker-notes". */
+  place?: string;
+  /**
+   * Every-format set only: why the readers don't index the answer's text today (a Word
+   * comment, a scanned page). Asked and reported like the others, as a known gap.
+   */
+  knownGap?: string;
   expected: ExpectedPassage;
 }
 
@@ -47,7 +59,11 @@ export interface EvaluationSet {
   questions: EvalQuestion[];
 }
 
-const EVALUATION_SET = "eval/retrieval/questions.json";
+/** The gating set. */
+export const EVALUATION_SET = "eval/retrieval/questions.json";
+
+/** The every-format set (#70): reported per format, never gating. */
+export const FORMATS_SET = "eval/retrieval/formats.json";
 
 const LANGUAGES: readonly EvalLanguage[] = ["en", "zh"];
 
@@ -57,11 +73,11 @@ interface RawSet {
   questions?: unknown;
 }
 
-function fail(message: string): never {
-  throw new Error(`${EVALUATION_SET}: ${message}`);
-}
-
-function readQuestion(raw: unknown, documents: ReadonlySet<string>): EvalQuestion {
+function readQuestion(
+  raw: unknown,
+  documents: ReadonlySet<string>,
+  fail: (message: string) => never,
+): EvalQuestion {
   const question = raw as Partial<EvalQuestion> & { crossLingual?: unknown };
   const { id, language, expected } = question;
   if (typeof id !== "string" || !id) fail("every question needs an id.");
@@ -76,11 +92,19 @@ function readQuestion(raw: unknown, documents: ReadonlySet<string>): EvalQuestio
   }
   if (typeof expected.quote !== "string" || !expected.quote.trim()) fail(`${id}: no quote.`);
   const crossLingual = question.crossLingual === true;
-  const { translatedQuery } = question as { translatedQuery?: unknown };
+  const { translatedQuery, place, knownGap } = question as Record<string, unknown>;
   if (translatedQuery !== undefined) {
     if (!crossLingual) fail(`${id}: only a cross-lingual question has a translatedQuery.`);
     if (typeof translatedQuery !== "string" || !translatedQuery.trim()) {
       fail(`${id}: translatedQuery must be text.`);
+    }
+  }
+  for (const [name, value] of [
+    ["place", place],
+    ["knownGap", knownGap],
+  ] as const) {
+    if (value !== undefined && (typeof value !== "string" || !value.trim())) {
+      fail(`${id}: ${name} must be text.`);
     }
   }
   return {
@@ -89,6 +113,8 @@ function readQuestion(raw: unknown, documents: ReadonlySet<string>): EvalQuestio
     crossLingual,
     question: question.question,
     ...(typeof translatedQuery === "string" && { translatedQuery }),
+    ...(typeof place === "string" && { place }),
+    ...(typeof knownGap === "string" && { knownGap }),
     expected: {
       document: expected.document,
       pages: [from, to] as [number, number],
@@ -97,8 +123,13 @@ function readQuestion(raw: unknown, documents: ReadonlySet<string>): EvalQuestio
   };
 }
 
-export function loadEvaluationSet(root: string): EvaluationSet {
-  const raw = JSON.parse(readFileSync(join(root, EVALUATION_SET), "utf8")) as RawSet;
+/** Reads an evaluation set (the gating one unless another is named), relative to the repository root. */
+export function loadEvaluationSet(root: string, source = EVALUATION_SET): EvaluationSet {
+  // Typed, so that calling it narrows what follows.
+  const fail: (message: string) => never = (message) => {
+    throw new Error(`${source}: ${message}`);
+  };
+  const raw = JSON.parse(readFileSync(join(root, source), "utf8")) as RawSet;
   if (typeof raw.documents !== "object" || raw.documents === null) fail("no documents.");
   const documents = Object.entries(raw.documents as Record<string, unknown>).map(([key, path]) => {
     if (typeof path !== "string") fail(`${key}: the path must be text.`);
@@ -108,11 +139,11 @@ export function loadEvaluationSet(root: string): EvaluationSet {
   });
   if (!Array.isArray(raw.questions)) fail("no questions.");
   const keys = new Set(documents.map((document) => document.key));
-  const questions = raw.questions.map((question) => readQuestion(question, keys));
+  const questions = raw.questions.map((question) => readQuestion(question, keys, fail));
   const ids = new Set(questions.map((question) => question.id));
   if (ids.size !== questions.length) fail("question ids must be unique.");
   return {
-    source: EVALUATION_SET,
+    source,
     hitRule: typeof raw.hitRule === "string" ? raw.hitRule : "",
     documents,
     questions,

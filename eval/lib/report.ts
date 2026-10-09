@@ -1,7 +1,8 @@
 /**
  * The evaluation's outputs: report.json (everything), report.md (for people),
  * reviewer-sheet.csv (found quotes, for judging whether they support their
- * sentence), and a summary on the terminal.
+ * sentence; reviewer-sheet-formats.csv for the every-format set's), and a
+ * summary on the terminal.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -14,6 +15,7 @@ import {
   type CitationRun,
   type GroupSummary,
 } from "./citations";
+import type { FormatsReport } from "./formats";
 import {
   type CandidateCounts,
   GATING_LABEL,
@@ -55,6 +57,8 @@ export interface EvalReport {
     runs: RetrievalRun[];
   };
   citations: CitationRun | { skipped: string };
+  /** The every-format set (#70): reported per format, never gating. */
+  formats?: FormatsReport;
 }
 
 const fraction = ({ hits, total }: Tally) => `${hits}/${total}`;
@@ -164,17 +168,20 @@ function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
   return lines;
 }
 
-/** For each miss of the gating mode: what the top 5 were, and what each lacked. */
-function misses(run: RetrievalRun): string[] {
+/**
+ * For each miss of the gating mode: what the top 5 were, and what each lacked.
+ * `unit` names what the pages are: "p." for PDFs, "Unit" for any format.
+ */
+function misses(run: RetrievalRun, unit = "p."): string[] {
   const lines: string[] = [];
   const describe = (question: QuestionResult) =>
     (question.modes[GATING_MODE]?.top ?? []).map((passage, index) => {
       const lacks = [
         passage.rightDocument ? null : "other Document",
-        passage.coversPages ? null : "other pages",
+        passage.coversPages ? null : `other ${unit === "p." ? "pages" : "Units"}`,
         passage.hasQuote ? null : "no quote",
       ].filter(Boolean);
-      return `${index + 1}. ${passage.documentName}, p. ${pages(passage.pageFrom, passage.pageTo)}${lacks.length ? ` (${lacks.join(", ")})` : ""}`;
+      return `${index + 1}. ${passage.documentName}, ${unit} ${pages(passage.pageFrom, passage.pageTo)}${lacks.length ? ` (${lacks.join(", ")})` : ""}`;
     });
   for (const question of run.questions) {
     if (question.modes[GATING_MODE]?.hit) continue;
@@ -184,18 +191,26 @@ function misses(run: RetrievalRun): string[] {
   return lines;
 }
 
-function citationTable(run: CitationRun): string[] {
+/**
+ * Citation figures, a column per group of Answers. With `minCitations` (the
+ * gating set's), each figure's target in a last column, and the reviewer's row.
+ */
+function citationTable(
+  columns: readonly (readonly [string, GroupSummary])[],
+  minCitations: number | null,
+): string[] {
+  const gating = minCitations !== null;
   const row = (label: string, cell: (summary: GroupSummary) => string, target = "") =>
-    `| ${label} | ${GROUPS.map(([group]) => cell(run.summary[group])).join(" | ")} | ${target} |`;
+    `| ${label} | ${columns.map(([, summary]) => cell(summary)).join(" | ")} |${gating ? ` ${target} |` : ""}`;
   const outcome = (key: CitationOutcome) => (summary: GroupSummary) =>
     summary.citations > 0
       ? `${summary.outcomes[key]} (${percent(summary.outcomes[key] / summary.citations)})`
       : "0";
   return [
-    `| | ${GROUPS.map(([, label]) => label).join(" | ")} | Target (per language) |`,
-    `|---|${GROUPS.map(() => "---|").join("")}---|`,
+    `| | ${columns.map(([label]) => label).join(" | ")} |${gating ? " Target (per language) |" : ""}`,
+    `|---|${columns.map(() => "---|").join("")}${gating ? "---|" : ""}`,
     row("Answers (failed)", (summary) => `${summary.answers} (${summary.failedAnswers})`),
-    row("Citations", (summary) => String(summary.citations), `at least ${run.minCitations}`),
+    row("Citations", (summary) => String(summary.citations), `at least ${minCitations}`),
     row(
       OUTCOME_LABELS.found,
       (summary) => percent(summary.foundShare),
@@ -224,12 +239,97 @@ function citationTable(run: CitationRun): string[] {
       (summary) => String(summary.droppedRecords),
       "reported",
     ),
-    row(
-      "Found quotes that support their sentence",
-      () => "reviewer sheet",
-      `at least ${percent(CITATION_TARGETS.supports)}`,
-    ),
+    ...(gating
+      ? [
+          row(
+            "Found quotes that support their sentence",
+            () => "reviewer sheet",
+            `at least ${percent(CITATION_TARGETS.supports)}`,
+          ),
+        ]
+      : []),
   ];
+}
+
+/** The every-format set (#70): per format, per hard place and per Question. Never gating. */
+function formatsSection(formats: FormatsReport): string[] {
+  const { retrieval } = formats;
+  const top = retrieval.summary[GATING_MODE];
+  const notSearchable = formats.documents.filter((document) => document.status !== "ready");
+  const lines = [
+    "## Every format (reported, not gating)",
+    "",
+    `\`${formats.source}\`: ${retrieval.questions.length} Questions over ${formats.documents.length} Documents in Word, PowerPoint, Excel, CSV, Markdown, plain text and PDF, in English and Chinese, about the hard places in each (#70). They are searched in a library of their own, with the gating set's hit rule; the expected pages are the Units a Citation would cite. Known gaps, text the readers don't index today (Word comments, scanned pages), are counted apart. No bar is set yet: \`eval/README.md\` proposes one per format.`,
+    "",
+    `| Format | Documents | Questions (English / Chinese), known gaps apart | ${GATING_LABEL}: English | Chinese | All | ${HYBRID}: All | Known gaps found |`,
+    "|---|---|---|---|---|---|---|---|",
+    ...formats.formats.map((format) => {
+      const reranked = format.retrieval[GATING_MODE];
+      const hybrid = format.retrieval[HYBRID];
+      if (!reranked || !hybrid)
+        return `| ${format.label} | ${format.documents} | – | – | – | – | – | – |`;
+      return `| ${format.label} | ${format.documents} | ${reranked.en.total} / ${reranked.zh.total} | ${fraction(reranked.en)} | ${fraction(reranked.zh)} | **${fraction(reranked.all)}** | ${fraction(hybrid.all)} | ${fraction(format.knownGaps)} |`;
+    }),
+    "",
+    ...(top
+      ? [
+          `Cross-lingual, every format: ${fraction(top.crossLingual)}${top.crossLingualTranslated ? `, with a translated second query ${fraction(top.crossLingualTranslated)}` : ""}.`,
+          "",
+        ]
+      : []),
+    ...(notSearchable.length
+      ? [
+          `Not searchable: ${notSearchable.map((document) => `${document.name} (${document.status})`).join(", ")}.`,
+          "",
+        ]
+      : []),
+    "### By hard place",
+    "",
+    `Hits of ${GATING_LABEL}, known gaps included.`,
+    "",
+    "| Format | Place | English | Chinese | |",
+    "|---|---|---|---|---|",
+    ...formats.formats.flatMap((format) =>
+      format.places.map(
+        (place) =>
+          `| ${format.label} | ${place.place} | ${fraction(place.hits.en)} | ${fraction(place.hits.zh)} | ${place.knownGap ? `known gap: ${place.knownGap}` : ""} |`,
+      ),
+    ),
+    "",
+  ];
+  const { citations, crossLingualCitations } = formats;
+  if ("skipped" in citations) {
+    lines.push("### Citations per format", "", `Skipped: ${citations.skipped}`, "");
+  } else {
+    const columns = [
+      ...formats.formats.flatMap((format) =>
+        format.citations ? [[format.label, format.citations] as const] : [],
+      ),
+      ...(crossLingualCitations ? [["Cross-lingual", crossLingualCitations] as const] : []),
+    ];
+    lines.push(
+      "### Citations per format",
+      "",
+      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}; each Question asked once, in a Mind of its own. Reported, not gating.`,
+      '- The figures are defined as for the gating set; a Citation\'s "pages" are the Units it cites.',
+      "",
+      ...citationTable(columns, null),
+      "",
+    );
+  }
+  lines.push(
+    "### Per Question",
+    "",
+    "Ranks as for the gating set.",
+    "",
+    ...perQuestionTable([retrieval]),
+    "",
+    `### Misses of ${GATING_LABEL}`,
+    "",
+    ...(misses(retrieval, "Unit").length ? misses(retrieval, "Unit") : ["None."]),
+    "",
+  );
+  return lines;
 }
 
 function markdownReport(report: EvalReport, reportDir: string, root: string): string {
@@ -295,10 +395,14 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
       "- Coverage counts every sentence of an Answer (headings and code left out) as drawn from Documents, so it is a lower bound: sentences that only say what the Documents don't cover count as uncited.",
       `- Reviewer sheet: \`${sheet}\`. Mark each found quote "y" if it supports its sentence, "n" if not; the target is ${percent(CITATION_TARGETS.supports)} "y".`,
       "",
-      ...citationTable(citations),
+      ...citationTable(
+        GROUPS.map(([group, label]) => [label, citations.summary[group]] as const),
+        citations.minCitations,
+      ),
       "",
     );
   }
+  if (report.formats) lines.push(...formatsSection(report.formats));
   lines.push(
     "## Citation-check cases",
     "",
@@ -363,6 +467,12 @@ export async function writeReports(
   if (!("skipped" in report.citations)) {
     await writeFile(join(dir, "reviewer-sheet.csv"), reviewerSheet(report.citations));
   }
+  if (report.formats && !("skipped" in report.formats.citations)) {
+    await writeFile(
+      join(dir, "reviewer-sheet-formats.csv"),
+      reviewerSheet(report.formats.citations),
+    );
+  }
   return dir;
 }
 
@@ -405,8 +515,31 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
       );
     }
   }
+  if (report.formats) lines.push(...formatsSummary(report.formats));
   lines.push("", `Result: ${report.result}`);
   for (const failure of report.failures) lines.push(`  - ${failure}`);
   lines.push(`Reports: ${relative(root, reportDir)}/`, "");
   return lines.join("\n");
+}
+
+/** The every-format set's lines of the terminal summary. */
+function formatsSummary(formats: FormatsReport): string[] {
+  const lines = [
+    "",
+    `Every format (reported, not gating): ${GATING_LABEL}, top 5, known gaps apart`,
+  ];
+  for (const format of formats.formats) {
+    const reranked = format.retrieval[GATING_MODE];
+    const citations = format.citations;
+    lines.push(
+      `  ${format.label.padEnd(24)} English ${fraction(reranked?.en ?? { hits: 0, total: 0 }).padEnd(6)} Chinese ${fraction(reranked?.zh ?? { hits: 0, total: 0 }).padEnd(6)} known gaps ${fraction(format.knownGaps)}${citations ? `; ${citations.citations} Citations, found ${percent(citations.foundShare)}, false "not found" ${percent(citations.falseNotFoundShare)}, coverage ${percent(citations.coverage)}` : ""}`,
+    );
+  }
+  const top = formats.retrieval.summary[GATING_MODE];
+  if (top) {
+    lines.push(
+      `  ${"Cross-lingual".padEnd(24)} ${fraction(top.crossLingual)}${top.crossLingualTranslated ? `, with a translated second query ${fraction(top.crossLingualTranslated)}` : ""}`,
+    );
+  }
+  return lines;
 }
