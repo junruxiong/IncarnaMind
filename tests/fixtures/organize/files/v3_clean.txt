@@ -1,0 +1,43 @@
+Measuring the Readability of Public Health Notices with Sentence Embeddings
+
+Grace Mbeki(1), Joaquin Herrera(2), Anika Sorensen(1)
+(1) School of Public Health, Riverside University (fictional)
+(2) Department of Linguistics, Riverside University (fictional)
+
+ABSTRACT
+Readability formulas such as Flesch-Kincaid count syllables and sentence length but ignore vocabulary that is
+technical yet short. We propose an embedding-based readability score trained on 2,400 public health notices that
+were rated by 312 adults with varied literacy levels. The score correlated with comprehension test results
+(Spearman rho = 0.68) more strongly than Flesch-Kincaid (rho = 0.39) and flagged jargon such as "asymptomatic"
+and "contraindicated" that conventional formulas miss. We release the rating dataset and a browser tool.
+
+1. INTRODUCTION
+Health agencies are required to publish guidance at a reading age of 11 to 12, and most check compliance with
+readability formulas. These formulas were designed for school textbooks in the mid-twentieth century. A notice
+can score well while relying on medical terms that many readers do not know.
+
+2. DATA
+We collected notices from 41 regional health agencies published between 2019 and 2025, covering vaccination,
+heat waves, food safety and outbreak alerts. Each notice was split into passages of 80 to 120 words. Raters read
+one passage and answered three multiple-choice comprehension questions written by two health communicators.
+
+3. METHOD
+Each sentence was encoded with a multilingual sentence-embedding model. A ridge regression mapped the mean
+passage embedding, sentence length and word frequency features to the mean comprehension score. We used
+ten-fold cross-validation grouped by agency.
+
+4. RESULTS
+                     Spearman rho   Mean absolute error
+Flesch-Kincaid           0.39             -
+Lexical frequency        0.51            0.14
+Embedding score          0.68            0.09
+
+The embedding score generalised to notices from agencies not seen in training (rho = 0.63).
+
+5. DISCUSSION
+Embedding-based scores can complement, but should not replace, testing with readers. Our raters were recruited
+online and may read better than the general population.
+
+REFERENCES
+[1] Kincaid JP et al. Derivation of new readability formulas. 1975.
+[2] Herrera J. Plain language in emergency communication. Example Health Communication Review, 2023.

@@ -1,0 +1,28 @@
+BRIGHTSPARK ENERGY - YOUR ELECTRICITY BILL
+
+Account number: 7700 1234 5678
+Bill date: 5 April 2026
+Billing period: 1 March 2026 - 31 March 2026
+Supply address: Flat 2, 14 Elm Row, Exampleton EX4 1AB
+Account holder: J. Achterberg
+
+AMOUNT DUE: 94.37
+Payment due by: 25 April 2026 (Direct Debit will be collected on this date)
+
+YOUR USAGE
+Meter reading 1 March:  18,204 kWh (actual)
+Meter reading 31 March: 18,431 kWh (actual)
+Units used: 227 kWh
+
+CHARGES
+Energy: 227 kWh at 27.62p per kWh            62.70
+Standing charge: 31 days at 53.35p per day    16.54
+Subtotal                                      79.24
+VAT at 5%                                      3.96
+Previous balance                              11.17
+Total due                                     94.37
+
+Compared with March last year you used 8% less electricity.
+
+How to pay: Direct Debit (already set up), online at example.com/pay, or by phone on 555-0110.
+Struggling to pay? Contact us early - we can offer a payment plan.

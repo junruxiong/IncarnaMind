@@ -9,7 +9,7 @@ import {
   linkedFolderRowState,
   rowStateLabel,
 } from "../linkedFolders";
-import { useAppStore } from "../store";
+import { selectTagFilterKey, useAppStore } from "../store";
 import { ExampleChip } from "./GettingStarted";
 import { LinkedFolderMenu, UnlinkFolderDialog } from "./LinkedFolderMenu";
 import {
@@ -96,7 +96,7 @@ export function FolderTree({ documents, filtering, renderDocument }: FolderTreeP
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const linkedFolders = useAppStore((state) => state.linkedFolders);
-  const tagFilter = useAppStore((state) => state.tagFilter);
+  const tagFilter = useAppStore(selectTagFilterKey);
   const collapsed = useFolderTree((state) => state.collapsed);
   const filteredFolds = useFolderTree((state) => state.filtered);
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
@@ -338,7 +338,7 @@ function GroupItem(props: GroupItemProps) {
   const { muted = false, status, progress = null, paused = false, actions, chip, data } = props;
   const children = props.children;
   const toggle = useFolderTree((state) => state.toggle);
-  const tagFilter = useAppStore((state) => state.tagFilter);
+  const tagFilter = useAppStore(selectTagFilterKey);
   const open = expandable && expanded;
   const Chevron = open ? ChevronDownLineIcon : ChevronRightLineIcon;
   const inner = (

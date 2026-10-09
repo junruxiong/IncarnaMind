@@ -7,10 +7,18 @@
  * Connector's own Tools from the Connectors. A later capability (Files, a
  * Browser, a Shell…) is a new provider, not a change to the Answer loop.
  *
+ * Each Tool declares its Effects (CONTEXT.md): what a call with a given
+ * input can do, and where (docs/designs/agent-extensibility.md §4.2).
+ * IncarnaMind works them out from what it knows (the provider, the input,
+ * the sandbox a program runs in); a Connector's hints only narrow them.
+ * Approvals decide from them whether a call asks the User first (see
+ * ../approvals).
+ *
  * Nothing here depends on an agent library, or on Answers: the Answer engine
  * turns Tools into its library's own (see `toToolSet` in ../answers/engine),
  * so that library can change without the Tools or their providers.
  */
+import type { Effect } from "../api";
 
 /** v1's providers; later ones add their kind here. */
 export type ToolProviderKind = "documents" | "skills" | "connector";
@@ -36,9 +44,8 @@ export interface ToolCallContext {
  * A Tool (CONTEXT.md) as a Run offers it to the model.
  *
  * Room is left for what comes next (docs/designs/agent-extensibility.md
- * §4.2): `effects(input)`, what a call can do, from which approvals are
- * decided in place of `readOnly`; and `untrustedResult`, for a result that
- * carries text the User didn't write.
+ * §4.6): `untrustedResult`, for a result that carries text the User didn't
+ * write.
  */
 export interface Tool {
   /** The name the model calls it by, unique within the Run: "search_documents", "github__create_issue". */
@@ -52,11 +59,12 @@ export interface Tool {
   /** Its display name, when its provider gives one. */
   title?: string | null;
   /**
-   * Its provider says a call only reads: a Connector's hint, not a fact. A
-   * Connector's Tool that says so runs without asking the User, unless they
-   * chose to be asked (see ../approvals); any other asks first.
+   * What a call with this input can do beyond the conversation it is part
+   * of. None for one that only records something for its Answer (`cite`),
+   * or that fails (it names a Skill the Answer can't use). A Connector's
+   * hints only narrow these: they never widen what runs without asking.
    */
-  readOnly?: boolean;
+  effects(input: Record<string, unknown>): Effect[];
   /**
    * What a call's Tool-call card shows of its input, e.g. a search's query,
    * as text. Without it, the card shows the input as the model sent it.

@@ -12,7 +12,7 @@ import { rowActionButtonClass } from "./sidebarRows";
 
 /** The status row's button: a small ghost one, inside the 28px row. */
 const statusActionClass =
-  "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[12px] font-semibold text-ink-secondary outline-none hover:bg-rule hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-expanded:bg-rule aria-expanded:text-ink";
+  "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[12px] font-semibold text-ink-secondary hover:bg-rule hover:text-ink focus-visible:outline-offset-0 aria-expanded:bg-rule aria-expanded:text-ink";
 
 /** Decimal megabytes, as the model's 135 MB is quoted elsewhere. */
 const MEGABYTE = 1_000_000;
