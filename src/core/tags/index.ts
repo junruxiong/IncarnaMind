@@ -306,6 +306,64 @@ export function createTags(db: Database, now: () => string) {
     },
 
     /**
+     * Merges Tag `fromInput` into Tag `intoInput` at `at`: each Document's
+     * link moves over, keeping who chose it (the User's wins where a Document
+     * has both, and an automatic link keeps its confidence), and a removal the
+     * User made carries over where they haven't decided on the other Tag. The
+     * merged Tag is then deleted. Returns the ids of the Documents whose Tags
+     * changed: those that carried the merged Tag.
+     */
+    merge(fromInput: unknown, intoInput: unknown, at: string): string[] {
+      return db.transaction(() => {
+        const from = get(fromInput);
+        const into = get(intoInput);
+        if (from.id === into.id) throw new InvalidInputError("A Tag can't be merged into itself.");
+        const rows = db.all<LinkRow & { document_id: string; deleted: number }>(
+          `SELECT id, document_id, tag_id, source, confidence, needs_review,
+             deleted_at IS NOT NULL AS deleted
+           FROM document_tags WHERE tag_id = ? AND (deleted_at IS NULL OR source = 'user')
+           ORDER BY created_at, rowid`,
+          [from.id],
+        );
+        const changed: string[] = [];
+        for (const row of rows) {
+          const target = liveLink(row.document_id, into.id);
+          const decided = !!db.get(
+            "SELECT 1 FROM document_tags WHERE document_id = ? AND tag_id = ? AND source = 'user'",
+            [row.document_id, into.id],
+          );
+          if (row.deleted) {
+            // The User's removal: the other Tag stays off too, unless they decided on it.
+            if (!target && !decided) insertLink(row.document_id, into.id, "user", at, at);
+            continue;
+          }
+          changed.push(row.document_id);
+          if (target) {
+            if (row.source === "user" && target.source !== "user")
+              db.run(
+                `UPDATE document_tags SET source = 'user', confidence = NULL, needs_review = 0,
+                   updated_at = ? WHERE id = ?`,
+                [at, target.id],
+              );
+          } else if (row.source === "user" || !decided) {
+            // An automatic link doesn't come back where the User took the other Tag off.
+            insertLink(row.document_id, into.id, row.source, at, null, {
+              confidence: row.confidence,
+              needsReview: row.needs_review !== 0,
+            });
+          }
+        }
+        db.run("UPDATE tags SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, from.id]);
+        db.run(
+          `UPDATE document_tags SET deleted_at = ?, updated_at = ?
+           WHERE tag_id = ? AND deleted_at IS NULL`,
+          [at, at, from.id],
+        );
+        return [...new Set(changed)];
+      });
+    },
+
+    /**
      * Sets a Document's automatic Tags to those in `decisions`: automatic
      * links not decided on are taken off, decided Tags not on it are added,
      * and those kept take the new confidence and review mark. Tags the User
