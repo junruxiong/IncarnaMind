@@ -57,8 +57,11 @@ export type ToolCallToApprove =
   | Omit<ToolApprovalRequest, "requestId">
   | Omit<SkillScriptApprovalRequest, "requestId">;
 
-/** What decides whether a call asks: what it is (for the User's policy), and what it can do. */
-export type CallToDecide = Pick<ToolCallToApprove, "subject" | "effects">;
+/**
+ * What decides whether a call asks: what it is (for the User's policy), what
+ * it can do, and whether its Run had read untrusted content first.
+ */
+export type CallToDecide = Pick<ToolCallToApprove, "subject" | "effects" | "tainted">;
 
 /**
  * Whether an Effect runs without asking: reading the Documents, a Skill, or
@@ -281,6 +284,12 @@ export function createApprovals(options: ApprovalsOptions) {
      * 2. it runs if the User always allows it ("always"), or if each of its
      *    Effects runs without asking (`runsByDefault`);
      * 3. otherwise it asks.
+     *
+     * A tainted Run (one that had read untrusted content) changes nothing for
+     * these subjects, a Connector's Tool and a Skill's scripts: their
+     * "always" keeps counting (decision D3, docs/designs/agent-extensibility.md
+     * §4.6). It is recorded on the request; side-effecting subjects to come
+     * will ask after it unless a scope grant covers the call.
      */
     decide(call: CallToDecide): "run" | "ask" {
       const policy = policyOf(call.subject);
