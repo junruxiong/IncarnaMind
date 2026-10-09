@@ -1,18 +1,20 @@
 /**
- * Rerank (ADR-0005): document search reranks its hybrid candidates before
- * grouping them (see ../documents/searchTool), when the User turns it on:
- * - "built-in": the built-in reranking model, on this computer (see
- *   ../reranking). Nothing is sent, so it needs no consent, and local mode
- *   doesn't pause it. Its files are downloaded once, starting when the User
- *   chooses it; until they are ready, search keeps its own order.
+ * Rerank (ADR-0005): document search reranks its candidates before grouping
+ * them (see ../documents/searchTool):
+ * - "built-in", the default: the built-in reranking model, on this computer
+ *   (see ../reranking). Nothing is sent, so it needs no consent, and local
+ *   mode doesn't pause it. Its files are downloaded once, when the first
+ *   Documents are ready to search (or when the User chooses it); until they
+ *   are ready, search keeps its own order.
  * - With a Cohere or Voyage key: the service's reranking model, through the
  *   AI SDK's `rerank` and the official @ai-sdk/cohere and @ai-sdk/voyage
  *   providers. Its requests are the "rerank" data flow: the search query and
  *   the candidate Passages, to the service. Nothing is sent before the User
  *   accepts it; when they decline, or a request fails, search keeps its own
  *   order. Local mode pauses it.
- * Off by default: nothing changes. The settings are per device; a key is in
- * the keychain, never in SQLite.
+ * - Off, when the User turns it off: search keeps its own order.
+ * The settings are per device: nothing stored is the default, null is off.
+ * A key is in the keychain, never in SQLite.
  */
 import { createCohere } from "@ai-sdk/cohere";
 import { createVoyage } from "@ai-sdk/voyage";
@@ -75,14 +77,21 @@ const TEST_DOCUMENTS = ["Bananas are rich in potassium.", "Paris is the capital 
 interface StoredRerank {
   kind: RerankProviderKind;
   modelId: string | null;
+  /** Nothing is stored: the default, not the User's choice. */
+  byDefault?: boolean;
 }
+
+/** Reranking on a device where the User hasn't chosen: the built-in model. */
+const DEFAULT_RERANK: StoredRerank = { kind: "built-in", modelId: null, byDefault: true };
 
 const isRerankKind = (value: unknown): value is RerankProviderKind =>
   rerankProviderKinds.some((kind) => kind === value);
 
 const isService = (kind: RerankProviderKind): kind is RerankServiceKind => kind !== "built-in";
 
+/** Nothing stored: the default. Null (the User turned it off), or anything else: off. */
 function parseStored(value: unknown): StoredRerank | null {
+  if (value === undefined) return DEFAULT_RERANK;
   if (!isRecord(value) || !isRerankKind(value.kind)) return null;
   return { kind: value.kind, modelId: typeof value.modelId === "string" ? value.modelId : null };
 }
@@ -166,6 +175,7 @@ export function createRerank(options: {
       hasApiKey: service !== null && (await secrets.tryGet(KEY_NAME)) !== null,
       service: service ? RERANK_SERVICES[service] : null,
       paused: pausedNow(current),
+      byDefault: current?.byDefault === true,
       model: builtIn.status(),
     };
   };
@@ -244,9 +254,6 @@ export function createRerank(options: {
     return rerankWithService(current.kind, modelOf(current), query, candidates, abortSignal);
   };
 
-  // A download that was interrupted (the app quit) carries on.
-  if (stored()?.kind === "built-in") builtIn.ensure();
-
   return {
     status,
     reranker,
@@ -259,6 +266,21 @@ export function createRerank(options: {
 
     /** The built-in model is chosen: its download's progress is rerank's to report. */
     usesBuiltIn: () => stored()?.kind === "built-in",
+
+    /**
+     * There are Documents to search: if the built-in model reranks them and
+     * isn't downloaded, its download starts (again, after a failed one), as
+     * the built-in embedding model's does when a Document needs it.
+     */
+    prepare(): void {
+      if (stored()?.kind === "built-in" && !builtIn.isReady()) builtIn.ensure();
+    },
+
+    /** Starts the built-in model's download, or tries it again after a failure. */
+    download(): Promise<RerankSettings> {
+      builtIn.retry();
+      return status();
+    },
 
     /**
      * Sets rerank up, or changes it. A service needs the User to accept the

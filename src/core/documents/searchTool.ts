@@ -4,8 +4,9 @@
  *
  * 1. Hybrid search: keyword (FTS5) and vector search, fused by reciprocal rank
  *    fusion, over the Search scope.
- * 2. Rerank, if the User turned reranking on (the built-in reranking model, or
- *    a Cohere or Voyage key; see ../providers/rerank). The reranker sees
+ * 2. Rerank, unless the User turned reranking off: with the built-in reranking
+ *    model by default, or a Cohere or Voyage key (see ../providers/rerank),
+ *    which the retrieval evaluation gates on (#31). The reranker sees
  *    keyword search's top 10 and vector search's top 10, each Passage once,
  *    instead of the fused list: fusion can push a hit that only one of them
  *    found below others that both found middlingly (#31: en-03, en-12, en-14

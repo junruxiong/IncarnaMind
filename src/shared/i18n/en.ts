@@ -362,6 +362,9 @@ export const en = {
   "status.downloading": "Search model: {downloaded} of {total} MB",
   "status.downloadFailed": "Search model download failed",
   "status.modelFailed": "Search model couldn't start",
+  "status.rerankDownloading": "Reranking model: {downloaded} of {total} MB",
+  "status.rerankDownloadFailed": "Reranking model download failed",
+  "status.rerankModelFailed": "Reranking model couldn't start",
   "status.rebuilding": "Rebuilding search: {done} of {total}",
   "status.searchError": "Search can't use {provider}",
   "status.retry": "Retry",
@@ -436,10 +439,14 @@ export const en = {
 
   "rerank.settings.title": "Reranking",
   "rerank.settings.body":
-    "Document search can reorder its best matches with a reranking model, so the most relevant Passages come first. The built-in model runs on this computer; Cohere and Voyage AI need a key. Off until you set it up.",
+    "Document search reorders its best matches with a reranking model, so the most relevant Passages come first. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off.",
   "rerank.settings.inUse": "{service} reranks search results ({model}).",
   "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
   "rerank.settings.builtInUse": "The built-in model reranks search results ({model}).",
+  "rerank.settings.builtInDefault":
+    "By default, the built-in model reranks search results ({model}).",
+  "rerank.settings.notDownloaded":
+    "It downloads once ({total} MB) when there are Documents to search. Until then, search keeps its own order.",
   "rerank.settings.builtInNote": "Nothing leaves this computer. Each search takes a little longer.",
   "rerank.settings.downloading":
     "Downloading the reranking model: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
@@ -731,7 +738,7 @@ export const en = {
     "The built-in search model is downloaded once, the first time a Document needs it.",
   "privacy.traffic.reranking-model": "Reranking model download",
   "privacy.traffic.reranking-model.description":
-    "The built-in reranking model is downloaded once, when you turn it on in Settings.",
+    "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",

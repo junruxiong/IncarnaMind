@@ -349,6 +349,9 @@ export const zhCN = {
   "status.downloading": "搜索模型：{downloaded} / {total} MB",
   "status.downloadFailed": "搜索模型下载失败",
   "status.modelFailed": "搜索模型无法启动",
+  "status.rerankDownloading": "重排序模型：{downloaded} / {total} MB",
+  "status.rerankDownloadFailed": "重排序模型下载失败",
+  "status.rerankModelFailed": "重排序模型无法启动",
   "status.rebuilding": "正在重建搜索：{done} / {total}",
   "status.searchError": "搜索无法使用 {provider}",
   "status.retry": "重试",
@@ -414,10 +417,13 @@ export const zhCN = {
 
   "rerank.settings.title": "重新排序",
   "rerank.settings.body":
-    "文档搜索可以用重排序模型调整最佳结果的顺序，让最相关的段落排在前面。内置模型在这台电脑上运行；Cohere 和 Voyage AI 需要密钥。设置之前不会开启。",
+    "文档搜索会用重排序模型调整最佳结果的顺序，让最相关的段落排在前面。默认开启，使用在这台电脑上运行的内置模型；Cohere 和 Voyage AI 需要密钥。你可以关闭它。",
   "rerank.settings.inUse": "{service} 正在为搜索结果重新排序（{model}）。",
   "rerank.settings.sends": "每次搜索和找到的段落都会发送到 {service}。",
   "rerank.settings.builtInUse": "内置模型正在为搜索结果重新排序（{model}）。",
+  "rerank.settings.builtInDefault": "默认由内置模型为搜索结果重新排序（{model}）。",
+  "rerank.settings.notDownloaded":
+    "有文档可搜索时，它会下载一次（{total} MB）。在此之前，搜索保持原来的顺序。",
   "rerank.settings.builtInNote": "所有内容都留在这台电脑上。每次搜索会稍慢一些。",
   "rerank.settings.downloading":
     "正在下载重排序模型：{downloaded} / {total} MB。下载完成前，搜索保持原来的顺序。",
@@ -691,7 +697,7 @@ export const zhCN = {
     "内置搜索模型只下载一次，在第一次有文档需要它时下载。",
   "privacy.traffic.reranking-model": "下载重排序模型",
   "privacy.traffic.reranking-model.description":
-    "内置重排序模型只下载一次，在你于设置中开启它时下载。",
+    "内置重排序模型只下载一次，在有文档可搜索时下载，除非重新排序已关闭或使用了在线服务。",
   "privacy.traffic.ollama-pull": "下载本地模型",
   "privacy.traffic.ollama-pull.description":
     "当你选择本地模型时，Ollama 会从它的模型库下载该模型。",
