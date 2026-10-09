@@ -61,6 +61,12 @@ export interface DocumentExcerpt {
   name: string;
   kind: DocumentKind;
   pageCount: number | null;
+  /**
+   * Its shape, where its format has one: a deck's slide titles, a
+   * workbook's sheet names, the headings of a Word or Markdown file (see
+   * `documentOutline` in ../library/excerpt).
+   */
+  outline?: string;
   /** The beginning of its text, at most about `EXCERPT_TOKENS`. */
   text: string;
 }
