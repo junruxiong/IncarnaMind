@@ -665,7 +665,7 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     ]);
   });
 
-  test("leniently: numbers and true/false sent as text, and lists sent as JSON text, reach the Tool converted", async () => {
+  test("the check is lenient, as a small model meant its arguments, and the Tool gets them as sent", async () => {
     const add = testTool("add_rows", {
       schema: {
         type: "object",
@@ -673,20 +673,19 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
           count: { type: "integer" },
           dry: { type: "boolean" },
           rows: { type: "array", items: { type: "object", properties: { n: { type: "number" } } } },
+          tags: { type: "array", items: { type: "string" } },
         },
         required: ["count", "rows"],
       },
     });
-    const model = stepsModel(
-      [[{ tool: "add_rows", input: { count: "2", dry: "false", rows: '[{"n": "1"}, {"n": 2}]' } }]],
-      "Added.",
-    );
+    // A number and true/false as text, a list as JSON text, and null for an optional list.
+    const sent = { count: "2", dry: "false", rows: '[{"n": "1"}, {"n": 2}]', tags: null };
+    const model = stepsModel([[{ tool: "add_rows", input: sent }]], "Added.");
 
-    await collect(create(), request(model, { tools: [add] }));
+    const run = await collect(create(), request(model, { tools: [add] }));
 
-    expect(add.calls.map((call) => call.input)).toEqual([
-      { count: 2, dry: false, rows: [{ n: 1 }, { n: 2 }] },
-    ]);
+    expect(add.calls.map((call) => call.input)).toEqual([sent]);
+    expect(run.events).toContainEqual({ type: "tool-result", id: "call-0-0", ok: true });
   });
 });
 

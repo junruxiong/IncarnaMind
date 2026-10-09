@@ -37,10 +37,12 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * Checks a call's arguments against its Tool's JSON Schema. The AI SDK passes
- * them on unchecked unless the schema has a `validate`. Lenient, as `RunTool`
- * says: text is converted to the number or true/false a schema wants
- * (`coerceTypes`); formats aren't checked; unknown keywords are ignored.
+ * Checks a call's arguments against its Tool's JSON Schema; the AI SDK passes
+ * them on unchecked unless the schema has a `validate`. Leniently, as
+ * `RunTool` says: formats aren't checked, unknown keywords are ignored, and a
+ * copy is checked with what small models send taken as meant (see `asMeant`
+ * and `coerceTypes`, which also takes text as the number or true/false a
+ * schema wants, and null as any of these).
  */
 const ajv = new Ajv({
   allErrors: true,
@@ -67,41 +69,48 @@ function validatorFor(schema: Record<string, unknown>): ValidateFunction | null 
   return validate;
 }
 
-/** Arguments sent as JSON text where the schema wants an array or an object, parsed (small models do this). */
-function withJsonText(
-  input: Record<string, unknown>,
-  schema: Record<string, unknown>,
-): Record<string, unknown> {
+/**
+ * A copy of the arguments to check, as a small model meant them: an optional
+ * one sent as null is left out, and one sent as JSON text where the schema
+ * wants an array or an object is parsed.
+ */
+function asMeant(input: Record<string, unknown>, schema: Record<string, unknown>) {
+  const copy = structuredClone(input);
   const properties = isPlainObject(schema.properties) ? schema.properties : {};
-  for (const [name, value] of Object.entries(input)) {
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  for (const [name, value] of Object.entries(copy)) {
     const wanted = (properties[name] as { type?: unknown } | undefined)?.type;
-    if (typeof value !== "string" || (wanted !== "array" && wanted !== "object")) continue;
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (wanted === "array" ? Array.isArray(parsed) : isPlainObject(parsed)) input[name] = parsed;
-    } catch {
-      // Not JSON: the check says what's wrong.
+    if (value === null && !required.includes(name)) {
+      delete copy[name];
+    } else if (typeof value === "string" && (wanted === "array" || wanted === "object")) {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        if (wanted === "array" ? Array.isArray(parsed) : isPlainObject(parsed)) copy[name] = parsed;
+      } catch {
+        // Not JSON: the check says what's wrong.
+      }
     }
   }
-  return input;
+  return copy;
 }
 
-/** A Tool's JSON Schema as the AI SDK takes it, checking each call's arguments (see `RunTool`). */
+/**
+ * A Tool's JSON Schema as the AI SDK takes it, checking each call's arguments
+ * (see `RunTool`). The Tool gets them as the model sent them.
+ */
 function checkedSchema(schema: Record<string, unknown>) {
   return jsonSchema<Record<string, unknown>>(schema, {
     validate: (value) => {
       const validate = validatorFor(schema);
-      if (!validate) return { success: true, value: value as Record<string, unknown> };
-      // A copy: converting changes it, and the model's own arguments stay in the history as sent.
-      const input = isPlainObject(value) ? withJsonText(structuredClone(value), schema) : value;
-      return validate(input)
-        ? { success: true, value: input as Record<string, unknown> }
-        : {
-            success: false,
-            error: new Error(
-              `The arguments don't match the Tool's schema: ${ajv.errorsText(validate.errors, { dataVar: "arguments" })}.`,
-            ),
-          };
+      if (!validate || validate(isPlainObject(value) ? asMeant(value, schema) : value)) {
+        return { success: true, value: value as Record<string, unknown> };
+      }
+      return {
+        success: false,
+        error: new Error(
+          `The arguments don't match the Tool's schema: ${ajv.errorsText(validate.errors, { dataVar: "arguments" })}.`,
+        ),
+      };
     },
   });
 }
