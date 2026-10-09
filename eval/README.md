@@ -9,7 +9,8 @@ It drives the core's public interface in Node, the way the desktop app's UI does
 3. It searches for each Question with `searchPassages` in hybrid, keyword and vector mode, and scores the top 5. A cross-lingual Question with a translated query is searched with that too.
 4. It reranks what the search Tool hands a reranker (keyword search's top 10 and vector search's top 10, each Passage once) with the built-in reranking model, mmarco-mMiniLMv2-L12-H384, as the search Tool does by default, and scores the top 5 again: this is the gate. Other reranking candidates, when given, are scored the same way.
 5. When a chat model is given, it asks each Question with `askQuestion` and scores the Citations of each Answer. The core reranks those Answers' searches with the real built-in reranking model, as the app does.
-6. It writes a report under `eval/results/` and prints a summary.
+6. It does steps 1 to 5 again for the every-format set (see [Every format](#every-format)), in a temporary data folder of its own: Word, PowerPoint, Excel, CSV, Markdown, plain-text and PDF Documents, asked about the hard places in each. That set is reported per format and never gates.
+7. It writes a report under `eval/results/` and prints a summary.
 
 The command fails (exit code 1) when a gating target is missed. It isn't part of `npm test` or CI's default run.
 
@@ -25,7 +26,7 @@ The first run downloads the two built-in models from Hugging Face, the embedding
 
 The models run on Node worker threads (`lib/embedderWorker.ts`, `lib/rerankerWorker.ts`). They use the same code as the app's utility processes: `createOnnxEmbedder` and `createOnnxCrossEncoder`, served over the channels in `src/core/embedding/channel.ts` and `src/core/reranking/channel.ts`.
 
-A run takes about two minutes on an Apple M2 Max, most of it spent embedding about 1,200 Passages, then reranking 60 searches.
+A run takes about two minutes on an Apple M2 Max, most of it spent embedding about 1,200 Passages, then reranking 60 searches. The every-format set adds 22 small Documents and 145 searches.
 
 ### Reranking candidates
 
@@ -62,7 +63,7 @@ npm run eval
 - **Gating:** a cloud model (`anthropic`, `openai`, `google`, or `openai-compatible` with a server elsewhere) is the gating model. Its name is recorded in the report. Use one named model for runs you compare, such as the current Claude Sonnet.
 - **Local models:** an Ollama model, or an `openai-compatible` server on this computer, is reported but never gates. For example: `INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=llama3.2 npm run eval`.
 - **Consent:** setting the variables is the consent to send Questions and Passages to the chat model. The run declines automatic tagging's consent request, so no Document excerpts are sent for tagging. A local model has no consent step, so it also tags the Documents while the run asks its Questions, which slows the run.
-- **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 50. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 50 and 130 Answers, each with up to 5 searches.
+- **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 50. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 50 and 130 Answers, each with up to 5 searches. The every-format set's 137 Questions are then asked once each: 137 Answers more.
 
 ### Cloud embeddings
 
@@ -112,6 +113,7 @@ Each run writes a folder `eval/results/<start time>/` (gitignored) with:
 - `report.md`: the results, for people.
 - `report.json`: everything, including the top 5 of each search and each Answer's sentences, Citations and searches.
 - `reviewer-sheet.csv`: only when Citations were scored. One row per "found" quote: the Question, the Answer sentence, the quote, the Document and the page.
+- `reviewer-sheet-formats.csv`: the same for the every-format set; its "page" is the cited Unit.
 
 The terminal summary at the end gives the same headline numbers.
 
@@ -155,6 +157,33 @@ The run gates on the first three targets for a cloud model. Support is judged by
 2. In the `supports (y/n)` column, write `y` when the quote supports the Answer sentence and `n` when it doesn't.
 3. Count the `y` rows. The target is at least 80% of the rows in each language.
 
+### Every format
+
+The gating set asks only about text PDFs. The every-format set, `retrieval/formats.json` (#70), asks about Word, PowerPoint, Excel, CSV, Markdown, plain text and PDF Documents, and the hard places in each: 137 Questions over 22 Documents, at least 3 English and 3 Chinese Questions for each format's hard place, and 8 cross-lingual ones (4 each way, each with a `translatedQuery`). Each has one answer, at one Location.
+
+| Format | Documents | Hard places | Questions (English + Chinese) |
+|---|---|---|---|
+| Word | Riverside Library Renovation Report.docx, 社区食堂试点评估报告.docx, Coastal Flood Risk Review.docx | body text, table cell, footnote, section (only its heading says which, as two sections read alike), comment | 17 + 15 |
+| PowerPoint | Coffee Subscription Launch Review.pptx, 新能源公交季度运营汇报.pptx, Quarterly Research Update.pptx | slide text, slide table, chart (title, series and categories from its cached values), speaker notes | 15 + 12 |
+| Excel and CSV | Clinic Staffing Plan 2027.xlsx, 门店销售与库存2026.xlsx, Regional Revenue.xlsx, Bike Share Stations September 2026.csv, 小区垃圾分类统计2026年9月.csv, Orders.csv | cell (a value in a sheet's first block, or a labelled value), row with header (a row in a later block, which repeats the header row), second sheet | 12 + 9 |
+| Markdown and plain text | Field Kit Setup Guide.md, 实验室数据管理规范.md, Night Shift Handbook.txt, 冷链仓库值班手册.txt | table, list, code block | 10 + 9 |
+| PDF | Urban Heat in Six Districts.pdf, 城市绿地与夏季降温调查.pdf, and four image-only scans | table, two columns (one sentence runs from a column's foot onto the next page), footnote, figure caption, scanned | 15 + 15 |
+
+- **Fixtures:** synthetic, Apache-2.0. The 14 in `retrieval/formats/files/` are written by `retrieval/formats/make-fixtures.py` (python-docx, python-pptx, openpyxl, reportlab), the same bytes each time; the others are the repository's own test fixtures, written by other libraries. See `retrieval/formats/ATTRIBUTION.md`.
+- **Locations:** `expected.pages` are Unit numbers, as Citations count them (ADR-0011): a PDF's page, a deck's slide, a Word or Markdown section in reading order (a Word file's footnotes are its last Unit), a block of rows (later sheets continue the count), a block of lines.
+- **Known gaps:** 12 Questions ask about text the readers don't index today: Word comments (the Word reader leaves them out, though the preview shows them) and scanned pages (no text layer; ADR-0011 leaves text recognition out). They are asked and reported, by hard place, and counted apart from their format's figures.
+- **Checked against the stored text:** `tests/eval/formatSet.test.ts` processes each Document as the core does and checks each quote: on its expected Units and no others, citable together, and inside a Passage that covers them. A known gap's quote is on none of its Document's Units.
+- **Run:** in a temporary data folder of its own, so the gating set's Documents, Questions and bar are unchanged. Retrieval as for the gating set, with the search Tool's default (hybrid search reranked by the built-in model) and plain hybrid search reported per format and language. With a chat model, each Question is asked once, and its Citations scored with the same figures, per format.
+- **Not gating:** no bar is set yet. The proposed bars below are for the User to approve once the first run's numbers are in.
+
+#### Proposed bars per format
+
+To approve after the first run, for each of Word, PowerPoint, Excel and CSV, Markdown and plain text, and PDF, over the Questions that aren't known gaps:
+
+- **Retrieval:** at least 80% with the search Tool's default, overall and in each language, as for the gating set. One Question is 7 to 11 points of a format's language here, so a bar that the first run misses by one Question is evidence of nothing; a format that misses by more has a problem to look into first.
+- **Citations, with a cloud model:** the gating set's targets per format: at least 90% "Quote found" and at most 5% false "not found", over at least 20 Citations per format.
+- **Known gaps:** reported, never gating, until their text is indexed.
+
 ## Citation-check cases
 
 These cases of the Citation check are unit tests, so they run with `npm test` on every push. They are table-driven in `tests/core/citationCheck.test.ts`, which runs `checkCitation` on stored page text in both languages. Where an end-to-end test covers the same case through the core, with a real PDF, it is listed too.
@@ -177,7 +206,26 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 
 `tests/eval/recordedCitations.test.ts` also checks again the Citations a real run recorded (see Results).
 
+### Every Location kind
+
+`tests/eval/formatCitations.test.ts` checks the Citation check on each kind of Location, with Citations to the every-format set's Documents (`tests/fixtures/eval-format-citations.json`), written as models write them before any model was asked the set. Each is checked against the Units processing stores, as the core checks an Answer's Citations, and sorted as the evaluation sorts them.
+
+| Location | Found | Not found, as it should be |
+|---|---|---|
+| PDF pages | A sentence over four lines of a narrow column; one that runs from a column's foot onto the next page, citing both pages; a table row; a footnote with its number; a figure caption over two lines; Chinese with "°C" for the page's "℃", and a table row the page reads as one line with its neighbours. | The sentence across the page break citing only its first page; a footnote on the page after its own; a paraphrase. |
+| Slides | A slide's text; a table row with its cells' tabs read as spaces; a chart's series and title, from its cached values; speaker notes; two slides, the quote in the first one's notes. | Notes cited on the next slide; a paraphrase. |
+| Word sections | Body text; a table row; a footnote, in the footnotes' section; a section with its heading; two sections. | A footnote cited at its sentence's section; the north wing's sentence at the south wing's section; a comment (not read). |
+| Markdown sections | A table row as written, with its pipes; list items with their number or bullet; lines of a code block. | A code line cited at the next section. |
+| Rows of workbooks and CSV files | Rows in a block that repeats the header, with numbers written another way (`1,077` for `1077`, `1453300` for `£1,453,300`, `17%` for `17.0%`); the repeated header with its row; a labelled value; the second sheet's rows; a CSV row across two blocks and the header between them. | A row cited in the wrong block or sheet; two blocks of different sheets (the Location rule); a number changed. |
+| Lines of plain text | A table aligned with spaces; a list item with its dash; indented code; the second block. | A line cited in the block before its own; a paraphrase. |
+
+Three quotes a model may well write are on their cited Unit but "not found", false "not found" in the report: a slide's table row written with pipes between its cells, a chart's value written with a thousands separator (`Jun: 1,560` for the cached `1560`; numbers are matched however they are written only in sheets' rows), and a Markdown table row without its pipes. The test keeps them as they are today; whether the check should accept them is for the User to decide.
+
 ## Results
+
+### Every format: first run pending
+
+The every-format set was built on 2026-10-09 (#70). Its first `npm run eval` hasn't run yet; its per-format table goes here once it has, with the bars it supports.
 
 ### 2026-10-09: reranking, which became the default
 
@@ -268,7 +316,8 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `vitest.config.ts`: Vitest compiles the TypeScript and bundles the worker threads, as it does for the unit tests. Its config includes only `*.eval.ts`.
 - **`lib/`:**
   - `config.ts`: the environment variables.
-  - `evaluationSet.ts`: reads and checks `retrieval/questions.json`.
+  - `evaluationSet.ts`: reads and checks `retrieval/questions.json`, or `retrieval/formats.json`.
+  - `formats.ts`: the every-format set's figures, per format and per hard place.
   - `library.ts`: the temporary data folder, the core, and the Documents.
   - `embedder.ts` and `embedderWorker.ts`: the built-in model on a worker thread, and cloud embedders.
   - `rerank.ts` and `rerankerWorker.ts`: a reranking candidate on a worker thread, and its download and timings.
@@ -278,10 +327,13 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 - **Evaluation set:**
   - `retrieval/questions.json`: the Questions.
   - `retrieval/fixtures/`: the Chinese Documents, CC BY-SA 4.0; see `ATTRIBUTION.md` there.
+  - `retrieval/formats.json`: the every-format set's Questions.
+  - `retrieval/formats/`: its Documents (`files/`), the script that writes them, and `ATTRIBUTION.md`.
 - **Tests of the evaluation itself:** these run with `npm test`, without the model.
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
+  - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.
 
 ## The grouping check
 

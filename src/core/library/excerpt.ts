@@ -8,6 +8,7 @@
 import type { UnitKind, UnitLabel } from "../../shared/units";
 import type { DocumentKind } from "../api";
 import { type DocumentExcerpt, excerptFromPassages } from "../tags/classify";
+import type { PageImageMode } from "./classifier";
 import { pdfNeedsPageImages } from "./routing";
 
 /** How many Passages, from the start, Organize reads. */
@@ -98,6 +99,21 @@ export function documentOutline(source: Pick<OrganizeSource, "kind" | "units">):
     return `${sheets.length} ${sheets.length === 1 ? "sheet" : "sheets"}: ${list(sheets)}`;
   }
   return null;
+}
+
+/**
+ * Whether a classifier that reads pages in `mode` gets this Document's page
+ * images: always a PDF's (`true`), a PDF with too little text ("auto"), or
+ * only a PDF with no text at all ("no-text").
+ */
+export function organizeReadsPages(
+  mode: PageImageMode | undefined,
+  source: Pick<OrganizeSource, "kind" | "pageCount" | "passages" | "units">,
+): boolean {
+  if (!mode || source.kind !== "pdf") return false;
+  if (mode === "auto") return organizeNeedsPageImages(source);
+  if (mode === "no-text") return source.passages.length === 0;
+  return true;
 }
 
 /** A PDF whose first pages hold too little text to classify from text alone (see ./routing). */

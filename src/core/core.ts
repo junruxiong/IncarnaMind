@@ -40,7 +40,7 @@ import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { createFolders } from "./folders";
-import { createLibrary } from "./library";
+import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
@@ -50,6 +50,7 @@ import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
+import { chatModelReadsImages } from "./providers/imageInput";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
 import {
@@ -625,6 +626,7 @@ export function createCore(adapters: CoreAdapters): Core {
     background,
     changed: () => events.emit("library.changed", null),
     providerExists: (id) => chat.exists(id),
+    chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
       try {
         return await documentPageImages(await documents.filePath(id), contentHash, signal);
@@ -665,15 +667,17 @@ export function createCore(adapters: CoreAdapters): Core {
       const prepared = await chat.prepareModel(classifier.choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
         throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+      // prepareModel got consent for everything the classification flow sends, page images included.
+      const images = chatModelReadsImages(prepared.provider.kind, prepared.modelId);
       return {
-        ...chatGroupClassifier(prepared.model, prepared.provider.service === null),
-        model: { id: classifier.choice.modelId, images: false, reason: "selected" as const },
+        ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
+        model: { id: classifier.choice.modelId, images, reason: "selected" as const },
       };
     },
   });
   consent.registry.register({
     id: "classification",
-    sends: ["groups", "tags", "document-excerpts"],
+    sends: CLASSIFICATION_FLOW_SENDS,
     async services() {
       const selected = library.settings().classifier;
       if (selected?.kind === "jev") {
