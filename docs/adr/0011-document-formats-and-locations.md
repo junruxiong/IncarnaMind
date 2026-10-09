@@ -19,7 +19,12 @@ IncarnaMind reads more than PDF, Markdown and plain text, and a Citation's Locat
 **Reading and previews.**
 - **Reading:** our own small zip-and-XML reader extracts text from `.docx`, `.pptx`, `.xlsx` and `.csv`, with no dependencies.
 - **Word previews** are page-like, with docx-preview (Apache-2.0).
-- **PowerPoint previews** are a slide-by-slide outline: title, text, images, then speaker notes. A true slide renderer comes later, once one shows images and tables reliably under the app's Content-Security-Policy.
+- **PowerPoint previews** draw each slide as PowerPoint lays it out, with a renderer of our own on the same zip-and-XML reader (decided 2026-10-09). Each slide keeps its aspect ratio, scaled to the viewer's width, and its speaker notes are folded under it.
+  - **Text stays real text,** read with the same code as the Units. A Citation's quote is washed on its slide, else in the slide's notes (which open), else the slide itself is marked.
+  - **What is drawn:** theme colours and fonts, and layout, master and placeholder inheritance. Text with its runs, bullets, numbering and autofit. Pictures, cropped and clipped to their shape. Preset and custom shapes with gradient or picture fills, lines, arrowheads and shadows. Groups. Tables, including PowerPoint's default table style, which files leave out. Bar, column, line, area, pie and doughnut charts, drawn from their cached values with the file's own number formats. SmartArt, from the drawing PowerPoint saves beside it. An embedded object's picture.
+  - **What falls back:** another kind of chart becomes a labelled box with its figures. A picture a browser can't show (EMF, WMF, TIFF) becomes a labelled box. A slide that can't be read, or a deck, is shown as the outline it was before (title, text, tables, images, notes).
+  - **The Content-Security-Policy is unchanged:** pictures are `data:` URLs, and pictures linked from outside the file are never fetched.
+  - **Fonts:** Carlito (OFL-1.1), which has Calibri's metrics, ships for decks set in Calibri, so their lines break where PowerPoint breaks them.
 - **Excel and CSV previews** are a grid with sheet tabs, highlighting the cited rows.
 - **Second wave:** we read text with our own code where the format is simple (HTML, EPUB, RTF, OpenDocument), and show text-only previews. The legacy binary formats are decided when we reach them. SheetJS, now published only from its own site, is the likely route for `.xls`.
 - **LibreOffice:** not used in v1. It is a separate 285 MB+ install, with frequent security advisories in its importers. Later, at most, it could give an optional exact-layout preview when it is already installed, but never the Locations Citations point at.
@@ -30,6 +35,15 @@ IncarnaMind reads more than PDF, Markdown and plain text, and a Citation's Locat
 - **LibreOffice for every Office format**: exact layouts and real Word pages, but a large separate install with a poor security record for opening untrusted files.
 - **Pages for everything**: one unit everywhere, but slides, sheets and Markdown have no pages their readers would recognise.
 - **Spreadsheet Citations marked "can't check"**: simpler, but it leaves unchecked the claims most worth checking.
+- **A PowerPoint library instead of our own slide renderer** (compared 2026-10-09 on the fixture deck and three python-pptx decks, in the app's Electron):
+  - **`@silurus/ooxml` 0.88.0** (MIT) parses in Rust compiled to WebAssembly and draws on canvas, with a transparent text layer over it.
+    - **It runs under the app's exact policy** when its worker ships as a file: the parse and the drawing run in a module worker loaded from a file, which the page's policy doesn't govern. Only its fallback, an inline `blob:` or `data:` worker, would need `'wasm-unsafe-eval'` and `worker-src blob:`, so it would never need its own frame or a looser policy.
+    - **Its fidelity is close to ours:** it draws shadows and charts' axes as the file sets them. It lost a chevron's label and a dark theme's chart text, and has no Calibri metrics.
+    - **It costs** about 4.5 MB (1.8 MB of it WebAssembly) against our 64 KB. It took 106–162 ms to its first slide, against our 16–57 ms.
+    - **Its quote highlight** would sit on an invisible layer over canvas glyphs, not on the text the Units were read from.
+    - **It is young:** one maintainer, written by AI agents by its own README, 153 releases in six months.
+  - **`@aiden0z/pptx-renderer` 1.3.0** (Apache-2.0) needs `blob:` images, cuts tables after their second row, and fetches linked pictures while a slide draws (its issue 32).
+  - **`pptx-preview`** has no source and non-OSI terms. **PPTXjs** is jQuery and JSZip 2, untouched since 2022.
 
 ## Consequences
 
