@@ -36,14 +36,68 @@ export interface OrganizeSource {
   units: readonly OrganizeUnit[];
 }
 
-/** The excerpt a classifier is given. */
+/**
+ * The excerpt a classifier is given: the name, the kind and page count, a
+ * deck's or a workbook's outline (see `documentOutline`), and the beginning
+ * of the text.
+ */
 export function organizeExcerpt(source: OrganizeSource): DocumentExcerpt {
+  const outline = documentOutline(source);
   return {
     name: source.name,
     kind: source.kind,
     pageCount: source.pageCount,
+    ...(outline ? { outline } : {}),
     text: excerptFromPassages(source.passages.slice(0, ORGANIZE_PASSAGES)),
   };
+}
+
+/** At most this many entries in an outline, each cut to this many characters. */
+const OUTLINE_ENTRIES = 16;
+const OUTLINE_ENTRY_CHARACTERS = 60;
+
+const clip = (text: string) => {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > OUTLINE_ENTRY_CHARACTERS
+    ? `${line.slice(0, OUTLINE_ENTRY_CHARACTERS - 1).trimEnd()}…`
+    : line;
+};
+
+const firstLine = (text: string) => text.split("\n").find((line) => line.trim()) ?? "";
+
+/** "a; b; c", and "(+N more)" past the limit. */
+function list(entries: readonly string[]): string {
+  const shown = entries.slice(0, OUTLINE_ENTRIES).join("; ");
+  const more = entries.length - OUTLINE_ENTRIES;
+  return more > 0 ? `${shown} (+${more} more)` : shown;
+}
+
+/**
+ * The shape of a deck or a workbook, which its text doesn't show: a deck's
+ * slide titles, a workbook's sheet names. It tells a deck or a spreadsheet
+ * for what it is, and shows what lies past the excerpt. Null for other
+ * formats: a Word or Markdown file's headings are in its text already, and
+ * listing them again made Tev1 4B less accurate on the tuning half of the
+ * Organize set (eval/organize).
+ */
+export function documentOutline(source: Pick<OrganizeSource, "kind" | "units">): string | null {
+  const { kind, units } = source;
+  if (kind === "pptx") {
+    const slides = units.filter((unit) => unit.kind === "slide");
+    if (slides.length === 0) return null;
+    const titles = slides.map(
+      (unit, index) => `${index + 1}. ${clip(unit.label?.title || firstLine(unit.text)) || "–"}`,
+    );
+    return `${slides.length} ${slides.length === 1 ? "slide" : "slides"}: ${list(titles)}`;
+  }
+  if (kind === "xlsx" || kind === "csv") {
+    const sheets = [
+      ...new Set(units.flatMap((unit) => (unit.label?.sheet ? [clip(unit.label.sheet)] : []))),
+    ];
+    if (sheets.length === 0) return null;
+    return `${sheets.length} ${sheets.length === 1 ? "sheet" : "sheets"}: ${list(sheets)}`;
+  }
+  return null;
 }
 
 /** A PDF whose first pages hold too little text to classify from text alone (see ./routing). */

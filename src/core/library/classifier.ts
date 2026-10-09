@@ -103,6 +103,25 @@ export function chatGroupClassifier(model: ChatLanguageModel, local: boolean): G
   };
 }
 
+/**
+ * Where a local decision model's probability that a Tag applies counts as
+ * unsure: below `low` the Tag isn't applied; from `low` up to `high` it is,
+ * marked "needs review". Models of different sizes are calibrated
+ * differently. On the tuning half of the Organize set (eval/organize), Tev1
+ * 4B's Tags from 0.6 up were right 29 times in 31, Tev1 0.8B's from 0.7 up
+ * 28 in 30, so marking those for review only asked the User to confirm
+ * Tags that were right. Clef-Flash's wrong Tags went as high as 0.79, and
+ * its 0.5–0.8 Tags were right 6 times in 10, so it keeps the wider band.
+ */
+const REVIEW_BANDS: { model: RegExp; band: { low: number; high: number } }[] = [
+  { model: /^tev1:4b$/i, band: { low: 0.5, high: 0.6 } },
+  { model: /^tev1:0\.8b$/i, band: { low: 0.5, high: 0.7 } },
+];
+const DEFAULT_REVIEW_BAND = { low: 0.5, high: 0.8 };
+
+export const reviewBandFor = (model: string) =>
+  REVIEW_BANDS.find((each) => each.model.test(model))?.band ?? DEFAULT_REVIEW_BAND;
+
 export function decisionGroupClassifier(connection: {
   baseUrl: string;
   apiKey: string;
@@ -151,15 +170,19 @@ export function decisionGroupClassifier(connection: {
         approximateTokens(JSON.stringify(criteria)),
         ...Object.values(questions).map((q) => approximateTokens(JSON.stringify(q))),
       );
+      const outlineTokens = excerpt.outline ? approximateTokens(excerpt.outline) : 0;
       // Tev1's practical context is around 2K despite the catalog's larger window.
-      let budget = isTev
-        ? Math.min(1000, 1500 - questionTokens - approximateTokens(excerpt.name))
-        : 1500;
+      let budget =
+        (isTev ? Math.min(1000, 1500 - questionTokens - approximateTokens(excerpt.name)) : 1500) -
+        outlineTokens;
       if (budget < 200)
         throw new Error("Shorten the group descriptions or use a model with a larger context.");
       const choose = () =>
         askJevOrganization({
           ...connection,
+          // A deck's or a workbook's outline comes with it: Tev1 0.8B missed Slides on
+          // every deck of the tuning half without it. Spelling out the type in words
+          // ("Word document") instead of the kind made Tev1 4B less accurate there.
           state: {
             ...excerpt,
             text: excerptFromPassages([excerpt.text], budget),
@@ -175,7 +198,7 @@ export function decisionGroupClassifier(connection: {
       for (let attempt = 0; ; attempt++) {
         try {
           const selected = await choose();
-          const band = connection.reviewBand ?? { low: 0.5, high: 0.8 };
+          const band = connection.reviewBand ?? reviewBandFor(connection.model);
           return {
             groupId: selected.group === UNSORTED ? null : selected.group,
             tags: tags.flatMap((tag) => {
