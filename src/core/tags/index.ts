@@ -9,6 +9,7 @@
  * Document and Tag that has one.
  */
 import { randomUUID } from "node:crypto";
+import { isTagColour, nextTagColour, type TagColour } from "../../shared/tagColours";
 import type { DocumentTag, Tag, TagSource } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Language } from "../language";
@@ -24,6 +25,7 @@ interface TagRow {
   name: string;
   description: string;
   preset: string | null;
+  colour: TagColour;
   created_at: string;
   updated_at: string;
 }
@@ -36,13 +38,14 @@ interface LinkRow {
   needs_review: number;
 }
 
-const COLUMNS = "id, name, description, preset, created_at, updated_at";
+const COLUMNS = "id, name, description, preset, colour, created_at, updated_at";
 
 const toTag = (row: TagRow): Tag => ({
   id: row.id,
   name: row.name,
   description: row.description,
   preset: row.preset !== null,
+  colour: row.colour,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -65,6 +68,11 @@ function parseName(name: unknown): string {
     throw new InvalidInputError(`A Tag's name can't be longer than ${MAX_NAME_LENGTH} characters.`);
   }
   return trimmed;
+}
+
+function parseColour(colour: unknown): TagColour {
+  if (!isTagColour(colour)) throw new InvalidInputError("Choose one of the Tag colours.");
+  return colour;
 }
 
 function parseDescription(description: unknown): string {
@@ -177,9 +185,9 @@ export function createTags(db: Database, now: () => string) {
         for (const preset of PRESET_TAGS) {
           const { name, description } = preset.text[language];
           db.run(
-            `INSERT INTO tags (id, name, description, preset, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [randomUUID(), name, description, preset.key, at, at],
+            `INSERT INTO tags (id, name, description, preset, colour, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [randomUUID(), name, description, preset.key, preset.colour, at, at],
           );
         }
         return true;
@@ -191,23 +199,25 @@ export function createTags(db: Database, now: () => string) {
       const name = parseName(input.name);
       const description =
         input.description === undefined ? "" : parseDescription(input.description);
+      const chosen = input.colour === undefined ? null : parseColour(input.colour);
       return db.transaction(() => {
         checkUnique(name);
         const id = randomUUID();
         const at = now();
+        const colour = chosen ?? nextTagColour(list().map((tag) => tag.colour));
         db.run(
-          `INSERT INTO tags (id, name, description, preset, created_at, updated_at)
-           VALUES (?, ?, ?, NULL, ?, ?)`,
-          [id, name, description, at, at],
+          `INSERT INTO tags (id, name, description, preset, colour, created_at, updated_at)
+           VALUES (?, ?, ?, NULL, ?, ?, ?)`,
+          [id, name, description, colour, at, at],
         );
-        return { id, name, description, preset: false, createdAt: at, updatedAt: at };
+        return { id, name, description, preset: false, colour, createdAt: at, updatedAt: at };
       });
     },
 
     update(tagId: unknown, patch: unknown): Tag {
       if (!isRecord(patch)) throw new InvalidInputError("updateTag expects an object.");
       for (const key of Object.keys(patch)) {
-        if (key !== "name" && key !== "description") {
+        if (key !== "name" && key !== "description" && key !== "colour") {
           throw new InvalidInputError(`A Tag has no field "${key}".`);
         }
       }
@@ -216,16 +226,16 @@ export function createTags(db: Database, now: () => string) {
         const name = patch.name === undefined ? tag.name : parseName(patch.name);
         const description =
           patch.description === undefined ? tag.description : parseDescription(patch.description);
-        if (name === tag.name && description === tag.description) return tag;
+        const colour = patch.colour === undefined ? tag.colour : parseColour(patch.colour);
+        if (name === tag.name && description === tag.description && colour === tag.colour)
+          return tag;
         checkUnique(name, tag.id);
         const at = now();
-        db.run("UPDATE tags SET name = ?, description = ?, updated_at = ? WHERE id = ?", [
-          name,
-          description,
-          at,
-          tag.id,
-        ]);
-        return { ...tag, name, description, updatedAt: at };
+        db.run(
+          "UPDATE tags SET name = ?, description = ?, colour = ?, updated_at = ? WHERE id = ?",
+          [name, description, colour, at, tag.id],
+        );
+        return { ...tag, name, description, colour, updatedAt: at };
       });
     },
 

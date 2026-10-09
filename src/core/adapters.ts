@@ -15,6 +15,7 @@ import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
+import type { RunEngine } from "./runs/engine";
 
 export interface Paths {
   /**
@@ -408,6 +409,12 @@ export interface CoreAdapters {
    * engine; an alternative agent layer plugs in here.
    */
   answerEngine?: AnswerEngine;
+  /**
+   * Runs the Tool-calling loop of each Run, such as an Answer's (see
+   * `RunEngine`). Defaults to the one on AI SDK 7; another loop library
+   * plugs in here, and must pass the same contract suite.
+   */
+  runEngine?: RunEngine;
   /**
    * Builds embedding models for the providers the User can choose instead of
    * the built-in model. Defaults to the AI SDK providers; tests pass AI SDK

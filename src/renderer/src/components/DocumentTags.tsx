@@ -5,6 +5,7 @@ import { NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { CheckLineIcon, CloseLineIcon, TagLineIcon } from "./lineIcons";
 import { rowActionButtonClass, rowClass } from "./sidebarRows";
+import { TagSwatch } from "./TagColour";
 import { pickerLabel, TagPicker, tagPopoverClass, useTagPopover } from "./TagPicker";
 import { menuClass, menuItemClass, menuRuleClass, menuTitleClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
@@ -79,7 +80,7 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
             ? t("tags.state.failed")
             : null;
   const footerButton =
-    "h-7 shrink-0 rounded-md px-2 text-[12px] font-semibold text-ink-secondary outline-none hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-accent";
+    "h-7 shrink-0 rounded-md px-2 text-[12px] font-semibold text-ink-secondary hover:bg-hover hover:text-ink";
   return (
     <>
       {taggingLine && (
@@ -193,6 +194,7 @@ export function TagFilterMenu() {
                   <CheckLineIcon
                     className={`size-3.5 shrink-0 ${selected ? "text-ink" : "invisible"}`}
                   />
+                  {tag && <TagSwatch colour={tag.colour} />}
                   <span className="truncate">{name(value)}</span>
                 </button>
               );

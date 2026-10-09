@@ -7,5 +7,5 @@
  * it here as `openDatabase`. Nothing else in the core imports a driver.
  */
 export type { Database, SqlValue } from "./database";
-export { migrate } from "./migrations";
+export { migrate, migrations } from "./migrations";
 export { openNodeSqlite as openDatabase } from "./node-sqlite";

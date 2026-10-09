@@ -13,10 +13,10 @@ import {
   type AnswerTools,
   createAiSdkAnswerEngine,
   documentTools,
-  toToolSet,
 } from "../../src/core/answers/engine";
 import { connectorToolEffects } from "../../src/core/connectors";
 import { declaredAccess, WORKING_FOLDER } from "../../src/core/execution";
+import { toToolSet } from "../../src/core/runs/aiSdkEngine";
 import { type SkillToolsOptions, skillTools } from "../../src/core/skills/tools";
 import { offeredTools, RESERVED_TOOL_NAMES, type Tool } from "../../src/core/tools";
 import { scriptedModel } from "../helpers/models";
@@ -38,6 +38,7 @@ function connectorTool(name: string, calls: unknown[] = []): Tool {
     providerTool: name.split("__").at(-1) ?? name,
     title: null,
     effects: () => connectorToolEffects(TIDES, true),
+    untrustedResult: true,
     async call(input) {
       calls.push(input);
       return `${name} was called.`;
@@ -305,21 +306,25 @@ describe("Each Tool declares its Effects: what a call with its input can do", ()
     );
   });
 
-  test("run_skill_script's call is run, and asked about, with the Effects the Tool declares", async () => {
-    const asked: unknown[] = [];
+  test("run_skill_script's call runs the script it names (asking first, about the Effects it declares, is the Run's gate's)", async () => {
+    const ran: unknown[] = [];
     const tool = skillTool("run_skill_script", {
       scripts: {
         access: (skillDir) => declaredAccess("none", scriptAllow(skillDir)),
-        run: async (_input, _context, effects) => {
-          asked.push(effects);
+        run: async (input, context) => {
+          ran.push([input, context.toolCallId]);
           return "ran";
         },
       },
     });
 
-    await tool.call(script, { toolCallId: "call-1", signal: new AbortController().signal });
+    const result = await tool.call(script, {
+      toolCallId: "call-1",
+      signal: new AbortController().signal,
+    });
 
-    expect(asked).toEqual([tool.effects(script)]);
+    expect(result).toBe("ran");
+    expect(ran).toEqual([[script, "call-1"]]);
   });
 
   test("a Connector's Tool sends to its Connector's service and may change something there; the Connector marking it read-only narrows that to reading", () => {

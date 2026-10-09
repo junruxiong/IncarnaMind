@@ -11,12 +11,13 @@
  * Question forces is loaded up front, and shown as a Tool call too.
  *
  * Connector Tools and Skill scripts (`run_skill_script`, see
- * ../skills/scripts) go through one gate: approvals decide from the call's
- * Effects whether it asks first (see ../approvals). One that asks pauses the
- * Answer inside its call until the User decides; the call's card records the
- * decision. A denied call isn't made: the model is told so, and the Answer
- * carries on. A script's card also keeps how the run ended and what it
- * wrote. Stopping the Answer stops a running script.
+ * ../skills/scripts) go through one gate, which the Run engine awaits before
+ * each call (see ../runs/engine): approvals decide from the call's Effects
+ * whether it asks first (see ../approvals). One that asks pauses the Answer
+ * there until the User decides; the call's card records the decision. A
+ * denied call isn't made: the model is told so, and the Answer carries on. A
+ * script's card also keeps how the run ended and what it wrote. Stopping the
+ * Answer stops a running script.
  *
  * A Question with a Search scope searches only the Documents it covers,
  * resolved when the Question is asked (or its Answer regenerated), and the
@@ -54,6 +55,7 @@ import type { ExecAccess } from "../execution";
 import type { MindContent } from "../mindContent";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
+import type { GateDecision } from "../runs/engine";
 import type { SkillScript, SkillSession } from "../skills";
 import {
   parseScriptArgs,
@@ -85,7 +87,7 @@ import {
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, type QuestionContext } from "./context";
-import type { AnswerEngine, AnswerTools, DocumentLanguage } from "./engine";
+import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
   answerInstructions,
@@ -460,7 +462,7 @@ export function createAnswers(options: AnswersOptions) {
 
     const base = answerInstructions(context.question);
     const callStarted = (call: AnswerToolCall) => {
-      // A call that asks the User first may already be there (see `withApproval`).
+      // A call that asks the User first may already be there (see `ask`).
       if (toolCalls.some((each) => each.id === call.id)) return;
       toolCalls.push(call);
       events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
@@ -491,83 +493,46 @@ export function createAnswers(options: AnswersOptions) {
     };
 
     /**
-     * The gate a call that may ask goes through: a Connector's Tool
-     * (`withApproval`) or a Skill script (`runScript`). Approvals decide from
-     * the call's Effects and the User's policy (see ../approvals). One that
-     * asks waits for the User inside its call, racing the Answer's own
-     * signal: stopping the Answer ends the wait at once. The model's call
-     * reaches here before the engine reports it, so its `card` is recorded
-     * here, waiting, if it isn't already; the engine's report of it then
-     * changes nothing. Resolves with null when the call may go ahead, or with
-     * what the model reads when the User denied it.
+     * Asks the User about a call that may need it: approvals decide from the
+     * call's Effects and the User's policy (see ../approvals). The wait races
+     * the Answer's own signal: stopping the Answer ends it at once. The
+     * model's call reaches here before the engine reports it, so its `card`
+     * is recorded here, waiting, if it isn't already; the engine's report of
+     * it then changes nothing. Resolves with null when the call may go ahead,
+     * or with what the model reads when the User denied it.
      */
-    const gate = async (
-      call: ToolCallToApprove,
-      card: AnswerToolCall,
-      signal: AbortSignal,
-    ): Promise<string | null> => {
+    const ask = async (call: ToolCallToApprove, card: AnswerToolCall): Promise<string | null> => {
       if (options.approvals.decide(call) === "run") return null;
       callStarted({ ...card, approval: "waiting" });
       // Already reported by the engine, after all: it waits too.
       setApproval(call.toolCallId, "waiting");
-      const allowed = await options.approvals.request(
-        call,
-        AbortSignal.any([signal, controller.signal]),
-      );
+      const allowed = await options.approvals.request(call, controller.signal);
       setApproval(call.toolCallId, allowed ? "allowed" : "denied");
       return allowed ? null : deniedResult(call);
     };
 
-    /** A Connector's Tool, through the gate: it asks first unless the User or its Effects say it needn't. */
-    const withApproval = (tool: Tool): Tool => ({
-      ...tool,
-      async call(input, context) {
-        const connector = { id: tool.provider.id, name: tool.provider.name };
-        const name = tool.providerTool;
-        const effects = tool.effects(input);
-        const denied = await gate(
-          {
-            mindId,
-            answerId,
-            toolCallId: context.toolCallId,
-            subject: { kind: "tool", connectorId: connector.id, tool: name },
-            connector,
-            tool: name,
-            title: tool.title ?? null,
-            input,
-            // Its Connector marks it read-only: it changes nothing.
-            readOnly: effects.every((effect) => effect.action !== "write"),
-            effects,
-          },
-          {
-            id: context.toolCallId,
-            tool: name,
-            source: "connector",
-            connector,
-            input,
-            status: "running",
-            resultCount: null,
-          },
-          context.signal,
-        );
-        return denied ?? tool.call(input, context);
-      },
-    });
+    /** A Skill script that can't run: its card and the model say why. */
+    const cantRun = (toolCallId: string, error: unknown): never => {
+      const message = messageOf(error);
+      setScriptRun(toolCallId, scriptNotRun(message));
+      throw new Error(message);
+    };
+
+    /** Skill scripts the gate checked and let through, by call: their call runs what was checked. */
+    const allowedScripts = new Map<string, { script: SkillScript; args: string[] }>();
 
     /**
-     * `run_skill_script`: checks the script (a script file of a Skill this
-     * Answer may use, of a kind that can run here), goes through the gate
-     * with the call's `effects` (it asks unless the Skill's scripts always
-     * run), then runs it, stopping it if the Answer stops. Its card shows the
-     * Skill, the script and the arguments, then how the run went, or why it
-     * couldn't run. It records its card itself, whichever comes first.
+     * `run_skill_script` at the gate: records its card, which shows the Skill,
+     * the script and the arguments; checks the script (a script file of a
+     * Skill this Answer may use, of a kind that can run here), so one that
+     * can't run is refused without asking; then asks about the call's
+     * `effects`, unless the Skill's scripts always run.
      */
-    const runScript = async (
-      skills: SkillSession,
-      input: Record<string, unknown>,
-      { toolCallId, signal }: ToolCallContext,
+    const scriptGate = async (
+      session: SkillSession,
+      { id: toolCallId, input, tainted }: GatedCall,
       effects: Effect[],
-    ): Promise<string> => {
+    ): Promise<string | null> => {
       const shown = scriptCallInput(input);
       const card: AnswerToolCall = {
         id: toolCallId,
@@ -578,22 +543,16 @@ export function createAnswers(options: AnswersOptions) {
         resultCount: null,
       };
       callStarted(card);
-      /** It can't run: the card and the model say why. */
-      const cantRun = (error: unknown): never => {
-        const message = messageOf(error);
-        setScriptRun(toolCallId, scriptNotRun(message));
-        throw new Error(message);
-      };
       let script: SkillScript;
       let args: string[];
       try {
         args = parseScriptArgs(input.args);
-        script = await skills.script(shown.skill, shown.script);
+        script = await session.script(shown.skill, shown.script);
         options.scripts.check(script.path);
       } catch (error) {
-        return cantRun(error);
+        return cantRun(toolCallId, error);
       }
-      const denied = await gate(
+      const denied = await ask(
         {
           mindId,
           answerId,
@@ -604,14 +563,75 @@ export function createAnswers(options: AnswersOptions) {
           script: script.path,
           args,
           effects,
+          tainted,
         },
         card,
-        signal,
       );
-      if (denied !== null) return denied;
+      if (denied === null) allowedScripts.set(toolCallId, { script, args });
+      return denied;
+    };
+
+    /**
+     * The gate the engine awaits before each Tool call (see `RunRequest.gate`):
+     * a Connector's Tool asks first unless the User or its Effects say it
+     * needn't; a Skill script is checked, then asks unless the Skill's scripts
+     * always run (see `scriptGate`). Every other Tool runs. Whether the Answer
+     * had read untrusted content first (`tainted`) goes to approvals with the call.
+     */
+    const gate = async (tool: Tool, call: GatedCall): Promise<GateDecision> => {
+      const { id, input, tainted } = call;
+      let denied: string | null = null;
+      if (tool.provider.kind === "connector") {
+        const connector = { id: tool.provider.id, name: tool.provider.name };
+        const name = tool.providerTool;
+        const effects = tool.effects(input);
+        denied = await ask(
+          {
+            mindId,
+            answerId,
+            toolCallId: id,
+            subject: { kind: "tool", connectorId: connector.id, tool: name },
+            connector,
+            tool: name,
+            title: tool.title ?? null,
+            input,
+            // Its Connector marks it read-only: it changes nothing.
+            readOnly: effects.every((effect) => effect.action !== "write"),
+            effects,
+            tainted,
+          },
+          {
+            id,
+            tool: name,
+            source: "connector",
+            connector,
+            input,
+            status: "running",
+            resultCount: null,
+          },
+        );
+      } else if (tool.name === SKILL_TOOLS.runScript && skills) {
+        denied = await scriptGate(skills, call, tool.effects(input));
+      }
+      return denied === null ? { run: true } : { run: false, result: denied };
+    };
+
+    /**
+     * `run_skill_script`'s call, once the gate let it through: runs the script
+     * it checked, stopping it if the Answer stops. Its card keeps how the run
+     * went, or why it couldn't run. A script the gate didn't let through never runs.
+     */
+    const runScript = async ({ toolCallId, signal }: ToolCallContext): Promise<string> => {
+      const allowed = allowedScripts.get(toolCallId);
+      allowedScripts.delete(toolCallId);
+      if (!allowed) return cantRun(toolCallId, "The script wasn't allowed to run.");
+      const { script, args } = allowed;
       // Turned off since the Answer started.
       if (!options.scripts.enabled()) {
-        return cantRun("Skill scripts are turned off in Settings, so the script didn't run.");
+        return cantRun(
+          toolCallId,
+          "Skill scripts are turned off in Settings, so the script didn't run.",
+        );
       }
       const timeoutSeconds = options.scripts.timeoutSeconds();
       let run: SkillScriptRun;
@@ -624,7 +644,7 @@ export function createAnswers(options: AnswersOptions) {
           signal: AbortSignal.any([signal, controller.signal]),
         });
       } catch (error) {
-        return cantRun(error);
+        return cantRun(toolCallId, error);
       }
       setScriptRun(toolCallId, run);
       return scriptResultText(script.path, run, timeoutSeconds);
@@ -716,16 +736,12 @@ export function createAnswers(options: AnswersOptions) {
       const { listed, forced } = skills;
       const opened: SkillSession = skills;
       // The Tools of the providers the core registered (the Connectors that are on), next to
-      // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't.
+      // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't
+      // (see `gate`).
       const provided: Tool[] = [];
       for (const provider of options.toolProviders) {
         try {
-          const tools = await provider.tools(controller.signal);
-          provided.push(
-            ...tools.map((tool) =>
-              tool.provider.kind === "connector" ? withApproval(tool) : tool,
-            ),
-          );
+          provided.push(...(await provider.tools(controller.signal)));
         } catch (error) {
           if (finished) return;
           options.reportError(error);
@@ -773,7 +789,7 @@ export function createAnswers(options: AnswersOptions) {
               ...(scripts && {
                 scripts: {
                   access: (skillDir) => options.scripts.access(skillDir),
-                  run: (input, call, effects) => runScript(opened, input, call, effects),
+                  run: (_input, call) => runScript(call),
                 },
               }),
             })
@@ -825,6 +841,7 @@ export function createAnswers(options: AnswersOptions) {
         model: prepared.model,
         documents,
         tools: [...provided, ...fromSkills],
+        gate,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         window: prepared.window,
         signal: controller.signal,

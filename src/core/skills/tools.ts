@@ -8,6 +8,10 @@
  * Their Effects: the first two read the Skill they name. A script's run
  * executes the Skill's code, and can reach what its Executor allows (see
  * ../execution): at sandbox level "none" (v1), anything.
+ *
+ * What the first two return is the User's own: a Skill is instructions they
+ * chose to install, as the Question is. What a script printed is untrusted
+ * (`Tool.untrustedResult`): it may have read anything it could reach.
  */
 import type { Effect, EffectScope } from "../api";
 import type { ExecAccess } from "../execution";
@@ -38,17 +42,13 @@ export interface SkillToolsOptions {
     /** What a run of a script of the Skill in `skillDir` can reach: from the Executor's sandbox level. */
     access(skillDir: string): ExecAccess;
     /**
-     * Runs one of a Skill's scripts (`{ skill, script, args }`), asking the
-     * User first, about the call's `effects`, unless the Skill's scripts
-     * always run. Resolves with what to tell the model (how it ended and
-     * what it wrote, or that the User denied it); rejects with why it
-     * couldn't run.
+     * Runs one of a Skill's scripts (`{ skill, script, args }`), once the
+     * Run's gate has let the call through: it asks the User first, about the
+     * call's Effects, unless the Skill's scripts always run (see
+     * ../runs/engine). Resolves with what to tell the model (how it ended and
+     * what it wrote); rejects with why it couldn't run.
      */
-    run(
-      input: Record<string, unknown>,
-      context: ToolCallContext,
-      effects: Effect[],
-    ): Promise<string>;
+    run(input: Record<string, unknown>, context: ToolCallContext): Promise<string>;
   };
 }
 
@@ -123,6 +123,7 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
       },
       shownInput: ({ name }) => ({ name: text(name) }),
       effects: ({ name }) => readsSkill(options.skill(text(name))),
+      untrustedResult: false,
       call: async ({ name }) => options.useSkill(text(name)),
     });
   }
@@ -143,6 +144,7 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
     },
     shownInput: ({ skill, path }) => ({ skill: text(skill), path: text(path) }),
     effects: ({ skill }) => readsSkill(options.skill(text(skill))),
+    untrustedResult: false,
     call: async ({ skill, path }) => options.readSkillFile(text(skill), text(path)),
   });
   const { scripts } = options;
@@ -173,7 +175,8 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
       },
       shownInput: scriptCallInput,
       effects,
-      call: async (input, context) => scripts.run(input, context, effects(input)),
+      untrustedResult: true,
+      call: async (input, context) => scripts.run(input, context),
     });
   }
   return tools;
