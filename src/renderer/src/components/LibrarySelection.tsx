@@ -9,8 +9,7 @@ import { buttonStyle } from "./ui";
 /** The Document a Shift-click selects from: the last one clicked. */
 let anchor: string | null = null;
 
-const boxClass =
-  "size-4 shrink-0 cursor-pointer accent-ink outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const boxClass = "size-4 shrink-0 cursor-pointer accent-ink";
 
 /**
  * A Library row's checkbox, in the margin left of its name: shown when the

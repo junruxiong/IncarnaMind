@@ -52,6 +52,26 @@
   --color-attention: #d97706;
   --color-danger: #b42318;
   --color-danger-wash: #fef0ee;
+  /*
+   * Tag colours (DESIGN.md, Tags; src/shared/tagColours.ts): a pale fill and its
+   * text, 6.6:1 or better. No green or amber (Citation checks, "needs review"), no accent blue.
+   */
+  --color-tag-stone: #eef0f3;
+  --color-tag-stone-ink: #4a4f57;
+  --color-tag-taupe: #f2eeea;
+  --color-tag-taupe-ink: #5c5248;
+  --color-tag-brick: #f5eae6;
+  --color-tag-brick-ink: #7a3d2d;
+  --color-tag-rose: #f9e9ec;
+  --color-tag-rose-ink: #8e2d45;
+  --color-tag-orchid: #f6e8f2;
+  --color-tag-orchid-ink: #843270;
+  --color-tag-violet: #f1eaf7;
+  --color-tag-violet-ink: #633c86;
+  --color-tag-indigo: #ebebf8;
+  --color-tag-indigo-ink: #43409b;
+  --color-tag-petrol: #e2eff3;
+  --color-tag-petrol-ink: #22566a;
 
   /* The type scale (DESIGN.md, Typography). */
   --text-display: 34px;
