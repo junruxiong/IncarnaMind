@@ -16,18 +16,19 @@
  *   whose sign-in is missing or expired waits for the User instead. Turning
  *   one off, deleting it, or closing the core stops it.
  * - Answers: the Tools of each ready Connector, local or remote, namespaced by
- *   Connector, each with its read-only claim: Answers ask the User before a
- *   call that may change something (see ../approvals). Every call checks
- *   consent for the "connectors" flow first: even a server on this computer
- *   can reach the internet.
+ *   Connector. Each call sends data to its Connector's service and may change
+ *   something there, unless the Connector marks the Tool read-only (its
+ *   Effects, `connectorToolEffects`): Answers ask the User before a call that
+ *   may change something (see ../approvals). Every call checks consent for
+ *   the "connectors" flow first: even a server on this computer can reach
+ *   the internet.
  */
 import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { Tool as McpTool } from "@modelcontextprotocol/sdk/types.js";
 import type { Browser, ProcessLauncher } from "../adapters";
-import type { ExternalTool } from "../answers/engine";
 import type {
   Connector,
   ConnectorError,
@@ -37,6 +38,7 @@ import type {
   ConnectorSignInResult,
   ConnectorState,
   ConnectorTool,
+  Effect,
   ExternalService,
 } from "../api";
 import type { Consent } from "../consent";
@@ -50,6 +52,7 @@ import {
 import { DEFAULT_SIGN_IN_TIMEOUT_MS, type OAuthPage } from "../oauth";
 import type { Secrets } from "../secrets";
 import type { Database } from "../storage";
+import type { Tool } from "../tools";
 import { type ConnectorAuth, clientSecret, createConnectorAuth, manualClientRecord } from "./auth";
 import { type ConnectorConfig, parseAddInput, parseClient, readMcpServers } from "./config";
 import { startError, stoppedError } from "./errors";
@@ -219,7 +222,21 @@ function serviceOf(row: ConnectorRow): ExternalService {
   return { id: `connector:${row.id}`, name: row.name };
 }
 
-function toToolInfo(tool: Tool): ToolInfo {
+/**
+ * What a call of a Connector's Tool can do: send its arguments to the
+ * Connector's `service`, and change something there. The Connector marking
+ * the Tool read-only (MCP's `readOnlyHint`) narrows that to reading. It is a
+ * hint IncarnaMind can't check, so it never widens anything.
+ */
+export function connectorToolEffects(service: ExternalService, readOnly: boolean): Effect[] {
+  const scope = { kind: "service", serviceId: service.id, name: service.name } as const;
+  return [
+    { action: readOnly ? "read" : "write", scope },
+    { action: "network", scope },
+  ];
+}
+
+function toToolInfo(tool: McpTool): ToolInfo {
   return {
     name: tool.name,
     title: tool.title ?? tool.annotations?.title ?? null,
@@ -813,7 +830,7 @@ export function createConnectors(options: ConnectorsOptions) {
   };
 
   /** A Connector's Tool, as an Answer offers it to the model. */
-  const answerTool = (row: ConnectorRow, tool: ToolInfo, name: string): ExternalTool => {
+  const answerTool = (row: ConnectorRow, tool: ToolInfo, name: string): Tool => {
     const service = serviceOf(row);
     const config = storedConfig(row);
     const description = tool.description || tool.title || tool.name;
@@ -824,10 +841,11 @@ export function createConnectors(options: ConnectorsOptions) {
         MAX_DESCRIPTION_CHARS,
       ),
       inputSchema: tool.inputSchema,
-      source: { connectorId: row.id, connectorName: row.name, tool: tool.name },
+      provider: { kind: "connector", id: row.id, name: row.name },
+      providerTool: tool.name,
       title: tool.title,
-      readOnly: tool.readOnly,
-      async call(input, signal) {
+      effects: () => connectorToolEffects(service, tool.readOnly),
+      async call(input, { signal }) {
         try {
           await untilAborted(consent.ensure("connectors", service), signal);
         } catch (error) {
@@ -1105,11 +1123,11 @@ export function createConnectors(options: ConnectorsOptions) {
     },
 
     /**
-     * The Tools of every enabled Connector that is ready, for one Answer.
-     * Connectors not yet started start now; those still connecting are
-     * waited for, a little.
+     * The Connectors as a Tool provider (see ../tools): the Tools of every
+     * enabled Connector that is ready, for one Answer. Connectors not yet
+     * started start now; those still connecting are waited for, a little.
      */
-    async toolsForAnswer(signal: AbortSignal): Promise<ExternalTool[]> {
+    async tools(signal: AbortSignal): Promise<Tool[]> {
       const rows = liveRows().filter((row) => row.enabled === 1);
       if (rows.length === 0) return [];
       startIdle(rows);
@@ -1126,7 +1144,7 @@ export function createConnectors(options: ConnectorsOptions) {
           signal,
         ).finally(() => clearTimeout(timer));
       }
-      const tools: ExternalTool[] = [];
+      const tools: Tool[] = [];
       const names = new Set<string>();
       const unique = (name: string) => {
         let candidate = name.slice(0, MAX_TOOL_NAME_LENGTH);

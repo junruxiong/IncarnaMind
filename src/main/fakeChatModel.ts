@@ -24,6 +24,8 @@
  * scripts by path (e.g. "greeter scripts/hello.js") gets it run once first
  * with run_skill_script, with the Question's last word as its one argument;
  * the Answer then starts with what the script printed (or why it didn't run).
+ * A Question that names a script and a Connector Tool gets both, the script
+ * first, and the Answer starts with what each said.
  *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  */
@@ -322,26 +324,30 @@ function scriptNamed(
 
 /**
  * What the model does next. A Question that names a Skill script, or a
- * Connector Tool, gets it called once first, and the Answer starts with what
- * it said (e.g. that the User denied it).
+ * Connector Tool, or both, gets each called once first (the script first),
+ * and the Answer starts with what each said (e.g. that the User denied it).
  */
 function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
   const names = tools.map((tool) => tool.name);
-  const run = scriptNamed(prompt, lastQuestion(prompt), names);
+  const question = lastQuestion(prompt);
+  /** What the calls made first said, in order. */
+  const said: string[] = [];
+  const run = scriptNamed(prompt, question, names);
   if (run) {
-    const said = lastResult(prompt, "run_skill_script");
-    if (said === undefined) return { tool: "run_skill_script", input: run };
+    const result = lastResult(prompt, "run_skill_script");
+    if (result === undefined) return { tool: "run_skill_script", input: run };
     // What it printed, or the whole result when it didn't run.
-    const printed = /<stdout>\n([\s\S]*?)\n?<\/stdout>/.exec(said)?.[1] ?? said;
-    const reply = answerReply(prompt, names);
-    return "text" in reply ? { text: `${run.script} said: ${printed}\n\n${reply.text}` } : reply;
+    const printed = /<stdout>\n([\s\S]*?)\n?<\/stdout>/.exec(result)?.[1] ?? result;
+    said.push(`${run.script} said: ${printed}`);
   }
-  const named = connectorToolNamed(lastQuestion(prompt), tools);
-  if (!named) return answerReply(prompt, names);
-  const said = lastResult(prompt, named.tool);
-  if (said === undefined) return { tool: named.tool, input: named.input };
+  const named = connectorToolNamed(question, tools);
+  if (named) {
+    const result = lastResult(prompt, named.tool);
+    if (result === undefined) return { tool: named.tool, input: named.input };
+    said.push(`${named.own} said: ${result}`);
+  }
   const reply = answerReply(prompt, names);
-  return "text" in reply ? { text: `${named.own} said: ${said}\n\n${reply.text}` } : reply;
+  return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
 }
 
 /** What the model does next, apart from Connector Tools: call a Tool, or stream its Answer. */

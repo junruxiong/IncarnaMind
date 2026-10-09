@@ -10,6 +10,11 @@ export type {
   Embedder,
   EmbeddingModelFiles,
   EmbeddingModelSource,
+  ExecAllow,
+  ExecFolder,
+  ExecRequest,
+  ExecResult,
+  Executor,
   FileShell,
   Keychain,
   LinkedFolderOptions,
@@ -20,12 +25,13 @@ export type {
   Paths,
   ProcessLauncher,
   RerankingModelFiles,
+  SandboxLevel,
   ScriptRuntimes,
   SpawnOptions,
 } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
-export type { DocumentFile } from "./documents";
+export type { DocumentFile, DocumentImage } from "./documents";
 export type { Reranker } from "./documents/searchTool";
 export type { FolderWatcher, WatchFolder, WatchListener } from "./documents/watcher";
 export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
