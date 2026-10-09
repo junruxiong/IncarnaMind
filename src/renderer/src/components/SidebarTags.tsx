@@ -4,12 +4,11 @@ import { useT } from "../i18n";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { BrowseGroup } from "./LibraryFolders";
-import { TagSwatch } from "./TagColour";
-import { ReviewDot } from "./TagPicker";
+import { ReviewRing, TagDot } from "./TagColour";
 
 const NONE: readonly Document[] = [];
 
-/** A Tag's mark in the icon column: its swatch, or the amber dot for "Needs review". */
+/** A Tag's mark in the icon column: its 11px dot, as in Finder's Tags, or the review ring. */
 const markBox = (mark: ReactNode) => (
   <span className="flex size-4 shrink-0 items-center justify-center">{mark}</span>
 );
@@ -17,7 +16,7 @@ const markBox = (mark: ReactNode) => (
 /**
  * The sidebar's Tags view, beside Folders and Source locations: "Needs
  * review" first while a Tag awaits review (as in the Tags filter), then every
- * Tag in name order, each with its colour and how many Documents carry it.
+ * Tag in name order, each with its dot and how many Documents carry it.
  * Clicking one shows its Documents in the Library, through the Tag filter the
  * Library and the sidebar share, and marks it chosen; clicking it again
  * there stops filtering, as a chip does. Its chevron lists its Documents
@@ -77,12 +76,12 @@ export function SidebarTags({
       ) : (
         <ul>
           {(byTag.has(NEEDS_REVIEW) || tagFilter.includes(NEEDS_REVIEW)) &&
-            group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewDot />)}
+            group(NEEDS_REVIEW, t("tags.filter.review"), <ReviewRing />)}
           {tags.map((tag) =>
             group(
               tag.id,
               tag.name,
-              <TagSwatch colour={tag.colour} size="md" />,
+              <TagDot colour={tag.colour} size="md" />,
               tag.description || tag.name,
             ),
           )}

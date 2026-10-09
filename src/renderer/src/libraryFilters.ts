@@ -26,8 +26,10 @@ export interface LibraryFacet<T> {
   label(value: string, t: Translate): string;
   /** The order its options are listed in. */
   compare(a: string, b: string): number;
-  /** An option's colour, shown as a swatch before it (the Tags filter's); none by default. */
+  /** An option's colour, shown as a dot before it (the Tags filter's); none by default. */
   colour?(value: string): string | null;
+  /** Whether an option stands for what awaits the User's review: a hollow ring marks it. */
+  review?(value: string): boolean;
 }
 
 /** The options chosen, by filter. A filter with none chosen is left out: it keeps everything. */
@@ -297,5 +299,6 @@ export function tagFacet(
               sensitivity: "base",
             }),
     colour: (value) => colours.get(value) ?? null,
+    review: (value) => value === NEEDS_REVIEW,
   };
 }

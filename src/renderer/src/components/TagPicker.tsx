@@ -16,7 +16,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { actionFor, pickerOptions, type TagOnDocuments, tagsOnDocuments } from "../tagEditing";
 import { CheckLineIcon, CloseLineIcon, PlusLineIcon, SparkLineIcon } from "./lineIcons";
-import { TagSwatch, tagChipColour } from "./TagColour";
+import { ReviewRing, TagDot, tagChipColour } from "./TagColour";
 import { buttonStyle, errorTextClass, hintClass, inputClass, menuRuleClass } from "./ui";
 
 const GAP_PX = 4;
@@ -142,7 +142,7 @@ const stateTitle = (state: TagOnDocuments, t: ReturnType<typeof useT>) =>
     t,
   );
 
-/** The amber dot of a Tag awaiting the User's review (DESIGN.md: `attention`). */
+/** The amber dot of a Tag awaiting the User's review, inside its chip (DESIGN.md: `attention`). */
 export function ReviewDot() {
   return <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />;
 }
@@ -501,9 +501,9 @@ function TagOption({
       <span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center">
         {coverage === "all" && !review && <CheckLineIcon className="size-3.5 text-ink" />}
         {coverage === "some" && <span className="h-0.5 w-2.5 rounded-full bg-ink-secondary" />}
-        {review && <ReviewDot />}
+        {review && <ReviewRing />}
       </span>
-      <TagSwatch colour={tag.colour} />
+      <TagDot colour={tag.colour} />
       <span className="min-w-0 shrink-0 truncate">{tag.name}</span>
       {state.automatic && coverage !== "none" && !review && (
         <SparkLineIcon aria-hidden="true" className="size-2.5 shrink-0 text-ink-meta" />

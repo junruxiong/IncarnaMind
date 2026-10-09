@@ -248,6 +248,9 @@ describe("the Tags filter", () => {
     expect(facet.label("t-invoice", en)).toBe("invoice");
     expect(facet.label(NEEDS_REVIEW, en)).toBe("Needs review");
     expect(facet.label(NEEDS_REVIEW, zh)).toBe("待确认");
+    // "Needs review" is marked by the review ring, a Tag by its colour's dot.
+    expect(facet.review?.(NEEDS_REVIEW)).toBe(true);
+    expect(facet.review?.("t-report")).toBe(false);
   });
 
   test("keeps Documents with any Tag chosen, combined with the other filters", () => {

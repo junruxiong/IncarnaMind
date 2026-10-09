@@ -3,38 +3,39 @@ import { create } from "zustand";
 import type { DocumentTag, Tag } from "../../../core/api";
 import { useAppStore } from "../store";
 import { chipsOf } from "../tagEditing";
-import { TagSwatch } from "./TagColour";
+import { TagDot } from "./TagColour";
 
 /** How many colours a sidebar row shows before "+N": they stay on its one line. */
 const VISIBLE_MARKS = 3;
 const GAP_PX = 2;
 const EDGE_PX = 8;
-/** The tip's left padding: its first colour sits under the row's first. */
+/** The tip's left padding: its first dot sits under the row's first. */
 const PADDING_PX = 8;
 
 /**
- * A Document's Tags at a glance, after its name on a sidebar row: the first
- * three Tags' colours as small squares (square, so none reads as the round
- * amber "needs review" dot), then "+N", in the order its Library row shows
- * its chips. Colours only: the names are in the row's tooltip and
- * description, and under the row while the keyboard is on it (`useTagNamesTip`).
+ * A Document's Tags at a glance, after its name on a sidebar row, as Finder
+ * shows them: the first three Tags' dots, each overlapping the one before by
+ * 4px and ringed in the row's background so the overlap reads, then "+N",
+ * in the order its Library row shows its chips. Dots only: the names are in
+ * the row's tooltip and description, and under the row while the keyboard is
+ * on it (`TagNamesTip`).
  */
 export function TagMarks({ chips }: { chips: readonly { tag: Tag; link: DocumentTag }[] }) {
   if (chips.length === 0) return null;
   const more = chips.length - VISIBLE_MARKS;
   return (
-    <span
-      data-testid="tag-marks"
-      aria-hidden="true"
-      className="flex shrink-0 items-center gap-[3px]"
-    >
-      {chips.slice(0, VISIBLE_MARKS).map(({ tag }) => (
-        <TagSwatch key={tag.id} colour={tag.colour} />
+    <span data-testid="tag-marks" aria-hidden="true" className="flex shrink-0 items-center">
+      {chips.slice(0, VISIBLE_MARKS).map(({ tag }, index) => (
+        <TagDot
+          key={tag.id}
+          colour={tag.colour}
+          className={`shadow-[0_0_0_1.5px_var(--row-bg,var(--color-frame))] ${index > 0 ? "-ml-1" : ""}`}
+        />
       ))}
       {more > 0 && (
         <span
           data-testid="tag-marks-more"
-          className="pl-px text-[12px] leading-4 text-ink-meta tabular-nums"
+          className="pl-1 text-[12px] leading-4 text-ink-meta tabular-nums"
         >
           +{more}
         </span>
@@ -123,7 +124,7 @@ export function TagNamesTip() {
       {visible &&
         chips.map(({ tag }) => (
           <span key={tag.id} data-testid="tag-names-tip-tag" className="flex items-center gap-1.5">
-            <TagSwatch colour={tag.colour} />
+            <TagDot colour={tag.colour} />
             <span className="min-w-0 truncate">{tag.name}</span>
           </span>
         ))}
