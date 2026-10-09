@@ -60,11 +60,11 @@ export function openRowMenu(event: MouseEvent<HTMLElement>, menuTestId: string):
 
 /** A name being typed in a row. */
 export const rowInputClass =
-  "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-accent select-text";
+  "h-6 w-full min-w-0 rounded-sm border border-accent bg-sheet px-1.5 text-ui text-ink outline-1 outline-offset-0 outline-accent select-text";
 
 /** The button that fills a row: icon, 8px gap, text, and anything at its end. */
 export const rowButtonClass =
-  "flex h-full w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent";
+  "flex h-full w-full min-w-0 items-center gap-2 rounded-md pr-2 pl-2 text-left focus-visible:-outline-offset-2";
 
 /** A row's 16px icon: muted unless the row is selected. */
 export const rowIconClass = (selected: boolean) =>
@@ -82,7 +82,7 @@ export const rowActionsClass =
 
 /** A 24px icon button among a row's actions. */
 export const rowActionButtonClass =
-  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ink-meta outline-none hover:bg-rule hover:text-ink focus-visible:outline-2 focus-visible:outline-accent aria-expanded:bg-rule aria-expanded:text-ink";
+  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-rule hover:text-ink focus-visible:outline-offset-0 aria-expanded:bg-rule aria-expanded:text-ink";
 
 /**
  * A section's label ("Minds", "Documents"): 12/16 semibold, in the icon
@@ -117,7 +117,7 @@ export function SectionLabel({
         aria-expanded={!folded}
         title={toggleLabel}
         onClick={onToggle}
-        className="flex items-center gap-1 rounded-sm outline-none hover:text-ink-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="flex items-center gap-1 rounded-sm hover:text-ink-secondary"
       >
         {children}
         {folded ? (

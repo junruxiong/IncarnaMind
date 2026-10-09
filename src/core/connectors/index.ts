@@ -16,10 +16,12 @@
  *   whose sign-in is missing or expired waits for the User instead. Turning
  *   one off, deleting it, or closing the core stops it.
  * - Answers: the Tools of each ready Connector, local or remote, namespaced by
- *   Connector, each with its read-only claim: Answers ask the User before a
- *   call that may change something (see ../approvals). Every call checks
- *   consent for the "connectors" flow first: even a server on this computer
- *   can reach the internet.
+ *   Connector. Each call sends data to its Connector's service and may change
+ *   something there, unless the Connector marks the Tool read-only (its
+ *   Effects, `connectorToolEffects`): Answers ask the User before a call that
+ *   may change something (see ../approvals). Every call checks consent for
+ *   the "connectors" flow first: even a server on this computer can reach
+ *   the internet.
  */
 import { randomUUID } from "node:crypto";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -36,6 +38,7 @@ import type {
   ConnectorSignInResult,
   ConnectorState,
   ConnectorTool,
+  Effect,
   ExternalService,
 } from "../api";
 import type { Consent } from "../consent";
@@ -217,6 +220,20 @@ function serviceOf(row: ConnectorRow): ExternalService {
     }
   }
   return { id: `connector:${row.id}`, name: row.name };
+}
+
+/**
+ * What a call of a Connector's Tool can do: send its arguments to the
+ * Connector's `service`, and change something there. The Connector marking
+ * the Tool read-only (MCP's `readOnlyHint`) narrows that to reading. It is a
+ * hint IncarnaMind can't check, so it never widens anything.
+ */
+export function connectorToolEffects(service: ExternalService, readOnly: boolean): Effect[] {
+  const scope = { kind: "service", serviceId: service.id, name: service.name } as const;
+  return [
+    { action: readOnly ? "read" : "write", scope },
+    { action: "network", scope },
+  ];
 }
 
 function toToolInfo(tool: McpTool): ToolInfo {
@@ -831,7 +848,7 @@ export function createConnectors(options: ConnectorsOptions) {
       provider: { kind: "connector", id: row.id, name: row.name },
       providerTool: tool.name,
       title: tool.title,
-      readOnly: tool.readOnly,
+      effects: () => connectorToolEffects(service, tool.readOnly),
       async call(input, { signal }) {
         try {
           await untilAborted(consent.ensure("connectors", service), signal);

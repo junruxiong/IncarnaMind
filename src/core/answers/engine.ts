@@ -720,9 +720,10 @@ interface DocumentToolsHooks {
 
 /**
  * The Documents as a Tool provider, for one go of the Tool-calling loop:
- * `search_documents`, and `cite`, whose records become Citations.
+ * `search_documents`, which reads the Documents, and `cite`, whose records
+ * become this Answer's Citations: nothing beyond it.
  */
-function documentTools(
+export function documentTools(
   documents: AnswerTools,
   hooks: DocumentToolsHooks,
 ): { search: Tool; cite: Tool } {
@@ -743,6 +744,7 @@ function documentTools(
         required: ["query"],
       },
       shownInput: ({ query }) => ({ query: String(query ?? "") }),
+      effects: () => [{ action: "read", scope: { kind: "documents" } }],
       async call({ query }, { toolCallId, signal }) {
         const result = hooks.fit(await documents.searchDocuments(String(query ?? ""), signal));
         hooks.searched(toolCallId, result.passageCount);
@@ -758,6 +760,7 @@ function documentTools(
         properties: { citations: recordsSchema },
         required: ["citations"],
       },
+      effects: () => [],
       async call({ citations }) {
         const records = parseRecords(citations);
         hooks.cited(records);

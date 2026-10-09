@@ -22,7 +22,7 @@ import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
 import { installAppMenu } from "./menu";
-import { createElectronAdapters, systemBrowser } from "./platform";
+import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
 import { registerUpdateCheck, startAutoUpdates } from "./updater";
 import { keepWindowPlace, windowPlace } from "./windowState";
 
@@ -33,6 +33,9 @@ if (dataDirOverride) app.setPath("userData", resolve(dataDirOverride));
 
 // The log in the data folder's `logs/`, from the start, so it has what goes wrong at startup too.
 const logger = startLogging(app.getPath("userData"));
+
+// Whether Skill scripts run in the OS sandbox, found out while Electron starts.
+const scriptExecutor = chooseExecutor(logger);
 
 /** Set by electron-vite in development; absent in a built app. */
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
@@ -160,12 +163,14 @@ function showStartupError(error: unknown): void {
 
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
+  const executor = await scriptExecutor;
   // The window's page starts loading while the core starts. Its calls reach the core once
   // `exposeCore` has run, below: they wait until this synchronous run is done.
   createWindow();
   try {
     core = createCore({
       ...createElectronAdapters(logger),
+      ...(executor && { executor }),
       ...(createChatModel && { createChatModel }),
     });
   } catch (error) {

@@ -7,15 +7,22 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
+import type { ExecAllow } from "../../src/core";
 import {
   type AnswerEngineEvent,
   type AnswerTools,
   createAiSdkAnswerEngine,
+  documentTools,
   toToolSet,
 } from "../../src/core/answers/engine";
-import { skillTools } from "../../src/core/skills/tools";
+import { connectorToolEffects } from "../../src/core/connectors";
+import { declaredAccess, WORKING_FOLDER } from "../../src/core/execution";
+import { type SkillToolsOptions, skillTools } from "../../src/core/skills/tools";
 import { offeredTools, RESERVED_TOOL_NAMES, type Tool } from "../../src/core/tools";
 import { scriptedModel } from "../helpers/models";
+
+/** The service a Connector's Tools send to, as consent names it. */
+const TIDES = { id: "connector:connector-1", name: "Tides" };
 
 /** A Connector's Tool, as the Connectors hand it out; its calls are recorded. */
 function connectorTool(name: string, calls: unknown[] = []): Tool {
@@ -30,7 +37,7 @@ function connectorTool(name: string, calls: unknown[] = []): Tool {
     provider: { kind: "connector", id: "connector-1", name: "Tides" },
     providerTool: name.split("__").at(-1) ?? name,
     title: null,
-    readOnly: true,
+    effects: () => connectorToolEffects(TIDES, true),
     async call(input) {
       calls.push(input);
       return `${name} was called.`;
@@ -38,14 +45,36 @@ function connectorTool(name: string, calls: unknown[] = []): Tool {
   };
 }
 
-/** The Skills provider's Tools, with every one offered. */
-const skills = () =>
+/** The one Skill there is, "toolbox": its id and its folder. */
+const TOOLBOX = { skillId: "skill-1", skillDir: "/data/skills/skill-1" };
+
+/** What a Skill's scripts may touch (as ../../src/core/skills/scripts asks the Executor). */
+const scriptAllow = (skillDir: string): ExecAllow => ({
+  read: [skillDir, WORKING_FOLDER],
+  write: [WORKING_FOLDER],
+  network: "any",
+});
+
+/** The Skills provider's Tools, with every one offered: scripts run on an Executor at "none". */
+const skills = (options: Partial<SkillToolsOptions> = {}) =>
   skillTools({
     loadable: true,
+    skill: (name) => (name === "toolbox" ? TOOLBOX : null),
     useSkill: async (name) => `Skill ${name}`,
     readSkillFile: async (skill, path) => `${skill}/${path}`,
-    runScript: async () => "ran",
+    scripts: {
+      access: (skillDir) => declaredAccess("none", scriptAllow(skillDir)),
+      run: async () => "ran",
+    },
+    ...options,
   });
+
+/** The Skills provider's Tool named `name`. */
+function skillTool(name: string, options: Partial<SkillToolsOptions> = {}): Tool {
+  const found = skills(options).find((each) => each.name === name);
+  if (!found) throw new Error(`No ${name} Tool.`);
+  return found;
+}
 
 const names = (tools: readonly Tool[]) => tools.map((each) => each.name);
 
@@ -201,6 +230,109 @@ describe("Tools for the model", () => {
       resultCount: 1,
     });
     expect(events.at(-1)).toEqual({ type: "finished" });
+  });
+});
+
+describe("Each Tool declares its Effects: what a call with its input can do", () => {
+  const readsToolbox = [{ action: "read", scope: { kind: "skill", skillId: TOOLBOX.skillId } }];
+  const runsToolbox = { action: "execute", scope: { kind: "skill", skillId: TOOLBOX.skillId } };
+  const anywhere = { kind: "anywhere" };
+  const script = { skill: "toolbox", script: "scripts/convert.py", args: [] };
+
+  test("Document search reads the Documents; cite only records the Answer's Citations", () => {
+    const documents: AnswerTools = {
+      documentCount: 1,
+      searchDocuments: async () => ({ text: "", passageCount: 0 }),
+      cite: () => "Recorded.",
+    };
+    const { search, cite } = documentTools(documents, {
+      fit: (found) => found,
+      searched: () => undefined,
+      cited: () => undefined,
+    });
+
+    expect(search.effects({ query: "high water" })).toEqual([
+      { action: "read", scope: { kind: "documents" } },
+    ]);
+    expect(cite.effects({ citations: [] })).toEqual([]);
+  });
+
+  test("use_skill and read_skill_file read the Skill they name; naming one the Answer can't use, nothing (the call fails)", () => {
+    expect(skillTool("use_skill").effects({ name: "toolbox" })).toEqual(readsToolbox);
+    expect(
+      skillTool("read_skill_file").effects({ skill: "toolbox", path: "references/guide.md" }),
+    ).toEqual(readsToolbox);
+    expect(skillTool("use_skill").effects({ name: "elsewhere" })).toEqual([]);
+    expect(skillTool("read_skill_file").effects({ skill: "elsewhere", path: "a.md" })).toEqual([]);
+  });
+
+  test('run_skill_script on an Executor at "none" runs the Skill\'s code, and can read, write and reach the network anywhere', () => {
+    expect(skillTool("run_skill_script").effects(script)).toEqual([
+      runsToolbox,
+      { action: "read", scope: anywhere },
+      { action: "write", scope: anywhere },
+      { action: "network", scope: anywhere },
+    ]);
+    expect(skillTool("run_skill_script").effects({ ...script, skill: "elsewhere" })).toEqual([]);
+  });
+
+  test("run_skill_script in a sandbox can reach only what it allows: its Skill's folder is the Skill, and its own working folder is nothing beyond the call", () => {
+    const sandboxed = (allow: ExecAllow) =>
+      skillTool("run_skill_script", {
+        scripts: { access: () => declaredAccess("os", allow), run: async () => "ran" },
+      }).effects(script);
+
+    expect(sandboxed(scriptAllow(TOOLBOX.skillDir))).toEqual([
+      runsToolbox,
+      ...readsToolbox,
+      { action: "network", scope: anywhere },
+    ]);
+    expect(
+      sandboxed({
+        read: [TOOLBOX.skillDir, "/Users/me/Reports", WORKING_FOLDER],
+        write: ["/Users/me/Reports", WORKING_FOLDER],
+        network: ["api.example.com"],
+      }),
+    ).toEqual([
+      runsToolbox,
+      ...readsToolbox,
+      { action: "read", scope: { kind: "folder", path: "/Users/me/Reports" } },
+      { action: "write", scope: { kind: "folder", path: "/Users/me/Reports" } },
+      { action: "network", scope: { kind: "host", host: "api.example.com" } },
+    ]);
+    expect(sandboxed({ read: [WORKING_FOLDER], write: [WORKING_FOLDER], network: "none" })).toEqual(
+      [runsToolbox],
+    );
+  });
+
+  test("run_skill_script's call is run, and asked about, with the Effects the Tool declares", async () => {
+    const asked: unknown[] = [];
+    const tool = skillTool("run_skill_script", {
+      scripts: {
+        access: (skillDir) => declaredAccess("none", scriptAllow(skillDir)),
+        run: async (_input, _context, effects) => {
+          asked.push(effects);
+          return "ran";
+        },
+      },
+    });
+
+    await tool.call(script, { toolCallId: "call-1", signal: new AbortController().signal });
+
+    expect(asked).toEqual([tool.effects(script)]);
+  });
+
+  test("a Connector's Tool sends to its Connector's service and may change something there; the Connector marking it read-only narrows that to reading", () => {
+    const tides = { kind: "service", serviceId: TIDES.id, name: TIDES.name };
+
+    expect(connectorToolEffects(TIDES, false)).toEqual([
+      { action: "write", scope: tides },
+      { action: "network", scope: tides },
+    ]);
+    expect(connectorToolEffects(TIDES, true)).toEqual([
+      { action: "read", scope: tides },
+      { action: "network", scope: tides },
+    ]);
   });
 });
 

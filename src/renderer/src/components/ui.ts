@@ -2,6 +2,10 @@
  * The app chrome's shared looks, from DESIGN.md and the approved mockups:
  * buttons, fields, dialogs, Settings rows and sidebar rows. Components put
  * these class strings together instead of repeating raw values.
+ *
+ * The keyboard's focus ring (a 2px accent outline, 2px out) is the base style
+ * in styles.css, for every control: these classes only move it (inside a
+ * row, or onto the edge of a small button). `outline-none` would hide it.
  */
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -9,7 +13,7 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
 const buttonBase =
-  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-semibold whitespace-nowrap outline-none transition-colors duration-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-50";
+  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-semibold whitespace-nowrap transition-colors duration-80 disabled:cursor-default disabled:opacity-50";
 
 const buttonSizes: Record<ButtonSize, string> = {
   sm: "h-7 px-2.5 text-[13px] leading-5",
@@ -36,11 +40,11 @@ export const dangerButtonClass = buttonStyle("danger");
 
 /** A square ghost button around a 16px icon. */
 export const iconButtonClass =
-  "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ink-meta outline-none hover:bg-chip hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50";
+  "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0 disabled:opacity-50";
 
 /** A text field, under its label. Radius 4, a 1px edge, blue when focused. */
 export const inputClass =
-  "mt-1 block w-full rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink outline-none placeholder:text-ink-placeholder focus:border-accent focus:outline-1 focus:outline-accent disabled:opacity-60";
+  "mt-1 block w-full rounded-sm border border-rule-strong bg-sheet px-2.5 py-1.5 text-ui text-ink placeholder:text-ink-placeholder focus:border-accent focus:outline-1 focus:outline-offset-0 focus:outline-accent disabled:opacity-60";
 
 /** A field's label, above it. */
 export const fieldLabelClass = "block text-[13px] leading-5 text-ink-secondary";
@@ -110,7 +114,7 @@ export const choiceTextClass = "text-[13px] leading-5 text-ink-secondary";
 
 /** A page in Settings' list on the left: a 28px row, selected like a sidebar row. */
 export const navRowClass = (selected: boolean) =>
-  `flex h-7 w-full shrink-0 items-center rounded-md px-2 text-left text-ui outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
+  `flex h-7 w-full shrink-0 items-center rounded-md px-2 text-left text-ui focus-visible:-outline-offset-2 ${
     selected
       ? "bg-sheet font-semibold text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]"
       : "text-ink-secondary hover:bg-hover"
