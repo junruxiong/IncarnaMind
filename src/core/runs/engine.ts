@@ -29,11 +29,11 @@ export interface RunEngine {
  * What an engine needs of a Tool (CONTEXT.md): its name, description and JSON
  * Schema, and its call. Its provider and Effects stay above the engine.
  *
- * A call's arguments are checked against `inputSchema` first, leniently, as a
- * small model meant them: a number or true/false sent as text, an array or
- * object sent as JSON text, and null for an optional one pass. The Tool gets
- * them as the model sent them. Arguments that don't match never reach `gate`
- * or the Tool: the call fails, and the model reads why.
+ * A call's arguments are checked against `inputSchema` first, leniently,
+ * taken as a small model meant them (a number or true/false sent as text, an
+ * array or an object sent as JSON text, null for an optional one); the Tool
+ * gets them as the model sent them. Arguments that don't match never reach
+ * `gate` or the Tool: the call fails, and the model reads why.
  */
 export type RunTool = Pick<Tool, "name" | "description" | "inputSchema" | "call">;
 
@@ -127,7 +127,10 @@ export type RunMessage =
  */
 export type RunEvent =
   | { type: "text-delta"; text: string }
-  /** The model asked for a Tool; `gate`, then the call, follow. */
+  /**
+   * The model asked for a Tool. Its `gate`, then its call, run alongside the
+   * stream, so they may begin before this event is read.
+   */
   | ({ type: "tool-call" } & RunToolCall)
   /** What the model read of the call: `ok: false` if it failed (see `RunMessage`). */
   | { type: "tool-result"; id: string; ok: boolean }
