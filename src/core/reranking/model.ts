@@ -3,11 +3,12 @@
  * permissive licences, as int8 ONNX, each pinned to a revision with its files'
  * sizes and SHA-256 hashes. The retrieval evaluation (eval/README.md, #31)
  * compares them over what the search Tool hands a reranker (keyword search's
- * top 10 and vector search's top 10, each Passage once); the one Settings
- * offers is `BUILT_IN_RERANKING_MODEL`.
+ * top 10 and vector search's top 10, each Passage once); the one the app
+ * ships, on by default, is `BUILT_IN_RERANKING_MODEL`.
  *
  * Measured on an Apple M2 Max, one pair at a time, 20 Passages of about 500
- * tokens per query, in a Node process of its own:
+ * tokens per query, in a Node process of its own (the evaluation, with other
+ * work on the machine, measured 0.9 s, 3.4 s and 10.4 s a search):
  * - mmarco-mMiniLMv2-L12-H384 (Apache-2.0, 118M parameters): 136 MB, about
  *   0.5 s a query, 0.8 GB resident.
  * - gte-multilingual-reranker-base (Apache-2.0, 306M): 358 MB, about 1.6 s,
@@ -148,9 +149,13 @@ export const RERANKING_MODEL_CANDIDATES: readonly RerankingModelDefinition[] = [
 ];
 
 /**
- * The model Settings → Reranking offers as "on this computer". Provisional
- * until the evaluation's reranked mode has been run: the smallest candidate,
- * the cheapest at every search.
+ * The built-in reranking model: on by default, and the one Settings →
+ * Reranking offers as "on this computer". The other candidates are for the
+ * evaluation only. In its run of 2026-10-09 (#31), reranking with it took
+ * hybrid search from 13 to 16 of 20 English Questions and from 19 to 20 of
+ * 20 Chinese ones, as bge-reranker-v2-m3 did at four times the download and
+ * twelve times the time; gte-multilingual-reranker-base changed nothing. It
+ * adds about 0.5 to 0.9 s to a search.
  */
 export const BUILT_IN_RERANKING_MODEL: RerankingModelDefinition = MMARCO_MINILM;
 

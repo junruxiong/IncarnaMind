@@ -46,8 +46,9 @@ const FAILURE_KEYS = {
 } as const;
 
 /**
- * Settings → Reranking: off by default; the built-in model on this computer,
- * or a Cohere or Voyage AI key, reorders document search's best matches.
+ * Settings → Reranking: the built-in model on this computer reorders document
+ * search's best matches by default; a Cohere or Voyage AI key can do it
+ * instead, or the User turns it off.
  */
 export function RerankSettingsSection() {
   const t = useT();
@@ -83,7 +84,12 @@ export function RerankSettingsSection() {
               {rerank.enabled && builtIn ? (
                 <>
                   <p data-testid="rerank-current" className="text-ui text-ink">
-                    {t("rerank.settings.builtInUse", { model: rerank.modelId ?? "" })}
+                    {t(
+                      rerank.byDefault
+                        ? "rerank.settings.builtInDefault"
+                        : "rerank.settings.builtInUse",
+                      { model: rerank.modelId ?? "" },
+                    )}
                   </p>
                   <p className={rowTextClass}>{t("rerank.settings.builtInNote")}</p>
                   <BuiltInModelState model={rerank.model} />
@@ -112,7 +118,7 @@ export function RerankSettingsSection() {
                 <button
                   type="button"
                   data-testid="rerank-retry"
-                  onClick={() => void run(() => core.saveRerankSettings({ kind: "built-in" }))}
+                  onClick={() => void run(() => core.downloadRerankingModel())}
                   className={buttonClass}
                 >
                   {t("rerank.settings.retry")}
@@ -120,7 +126,12 @@ export function RerankSettingsSection() {
               )}
               {rerank.enabled ? (
                 <>
-                  <button type="button" onClick={() => setEditing(true)} className={buttonClass}>
+                  <button
+                    type="button"
+                    data-testid="rerank-change"
+                    onClick={() => setEditing(true)}
+                    className={buttonClass}
+                  >
                     {t("rerank.settings.change")}
                   </button>
                   <button
@@ -162,10 +173,17 @@ export function RerankSettingsSection() {
   );
 }
 
-/** The built-in model's download, while it isn't ready: progress, or why it failed. */
+/** The built-in model's download, while it isn't ready: when it will, its progress, or why it failed. */
 function BuiltInModelState({ model }: { model: RerankingModelStatus }) {
   const t = useT();
-  if (model.state === "downloading" || model.state === "not-downloaded") {
+  if (model.state === "not-downloaded") {
+    return (
+      <p data-testid="rerank-model-state" className={`mt-1.5 ${rowTextClass}`}>
+        {t("rerank.settings.notDownloaded", { total: megabytes(model.totalBytes) })}
+      </p>
+    );
+  }
+  if (model.state === "downloading") {
     return (
       <p data-testid="rerank-model-state" className={`mt-1.5 ${rowTextClass}`}>
         {t("rerank.settings.downloading", {

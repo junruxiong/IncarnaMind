@@ -14,6 +14,7 @@ import type {
   LinkedFolderLayout,
   LinkedFolderPreview,
   Mind,
+  RerankSettings,
   Settings,
   SettingsPatch,
   Skill,
@@ -94,6 +95,8 @@ interface AppState {
   embeddingModel: EmbeddingModelStatus | null;
   /** The embedding model search uses, local mode and any rebuild. Set once loaded, then follows the core's event. */
   embedding: EmbeddingSettings | null;
+  /** Reranking, and the built-in reranking model's download. Set once loaded, then follows the core's event. */
+  rerank: RerankSettings | null;
   settingsOpen: boolean;
   /** The page Settings shows. */
   settingsPage: SettingsPage;
@@ -209,6 +212,8 @@ interface AppState {
   dismissAlreadyAdded(): void;
   /** Downloads the embedding model again after a failure. */
   downloadEmbeddingModel(): Promise<void>;
+  /** Downloads the built-in reranking model again after a failure. */
+  downloadRerankingModel(): Promise<void>;
   /** Tries the chosen embedding provider again after an error. */
   retryEmbedding(): Promise<void>;
   /**
@@ -410,6 +415,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     alreadyAdded: [],
     embeddingModel: null,
     embedding: null,
+    rerank: null,
     settingsOpen: false,
     settingsPage: "general",
     folders: [],
@@ -462,6 +468,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           keptCitationTexts,
           examples,
           connectors,
+          rerank,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -476,6 +483,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.listKeptCitationTexts(),
           core.getExamples(),
           core.listConnectors(),
+          core.getRerankSettings(),
         ]);
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
@@ -494,6 +502,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           tags,
           skills,
           embedding,
+          rerank,
           examples,
           status: { kind: "ready" },
         });
@@ -720,6 +729,11 @@ export const useAppStore = create<AppState>()((set, get) => {
     downloadEmbeddingModel: () =>
       attempt(async () => {
         set({ embeddingModel: await core.downloadEmbeddingModel() });
+      }),
+
+    downloadRerankingModel: () =>
+      attempt(async () => {
+        set({ rerank: await core.downloadRerankingModel() });
       }),
 
     retryEmbedding: () =>
@@ -952,6 +966,9 @@ core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embe
 
 // The embedding model can change in Settings or by local mode, and a rebuild reports its progress.
 core.on("embedding.changed", (embedding) => useAppStore.setState({ embedding }));
+
+// Reranking changes in Settings, and the built-in reranking model downloads in the background.
+core.on("rerank.changed", (rerank) => useAppStore.setState({ rerank }));
 
 // Folders change through this window or another: follow the list. The sidebar's tree follows it.
 core.on("folders.changed", (folders) => useAppStore.setState({ folders }));

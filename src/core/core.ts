@@ -159,6 +159,8 @@ export function createCore(adapters: CoreAdapters): Core {
   const tagsChanged = () => events.emit("tags.changed", tags.list());
   /** Set once automatic tagging exists: it hears about every Document that becomes ready. */
   let documentReady = (_documentId: string) => {};
+  /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
+  let prepareRerank = () => {};
   let libraryDocumentChanged = (_documentId: string) => {};
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
@@ -207,7 +209,11 @@ export function createCore(adapters: CoreAdapters): Core {
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
       linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
-      onReady: (documentId) => documentReady(documentId),
+      onReady: (documentId) => {
+        // There is something to search now: the built-in reranking model downloads, if it reranks.
+        prepareRerank();
+        documentReady(documentId);
+      },
       // Citations live in Minds, anywhere: in Answers, or copied into Notes.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
@@ -317,7 +323,7 @@ export function createCore(adapters: CoreAdapters): Core {
 
   /** Reports rerank's settings again; set once rerank exists. */
   let reportRerank = () => {};
-  // The built-in reranking model: downloaded and run only once the User turns it on.
+  // The built-in reranking model, the default: downloaded once there are Documents to search.
   const rerankingModel = createRerankingModel({
     definition: BUILT_IN_RERANKING_MODEL,
     source: adapters.rerankingModelSource,
@@ -325,7 +331,7 @@ export function createCore(adapters: CoreAdapters): Core {
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
   });
-  // Rerank: off, the built-in model, or a Cohere or Voyage key (paused in local mode).
+  // Rerank: the built-in model by default, a Cohere or Voyage key (paused in local mode), or off.
   const rerank = createRerank({
     settings,
     secrets,
@@ -347,6 +353,10 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) console.error(error);
     });
   };
+  prepareRerank = () => rerank.prepare();
+  // Documents to search from an earlier run: the built-in reranking model downloads now, or
+  // carries on from where the app quit, if it reranks them.
+  if (documents.searchableCount() > 0) rerank.prepare();
   /** Local mode on or off: embeddings may switch back to the built-in model, and rerank pauses. */
   const setLocalOnly = async (enabled: unknown) => {
     const wasLocal = embedding.localOnly();
@@ -708,7 +718,7 @@ export function createCore(adapters: CoreAdapters): Core {
       id: rerankingHost.origin,
       name: rerankingHost.host === "huggingface.co" ? "Hugging Face" : rerankingHost.host,
     },
-    // Only once the User turns the built-in reranking model on.
+    // While the built-in reranking model reranks: by default, unless the User chose otherwise.
     listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
@@ -893,6 +903,10 @@ export function createCore(adapters: CoreAdapters): Core {
     setLocalOnly: (enabled) => setLocalOnly(enabled),
 
     getRerankSettings: () => rerank.status(),
+    downloadRerankingModel: async () => {
+      await rerank.download();
+      return rerankChanged();
+    },
     saveRerankSettings: async (input) => {
       await rerank.save(input);
       return rerankChanged();

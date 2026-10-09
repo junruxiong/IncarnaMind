@@ -108,9 +108,10 @@ test("in local mode, a server elsewhere and reranking are turned down as they're
   await expect(why).toBeHidden();
   await expect(form.getByTestId("embedding-switch")).toBeEnabled();
 
-  // Reranking: only the built-in model, on this computer, can be chosen.
+  // Reranking: only the built-in model, on this computer, can be chosen, and it stays on.
   const rerank = window.getByTestId("rerank-settings");
-  await rerank.getByTestId("rerank-set-up").click();
+  await expect(rerank.getByTestId("rerank-current")).toContainText("the built-in model reranks");
+  await rerank.getByTestId("rerank-change").click();
   const rerankForm = rerank.getByTestId("rerank-form");
   await expect(rerankForm.getByLabel("Cohere", { exact: true })).toBeDisabled();
   await expect(rerankForm.getByLabel("Voyage AI", { exact: true })).toBeDisabled();
@@ -119,13 +120,33 @@ test("in local mode, a server elsewhere and reranking are turned down as they're
   await app.close();
 });
 
-test("the built-in reranking model is turned on in Settings, and stays on this computer", async () => {
+test("reranking is on by default with the built-in model, can be turned off, and stays off after a restart", async () => {
+  const launched = await launchApp(dataDir);
+  await dismissChatSetup(launched.window);
+  await openSettings(launched.window, "search");
+  const current = () => launched.window.getByTestId("rerank-settings");
+
+  // The smoke tests' fake model has nothing to download: it is ready at once.
+  await expect(current().getByTestId("rerank-current")).toHaveText(
+    /^By default, the built-in model reranks search results \(.+\)\.$/,
+  );
+  await expect(current()).toContainText("Nothing leaves this computer.");
+  await expect(current().getByTestId("rerank-model-state")).toHaveCount(0);
+  expect(
+    await launched.window.evaluate(() => (globalThis as Page).incarnamind.getRerankSettings()),
+  ).toMatchObject({ enabled: true, byDefault: true, kind: "built-in", service: null });
+
+  await current().getByTestId("rerank-remove").click();
+  await expect(current()).toContainText("Off");
+  await launched.app.close();
+
   const { app, window } = await launchApp(dataDir);
-  await dismissChatSetup(window);
   await openSettings(window, "search");
   const rerank = window.getByTestId("rerank-settings");
   await expect(rerank).toContainText("Off");
+  await expect(rerank.getByTestId("rerank-current")).toHaveCount(0);
 
+  // Chosen again, it is the User's choice now, not the default.
   await rerank.getByTestId("rerank-set-up").click();
   const form = rerank.getByTestId("rerank-form");
   await form.getByLabel("On this computer (built-in model)").check();
@@ -135,17 +156,12 @@ test("the built-in reranking model is turned on in Settings, and stays on this c
   await expect(form.getByLabel("API key")).toHaveCount(0);
   await form.getByRole("button", { name: "Use for reranking" }).click();
 
-  // The smoke tests' fake model has nothing to download: it is ready at once.
   await expect(rerank.getByTestId("rerank-current")).toHaveText(
     /^The built-in model reranks search results \(.+\)\.$/,
   );
-  await expect(rerank.getByTestId("rerank-model-state")).toHaveCount(0);
   const settings = await window.evaluate(() =>
     (globalThis as Page).incarnamind.getRerankSettings(),
   );
-  expect(settings).toMatchObject({ enabled: true, kind: "built-in", service: null });
-
-  await rerank.getByTestId("rerank-remove").click();
-  await expect(rerank).toContainText("Off");
+  expect(settings).toMatchObject({ enabled: true, byDefault: false, kind: "built-in" });
   await app.close();
 });

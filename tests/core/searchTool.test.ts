@@ -161,6 +161,8 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
         contents: "The lighthouse keeper lit the lamp at dusk, and kept it burning all night.",
       },
     ]);
+    // This is about grouping by fused scores: no reranker (the default one is on).
+    await core.removeRerankSettings();
     // The note's Passage is the best match, by keyword and by vector search alike.
     for (const mode of ["keyword", "vector"] as const) {
       const [best] = await core.searchPassages("lighthouse keeper", { mode });
