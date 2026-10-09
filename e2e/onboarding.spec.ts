@@ -137,6 +137,31 @@ test("removing the examples deletes the example Mind, its Documents and the copi
   await again.app.close();
 });
 
+test("with only the example Documents, the footer doesn't ask for a model to tag them; a Document of one's own without a model does", async () => {
+  const own = join(sources, "Harbour notes.md");
+  await writeFile(own, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true });
+  const items = window.getByTestId("document-list-item");
+  const notice = window.getByTestId("sidebar-footer").getByTestId("tagging-waiting");
+
+  // The examples are ready and their tagging waits for a model, but they need none: no notice.
+  await expect(items).toHaveCount(2);
+  for (const item of await items.all()) {
+    await expect(item).toHaveAttribute("data-tagging", "waiting-for-provider", {
+      timeout: 30_000,
+    });
+  }
+  await expect(notice).toHaveCount(0);
+
+  // A Document of one's own, with no model: the notice, as always.
+  await window.getByTestId("add-documents-input").setInputFiles([own]);
+  const added = items.filter({ hasText: "Harbour notes" });
+  await expect(added).toHaveAttribute("data-tagging", "waiting-for-provider");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("Tags need a model");
+  await app.close();
+});
+
 test("an empty Mind of one's own shows the three steps; Get started ticks itself as Documents are added and a Question is asked, and goes once all are done", async () => {
   await writeFile(
     join(sources, "Harbour notes.md"),

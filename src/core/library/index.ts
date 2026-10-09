@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { translate } from "../../shared/i18n";
 import { supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
-import type { DocumentKind, ProviderError } from "../api";
+import type { ChatModelChoice, DocumentKind, ProviderError } from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
@@ -24,6 +24,7 @@ import {
   type OrganizeUnit,
   organizeExcerpt,
   organizeNeedsPageImages,
+  organizeReadsPages,
   ROUTING_PAGE_CHARACTERS,
   ROUTING_PAGES,
 } from "./excerpt";
@@ -58,6 +59,19 @@ interface DocumentRow {
 }
 const GROUP_COLUMNS = "id, name, description, created_at AS createdAt, updated_at AS updatedAt";
 
+/**
+ * What Organize sends to a cloud model: the Folders and Tags, each
+ * Document's excerpt, and a scan's page images, which go only to a chat
+ * model that reads images. Page images are a kind of their own, so a User
+ * who allowed the flow before it sent them is asked again.
+ */
+export const CLASSIFICATION_FLOW_SENDS = [
+  "groups",
+  "tags",
+  "document-excerpts",
+  "page-images",
+] as const;
+
 /** One flat group per Document; user choices, including Unsorted, always win. */
 export function createLibrary(options: {
   db: Database;
@@ -69,6 +83,8 @@ export function createLibrary(options: {
   tagged(ids: string[]): void;
   prepare(settings: LibrarySettings): Promise<GroupClassifier>;
   providerExists(id: string): boolean;
+  /** Whether a connected chat model reads images, so it can organize a PDF with no text from its pages. */
+  chatReadsImages(choice: ChatModelChoice): boolean;
   pageImages(id: string, contentHash: string, signal: AbortSignal): Promise<DocumentPageImage[]>;
 }) {
   const { db, now, settings, background, changed } = options;
@@ -111,7 +127,8 @@ export function createLibrary(options: {
       (classifier?.kind === "auto" ||
         (classifier?.kind === "ollama" &&
           supportsLibraryImages(classifier.modelId) &&
-          classifier.usePageImages === true));
+          classifier.usePageImages === true) ||
+        (classifier?.kind === "chat" && options.chatReadsImages(classifier.choice)));
     return (
       (canReadPages && doc.status === "no-text") ||
       (["ready", "waiting-for-model", "embedding"].includes(doc.status) &&
@@ -249,12 +266,9 @@ export function createLibrary(options: {
           if (stale()) return;
           const read = source(current);
           const signal = AbortSignal.any([lifetime.signal, call.signal]);
-          const images =
-            classifier.pageImages &&
-            current.kind === "pdf" &&
-            (classifier.pageImages !== "auto" || organizeNeedsPageImages(read))
-              ? await options.pageImages(id, current.content_hash ?? "", signal)
-              : [];
+          const images = organizeReadsPages(classifier.pageImages, read)
+            ? await options.pageImages(id, current.content_hash ?? "", signal)
+            : [];
           if (stale()) return;
           const result = await classifier.organize(
             definitions,

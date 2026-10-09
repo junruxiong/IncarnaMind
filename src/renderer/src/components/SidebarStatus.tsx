@@ -4,7 +4,7 @@ import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { rerankingModelStatus } from "../rerankStatus";
-import { useAppStore } from "../store";
+import { isOwnDocument, useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
@@ -191,6 +191,7 @@ function useStatuses(): Status[] {
     useShallow((state) => {
       let processing = 0;
       let tagging = 0;
+      // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
       // A paused Linked folder's Documents wait for the User: its row says so, not the footer.
       const paused = new Set(
@@ -201,7 +202,8 @@ function useStatuses(): Status[] {
           if (item.linkedFolderId === null || !paused.has(item.linkedFolderId)) processing++;
         } else if (item.status === "ready") {
           if (item.tagging === "pending" || item.tagging === "tagging") tagging++;
-          else if (item.tagging === "waiting-for-provider") waitingForTagger++;
+          else if (item.tagging === "waiting-for-provider" && isOwnDocument(item, state.examples))
+            waitingForTagger++;
         }
       }
       return { processing, tagging, waitingForTagger };

@@ -1,0 +1,70 @@
+station_id,station_name,district,docks,trips_september,avg_trip_minutes
+BS-1001,Abbey Road,Central,12,900,9.0
+BS-1002,Albert Dock,Docklands,17,1367,16.5
+BS-1003,Arch Street,Old Town,22,1834,23.0
+BS-1004,Bank Square,University Quarter,27,2301,11.5
+BS-1005,Bell Lane,Riverside,32,2768,18.0
+BS-1006,Bishops Gate,Central,12,3235,25.5
+BS-1007,Boat House,Docklands,17,3702,13.0
+BS-1008,Bridge End,Old Town,22,4169,20.5
+BS-1009,Bus Station,University Quarter,27,4636,27.0
+BS-1010,Canal Basin,Riverside,32,1203,15.5
+BS-1011,Castle Hill,Central,12,1670,22.0
+BS-1012,Cathedral,Docklands,17,2137,10.5
+BS-1013,Chapel Walk,Old Town,22,2604,17.0
+BS-1014,Church Green,University Quarter,27,3071,24.5
+BS-1015,City Library,Riverside,32,3538,12.0
+BS-1016,Clock Tower,Central,12,4005,19.5
+BS-1017,College Road,Docklands,17,4472,26.0
+BS-1018,Corn Exchange,Old Town,22,1039,14.5
+BS-1019,Court House,University Quarter,27,1506,21.0
+BS-1020,Cricket Ground,Riverside,32,1973,9.5
+BS-1021,Dock Gates,Central,12,2440,16.0
+BS-1022,Exchange Place,Docklands,17,2907,23.5
+BS-1023,Ferry Terminal,Old Town,22,3374,11.0
+BS-1024,Fire Station,University Quarter,27,3841,18.5
+BS-1025,Fish Market,Riverside,32,4308,25.0
+BS-1026,Gas Works,Central,12,4775,13.5
+BS-1027,Grain Store,Docklands,17,1342,20.0
+BS-1028,Guild Hall,Old Town,22,1809,27.5
+BS-1029,Harbour Steps,University Quarter,27,2276,15.0
+BS-1030,Hay Market,Riverside,32,2743,22.5
+BS-1031,High Street,Central,12,3210,10.0
+BS-1032,Hospital,Docklands,17,3677,17.5
+BS-1033,Ice Rink,Old Town,22,4144,24.0
+BS-1034,Iron Bridge,University Quarter,27,4611,12.5
+BS-1035,King's Yard,Riverside,32,1178,19.0
+BS-1036,Lantern Square,Central,12,1645,26.5
+BS-1037,Leisure Centre,Docklands,17,2112,14.0
+BS-1038,Lock Keeper,Old Town,22,2579,21.5
+BS-1039,Market Cross,University Quarter,27,3046,9.0
+BS-1040,Mill Race,Riverside,32,3513,16.5
+BS-1041,Museum,Central,12,3980,23.0
+BS-1042,New Quay,Docklands,17,4447,11.5
+BS-1043,Old Brewery,Old Town,22,1014,18.0
+BS-1044,Opera House,University Quarter,27,1481,25.5
+BS-1045,Park Gates,Riverside,32,1948,13.0
+BS-1046,Pier Head,Central,12,2415,20.5
+BS-1047,Post Office,Docklands,17,2882,27.0
+BS-1048,Quayside,Old Town,22,3349,15.5
+BS-1049,Railway Arch,University Quarter,27,3816,22.0
+BS-1050,Rope Walk,Riverside,32,4283,10.5
+BS-1051,Science Park,Central,12,4750,17.0
+BS-1052,Ship Yard,Docklands,17,1317,24.5
+BS-1053,Silk Mill,Old Town,22,1784,12.0
+BS-1054,Stadium,University Quarter,27,2251,19.5
+BS-1055,Station Approach,Riverside,32,2718,26.0
+BS-1056,Swan Wharf,Central,12,3185,14.5
+BS-1057,Tannery,Docklands,17,3652,21.0
+BS-1058,Theatre,Old Town,22,4119,9.5
+BS-1059,Tower Bridge,University Quarter,27,4586,16.0
+BS-1060,Town Hall,Riverside,32,1153,23.5
+BS-1061,Tram Depot,Central,12,1620,11.0
+BS-1062,University,Docklands,17,2087,18.5
+BS-1063,Velodrome,Old Town,22,2554,25.0
+BS-1064,Viaduct,University Quarter,27,3021,13.5
+BS-1065,Water Tower,Riverside,32,3488,20.0
+BS-1066,Weavers Row,Central,12,3955,27.5
+BS-1067,West Pier,Docklands,17,4422,15.0
+BS-1068,Wool Hall,Old Town,22,989,22.5
+BS-1069,Zoo Gate,University Quarter,27,1456,10.0

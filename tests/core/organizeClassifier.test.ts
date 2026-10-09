@@ -1,11 +1,15 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
+import type { ChatProviderKind } from "../../src/core/api";
 import {
   chatGroupClassifier,
   decisionGroupClassifier,
+  PAGE_IMAGES_INSTRUCTIONS,
   reviewBandFor,
 } from "../../src/core/library/classifier";
+import { organizeReadsPages } from "../../src/core/library/excerpt";
 import type { LibraryGroup } from "../../src/core/library/types";
+import { chatModelReadsImages } from "../../src/core/providers/imageInput";
 import { startFakeJev } from "../helpers/jev";
 
 type CallOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
@@ -149,5 +153,102 @@ describe("Organize with the chat model", () => {
       new AbortController().signal,
     );
     expect(unsorted).toEqual({ groupId: null, tags: [] });
+  });
+});
+
+describe("Organize a scan with a chat model that reads images", () => {
+  /** A scan, as Organize reads it: no text. */
+  const scan = { name: "scan_0042", kind: "pdf" as const, pageCount: 3, text: "" };
+  /** Two page previews, as the preview worker gives them: bare base64 JPEGs. */
+  const pages = [1, 2].map((page) => ({
+    page,
+    data: Buffer.from([0xff, 0xd8, 0xff, 0xe0, page]).toString("base64"),
+  }));
+  const imagesOf = (call: CallOptions | undefined) =>
+    (call?.prompt ?? []).flatMap((message) =>
+      typeof message.content === "string"
+        ? []
+        : message.content.filter((part) => part.type === "file"),
+    );
+
+  test("gets the scan's page images with the same request, and is told what they are", async () => {
+    const fake = model({ groupId: "g-finance", tags: ["t-report"] });
+    const classifier = chatGroupClassifier(fake.model, false, true);
+    // It reads the pages of a PDF with no text, and of nothing else.
+    expect(classifier.pageImages).toBe("no-text");
+    const decision = await classifier.organize(
+      groups,
+      tags,
+      scan,
+      new AbortController().signal,
+      pages,
+    );
+    expect(decision.groupId).toBe("g-finance");
+    expect(fake.calls).toHaveLength(1);
+    const [call] = fake.calls;
+    expect(imagesOf(call)).toEqual(
+      pages.map((page) =>
+        expect.objectContaining({
+          mediaType: "image/jpeg",
+          data: expect.objectContaining({ data: page.data }),
+        }),
+      ),
+    );
+    if (!call) throw new Error("The model wasn't asked.");
+    expect(textOf(call)).toContain(PAGE_IMAGES_INSTRUCTIONS);
+    expect(textOf(call)).toContain('"pages":[1,2]');
+  });
+
+  test("a Document with text goes exactly as before, and a model that can't read images never gets them", async () => {
+    const report = { name: "Q3", kind: "pdf" as const, pageCount: 2, text: "Quarterly report" };
+    const asked = async (readsImages: boolean, images?: typeof pages) => {
+      const fake = model({ groupId: "g-reports", tags: [] });
+      await chatGroupClassifier(fake.model, false, readsImages).organize(
+        groups,
+        tags,
+        report,
+        new AbortController().signal,
+        images,
+      );
+      return fake.calls[0];
+    };
+    const before = await asked(false);
+    // A model that reads images, given no images: the request is the same as before.
+    expect((await asked(true))?.prompt).toEqual(before?.prompt);
+    // A model that can't read images ignores any it is given, so nothing changes either.
+    const withoutImages = await asked(false, pages);
+    expect(withoutImages?.prompt).toEqual(before?.prompt);
+    expect(imagesOf(withoutImages)).toEqual([]);
+    expect(chatGroupClassifier(model({}).model, false).pageImages).toBeUndefined();
+  });
+
+  test("only a PDF with no text has its pages read", () => {
+    const source = (kind: "pdf" | "docx", passages: string[]) => ({
+      kind,
+      pageCount: 1,
+      passages,
+      units: [],
+    });
+    expect(organizeReadsPages("no-text", source("pdf", []))).toBe(true);
+    expect(organizeReadsPages("no-text", source("pdf", ["Quarterly report"]))).toBe(false);
+    expect(organizeReadsPages("no-text", source("docx", []))).toBe(false);
+    expect(organizeReadsPages(undefined, source("pdf", []))).toBe(false);
+  });
+
+  test.each<[ChatProviderKind, string, boolean]>([
+    ["anthropic", "claude-sonnet-5-5", true],
+    ["anthropic", "claude-3-haiku-20240307", true],
+    ["anthropic", "claude-2.1", false],
+    ["openai", "gpt-5.5", true],
+    ["openai", "gpt-4o-mini", true],
+    ["openai", "o4-mini", true],
+    ["openai", "o3-mini", false],
+    ["openai", "gpt-3.5-turbo", false],
+    ["chatgpt", "gpt-6-sol", true],
+    ["google", "gemini-pro-latest", true],
+    ["openai-compatible", "qwen-vl-max", false],
+    ["ollama", "llava", false],
+  ])("%s %s reads images: %s", (kind, modelId, reads) => {
+    expect(chatModelReadsImages(kind, modelId)).toBe(reads);
   });
 });

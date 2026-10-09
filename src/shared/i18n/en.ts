@@ -60,7 +60,7 @@ export const en = {
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
   "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions.",
+    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions, and, if they can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
   "library.manualOnly": "Organize manually",
   "library.jev": "Jev · saved connection",
@@ -797,6 +797,8 @@ export const en = {
   "consent.data.tags": "The names and descriptions of your Tags",
   "consent.data.document-excerpts":
     "The name and type of each Document being tagged, and a short excerpt from its beginning",
+  "consent.data.page-images":
+    "For a scanned PDF with no text, images of up to 3 of its first pages, if the model can read images",
   "consent.flow.embeddings": "Document search",
   "consent.flow.embeddings.purpose": "search your Documents by their meaning",
   "consent.data.document-text": "The full text of every Document, as it is processed",

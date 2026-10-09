@@ -967,15 +967,14 @@ async function startGettingStarted(exampleMindId: string): Promise<void> {
 }
 
 /** A Document of the User's own: not one of the examples. */
-const isOwnDocument = (document: Document) => {
-  const { examples } = useAppStore.getState();
-  return document.linkedFolderId === null || document.linkedFolderId !== examples?.linkedFolderId;
-};
+export const isOwnDocument = (document: Document, examples: Examples | null) =>
+  document.linkedFolderId === null || document.linkedFolderId !== examples?.linkedFolderId;
 
 /** Ticks "Index your Documents or connect apps" once there are Documents of the User's own, or Connectors. */
 function tickIndexed(connectors: number): void {
-  const { documents, updateGettingStarted } = useAppStore.getState();
-  if (connectors > 0 || documents.some(isOwnDocument)) updateGettingStarted({ indexed: true });
+  const { documents, examples, updateGettingStarted } = useAppStore.getState();
+  if (connectors > 0 || documents.some((each) => isOwnDocument(each, examples)))
+    updateGettingStarted({ indexed: true });
 }
 
 // Settings can change outside this window (another window, or the core itself), so follow the core's event.
@@ -1008,7 +1007,8 @@ core.on("minds.changed", (minds) => {
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {
   useAppStore.setState((state) => ({ documents: upsert(state.documents, changed) }));
-  if (isOwnDocument(changed)) useAppStore.getState().updateGettingStarted({ indexed: true });
+  const { examples, updateGettingStarted } = useAppStore.getState();
+  if (isOwnDocument(changed, examples)) updateGettingStarted({ indexed: true });
 });
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
