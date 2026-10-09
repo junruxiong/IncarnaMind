@@ -13,25 +13,25 @@ describe("Tag colours", () => {
       (await core.listTags()).map((tag) => [tag.name, tag.colour]),
     );
     expect(colours).toEqual({
-      Book: "brick",
-      Contract: "indigo",
-      Invoice: "rose",
-      Notes: "taupe",
-      Paper: "violet",
-      Report: "petrol",
-      Slides: "orchid",
+      Book: "orange",
+      Contract: "red",
+      Invoice: "green",
+      Notes: "gray",
+      Paper: "purple",
+      Report: "blue",
+      Slides: "yellow",
     });
   });
 
   test("a new Tag takes the colour fewest Tags have, unless the User chooses one", async () => {
     const core = startCore(await createTempDataFolder());
-    // Only stone is unused by the presets.
-    expect((await core.createTag({ name: "Urgent" })).colour).toBe("stone");
+    // Only teal is unused by the presets.
+    expect((await core.createTag({ name: "Urgent" })).colour).toBe("teal");
     // Then every colour is on one Tag: the first in the palette again.
-    expect((await core.createTag({ name: "Later" })).colour).toBe("stone");
-    expect((await core.createTag({ name: "Travel", colour: "rose" })).colour).toBe("rose");
-    expect((await core.createTag({ name: "Ideas" })).colour).toBe("taupe");
-    await expect(core.createTag({ name: "Odd", colour: "green" as never })).rejects.toThrow(
+    expect((await core.createTag({ name: "Later" })).colour).toBe("red");
+    expect((await core.createTag({ name: "Travel", colour: "green" })).colour).toBe("green");
+    expect((await core.createTag({ name: "Ideas" })).colour).toBe("orange");
+    await expect(core.createTag({ name: "Odd", colour: "magenta" as never })).rejects.toThrow(
       InvalidInputError,
     );
   });
@@ -41,18 +41,18 @@ describe("Tag colours", () => {
     const core = startCore(dataDir);
     const report = await tagNamed(core, "Report");
     const notes = await tagNamed(core, "Notes");
-    expect(await core.updateTag(report.id, { colour: "indigo" })).toMatchObject({
-      colour: "indigo",
+    expect(await core.updateTag(report.id, { colour: "teal" })).toMatchObject({
+      colour: "teal",
       name: "Report",
     });
-    await expect(core.updateTag(report.id, { colour: "blue" as never })).rejects.toThrow(
+    await expect(core.updateTag(report.id, { colour: "petrol" as never })).rejects.toThrow(
       InvalidInputError,
     );
     // The Tag merged into keeps its own colour.
-    expect((await core.mergeTags(notes.id, report.id)).colour).toBe("indigo");
+    expect((await core.mergeTags(notes.id, report.id)).colour).toBe("teal");
     core.close();
     const reopened = startCore(dataDir);
-    expect((await tagNamed(reopened, "Report")).colour).toBe("indigo");
+    expect((await tagNamed(reopened, "Report")).colour).toBe("teal");
   });
 
   test("Tags made before colours get them: presets their own, the User's in turn", async () => {
@@ -74,12 +74,73 @@ describe("Tag colours", () => {
 
     migrate(db);
 
+    // Coloured in turn by migration 27, then moved to the bright palette by migration 28.
     expect(db.all("SELECT id, colour FROM tags ORDER BY id")).toEqual([
-      { id: "a", colour: "violet" },
-      { id: "b", colour: "taupe" },
-      { id: "c", colour: "stone" },
-      { id: "d", colour: "rose" },
+      { id: "a", colour: "purple" },
+      { id: "b", colour: "yellow" },
+      { id: "c", colour: "gray" },
+      { id: "d", colour: "green" },
     ]);
+    db.close();
+  });
+
+  test("Tags coloured from the first palette move to the bright one: presets on their first colour to their new one, the rest by hue, each to a different one", async () => {
+    const db = openDatabase(join(await createTempDataFolder(), "test.db"));
+    migrate(
+      db,
+      migrations.filter((migration) => migration.version < 28),
+    );
+    const at = "2026-10-09T00:00:00.000Z";
+    const insert = (id: string, preset: string | null, colour: string) =>
+      db.run(
+        "INSERT INTO tags (id, name, description, preset, colour, created_at, updated_at) VALUES (?, ?, '', ?, ?, ?, ?)",
+        [id, `Tag ${id}`, preset, colour, at, at],
+      );
+    // Every preset on its first colour.
+    for (const [preset, colour] of [
+      ["paper", "violet"],
+      ["report", "petrol"],
+      ["book", "brick"],
+      ["contract", "indigo"],
+      ["invoice", "rose"],
+      ["slides", "orchid"],
+      ["notes", "taupe"],
+    ] as const) {
+      insert(`preset-${preset}`, preset, colour);
+    }
+    // A preset the User recoloured, and the User's Tags in every first-palette colour.
+    insert("recoloured-paper", "paper", "petrol");
+    const first = ["stone", "taupe", "brick", "rose", "orchid", "violet", "indigo", "petrol"];
+    for (const colour of first) insert(`user-${colour}`, null, colour);
+
+    migrate(db);
+
+    const colours = Object.fromEntries(
+      db
+        .all<{ id: string; colour: string }>("SELECT id, colour FROM tags")
+        .map((row) => [row.id, row.colour]),
+    );
+    expect(colours).toMatchObject({
+      "preset-paper": "purple",
+      "preset-report": "blue",
+      "preset-book": "orange",
+      "preset-contract": "red",
+      "preset-invoice": "green",
+      "preset-slides": "yellow",
+      "preset-notes": "gray",
+      "recoloured-paper": "green",
+      "user-stone": "gray",
+      "user-taupe": "yellow",
+      "user-brick": "orange",
+      "user-rose": "red",
+      "user-orchid": "purple",
+      "user-violet": "teal",
+      "user-indigo": "blue",
+      "user-petrol": "green",
+    });
+    // Each first colour has its own bright one, and every stored colour is in the palette.
+    expect(new Set(first.map((colour) => colours[`user-${colour}`])).size).toBe(8);
+    for (const colour of Object.values(colours)) expect(TAG_COLOURS).toContain(colour);
     db.close();
   });
 });
@@ -87,8 +148,8 @@ describe("Tag colours", () => {
 describe("the next Tag colour", () => {
   test("is the least used, the earliest in the palette on a tie", () => {
     expect(nextTagColour([])).toBe(TAG_COLOURS[0]);
-    expect(nextTagColour(["stone"])).toBe("taupe");
-    expect(nextTagColour([...TAG_COLOURS])).toBe("stone");
-    expect(nextTagColour([...TAG_COLOURS, "stone", "taupe"])).toBe("brick");
+    expect(nextTagColour(["red"])).toBe("orange");
+    expect(nextTagColour([...TAG_COLOURS])).toBe("red");
+    expect(nextTagColour([...TAG_COLOURS, "red", "orange"])).toBe("yellow");
   });
 });

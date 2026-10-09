@@ -5,29 +5,29 @@ import { CheckLineIcon } from "./lineIcons";
 
 /** A chip's fill and text in a Tag's colour. Literal classes, so Tailwind finds them. */
 const CHIP: Record<TagColour, string> = {
-  stone: "bg-tag-stone text-tag-stone-ink",
-  taupe: "bg-tag-taupe text-tag-taupe-ink",
-  brick: "bg-tag-brick text-tag-brick-ink",
-  rose: "bg-tag-rose text-tag-rose-ink",
-  orchid: "bg-tag-orchid text-tag-orchid-ink",
-  violet: "bg-tag-violet text-tag-violet-ink",
-  indigo: "bg-tag-indigo text-tag-indigo-ink",
-  petrol: "bg-tag-petrol text-tag-petrol-ink",
+  red: "bg-tag-red text-tag-red-ink",
+  orange: "bg-tag-orange text-tag-orange-ink",
+  yellow: "bg-tag-yellow text-tag-yellow-ink",
+  green: "bg-tag-green text-tag-green-ink",
+  teal: "bg-tag-teal text-tag-teal-ink",
+  blue: "bg-tag-blue text-tag-blue-ink",
+  purple: "bg-tag-purple text-tag-purple-ink",
+  gray: "bg-tag-gray text-tag-gray-ink",
 };
 
-/** A dot's colour: the brighter tone, as Finder's. */
+/** A dot's colour, as Finder's, and its edge (a hairline darker for a light hue). */
 const DOT: Record<TagColour, string> = {
-  stone: "bg-tag-stone-dot",
-  taupe: "bg-tag-taupe-dot",
-  brick: "bg-tag-brick-dot",
-  rose: "bg-tag-rose-dot",
-  orchid: "bg-tag-orchid-dot",
-  violet: "bg-tag-violet-dot",
-  indigo: "bg-tag-indigo-dot",
-  petrol: "bg-tag-petrol-dot",
+  red: "bg-tag-red-dot border-tag-red-edge",
+  orange: "bg-tag-orange-dot border-tag-orange-edge",
+  yellow: "bg-tag-yellow-dot border-tag-yellow-edge",
+  green: "bg-tag-green-dot border-tag-green-edge",
+  teal: "bg-tag-teal-dot border-tag-teal-edge",
+  blue: "bg-tag-blue-dot border-tag-blue-edge",
+  purple: "bg-tag-purple-dot border-tag-purple-edge",
+  gray: "bg-tag-gray-dot border-tag-gray-edge",
 };
 
-const known = (colour: string | undefined): TagColour => (isTagColour(colour) ? colour : "stone");
+const known = (colour: string | undefined): TagColour => (isTagColour(colour) ? colour : "gray");
 
 /** The classes that colour a Tag's chip. */
 export const tagChipColour = (colour: string | undefined) => CHIP[known(colour)];
@@ -52,7 +52,7 @@ export function TagDot({
       aria-hidden="true"
       data-testid="tag-dot"
       data-colour={known(colour)}
-      className={`inline-block shrink-0 rounded-full ${DOT[known(colour)]} ${
+      className={`inline-block shrink-0 rounded-full border ${DOT[known(colour)]} ${
         size === "md" ? "size-[11px]" : "size-2.5"
       } ${className}`}
     />
@@ -61,8 +61,9 @@ export function TagDot({
 
 /**
  * A Tag awaiting the User's review, where Tags are dots (the sidebar, filter
- * menus, picker options): a hollow `attention` ring, 9px with a 1.5px stroke,
- * in a dot's 10px place. Inside a named chip it is the 6px amber dot (`ReviewDot`).
+ * menus, picker options): a hollow ring in `review`, a darker amber than the
+ * orange dot, 9px with a 1.5px stroke, in a dot's 10px place. Inside a named
+ * chip it is the 6px `attention` dot (`ReviewDot`).
  */
 export function ReviewRing() {
   return (
@@ -71,7 +72,7 @@ export function ReviewRing() {
       data-testid="review-ring"
       className="flex size-2.5 shrink-0 items-center justify-center"
     >
-      <span className="size-[9px] rounded-full border-[1.5px] border-attention" />
+      <span className="size-[9px] rounded-full border-[1.5px] border-review" />
     </span>
   );
 }
@@ -110,7 +111,7 @@ export function TagColourPicker({
               className="peer sr-only"
             />
             <span
-              className={`flex size-6 items-center justify-center rounded-full text-sheet ${DOT[colour]} peer-checked:shadow-[0_0_0_2px_var(--color-sheet),0_0_0_3px_var(--color-ink-meta)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
+              className={`flex size-6 items-center justify-center rounded-full border text-ink ${DOT[colour]} peer-checked:shadow-[0_0_0_2px_var(--color-sheet),0_0_0_3px_var(--color-ink-meta)] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}
             >
               {value === colour && <CheckLineIcon className="size-3.5" />}
             </span>

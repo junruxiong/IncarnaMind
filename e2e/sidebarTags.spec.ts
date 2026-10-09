@@ -272,13 +272,13 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       .poll(() => tagRowsListed(tagRows), { timeout: 20_000 })
       .toEqual([
         ["Needs review", 1, null],
-        ["Book", 1, "brick"],
-        ["Contract", 1, "indigo"],
-        ["Invoice", 1, "rose"],
-        ["Notes", 0, "taupe"],
-        ["Paper", 1, "violet"],
-        ["Report", 2, "petrol"],
-        ["Slides", 0, "orchid"],
+        ["Book", 1, "orange"],
+        ["Contract", 1, "red"],
+        ["Invoice", 1, "green"],
+        ["Notes", 0, "gray"],
+        ["Paper", 1, "purple"],
+        ["Report", 2, "blue"],
+        ["Slides", 0, "yellow"],
       ]);
     const byName = (name: string) =>
       tagRows.filter({
@@ -291,7 +291,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
       height: 11,
       round: true,
       filled: true,
-      border: 0,
+      border: 1,
     });
     const reviewHead = byName("Needs review").locator(":scope > div");
     await expect(reviewHead.getByTestId("tag-dot")).toHaveCount(0);
@@ -307,7 +307,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
         .getByTestId("review-ring")
         .locator("span")
         .evaluate((element) => getComputedStyle(element).borderTopColor),
-    ).toBe("rgb(217, 119, 6)");
+    ).toBe("rgb(180, 95, 6)");
     // Rows are 28px, their marks in the icon column and their names on the text edge.
     const sidebarLeft = (await window.getByTestId("sidebar").boundingBox())?.x ?? 0;
     for (const row of await tagRows.all()) {
@@ -327,11 +327,11 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     await expect(reportDocuments.first()).toHaveAttribute("data-depth", "1");
     const attention = reportDocuments.filter({ hasText: "Attention" });
     expect(await marksOf(attention)).toEqual({
-      colours: ["brick", "indigo", "violet"],
+      colours: ["orange", "red", "purple"],
       more: "+1",
     });
     expect(await marksOf(reportDocuments.filter({ hasText: "Q1 report" }))).toEqual({
-      colours: ["petrol"],
+      colours: ["blue"],
       more: null,
     });
 
@@ -398,7 +398,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
         .getByTestId("library-filter-option")
         .filter({ hasText: "Report" })
         .getByTestId("tag-dot"),
-    ).toHaveAttribute("data-colour", "petrol");
+    ).toHaveAttribute("data-colour", "blue");
     await screenshot(window, "library-filter-menu-en");
     await window.keyboard.press("Escape");
     await expect(libraryTagMenu).toBeHidden();
@@ -417,7 +417,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
           .getByTestId("tag-filter")
           .getByTestId("tag-dot")
           .evaluateAll((all) => all.map((each) => each.getAttribute("data-colour"))),
-      ).toEqual(["brick", "indigo", "rose", "taupe", "violet", "petrol", "orchid"]);
+      ).toEqual(["orange", "red", "green", "gray", "purple", "blue", "yellow"]);
     };
     await openFilterMenu();
     await screenshot(window, "tag-filter-menu-en");
@@ -480,11 +480,11 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     });
     await expect(row("Attention").getByTestId("tag-dot")).toHaveCount(3);
     expect(await marksOf(row("Attention"))).toEqual({
-      colours: ["brick", "indigo", "violet"],
+      colours: ["orange", "red", "purple"],
       more: "+1",
     });
-    expect(await marksOf(row("Q1 report"))).toEqual({ colours: ["petrol"], more: null });
-    expect(await marksOf(row(long))).toEqual({ colours: ["taupe", "violet"], more: null });
+    expect(await marksOf(row("Q1 report"))).toEqual({ colours: ["blue"], more: null });
+    expect(await marksOf(row(long))).toEqual({ colours: ["gray", "purple"], more: null });
     await expect(row("Field notes").getByTestId("tag-marks")).toHaveCount(0);
     // Nothing moved: every row where it was, 28px, its name on one line.
     expect(await boxes()).toEqual(before);
@@ -512,7 +512,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
           height: 10,
           round: true,
           filled: true,
-          border: 0,
+          border: 1,
         });
         const x = (await each.boundingBox())?.x ?? 0;
         if (previous !== null) expect(x - previous).toBeCloseTo(6, 0);
@@ -569,7 +569,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
       await tip
         .getByTestId("tag-dot")
         .evaluateAll((all) => all.map((each) => each.getAttribute("data-colour"))),
-    ).toEqual(["brick", "indigo", "violet", "petrol"]);
+    ).toEqual(["orange", "red", "purple", "blue"]);
     const rowBox = await row("Attention").boundingBox();
     const tipBox = await tip.boundingBox();
     if (!rowBox || !tipBox) throw new Error("The row or the tip isn't visible.");
