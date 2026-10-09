@@ -385,6 +385,7 @@ describe("The evaluation's settings for a model in Ollama", () => {
       digest: "d1",
       capabilities: ["completion", "tools"],
       contextLength: 262_144,
+      parameters: 9_653_104_368,
       support: "tools",
       chat: true,
       settings: { numCtx: 16_384, outputTokens: 4_096, keepAlive: "30m", think: false },

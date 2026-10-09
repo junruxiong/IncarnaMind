@@ -14,17 +14,31 @@ import { waitForTagging } from "./tags";
 
 export const GIB = 1024 ** 3;
 
-/** Qwen3.5-4B as Ollama lists it: Tools and thinking, a long context, little model_info (an MLX build). */
+/**
+ * Qwen3.5-4B as Ollama lists it: Tools and thinking, a long context, little
+ * model_info (an MLX build). Small, so it cites with structured output.
+ */
 export const QWEN35: OllamaModelStub = {
   name: "qwen3.5:4b",
   capabilities: ["completion", "vision", "thinking", "tools"],
   size: 3_973_305_013,
   modelInfo: {
     "general.architecture": "qwen3_5",
+    "general.parameter_count": 4_538_986_496,
     "qwen3_5.block_count": 32,
     "qwen3_5.context_length": 262_144,
   },
   thinking: { values: [false, true], default: true },
+};
+
+/**
+ * Qwen3.5-9B, a local model large enough to cite in the Tool-calling loop;
+ * its weights as the 4B's, so it gets the same window.
+ */
+export const QWEN35_9B: OllamaModelStub = {
+  ...QWEN35,
+  name: "qwen3.5:9b",
+  modelInfo: { ...QWEN35.modelInfo, "general.parameter_count": 9_653_104_368 },
 };
 
 /** The 2023 Mistral build: no Tools. */
