@@ -286,3 +286,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 ## The grouping check
 
 `npm run eval:grouping` is the check before building the Library's grouping (#51): how Documents are grouped into Topics, on its own fixture set, with the same data folder setup and model. `npm run eval` doesn't run it. See `grouping/README.md`.
+
+## The Organize benchmark
+
+`npm run eval:organize` measures how well Organize puts Documents in the right Folder with the right Tags (ADR-0012), per classifier route, on 80 labelled English and Chinese Documents split into a tuning half and a held-out half. It reads the chat route's model from the same `INCARNAMIND_EVAL_CHAT_*` variables. `npm run eval` doesn't run it. See `organize/README.md` and `organize/RESULTS.md`.

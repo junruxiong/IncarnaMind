@@ -37,12 +37,12 @@ export interface RunInfo {
 const seconds = (ms: number) => (ms / 1000).toFixed(1);
 
 function row(name: string, s: Summary): string {
-  return `| ${name} | ${s.count} | ${fraction(s.folderCorrect, s.count)} | ${fraction(s.folderLenient, s.count)} | ${decimal(precision(s))} | ${decimal(recall(s))} | **${decimal(f1(s))}** | ${fraction(s.exact, s.count)} | ${s.errors} | ${seconds(s.msMedian)} | ${seconds(s.msMean)} |`;
+  return `| ${name} | ${s.count} | ${fraction(s.folderCorrect, s.count)} | ${fraction(s.folderLenient, s.count)} | ${decimal(precision(s))} | ${decimal(recall(s))} | **${decimal(f1(s))}** | ${fraction(s.exact, s.count)} | ${s.review ? fraction(s.reviewCorrect, s.review) : "–"} | ${s.errors} | ${seconds(s.msMedian)} | ${seconds(s.msMean)} |`;
 }
 
 const HEADER = [
-  "| | Docs | Folder | Folder, lenient | Tag P | Tag R | Tag F1 | Exact Tag set | Errors | Median s | Mean s |",
-  "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+  "| | Docs | Folder | Folder, lenient | Tag P | Tag R | Tag F1 | Exact Tag set | Needs review: right | Errors | Median s | Mean s |",
+  "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
 ];
 
 const tagList = (tags: Mistake["tags"]) =>
@@ -79,7 +79,7 @@ export function markdownReport(
     "",
     `Models: ${info.models.map((m) => `${m.name} \`${m.digest.slice(0, 12)}\``).join(", ") || "none"}.`,
     "",
-    "Folder: the labelled Folder (Unsorted included). Lenient: a two-Folder case's second Folder counts too. Tags: every applied Tag, including those marked needs review; precision, recall and F1 are micro-averaged. Exact: the Tag set is exactly the labelled one. Errors count as a wrong Folder and no Tags. Time: the classifier call per Document, page rendering excluded.",
+    "Folder: the labelled Folder (Unsorted included). Lenient: a two-Folder case's second Folder counts too. Tags: every applied Tag, including those marked needs review; precision, recall and F1 are micro-averaged. Exact: the Tag set is exactly the labelled one. Needs review: of the Tags applied with that mark, how many were right. Errors count as a wrong Folder and no Tags. Time: the classifier call per Document, page rendering excluded.",
   ];
   for (const split of info.splits) {
     const inSplit = documents.filter((doc) => doc.split === split);
@@ -167,7 +167,7 @@ export function summaryLines(
       if (!pairs.length) return [];
       const s = summarise(pairs);
       return [
-        `${split.padEnd(7)} ${result.route.padEnd(10)} Folder ${fraction(s.folderCorrect, s.count)}, lenient ${fraction(s.folderLenient, s.count)}; Tags P ${decimal(precision(s))} R ${decimal(recall(s))} F1 ${decimal(f1(s))}, exact ${fraction(s.exact, s.count)}; ${s.errors} errors; median ${seconds(s.msMedian)} s`,
+        `${split.padEnd(7)} ${result.route.padEnd(10)} Folder ${fraction(s.folderCorrect, s.count)}, lenient ${fraction(s.folderLenient, s.count)}; Tags P ${decimal(precision(s))} R ${decimal(recall(s))} F1 ${decimal(f1(s))}, exact ${fraction(s.exact, s.count)}; needs review ${s.review ? fraction(s.reviewCorrect, s.review) : "none"} right; ${s.errors} errors; median ${seconds(s.msMedian)} s`,
       ];
     }),
   );

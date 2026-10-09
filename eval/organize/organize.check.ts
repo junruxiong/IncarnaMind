@@ -118,6 +118,9 @@ test("Organize on the labelled set", async () => {
   );
   const splits: Split[] = splitChoice === "all" ? ["tune", "heldout"] : [splitChoice];
   const showHeldOut = env.INCARNAMIND_ORGANIZE_SHOW_HELDOUT === "1";
+  const batch = Number(env.INCARNAMIND_ORGANIZE_BATCH ?? 10);
+  if (!Number.isInteger(batch) || batch < 1)
+    throw new Error("INCARNAMIND_ORGANIZE_BATCH must be a whole number of at least 1.");
   const ollama = (env.INCARNAMIND_ORGANIZE_OLLAMA ?? "http://127.0.0.1:11434").replace(/\/+$/, "");
   const routeNames = (
     env.INCARNAMIND_ORGANIZE_ROUTES ?? `auto,tev-0.8b,clef-flash${config.chat ? ",chat" : ""}`
@@ -202,6 +205,7 @@ test("Organize on the labelled set", async () => {
     const predictions: Prediction[] = [];
     // Text first, then PDFs that need page images, as the Library orders a batch for Auto.
     const order = [...prepared].sort((a, b) => Number(a.visual) - Number(b.visual));
+    let sinceUnload = 0;
     try {
       for (const item of order) {
         const done = cached.get(item.doc.id);
@@ -258,6 +262,12 @@ test("Organize on the labelled set", async () => {
         predictions.push(prediction);
         cached.set(prediction.id, prediction);
         await save(cacheFile, [...cached.values()]);
+        // Ollama's decision endpoint can't cap the context, so Clef-Flash loads with its
+        // Modelfile's 16K: stop the models after every batch, so none stays loaded long.
+        if (route.local && ++sinceUnload >= batch) {
+          await unload(ollama, route.models);
+          sinceUnload = 0;
+        }
         if (item.doc.split === "tune" || showHeldOut) {
           const folderOk = prediction.error === null && prediction.folder === item.doc.folder;
           log(
