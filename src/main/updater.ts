@@ -17,7 +17,6 @@
 import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
-import { autoUpdater } from "electron-updater";
 import type { Core, CoreApi, ExternalService, Language } from "../core";
 import { translate } from "../shared/i18n";
 import { systemBrowser } from "./platform";
@@ -55,6 +54,7 @@ export function startAutoUpdates(core: SettingsSource): void {
 
 async function checkForUpdates(core: SettingsSource): Promise<void> {
   if (!(await core.getPrivacySettings()).automaticUpdateChecks) return;
+  const { autoUpdater } = await import("./autoUpdater");
   const installable = await canInstallUpdates();
   autoUpdater.autoDownload = installable;
   autoUpdater.autoInstallOnAppQuit = installable;
