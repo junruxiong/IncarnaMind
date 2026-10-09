@@ -518,18 +518,17 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
     },
-    connectorTools: (signal) => connectors.toolsForAnswer(signal),
+    toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
-      toolNeedsApproval: (connectorId, tool, readOnly) =>
-        approvals.toolNeedsApproval(connectorId, tool, readOnly),
-      scriptNeedsApproval: (skillId) => approvals.scriptNeedsApproval(skillId),
+      decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
     },
     scripts: {
       enabled: () => settings.get().device.skillScriptsEnabled,
       timeoutSeconds: () => settings.get().device.skillScriptTimeoutSeconds,
       check: (script) => scriptRunner.check(script),
+      access: (skillDir) => scriptRunner.access(skillDir),
       run: (request) => scriptRunner.run(request),
     },
     skills: {
@@ -577,6 +576,21 @@ export function createCore(adapters: CoreAdapters): Core {
   const announceTagged = (documentIds: readonly string[]) => {
     const live = documents.getMany(documentIds);
     if (live.length > 0) events.emit("documents.tagged", live);
+  };
+  /**
+   * The User's change to one Tag on several Documents: all of it or nothing,
+   * in one transaction, then one "documents.tagged" event for those that changed.
+   */
+  const tagMany = (documentIds: unknown, change: (documentId: string) => boolean) => {
+    if (
+      !Array.isArray(documentIds) ||
+      !documentIds.every((id) => typeof id === "string" && id !== "")
+    )
+      throw new InvalidInputError("documentIds must be a list of Document ids.");
+    const ids = [...new Set(documentIds as string[])];
+    const changed = db.transaction(() => ids.filter((id) => change(documents.get(id).id)));
+    if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
+    return documents.getMany(ids);
   };
   // Existing installations keep the legacy tagger until organization is configured.
   // Once folders are in use, only the selected organizer may suggest tags.
@@ -1072,6 +1086,17 @@ export function createCore(adapters: CoreAdapters): Core {
       const updated = documents.get(document.id);
       events.emit("documents.tagged", [updated]);
       return updated;
+    },
+    addTagToDocuments: async (documentIds, tagId) =>
+      tagMany(documentIds, (id) => tags.addToDocument(id, tagId)),
+    removeTagFromDocuments: async (documentIds, tagId) =>
+      tagMany(documentIds, (id) => tags.removeFromDocument(id, tagId)),
+    mergeTags: async (tagId, intoTagId) => {
+      const documentIds = tags.merge(tagId, intoTagId, now());
+      // Tags first, so a listener filtering by the merged Tag hears it's gone before it refreshes.
+      tagsChanged();
+      announceTagged(documentIds);
+      return tags.get(intoTagId);
     },
     retagDocuments: async (documentIds) => {
       if (organizationConfigured()) return library.classify(documentIds);

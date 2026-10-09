@@ -24,6 +24,7 @@
     "eval": "vitest run --config eval/vitest.config.ts",
     "eval:grouping": "vitest run --config eval/grouping/vitest.config.ts",
     "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
+    "eval:organize": "vitest run --config eval/organize/vitest.config.ts",
     "dist": "electron-vite build && electron-builder --publish never",
     "dist:dir": "electron-vite build && electron-builder --dir --publish never"
   },
@@ -77,6 +78,7 @@
     "@biomejs/biome": "2.5.15",
     "@fontsource-variable/source-sans-3": "5.3.0",
     "@fontsource-variable/source-serif-4": "5.3.0",
+    "@fontsource/carlito": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "@playwright/test": "1.63.0",
     "@sentry/electron": "8.1.0",

@@ -95,7 +95,7 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await addDocuments(window, [summary]);
 
   // Paper is likely; Report is unsure, so it is applied and marked for review. The
-  // Document's Tags menu shows its Tags.
+  // Document's Tag picker shows its Tags.
   const item = window.getByTestId("document-list-item");
   await expect(item).toHaveAttribute("data-tagging", "tagged");
   const tags = await openDocumentTags(item);
@@ -112,7 +112,7 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await expect(confirm).toHaveCount(1);
 
   // Confirming it makes it the User's.
-  await item.getByRole("menuitem", { name: "Confirm Report on Attention" }).click();
+  await item.getByRole("button", { name: "Confirm Report on Attention" }).click();
   await expect(report).toHaveAttribute("data-source", "user");
   await expect(report).not.toHaveAttribute("data-needs-review");
   await expect(item.locator("[data-needs-review]")).toHaveCount(0);

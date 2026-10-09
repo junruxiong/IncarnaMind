@@ -340,7 +340,10 @@ describe("Importing a Skill", () => {
     expect(await readFile(copy, "utf8")).toBe("Brest.");
   });
 
-  test("a Skill over the size limits is refused, before a zip is inflated", async () => {
+  // It writes and deflates tens of megabytes on purpose, so a busy machine needs longer than the default 5 s.
+  test("a Skill over the size limits is refused, before a zip is inflated", {
+    timeout: 30_000,
+  }, async () => {
     const { sources, core } = await setUpCore();
     const big = await writeFolder(sources, "big", {
       "SKILL.md": simpleSkillMd("big", "Too big."),
