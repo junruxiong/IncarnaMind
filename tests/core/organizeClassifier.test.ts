@@ -1,7 +1,12 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import { chatGroupClassifier } from "../../src/core/library/classifier";
+import {
+  chatGroupClassifier,
+  decisionGroupClassifier,
+  reviewBandFor,
+} from "../../src/core/library/classifier";
 import type { LibraryGroup } from "../../src/core/library/types";
+import { startFakeJev } from "../helpers/jev";
 
 type CallOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
 
@@ -44,6 +49,46 @@ const textOf = (options: CallOptions) =>
         : message.content.map((part) => ("text" in part ? part.text : "")).join(""),
     )
     .join("\n");
+
+describe("Organize with a local decision model", () => {
+  test("reads a deck's outline, and marks for review only what its size calls unsure", async () => {
+    const jev = await startFakeJev({ apiKey: "ollama" });
+    jev.chooseGroup("g-reports");
+    jev.answer({ Report: 0.65, Slides: 0.55 });
+    const organize = (model: string) =>
+      decisionGroupClassifier({ baseUrl: jev.url, apiKey: "ollama", model, local: true }).organize(
+        groups,
+        tags,
+        {
+          name: "QBR",
+          kind: "pptx",
+          pageCount: null,
+          outline: "2 slides: 1. Quarterly review; 2. Agenda",
+          text: "Quarterly review",
+        },
+        new AbortController().signal,
+      );
+    const big = await organize("tev1:4b");
+    expect(jev.requests[0]?.body.state).toEqual({
+      name: "QBR",
+      kind: "pptx",
+      pageCount: null,
+      outline: "2 slides: 1. Quarterly review; 2. Agenda",
+      text: "Quarterly review",
+    });
+    expect(big).toEqual({
+      groupId: "g-reports",
+      tags: [
+        { tagId: "t-report", confidence: 0.65, needsReview: false },
+        { tagId: "t-slides", confidence: 0.55, needsReview: true },
+      ],
+    });
+    // The smaller model is less sure at the same probability; others keep the wide band.
+    expect((await organize("tev1:0.8b")).tags.map((tag) => tag.needsReview)).toEqual([true, true]);
+    expect(reviewBandFor("clef-flash")).toEqual({ low: 0.5, high: 0.8 });
+    expect(reviewBandFor("tev1:4b")).toEqual({ low: 0.5, high: 0.6 });
+  });
+});
 
 describe("Organize with the chat model", () => {
   test("asks for one Folder and every Tag that fits, from the Document's type, outline and text", async () => {
