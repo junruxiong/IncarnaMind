@@ -29,10 +29,11 @@ export interface RunEngine {
  * What an engine needs of a Tool (CONTEXT.md): its name, description and JSON
  * Schema, and its call. Its provider and Effects stay above the engine.
  *
- * A call's arguments are checked against `inputSchema` first, leniently: text
- * where a number or a true/false is wanted is converted, as is an array or
- * object sent as JSON text (small models do both). Arguments that still don't
- * match never reach `gate` or the Tool: the call fails, and the model reads why.
+ * A call's arguments are checked against `inputSchema` first, leniently, as a
+ * small model meant them: a number or true/false sent as text, an array or
+ * object sent as JSON text, and null for an optional one pass. The Tool gets
+ * them as the model sent them. Arguments that don't match never reach `gate`
+ * or the Tool: the call fails, and the model reads why.
  */
 export type RunTool = Pick<Tool, "name" | "description" | "inputSchema" | "call">;
 
