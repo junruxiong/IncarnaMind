@@ -8,6 +8,10 @@
  * Their Effects: the first two read the Skill they name. A script's run
  * executes the Skill's code, and can reach what its Executor allows (see
  * ../execution): at sandbox level "none" (v1), anything.
+ *
+ * What the first two return is the User's own: a Skill is instructions they
+ * chose to install, as the Question is. What a script printed is untrusted
+ * (`Tool.untrustedResult`): it may have read anything it could reach.
  */
 import type { Effect, EffectScope } from "../api";
 import type { ExecAccess } from "../execution";
@@ -119,6 +123,7 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
       },
       shownInput: ({ name }) => ({ name: text(name) }),
       effects: ({ name }) => readsSkill(options.skill(text(name))),
+      untrustedResult: false,
       call: async ({ name }) => options.useSkill(text(name)),
     });
   }
@@ -139,6 +144,7 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
     },
     shownInput: ({ skill, path }) => ({ skill: text(skill), path: text(path) }),
     effects: ({ skill }) => readsSkill(options.skill(text(skill))),
+    untrustedResult: false,
     call: async ({ skill, path }) => options.readSkillFile(text(skill), text(path)),
   });
   const { scripts } = options;
@@ -169,6 +175,7 @@ export function skillTools(options: SkillToolsOptions): Tool[] {
       },
       shownInput: scriptCallInput,
       effects,
+      untrustedResult: true,
       call: async (input, context) => scripts.run(input, context),
     });
   }

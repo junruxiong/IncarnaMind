@@ -121,6 +121,8 @@ describe("A Tool that may change something asks first", { timeout: 30_000 }, () 
         action,
         scope: { kind: "service", serviceId: `connector:${connector.id}`, name: "Tides" },
       })),
+      // Nothing untrusted was read before it: there are no Documents to search.
+      tainted: false,
     });
     expect(await core.listApprovalRequests()).toEqual([request]);
     // Paused: the card says it waits, the model wasn't asked again, and the server got nothing.
