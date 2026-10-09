@@ -235,6 +235,7 @@ export const en = {
   "viewer.slide.notes": "Speaker notes",
   "viewer.slide.chart": "Chart",
   "viewer.slide.untitled": "Untitled slide",
+  "viewer.slide.picture": "Picture",
   "viewer.sheet.tabs": "Sheets",
   "viewer.sheet.empty": "This sheet is empty.",
   "viewer.sheet.truncated": "Only the first {rows} rows are read, searched and shown.",

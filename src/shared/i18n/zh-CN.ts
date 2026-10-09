@@ -223,6 +223,7 @@ export const zhCN = {
   "viewer.slide.notes": "演讲者备注",
   "viewer.slide.chart": "图表",
   "viewer.slide.untitled": "无标题幻灯片",
+  "viewer.slide.picture": "图片",
   "viewer.sheet.tabs": "工作表",
   "viewer.sheet.empty": "这个工作表是空的。",
   "viewer.sheet.truncated": "只读取、搜索并显示前 {rows} 行。",
