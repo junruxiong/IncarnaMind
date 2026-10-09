@@ -178,15 +178,35 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeLessThan(600);
 
   const last = window.getByTestId("document-list-item").last();
+  const menu = last.getByTestId("document-tags-popover");
+  // Where the menu is in the first frame drawn once it shows.
+  await menu.evaluate((element) => {
+    const firstFrame = new Promise((resolve) => {
+      const measure = () => {
+        const { top, bottom } = element.getBoundingClientRect();
+        resolve({ top, bottom });
+      };
+      element.addEventListener("beforetoggle", () => requestAnimationFrame(measure), {
+        once: true,
+      });
+    });
+    Object.assign(element, { firstFrame });
+  });
   await last.hover();
   await last.getByTestId("document-tags-menu").click();
-  const menu = last.getByTestId("document-tags-popover");
   await expect(menu).toBeVisible();
   const box = await menu.boundingBox();
   const height = await window.evaluate(() => globalThis.innerHeight);
   if (!box) throw new Error("The menu isn't visible.");
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(height);
+  // It is drawn there from the first frame, not below the window and then moved up.
+  const firstFrame = await menu.evaluate(
+    (element) =>
+      (element as unknown as { firstFrame: Promise<{ top: number; bottom: number }> }).firstFrame,
+  );
+  expect(firstFrame.top).toBeCloseTo(box.y, 0);
+  expect(firstFrame.bottom).toBeCloseTo(box.y + box.height, 0);
   // The picker takes the focus into its field, ready to type a Tag.
   await expect(menu.getByTestId("tag-picker-input")).toBeFocused();
 

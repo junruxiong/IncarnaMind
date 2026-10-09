@@ -25,13 +25,19 @@ import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
+import {
+  createDocuments,
+  type DocumentFile,
+  type DocumentImage,
+  parseListOptions,
+} from "./documents";
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord, TaggingNotReadyError } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
+import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { createFolders } from "./folders";
 import { createLibrary } from "./library";
@@ -80,6 +86,13 @@ export interface Core extends CoreApi, CoreEventSource {
    * reached (the UI then shows `readDocumentText` instead).
    */
   openDocumentFile(documentId: string): Promise<DocumentFile>;
+  /**
+   * Opens a picture a live Markdown Document shows from beside it, by the
+   * relative path written in the file ("figures/map.png"), for the host to
+   * serve to the viewer: only images, only from the file's folder or below
+   * it. Throws NotFoundError for anything else.
+   */
+  openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
    * Opens a live Document's file, where it is, in the default app for its
    * type, through the `shell` adapter. Throws NotFoundError as
@@ -445,13 +458,17 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   syncChatFlow();
 
+  // The programs Tools start go through one Executor (#61): by default the local one, at
+  // sandbox level "none".
+  const executor =
+    adapters.executor ??
+    createLocalExecutor({
+      processes: adapters.processes,
+      tempDir: adapters.paths.tempDir ?? tmpdir(),
+      reportError: (error) => console.error(error),
+    });
   // Running Skill scripts (#41), each in its own temporary folder.
-  const scriptRunner = createScriptRunner({
-    processes: adapters.processes,
-    runtimes: adapters.scriptRuntimes,
-    tempDir: adapters.paths.tempDir ?? tmpdir(),
-    reportError: (error) => console.error(error),
-  });
+  const scriptRunner = createScriptRunner({ executor, runtimes: adapters.scriptRuntimes });
 
   // Asking the User before a Connector Tool that may change something runs (#38).
   const approvals = createApprovals({
@@ -499,18 +516,17 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
     },
-    connectorTools: (signal) => connectors.toolsForAnswer(signal),
+    toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
-      toolNeedsApproval: (connectorId, tool, readOnly) =>
-        approvals.toolNeedsApproval(connectorId, tool, readOnly),
-      scriptNeedsApproval: (skillId) => approvals.scriptNeedsApproval(skillId),
+      decide: (call) => approvals.decide(call),
       request: (call, signal) => approvals.request(call, signal),
     },
     scripts: {
       enabled: () => settings.get().device.skillScriptsEnabled,
       timeoutSeconds: () => settings.get().device.skillScriptTimeoutSeconds,
       check: (script) => scriptRunner.check(script),
+      access: (skillDir) => scriptRunner.access(skillDir),
       run: (request) => scriptRunner.run(request),
     },
     skills: {
@@ -1155,6 +1171,7 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
+    openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
       const path = await documents.filePath(documentId);
       if (!adapters.shell)

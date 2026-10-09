@@ -4,10 +4,12 @@
  * `documentFileUrl(id)`, and the bytes stream straight from the file, where
  * the User keeps it. A Document whose file is missing or can't be reached is
  * a 404: the viewer then shows the text IncarnaMind kept (`readDocumentText`).
+ * A Markdown Document's pictures beside it are served under its URL
+ * (`documentImageUrl`), only from its own folder, and only images.
  */
 import { protocol } from "electron";
 import { type Core, type DocumentKind, NotFoundError } from "../core";
-import { DOCUMENT_SCHEME, documentIdFromUrl } from "../shared/documentViewer";
+import { DOCUMENT_SCHEME, documentIdFromUrl, documentImageFromUrl } from "../shared/documentViewer";
 
 const CONTENT_TYPES: Readonly<Record<DocumentKind, string>> = {
   pdf: "application/pdf",
@@ -55,6 +57,19 @@ export function serveDocumentFiles(core: Core, devServerOrigin: string | null): 
     }
     if (request.method !== "GET") return new Response(null, { status: 405, headers });
     const documentId = documentIdFromUrl(request.url);
+    const image = documentId ? null : documentImageFromUrl(request.url);
+    if (image) {
+      try {
+        const { stream, size, type } = await core.openDocumentImage(image.documentId, image.path);
+        headers["Content-Type"] = type;
+        headers["Content-Length"] = String(size);
+        return new Response(stream, { status: 200, headers });
+      } catch (error) {
+        if (error instanceof NotFoundError) return new Response(null, { status: 404, headers });
+        console.error(error);
+        return new Response(null, { status: 500, headers });
+      }
+    }
     if (!documentId) return new Response(null, { status: 404, headers });
     try {
       const { document, stream, size } = await core.openDocumentFile(documentId);

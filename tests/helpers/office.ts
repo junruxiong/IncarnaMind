@@ -56,6 +56,90 @@ export interface SheetInput {
   rows: (string | number)[][];
 }
 
+/** A sheet of an .xlsx written as XML, for the look the sheet preview reads. */
+export interface RawSheet {
+  name: string;
+  /** What goes inside <worksheet>: <sheetViews>, <cols>, <sheetData>, <drawing>… */
+  xml: string;
+  /** The sheet's relationships, as <Relationship> elements. */
+  rels?: string;
+  state?: "hidden";
+}
+
+/**
+ * An .xlsx put together from raw parts: its sheets, styles.xml, a theme, shared
+ * strings and any other parts (drawings, media, charts, comments).
+ */
+export function xlsxPackage(input: {
+  sheets: readonly RawSheet[];
+  styles?: string;
+  theme?: string;
+  sharedStrings?: readonly string[];
+  /** The sheet the workbook opens at, by its place among all sheets. */
+  activeTab?: number;
+  parts?: readonly { name: string; data: string | Buffer }[];
+}): Buffer {
+  const ns = `xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+  const rel = (id: string, type: string, target: string) =>
+    `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`;
+  const relationships = (body: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${body}</Relationships>`;
+  const workbookRels = [
+    ...input.sheets.map((_, index) =>
+      rel(`rId${index + 1}`, "worksheet", `worksheets/sheet${index + 1}.xml`),
+    ),
+    input.styles ? rel("rIdS", "styles", "styles.xml") : "",
+    input.theme ? rel("rIdT", "theme", "theme/theme1.xml") : "",
+    input.sharedStrings ? rel("rIdSS", "sharedStrings", "sharedStrings.xml") : "",
+  ].join("");
+  const view =
+    input.activeTab === undefined
+      ? ""
+      : `<bookViews><workbookView activeTab="${input.activeTab}"/></bookViews>`;
+  const entries: { name: string; data: string | Buffer }[] = [
+    { name: "[Content_Types].xml", data: CONTENT_TYPES("") },
+    {
+      name: "xl/workbook.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook ${ns}>${view}<sheets>${input.sheets
+        .map(
+          (sheet, index) =>
+            `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}"${sheet.state ? ` state="${sheet.state}"` : ""} r:id="rId${index + 1}"/>`,
+        )
+        .join("")}</sheets></workbook>`,
+    },
+    { name: "xl/_rels/workbook.xml.rels", data: relationships(workbookRels) },
+    ...input.sheets.flatMap((sheet, index) => [
+      {
+        name: `xl/worksheets/sheet${index + 1}.xml`,
+        data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet ${ns}>${sheet.xml}</worksheet>`,
+      },
+      ...(sheet.rels
+        ? [
+            {
+              name: `xl/worksheets/_rels/sheet${index + 1}.xml.rels`,
+              data: relationships(sheet.rels),
+            },
+          ]
+        : []),
+    ]),
+  ];
+  if (input.styles) {
+    entries.push({
+      name: "xl/styles.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet ${ns}>${input.styles}</styleSheet>`,
+    });
+  }
+  if (input.theme) entries.push({ name: "xl/theme/theme1.xml", data: input.theme });
+  if (input.sharedStrings) {
+    entries.push({
+      name: "xl/sharedStrings.xml",
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst ${ns}>${input.sharedStrings.join("")}</sst>`,
+    });
+  }
+  entries.push(...(input.parts ?? []));
+  return buildZip(entries);
+}
+
 /** An .xlsx with these sheets, in order, values unformatted. */
 export function xlsxOf(sheets: readonly SheetInput[], options: PackageOptions = {}): Buffer {
   const sheetXml = (sheet: SheetInput) => {
