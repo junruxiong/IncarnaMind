@@ -214,6 +214,19 @@ test("Tags are added, created and removed with the keyboard, on one Document and
     await expect(library.getByTestId("tag-chip").filter({ hasText: "Report" })).toHaveCount(0);
     await slideAndClick(window, bar.getByTestId("library-selection-clear"));
     await expect(bar).toHaveCount(0);
+
+    // The sidebar's row offers the same picker, from its Tags button.
+    const item = window
+      .getByTestId("document-list-item")
+      .filter({ has: window.getByText("March invoice", { exact: true }) });
+    await slideTo(window, item);
+    await slideAndClick(window, item.getByTestId("document-tags-menu"));
+    const sidebarPicker = item.getByTestId("document-tags-popover");
+    await expect(sidebarPicker.getByTestId("tag-picker-input")).toBeFocused();
+    await expect(tokens(sidebarPicker)).toHaveText(["Invoice"]);
+    await screenshot(window, "picker-sidebar");
+    await window.keyboard.press("Escape");
+    await expect(sidebarPicker).toBeHidden();
   } finally {
     await app.close();
   }
@@ -358,6 +371,23 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await slideAndClick(window, library.getByTestId("library-filters-clear"));
     await expect(rows).toHaveCount(4);
     await expect(window.getByTestId("tag-filter-active")).toHaveCount(0);
+
+    // In Chinese, the chips, picker and filter speak Chinese; Tag names are the User's.
+    await (await bridge(window)).evaluate((core) =>
+      core.updateSettings({ user: { language: "zh-CN" } }),
+    );
+    await expect(library.locator('[data-testid="library-filter"][data-facet="tag"]')).toHaveText(
+      "标签",
+    );
+    await screenshot(window, "library-zh");
+    await slideTo(window, q1);
+    await slideAndClick(window, q1.getByTestId("document-tags-menu"));
+    const picker = q1.getByTestId("document-tags-popover");
+    await expect(picker.getByTestId("tag-picker-input")).toBeFocused();
+    await window.keyboard.type("新");
+    await expect(picker.getByTestId("tag-option-create")).toHaveText(/新建“新”/);
+    await screenshot(window, "picker-zh");
+    await window.keyboard.press("Escape");
   } finally {
     await app.close();
     server.closeAllConnections();
