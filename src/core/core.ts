@@ -32,6 +32,7 @@ import { createActiveEmbedding } from "./embedding/active";
 import { InvalidInputError, isRecord, TaggingNotReadyError } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
+import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { createFolders } from "./folders";
 import { createLibrary } from "./library";
@@ -445,13 +446,17 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   syncChatFlow();
 
+  // The programs Tools start go through one Executor (#61): by default the local one, at
+  // sandbox level "none".
+  const executor =
+    adapters.executor ??
+    createLocalExecutor({
+      processes: adapters.processes,
+      tempDir: adapters.paths.tempDir ?? tmpdir(),
+      reportError: (error) => console.error(error),
+    });
   // Running Skill scripts (#41), each in its own temporary folder.
-  const scriptRunner = createScriptRunner({
-    processes: adapters.processes,
-    runtimes: adapters.scriptRuntimes,
-    tempDir: adapters.paths.tempDir ?? tmpdir(),
-    reportError: (error) => console.error(error),
-  });
+  const scriptRunner = createScriptRunner({ executor, runtimes: adapters.scriptRuntimes });
 
   // Asking the User before a Connector Tool that may change something runs (#38).
   const approvals = createApprovals({

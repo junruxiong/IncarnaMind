@@ -1,4 +1,11 @@
-import { type KeyboardEvent, type ToggleEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ToggleEvent,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 const GAP_PX = 4;
 const EDGE_PX = 8;
@@ -8,13 +15,21 @@ const ITEMS = '[role^="menuitem"]';
 const itemsOf = (menu: HTMLElement | null) =>
   Array.from(menu?.querySelectorAll<HTMLElement>(ITEMS) ?? []);
 
-/** Below the button, or above it if the window is too short. */
+/**
+ * Below the button, or above it if the window is too short. A popover that
+ * isn't showing yet isn't laid out (it has no size), so it is laid out for a
+ * moment to measure it as it will show.
+ */
 function place(button: HTMLElement | null, menu: HTMLElement | null): void {
   const anchor = button?.getBoundingClientRect();
   if (!anchor || !menu) return;
-  menu.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - menu.offsetWidth - EDGE_PX))}px`;
-  const below = anchor.bottom + GAP_PX;
+  const hidden = !menu.matches(":popover-open");
+  if (hidden) menu.style.display = "block";
+  const width = menu.offsetWidth;
   const height = menu.offsetHeight;
+  if (hidden) menu.style.removeProperty("display");
+  menu.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX))}px`;
+  const below = anchor.bottom + GAP_PX;
   menu.style.top =
     below + height > window.innerHeight - EDGE_PX
       ? `${Math.max(EDGE_PX, anchor.top - GAP_PX - height)}px`
@@ -44,13 +59,15 @@ export function usePopoverMenu() {
   const menu = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
 
-  // Once rendered with its items: placed again and focused, if it shows by
-  // then. A popover that hasn't opened yet has no height, and takes no focus;
-  // its `toggle` event (below) does both once it has.
-  useEffect(() => {
-    if (!open || !menu.current?.matches(":popover-open")) return;
+  // Once rendered with its items, and before it is drawn: placed. A click
+  // renders it just before the popover shows, so it shows where it belongs;
+  // its `toggle` event comes only after a frame is drawn, too late to place it.
+  // It takes the focus once it shows: here if it already does, or else on that
+  // `toggle` event (below), as a popover that hasn't shown can't be focused.
+  useLayoutEffect(() => {
+    if (!open) return;
     place(button.current, menu.current);
-    focusFirst(menu.current);
+    if (menu.current?.matches(":popover-open")) focusFirst(menu.current);
   }, [open]);
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -93,14 +110,11 @@ export function usePopoverMenu() {
       popover: "auto" as const,
       // Before it shows, so a menu that renders its items only while open has them when it paints.
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState === "open") place(button.current, menu.current);
         setOpen(event.newState === "open");
       },
-      // Now it shows: its real height decides above or below, and it can take the focus.
+      // Now it shows, where it was placed: it can take the focus.
       onToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState !== "open") return;
-        place(button.current, menu.current);
-        focusFirst(menu.current);
+        if (event.newState === "open") focusFirst(menu.current);
       },
       onKeyDown,
     },
