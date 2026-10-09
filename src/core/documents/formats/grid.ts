@@ -11,6 +11,7 @@
  * at the top, so each Passage knows its columns. Pure.
  */
 import { columnName, type TextUnit } from "../../../shared/units";
+import type { SheetLayout, WorkbookLayout } from "./sheetLayout";
 
 /** The most rows a block holds. */
 export const BLOCK_ROWS = 100;
@@ -42,12 +43,16 @@ export interface Sheet {
   columnCount: number;
   /** Column widths in CSS pixels, where the file sets them, by column from 0. */
   columnWidths: number[];
+  /** How the sheet looks, when the sheet preview asked for it (./sheetLayout). */
+  layout?: SheetLayout;
 }
 
 export interface Workbook {
   sheets: Sheet[];
   /** Rows were left out because the file is over `MAX_ROWS` rows or `MAX_CELLS` cells. */
   truncated: boolean;
+  /** The workbook's styles, when the sheet preview asked for them. */
+  layout?: WorkbookLayout;
 }
 
 const NUMERIC = /^[-+(]?[£$€¥]?\d[\d,.]*%?\)?$/;
