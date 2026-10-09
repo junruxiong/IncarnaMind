@@ -1598,6 +1598,7 @@ export const dataKinds = [
   "tags",
   "groups",
   "document-excerpts",
+  "page-images",
   "tool-arguments",
   "document-text",
   "queries",
@@ -2110,6 +2111,13 @@ interface ApprovalRequestBase {
   toolCallId: string;
   /** What the call can do, as its Tool declares it: why it asks. */
   effects: Effect[];
+  /**
+   * Its Answer had read content the User didn't write before this call, such
+   * as Passages of their Documents or a Connector's reply
+   * (docs/designs/agent-extensibility.md §4.6). For now it doesn't change
+   * whether a call asks.
+   */
+  tainted: boolean;
 }
 
 /**

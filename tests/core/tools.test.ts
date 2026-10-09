@@ -38,6 +38,7 @@ function connectorTool(name: string, calls: unknown[] = []): Tool {
     providerTool: name.split("__").at(-1) ?? name,
     title: null,
     effects: () => connectorToolEffects(TIDES, true),
+    untrustedResult: true,
     async call(input) {
       calls.push(input);
       return `${name} was called.`;

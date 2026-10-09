@@ -4,7 +4,9 @@
  * it. The golden table is every case v1 decides, with v1's outcome: a
  * Connector's Tool, marked read-only or not, with no policy, "always" or
  * "ask"; and a Skill script, with no policy or "always". Each call's Effects
- * are the ones its Tool declares.
+ * are the ones its Tool declares. Each case is decided in a Run that had read
+ * untrusted content (tainted, #64) and in one that hadn't, with the same
+ * outcome: for v1's subjects taint is only recorded (decision D3, §4.6).
  */
 import { describe, expect, test } from "vitest";
 import type { ApprovalPolicyValue, ApprovalSubject, Effect } from "../../src/core";
@@ -125,18 +127,30 @@ const GOLDEN: {
   },
 ];
 
-describe("One approval decision gives v1's outcomes", () => {
-  test.each(GOLDEN)("$call, policy $policy: $outcome", ({ subject, effects, policy, outcome }) => {
-    const approvals = approvalsWith(policy, subject);
+/** The golden table with its taint column: each case, in a Run that hadn't read untrusted content and in one that had. */
+const GOLDEN_WITH_TAINT = GOLDEN.flatMap((row) =>
+  [false, true].map((tainted) => ({ ...row, tainted })),
+);
 
-    expect(approvals.decide({ subject, effects: effects() })).toBe(outcome);
-  });
+describe("One approval decision gives v1's outcomes", () => {
+  test.each(GOLDEN_WITH_TAINT)(
+    "$call, policy $policy, tainted $tainted: $outcome",
+    ({ subject, effects, policy, tainted, outcome }) => {
+      const approvals = approvalsWith(policy, subject);
+
+      expect(approvals.decide({ subject, effects: effects(), tainted })).toBe(outcome);
+    },
+  );
 
   test("a policy covers only its own subject: another Tool of the Connector keeps its default", () => {
     const approvals = approvalsWith("always", tool("book_boat"));
 
-    expect(approvals.decide({ subject: tool("cancel_boat"), effects: connectorCall(false) })).toBe(
-      "ask",
-    );
+    expect(
+      approvals.decide({
+        subject: tool("cancel_boat"),
+        effects: connectorCall(false),
+        tainted: false,
+      }),
+    ).toBe("ask");
   });
 });
