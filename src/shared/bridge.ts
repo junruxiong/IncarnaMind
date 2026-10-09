@@ -1,5 +1,6 @@
 /** Names shared by the main process and the preload script for the typed core bridge. */
 import type { CoreApiMethod, ExportMindOptions } from "../core/api";
+import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
 export const BRIDGE_KEY = "incarnamind";
@@ -68,6 +69,13 @@ export interface FilesBridge {
   logError(report: RendererErrorReport): void;
   /** Calls `listener` with each command chosen in the application menu. Returns how to stop. */
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
+  /** The window's title bar (./titleBar.ts), for the page to keep room for the window's buttons. */
+  readonly titleBar: TitleBar;
+  /**
+   * Calls `listener` with true when the window enters full screen, where
+   * macOS hides its traffic lights, and false when it leaves. Returns how to stop.
+   */
+  onFullScreenChange(listener: (fullScreen: boolean) => void): () => void;
 }
 
 /** What the application menu asks the window to do (see src/main/menu.ts). */
@@ -98,4 +106,6 @@ export const FILES_CHANNELS = {
   logError: "files:logError",
   /** From the main process: a command chosen in the application menu. */
   menuCommand: "app:menuCommand",
+  /** From the main process: the window entered (true) or left (false) full screen. */
+  fullScreen: "app:fullScreen",
 } as const;

@@ -88,7 +88,7 @@ export function MindTabs({ onExport }: { onExport(): void }) {
   };
 
   return (
-    <header data-testid="mind-header" className="mind-tabs">
+    <header data-testid="mind-header" className="mind-tabs title-bar">
       <div
         ref={list}
         role="tablist"
