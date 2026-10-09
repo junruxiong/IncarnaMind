@@ -95,7 +95,8 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     title: "IncarnaMind",
-    // The frame's colour (the sidebar's), so the window never flashes another as it opens.
+    // The frame (DESIGN.md), as the approved canvas has it: the sidebar's colour, which the
+    // first paint shows at the top left, under macOS's traffic lights.
     backgroundColor: "#F4F5F7",
     // No title row of the system's: its window buttons sit in the app's top band.
     ...titleBarOptions(process.platform),
@@ -168,6 +169,9 @@ function showStartupError(error: unknown): void {
 app.whenReady().then(async () => {
   const createChatModel = await testChatModel();
   const executor = await scriptExecutor;
+  // The window's page starts loading while the core starts. Its calls reach the core once
+  // `exposeCore` has run, below: they wait until this synchronous run is done.
+  createWindow();
   try {
     core = createCore({
       ...createElectronAdapters(logger),
@@ -188,7 +192,6 @@ app.whenReady().then(async () => {
   });
   serveDocumentFiles(core, rendererUrl ? new URL(rendererUrl).origin : null);
   installMenuInLanguage(core);
-  createWindow();
   // Only a packaged app checks for updates; the smoke tests must never reach GitHub.
   if (!testHooks) startAutoUpdates(core);
 

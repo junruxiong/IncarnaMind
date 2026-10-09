@@ -93,5 +93,8 @@ export default defineConfig({
   preload: {},
   renderer: {
     plugins: [react(), tailwindcss(), pdfjsData(), fontLicences()],
+    // electron-vite leaves the renderer unminified; minified, its JavaScript is half the size
+    // to load and parse at every launch.
+    build: { minify: true },
   },
 });
