@@ -25,7 +25,12 @@ import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
-import { createDocuments, type DocumentFile, parseListOptions } from "./documents";
+import {
+  createDocuments,
+  type DocumentFile,
+  type DocumentImage,
+  parseListOptions,
+} from "./documents";
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
@@ -81,6 +86,13 @@ export interface Core extends CoreApi, CoreEventSource {
    * reached (the UI then shows `readDocumentText` instead).
    */
   openDocumentFile(documentId: string): Promise<DocumentFile>;
+  /**
+   * Opens a picture a live Markdown Document shows from beside it, by the
+   * relative path written in the file ("figures/map.png"), for the host to
+   * serve to the viewer: only images, only from the file's folder or below
+   * it. Throws NotFoundError for anything else.
+   */
+  openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
    * Opens a live Document's file, where it is, in the default app for its
    * type, through the `shell` adapter. Throws NotFoundError as
@@ -1134,6 +1146,7 @@ export function createCore(adapters: CoreAdapters): Core {
     exportMind: async (mindId, options) => mindExports.export(mindId, options),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
+    openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
       const path = await documents.filePath(documentId);
       if (!adapters.shell)
