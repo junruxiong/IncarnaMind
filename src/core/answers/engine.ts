@@ -3,13 +3,15 @@
  * streamed Answer by calling a chat model. Everything else about Answers
  * (building the context, the Tools' work, Citations, writing the Answer into
  * the Mind, stop and regenerate, the event stream) depends only on this port,
- * so the agent layer behind it can change (the AI SDK today) without touching
- * the rest.
+ * so the agent layer behind it can change without touching the rest.
  *
  * How the model cites depends on what it can do (see `CitationSupport`):
- * - "tools": a Tool-calling loop (ADR-0007). The model searches the Documents
+ * - "tools": a Tool-calling loop (ADR-0007), run by a Run engine (see
+ *   ../runs/engine; AI SDK 7 by default). The model searches the Documents
  *   with `search_documents` as often as it needs, and gives the records of its
- *   Citation markers with `cite`.
+ *   Citation markers with `cite`. The Answer keeps what is its own on top of
+ *   the engine's events: the search phase, preambles taken back, the records
+ *   and the markers they place.
  * - "structured-output": for a model that can't call Tools, one search, its
  *   Passages in the instructions, and the Answer and its records returned as
  *   one JSON object. A follow-up Question is first rewritten by the model into
@@ -26,36 +28,31 @@
  *
  * Answers are written at a low temperature (see `ANSWER_TEMPERATURE`), except
  * with models that reject one; a provider that refuses it gets the request
- * again without, and that model gets none from then on.
+ * again without, and that model gets none from then on. These retries, and
+ * stepping down from Tools, are the Answer's: the Run engine only reports
+ * what the provider refused.
  *
  * Every Tool the loop offers has one shape and comes from a Tool provider
  * (see ../tools): the Documents' two (made here, from `AnswerTools`), and
  * those the request brings: the Skills' (`use_skill`, `read_skill_file`,
- * `run_skill_script`, see ../skills/tools) and each Connector's. A Tool that
- * asks the User first waits inside its `call`. The loop names none of them
- * but the Documents' own: every call shows as a Tool-call card, from its
- * provider, except `cite`, whose records become Citations; results that
- * aren't Passages are never cited. With Skills or Connector Tools but no
- * Documents, the loop runs with those alone; a model that can't call Tools
- * answers without.
+ * `run_skill_script`, see ../skills/tools) and each Connector's. A call that
+ * asks the User first waits in the request's `gate`, which the engine awaits
+ * before each call. The loop names none of them but the Documents' own:
+ * every call shows as a Tool-call card, from its provider, except `cite`,
+ * whose records become Citations; results that aren't Passages are never
+ * cited. With Skills or Connector Tools but no Documents, the loop runs with
+ * those alone; a model that can't call Tools answers without.
  */
-import {
-  APICallError,
-  generateText,
-  jsonSchema,
-  Output,
-  parsePartialJson,
-  RetryError,
-  type StopCondition,
-  stepCountIs,
-  streamText,
-  type ToolSet,
-  tool,
-  UnsupportedFunctionalityError,
-} from "ai";
+import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
 import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
-import { classifyProviderError, contextOverflow } from "../providers/providerErrors";
+import {
+  classifyProviderError,
+  contextOverflow,
+  refusesFeature,
+} from "../providers/providerErrors";
+import { createAiSdkRunEngine } from "../runs/aiSdkEngine";
+import type { GateDecision, RunEngine, RunMessage, RunToolCall, RunWindow } from "../runs/engine";
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
 import { earlierContext } from "./context";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
@@ -154,6 +151,12 @@ export interface AnswerRequest {
    * window, what they return is cut to the room left.
    */
   tools: readonly Tool[];
+  /**
+   * Awaited before each call of an offered Tool (see `RunRequest.gate`): the
+   * Answer's approvals decide there whether it asks the User first. Without
+   * it, every call runs.
+   */
+  gate?(tool: Tool, call: RunToolCall): Promise<GateDecision>;
   /** How this model is known to cite, from its capabilities or earlier Answers. Unknown: try Tools first. */
   support?: CitationSupport;
   /**
@@ -206,6 +209,8 @@ export interface AnswerEngine {
 export interface AiSdkAnswerEngineOptions {
   /** The most model calls one Answer makes in the Tool-calling loop. The last one must write. */
   maxSteps?: number;
+  /** Runs the Tool-calling loop. Defaults to the one on AI SDK 7. */
+  runEngine?: RunEngine;
 }
 
 /** Model calls per Answer: a few searches, the records, and the Answer, with room to spare. */
@@ -293,48 +298,15 @@ export function searchToolDescription(languages: readonly DocumentLanguage[]): s
 const MARKER = /\[\^\d{1,4}\]/;
 
 /**
- * Whether a provider refused a request because the model can't use `feature`:
- * e.g. Ollama's "model does not support tools", vLLM's "--enable-auto-tool-choice",
- * a server that rejects `response_format`, or OpenAI's "Unsupported parameter:
- * 'temperature'" for a reasoning model. Auth, rate limits and outages never count.
- */
-function isUnsupportedFeature(
-  error: unknown,
-  feature: "tools" | "structured-output" | "temperature",
-): boolean {
-  const cause = RetryError.isInstance(error) ? error.lastError : error;
-  const subject =
-    feature === "tools"
-      ? /tool|function/i
-      : feature === "temperature"
-        ? /temperature/i
-        : /response_format|response format|json_schema|json schema|json mode|json_object|structured output|format/i;
-  if (UnsupportedFunctionalityError.isInstance(cause)) return subject.test(cause.functionality);
-  if (!APICallError.isInstance(cause)) return false;
-  const status = cause.statusCode;
-  if (status === undefined || [401, 403, 404, 408, 429].includes(status) || status >= 502) {
-    return false;
-  }
-  const text = `${cause.message} ${cause.responseBody ?? ""}`;
-  const refusal =
-    /not support|unsupported|doesn't support|does not support|not enabled|not available|isn't available|requires --|requires the --|not allowed|is invalid|invalid value|unknown (?:field|parameter|argument)|unrecognized/i;
-  // A temperature is also refused as deprecated, or as other than the default.
-  const temperatureRefusal = /deprecated|only the default/i;
-  return (
-    subject.test(text) &&
-    (refusal.test(text) || (feature === "temperature" && temperatureRefusal.test(text)))
-  );
-}
-
-/**
- * What an attempt yields when its provider refused the request before anything
- * came back: the temperature, if one was sent, or else `feature`; or, for a
- * request sized to a window (`estimated` tokens), that it was too long. Null
- * for any other failure.
+ * What a one-pass attempt yields when its provider refused the request before
+ * anything came back: the temperature, if one was sent, or else `feature`;
+ * or, for a request sized to a window (`estimated` tokens), that it was too
+ * long. Null for any other failure. (The Tool loop's refusals come from its
+ * Run engine, as "refused" events.)
  */
 function refusalOf(
   error: unknown,
-  feature: "tools" | "structured-output" | null,
+  feature: "structured-output" | null,
   temperature: number | undefined,
   estimated?: number,
 ): Unsupported | TemperatureRefused | Overflow | null {
@@ -342,10 +314,10 @@ function refusalOf(
   if (overflow && estimated !== undefined) {
     return { type: "overflow", promptTokens: overflow.promptTokens, estimated };
   }
-  if (temperature !== undefined && isUnsupportedFeature(error, "temperature")) {
+  if (temperature !== undefined && refusesFeature(error, "temperature")) {
     return { type: "temperature-refused" };
   }
-  if (feature && isUnsupportedFeature(error, feature)) return { type: "unsupported" };
+  if (feature && refusesFeature(error, feature)) return { type: "unsupported" };
   return null;
 }
 
@@ -473,9 +445,13 @@ async function searchQuery(
   }
 }
 
-/** The engine on the Vercel AI SDK. */
+/**
+ * The Answer engine: its Tool-calling loop on a Run engine, and the ways of
+ * answering without Tools on the model layer (the Vercel AI SDK).
+ */
 export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}): AnswerEngine {
   const maxSteps = options.maxSteps ?? MAX_STEPS;
+  const engine = options.runEngine ?? createAiSdkRunEngine();
   /** Models whose provider refused a temperature, by provider and model: they get none. */
   const refusedTemperature = new Set<string>();
   /** What earlier Answers learnt of each local model's tokenizer (see ./window). */
@@ -598,7 +574,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         if (request.tools.length > 0 && (request.support ?? "tools") === "tools") {
           let unsupported = false;
           for await (const event of fitted(() =>
-            tempered((sent) => toolLoop(request, maxSteps, "no-documents", sent, budget)),
+            tempered((sent) => toolLoop(request, engine, maxSteps, "no-documents", sent, budget)),
           )) {
             if (event.type === "unsupported") {
               unsupported = true;
@@ -652,7 +628,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         try {
           if (support === "tools") {
             attempt = fitted(() =>
-              tempered((sent) => toolLoop(request, maxSteps, "tools", sent, budget)),
+              tempered((sent) => toolLoop(request, engine, maxSteps, "tools", sent, budget)),
             );
           } else {
             const passages: string = yield* searchOnce();
@@ -681,31 +657,6 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       }
     },
   };
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Tools as the AI SDK takes them: each by its name, with its description,
- * JSON Schema and call. Arguments a model sends that aren't an object are
- * taken as none. (The one place Tools meet the loop's library.)
- */
-export function toToolSet(tools: readonly Tool[], signal: AbortSignal): ToolSet {
-  const set: ToolSet = {};
-  for (const each of tools) {
-    set[each.name] = tool({
-      description: each.description,
-      inputSchema: jsonSchema<Record<string, unknown>>(each.inputSchema),
-      execute: async (input, { abortSignal, toolCallId }) =>
-        each.call(isPlainObject(input) ? input : {}, {
-          toolCallId,
-          signal: abortSignal ?? signal,
-        }),
-    });
-  }
-  return set;
 }
 
 /** What one go of the Tool-calling loop keeps of its calls of the Documents' Tools. */
@@ -746,7 +697,15 @@ export function documentTools(
       shownInput: ({ query }) => ({ query: String(query ?? "") }),
       effects: () => [{ action: "read", scope: { kind: "documents" } }],
       async call({ query }, { toolCallId, signal }) {
-        const result = hooks.fit(await documents.searchDocuments(String(query ?? ""), signal));
+        let found: SearchResultForModel;
+        try {
+          found = await documents.searchDocuments(String(query ?? ""), signal);
+        } catch (error) {
+          // A failed search is the app's problem, so it is logged; the model is told it failed.
+          if (!signal.aborted) console.error(error);
+          throw error;
+        }
+        const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount);
         return result.text;
       },
@@ -770,14 +729,41 @@ export function documentTools(
   };
 }
 
+/** What a call the gate lets through gets: it runs. */
+const RUN: GateDecision = { run: true };
+
+/** A message of Question context as a Run's. */
+const runMessage = (message: AnswerMessage): RunMessage =>
+  message.role === "user"
+    ? { role: "user", text: message.content }
+    : { role: "assistant", text: message.content, toolCalls: [] };
+
 /**
- * The Tool-calling loop: search, cite, answer; with Skills, load them as
- * needed; with Connectors, call their Tools where they help. "no-documents":
- * the Skill and Connector Tools alone, with nothing to cite. Within a
- * window, its requests are kept within it (see ./window).
+ * The Tools' definitions as the window's estimate counts them: by name, each
+ * with its description and JSON Schema (written out as the AI SDK's `ToolSet`
+ * was before the Run engine, so requests are sized as they were).
+ */
+const definitions = (tools: readonly Tool[]) =>
+  JSON.stringify(
+    Object.fromEntries(
+      tools.map((each) => [
+        each.name,
+        { description: each.description, inputSchema: { jsonSchema: each.inputSchema } },
+      ]),
+    ),
+  );
+
+/**
+ * The Tool-calling loop, on a Run engine (see ../runs/engine): search, cite,
+ * answer; with Skills, load them as needed; with Connectors, call their Tools
+ * where they help. "no-documents": the Skill and Connector Tools alone, with
+ * nothing to cite. Within a window, its requests are kept within it (see
+ * ./window). A request the provider refused is the engine's "refused" event;
+ * what to try next is `generate`'s.
  */
 async function* toolLoop(
   request: AnswerRequest,
+  engine: RunEngine,
   maxSteps: number,
   mode: "tools" | "no-documents",
   temperature: number | undefined,
@@ -801,37 +787,28 @@ async function* toolLoop(
       : null;
   const search = documents?.search ?? null;
   const cite = documents?.cite ?? null;
-  // Within a window, what another provider's Tool returns is cut to the room left.
-  const provided = request.tools.map(
-    (each): Tool => ({
-      ...each,
-      call: async (input, context) => {
-        const text = await each.call(input, context);
-        return loop ? loop.result(text) : text;
-      },
-    }),
-  );
   /** The Tools offered, by the name the model calls them; never a Connector's with one of ours. */
   const offered = new Map(
-    offeredTools([...(documents ? [documents.search, documents.cite] : []), ...provided]).map(
+    offeredTools([...(documents ? [documents.search, documents.cite] : []), ...request.tools]).map(
       (each) => [each.name, each],
     ),
   );
-  const tools = toToolSet([...offered.values()], signal);
+  const tools = [...offered.values()];
   const instructions = request.instructions(mode, {
     skillTools: request.tools.some((each) => each.provider.kind === "skills"),
-    connectorTools: [...offered.values()].some((each) => each.provider.kind === "connector"),
+    connectorTools: tools.some((each) => each.provider.kind === "connector"),
   });
 
   // Within a window: the Question context that fits beside the instructions, the Tools and a search.
   let messages = request.messages;
   let estimated: number | undefined;
+  let window: RunWindow | undefined;
   if (budget) {
     const fit = budget.fit({
       instructions,
       messages,
       question: request.question,
-      tools: JSON.stringify(tools),
+      tools: definitions(tools),
       reserve: SEARCH_RESERVE_TOKENS,
     });
     if (!fit.ok) {
@@ -839,129 +816,121 @@ async function* toolLoop(
       return;
     }
     ({ messages, estimated } = fit);
-    loop = budget.loop(fit.estimated);
+    const account = budget.loop(fit.estimated);
+    loop = account;
+    window = {
+      // What another provider's Tool returns (or the gate gives instead) is cut to the room left.
+      fitResult: (text, tool) =>
+        tool === search?.name || tool === cite?.name ? text : account.result(text),
+      canCallTools: () => account.canCallTools(),
+      stepFinished: ({ inputTokens, outputTokens }) =>
+        account.stepFinished({ inputTokens, outputTokens }),
+    };
   }
-
-  const result = streamText({
-    model: request.model,
-    instructions,
-    messages,
-    tools,
-    temperature,
-    stopWhen: stepCountIs(maxSteps) as StopCondition<ToolSet>,
-    // The last step must write the Answer; so must a step with no room left for a Tool's result.
-    prepareStep: ({ stepNumber }) =>
-      stepNumber >= maxSteps - 1 || (loop !== null && !loop.canCallTools())
-        ? { toolChoice: "none" }
-        : {},
-    abortSignal: signal,
-    // Errors arrive as stream parts; don't also log them.
-    onError: () => undefined,
-  });
 
   /** Text of the current step, and of every step before it that was kept. */
   let stepText = "";
   let keptText = "";
   /** The Tools the current step called. */
   let stepTools: Tool[] = [];
-  let produced = false;
+  /** The Tool of each call, by its id. */
+  const calls = new Map<string, Tool>();
   /** Searches running now: the Answer is "searching" while there are any. */
   let searching = 0;
-  try {
-    for await (const part of result.fullStream) {
-      if (signal.aborted || part.type === "abort") return;
-      switch (part.type) {
-        case "start-step":
-          stepText = "";
-          stepTools = [];
-          break;
-        case "text-delta": {
-          if (!part.text) break;
-          produced = true;
-          let text = part.text;
-          // A new step's text goes on from the last kept text in a new paragraph.
-          if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
-          stepText += text;
-          yield { type: "text-delta", text };
-          break;
-        }
-        case "tool-call": {
-          produced = true;
-          const called = offered.get(part.toolName);
-          if (!called) break;
-          stepTools.push(called);
-          if (called === search && searching++ === 0) {
-            yield { type: "phase", phase: "searching" };
-          }
-          // Every call has a Tool-call card but `cite`'s: its records become Citations.
-          if (called !== cite) {
-            const input = isPlainObject(part.input) ? part.input : {};
-            yield {
-              type: "tool-call-started",
-              id: part.toolCallId,
-              provider: called.provider,
-              tool: called.providerTool,
-              input: called.shownInput ? called.shownInput(input) : input,
-            };
-          }
-          break;
-        }
-        case "tool-result": {
-          const called = offered.get(part.toolName);
-          if (called && called !== cite) {
-            yield {
-              type: "tool-call-finished",
-              id: part.toolCallId,
-              ok: true,
-              resultCount: results.get(part.toolCallId) ?? null,
-            };
-          }
-          if (called === search && --searching === 0) {
-            yield { type: "phase", phase: "writing" };
-          }
-          break;
-        }
-        case "tool-error": {
-          const called = offered.get(part.toolName);
-          if (called && called !== cite) {
-            // A failed search is the app's problem; a Skill or file that isn't there, the
-            // model's; a Connector's failure (or a declined consent) is told to the model.
-            if (called === search && !signal.aborted) console.error(part.error);
-            yield { type: "tool-call-finished", id: part.toolCallId, ok: false, resultCount: null };
-          }
-          if (called === search && --searching === 0) {
-            yield { type: "phase", phase: "writing" };
-          }
-          break;
-        }
-        case "finish-step": {
-          loop?.stepFinished(part.usage);
-          // Text before a call with a Tool-call card (a search, a Skill, a Connector's Tool), or
-          // before records with no marker in it, was a preamble.
-          const preamble =
-            stepTools.some((each) => each !== cite) ||
-            (cite !== null && stepTools.includes(cite) && !MARKER.test(stepText));
-          if (preamble && stepText) yield { type: "text-retracted", length: stepText.length };
-          else keptText += stepText;
-          stepText = "";
-          break;
-        }
-        case "error": {
-          const refused = produced ? null : refusalOf(part.error, "tools", temperature, estimated);
-          yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
-          return;
-        }
-      }
-    }
-  } catch (error) {
+  for await (const event of engine.run({
+    model: request.model,
+    instructions,
+    messages: messages.map(runMessage),
+    tools,
+    maxSteps,
+    gate: async (call) => {
+      const tool = offered.get(call.tool);
+      return tool && request.gate ? request.gate(tool, call) : RUN;
+    },
+    window,
+    temperature,
+    signal,
+  })) {
     if (signal.aborted) return;
-    const refused = produced ? null : refusalOf(error, "tools", temperature, estimated);
-    yield refused ?? { type: "failed", error: classifyProviderError(error) };
-    return;
+    switch (event.type) {
+      case "text-delta": {
+        let { text } = event;
+        // A new step's text goes on from the last kept text in a new paragraph.
+        if (stepText === "" && keptText !== "" && !/\s$/.test(keptText)) text = `\n\n${text}`;
+        stepText += text;
+        yield { type: "text-delta", text };
+        break;
+      }
+      case "tool-call": {
+        const called = offered.get(event.tool);
+        if (!called) break;
+        calls.set(event.id, called);
+        stepTools.push(called);
+        if (called === search && searching++ === 0) {
+          yield { type: "phase", phase: "searching" };
+        }
+        // Every call has a Tool-call card but `cite`'s: its records become Citations.
+        if (called !== cite) {
+          yield {
+            type: "tool-call-started",
+            id: event.id,
+            provider: called.provider,
+            tool: called.providerTool,
+            input: called.shownInput ? called.shownInput(event.input) : event.input,
+          };
+        }
+        break;
+      }
+      case "tool-result": {
+        // A Skill or file that isn't there is the model's problem; a Connector's failure (or a
+        // declined consent) is told to the model.
+        const called = calls.get(event.id);
+        if (called && called !== cite) {
+          yield {
+            type: "tool-call-finished",
+            id: event.id,
+            ok: event.ok,
+            resultCount: results.get(event.id) ?? null,
+          };
+        }
+        if (called === search && --searching === 0) {
+          yield { type: "phase", phase: "writing" };
+        }
+        break;
+      }
+      case "step-finished": {
+        // Text before a call with a Tool-call card (a search, a Skill, a Connector's Tool), or
+        // before records with no marker in it, was a preamble.
+        const preamble =
+          stepTools.some((each) => each !== cite) ||
+          (cite !== null && stepTools.includes(cite) && !MARKER.test(stepText));
+        if (preamble && stepText) yield { type: "text-retracted", length: stepText.length };
+        else keptText += stepText;
+        stepText = "";
+        stepTools = [];
+        break;
+      }
+      case "refused":
+        // Too long only with a window, so sized to one.
+        yield event.what === "tools"
+          ? { type: "unsupported" }
+          : event.what === "temperature"
+            ? { type: "temperature-refused" }
+            : {
+                type: "overflow",
+                promptTokens: event.promptTokens ?? null,
+                estimated: estimated ?? 0,
+              };
+        return;
+      case "failed":
+        yield { type: "failed", error: event.error };
+        return;
+      case "finished":
+        yield* missingMarkerEvents(keptText, cited, request.documents);
+        yield { type: "finished" };
+        return;
+    }
   }
-  if (signal.aborted) return;
-  yield* missingMarkerEvents(keptText, cited, request.documents);
-  yield { type: "finished" };
 }
 
 /**

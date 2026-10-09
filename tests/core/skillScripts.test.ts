@@ -654,7 +654,8 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
     expect(results[1]).toMatch(/has no script SKILL\.md/);
     expect(results[2]).toMatch(/has no script scripts\/missing\.js/);
     expect(results[3]).toMatch(/There is no Skill named "nonexistent"/);
-    expect(results[4]).toMatch(/args must be a list of strings/);
+    // Arguments that don't match the Tool's schema are refused before the call (#63).
+    expect(results[4]).toMatch(/args must be array/);
     expect(scriptCalls(client, answerId).map((call) => call.status)).toEqual([
       "failed",
       "failed",

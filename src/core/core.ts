@@ -488,7 +488,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const answers = createAnswers({
     content,
     events,
-    engine: adapters.answerEngine ?? createAiSdkAnswerEngine(),
+    engine: adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine }),
     requireMind: (mindId) => minds.get(mindId).id,
     mindExists: (mindId) => {
       try {
