@@ -117,6 +117,12 @@ describe("the fixture deck", () => {
       series: [{ name: "Revenue (£m)", values: [3.1, 3.4, 3.9, 4.4], colour: "#2563eb" }],
       dataLabels: true,
       gridlines: true,
+      // The file's own label format, text and line styles, as PowerPoint draws them.
+      labelFormat: "#,##0",
+      textSize: 16,
+      textColour: "#000000",
+      gridColour: "#888888",
+      axisColour: "#888888",
     });
   });
 });
@@ -292,6 +298,32 @@ describe("colours", () => {
     expect(shape?.line?.width).toBeCloseTo(12700 / 9525);
     expect(shape?.line?.colour).not.toBe("#4472c4");
     expect(firstRun(shape)?.colour).toBe("#ffffff");
+  });
+});
+
+describe("effects", () => {
+  test("an outer shadow is drawn at its offset and blur, in its colour", async () => {
+    const effect = `<a:effectLst><a:outerShdw blurRad="38100" dist="19050" dir="5400000"><a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst>`;
+    const deck = await drawPptx(
+      pptxOf({
+        slides: [
+          {
+            shapes: [
+              sp({
+                spPr: `${xfrm(0, 0, 952500, 952500)}<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>${effect}`,
+              }),
+              sp({
+                id: 3,
+                spPr: `${xfrm(0, 0, 952500, 952500)}<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`,
+              }),
+            ].join(""),
+          },
+        ],
+      }),
+    );
+    const [shadowed, plain] = shapes(drawn(deck, 1));
+    expect(shadowed?.shadow).toEqual({ x: 0, y: 2, blur: 4, colour: "rgb(0 0 0 / 0.4)" });
+    expect(plain?.shadow).toBeNull();
   });
 });
 

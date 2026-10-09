@@ -9,6 +9,7 @@ import type {
   Paragraph,
   PictureItem,
   Run,
+  Shadow,
   ShapeItem,
   SlideDrawing,
   Spacing,
@@ -101,6 +102,12 @@ function boxStyle(box: Box): CSSProperties {
     transform: transforms.length > 0 ? transforms.join(" ") : undefined,
   };
 }
+
+/** An outer shadow as a CSS filter, which follows the shape's outline. */
+const shadowFilter = (shadow: Shadow | null) =>
+  shadow
+    ? `drop-shadow(${shadow.x}px ${shadow.y}px ${shadow.blur / 2}px ${shadow.colour})`
+    : undefined;
 
 const flipTransform = (box: Box) =>
   box.flipH || box.flipV ? `scale(${box.flipH ? -1 : 1}, ${box.flipV ? -1 : 1})` : undefined;
@@ -271,7 +278,7 @@ function ShapeView({ item, path, context }: { item: ShapeItem; path: string; con
           className="slide-shape"
           width={Math.max(box.w, 1)}
           height={Math.max(box.h, 1)}
-          style={{ transform: flipTransform(box) }}
+          style={{ transform: flipTransform(box), filter: shadowFilter(item.shadow) }}
           aria-hidden="true"
         >
           {(paint.defs || ends.defs) && (
@@ -323,7 +330,7 @@ function PictureView({ item, context }: { item: PictureItem; context: Context })
     : `path("${geometryPaths(item.geometry, box.w, box.h)[0]?.d ?? ""}")`;
   const line = item.line;
   return (
-    <div style={boxStyle(box)}>
+    <div style={{ ...boxStyle(box), filter: shadowFilter(item.shadow) }}>
       <div
         style={{
           position: "absolute",
