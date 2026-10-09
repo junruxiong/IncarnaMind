@@ -235,6 +235,8 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
         { action: "write", scope: { kind: "anywhere" } },
         { action: "network", scope: { kind: "anywhere" } },
       ],
+      // Nothing untrusted was read before it: there are no Documents to search.
+      tainted: false,
     } satisfies SkillScriptApprovalRequest);
     expect(await core.listApprovalRequests()).toEqual([request]);
     // Paused: its card waits, and the script hasn't run.
@@ -654,7 +656,8 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
     expect(results[1]).toMatch(/has no script SKILL\.md/);
     expect(results[2]).toMatch(/has no script scripts\/missing\.js/);
     expect(results[3]).toMatch(/There is no Skill named "nonexistent"/);
-    expect(results[4]).toMatch(/args must be a list of strings/);
+    // Arguments that don't match the Tool's schema are refused before the call (#63).
+    expect(results[4]).toMatch(/args must be array/);
     expect(scriptCalls(client, answerId).map((call) => call.status)).toEqual([
       "failed",
       "failed",

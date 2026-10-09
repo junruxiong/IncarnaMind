@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useContext } from "react";
 import type { Document } from "../../../core/api";
+import { DocumentTagChips } from "../components/TagChips";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
@@ -66,6 +67,7 @@ export function ViewerHeader({
       ) : (
         <span className="flex-1" />
       )}
+      {document && <DocumentTagChips document={document} variant="header" />}
       {children}
       {children && <HeaderDivider />}
       {document && openable && document.fileStatus === "available" && (

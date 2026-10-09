@@ -14,8 +14,8 @@
  * Approvals decide from them whether a call asks the User first (see
  * ../approvals).
  *
- * Nothing here depends on an agent library, or on Answers: the Answer engine
- * turns Tools into its library's own (see `toToolSet` in ../answers/engine),
+ * Nothing here depends on an agent library, or on Answers: the Run engine
+ * turns Tools into its library's own (see `toToolSet` in ../runs/aiSdkEngine),
  * so that library can change without the Tools or their providers.
  */
 import type { Effect } from "../api";
@@ -40,13 +40,7 @@ export interface ToolCallContext {
   signal: AbortSignal;
 }
 
-/**
- * A Tool (CONTEXT.md) as a Run offers it to the model.
- *
- * Room is left for what comes next (docs/designs/agent-extensibility.md
- * §4.6): `untrustedResult`, for a result that carries text the User didn't
- * write.
- */
+/** A Tool (CONTEXT.md) as a Run offers it to the model. */
 export interface Tool {
   /** The name the model calls it by, unique within the Run: "search_documents", "github__create_issue". */
   name: string;
@@ -65,6 +59,13 @@ export interface Tool {
    * hints only narrow these: they never widen what runs without asking.
    */
   effects(input: Record<string, unknown>): Effect[];
+  /**
+   * Its results can carry text the User didn't write: a Document's Passages,
+   * a Connector's reply, what a script printed. A Run that has read one is
+   * tainted (docs/designs/agent-extensibility.md §4.6). False for text that
+   * is the User's own or IncarnaMind's, such as the User's Skills.
+   */
+  untrustedResult: boolean;
   /**
    * What a call's Tool-call card shows of its input, e.g. a search's query,
    * as text. Without it, the card shows the input as the model sent it.

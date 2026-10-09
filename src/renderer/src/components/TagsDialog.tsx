@@ -1,11 +1,13 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { Tag } from "../../../core/api";
+import { nextTagColour, type TagColour } from "../../../shared/tagColours";
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { formatCount } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { MergeLineIcon, PencilLineIcon, TrashLineIcon } from "./lineIcons";
+import { TagColourPicker, tagChipColour } from "./TagColour";
 import {
   buttonClass,
   dangerButtonClass,
@@ -189,8 +191,9 @@ function TagRow({
           initial={tag}
           submitLabel={t("tags.dialog.save")}
           note={t("tags.dialog.descriptionNote")}
-          onSubmit={async (name, description) => {
-            if (await run(() => core.updateTag(tag.id, { name, description }))) setMode("view");
+          onSubmit={async (name, description, colour) => {
+            if (await run(() => core.updateTag(tag.id, { name, description, colour })))
+              setMode("view");
           }}
           onCancel={() => setMode("view")}
         />
@@ -272,8 +275,14 @@ function TagRow({
   return (
     <li data-testid="tag-row" data-tag-id={tag.id} className="flex items-start gap-2 py-2.5">
       <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-baseline gap-x-2 text-ui font-semibold break-words text-ink">
-          {tag.name}
+        <p className="flex flex-wrap items-center gap-x-2 text-ui font-semibold break-words text-ink">
+          <span
+            data-testid="tag-row-name"
+            data-colour={tag.colour}
+            className={`inline-flex min-h-6 max-w-full items-center rounded-sm px-2 ${tagChipColour(tag.colour)}`}
+          >
+            {tag.name}
+          </span>
           {tag.preset && (
             <span className="text-label font-semibold text-ink-meta">
               {t("tags.dialog.preset")}
@@ -297,7 +306,7 @@ function TagRow({
           store.closeTagsDialog();
           store.openLibrary();
         }}
-        className="mt-1 shrink-0 rounded-sm px-1 text-right text-[12px] leading-5 text-ink-meta tabular-nums outline-none hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent disabled:hover:no-underline"
+        className="mt-1 shrink-0 rounded-sm px-1 text-right text-[12px] leading-5 text-ink-meta tabular-nums hover:text-ink hover:underline disabled:hover:no-underline"
       >
         {usage.count === 1
           ? t("tags.dialog.count.one")
@@ -346,16 +355,22 @@ function TagRow({
 function NewTag({ run }: { run: Run }) {
   const t = useT();
   const [added, setAdded] = useState(0);
+  const tags = useAppStore((state) => state.tags);
   return (
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitleClass}>{t("tags.dialog.new")}</h3>
       <TagForm
         key={added}
-        initial={{ name: "", description: "" }}
+        initial={{
+          name: "",
+          description: "",
+          colour: nextTagColour(tags.map((tag) => tag.colour)),
+        }}
         submitLabel={t("tags.dialog.create")}
         note={t("tags.dialog.descriptionNote")}
-        onSubmit={async (name, description) => {
-          if (await run(() => core.createTag({ name, description }))) setAdded((n) => n + 1);
+        onSubmit={async (name, description, colour) => {
+          if (await run(() => core.createTag({ name, description, colour })))
+            setAdded((n) => n + 1);
         }}
       />
     </section>
@@ -363,17 +378,18 @@ function NewTag({ run }: { run: Run }) {
 }
 
 function TagForm(props: {
-  initial: { name: string; description: string };
+  initial: { name: string; description: string; colour: TagColour };
   submitLabel: string;
   /** Under the description: what it is for. */
   note: string;
-  onSubmit(name: string, description: string): Promise<void>;
+  onSubmit(name: string, description: string, colour: TagColour): Promise<void>;
   onCancel?(): void;
 }) {
   const { initial, submitLabel, note, onSubmit, onCancel } = props;
   const t = useT();
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
+  const [colour, setColour] = useState<TagColour>(initial.colour);
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: FormEvent) => {
@@ -381,7 +397,7 @@ function TagForm(props: {
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
-      await onSubmit(name, description);
+      await onSubmit(name, description, colour);
     } finally {
       setBusy(false);
     }
@@ -412,6 +428,7 @@ function TagForm(props: {
         />
         <span className={hintClass}>{note}</span>
       </label>
+      <TagColourPicker value={colour} onChange={setColour} />
       <div className="flex justify-end gap-2">
         {onCancel && (
           <button type="button" onClick={onCancel} className={ghostButtonClass}>

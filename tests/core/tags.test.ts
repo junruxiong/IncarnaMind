@@ -101,6 +101,7 @@ describe("Preset Tags", () => {
         name: tag.name,
         description: expect.stringMatching(/\w{4,}.*\./),
         preset: true,
+        colour: expect.any(String),
         createdAt: "2026-10-06T12:00:00.000Z",
         updatedAt: "2026-10-06T12:00:00.000Z",
       });
@@ -151,6 +152,8 @@ describe("Managing Tags", () => {
       name: "Quarterly",
       description: "Covers one quarter of a year.",
       preset: false,
+      // The one colour no preset has.
+      colour: "stone",
       createdAt: "2026-10-06T12:00:00.000Z",
       updatedAt: "2026-10-06T12:00:00.000Z",
     });

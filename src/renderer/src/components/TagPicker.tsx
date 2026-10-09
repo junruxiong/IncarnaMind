@@ -16,6 +16,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { actionFor, pickerOptions, type TagOnDocuments, tagsOnDocuments } from "../tagEditing";
 import { CheckLineIcon, CloseLineIcon, PlusLineIcon, SparkLineIcon } from "./lineIcons";
+import { TagSwatch, tagChipColour } from "./TagColour";
 import { buttonStyle, errorTextClass, hintClass, inputClass, menuRuleClass } from "./ui";
 
 const GAP_PX = 4;
@@ -105,9 +106,9 @@ export function useTagPopover() {
 export const tagPopoverClass =
   "inset-auto m-0 w-80 max-w-[calc(100vw-16px)] overflow-visible rounded-lg border-0 bg-sheet p-0 text-ui font-normal text-ink shadow-popover";
 
-/** A chip's look in the picker's field and on a row: 20px, radius 4, the chip fill. */
+/** A chip's shape in the picker's field and on a row: 20px, radius 4. Its colours are its Tag's. */
 export const chipClass =
-  "inline-flex h-5 max-w-[10rem] shrink-0 items-center gap-1 rounded-sm bg-chip px-1.5 text-[12px] leading-5 text-ink-secondary";
+  "inline-flex h-5 max-w-[10rem] shrink-0 items-center gap-1 rounded-sm px-1.5 text-[12px] leading-5";
 
 /**
  * A Tag's tooltip on one Document: who added it and, when automatic tagging
@@ -308,16 +309,17 @@ export function TagPicker({
             key={state.tag.id}
             data-testid="tag-token"
             data-tag-id={state.tag.id}
+            data-colour={state.tag.colour}
             data-source={state.automatic ? "automatic" : "user"}
             data-needs-review={state.needsReview && single ? "true" : undefined}
             title={single ? stateTitle(state, t) : state.tag.description || undefined}
-            className={`${chipClass} pr-0.5 ${
-              picked === state.tag.id ? "shadow-[inset_0_0_0_1px_var(--color-ink-meta)]" : ""
+            className={`${chipClass} ${tagChipColour(state.tag.colour)} pr-0.5 ${
+              picked === state.tag.id ? "shadow-[inset_0_0_0_1px_currentColor]" : ""
             }`}
           >
             {state.needsReview && single && <ReviewDot />}
             {state.automatic && !(state.needsReview && single) && (
-              <SparkLineIcon aria-hidden="true" className="size-2.5 shrink-0 text-ink-meta" />
+              <SparkLineIcon aria-hidden="true" className="size-2.5 shrink-0 opacity-70" />
             )}
             <span className="truncate">{state.tag.name}</span>
             {state.needsReview && single && (
@@ -332,7 +334,7 @@ export function TagPicker({
                 title={t("tags.review.confirm", { tag: state.tag.name })}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => void run(() => add(state.tag.id))}
-                className="inline-flex size-4 items-center justify-center rounded-sm text-ink-secondary hover:bg-hover hover:text-ink"
+                className="inline-flex size-4 items-center justify-center rounded-sm hover:bg-sheet/70"
               >
                 <CheckLineIcon className="size-3" />
               </button>
@@ -345,7 +347,7 @@ export function TagPicker({
               title={t("tags.picker.remove", { tag: state.tag.name })}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void run(() => remove(state.tag.id))}
-              className="inline-flex size-4 items-center justify-center rounded-sm text-ink-meta hover:bg-hover hover:text-ink"
+              className="inline-flex size-4 items-center justify-center rounded-sm opacity-70 hover:bg-sheet/70 hover:opacity-100"
             >
               <CloseLineIcon className="size-2.5" />
             </button>
@@ -501,6 +503,7 @@ function TagOption({
         {coverage === "some" && <span className="h-0.5 w-2.5 rounded-full bg-ink-secondary" />}
         {review && <ReviewDot />}
       </span>
+      <TagSwatch colour={tag.colour} />
       <span className="min-w-0 shrink-0 truncate">{tag.name}</span>
       {state.automatic && coverage !== "none" && !review && (
         <SparkLineIcon aria-hidden="true" className="size-2.5 shrink-0 text-ink-meta" />
