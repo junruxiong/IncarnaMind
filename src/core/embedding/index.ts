@@ -3,17 +3,13 @@
  * state, loading it into the `Embedder`, and turning Passages and queries into
  * vectors with the model's prefixes and the shared text normalisation.
  */
-import { join } from "node:path";
 import { normaliseText } from "../../shared/text";
 import type { Embedder, EmbeddingModelSource } from "../adapters";
-import type { EmbeddingModelError, EmbeddingModelStatus } from "../api";
-import { downloadModel, isModelDownloaded, ModelDownloadError } from "./download";
+import type { EmbeddingModelStatus } from "../api";
+import { createDownloadableModel } from "./downloadable";
 import type { EmbeddingModelDefinition } from "./model";
 
 export { BUILT_IN_EMBEDDING_MODEL } from "./model";
-
-/** Progress events are at most this often, apart from state changes. */
-const PROGRESS_INTERVAL_MS = 250;
 
 export interface EmbeddingModel {
   readonly id: string;
@@ -68,91 +64,18 @@ function passageEmbeddingText(
 }
 
 export function createEmbeddingModel(options: EmbeddingModelOptions): EmbeddingModel {
-  const { definition, dataDir, embedder, emitStatus } = options;
-  const reportError = options.reportError ?? ((error) => console.error(error));
-  const source = options.source ?? definition.source;
-  const directory = join(dataDir, "models", definition.folder);
-  const totalBytes = source.files.reduce((sum, file) => sum + file.size, 0);
-  const host = new URL(source.baseUrl).host;
-  const files = {
-    model: join(directory, definition.files.model),
-    tokenizer: join(directory, definition.files.tokenizer),
-    tokenizerConfig: join(directory, definition.files.tokenizerConfig),
-    maxTokens: definition.maxTokens,
-  };
-
-  const ready = isModelDownloaded(directory, source.files);
-  let status: EmbeddingModelStatus = {
+  const { definition, embedder } = options;
+  const files = createDownloadableModel({
     name: definition.name,
-    host,
-    state: ready ? "ready" : "not-downloaded",
-    downloadedBytes: ready ? totalBytes : 0,
-    totalBytes,
-    error: null,
-  };
-  const readyListeners = new Set<() => void>();
-  const lifetime = new AbortController();
-  let downloading = false;
-  let loading: Promise<boolean> | undefined;
-  let lastProgress = 0;
-
-  const update = (patch: Partial<EmbeddingModelStatus>) => {
-    status = { ...status, ...patch };
-    if (!lifetime.signal.aborted) emitStatus(status);
-  };
-
-  const fail = (error: EmbeddingModelError) => update({ state: "failed", error });
-
-  function start(): void {
-    if (downloading || lifetime.signal.aborted) return;
-    downloading = true;
-    update({ state: "downloading", error: null, downloadedBytes: 0 });
-    void downloadModel({
-      directory,
-      source,
-      signal: lifetime.signal,
-      onProgress(downloadedBytes) {
-        status = { ...status, downloadedBytes };
-        const now = Date.now();
-        if (now - lastProgress < PROGRESS_INTERVAL_MS) return;
-        lastProgress = now;
-        update({});
-      },
-    }).then(
-      () => {
-        downloading = false;
-        if (lifetime.signal.aborted) return;
-        update({ state: "ready", downloadedBytes: totalBytes, error: null });
-        for (const listener of readyListeners) {
-          try {
-            listener();
-          } catch (error) {
-            reportError(error);
-          }
-        }
-      },
-      (error: unknown) => {
-        downloading = false;
-        if (lifetime.signal.aborted) return;
-        if (error instanceof ModelDownloadError) fail({ kind: error.kind, message: error.message });
-        else
-          fail({
-            kind: "storage",
-            message: error instanceof Error ? error.message : String(error),
-          });
-      },
-    );
-  }
-
-  async function loadOnce(): Promise<boolean> {
-    try {
-      await embedder.load(files);
-      return true;
-    } catch (error) {
-      fail({ kind: "load", message: error instanceof Error ? error.message : String(error) });
-      return false;
-    }
-  }
+    folder: definition.folder,
+    files: definition.files,
+    maxTokens: definition.maxTokens,
+    source: options.source ?? definition.source,
+    dataDir: options.dataDir,
+    loadRunner: (paths) => embedder.load(paths),
+    emitStatus: options.emitStatus,
+    reportError: options.reportError,
+  });
 
   async function vectorOf(text: string): Promise<Float32Array> {
     const vector = await embedder.embed(text);
@@ -171,26 +94,12 @@ export function createEmbeddingModel(options: EmbeddingModelOptions): EmbeddingM
   return {
     id: definition.id,
     dimensions: definition.dimensions,
-    status: () => status,
-    isReady: () => status.state === "ready",
-    ensure() {
-      const { state, error } = status;
-      if (state === "not-downloaded" || (state === "failed" && error?.kind !== "load")) start();
-    },
-    retry() {
-      if (status.state !== "ready" && status.state !== "downloading") start();
-      return status;
-    },
-    onReady(listener) {
-      readyListeners.add(listener);
-    },
-    load() {
-      if (status.state !== "ready") return Promise.resolve(false);
-      loading ??= loadOnce().finally(() => {
-        loading = undefined;
-      });
-      return loading;
-    },
+    status: files.status,
+    isReady: files.isReady,
+    ensure: files.ensure,
+    retry: files.retry,
+    onReady: files.onReady,
+    load: files.load,
     embedPassage: (documentName, text) =>
       vectorOf(passageEmbeddingText(definition, documentName, text)),
     embedQuery: (query) => vectorOf(`${definition.queryPrefix}${normaliseText(query)}`),
@@ -198,8 +107,7 @@ export function createEmbeddingModel(options: EmbeddingModelOptions): EmbeddingM
       embedder.close();
     },
     close() {
-      lifetime.abort();
-      readyListeners.clear();
+      files.close();
       embedder.close();
     },
   };

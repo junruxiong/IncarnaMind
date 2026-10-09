@@ -1,53 +1,60 @@
 /**
- * Rerank (ADR-0005): with a Cohere or Voyage key, document search reranks its
- * hybrid candidates with the provider's reranking model before grouping them
- * (see ../documents/searchTool), through the AI SDK's `rerank` and the
- * official @ai-sdk/cohere and @ai-sdk/voyage providers. Without a key,
- * nothing changes.
- *
- * Its requests are the "rerank" data flow: the search query and the candidate
- * Passages, to the provider. Nothing is sent before the User accepts it; when
- * they decline, or a request fails, search keeps its own order. Local mode
- * pauses it. The settings are per device; the key is in the keychain, never
- * in SQLite.
+ * Rerank (ADR-0005): document search reranks its candidates before grouping
+ * them (see ../documents/searchTool):
+ * - "built-in", the default: the built-in reranking model, on this computer
+ *   (see ../reranking). Nothing is sent, so it needs no consent, and local
+ *   mode doesn't pause it. Its files are downloaded once, when the first
+ *   Documents are ready to search (or when the User chooses it); until they
+ *   are ready, search keeps its own order.
+ * - With a Cohere or Voyage key: the service's reranking model, through the
+ *   AI SDK's `rerank` and the official @ai-sdk/cohere and @ai-sdk/voyage
+ *   providers. Its requests are the "rerank" data flow: the search query and
+ *   the candidate Passages, to the service. Nothing is sent before the User
+ *   accepts it; when they decline, or a request fails, search keeps its own
+ *   order. Local mode pauses it.
+ * - Off, when the User turns it off: search keeps its own order.
+ * The settings are per device: nothing stored is the default, null is off.
+ * A key is in the keychain, never in SQLite.
  */
 import { createCohere } from "@ai-sdk/cohere";
 import { createVoyage } from "@ai-sdk/voyage";
-import { type RerankingModel, rerank } from "ai";
+import { type RerankingModel as AiSdkRerankingModel, rerank } from "ai";
 import {
   type ConnectionTestResult,
   DEFAULT_RERANK_MODELS,
   type ExternalService,
   type RerankProviderKind,
+  type RerankServiceKind,
   type RerankSettings,
   rerankProviderKinds,
 } from "../api";
 import type { Consent } from "../consent";
 import type { Reranker, SearchCandidate } from "../documents/searchTool";
 import { InvalidInputError, isRecord } from "../errors";
+import type { RerankingModel } from "../reranking";
 import type { Secrets } from "../secrets";
 import type { SettingsStore } from "../settings";
 import { classifyProviderError } from "./providerErrors";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
-export type ApiRerankingModel = Exclude<RerankingModel, string>;
+export type ApiRerankingModel = Exclude<AiSdkRerankingModel, string>;
 
 export interface RerankingModelSpec {
-  kind: RerankProviderKind;
+  kind: RerankServiceKind;
   apiKey: string;
   modelId: string;
 }
 
 export type RerankingModelFactory = (spec: RerankingModelSpec) => ApiRerankingModel;
 
-/** The AI SDK provider for each kind. */
+/** The AI SDK provider for each service. */
 export const createAiSdkRerankingModel: RerankingModelFactory = ({ kind, apiKey, modelId }) =>
   kind === "cohere"
     ? createCohere({ apiKey }).reranking(modelId)
     : createVoyage({ apiKey }).reranking(modelId);
 
-/** Where each provider's requests go. */
-const RERANK_SERVICES: Readonly<Record<RerankProviderKind, ExternalService>> = {
+/** Where each service's requests go. */
+const RERANK_SERVICES: Readonly<Record<RerankServiceKind, ExternalService>> = {
   cohere: { id: "https://api.cohere.com", name: "Cohere" },
   voyage: { id: "https://api.voyageai.com", name: "Voyage AI" },
 };
@@ -66,16 +73,25 @@ const TEST_TIMEOUT_MS = 30_000;
 const TEST_QUERY = "Which city is the capital of France?";
 const TEST_DOCUMENTS = ["Bananas are rich in potassium.", "Paris is the capital of France."];
 
-/** What is stored: a null model means the provider's default. */
+/** What is stored: a null model means the service's default (always null for "built-in"). */
 interface StoredRerank {
   kind: RerankProviderKind;
   modelId: string | null;
+  /** Nothing is stored: the default, not the User's choice. */
+  byDefault?: boolean;
 }
+
+/** Reranking on a device where the User hasn't chosen: the built-in model. */
+const DEFAULT_RERANK: StoredRerank = { kind: "built-in", modelId: null, byDefault: true };
 
 const isRerankKind = (value: unknown): value is RerankProviderKind =>
   rerankProviderKinds.some((kind) => kind === value);
 
+const isService = (kind: RerankProviderKind): kind is RerankServiceKind => kind !== "built-in";
+
+/** Nothing stored: the default. Null (the User turned it off), or anything else: off. */
 function parseStored(value: unknown): StoredRerank | null {
+  if (value === undefined) return DEFAULT_RERANK;
   if (!isRecord(value) || !isRerankKind(value.kind)) return null;
   return { kind: value.kind, modelId: typeof value.modelId === "string" ? value.modelId : null };
 }
@@ -111,18 +127,25 @@ export function createRerank(options: {
   secrets: Secrets;
   consent: Consent;
   createModel: RerankingModelFactory;
-  /** Local mode is on: nothing is reranked. */
+  /** The built-in reranking model: downloaded and run only once the User chooses it. */
+  builtIn: RerankingModel;
+  /** Local mode is on: nothing is sent to a reranking service. */
   localOnly(): boolean;
   /** Aborts requests when the core closes. */
   signal: AbortSignal;
   reportError?: (error: unknown) => void;
 }) {
-  const { settings, secrets, consent, createModel, signal } = options;
+  const { settings, secrets, consent, createModel, builtIn, signal } = options;
   const reportError = options.reportError ?? ((error) => console.error(error));
 
   const stored = () => parseStored(settings.readDeviceValue(SETTINGS_VALUE));
   const modelOf = (rerankSettings: StoredRerank) =>
-    rerankSettings.modelId ?? DEFAULT_RERANK_MODELS[rerankSettings.kind];
+    isService(rerankSettings.kind)
+      ? (rerankSettings.modelId ?? DEFAULT_RERANK_MODELS[rerankSettings.kind])
+      : builtIn.definition.name;
+  /** A service is set up while local mode is on. */
+  const pausedNow = (current: StoredRerank | null) =>
+    current !== null && isService(current.kind) && options.localOnly();
 
   const refuseInLocalMode = () => {
     if (options.localOnly()) {
@@ -137,36 +160,58 @@ export function createRerank(options: {
     sends: RERANK_FLOW_SENDS,
     async services() {
       const current = stored();
-      return current ? [RERANK_SERVICES[current.kind]] : [];
+      // The built-in model sends nothing: the flow stays on this computer.
+      return current && isService(current.kind) ? [RERANK_SERVICES[current.kind]] : [];
     },
   });
 
   const status = async (): Promise<RerankSettings> => {
     const current = stored();
+    const service = current && isService(current.kind) ? current.kind : null;
     return {
       enabled: current !== null,
       kind: current?.kind ?? null,
       modelId: current ? modelOf(current) : null,
-      hasApiKey: current !== null && (await secrets.tryGet(KEY_NAME)) !== null,
-      service: current ? RERANK_SERVICES[current.kind] : null,
-      paused: current !== null && options.localOnly(),
+      hasApiKey: service !== null && (await secrets.tryGet(KEY_NAME)) !== null,
+      service: service ? RERANK_SERVICES[service] : null,
+      paused: pausedNow(current),
+      byDefault: current?.byDefault === true,
+      model: builtIn.status(),
     };
   };
 
-  /**
-   * The document-search Tool's reranker: the candidates in the reranking
-   * model's order, scored by it. Unchanged, with nothing sent, while rerank
-   * isn't set up or is paused, and when the User declines or the request fails.
-   */
-  const reranker: Reranker = async (query, candidates, abortSignal) => {
-    const current = stored();
-    if (!current || options.localOnly() || candidates.length < 2) return [...candidates];
+  /** The built-in model's order; search's own while it isn't downloaded, or when it fails. */
+  const rerankBuiltIn: Reranker = async (query, candidates, abortSignal) => {
+    if (!builtIn.isReady()) {
+      builtIn.ensure();
+      return [...candidates];
+    }
+    try {
+      const ranked = await builtIn.rerank(query, candidates);
+      abortSignal?.throwIfAborted();
+      return ranked ?? [...candidates];
+    } catch (error) {
+      // The Answer was stopped: stop too.
+      if (abortSignal?.aborted) throw error;
+      if (!signal.aborted) reportError(error);
+      return [...candidates];
+    }
+  };
+
+  /** A service's order and scores; search's own when the User declines or the request fails. */
+  const rerankWithService = async (
+    kind: RerankServiceKind,
+    modelId: string,
+    query: string,
+    candidates: readonly SearchCandidate[],
+    abortSignal: AbortSignal | undefined,
+  ): Promise<SearchCandidate[]> => {
     const apiKey = await secrets.tryGet(KEY_NAME);
     if (!apiKey) return [...candidates];
     try {
-      await consent.ensure("rerank", RERANK_SERVICES[current.kind]);
+      await consent.ensure("rerank", RERANK_SERVICES[kind]);
       const { ranking } = await rerank({
-        model: createModel({ kind: current.kind, apiKey, modelId: modelOf(current) }),
+        model: createModel({ kind, apiKey, modelId }),
         documents: candidates.map(candidateText),
         query,
         topN: candidates.length,
@@ -196,14 +241,53 @@ export function createRerank(options: {
     }
   };
 
+  /**
+   * The document-search Tool's reranker: the candidates in the reranking
+   * model's order, scored by it. Unchanged, with nothing sent, while rerank
+   * isn't set up or is paused, while the built-in model isn't downloaded, and
+   * when the User declines or the request fails.
+   */
+  const reranker: Reranker = async (query, candidates, abortSignal) => {
+    const current = stored();
+    if (!current || pausedNow(current) || candidates.length < 2) return [...candidates];
+    if (!isService(current.kind)) return rerankBuiltIn(query, candidates, abortSignal);
+    return rerankWithService(current.kind, modelOf(current), query, candidates, abortSignal);
+  };
+
   return {
     status,
     reranker,
 
+    /** The reranker, while rerank is set up and not paused; undefined otherwise. */
+    active(): Reranker | undefined {
+      const current = stored();
+      return current && !pausedNow(current) ? reranker : undefined;
+    },
+
+    /** The built-in model is chosen: its download's progress is rerank's to report. */
+    usesBuiltIn: () => stored()?.kind === "built-in",
+
     /**
-     * Sets rerank up, or changes it, once the User has accepted the rerank
-     * flow to its service. The key is stored first: if the keychain refuses
-     * it, nothing changes.
+     * There are Documents to search: if the built-in model reranks them and
+     * isn't downloaded, its download starts (again, after a failed one), as
+     * the built-in embedding model's does when a Document needs it.
+     */
+    prepare(): void {
+      if (stored()?.kind === "built-in" && !builtIn.isReady()) builtIn.ensure();
+    },
+
+    /** Starts the built-in model's download, or tries it again after a failure. */
+    download(): Promise<RerankSettings> {
+      builtIn.retry();
+      return status();
+    },
+
+    /**
+     * Sets rerank up, or changes it. A service needs the User to accept the
+     * rerank flow to it first; its key is stored first, so if the keychain
+     * refuses it, nothing changes. The built-in model needs neither: its
+     * download starts (or starts again after a failure), and a service's key
+     * is forgotten.
      */
     async save(input: unknown): Promise<RerankSettings> {
       if (!isRecord(input)) throw new InvalidInputError("saveRerankSettings expects an object.");
@@ -213,6 +297,15 @@ export function createRerank(options: {
         }
       }
       const kind = parseKind(input.kind);
+      if (!isService(kind)) {
+        if (input.apiKey !== undefined || (input.modelId !== undefined && input.modelId !== null)) {
+          throw new InvalidInputError("The built-in reranking model takes no key or model name.");
+        }
+        settings.writeDeviceValue(SETTINGS_VALUE, { kind, modelId: null } satisfies StoredRerank);
+        await secrets.delete(KEY_NAME);
+        builtIn.retry();
+        return status();
+      }
       const apiKey = parseApiKey(input.apiKey);
       const saved = stored();
       const sameKind = saved?.kind === kind;
@@ -226,19 +319,22 @@ export function createRerank(options: {
       await consent.ensure("rerank", RERANK_SERVICES[kind]);
       if (apiKey !== undefined) await secrets.set(KEY_NAME, apiKey);
       settings.writeDeviceValue(SETTINGS_VALUE, { kind, modelId } satisfies StoredRerank);
+      // The built-in model, if it ran, isn't needed any more.
+      builtIn.unload();
       return status();
     },
 
-    /** Forgets rerank on this device: its settings, then its key. */
+    /** Forgets rerank on this device: its settings, then its key. The built-in model stops. */
     async remove(): Promise<RerankSettings> {
       settings.writeDeviceValue(SETTINGS_VALUE, null);
       await secrets.delete(KEY_NAME);
+      builtIn.unload();
       return status();
     },
 
     /**
-     * Reranks two fixed texts against a fixed query with the given settings,
-     * or the saved ones. The rerank flow must be accepted first.
+     * Reranks two fixed texts against a fixed query with the given service
+     * settings, or the saved ones. The rerank flow must be accepted first.
      */
     async test(input: unknown): Promise<ConnectionTestResult> {
       if (input !== undefined && !isRecord(input)) {
@@ -246,7 +342,7 @@ export function createRerank(options: {
       }
       const saved = stored();
       const kind = input?.kind === undefined ? saved?.kind : parseKind(input.kind);
-      if (!kind) throw new InvalidInputError("Choose Cohere or Voyage AI.");
+      if (!kind || !isService(kind)) throw new InvalidInputError("Choose Cohere or Voyage AI.");
       const sameKind = saved?.kind === kind;
       const modelId =
         input?.modelId === undefined

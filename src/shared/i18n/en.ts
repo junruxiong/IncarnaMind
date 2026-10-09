@@ -404,6 +404,9 @@ export const en = {
   "status.downloading": "Search model: {downloaded} of {total} MB",
   "status.downloadFailed": "Search model download failed",
   "status.modelFailed": "Search model couldn't start",
+  "status.rerankDownloading": "Reranking model: {downloaded} of {total} MB",
+  "status.rerankDownloadFailed": "Reranking model download failed",
+  "status.rerankModelFailed": "Reranking model couldn't start",
   "status.rebuilding": "Rebuilding search: {done} of {total}",
   "status.searchError": "Search can't use {provider}",
   "status.retry": "Retry",
@@ -478,20 +481,34 @@ export const en = {
 
   "rerank.settings.title": "Reranking",
   "rerank.settings.body":
-    "With a Cohere or Voyage AI key, document search reorders its best matches with a reranking model, so the most relevant Passages come first. Without a key, nothing changes.",
+    "Document search reorders its best matches with a reranking model, so the most relevant Passages come first. It is on by default, with the built-in model, which runs on this computer; Cohere and Voyage AI need a key. You can turn it off.",
   "rerank.settings.inUse": "{service} reranks search results ({model}).",
   "rerank.settings.sends": "Each search and the Passages it found are sent to {service}.",
+  "rerank.settings.builtInUse": "The built-in model reranks search results ({model}).",
+  "rerank.settings.builtInDefault":
+    "By default, the built-in model reranks search results ({model}).",
+  "rerank.settings.notDownloaded":
+    "It downloads once ({total} MB) when there are Documents to search. Until then, search keeps its own order.",
+  "rerank.settings.builtInNote": "Nothing leaves this computer. Each search takes a little longer.",
+  "rerank.settings.downloading":
+    "Downloading the reranking model: {downloaded} of {total} MB. Until it's ready, search keeps its own order.",
+  "rerank.settings.failed": "The reranking model couldn't be downloaded: {reason}.",
+  "rerank.settings.loadFailed": "The reranking model couldn't start on this computer.",
+  "rerank.settings.retry": "Try again",
   "rerank.settings.paused": "Paused: local mode keeps search results on this computer.",
   "rerank.settings.keyMissing":
     "No key for {service} can be read on this device, so nothing is reranked. Enter the key again.",
-  "rerank.settings.setUp": "Add a reranking key…",
+  "rerank.settings.setUp": "Set up reranking…",
   "rerank.settings.localOnly":
-    'Local mode is on: reranking would send search matches to Cohere or Voyage AI. Turn off "Keep everything on this computer" to set it up.',
+    "Local mode is on: Cohere and Voyage AI would receive search matches, so only the built-in model can be chosen.",
   "rerank.settings.change": "Change",
   "rerank.settings.remove": "Stop reranking",
+  "rerank.kind.built-in": "On this computer (built-in model)",
   "rerank.kind.cohere": "Cohere",
   "rerank.kind.voyage": "Voyage AI",
-  "rerank.form.label": "Reranking service",
+  "rerank.form.label": "Rerank with",
+  "rerank.form.builtInNote":
+    "Downloads {model} ({size} MB) once. Your searches and Documents stay on this computer.",
   "rerank.form.model": "Model (optional)",
   "rerank.form.save": "Use for reranking",
 
@@ -761,6 +778,9 @@ export const en = {
   "privacy.traffic.embedding-model": "Search model download",
   "privacy.traffic.embedding-model.description":
     "The built-in search model is downloaded once, the first time a Document needs it.",
+  "privacy.traffic.reranking-model": "Reranking model download",
+  "privacy.traffic.reranking-model.description":
+    "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",

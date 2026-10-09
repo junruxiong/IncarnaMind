@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
+import { rerankingModelStatus } from "../rerankStatus";
 import { useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
@@ -207,11 +208,28 @@ function useStatuses(): Status[] {
     }),
   );
   const retryDownload = useAppStore((state) => state.downloadEmbeddingModel);
+  const rerank = useAppStore((state) => state.rerank);
+  const retryRerankingDownload = useAppStore((state) => state.downloadRerankingModel);
   const retryEmbedding = useAppStore((state) => state.retryEmbedding);
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
   const statuses: Status[] = [];
+  // The built-in reranking model, on by default, downloads once there are Documents to search.
+  const rerankingStatus = rerankingModelStatus(rerank, t);
+  const reranking: Status | null = rerankingStatus && {
+    testId: rerankingStatus.testId,
+    tone: rerankingStatus.tone,
+    short: rerankingStatus.short,
+    full: rerankingStatus.full,
+    ...(rerankingStatus.retry && {
+      action: {
+        label: t("status.retry"),
+        testId: "reranking-model-retry",
+        run: () => void retryRerankingDownload(),
+      },
+    }),
+  };
 
   if (model?.state === "failed" && model.error) {
     const { kind, message } = model.error;
@@ -231,6 +249,8 @@ function useStatuses(): Status[] {
       },
     });
   }
+
+  if (reranking?.tone === "error") statuses.push(reranking);
 
   if (embedding?.error) {
     const provider = embeddingProviderLabel(embedding.provider, t);
@@ -296,6 +316,8 @@ function useStatuses(): Status[] {
       full: `${t("embedding.model.downloading", { downloaded, total })}\n${t("embedding.model.note")}`,
     });
   }
+
+  if (reranking?.tone === "progress") statuses.push(reranking);
 
   const rebuild = embedding?.rebuild;
   if (rebuild) {
