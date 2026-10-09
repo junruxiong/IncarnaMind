@@ -68,6 +68,38 @@ export function citedTextKept(
   });
 }
 
+type LiveDocument = Pick<Document, "id" | "contentHash">;
+
+/** A list of Documents by ID and by content: the first in the list with each. */
+interface DocumentIndex {
+  byId: ReadonlyMap<string, LiveDocument>;
+  byContent: ReadonlyMap<string, LiveDocument>;
+}
+
+/**
+ * Each list of Documents indexed once, by the list: a Mind looks up a
+ * Document for every Citation it shows, often, and a list is replaced, never
+ * changed in place, when the Documents change.
+ */
+const indexes = new WeakMap<readonly LiveDocument[], DocumentIndex>();
+
+function indexOf(documents: readonly LiveDocument[]): DocumentIndex {
+  let index = indexes.get(documents);
+  if (!index) {
+    const byId = new Map<string, LiveDocument>();
+    const byContent = new Map<string, LiveDocument>();
+    for (const document of documents) {
+      if (!byId.has(document.id)) byId.set(document.id, document);
+      if (document.contentHash && !byContent.has(document.contentHash)) {
+        byContent.set(document.contentHash, document);
+      }
+    }
+    index = { byId, byContent };
+    indexes.set(documents, index);
+  }
+  return index;
+}
+
 /**
  * The badge state of a Citation, given the User's live Documents (null while
  * they are loading) and the text kept of Documents unlinked with their Linked
@@ -78,18 +110,17 @@ export function citedTextKept(
  */
 export function citationState(
   attributes: Partial<CitationAttributes>,
-  documents: readonly Pick<Document, "id" | "contentHash">[] | null,
+  documents: readonly LiveDocument[] | null,
   kept: readonly KeptCitationText[] = [],
 ): CitationState {
   const check = attributes.check ?? "checking";
   const reason = attributes.checkReason ?? null;
   const own = attributes.documentId ?? null;
   if (documents === null) return { check, reason, documentId: own, changedAfterCited: false };
+  const { byId, byContent } = indexOf(documents);
   const live =
-    documents.find((document) => document.id === own) ??
-    (attributes.contentHash
-      ? documents.find((document) => document.contentHash === attributes.contentHash)
-      : undefined);
+    (own === null ? undefined : byId.get(own)) ??
+    (attributes.contentHash ? byContent.get(attributes.contentHash) : undefined);
   const changedAfterCited =
     live !== undefined &&
     typeof attributes.contentHash === "string" &&
