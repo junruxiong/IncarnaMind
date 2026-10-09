@@ -1,16 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { Document } from "../../../core/api";
 import { citedTextKept } from "../../../shared/citations";
 import { useT } from "../i18n";
 import { useAppStore, type ViewerTarget } from "../store";
-import { DocxView } from "../viewer/DocxView";
-import { PdfView } from "../viewer/PdfView";
 import { type PlaceMemory, PlaceMemoryContext, type ViewPlace } from "../viewer/place";
-import { SheetView } from "../viewer/SheetView";
-import { SlidesView } from "../viewer/SlidesView";
-import { TextView } from "../viewer/TextView";
 import { type ViewerFrame, ViewerFrameContext, ViewerHeader } from "../viewer/ViewerHeader";
 import { DocumentRemoved, ViewerMessage } from "../viewer/ViewerMessage";
+
+// Each kind's view loads the first time a Document of that kind opens, with its libraries
+// (pdf.js, docx-preview, JSZip, the Office formats), rather than with the app.
+const PdfView = lazy(() => import("../viewer/PdfView").then((m) => ({ default: m.PdfView })));
+const TextView = lazy(() => import("../viewer/TextView").then((m) => ({ default: m.TextView })));
+const DocxView = lazy(() => import("../viewer/DocxView").then((m) => ({ default: m.DocxView })));
+const SlidesView = lazy(() =>
+  import("../viewer/SlidesView").then((m) => ({ default: m.SlidesView })),
+);
+const SheetView = lazy(() => import("../viewer/SheetView").then((m) => ({ default: m.SheetView })));
 
 /**
  * What the viewer shows of a Document's file, as a key that changes when
@@ -132,8 +137,11 @@ export function ViewerPanel({ width, onClose }: { width: number; onClose(): void
               <DocumentRemoved quote={target.quote} unlinked={unlinked} />
             </>
           ) : (
-            // Keyed, so another Document, or a new read of its file, starts afresh.
-            <DocumentView key={fileKey} document={document} target={target} />
+            // While its view loads, the header alone: the page comes a moment later.
+            <Suspense fallback={<ViewerHeader />}>
+              {/* Keyed, so another Document, or a new read of its file, starts afresh. */}
+              <DocumentView key={fileKey} document={document} target={target} />
+            </Suspense>
           )}
         </PlaceMemoryContext.Provider>
       </ViewerFrameContext.Provider>

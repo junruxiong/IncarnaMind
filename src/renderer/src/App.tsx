@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { LibraryPane } from "./components/LibraryPane";
@@ -41,7 +42,8 @@ export function App() {
     document.documentElement.lang = language;
   }, [language]);
 
-  if (status.kind === "loading") return null;
+  // The frame shows at once; the data fills it in as it arrives.
+  if (status.kind === "loading") return <AppShell />;
   if (status.kind === "failed") {
     return (
       <p role="alert" className="p-6 text-ui text-danger">
@@ -92,6 +94,7 @@ function Workspace() {
   const openSettings = useAppStore((state) => state.openSettings);
   useDevViewerShortcut();
   useMenuCommands();
+  useRememberSidebarWidth(device?.sidebarWidth);
 
   if (!device) return null;
   const { sidebarWidth } = device;
