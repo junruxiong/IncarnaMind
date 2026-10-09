@@ -4,6 +4,7 @@ import {
   type ToggleEvent,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,13 +21,21 @@ import { buttonStyle, errorTextClass, hintClass, inputClass, menuRuleClass } fro
 const GAP_PX = 4;
 const EDGE_PX = 8;
 
-/** Below its button, or above it if the window is too short; kept inside the window. */
+/**
+ * Below its button, or above it if the window is too short; kept inside the
+ * window. A popover not showing yet has no size, so it is laid out for a
+ * moment to measure it as it will show (as `usePopoverMenu` does).
+ */
 function place(button: HTMLElement | null, popover: HTMLElement | null): void {
   const anchor = button?.getBoundingClientRect();
   if (!anchor || !popover) return;
-  popover.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - popover.offsetWidth - EDGE_PX))}px`;
-  const below = anchor.bottom + GAP_PX;
+  const hidden = !popover.matches(":popover-open");
+  if (hidden) popover.style.display = "block";
+  const width = popover.offsetWidth;
   const height = popover.offsetHeight;
+  if (hidden) popover.style.removeProperty("display");
+  popover.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX))}px`;
+  const below = anchor.bottom + GAP_PX;
   popover.style.top =
     below + height > window.innerHeight - EDGE_PX
       ? `${Math.max(EDGE_PX, anchor.top - GAP_PX - height)}px`
@@ -48,10 +57,12 @@ export function useTagPopover() {
   const popover = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open || !popover.current?.matches(":popover-open")) return;
+  // Once rendered with the picker, and before it is drawn: placed, so it shows where it
+  // belongs from the first frame. It takes the focus once it shows (here or on `toggle`).
+  useLayoutEffect(() => {
+    if (!open) return;
     place(button.current, popover.current);
-    focusFieldIn(popover.current);
+    if (popover.current?.matches(":popover-open")) focusFieldIn(popover.current);
   }, [open]);
 
   return {
@@ -73,13 +84,11 @@ export function useTagPopover() {
       id,
       popover: "auto" as const,
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState === "open") place(button.current, popover.current);
         setOpen(event.newState === "open");
       },
+      // Now it shows, where it was placed: it can take the focus.
       onToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState !== "open") return;
-        place(button.current, popover.current);
-        focusFieldIn(popover.current);
+        if (event.newState === "open") focusFieldIn(popover.current);
       },
       onKeyDown: (event: KeyboardEvent) => {
         if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -185,9 +194,9 @@ export function TagPicker({
   const names = documents.map((document) => document.name).join(", ");
   const current = Math.min(active, options.length - 1);
 
-  // The list's length changes the popover's height: place it again.
+  // The list's length changes the popover's height: place it again, before it is drawn.
   // biome-ignore lint/correctness/useExhaustiveDependencies: placing follows the visible rows.
-  useEffect(() => onReposition?.(), [options.length, describing, applied.length, error]);
+  useLayoutEffect(() => onReposition?.(), [options.length, describing, applied.length, error]);
 
   // Back from describing a new Tag (created or not): the field has the keys again.
   useEffect(() => {
