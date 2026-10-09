@@ -7,7 +7,7 @@
  */
 import type { ChildProcess } from "node:child_process";
 import type { AnswerEngine } from "./answers/engine";
-import type { SecretProtection } from "./api";
+import type { SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { WatchFolder } from "./documents/watcher";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
@@ -158,15 +158,8 @@ export interface ProcessLauncher {
   spawn(command: string, args: readonly string[], options?: SpawnOptions): Promise<ChildProcess>;
 }
 
-/**
- * How the programs an `Executor` runs are confined:
- * - "none": not at all; they run as the User, as Skill scripts do in v1.
- * - "os": in the OS sandbox (macOS Seatbelt, Linux bubblewrap), with only
- *   what each request allows.
- * - "container": in a container or virtual machine on this computer.
- * - "remote": on another machine (the hosted version).
- */
-export type SandboxLevel = "none" | "os" | "container" | "remote";
+/** How the programs an `Executor` runs are confined (see `SandboxLevel` in ./api, where the UI reads it). */
+export type { SandboxLevel } from "./api";
 
 /**
  * A folder an `ExecRequest` allows: an absolute path, or the run's own

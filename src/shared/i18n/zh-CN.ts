@@ -943,6 +943,8 @@ export const zhCN = {
   "scripts.settings.enabled": "允许技能运行它们的脚本",
   "scripts.settings.body":
     "脚本在这台电脑上运行，没有沙盒。每次运行前都会先问你，除非你为该技能选择了“始终运行”。关闭后，任何技能脚本都不会运行。",
+  "scripts.settings.bodySandboxed":
+    "脚本在这台电脑上的沙盒中运行：它们打不开你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。每次运行前都会先问你，除非你为该技能选择了“始终运行”。关闭后，任何技能脚本都不会运行。",
   "scripts.settings.timeout": "脚本运行超过此时长即停止：",
   "scripts.settings.seconds": "秒",
   "scripts.card.title": "{skill} 想运行 {script}",
@@ -953,6 +955,8 @@ export const zhCN = {
   "scripts.card.noArgs": "没有参数。",
   "scripts.card.noSandbox":
     "脚本在这台电脑上运行，没有沙盒：它可以像你一样读取、修改或删除你的文件，也可以访问互联网。在你做出选择之前，什么都不会运行。",
+  "scripts.card.sandboxed":
+    "这个脚本在沙盒中运行：它打不开你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。在你做出选择之前，什么都不会运行。",
   "scripts.card.allowOnce": "允许一次",
   "scripts.card.alwaysRun": "始终运行",
   "scripts.card.alwaysRunHint":
@@ -961,6 +965,8 @@ export const zhCN = {
   "scripts.alwaysRun.title": "始终运行 {skill} 的脚本？",
   "scripts.alwaysRun.body":
     "从现在起，只要回答需要，{skill} 的每个脚本都会直接运行，不再询问你。脚本没有沙盒：它们可以读取、修改或删除你的文件，安装软件，并通过互联网发送你的数据。只对你完全信任的技能这样做。你可以在“设置”的“批准”中撤销。",
+  "scripts.alwaysRun.bodySandboxed":
+    "从现在起，只要回答需要，{skill} 的每个脚本都会直接运行，不再询问你。脚本在沙盒中运行：它们打不开你的个人文件夹和 IncarnaMind 的数据，只能写入自己的工作文件夹，也不能访问互联网。但它们仍能读取这台电脑上其他位置的文件，例如外接硬盘上的文件。只对你信任的技能这样做。你可以在“设置”的“批准”中撤销。",
   "scripts.alwaysRun.confirm": "始终运行 {skill} 的脚本",
   "scripts.alwaysRun.cancel": "取消",
   "scripts.call.waiting": "等待你的批准：{script}（{skill}）",

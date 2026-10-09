@@ -456,11 +456,28 @@ export interface DeviceSettings {
   skillScriptTimeoutSeconds: number;
 }
 
+/**
+ * How the programs Tools start (Skill scripts) are confined:
+ * - "none": not at all; they run as the User, with the User's permissions
+ *   (Windows; Linux without bubblewrap).
+ * - "os": in the OS sandbox (macOS Seatbelt, Linux bubblewrap): they can't
+ *   read the User's home or IncarnaMind's data folder, write only their
+ *   working folder, and have no network.
+ * - "container": in a container or virtual machine on this computer.
+ * - "remote": on another machine (the hosted version).
+ */
+export type SandboxLevel = "none" | "os" | "container" | "remote";
+
 export interface Settings {
   user: UserSettings;
   device: DeviceSettings;
   /** The interface language in effect: the User's choice, or the OS language for "system". */
   language: Language;
+  /**
+   * How Skill scripts run on this device, found out when the app starts: not
+   * a setting. The approval card and Settings say what a script can reach by it.
+   */
+  scriptSandbox: SandboxLevel;
 }
 
 export interface SettingsPatch {
