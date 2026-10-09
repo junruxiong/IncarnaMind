@@ -2,8 +2,8 @@
 
 How well Organize files each Document in the right Folder with the right Tags, on the 80-Document set described in [README.md](README.md), before and after the changes tuned on its tuning half. Measured on an Apple M2 Max (32 GiB) with Ollama 0.40.0: Tev1 4B `4d24c6f6d61a`, Tev1 0.8B `d6e7bb9bfe0f`, Clef-Flash `0a2a05d6a581`. Folders and Tags are the app's English starter Folders and preset Tags.
 
-- **Before:** commit `19f78b6`, the classifier as it was, with the benchmark and the set added.
-- **After:** commit `2395b42`.
+- **Before:** commit `b40994b`, the classifier as it was, with the benchmark and the set added.
+- **After:** commit `4fe33f8`.
 
 The connected-chat-model route wasn't run here: it needs the User's model and key (see "The chat route" below).
 
@@ -74,7 +74,7 @@ Each local route waited until no other model was loaded, stopped its models afte
 Not run here: it needs a model and a key. To measure it before and after, run on both commits:
 
 ```sh
-git checkout 19f78b6   # before
+git checkout b40994b   # before
 INCARNAMIND_ORGANIZE_ROUTES=chat INCARNAMIND_EVAL_CHAT_KIND=anthropic \
 INCARNAMIND_EVAL_CHAT_MODEL=<model id> INCARNAMIND_EVAL_CHAT_KEY=<key> npm run eval:organize
 git checkout feat/tags-quality-ui   # after
