@@ -1,6 +1,6 @@
-import { Extension } from "@tiptap/core";
+import { Extension, getChangedRanges } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { BLOCK_ID_ATTRIBUTE, CITATION_NODE, type CitationAttributes } from "../../../core/api";
 
@@ -39,6 +39,41 @@ export function numberCitations(doc: ProseMirrorNode): NumberedCitation[] {
   return citations;
 }
 
+const citationsIn = (textBlock: ProseMirrorNode) => {
+  const found: ProseMirrorNode[] = [];
+  textBlock.forEach((child) => {
+    if (child.type.name === CITATION_NODE) found.push(child);
+  });
+  return found;
+};
+
+/**
+ * Where the text block is (its position before it, after the change) when a
+ * change edits only inside one text block and leaves its Citations as they
+ * were, as typing does; null for any other change. Such a change renumbers no
+ * Citation, and moves those outside the block only along the document: on
+ * screen too, unless the block grows or shrinks.
+ */
+export function textBlockEdited(tr: Transaction): number | null {
+  if (!tr.docChanged) return null;
+  const changes = getChangedRanges(tr);
+  const [change] = changes;
+  if (!change || changes.length > 1) return null;
+  const within = (doc: ProseMirrorNode, { from, to }: { from: number; to: number }) => {
+    const $from = doc.resolve(from);
+    return $from.depth > 0 && $from.parent.isTextblock && to <= $from.end() ? $from : null;
+  };
+  const before = within(tr.before, change.oldRange);
+  const after = within(tr.doc, change.newRange);
+  if (!before || !after) return null;
+  // An edit beside a Citation keeps the very node; one added, removed or replaced doesn't.
+  const were = citationsIn(before.parent);
+  const are = citationsIn(after.parent);
+  return were.length === are.length && were.every((node, index) => node === are[index])
+    ? after.before()
+    : null;
+}
+
 /**
  * The attribute a Citation's number is drawn in. It is part of the
  * decoration's attributes, not just its spec, so renumbering counts as a
@@ -55,12 +90,19 @@ export function citationNumberOf(decorations: readonly Decoration[]): number {
   return 0;
 }
 
-const numbersKey = new PluginKey<DecorationSet>("citationNumbers");
+/** The Citations of a document, numbered, and their numbers as decorations. */
+interface Numbers {
+  citations: readonly NumberedCitation[];
+  decorations: DecorationSet;
+}
 
-function decorate(doc: ProseMirrorNode): DecorationSet {
-  return DecorationSet.create(
+const numbersKey = new PluginKey<Numbers>("citationNumbers");
+
+function numbersOf(doc: ProseMirrorNode): Numbers {
+  const citations = numberCitations(doc);
+  const decorations = DecorationSet.create(
     doc,
-    numberCitations(doc).map(({ pos, number }) => {
+    citations.map(({ pos, number }) => {
       const size = doc.nodeAt(pos)?.nodeSize ?? 1;
       return Decoration.node(
         pos,
@@ -70,6 +112,38 @@ function decorate(doc: ProseMirrorNode): DecorationSet {
       );
     }),
   );
+  return { citations, decorations };
+}
+
+/**
+ * The editor's Citations, numbered (see `numberCitations`), as of its last
+ * change: worked out once per change, for every view of them. Empty without
+ * `CitationNumbers`.
+ */
+export function numberedCitations(state: EditorState): readonly NumberedCitation[] {
+  return numbersKey.getState(state)?.citations ?? [];
+}
+
+/** The plugin behind `CitationNumbers`, which keeps the numbers in the editor's state. */
+export function citationNumbersPlugin(): Plugin<Numbers> {
+  return new Plugin<Numbers>({
+    key: numbersKey,
+    state: {
+      init: (_config, state) => numbersOf(state.doc),
+      apply: (tr, numbers) => {
+        if (!tr.docChanged) return numbers;
+        if (textBlockEdited(tr) === null) return numbersOf(tr.doc);
+        // Typing: the Citations move along, numbered as they were.
+        return {
+          citations: numbers.citations.map((each) => ({ ...each, pos: tr.mapping.map(each.pos) })),
+          decorations: numbers.decorations.map(tr.mapping, tr.doc),
+        };
+      },
+    },
+    props: {
+      decorations: (state) => numbersKey.getState(state)?.decorations,
+    },
+  });
 }
 
 /**
@@ -81,17 +155,6 @@ export const CitationNumbers = Extension.create({
   name: "citationNumbers",
 
   addProseMirrorPlugins() {
-    return [
-      new Plugin<DecorationSet>({
-        key: numbersKey,
-        state: {
-          init: (_config, state) => decorate(state.doc),
-          apply: (tr, numbers) => (tr.docChanged ? decorate(tr.doc) : numbers),
-        },
-        props: {
-          decorations: (state) => numbersKey.getState(state),
-        },
-      }),
-    ];
+    return [citationNumbersPlugin()];
   },
 });

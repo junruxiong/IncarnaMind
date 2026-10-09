@@ -46,15 +46,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
       className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
     >
-      <header
-        data-testid="sidebar-header"
-        // The start of the window's title bar: macOS's traffic lights sit here, in
-        // place of the app's mark (styles.css, "The title bar"). Its rule is inset
-        // 8px each side, like the rows: it never meets the sidebar's edge.
-        className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-4 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
-      >
-        <AppMark />
-      </header>
+      <SidebarHeader />
 
       <div
         data-testid="sidebar-tree"
@@ -115,6 +107,23 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
       </footer>
       <DeleteMindDialog mind={confirmingDelete} onClose={() => setConfirmingDelete(null)} />
     </aside>
+  );
+}
+
+/**
+ * The sidebar's 44px header, the start of the window's title bar: macOS's
+ * traffic lights sit here, in place of the app's mark (styles.css, "The title
+ * bar"). The startup shell draws it too.
+ */
+export function SidebarHeader() {
+  return (
+    <header
+      data-testid="sidebar-header"
+      // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
+      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-4 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
+    >
+      <AppMark />
+    </header>
   );
 }
 
