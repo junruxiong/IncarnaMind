@@ -12,6 +12,7 @@ const tag = (name: string, description = ""): Tag => ({
   name,
   description,
   preset: false,
+  colour: "stone",
   createdAt: "",
   updatedAt: "",
 });

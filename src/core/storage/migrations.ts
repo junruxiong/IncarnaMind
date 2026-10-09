@@ -587,6 +587,36 @@ export const migrations: readonly Migration[] = [
     description: "Record the model and routing reason for Library classifications",
     sql: `ALTER TABLE document_groups ADD COLUMN classification_model TEXT;`,
   },
+  {
+    version: 27,
+    description: "Tag colours: presets their own, the User's Tags in turn through the palette",
+    // The palette is src/shared/tagColours.ts, in order; the preset colours are
+    // src/core/tags/presets.ts. Deleted Tags are coloured too, harmlessly.
+    sql: `
+      ALTER TABLE tags ADD COLUMN colour TEXT NOT NULL DEFAULT 'stone';
+      UPDATE tags SET colour = CASE preset
+        WHEN 'paper' THEN 'violet'
+        WHEN 'report' THEN 'petrol'
+        WHEN 'book' THEN 'brick'
+        WHEN 'contract' THEN 'indigo'
+        WHEN 'invoice' THEN 'rose'
+        WHEN 'slides' THEN 'orchid'
+        WHEN 'notes' THEN 'taupe'
+        ELSE 'stone' END
+      WHERE preset IS NOT NULL;
+      UPDATE tags SET colour = (
+        SELECT CASE turn.n % 8
+          WHEN 0 THEN 'stone' WHEN 1 THEN 'taupe' WHEN 2 THEN 'brick' WHEN 3 THEN 'rose'
+          WHEN 4 THEN 'orchid' WHEN 5 THEN 'violet' WHEN 6 THEN 'indigo' ELSE 'petrol' END
+        FROM (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, rowid) - 1 AS n
+          FROM tags WHERE preset IS NULL
+        ) AS turn
+        WHERE turn.id = tags.id
+      )
+      WHERE preset IS NULL;
+    `,
+  },
 ];
 
 /**

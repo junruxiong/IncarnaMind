@@ -2,6 +2,7 @@ import { useLanguage, useT } from "../i18n";
 import type { FacetOption, FilterSelection, LibraryFacet } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
 import { CheckLineIcon, ChevronDownLineIcon } from "./lineIcons";
+import { TagSwatch } from "./TagColour";
 import { buttonStyle, menuClass, menuItemClass, menuTitleClass } from "./ui";
 import { usePopoverMenu } from "./usePopoverMenu";
 
@@ -126,6 +127,7 @@ function FilterMenu<T>({
                   <CheckLineIcon
                     className={`size-3.5 shrink-0 ${selected ? "text-ink" : "invisible"}`}
                   />
+                  {facet.colour?.(value) && <TagSwatch colour={facet.colour(value) ?? undefined} />}
                   <span className="min-w-0 flex-1 truncate">{name}</span>
                   <span
                     aria-hidden="true"
