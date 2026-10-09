@@ -10,6 +10,7 @@ import {
   type CitationOutcome,
   type CitationRecord,
   type CitationRun,
+  evalOllamaModels,
   outcomeOf,
   sentencesOf,
   summariseGroup,
@@ -50,7 +51,13 @@ import {
   scoreRanking,
   summarise,
 } from "../../eval/lib/retrieval";
-import { BUILT_IN_RERANKING_MODEL, type Core, RERANKING_MODEL_CANDIDATES } from "../../src/core";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type Core,
+  type OllamaModelProfile,
+  type OllamaModels,
+  RERANKING_MODEL_CANDIDATES,
+} from "../../src/core";
 
 const MARK = "\uE000";
 
@@ -346,6 +353,59 @@ describe("The evaluation's settings for reranking", () => {
   });
 });
 
+describe("The evaluation's settings for a model in Ollama", () => {
+  test("an Ollama run may set num_ctx and the citing mode; no other kind may", () => {
+    const ollama = {
+      INCARNAMIND_EVAL_CHAT_KIND: "ollama",
+      INCARNAMIND_EVAL_CHAT_MODEL: "qwen3.5:4b",
+    };
+    expect(readConfig("/repo", ollama).chat).toMatchObject({ numCtx: null, citing: null });
+    expect(
+      readConfig("/repo", {
+        ...ollama,
+        INCARNAMIND_EVAL_CHAT_NUM_CTX: "8192",
+        INCARNAMIND_EVAL_CHAT_CITING: "structured-output",
+      }).chat,
+    ).toMatchObject({ numCtx: 8192, citing: "structured-output" });
+    expect(() => readConfig("/repo", { ...ollama, INCARNAMIND_EVAL_CHAT_CITING: "json" })).toThrow(
+      /json/,
+    );
+    expect(() =>
+      readConfig("/repo", {
+        INCARNAMIND_EVAL_CHAT_KIND: "anthropic",
+        INCARNAMIND_EVAL_CHAT_MODEL: "a-model",
+        INCARNAMIND_EVAL_CHAT_KEY: "a-key",
+        INCARNAMIND_EVAL_CHAT_NUM_CTX: "8192",
+      }),
+    ).toThrow(/only apply to "ollama"/);
+  });
+
+  test("an Ollama run's window and citing mode replace the app's choice", async () => {
+    const profile: OllamaModelProfile = {
+      digest: "d1",
+      capabilities: ["completion", "tools"],
+      contextLength: 262_144,
+      support: "tools",
+      chat: true,
+      settings: { numCtx: 16_384, outputTokens: 4_096, keepAlive: "30m", think: false },
+    };
+    const app: OllamaModels = { describe: async () => profile, loaded: async () => true };
+    const chat = {
+      kind: "ollama" as const,
+      modelId: "qwen3.5:4b",
+      apiKey: null,
+      baseUrl: null,
+    };
+    expect(evalOllamaModels({ ...chat, numCtx: null, citing: null }, app)).toBeNull();
+    const models = evalOllamaModels({ ...chat, numCtx: 8_192, citing: "structured-output" }, app);
+    expect(await models?.describe("http://127.0.0.1:11434", "qwen3.5:4b")).toEqual({
+      ...profile,
+      support: "structured-output",
+      settings: { ...profile.settings, numCtx: 8_192, outputTokens: 2_048 },
+    });
+  });
+});
+
 const cited = (outcome: CitationOutcome, sentence = "A claim."): CitationRecord => ({
   sentence,
   quote: "a quote",
@@ -374,22 +434,32 @@ describe("A language's Citation figures", () => {
         citations: [cited("found")],
         sentences: [{ text: "A third.", cited: true }],
         droppedRecords: 2,
+        seconds: 4,
       }),
+      record({ sentences: [{ text: "Uncited.", cited: false }], seconds: 2 }),
     ]);
     expect(summary).toMatchObject({
-      answers: 2,
+      answers: 3,
       failedAnswers: 1,
+      citedAnswers: 2,
+      citedAnswerShare: 2 / 3,
+      medianSeconds: 2,
       citations: 4,
       foundShare: 0.75,
       falseNotFoundShare: 0.25,
-      sentences: 3,
+      sentences: 4,
       citedSentences: 2,
-      coverage: 2 / 3,
+      coverage: 2 / 4,
       droppedMarkers: 1,
       droppedRecords: 2,
-      citationSupport: { tools: 1, unknown: 1 },
+      citationSupport: { tools: 2, unknown: 1 },
     });
-    expect(summariseGroup([])).toMatchObject({ foundShare: null, coverage: null });
+    expect(summariseGroup([])).toMatchObject({
+      foundShare: null,
+      coverage: null,
+      citedAnswerShare: null,
+      medianSeconds: null,
+    });
   });
 });
 

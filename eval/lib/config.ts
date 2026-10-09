@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type ChatProviderKind,
+  type CitationSupport,
   chatProviderKinds,
   RERANKING_MODEL_CANDIDATES,
   type RerankingModelDefinition,
@@ -19,7 +20,20 @@ export interface ChatSettings {
   modelId: string;
   apiKey: string | null;
   baseUrl: string | null;
+  /**
+   * "ollama" only: the context window, `num_ctx`, every request carries
+   * instead of the one chosen from this computer's memory, so local runs are
+   * comparable (INCARNAMIND_EVAL_CHAT_NUM_CTX). Null: the app's choice.
+   */
+  numCtx: number | null;
+  /**
+   * "ollama" only: how the model cites instead of the app's rule, to compare
+   * citing modes (INCARNAMIND_EVAL_CHAT_CITING). Null: the app's rule.
+   */
+  citing: CitationSupport | null;
 }
+
+const citingModes: readonly CitationSupport[] = ["tools", "structured-output", "none"];
 
 const cloudEmbeddingKinds = ["openai", "google"] as const;
 export type CloudEmbeddingKind = (typeof cloudEmbeddingKinds)[number];
@@ -100,7 +114,19 @@ function chatSettings(env: Env): ChatSettings | null {
   if (found === "openai-compatible" && !baseUrl) {
     throw new Error(`Set ${PREFIX}CHAT_BASE_URL to the server's URL.`);
   }
-  return { kind: found, modelId, apiKey, baseUrl };
+  const numCtx =
+    value(env, "CHAT_NUM_CTX") === null ? null : positiveInteger(env, "CHAT_NUM_CTX", 1);
+  const citingValue = value(env, "CHAT_CITING");
+  const citing = citingModes.find((each) => each === citingValue) ?? null;
+  if (citingValue !== null && !citing) {
+    throw new Error(
+      `${PREFIX}CHAT_CITING must be one of ${citingModes.join(", ")}, not "${citingValue}".`,
+    );
+  }
+  if ((numCtx !== null || citing !== null) && found !== "ollama") {
+    throw new Error(`${PREFIX}CHAT_NUM_CTX and ${PREFIX}CHAT_CITING only apply to "ollama".`);
+  }
+  return { kind: found, modelId, apiKey, baseUrl, numCtx, citing };
 }
 
 function cloudEmbeddingSettings(env: Env): CloudEmbeddingSettings | null {

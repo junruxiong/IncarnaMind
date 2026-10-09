@@ -23,10 +23,13 @@ import {
   type CitationCheckReason,
   type CitationSupport,
   type Core,
+  createOllamaModels,
   MIND_CONTENT_FIELD,
+  type OllamaModels,
   type ProviderError,
   QUESTION_BLOCK,
 } from "../../src/core";
+import { outputTokensFor } from "../../src/core/providers/ollamaModels";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { normaliseText } from "../../src/shared/text";
 import type { ChatSettings, EvalConfig } from "./config";
@@ -108,6 +111,12 @@ export interface GroupSummary {
   answers: number;
   /** Answers that failed or timed out. */
   failedAnswers: number;
+  /** Answers with at least one Citation. */
+  citedAnswers: number;
+  /** Share of Answers with at least one Citation; null without Answers. */
+  citedAnswerShare: number | null;
+  /** The median time an Answer took, in seconds; null without Answers. */
+  medianSeconds: number | null;
   citations: number;
   outcomes: Record<CitationOutcome, number>;
   /** Share of Citations showing "Quote found"; null without Citations. */
@@ -130,6 +139,8 @@ export interface CitationRun {
   service: string | null;
   /** A cloud model gates; a model on this computer (Ollama) is only reported. */
   gating: boolean;
+  /** What the run set instead of the app's choice ("ollama" only), e.g. "num_ctx 8192"; empty for none. */
+  overrides: string[];
   minCitations: number;
   rounds: number;
   answers: AnswerRecord[];
@@ -240,6 +251,38 @@ export function outcomeOf(
     looseText(some.map((page) => page.text).join("\n")).includes(quote);
   if (onPages(cited)) return "false-not-found";
   return onPages(pages) ? "wrong-page" : "not-in-document";
+}
+
+/**
+ * "ollama" only: the app's lookup of models in Ollama, with the window and
+ * the citing mode the run asks for (`ChatSettings.numCtx` and `citing`)
+ * instead of the app's choice; the output cap follows the window, as in the
+ * app. Null when the run asks for neither.
+ */
+export function evalOllamaModels(
+  chat: ChatSettings | null,
+  models: OllamaModels = createOllamaModels(),
+): OllamaModels | null {
+  if (!chat || (chat.numCtx === null && chat.citing === null)) return null;
+  const { numCtx, citing } = chat;
+  return {
+    async describe(baseUrl, model) {
+      const profile = await models.describe(baseUrl, model);
+      if (!profile) return null;
+      return {
+        ...profile,
+        ...(citing !== null && { support: citing }),
+        ...(numCtx !== null && {
+          settings: {
+            ...profile.settings,
+            numCtx,
+            outputTokens: outputTokensFor(numCtx, profile.settings.think),
+          },
+        }),
+      };
+    },
+    loaded: (baseUrl, model, numCtx) => models.loaded(baseUrl, model, numCtx),
+  };
 }
 
 /** Writes a Question into the Mind, as the editor would store it, through the public interface. */
@@ -371,6 +414,15 @@ const groupOf = (answer: Pick<AnswerRecord, "crossLingual" | "language">): Citat
 
 const share = (part: number, whole: number) => (whole > 0 ? part / whole : null);
 
+function median(values: readonly number[]): number | null {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length === 0) return null;
+  return sorted.length % 2 === 1
+    ? (sorted[middle] as number)
+    : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
+}
+
 export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
   const citations = answers.flatMap((answer) => answer.citations);
   const outcomes = Object.fromEntries(CITATION_OUTCOMES.map((outcome) => [outcome, 0])) as Record<
@@ -380,6 +432,7 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
   for (const citation of citations) outcomes[citation.outcome]++;
   const sentences = answers.flatMap((answer) => answer.sentences);
   const cited = sentences.filter((sentence) => sentence.cited).length;
+  const citedAnswers = answers.filter((answer) => answer.citations.length > 0).length;
   const citationSupport: GroupSummary["citationSupport"] = {};
   for (const answer of answers) {
     const key = answer.citationSupport ?? "unknown";
@@ -390,6 +443,9 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
     failedAnswers: answers.filter(
       (answer) => answer.status === "failed" || answer.status === "timed-out",
     ).length,
+    citedAnswers,
+    citedAnswerShare: share(citedAnswers, answers.length),
+    medianSeconds: median(answers.map((answer) => answer.seconds)),
     citations: citations.length,
     outcomes,
     foundShare: share(outcomes.found, citations.length),
@@ -462,8 +518,12 @@ export async function runCitations(
     });
     const model = `${chat.kind}/${chat.modelId}`;
     const gating = provider.service !== null;
+    const overrides = [
+      ...(chat.numCtx !== null ? [`num_ctx ${chat.numCtx}`] : []),
+      ...(chat.citing !== null ? [`citing mode "${chat.citing}"`] : []),
+    ];
     log(
-      `Asking with ${model}${gating ? `, sent to ${provider.service?.name}` : " (local, not gating)"}`,
+      `Asking with ${model}${gating ? `, sent to ${provider.service?.name}` : " (local, not gating)"}${overrides.length > 0 ? `, ${overrides.join(", ")}` : ""}`,
     );
 
     const answers: AnswerRecord[] = [];
@@ -487,7 +547,7 @@ export async function runCitations(
         answers.push(answer);
         const found = answer.citations.filter((citation) => citation.outcome === "found").length;
         log(
-          `${question.id} (round ${round}): ${answer.status}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s`,
+          `${question.id} (round ${round}): ${answer.status}, ${answer.citationSupport ?? "unknown"}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s`,
         );
       }
     }
@@ -501,6 +561,7 @@ export async function runCitations(
       model,
       service: provider.service?.name ?? null,
       gating,
+      overrides,
       minCitations: config.minCitations,
       rounds,
       answers,
