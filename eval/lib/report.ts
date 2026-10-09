@@ -15,11 +15,13 @@ import {
   type GroupSummary,
 } from "./citations";
 import {
+  type CandidateCounts,
   GATING_MODE,
   type ModeResult,
   type ModeSummary,
   type QuestionResult,
   RANK_DEPTH,
+  RERANK_PER_LIST,
   type RetrievalMode,
   type RetrievalRun,
   SEARCH_MODES,
@@ -107,12 +109,16 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
   return lines;
 }
 
+/** How many Passages a reranker saw per search. */
+export const candidatesLine = (counts: CandidateCounts) =>
+  `Candidates per reranked search (keyword search's top ${counts.perList} and vector search's top ${counts.perList}, each Passage once): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches.`;
+
 /** What each reranking candidate costs: its download, and the time it adds to a search. */
 function rerankerTable(run: RetrievalRun): string[] {
   if (!run.rerankers?.length) return [];
   const ms = (value: number) => `${value.toFixed(0)} ms`;
   return [
-    "| Reranking model | Licence | Download | Per search (20 Passages): mean | median | 95th percentile | slowest | Loading |",
+    "| Reranking model | Licence | Download | Per search: mean | median | 95th percentile | slowest | Loading |",
     "|---|---|---|---|---|---|---|---|",
     ...run.rerankers.map(
       (each) =>
@@ -241,7 +247,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is ${GATING_MODE} search with the built-in model: at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). Cross-lingual Questions, cloud embedding models and reranked modes are reported only.`,
     "",
-    `- **Reranked modes** ("${GATING_MODE} + model"): ${GATING_MODE} search's top ${RANK_DEPTH}, reordered by a built-in reranking candidate, as the search Tool does when the User turns reranking on.`,
+    `- **Reranked modes** ("${GATING_MODE} + model"): what the search Tool hands a reranker when the User turns reranking on, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a built-in reranking candidate.`,
     "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
     "",
     ...retrievalTable(retrieval.runs),
@@ -255,7 +261,8 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
       ? [
           "### Reranking models",
           "",
-          `Time to rerank one search's top ${RANK_DEPTH} on this machine, one Passage at a time on a worker thread, after the first search (which loads the model).`,
+          ...(builtIn.rerankCandidates ? [candidatesLine(builtIn.rerankCandidates), ""] : []),
+          "Time to rerank one search's candidates on this machine, one Passage at a time on a worker thread, after the first search (which loads the model).",
           "",
           ...rerankerTable(builtIn),
           "",
@@ -369,6 +376,7 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
         `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}`,
       );
     }
+    if (run.rerankCandidates) lines.push(`    ${candidatesLine(run.rerankCandidates)}`);
     for (const each of run.rerankers ?? []) {
       lines.push(
         `    ${each.name}: ${(each.downloadBytes / 1e6).toFixed(0)} MB, ${each.latency.mean.toFixed(0)} ms per search on average (95th percentile ${each.latency.p95.toFixed(0)} ms)`,

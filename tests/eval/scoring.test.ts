@@ -38,14 +38,16 @@ import { readConfig } from "../../eval/lib/config";
 import { loadEvaluationSet } from "../../eval/lib/evaluationSet";
 import { reviewerSheet } from "../../eval/lib/report";
 import {
+  candidateCounts,
   checkPassage,
   isHit,
   modesOf,
   type QuestionResult,
+  rerankCandidates,
   scoreRanking,
   summarise,
 } from "../../eval/lib/retrieval";
-import { RERANKING_MODEL_CANDIDATES } from "../../src/core";
+import { type Core, RERANKING_MODEL_CANDIDATES } from "../../src/core";
 
 const MARK = "\uE000";
 
@@ -195,6 +197,61 @@ describe("Retrieval tallies", () => {
     expect(summarise([result("xl-01", { keyword: at(1) })]).keyword?.crossLingualTranslated).toBe(
       null,
     );
+  });
+});
+
+describe("What the reranked modes rerank", () => {
+  const passage = (id: string): PassageSearchResult => ({
+    passageId: id,
+    documentId: "doc-1",
+    documentName: "Tides",
+    pageFrom: 1,
+    pageTo: 1,
+    position: 0,
+    text: id,
+  });
+
+  test("keyword search's top 10 and vector search's top 10, each Passage once, as the search Tool hands them", async () => {
+    const asked: string[] = [];
+    const ranked = (prefix: string) =>
+      Array.from({ length: 12 }, (_, index) => passage(`${prefix}${index}`));
+    const core = {
+      searchPassages: async (_query: string, options: { mode: string; limit: number }) => {
+        asked.push(`${options.mode} ${options.limit}`);
+        // Both lists share k0 and k1; vector search adds 8 of its own in its top 10.
+        return options.mode === "keyword"
+          ? ranked("k").slice(0, options.limit)
+          : [passage("k1"), passage("k0"), ...ranked("v")].slice(0, options.limit);
+      },
+    } as unknown as Core;
+
+    const candidates = await rerankCandidates(core, "tides");
+
+    expect(asked.sort()).toEqual(["keyword 10", "vector 10"]);
+    expect(candidates.map((each) => each.passageId)).toEqual([
+      ...Array.from({ length: 10 }, (_, index) => `k${index}`),
+      ...Array.from({ length: 8 }, (_, index) => `v${index}`),
+    ]);
+  });
+
+  test("the report counts candidates per reranked search, the translated queries' too", () => {
+    const result = (rerank?: QuestionResult["rerankCandidates"]): QuestionResult => ({
+      id: "x",
+      language: "en",
+      crossLingual: false,
+      question: "x",
+      modes: {},
+      ...(rerank && { rerankCandidates: rerank }),
+    });
+
+    expect(candidateCounts([result()])).toBeNull();
+    expect(
+      candidateCounts([
+        result({ question: 12 }),
+        result({ question: 20, translated: 16 }),
+        result(),
+      ]),
+    ).toEqual({ perList: 10, searches: 3, mean: 16, min: 12, max: 20 });
   });
 });
 
