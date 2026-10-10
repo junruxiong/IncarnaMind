@@ -3,7 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test } from "vitest";
 import type { Citation, Core, CoreEvents } from "../../src/core";
-import { ANSWER_TEMPERATURE } from "../../src/core/answers/engine";
+import { ANSWER_TEMPERATURE, mergeSearches, searchLanguage } from "../../src/core/answers/engine";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   answerEnded,
@@ -1040,5 +1040,104 @@ describe("Citations in the Mind", { timeout: 30_000 }, () => {
     expect(promptOf(model, 0)[1]?.text).toBe(
       "Spring tides come at full moon[Tides, p. 2].\n\nIs that right?",
     );
+  });
+});
+
+describe("Searching across languages without Tools", { timeout: 30_000 }, () => {
+  const refusesTools = { status: 400, message: "tiny:latest does not support tools" };
+  /** The instructions of a request to translate a search query. */
+  const TRANSLATING = /You translate a query for searching the User's Documents/;
+
+  /** A model that can't call Tools: it answers in JSON, and translates queries with `translate`. */
+  const withoutTools = (translate: (call: GenerateCall) => GeneratedReply) =>
+    scriptedModel(
+      (call) =>
+        call.tools.length > 0
+          ? { error: refusesTools }
+          : { text: JSON.stringify({ answer: "At new and full moon.", citations: [] }) },
+      {
+        generate: (call) =>
+          TRANSLATING.test(call.system)
+            ? translate(call)
+            : { error: { status: 400, message: "This model doesn't tag Documents." } },
+      },
+    );
+
+  /** What the Answer's searches looked for, as their Tool-call cards show them. */
+  const searchesOf = (client: MindClient, answerId: string): unknown[] =>
+    (
+      JSON.parse(answerIn(client, answerId).attrs.toolCalls as string) as {
+        input: { query: unknown };
+      }[]
+    ).map((call) => call.input.query);
+
+  test("a Question in another language than the Documents is searched again, translated into theirs, by one short request", async () => {
+    const translations: string[] = [];
+    const model = withoutTools(({ prompt }) => {
+      translations.push(prompt);
+      return { text: "When do spring tides happen?" };
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "大潮在什么时候发生？");
+
+    expect(translations).toEqual(["Translate this query into English:\n大潮在什么时候发生？"]);
+    expect(searchesOf(client, answerId)).toEqual([
+      "大潮在什么时候发生？",
+      "When do spring tides happen?",
+    ]);
+    expect(promptOf(model, 1)[0]?.text).toContain(SPRING);
+  });
+
+  test("a Question in the Documents' language is searched once, with no translation", async () => {
+    const model = withoutTools(() => ({ text: "A translation that shouldn't be asked for" }));
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "When are the spring tides?");
+
+    expect(
+      model.doGenerateCalls.filter((call) => TRANSLATING.test(JSON.stringify(call.prompt))),
+    ).toHaveLength(0);
+    expect(searchesOf(client, answerId)).toEqual(["When are the spring tides?"]);
+  });
+
+  test("the language searched again is the Documents' most common one the Question isn't in", () => {
+    const english = { language: "English", documents: 7 };
+    const chinese = { language: "Chinese", documents: 5 };
+    expect(searchLanguage("大潮在什么时候发生？", [english])).toBe("English");
+    expect(searchLanguage("大潮在什么时候发生？", [chinese, english])).toBe("English");
+    expect(searchLanguage("What is the size of the data that is used?", [english])).toBeNull();
+    expect(searchLanguage("What is the size of the data that is used?", [english, chinese])).toBe(
+      "Chinese",
+    );
+    // Too short to tell it is English, but it can't be Chinese: it has no Chinese characters.
+    expect(searchLanguage("When are spring tides?", [english, chinese])).toBe("Chinese");
+    expect(
+      searchLanguage("When are spring tides?", [english, { language: "French", documents: 1 }]),
+    ).toBeNull();
+    expect(searchLanguage("When are spring tides?", [])).toBeNull();
+  });
+
+  test("two searches' Passages are given once each, ranked alternately so a small window keeps the best of each", () => {
+    const shown = (id: string) =>
+      `<passage id="${id}" document="Tides" pages="1">\nText ${id}\n</passage>`;
+    const merged = mergeSearches([
+      { text: [shown("P1"), shown("P2")].join("\n\n"), passageCount: 2, ranks: [1, 0] },
+      { text: [shown("P2"), shown("P3")].join("\n\n"), passageCount: 2, ranks: [0, 1] },
+    ]);
+    expect(merged).toEqual({
+      text: [shown("P1"), shown("P2"), shown("P3")].join("\n\n"),
+      passageCount: 3,
+      ranks: [2, 0, 3],
+    });
+    const none = {
+      text: "No Passages in the User's Documents match this search.",
+      passageCount: 0,
+    };
+    expect(mergeSearches([none, none])).toBe(none);
   });
 });

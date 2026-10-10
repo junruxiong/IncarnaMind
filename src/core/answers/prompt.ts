@@ -174,6 +174,23 @@ export const SEARCH_QUERY_INSTRUCTIONS = [
   "- Reply with the query alone, on one line. Don't answer the Question or explain.",
 ].join("\n");
 
+/**
+ * For a model that can't call Tools (or a small local one), before its second
+ * search: the query translated into a language some of the Documents are in,
+ * as the search Tool tells a model in the loop to search (see
+ * `searchLanguage` in ./engine).
+ */
+export const TRANSLATE_QUERY_INSTRUCTIONS = [
+  "You translate a query for searching the User's Documents into the language some of them are written in: search finds Passages best in their own language.",
+  "- Keep names, numbers and technical terms as Documents in that language would write them.",
+  "- Reply with the translated query alone, on one line. Don't answer it or explain.",
+].join("\n");
+
+/** The request to translate a search query into `language`. */
+export function translateQueryPrompt(query: string, language: string): string {
+  return `Translate this query into ${language}:\n${query}`;
+}
+
 /** The request to rewrite `question` into a search query, with the notebook text above it. */
 export function searchQueryPrompt(earlier: string, question: string): string {
   return [
