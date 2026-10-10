@@ -366,7 +366,8 @@ test("B0 startup breakdown: Electron's own baseline, and the main process's mark
   await close(firstRun);
   const marks: unknown[] = [];
   for (let i = 0; i < RUNS; i++) {
-    const out = join(tempDir("startup"), "startup.json");
+    const hookDir = tempDir("startup");
+    const out = join(hookDir, "startup.json");
     const { launched, result } = await (async () => {
       const l = await launch(dataDir, {
         extraArgs: ["-r", join(__dirname, "startup-hook.cjs")],
@@ -391,6 +392,7 @@ test("B0 startup breakdown: Electron's own baseline, and the main process's mark
     }
     marks.push({ ...result, hook });
     await close(launched);
+    removeDir(hookDir);
   }
   record("speed.startup.breakdown", marks);
   removeDir(dataDir);
