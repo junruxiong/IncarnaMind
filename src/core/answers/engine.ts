@@ -29,12 +29,16 @@
  * leave their markers out of its text: the engine then places them (see
  * ./markerPlacement).
  *
- * For a local model with a fixed context window, every request is kept
- * within it by IncarnaMind's own rules (see ./window), and one that can't fit
- * fails as "too-long"; nothing is left to the server to cut.
+ * For a model with a known context window (a local model's fixed one, or a
+ * cloud model's own from the catalog), every request is kept within it by
+ * IncarnaMind's own rules (see ./window), and one that can't fit fails as
+ * "too-long"; nothing is left to the server to cut.
  *
- * Answers are written at a low temperature (see `ANSWER_TEMPERATURE`), except
- * with models that reject one; a provider that refuses it gets the request
+ * What the model is known to do before the first request (see
+ * ../providers/capabilities) sets where this starts: how it cites, whether
+ * structured output is worth trying, whether it takes a temperature. Answers
+ * are written at a low temperature (see `ANSWER_TEMPERATURE`), except with
+ * models known not to take one; a provider that refuses it gets the request
  * again without, and that model gets none from then on. These retries, and
  * stepping down from Tools, are the Answer's: the Run engine only reports
  * what the provider refused.
@@ -232,11 +236,25 @@ export interface AnswerRequest {
   gate?(tool: Tool, call: GatedCall): Promise<GateDecision>;
   /** How this model is known to cite, from its capabilities or earlier Answers. Unknown: try Tools first. */
   support?: CitationSupport;
+  /** False: the model is known to give no structured output, so it isn't tried. */
+  structuredOutput?: boolean;
   /**
-   * A local model's context window: every request is kept within it (see
-   * ./window), and one that can't fit fails as "too-long". None for a cloud model.
+   * Whether the model takes a temperature (see ../providers/capabilities).
+   * False: it gets none. Unknown: it gets the Answer temperature, and none
+   * once its provider refuses it.
+   */
+  takesTemperature?: boolean;
+  /**
+   * The model's context window: every request is kept within it (see
+   * ./window), and one that can't fit fails as "too-long". None when it isn't
+   * known: requests are sent as they are.
    */
   window?: ContextWindow;
+  /**
+   * In structured output, ask the model once more for the quotes the check
+   * doesn't find (see ./quoteRetry): a local model, never a cloud one.
+   */
+  retryQuotes?: boolean;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
   signal: AbortSignal;
 }
@@ -306,29 +324,15 @@ const MAX_STEPS = 10;
  */
 export const ANSWER_TEMPERATURE = 0.2;
 
-/** The part of a model id after a provider's prefix ("openai/o3" → "o3"), lowercased. */
-const modelName = (modelId: string) => (modelId.split("/").at(-1) ?? "").toLowerCase();
-
 /**
- * The temperature to send `model`, or undefined for a model that rejects one
- * or should run at its default:
- * - OpenAI's reasoning models (o1, o3, o4-mini…, and GPT-5 and later, except
- *   their "chat" models) reject a temperature. The AI SDK's OpenAI provider
- *   leaves it out for them, but an OpenAI-compatible server passes it on.
- * - Google wants Gemini 3 and later run at their default: lower makes them
- *   loop or reason worse.
- * Claude models that reject one (Opus 4.7 and later…) are left to the AI
- * SDK's Anthropic provider, which leaves it out for them. A provider that
- * refuses it for any other model gets the request again without (`generate`).
+ * The temperature to send a model, or undefined for one known not to take
+ * one: OpenAI's reasoning models and Claude's newest reject it, and Google
+ * wants Gemini 3 run at its default (the catalog says which, see
+ * ../providers/catalog). A model whose provider refuses it anyway gets the
+ * request again without (`generate`).
  */
-export function answerTemperature(model: Pick<ChatLanguageModel, "modelId">): number | undefined {
-  const name = modelName(model.modelId);
-  if (/^o\d+(?:$|[-.])/.test(name)) return undefined;
-  const gpt = /^gpt-(\d+)/.exec(name);
-  if (gpt && Number(gpt[1]) >= 5 && !name.includes("chat")) return undefined;
-  const gemini = /^gemini-(\d+)/.exec(name);
-  if (gemini && Number(gemini[1]) >= 3) return undefined;
-  return ANSWER_TEMPERATURE;
+export function answerTemperature(takesTemperature: boolean | undefined): number | undefined {
+  return takesTemperature === false ? undefined : ANSWER_TEMPERATURE;
 }
 
 /** The provider refused this way of answering: try the next one. Internal to the engine. */
@@ -631,7 +635,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
       const { signal } = request;
       const modelKey = `${request.model.provider}\n${request.model.modelId}`;
       const temperature = () =>
-        refusedTemperature.has(modelKey) ? undefined : answerTemperature(request.model);
+        refusedTemperature.has(modelKey) ? undefined : answerTemperature(request.takesTemperature);
       const budget = request.window
         ? createWindowBudget(request.window, tokenFactors.get(modelKey), (factor) =>
             tokenFactors.set(modelKey, factor),
@@ -728,9 +732,10 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
             learn: (actual) => budget.learn(actual, fit.estimated),
           };
           // A local model's quotes the check doesn't find are asked for once more (see ./quoteRetry).
+          const retry = request.retryQuotes ? budget : undefined;
           yield* tempered((sent) =>
             mode === "structured-output"
-              ? structured(sized, instructions, sent, window, budget)
+              ? structured(sized, instructions, sent, window, retry)
               : plain(sized, instructions, sent, window),
           );
         });
@@ -806,8 +811,16 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         return searched;
       }
 
-      const order: CitationSupport[] = ["tools", "structured-output", "none"];
-      for (let mode = order.indexOf(request.support ?? "tools"); mode < order.length; mode++) {
+      // Structured output isn't tried for a model known to give none, unless it is where to start
+      // (an earlier Answer found it works).
+      const order = (["tools", "structured-output", "none"] as const).filter(
+        (each) =>
+          each !== "structured-output" ||
+          request.structuredOutput !== false ||
+          request.support === each,
+      );
+      const start = order.indexOf(request.support ?? "tools");
+      for (let mode = start; mode < order.length; mode++) {
         const support = order[mode] as CitationSupport;
         let attempt: FittedAttempt;
         try {

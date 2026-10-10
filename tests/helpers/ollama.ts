@@ -20,18 +20,28 @@ const readBody = (request: IncomingMessage) =>
 
 /**
  * A tiny local HTTP server that speaks just enough of Ollama's API:
- * `/api/tags` lists `models`, and `/api/pull` streams `pullLines` as
- * newline-delimited JSON, a few milliseconds apart. Stopped when the test finishes.
+ * `/api/tags` lists `models` (with their `capabilities`, as Ollama 0.40 does,
+ * where given), and `/api/pull` streams `pullLines` as newline-delimited
+ * JSON, a few milliseconds apart. Stopped when the test finishes.
  */
 export async function startOllamaStub(
-  options: { models?: string[]; pullLines?: object[] } = {},
+  options: {
+    models?: string[];
+    capabilities?: Record<string, string[]>;
+    pullLines?: object[];
+  } = {},
 ): Promise<OllamaStub> {
-  const { models = [], pullLines = [] } = options;
+  const { models = [], capabilities = {}, pullLines = [] } = options;
   const pulls: unknown[] = [];
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/api/tags") {
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
+      const listed = models.map((name) => ({
+        name,
+        model: name,
+        ...(capabilities[name] && { capabilities: capabilities[name] }),
+      }));
+      response.end(JSON.stringify({ models: listed }));
       return;
     }
     if (request.method === "POST" && request.url === "/api/pull") {
