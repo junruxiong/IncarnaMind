@@ -25,10 +25,11 @@
  * header set and body rules follow them; no code is copied from either.
  */
 import { createOpenAI } from "@ai-sdk/openai";
-import { APICallError, wrapLanguageModel } from "ai";
+import { APICallError } from "ai";
 import type { ChatGptPlanModel } from "../../api";
 import { isRecord } from "../../errors";
 import type { ChatLanguageModel } from "../models";
+import { withoutStorage } from "../responsesStore";
 import { ChatGptPlanError } from "./errors";
 
 /** The endpoint's base; the AI SDK appends `/responses`. */
@@ -356,18 +357,6 @@ export function createCodexChatModel(options: {
     apiKey: "chatgpt-sign-in",
     fetch: createCodexFetch(options.credentials, options.fetch),
   });
-  return wrapLanguageModel({
-    model: provider.responses(options.modelId),
-    middleware: {
-      specificationVersion: "v4",
-      // Nothing is stored at OpenAI, so earlier steps are sent in full rather than by reference.
-      transformParams: async ({ params }) => ({
-        ...params,
-        providerOptions: {
-          ...params.providerOptions,
-          openai: { ...params.providerOptions?.openai, store: false },
-        },
-      }),
-    },
-  });
+  // Nothing is stored at OpenAI, so earlier steps are sent in full rather than by reference.
+  return withoutStorage(provider.responses(options.modelId));
 }
