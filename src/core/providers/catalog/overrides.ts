@@ -3,14 +3,44 @@
  * what models.dev doesn't say or says too coarsely. A model's own entry wins
  * over its provider's. Each says why; tests check that every model named here
  * is in the generated facts.
+ *
+ * Keys are model sets: a provider's id, or "<provider>/<endpoint>" for a
+ * region whose models differ (see ./index). The sets whose source gives prices
+ * only in US dollars (the Chinese regions of providers that bill in yuan) have
+ * their yuan prices here, from the providers' own price pages.
  */
-import type { CatalogOverrides } from "./types";
+import type { CatalogOverrides, Price } from "./types";
+
+/** A price in yuan per million tokens. */
+const yuan = (input: number, output: number, cacheRead?: number, note?: Price["note"]): Price => ({
+  currency: "CNY",
+  input,
+  output,
+  ...(cacheRead !== undefined && { cacheRead }),
+  ...(note && { note }),
+});
+
+/** Kimi fixes its sampling (any other temperature is an error) and rejects a forced Tool choice. */
+const KIMI = { temperature: false, forcedToolChoice: false } as const;
+
+/** GLM takes JSON mode but no JSON schema, and only automatic Tool choice. */
+const GLM = { structuredOutput: "json_object", forcedToolChoice: false } as const;
 
 export const OVERRIDES: CatalogOverrides = {
   providers: {
     // Google asks for its Gemini 3 models to run at their default temperature: lower makes
     // them loop or reason worse. The 2.5 models retire on 2026-10-20.
     google: { temperature: false },
+    // DeepSeek takes JSON mode only (its prompt must say "json"), and answers 400 to a forced
+    // Tool choice while it thinks, which it does by default; then it ignores the temperature.
+    deepseek: { structuredOutput: "json_object", forcedToolChoice: false, temperature: false },
+    // Qwen thinks by default, and a forced Tool choice fails while it does.
+    qwen: { forcedToolChoice: false },
+    "qwen/intl": { forcedToolChoice: false },
+    kimi: KIMI,
+    "kimi/intl": KIMI,
+    glm: GLM,
+    "glm/intl": GLM,
   },
   models: {
     anthropic: {
@@ -45,6 +75,63 @@ export const OVERRIDES: CatalogOverrides = {
           note: { en: "From 2027-01-01: $1.50 / $7.50", zh: "2027-01-01 起：$1.50 / $7.50" },
         },
       },
+    },
+    mistral: {
+      // Strict JSON schema works on Mistral's current models (its docs); models.dev leaves this one out.
+      "mistral-small-2603": { structuredOutput: "json_schema" },
+    },
+    deepseek: {
+      // The peak price, from the Chinese price page; the rest of the day it is half.
+      "deepseek-flash": {
+        price: yuan(2, 8, 0.04, {
+          en: "Half outside weekdays 09:00–12:00 and 14:00–18:00 Beijing time: ¥1 / ¥4",
+          zh: "非北京时间工作日 9:00–12:00、14:00–18:00 的时段为半价：¥1 / ¥4",
+        }),
+      },
+      "deepseek-v4-pro": {
+        price: yuan(9, 27, 0.3, {
+          en: "Half outside weekdays 09:00–12:00 and 14:00–18:00 Beijing time: ¥4.5 / ¥13.5",
+          zh: "非北京时间工作日 9:00–12:00、14:00–18:00 的时段为半价：¥4.5 / ¥13.5",
+        }),
+      },
+    },
+    qwen: {
+      // Beijing, up to 32K input unless a note says otherwise (Alibaba Cloud's price page).
+      "qwen3.7-plus": {
+        structuredOutput: "json_schema",
+        price: yuan(2, 8, undefined, {
+          en: "Prompts over 256K tokens: ¥6 / ¥24",
+          zh: "提示超过 256K token：¥6 / ¥24",
+        }),
+      },
+      "qwen3.7-flash": {
+        price: yuan(0.2, 0.8, undefined, {
+          en: "Prompts over 32K tokens: ¥0.6 / ¥2.4; over 256K: ¥1.2 / ¥4.8",
+          zh: "提示超过 32K token：¥0.6 / ¥2.4；超过 256K：¥1.2 / ¥4.8",
+        }),
+      },
+      "qwen3.8-max": { price: yuan(12, 36) },
+      "qwen3.8-flash": { price: yuan(0.8, 2.7) },
+    },
+    kimi: {
+      "kimi-k2.6": { price: yuan(6.5, 27, 1.1) },
+      "kimi-k3": { price: yuan(20, 100, 2) },
+    },
+    glm: {
+      "glm-5.3": { price: yuan(8, 28) },
+      "glm-5.3-flash": { price: yuan(0.8, 2.8) },
+      // Free, text only.
+      "glm-4.7-flash": { price: yuan(0, 0) },
+    },
+    siliconflow: {
+      "deepseek-ai/DeepSeek-V4-Flash": {
+        price: yuan(3, 9, undefined, {
+          en: "From 02:00 to 08:00: ¥1.5 / ¥4.5",
+          zh: "凌晨 2 点至 8 点：¥1.5 / ¥4.5",
+        }),
+      },
+      // Free.
+      "Qwen/Qwen3-8B": { price: yuan(0, 0) },
     },
   },
 };

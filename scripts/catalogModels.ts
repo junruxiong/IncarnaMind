@@ -36,11 +36,29 @@ const MODELS_DEV_URL = "https://models.dev/api.json";
 const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 
-/** Each catalog provider's id at models.dev and at LiteLLM (`litellm_provider`). */
-const SOURCES: Record<string, { modelsDev: string; litellm: string }> = {
+/**
+ * Each model set's id at models.dev and at LiteLLM (`litellm_provider`). A set is a catalog
+ * provider's models, or, for a provider with regions whose model lists differ, one region's:
+ * the first endpoint's set is the provider's id, another's is "<provider>/<endpoint>" (see
+ * catalog/index). `prices: false` leaves the source's prices out: models.dev gives every
+ * price in US dollars, and a provider that bills in yuan has them in overrides.ts instead.
+ */
+const SOURCES: Record<string, { modelsDev: string; litellm: string; prices?: false }> = {
   anthropic: { modelsDev: "anthropic", litellm: "anthropic" },
   openai: { modelsDev: "openai", litellm: "openai" },
   google: { modelsDev: "google", litellm: "gemini" },
+  openrouter: { modelsDev: "openrouter", litellm: "openrouter" },
+  mistral: { modelsDev: "mistral", litellm: "mistral" },
+  xai: { modelsDev: "xai", litellm: "xai" },
+  deepseek: { modelsDev: "deepseek", litellm: "deepseek", prices: false },
+  qwen: { modelsDev: "alibaba-cn", litellm: "dashscope", prices: false },
+  "qwen/intl": { modelsDev: "alibaba", litellm: "dashscope" },
+  kimi: { modelsDev: "moonshotai-cn", litellm: "moonshot", prices: false },
+  "kimi/intl": { modelsDev: "moonshotai", litellm: "moonshot" },
+  glm: { modelsDev: "zhipuai", litellm: "zai", prices: false },
+  "glm/intl": { modelsDev: "zai", litellm: "zai" },
+  siliconflow: { modelsDev: "siliconflow-cn", litellm: "siliconflow", prices: false },
+  "siliconflow/intl": { modelsDev: "siliconflow", litellm: "siliconflow" },
 };
 
 const MIT = (copyright: string) =>
@@ -121,7 +139,7 @@ function readsAndWritesText(model: ModelsDevModel): boolean {
   );
 }
 
-function factsOf(id: string, model: ModelsDevModel): CatalogModel {
+function factsOf(id: string, model: ModelsDevModel, prices: boolean): CatalogModel {
   const { context = 0, input: maxInput, output: maxOutput } = model.limit ?? {};
   const cost = model.cost;
   const status =
@@ -144,7 +162,8 @@ function factsOf(id: string, model: ModelsDevModel): CatalogModel {
     // models.dev gives an input limit where the provider has one below the window.
     ...(maxInput !== undefined && maxInput > 0 && maxInput < context && { maxInput }),
     ...(maxOutput !== undefined && maxOutput > 0 && { maxOutput }),
-    ...(cost?.input !== undefined &&
+    ...(prices &&
+      cost?.input !== undefined &&
       cost.output !== undefined && {
         price: {
           currency: "USD" as const,
@@ -192,7 +211,7 @@ export function generateModels(
         nonChat.add(modelId);
         continue;
       }
-      const facts = factsOf(modelId, model);
+      const facts = factsOf(modelId, model, source.prices !== false);
       models.push(facts);
       const entry = entries.get(modelId);
       if (entry) found.push(...disagreements(id, facts, entry));

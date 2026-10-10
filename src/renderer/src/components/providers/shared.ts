@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { ChatProvider, ChatReadiness, ProviderErrorKind } from "../../../../core/api";
+import { catalogProviderOfKind } from "../../../../core/providers/catalog/providers";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -29,8 +30,13 @@ export function readinessKey(
 export function providerLabel(provider: ChatProvider, t: Translate): string {
   if (provider.kind === "chatgpt") return t("codex.provider.name");
   const kind = t(`providers.kind.${provider.kind}`);
-  if (provider.kind === "openai" || provider.kind === "anthropic" || provider.kind === "google") {
-    return kind;
+  const catalog = catalogProviderOfKind(provider.kind);
+  if (catalog && catalog.endpoints.length > 0) {
+    // A hosted provider: its name, and its region when it has more than one.
+    if (catalog.endpoints.length === 1) return kind;
+    return provider.endpoint === "cn" || provider.endpoint === "intl"
+      ? `${kind} · ${t(`providers.region.${provider.endpoint}`)}`
+      : kind;
   }
   return `${kind} · ${provider.service?.name ?? t("providers.settings.local")}`;
 }

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
-import type { ChatProviderKind } from "../../src/core/api";
+import { type ChatProviderKind, chatProviderKinds } from "../../src/core/api";
 import {
   cloudWindow,
   givesStructuredOutput,
@@ -23,6 +23,15 @@ import {
   recommendedLocalModels,
 } from "../../src/core/providers/catalog";
 import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
+import { catalogProvider } from "../../src/core/providers/catalog/providers";
+import {
+  baseUrlFor,
+  endpointUrl,
+  requiresApiKey,
+  serviceFor,
+} from "../../src/core/providers/kinds";
+import { en } from "../../src/shared/i18n/en";
+import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 const GIB = 1024 ** 3;
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -37,6 +46,14 @@ describe("The provider catalog", () => {
       "anthropic",
       "openai",
       "google",
+      "openrouter",
+      "mistral",
+      "xai",
+      "deepseek",
+      "qwen",
+      "kimi",
+      "glm",
+      "siliconflow",
       "ollama",
       "openai-compatible",
     ]);
@@ -80,18 +97,41 @@ describe("The provider catalog", () => {
         return found;
       };
       expect(model(answers).tools, provider.id).toBe(true);
-      expect(model(answers).input, provider.id).toContain("image");
       expect(model(images).input, provider.id).toContain("image");
-      const price = (id: string | undefined) => model(id).price?.output ?? Number.NaN;
-      expect(price(answers), provider.id).toBeLessThan(price(strongest));
-      expect(price(quickTasks), provider.id).toBeLessThan(price(answers));
-      // Prices in the provider's own currency.
-      expect(model(answers).price?.currency, provider.id).toBe("USD");
+      // The Answers model costs less than the strongest, and a quick-tasks model no more than it
+      // (where the strongest's price is known: SiliconFlow's yuan price for it is not listed).
+      const output = (id: string | undefined) => model(id).price?.output;
+      expect(output(answers), provider.id).toBeDefined();
+      if (output(strongest) !== undefined) {
+        expect(output(answers) ?? Number.NaN, provider.id).toBeLessThan(output(strongest) ?? 0);
+      }
+      expect(output(quickTasks) ?? Number.NaN, provider.id).toBeLessThanOrEqual(
+        output(answers) ?? Number.NaN,
+      );
+      // Prices in the provider's own currency: yuan on a Chinese endpoint of a provider that bills in it.
+      const yuan = provider.id === "deepseek" || provider.endpoints[0]?.id === "cn";
+      expect(model(answers).price?.currency, provider.id).toBe(yuan ? "CNY" : "USD");
     }
   });
 
   test("the generated facts cover the hosted providers, with unique ids, and their sources' licences ship with the app", async () => {
-    expect(providersWithModels().sort()).toEqual(["anthropic", "google", "openai"]);
+    expect(providersWithModels().sort()).toEqual([
+      "anthropic",
+      "deepseek",
+      "glm",
+      "glm/intl",
+      "google",
+      "kimi",
+      "kimi/intl",
+      "mistral",
+      "openai",
+      "openrouter",
+      "qwen",
+      "qwen/intl",
+      "siliconflow",
+      "siliconflow/intl",
+      "xai",
+    ]);
     for (const providerId of providersWithModels()) {
       const ids = catalogModels(providerId).map((model) => model.id);
       expect(new Set(ids).size, providerId).toBe(ids.length);
@@ -251,5 +291,117 @@ describe("What is known of a model", () => {
       outputTokens: 4_096,
     });
     expect(window({ maxOutput: 8_192 })).toBeUndefined();
+  });
+});
+
+describe("The providers of #178", () => {
+  const added = ["openrouter", "mistral", "xai", "deepseek", "qwen", "kimi", "glm", "siliconflow"];
+
+  test("each is a chat provider kind with its own catalog entry, names in both languages, and a key link", () => {
+    for (const id of added) {
+      const provider = catalogProvider(id);
+      expect(provider, id).toBeDefined();
+      expect(chatProviderKinds as readonly string[], id).toContain(id);
+      expect(provider?.apiKey, id).toBe("required");
+      expect(provider?.keyUrl, id).toMatch(/^https:\/\//);
+      for (const endpoint of provider?.endpoints ?? []) {
+        expect(endpoint.keyUrl ?? provider?.keyUrl, `${id} ${endpoint.id}`).toMatch(/^https:/);
+      }
+      // The names the page shows are the catalog's, in both languages.
+      expect(en[`providers.kind.${id as ChatProviderKind}`], id).toBe(provider?.name.en);
+      expect(zhCN[`providers.kind.${id as ChatProviderKind}`], id).toBe(provider?.name.zh);
+    }
+  });
+
+  test("each says whether it may train on API data; DeepSeek may (with an opt-out) and Kimi's pages disagree", () => {
+    const training = Object.fromEntries(
+      added.map((id) => [id, catalogProvider(id)?.dataUse.training]),
+    );
+    expect(training).toEqual({
+      openrouter: "no",
+      mistral: "opt-out",
+      xai: "no",
+      deepseek: "opt-out",
+      qwen: "no",
+      kimi: "unknown",
+      glm: "unknown",
+      siliconflow: "no",
+    });
+    expect(catalogProvider("kimi")?.dataUse.summary.en).toContain("disagree");
+  });
+
+  test("a provider with regions has an endpoint for each, the first the default, and a set of model facts for each", () => {
+    const regions = (id: string) => catalogProvider(id)?.endpoints.map((each) => each.id);
+    expect(regions("qwen")).toEqual(["cn", "intl"]);
+    expect(regions("kimi")).toEqual(["cn", "intl"]);
+    expect(regions("glm")).toEqual(["cn", "intl"]);
+    expect(regions("siliconflow")).toEqual(["cn", "intl"]);
+    expect(regions("deepseek")).toEqual(["global"]);
+    expect(endpointUrl("qwen")).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
+    expect(endpointUrl("qwen", "intl")).toBe(
+      "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    );
+    expect(endpointUrl("kimi", "cn")).toBe("https://api.moonshot.cn/v1");
+    expect(endpointUrl("kimi", "intl")).toBe("https://api.moonshot.ai/v1");
+    expect(endpointUrl("glm", "cn")).toBe("https://open.bigmodel.cn/api/paas/v4");
+    expect(endpointUrl("glm", "intl")).toBe("https://api.z.ai/api/paas/v4");
+    expect(endpointUrl("siliconflow", "intl")).toBe("https://api.siliconflow.com/v1");
+    // The region picks the model set; one without its own uses the provider's.
+    expect(modelsProviderOfKind("qwen")).toBe("qwen");
+    expect(modelsProviderOfKind("qwen", "cn")).toBe("qwen");
+    expect(modelsProviderOfKind("qwen", "intl")).toBe("qwen/intl");
+    expect(modelsProviderOfKind("deepseek", "global")).toBe("deepseek");
+    // Each region is its own service for consent: data goes to its host.
+    expect(serviceFor("qwen", null, "cn")?.id).toBe("https://dashscope.aliyuncs.com");
+    expect(serviceFor("qwen", null, "intl")?.id).toBe("https://dashscope-intl.aliyuncs.com");
+  });
+
+  test("prices are in the provider's own currency and the defaults are as chosen", () => {
+    const answers = (id: string, set = id) => {
+      const model = catalogModel(set, catalogProvider(id)?.roles.answers ?? "");
+      return [model?.id, model?.price?.currency, model?.price?.input, model?.price?.output];
+    };
+    expect(answers("deepseek")).toEqual(["deepseek-flash", "CNY", 2, 8]);
+    expect(answers("qwen")).toEqual(["qwen3.7-plus", "CNY", 2, 8]);
+    expect(answers("qwen", "qwen/intl")).toEqual(["qwen3.7-plus", "USD", 0.4, 1.6]);
+    expect(answers("kimi")).toEqual(["kimi-k2.6", "CNY", 6.5, 27]);
+    expect(answers("kimi", "kimi/intl")).toEqual(["kimi-k2.6", "USD", 0.95, 4]);
+    expect(answers("glm")).toEqual(["glm-5.3-flash", "CNY", 0.8, 2.8]);
+    expect(answers("glm", "glm/intl")).toEqual(["glm-5.3-flash", "USD", 0.15, 0.5]);
+    expect(answers("siliconflow")).toEqual(["deepseek-ai/DeepSeek-V4-Flash", "CNY", 3, 9]);
+    expect(answers("mistral")).toEqual(["mistral-small-2603", "USD", 0.15, 0.6]);
+    expect(answers("xai")).toEqual(["grok-4.3", "USD", 1.25, 2.5]);
+    expect(catalogProvider("kimi")?.roles.strongest).toBe("kimi-k3");
+    expect(catalogProvider("glm")?.roles.quickTasks).toBe("glm-4.7-flash");
+    // The corrections: Kimi fixes its sampling, GLM and DeepSeek take JSON mode only.
+    expect(catalogModel("kimi", "kimi-k2.6")?.temperature).toBe(false);
+    expect(catalogModel("glm", "glm-5.3")?.structuredOutput).toBe("json_object");
+    expect(catalogModel("deepseek", "deepseek-flash")?.structuredOutput).toBe("json_object");
+  });
+
+  test("their requests carry what the provider needs", () => {
+    expect(catalogProvider("xai")?.request?.store).toBe(false);
+    expect(catalogProvider("openrouter")?.request?.body).toEqual({
+      provider: { data_collection: "deny", require_parameters: true },
+    });
+    expect(catalogProvider("siliconflow")?.request?.openAiCompatible).toEqual({
+      includeUsage: true,
+      supportsStructuredOutputs: true,
+    });
+    // Every one that thinks by default says how a small call turns it off.
+    for (const id of ["deepseek", "qwen", "kimi", "glm", "siliconflow", "openrouter", "xai"]) {
+      expect(catalogProvider(id)?.request?.thinkingOff, id).toBeDefined();
+    }
+    expect(catalogProvider("glm")?.request?.thinkingOff?.unless).toEqual(["glm-5.3"]);
+  });
+
+  test("a provider needs a key and takes no server URL; a region comes with the endpoint", () => {
+    for (const id of added) {
+      expect(requiresApiKey(id as ChatProviderKind), id).toBe(true);
+      expect(() => baseUrlFor(id as ChatProviderKind, "https://example.com"), id).toThrow(
+        /doesn't take a server URL/,
+      );
+      expect(baseUrlFor(id as ChatProviderKind, undefined), id).toBeNull();
+    }
   });
 });
