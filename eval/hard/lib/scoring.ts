@@ -1,38 +1,67 @@
 /**
  * Retrieval on the hard tier: each answerable Question searched in every mode
- * the evaluation has (keyword, vector and hybrid search; hybrid search's
- * candidates and keyword search's top 20 reranked by the built-in reranking
- * model), scored with the gating set's hit rule for each Passage its answer
+ * the evaluation has (keyword, vector and hybrid search; keyword search's top
+ * 60, the search Tool's default, and top 20, and hybrid search's candidates,
+ * each reranked by the built-in reranking model), scored with the gating
+ * set's hit rule for each Passage its answer
  * needs (eval/lib/retrieval). A Question is a hit when every Passage it needs
  * is in the top 5; a cross-lingual Question is searched again with its
  * translation, as an Answer is told to, and a Passage found by either search
  * counts. Unanswerable Questions aren't searched for: there is nothing to
  * find, and the Citation part scores them.
  */
-import type { Core, PassageSearchResult, SearchMode } from "../../../src/core";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type Core,
+  type PassageSearchResult,
+  type SearchMode,
+} from "../../../src/core";
 import type { OpenReranker } from "../../lib/rerank";
 import {
   checkPassage,
   GATING_MODE,
+  GATING_SEARCH,
   HYBRID_RERANK_MODE,
   isHit,
-  keywordRerankCandidates,
+  KEYWORD_DEPTHS,
   RANK_DEPTH,
+  type RerankedSearch,
   type RetrievalMode,
   rerankCandidates,
   rerankedSearchOf,
+  rerankMode,
   TOP_K,
 } from "../../lib/retrieval";
+import { keywordTop } from "../../lib/searches";
 import type { Domain, HardLanguage } from "./manifest";
 import { DIFFICULTIES, type Difficulty, type HardExpected, type HardQuestion } from "./questions";
 
 /**
- * The modes, in the order the report lists them: keyword search, reranked as
- * the search Tool does by default (the gating set's gate), then hybrid
- * search, reranked as with embeddings on, and vector search.
+ * The reranked searches, each reranked by the built-in model: keyword
+ * search's top 20 (the default before), its top 60 (the search Tool's
+ * default with embeddings off, and the gating set's gate), and hybrid
+ * search's candidates (the search Tool's with embeddings on).
+ */
+export const HARD_RERANKED_SEARCHES: readonly RerankedSearch[] = [
+  "keyword",
+  GATING_SEARCH,
+  "hybrid",
+];
+
+/** Keyword search's top 20, reranked by the built-in model. */
+export const KEYWORD_20_RERANK_MODE: RetrievalMode = rerankMode(
+  BUILT_IN_RERANKING_MODEL,
+  "keyword",
+);
+
+/**
+ * The modes, in the order the report lists them: keyword search and its top
+ * 20 and top 60 reranked (the default), then hybrid search and its candidates
+ * reranked (to compare with the default), and vector search.
  */
 export const HARD_MODES: readonly RetrievalMode[] = [
   "keyword",
+  KEYWORD_20_RERANK_MODE,
   GATING_MODE,
   "hybrid",
   HYBRID_RERANK_MODE,
@@ -133,7 +162,8 @@ export async function searchAll(
 
 /**
  * Adds a reranked mode: hybrid search's candidates as the search Tool hands
- * them to a reranker, or keyword search's top 20, reordered by `reranker`.
+ * them to a reranker with embeddings on, or keyword search's top 20 or 60
+ * (`KEYWORD_DEPTHS`, the search Tool's own for 60), reordered by `reranker`.
  */
 export async function rerankAll(
   core: Core,
@@ -145,7 +175,10 @@ export async function rerankAll(
   const mode = reranker.mode as RetrievalMode;
   const search = rerankedSearchOf(mode);
   if (!search) throw new Error(`${mode} isn't a reranked mode.`);
-  const candidatesOf = search === "hybrid" ? rerankCandidates : keywordRerankCandidates;
+  const depth = KEYWORD_DEPTHS[search];
+  if (search !== "hybrid" && depth === undefined) throw new Error(`${mode}: no candidates here.`);
+  const candidatesOf = (on: Core, query: string) =>
+    search === "hybrid" ? rerankCandidates(on, query) : keywordTop(on, query, depth as number);
   for (const question of searchable(questions)) {
     const result = results.find((each) => each.id === question.id);
     if (!result) throw new Error(`${question.id}: no results to add ${mode} to.`);

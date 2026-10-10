@@ -23,6 +23,7 @@ import {
 } from "../../eval/hard/lib/report";
 import {
   type HardQuestionResult,
+  KEYWORD_20_RERANK_MODE,
   modeResult,
   ranksOf,
   rerankAll,
@@ -370,7 +371,7 @@ const REPORT: HardReport = {
   },
   retrieval: {
     topK: 5,
-    modes: modeLabels("keyword + reranker", "hybrid + reranker"),
+    modes: modeLabels("reranker"),
     results: RESULTS,
     summary: summariseHard(RESULTS),
     rerankers: [],
@@ -386,16 +387,19 @@ const REPORT: HardReport = {
 };
 
 describe("The hard tier's report", () => {
-  test("labels the modes, the planned default and the search Tool's reranked hybrid search", () => {
+  test("labels the modes: keyword search's top 20 and top 60 reranked, and hybrid search's candidates reranked", () => {
     expect(REPORT.retrieval.modes.map((each) => each.label)).toEqual([
       "keyword",
-      "keyword + reranker",
+      "keyword top 20 + reranker",
+      "keyword top 60 + reranker",
       "hybrid",
       "hybrid + reranker",
       "vector",
     ]);
-    expect(REPORT.retrieval.modes[1]?.mode).toBe(GATING_MODE);
-    expect(REPORT.retrieval.modes[3]?.mode).toBe(HYBRID_RERANK_MODE);
+    // Keyword search's top 60 reranked is the search Tool's default, and the gating set's gate.
+    expect(REPORT.retrieval.modes[1]?.mode).toBe(KEYWORD_20_RERANK_MODE);
+    expect(REPORT.retrieval.modes[2]?.mode).toBe(GATING_MODE);
+    expect(REPORT.retrieval.modes[4]?.mode).toBe(HYBRID_RERANK_MODE);
   });
 
   test("report.md has the library, indexing, and retrieval per difficulty, domain and language", () => {
@@ -407,7 +411,7 @@ describe("The hard tier's report", () => {
       "- Keyword search covered every Document after 120 s (text extraction, Passages and the keyword index); every Document was embedded after 1500 s.",
     );
     expect(markdown).toContain("- q9: gone isn't in the library.");
-    expect(markdown).toContain("| | keyword | keyword + reranker | hybrid |");
+    expect(markdown).toContain("| | keyword | keyword top 60 + reranker | hybrid |");
     expect(markdown).toContain(
       "| Easy (the Documents' own words) | 1/2 (50%) | 2/2 (100%) | 2/2 (100%) |",
     );
@@ -416,7 +420,7 @@ describe("The hard tier's report", () => {
     );
     expect(markdown).toContain("| English | 1/3 (33%) | 2/3 (67%) | 3/3 (100%) |");
     expect(markdown).toContain(
-      "| x1 | cross-lingual | reports | – / 2 | – / 1 | (11) / 1 | – | – | x1? |",
+      "| x1 | cross-lingual | reports | – / 2 | – | – / 1 | (11) / 1 | – | – | x1? |",
     );
     expect(markdown).toContain(
       "| Keyword search, `ORDER BY bm25(passages_fts)` (the app's) | 3.0 ms | 120 ms | 26 ms | 120 ms |  |",
