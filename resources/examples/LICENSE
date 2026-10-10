@@ -1,15 +1,161 @@
-The two example Documents in this folder are excerpts of Wikipedia articles:
+The example Documents in this folder are shared under the licences named
+below, each with its source and attribution. The rest of IncarnaMind is under
+its own licence (Apache-2.0); this folder's licence list covers these files
+only. Every Document here may be redistributed with the app; nothing is
+included whose licence could not be confirmed on its source page.
+
+How the files differ from the originals: unless a Document says otherwise, its
+text is unchanged. Where a PDF is an excerpt, the pages kept are named. To keep
+the app small, the images inside the PDFs were recompressed (JPEG) and the PDFs
+rewritten; no words were changed. File names were shortened to the names shown.
+
+Licences: CC BY 4.0 https://creativecommons.org/licenses/by/4.0/legalcode
+          CC BY 3.0 IGO https://creativecommons.org/licenses/by/3.0/igo/legalcode
+          CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+
+=== Where tea comes from (tea/) ===
 
 - "Tea · Wikipedia.md": from "Tea" on the English Wikipedia,
   https://en.wikipedia.org/wiki/Tea (revision 1374563032 of 2026-09-12).
 - "茶 · 维基百科.md": from "茶" on the Chinese Wikipedia,
   https://zh.wikipedia.org/wiki/茶 (revision 94321343 of 2026-09-12).
 
-By Wikipedia contributors. Each is licensed under the Creative Commons
-Attribution-ShareAlike 4.0 International licence (CC BY-SA 4.0):
-https://creativecommons.org/licenses/by-sa/4.0/legalcode
-
+By Wikipedia contributors. Each is licensed under CC BY-SA 4.0.
 Changes: each is an excerpt (the introduction and part of the history
 section), as plain text without references, images or tables. The excerpts
-are shared under the same licence. The rest of IncarnaMind is under its own
-licence (Apache-2.0); this folder's licence covers these two files only.
+are shared under the same licence.
+
+
+=== Papers and research, English (papers/en/) ===
+
+Three papers from arXiv, each under CC BY 4.0, as shown on the paper's arXiv
+page (https://arxiv.org/abs/<number>, "license"). Full papers.
+
+- "Self-RAG (Asai et al., 2023).pdf": Akari Asai, Zeqiu Wu, Yizhong Wang,
+  Avirup Sil and Hannaneh Hajishirzi, "Self-RAG: Learning to Retrieve,
+  Generate, and Critique through Self-Reflection", arXiv:2310.11511 (2023).
+  https://arxiv.org/abs/2310.11511 . CC BY 4.0.
+- "Fine-Tuning or Retrieval (Ovadia et al., 2023).pdf": Oded Ovadia,
+  Menachem Brief, Moshik Mishaeli and Oren Elisha, "Fine-Tuning or Retrieval?
+  Comparing Knowledge Injection in LLMs", arXiv:2312.05934 (2023).
+  https://arxiv.org/abs/2312.05934 . CC BY 4.0.
+- "Ragas (Es et al., 2023).pdf": Shahul Es, Jithin James, Luis Espinosa-Anke
+  and Steven Schockaert, "Ragas: Automated Evaluation of Retrieval Augmented
+  Generation", arXiv:2309.15217 (2023). https://arxiv.org/abs/2309.15217 .
+  CC BY 4.0.
+
+
+=== Papers and research, Chinese (papers/zh-CN/) ===
+
+Three review articles from the Chinese Journal of Chromatography (色谱),
+2026, 44(8), in Chinese, each under CC BY 4.0. The licence is stated in each
+article ("本文是开放获取文章，遵循CC BY 4.0协议") and recorded by PubMed
+Central (license: CC BY). Source: the PubMed Central Open Access dataset,
+https://pmc-oa-opendata.s3.amazonaws.com/ . Full articles.
+
+- "亲和超滤色谱-质谱筛选天然活性物质(徐勇兵等,2026).pdf": 徐勇兵, 钮宇佳,
+  郭明全, 《亲和超滤色谱-质谱技术在天然活性物质筛选中的研究进展》,
+  色谱 2026;44(8):877-888. doi:10.3724/SP.J.1123.2025.08020 . PMC13425201,
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC13425201/ . CC BY 4.0.
+- "生物亲和垂钓发现天然产物活性成分(曲清莉等,2026).pdf": 曲清莉, 王小芳,
+  邸多隆, 裴栋, 《生物亲和垂钓技术在天然产物活性成分发现中的研究进展》,
+  色谱 2026;44(8):900-910. doi:10.3724/SP.J.1123.2025.08021 . PMC13425207,
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC13425207/ . CC BY 4.0.
+- "高效色谱材料在本草物质组中的应用(丰静等,2026).pdf": 丰静, 夏东海, 宋春颖,
+  漆义, 金高娃, 刘艳芳, 梁鑫淼, 俞冬萍, 郭志谋,
+  《2020年以来高效色谱材料的开发及其在本草物质组中的应用》,
+  色谱 2026;44(8):864-876. doi:10.3724/SP.J.1123.2025.08025 . PMC13425205,
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC13425205/ . CC BY 4.0.
+
+
+=== Reports and analysis, English (reports/en/) ===
+
+Executive summaries of three World Bank regional economic updates of April
+2026, each under CC BY 3.0 IGO, as stated on the World Bank Open Knowledge
+Repository page and in the report ("This work is available under the Creative
+Commons Attribution 3.0 IGO license"). Original work by The World Bank. These
+are excerpts: this is an adaptation of an original work by The World Bank.
+Views and opinions expressed in the adaptation are the sole responsibility of
+the author or authors of the adaptation and are not endorsed by The World
+Bank. Third-party material that the reports credit to others is not covered
+by this licence. The World Bank's name and logo are not licensed; the covers
+(which carry the logo) are left out.
+
+- "Africa Economic Update, April 2026 (executive summary).pdf": World Bank,
+  "Africa Economic Update, April 2026: Making Industrial Policy Work in
+  Africa". https://openknowledge.worldbank.org/handle/10986/44533 .
+  doi:10.1596/978-1-4648-2333-6 . CC BY 3.0 IGO. Excerpt: the Executive
+  Summary (pages 2 to 10 of the published executive-summary file; its cover
+  is left out).
+- "Latin America and the Caribbean Economic Update, April 2026 (executive
+  summary).pdf": William Maloney, Guillermo Vuletin and Andres Zambrano,
+  "Revisiting Industrial Policy: Strategic Options for Today", Latin America
+  and the Caribbean Economic Update (April 2026), World Bank.
+  https://openknowledge.worldbank.org/handle/10986/44606 .
+  doi:10.1596/978-1-4648-2337-4 . CC BY 3.0 IGO. Excerpt: the Executive
+  Summary (pages xi to xviii of the report).
+- "South Asia Economic Update, April 2026 (executive summary).pdf": World
+  Bank, "South Asia Economic Update, April 2026: Working with Industrial
+  Policy". https://openknowledge.worldbank.org/handle/10986/44482 .
+  doi:10.1596/978-1-4648-2326-8 . CC BY 3.0 IGO. Excerpt: the Executive
+  Summary file as published by the World Bank.
+
+
+=== Reports and analysis, Chinese (reports/zh-CN/) ===
+
+Two reports in Chinese from the same research team, each under CC BY 4.0, as
+stated on its Zenodo record. Full reports.
+
+- "2023年省会城市品牌国际传播影响力报告.pdf": 文化元宇宙专委会大数据智能传播实验室,
+  《2023年中国内地省会城市及计划单列市城市品牌全球媒体国际传播影响力（发布报告）》
+  (2024-11-25). https://zenodo.org/records/18136284 ,
+  doi:10.5281/zenodo.18136284 . CC BY 4.0.
+- "2024年省会城市品牌国际传播影响力报告.pdf": 强省会城市品牌传播协同联动平台,
+  文化元宇宙专委会大数据智能传播实验室,
+  《2024年中国内地省会城市及计划单列市城市品牌全球媒体国际传播影响力（发布报告）》
+  (2025-11-08). https://zenodo.org/records/18136359 ,
+  doi:10.5281/zenodo.18136359 . CC BY 4.0.
+
+
+=== Contracts and legal work, English (contracts/en/) ===
+
+Three agreements from the Contract Understanding Atticus Dataset (CUAD) v1,
+by The Atticus Project, under CC BY 4.0, as stated on its Zenodo record
+(https://zenodo.org/records/4595826 , doi:10.5281/zenodo.4595826). Citation:
+Dan Hendrycks, Collin Burns, Anya Chen and Spencer Ball, "CUAD: An
+Expert-Annotated NLP Dataset for Legal Contract Review", NeurIPS 2021
+Datasets and Benchmarks. The agreements are public exhibits filed with the
+US Securities and Exchange Commission (EDGAR). The files are the dataset's
+PDFs, unchanged in content, renamed.
+
+- "Web Site Hosting Agreement (i-on interactive and Centrack).pdf": CUAD file
+  full_contract_pdf/Part_II/Hosting/CENTRACKINTERNATIONALINC_10_29_1999-EX-10.3-WEB SITE HOSTING AGREEMENT.PDF .
+- "Distributor Agreement (Snotarator and SMSA Ballinger).pdf": CUAD file
+  full_contract_pdf/Part_III/Distributor/BLACKBOXSTOCKSINC_08_05_2014-EX-10.1-DISTRIBUTOR AGREEMENT.PDF .
+- "Exclusive Distributor Agreement (Erchonia and InnerScope).pdf": CUAD file
+  full_contract_pdf/Part_I/Distributor/InnerscopeHearingTechnologiesInc_20181109_8-K_EX-10.6_11419704_EX-10.6_Distributor Agreement.pdf .
+
+
+=== Contracts and legal work, Chinese (contracts/zh-CN/) ===
+
+No contract dataset with a clear open licence was found in Chinese, so these
+three were written for IncarnaMind's examples. The companies and people in
+them are made up, and they are not legal advice. By the IncarnaMind
+contributors, released under CC0 1.0 (public domain dedication):
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+- "设备租赁合同.docx"
+- "软件开发服务合同.docx"
+- "货物采购合同.docx"
+
+
+=== Meetings and team notes (meetings/en/ and meetings/zh-CN/) ===
+
+Written for IncarnaMind's examples, in English and, separately, in Chinese.
+The companies (Fernwood Pantry, 澄溪文具) and the people in them are made up.
+By the IncarnaMind contributors, released under CC0 1.0 (public domain
+dedication): https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+- "Launch sync transcript · 12 March.md", "Launch sync agenda.docx"
+- "大促备货会议记录 · 9月17日.md", "大促备货会议议程.docx"
