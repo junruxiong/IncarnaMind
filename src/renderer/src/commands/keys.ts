@@ -1,6 +1,7 @@
 import type { Keys, ShortcutKeys } from "../../../shared/commands";
 
 interface KeyPress {
+  key: string;
   code: string;
   metaKey: boolean;
   ctrlKey: boolean;
@@ -8,7 +9,7 @@ interface KeyPress {
   shiftKey: boolean;
 }
 
-/** Keys as pressed: the physical key, as `KeyboardEvent.code` names it, and the modifiers held. */
+/** The key as the accelerator writes it, its physical key (`KeyboardEvent.code`), and the modifiers. */
 interface Chord {
   key: string;
   code: string;
@@ -100,11 +101,25 @@ export function keysForm(keys: Keys, mac: boolean): string {
     .join("+");
 }
 
+/**
+ * A letter, digit or sign is the key that types it in the User's layout, as
+ * browsers match shortcuts: on AZERTY, ⌘Z is pressed where QWERTY has W, and
+ * must not close the tab. Where the layout types no Latin letter or digit
+ * there (Cyrillic, ⌥ held, a sign on another key), the physical key stands in.
+ */
+function sameKey(chord: Chord, press: KeyPress): boolean {
+  if (chord.key.length === 1 && press.key.length === 1) {
+    if (press.key.toUpperCase() === chord.key) return true;
+    if (/^[a-z0-9]$/i.test(press.key)) return false;
+  }
+  return press.code === chord.code;
+}
+
 /** Whether a key pressed is these keys, with exactly these modifiers. */
 export function pressed(keys: Keys, press: KeyPress, mac: boolean): boolean {
   const chord = chordOf(keys, mac);
   return (
-    press.code === chord.code &&
+    sameKey(chord, press) &&
     press.metaKey === chord.meta &&
     press.ctrlKey === chord.ctrl &&
     press.altKey === chord.alt &&
