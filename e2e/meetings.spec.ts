@@ -173,7 +173,16 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready");
   await shot(window, "meeting-stopped-en");
 
+  // It can't be undone, so the line asks first; Esc keeps it.
   await audio.getByTestId("meeting-audio-delete").click();
+  const confirm = window.getByTestId("meeting-audio-confirm");
+  await expect(confirm).toContainText("It can’t be brought back. Your notes stay.");
+  await expect(confirm.getByTestId("meeting-audio-delete-confirm")).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(audio).toContainText("Audio kept on this computer");
+  await audio.getByTestId("meeting-audio-delete").click();
+  await shot(window, "meeting-delete-audio-en");
+  await window.getByTestId("meeting-audio-delete-confirm").click();
   await expect(audio).toContainText("Audio deleted");
   const [meeting] = await bridge(window);
   expect(meeting?.audio.kept).toBe(false);
