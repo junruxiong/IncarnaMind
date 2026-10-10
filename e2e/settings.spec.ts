@@ -5,8 +5,8 @@ import type { CoreBridge } from "../src/core/api";
 import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
 
 /*
- * Settings has seven pages (General, Models, Search, Tools, Connectors, Skills,
- * Privacy), and every setting there was before is on one of them. Set
+ * Settings has six pages (General, Models, Search, Connectors, Skills, Privacy;
+ * Meetings and Memory join with their first setting), and every setting there was before is on one of them. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save a screenshot of each page.
  */
 
@@ -30,13 +30,12 @@ const PAGES = [
     ],
   },
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
-  { page: "tools", name: "Tools", sections: ["approvals-settings"] },
   { page: "connectors", name: "Connectors", sections: ["connectors-settings"] },
   { page: "skills", name: "Skills", sections: ["skills-settings", "skill-scripts-settings"] },
   {
     page: "privacy",
     name: "Privacy",
-    sections: ["consent-settings", "network-traffic"],
+    sections: ["consent-settings", "network-traffic", "approvals-settings"],
   },
 ] as const;
 
@@ -54,7 +53,7 @@ async function shot(window: Page, name: string) {
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-test("Settings lists seven pages, and each holds its settings", async () => {
+test("Settings lists six pages, and each holds its settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -136,12 +135,11 @@ test("the pages are named in Chinese too", async () => {
       "通用",
       "模型",
       "搜索",
-      "工具",
       "连接器",
       "技能",
       "隐私",
     ]);
-    const names = ["general", "models", "search", "tools", "connectors", "skills", "privacy"];
+    const names = ["general", "models", "search", "connectors", "skills", "privacy"];
     for (const page of names) {
       await window.getByTestId(`settings-nav-${page}`).click();
       await expect(window.getByTestId("settings")).toHaveAttribute("data-page", page);

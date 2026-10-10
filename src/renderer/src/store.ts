@@ -28,7 +28,7 @@ import { core, files } from "./core";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
-import { isSettingsPage, type SettingsPage } from "./settingsPages";
+import { resolveSettingsPage, type SettingsPage } from "./settingsPages";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -770,8 +770,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     openSettings(page) {
-      // Also a click handler: anything but a page name opens the general page.
-      set({ settingsOpen: true, settingsPage: isSettingsPage(page) ? page : "general" });
+      // Also a click handler: anything but a page name opens General.
+      set({ settingsOpen: true, settingsPage: resolveSettingsPage(page) });
     },
 
     showSettingsPage(page) {
