@@ -6,7 +6,7 @@ We replaced the approved design that grouped Documents into a two-level tree of 
 
 ## Considered options
 
-- **Clustering into generated Topics, with model-written names:** rejected, as above. The grouping functions and `npm run eval:grouping` remain for measurement.
+- **Clustering into generated Topics, with model-written names:** rejected, as above. The grouping functions and `npm run eval:grouping` stayed for measurement until 2026-10-10, when they were removed with the rest of the dormant Topic code; the check's fixture set and results are in `eval/grouping/`.
 - **Moving or renaming the User's files on disk:** rejected, because ADR-0010 indexes Documents in place and IncarnaMind never changes a Linked folder.
 
 ## Consequences

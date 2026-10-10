@@ -1,8 +1,8 @@
 /**
  * The background model queue (docs/designs/library-structure-view.md, R4, R8
- * and O7): background work that calls a model, automatic tagging now and
- * Topic naming later, runs here, one job at a time, in the order queued,
- * whatever its kind.
+ * and O7): background work that calls a model, automatic tagging and
+ * Organize's classification, runs here, one job at a time, in the order
+ * queued, whatever its kind.
  *
  * Answers come first:
  * - While any Answer is being written, no job starts. Jobs queued meanwhile
@@ -16,7 +16,7 @@
 
 /** One piece of background work: as a rule, one model call. */
 export interface BackgroundJob {
-  /** What kind of work it is, e.g. "tagging" or "topic-naming". */
+  /** What kind of work it is, e.g. "tagging" or "classification". */
   readonly kind: string;
   /**
    * Does the work. A job that fails is reported, and the queue goes on.

@@ -31,7 +31,7 @@ What an Answer is generated from: every Block above its Question in the Mind, ex
 _Avoid_: prompt, history
 
 **Search scope**:
-The Topics, Folders, Tags and individual Documents that a Question's Document search is limited to. A Question with no Search scope searches all Documents.
+The Folders, Tags and individual Documents that a Question's Document search is limited to. A Question with no Search scope searches all Documents.
 _Avoid_: filter, context
 
 ### Documents
@@ -80,7 +80,7 @@ A label with a short description that a Document can carry. A Document can have 
 _Avoid_: category, label, class
 
 **Topic**:
-The earlier design for a generated two-level subject tree. The current Library uses flat Folders instead (direction revised 2026-10-08).
+The earlier design for a generated two-level subject tree. The current Library uses flat Folders instead (direction revised 2026-10-08), and the dormant Topic code was removed on 2026-10-10 (ADR-0012).
 _Avoid_: cluster, category, collection, group
 
 **Group**:

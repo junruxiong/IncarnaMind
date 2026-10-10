@@ -84,13 +84,13 @@ describe("The background model queue", () => {
     const log: string[] = [];
     const queue = queueFor();
     const tagA = testJob(log, "tagging", "tag A");
-    const name1 = testJob(log, "topic-naming", "name 1");
+    const classify1 = testJob(log, "classification", "classify 1");
     const tagB = testJob(log, "tagging", "tag B");
-    const name2 = testJob(log, "topic-naming", "name 2");
-    for (const job of [tagA, name1, tagB, name2]) queue.add(job);
+    const classify2 = testJob(log, "classification", "classify 2");
+    for (const job of [tagA, classify1, tagB, classify2]) queue.add(job);
 
     expect(log).toEqual(["tag A started"]);
-    for (const job of [tagA, name1, tagB, name2]) {
+    for (const job of [tagA, classify1, tagB, classify2]) {
       await settle();
       job.finish();
     }
@@ -99,12 +99,12 @@ describe("The background model queue", () => {
     expect(log).toEqual([
       "tag A started",
       "tag A done",
-      "name 1 started",
-      "name 1 done",
+      "classify 1 started",
+      "classify 1 done",
       "tag B started",
       "tag B done",
-      "name 2 started",
-      "name 2 done",
+      "classify 2 started",
+      "classify 2 done",
     ]);
   });
 
@@ -114,7 +114,7 @@ describe("The background model queue", () => {
     const queue = queueFor(errors);
     const failing = testJob(log, "tagging", "tag A");
     const throwing: BackgroundJob = {
-      kind: "topic-naming",
+      kind: "classification",
       run: () => {
         throw new Error("Not even started.");
       },
@@ -134,9 +134,9 @@ describe("The background model queue", () => {
     const queue = queueFor();
     queue.setAnswering(true);
     const tagA = testJob(log, "tagging", "tag A", { local: true });
-    const name1 = testJob(log, "topic-naming", "name 1");
+    const classify1 = testJob(log, "classification", "classify 1");
     queue.add(tagA);
-    queue.add(name1);
+    queue.add(classify1);
     await settle();
     expect(log).toEqual([]);
 
@@ -145,16 +145,16 @@ describe("The background model queue", () => {
     expect(log).toEqual(["tag A started"]);
     tagA.finish();
     await settle();
-    expect(log).toEqual(["tag A started", "tag A done", "name 1 started"]);
+    expect(log).toEqual(["tag A started", "tag A done", "classify 1 started"]);
   });
 
   test("an Answer starting aborts a job in flight on a local model server; it runs again first once the Answer is done", async () => {
     const log: string[] = [];
     const queue = queueFor();
     const tagA = testJob(log, "tagging", "tag A", { local: true });
-    const name1 = testJob(log, "topic-naming", "name 1");
+    const classify1 = testJob(log, "classification", "classify 1");
     queue.add(tagA);
-    queue.add(name1);
+    queue.add(classify1);
 
     queue.setAnswering(true);
     await settle();
@@ -168,16 +168,16 @@ describe("The background model queue", () => {
     expect(tagA.calls[1]?.gaveWay).toBe(false);
     tagA.finish();
     await settle();
-    expect(log.slice(3)).toEqual(["tag A done", "name 1 started"]);
+    expect(log.slice(3)).toEqual(["tag A done", "classify 1 started"]);
   });
 
   test("a job in flight on a cloud provider finishes while the Answer is written; the next waits for it", async () => {
     const log: string[] = [];
     const queue = queueFor();
     const tagA = testJob(log, "tagging", "tag A");
-    const name1 = testJob(log, "topic-naming", "name 1");
+    const classify1 = testJob(log, "classification", "classify 1");
     queue.add(tagA);
-    queue.add(name1);
+    queue.add(classify1);
 
     queue.setAnswering(true);
     await settle();
@@ -188,7 +188,7 @@ describe("The background model queue", () => {
 
     queue.setAnswering(false);
     await settle();
-    expect(log).toEqual(["tag A started", "tag A done", "name 1 started"]);
+    expect(log).toEqual(["tag A started", "tag A done", "classify 1 started"]);
   });
 
   test("a job that finds its call goes to a local server while an Answer is written gives way at once", async () => {
@@ -214,9 +214,9 @@ describe("The background model queue", () => {
     const log: string[] = [];
     const queue = queueFor();
     const tagA = testJob(log, "tagging", "tag A", { local: true });
-    const name1 = testJob(log, "topic-naming", "name 1");
+    const classify1 = testJob(log, "classification", "classify 1");
     queue.add(tagA);
-    queue.add(name1);
+    queue.add(classify1);
 
     queue.close();
     queue.setAnswering(true);
@@ -276,11 +276,11 @@ describe("Automatic tagging in the background queue", () => {
         throw error;
       },
     });
-    /** A Topic naming job: one model call, which answers at once. */
-    const naming = (name: string): BackgroundJob => ({
-      kind: "topic-naming",
+    /** A classification job, as Organize queues: one model call, which answers at once. */
+    const classifying = (name: string): BackgroundJob => ({
+      kind: "classification",
       run: async () => {
-        log.push(`name ${name}`);
+        log.push(`classify ${name}`);
         running++;
         mostAtOnce = Math.max(mostAtOnce, running);
         await Promise.resolve();
@@ -291,17 +291,17 @@ describe("Automatic tagging in the background queue", () => {
     tagger.start();
     await settle();
     expect(log).toEqual(["tag A"]);
-    background.add(naming("1"));
+    background.add(classifying("1"));
     answer();
     await settle();
-    expect(log).toEqual(["tag A", "name 1", "tag B"]);
-    background.add(naming("2"));
+    expect(log).toEqual(["tag A", "classify 1", "tag B"]);
+    background.add(classifying("2"));
     answer();
     await settle();
     answer();
     await settle();
 
-    expect(log).toEqual(["tag A", "name 1", "tag B", "name 2", "tag C"]);
+    expect(log).toEqual(["tag A", "classify 1", "tag B", "classify 2", "tag C"]);
     expect(mostAtOnce).toBe(1);
     expect(db.all("SELECT tagging_status FROM documents")).toEqual(
       Array(3).fill({ tagging_status: "tagged" }),
