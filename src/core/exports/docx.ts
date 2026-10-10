@@ -11,8 +11,9 @@
  * footnote; maths is Word's own equations (./math), or its LaTeX as text
  * where it can't be converted; code is monospaced paragraphs.
  */
+
+import type { Block, Footnote, Image, Inline, Marks, TableCell } from "../mindText";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
-import type { Block, Footnote, Image, Inline, Marks, TableCell } from "./model";
 import { zip } from "./zip";
 
 export interface DocxOptions {
