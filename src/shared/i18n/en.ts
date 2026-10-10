@@ -156,6 +156,12 @@ export const en = {
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
   "mind.editor.label": "Mind content",
+  "mind.update.title": "Update IncarnaMind to open this",
+  "mind.update.body":
+    "A newer version of IncarnaMind made this. Nothing has been changed, and it will open here once you update.",
+  "mind.readOnly.title": "Read-only",
+  "mind.readOnly.body":
+    "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it; nothing here has been changed.",
   "mind.delete": "Delete Mind",
   "mind.rename": "Rename",
   "mind.renameLabel": "New title for {title}",

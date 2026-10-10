@@ -35,14 +35,73 @@ export interface Mind {
   id: string;
   /** May be empty: the UI shows an "Untitled" placeholder. */
   title: string;
+  /**
+   * What the Mind is: a `MindKind` this version knows, or the name of a kind a
+   * newer version wrote, which is listed but not opened (see `MindAccess`).
+   */
+  kind: string;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
 
+/** The kinds of Mind this version opens. `chat` is a conversation with no note behind it. */
+export const MIND_KINDS = ["mind", "chat"] as const;
+export type MindKind = (typeof MIND_KINDS)[number];
+
+/** The kind of every Mind made before kinds existed, and of a new Mind by default. */
+export const DEFAULT_MIND_KIND: MindKind = "mind";
+
 export interface CreateMindInput {
   title?: string;
+  /** Defaults to `"mind"`. */
+  kind?: MindKind;
+}
+
+/**
+ * The newest content schema this version understands: the node types, marks
+ * and attributes a Mind's Yjs document may hold. Raise it when a change would
+ * make an older version lose or misread content (a new node type or mark, a
+ * new attribute); a Mind without a recorded version is version 1.
+ */
+export const CONTENT_SCHEMA_VERSION = 1;
+
+/**
+ * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
+ * schema version the Mind was last written with. The core records it on every
+ * write; it is never lowered.
+ */
+export const CONTENT_SCHEMA_VERSION_KEY = "schemaVersion";
+
+/**
+ * How a Mind opens:
+ * - "edit": as usual.
+ * - "read-only": a newer version wrote its content (`CONTENT_SCHEMA_VERSION`).
+ *   The editor's Yjs binding deletes node types, marks and attributes its
+ *   schema doesn't know, so the Mind is shown but never written to, by the
+ *   editor or the core, until IncarnaMind is updated.
+ * - "update-required": its kind is one this version doesn't know. It is not
+ *   shown in the editor, only a prompt to update.
+ */
+export type MindAccess = "edit" | "read-only" | "update-required";
+
+/** A place in an artifact that a reference points to. Only Blocks for now; sheets, decks and boards add their own. */
+export interface BlockAnchor {
+  kind: "block";
+  /** The Block's stable UUID (`BLOCK_ID_ATTRIBUTE`), never its position. */
+  blockId: string;
+}
+export type ReferenceAnchor = BlockAnchor;
+
+/**
+ * One reference from one artifact to another: a Block's origin, the link back
+ * from a Note to the chat it came from. An artifact is a Mind now (a chat is a
+ * Mind of kind `chat`); other kinds will have their own IDs.
+ */
+export interface ArtifactReference {
+  artifactId: string;
+  anchor: ReferenceAnchor;
 }
 
 /**
@@ -404,7 +463,12 @@ export interface Citation {
 /** A Mind opened for editing. */
 export interface OpenedMind {
   mind: Mind;
-  /** The Mind's whole Yjs document, encoded as one update: apply it to an empty `Y.Doc`. */
+  /** How to show it. Anything but "edit" must not be written to; the core refuses. */
+  access: MindAccess;
+  /**
+   * The Mind's whole Yjs document, encoded as one update: apply it to an empty
+   * `Y.Doc`. Empty when `access` is "update-required".
+   */
   state: Uint8Array;
 }
 
