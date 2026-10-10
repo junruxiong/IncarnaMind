@@ -365,6 +365,60 @@ describe("Organize suggests a Folder and waits for the User", () => {
     );
   });
 
+  test("a first scan paused before it ends still files what it finds once resumed", async () => {
+    const { core, thesis, sources } = await setUp();
+    await writeSourceFile(sources, "Notes/Chapter 1.txt", "Chapter 1: urban heat.");
+    await writeSourceFile(sources, "Notes/Chapter 2.txt", "Chapter 2: field data.");
+    const batches = batchesOf(core);
+
+    const linked = await core.addLinkedFolder(join(sources, "Notes"), { groupId: thesis.id });
+    await core.setLinkedFolderPaused(linked.id, true);
+    await core.setLinkedFolderPaused(linked.id, false);
+
+    const last = await batches.until(
+      linked.batchId,
+      (batch) => !batch.adding && batch.sorted === 2,
+    );
+    expect((await core.getLibrary()).assignments).toEqual(
+      last.documentIds.map((documentId) =>
+        expect.objectContaining({ documentId, groupId: thesis.id, source: "user" }),
+      ),
+    );
+  });
+
+  test("a folder inside one already linked, while it scans, files nothing into the Folder", async () => {
+    const { core, thesis, sources } = await setUp();
+    await writeSourceFile(sources, "Notes/Chapter 1.txt", "Chapter 1: urban heat.");
+    const batches = batchesOf(core);
+    const outer = await core.addLinkedFolder(join(sources, "Notes"));
+    await batches.until(outer.batchId, (batch) => !batch.adding && batch.sorted === 1);
+    // A later scan of it, with a new file to find.
+    await core.setLinkedFolderPaused(outer.id, true);
+    await writeSourceFile(sources, "Notes/Inner/Chapter 2.txt", "Chapter 2: field data.");
+    await core.setLinkedFolderPaused(outer.id, false);
+
+    const inner = await core.addLinkedFolder(join(sources, "Notes", "Inner"), {
+      groupId: thesis.id,
+    });
+
+    expect(inner.id).toBe(outer.id);
+    expect(await batches.until(inner.batchId, (batch) => !batch.adding)).toMatchObject({
+      documentIds: [],
+    });
+    await vi.waitFor(async () => {
+      const { assignments } = await core.getLibrary();
+      expect(assignments).toHaveLength(2);
+      for (const assignment of assignments) {
+        expect(assignment).toMatchObject({
+          groupId: thesis.id,
+          source: "automatic",
+          suggested: true,
+          status: "classified",
+        });
+      }
+    });
+  });
+
   test("adding to a Folder that doesn't exist adds nothing", async () => {
     const { core, sources } = await setUp();
     const path = await writeSourceFile(sources, "Invoice 1.txt", "Invoice 1: GBP 100.");
