@@ -12,6 +12,7 @@ import {
   interceptOpenPath,
   launchApp,
   linkFolderFromSidebar,
+  newMind,
   openDocumentAt,
   openDocumentMenu,
   pathsOpened,
@@ -775,7 +776,7 @@ test("a Document's tab has one 36px toolbar under its group's strip, holding eve
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [guide]);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("open-document").click();
   const viewer = window.getByTestId("viewer");
   await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");

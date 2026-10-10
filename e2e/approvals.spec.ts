@@ -6,6 +6,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -51,7 +52,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await useLocalChatModel(window);
   await addTideConnector(window);
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await ask(window, "Please book_boat from Dover");
