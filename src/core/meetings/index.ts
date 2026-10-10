@@ -656,11 +656,7 @@ export function createMeetings(options: MeetingsOptions) {
       for (const row of rows) {
         if (live?.meetingId === row.id) end(live);
         deleteAudio(row.id, "discarded");
-        db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [
-          at,
-          at,
-          row.id,
-        ]);
+        db.run("UPDATE meetings SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, row.id]);
       }
       changed();
     },

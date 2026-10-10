@@ -904,7 +904,10 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     changed: (list) => events.emit("meetings.changed", list),
-    onCapturingChange: (capturing) => background.setRecording(capturing),
+    onCapturingChange: (capturing) => {
+      background.setRecording(capturing);
+      documents.hold(capturing);
+    },
     log: adapters.log ?? silentLogger,
   });
 
