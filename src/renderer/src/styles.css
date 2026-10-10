@@ -691,6 +691,14 @@
    * instead. The composer, pinned under it, is the measure wide. Under 900px
    * both margins fold away (see the container query at the end).
    */
+  /*
+   * What scrolls the Mind: room is kept for a scrollbar where they always show,
+   * so the column doesn't shift as a Mind grows past the window, and the
+   * composer under it keeps clear of the same width (MindPane).
+   */
+  .mind-scroller {
+    scrollbar-gutter: stable;
+  }
   .mind-column {
     container: mind / inline-size;
     padding-block: 64px 160px;
