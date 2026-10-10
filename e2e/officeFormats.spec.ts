@@ -398,6 +398,109 @@ test("a deck opens at a quote in a slide's speaker notes, which open, and marks 
   await app.close();
 });
 
+test("a Question about a Word comment cites the comment by its author, found, and the viewer washes it in its note beside the page (#76)", async () => {
+  const report = join(sources, "Field Report.docx");
+  await copyFile(join(FIXTURES, "Field Report.docx"), report);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await widen(app, window);
+  await addDocuments(window, [report]);
+
+  // Only the comment says this: the scripted model searches, and quotes the line that answers.
+  const answer = await ask(
+    window,
+    "What should be confirmed with the hydrology team before release?",
+  );
+  const chip = answer.getByTestId("citation-chip");
+  await expect(chip).toHaveCount(1);
+  await expect(chip).toHaveAttribute(
+    "aria-label",
+    "Citation 1: Field Report, § Start, comment by J. Moreau. Quote found in § Start, comment by J. Moreau",
+  );
+
+  // Opened at the Citation: the quote is washed in the comment's note, not in the page.
+  await chip.click();
+  await expect(window.getByTestId("viewer-title")).toHaveText("Field Report");
+  const viewer = window.getByTestId("viewer");
+  const docx = viewer.getByTestId("viewer-docx");
+  await expect(docx).toHaveAttribute("data-rendered", "yes");
+  const note = docx.getByTestId("viewer-docx-comment");
+  await expect(note).toHaveAttribute("aria-label", "Comment by J. Moreau");
+  const washed = note.locator("[data-quote-highlight]");
+  await expect(washed).toHaveText("Confirm with the hydrology team before release.");
+  await expect(washed).toBeInViewport();
+  await expect(docx.locator("section.docx [data-quote-highlight]")).toHaveCount(0);
+
+  // Its mark: in the margin between the page's text and the note, level with the quote.
+  const mark = viewer.getByTestId("viewer-quote-mark");
+  await expect(mark).toHaveAttribute("data-check", "found");
+  await expect(mark).toHaveAttribute(
+    "aria-label",
+    "Citation 1: quote found, § Start, comment by J. Moreau",
+  );
+  const markBox = await boxOf(mark);
+  const noteBox = await boxOf(note);
+  const text = await boxOf(docx.locator("section.docx > article").first());
+  expect(markBox.x).toBeGreaterThan(text.x + text.width);
+  expect(markBox.x + markBox.width).toBeLessThanOrEqual(noteBox.x);
+  const line = await washed.evaluate((element) => {
+    const rect = element.getClientRects()[0] ?? element.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  });
+  expect(Math.abs(markBox.y + markBox.height / 2 - line)).toBeLessThanOrEqual(1.5);
+  await screenshot(window, "docx-comment-cited");
+  await app.close();
+});
+
+test("the viewer washes a Markdown table's row quoted without its pipes, and a slide's row quoted with pipes, its figure written another way (#76)", async () => {
+  const notes = join(sources, "Survey.md");
+  await writeFile(
+    notes,
+    ["# Survey", "", "| Site | Gauges |", "|:-----|-------:|", "| Mid estuary | 4 |", ""].join(
+      "\n",
+    ),
+  );
+  const deck = join(sources, "Quarterly Research Update.pptx");
+  await copyFile(join(FIXTURES, "Quarterly Research Update.pptx"), deck);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await widen(app, window);
+  await addDocuments(window, [notes, deck]);
+  const viewer = window.getByTestId("viewer");
+  const mark = viewer.getByTestId("viewer-quote-mark");
+
+  // The Markdown row: its cells washed, though the quote has no pipes.
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Survey"),
+    pageFrom: 1,
+    quote: "Mid estuary 4",
+    citation: { check: "found", number: 1, label: "§ Survey" },
+  });
+  const text = viewer.getByTestId("viewer-text");
+  await expect(text).toHaveAttribute("data-view", "formatted");
+  await expect(text.locator("td [data-quote-highlight]")).toHaveText(["Mid estuary", "4"]);
+  await expect(mark.getByTestId("viewer-quote-mark-label")).toHaveText("§ Survey");
+  await screenshot(window, "markdown-row-without-pipes");
+
+  // The slide's table row, quoted with pipes and "1260" for the cell's "1,260".
+  await openDocumentAt(window, {
+    documentId: await documentIdOf(window, "Quarterly Research Update"),
+    pageFrom: 4,
+    quote: "Qualified | 42 | 1260",
+    citation: { check: "found", number: 2, label: "slide 4" },
+  });
+  await expect(viewer.getByTestId("viewer-slides")).toHaveAttribute("data-drawn", "yes");
+  const slide = viewer.locator('[data-slide="4"]');
+  await expect(slide).toHaveAttribute("data-quote-found", "slide");
+  const cells = slide.locator("[data-quote-highlight]");
+  await expect(cells).toHaveText(["Qualified", "42", "1,260"]);
+  await expect(cells.first()).toBeInViewport();
+  await expectMarkBeside(mark, cells.first());
+  await screenshot(window, "pptx-row-with-pipes");
+  await app.close();
+});
+
 /** A one-pixel PNG: a picture beside a Markdown file. */
 const PIXEL = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",

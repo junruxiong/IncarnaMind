@@ -1009,7 +1009,7 @@ export function createDocuments(options: DocumentsOptions) {
       `UPDATE documents SET processing_version = ?
        WHERE deleted_at IS NULL AND processing_version < ?
          AND status IN ('ready', 'embedding', 'waiting-for-model')`,
-      [BigInt(HAN_CURRENT_SINCE), BigInt(HAN_CURRENT_SINCE)],
+      [BigInt(PROCESSING_VERSION), BigInt(PROCESSING_VERSION)],
     );
   });
   // Pick up work a quit interrupted, in the order it was queued (newest files first).
