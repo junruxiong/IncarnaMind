@@ -23,6 +23,7 @@ import {
   summariseGroup,
 } from "../../eval/lib/citations";
 import type { PassageSearchResult } from "../../src/core";
+import { checkCitation } from "../../src/core/answers/citations";
 
 const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
   questionId: "en-01",
@@ -145,6 +146,41 @@ describe("What became of a Citation", () => {
     expect(line).toBe(
       'wrong page (quote-not-on-pages): Report, cites p. 1 of a Passage on pp. 1–2; the quote is on p. 2: "Revenue grew by ten percent"',
     );
+  });
+
+  test("a quote of a page whose stored text lost its f-ligatures is the check's miss: a false 'not found'", () => {
+    // JP Morgan 2022 Environmental Social Governance Report, p. 8, as stored: pdf.js reads its
+    // "fi" ligature as "f", so the page shows "finance" where its text reads "fnance".
+    const stored = [
+      {
+        page: 8,
+        text: "set our Sustainable Development Target (the “Target”) with the goal to fnance and\nfacilitate more than $2.5 trillion over 10 years—from 2021 through the end of 2030—",
+      },
+    ];
+    const asShown = "with the goal to finance and facilitate more than $2.5 trillion over 10 years";
+    const range = { pageFrom: 8, pageTo: 8 };
+    const check = (quote: string) =>
+      checkCitation({
+        quote,
+        range,
+        passage: { pageFrom: 7, pageTo: 8 },
+        documentDeleted: false,
+        pages: stored,
+      });
+
+    // The check finds the quote as the stored text reads it, not as the page shows it.
+    expect(check(asShown.replace("finance", "fnance")).check).toBe("found");
+    const checked = check(asShown);
+    expect(checked).toEqual({ check: "not-found", checkReason: "quote-not-on-pages" });
+    expect(outcomeOf({ ...checked, ...range, quote: asShown }, stored)).toBe("false-not-found");
+    // "efforts" for "eforts", "office" for "ofce", "fifty" for a lost ligature's "ffty".
+    const pages = [{ page: 1, text: "our eforts in the ofce, ffty in all" }];
+    expect(
+      outcomeOf(
+        { ...checked, pageFrom: 1, pageTo: 1, quote: "our efforts in the office, fifty in all" },
+        pages,
+      ),
+    ).toBe("false-not-found");
   });
 
   test("the check's own results are kept", () => {
