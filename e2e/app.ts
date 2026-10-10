@@ -57,7 +57,9 @@ export interface LaunchOptions {
  * The window size the specs are written for: the app's default. The app opens
  * no bigger than the screen, and a test machine's can be smaller (GitHub's
  * macOS runners have a 1024 × 768 one), where the Mind is narrow enough to fold
- * its margins away; so every launch makes the window this size.
+ * its margins away; so every launch makes the window this size. macOS can keep
+ * a window no taller than the screen (wider is allowed), so on a short screen
+ * the height is what the screen allows: only the width is waited for.
  */
 export const WINDOW_SIZE = { width: 1280, height: 800 };
 
@@ -94,9 +96,7 @@ export async function launchApp(
     await app.evaluate(({ BrowserWindow }, size) => {
       BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
     }, WINDOW_SIZE);
-    await expect
-      .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]))
-      .toEqual([WINDOW_SIZE.width, WINDOW_SIZE.height]);
+    await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(WINDOW_SIZE.width);
   }
   return { app, window };
 }
