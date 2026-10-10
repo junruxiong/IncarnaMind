@@ -221,18 +221,24 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     expect(feedback).toMatch(/\[\^1\]: the quote isn't word for word on p\. 7 in P1/);
   });
 
-  test("the example page in the structured-output instructions, copied, is outside the Passage (en-02)", async () => {
-    expect(
-      documentInstructions("structured-output", { total: 1, names: ["Attention Is All You Need"] }),
-    ).toContain('"location": "p. 3"');
+  test("the structured-output example names no page; its placeholder, copied, cites the Passage's own pages (en-02)", async () => {
+    const instructions = documentInstructions("structured-output", {
+      total: 1,
+      names: ["Attention Is All You Need"],
+    });
+    // It named "p. 3", which a record that copied it put outside its Passage.
+    expect(instructions).toContain('"location": "…"');
+    expect(instructions).not.toContain("p. 3");
     const attention = sessionOver(ATTENTION);
     await attention.shown();
 
     const { outcomes } = attention.cite([
-      { marker: 1, passage: "P1", location: "p. 3", quote: PERPLEXITY },
+      { marker: 1, passage: "P1", location: "…", quote: PERPLEXITY },
+      { marker: 2, passage: "P1", location: "p. 3", quote: PERPLEXITY },
     ]);
 
     expect(outcomes).toMatchObject([
+      { check: "found", pages: [7, 8] },
       { check: "not-found", checkReason: "pages-outside-passage", outcome: "page-range" },
     ]);
   });

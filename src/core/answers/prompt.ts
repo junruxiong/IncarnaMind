@@ -141,7 +141,8 @@ export function documentInstructions(
         "Passages found in the User's Documents for this Question:",
         passages,
         "",
-        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "p. 3", "quote": "…"}]}.',
+        // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
+        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}]}.',
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
