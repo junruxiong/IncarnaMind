@@ -4,7 +4,9 @@
  * with `Intl.Segmenter`, which finds the words in Chinese and Japanese text
  * too. The FTS5 index stores the words joined by spaces, so its default
  * `unicode61` tokenizer sees the same words; queries go through the same steps,
- * minus a short list of stopwords. `Intl.Segmenter` uses the ICU data bundled
+ * minus a short list of stopwords, an English possessive's "'s" and the
+ * space-joined run of single Han characters that stands for a split name (see
+ * `keywordTerms`). `Intl.Segmenter` uses the ICU data bundled
  * with Node and Electron, so this adds no dependency.
  *
  * The characters are folded one by one, by the Citation check's table
@@ -57,11 +59,42 @@ export function keywordText(text: string): string {
 /** Whether a word (lowercased, as `keywordText` gives it) is left out of searches. */
 export const isStopword = (word: string) => STOPWORDS.has(word);
 
-/** The words a search looks for: each distinct word of the query that isn't a stopword, in order. */
+/** A single Han character: the segmenter's pieces of a name it has no word for. */
+const SINGLE_HAN = /^[㐀-鿿]$/;
+
+/** An English possessive: "costco's" (curly apostrophes are straight by now). */
+const POSSESSIVE = /^(.+)'s$/;
+
+/**
+ * The words a search looks for: each distinct word of the query that isn't a
+ * stopword, in order. An English possessive is searched without its "'s": the
+ * index stores "costco's" as the tokens "costco" and "s", so "costco" finds it,
+ * and a Passage that says "Costco" too. A run of single Han characters (a name
+ * the segmenter split, 五|粮|液) is one term, those characters joined by spaces:
+ * a phrase that matches the same run in the index.
+ */
 export function keywordTerms(query: string): string[] {
-  return [...new Set(words(normaliseText(query)))]
-    .filter((word) => !STOPWORDS.has(word))
-    .slice(0, MAX_TERMS);
+  const terms: string[] = [];
+  let run: string[] = [];
+  const endRun = () => {
+    if (run.length > 0) terms.push(run.join(" "));
+    run = [];
+  };
+  for (const segment of segmenter.segment(simplified(normaliseText(query)))) {
+    if (!segment.isWordLike) {
+      endRun();
+      continue;
+    }
+    const word = segment.segment.toLowerCase().replace(POSSESSIVE, "$1");
+    if (STOPWORDS.has(word)) endRun();
+    else if (SINGLE_HAN.test(word)) run.push(word);
+    else {
+      endRun();
+      terms.push(word);
+    }
+  }
+  endRun();
+  return [...new Set(terms)].slice(0, MAX_TERMS);
 }
 
 /**
