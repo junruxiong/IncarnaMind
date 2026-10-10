@@ -1,15 +1,17 @@
 import { type FormEvent, useEffect, useId, useState } from "react";
-import type {
-  ChatProvider,
-  ChatProviderKind,
-  ConnectionTestResult,
-  SecretStorageStatus,
-  TestChatConnectionInput,
+import {
+  type ChatProvider,
+  type ChatProviderKind,
+  type ConnectionTestResult,
+  chatProviderKinds,
+  type SecretStorageStatus,
+  type TestChatConnectionInput,
 } from "../../../../core/api";
+import { catalogProviderOfKind, endpointOf } from "../../../../core/providers/catalog/providers";
 import { features } from "../../../../shared/features";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import {
   buttonClass,
   choiceListClass,
@@ -25,29 +27,30 @@ import {
 } from "../ui";
 import { testErrorKey, useProviderKey } from "./shared";
 
-/** Providers set up with a key or a server URL. Ollama has its own one-click card. */
-const formKinds = [
-  "openai",
-  "anthropic",
-  "google",
+/**
+ * Providers set up with a key or a server URL: every hosted provider in the
+ * catalog, then a server the User gives. Ollama has its own one-click card.
+ */
+const formKinds: readonly ChatProviderKind[] = [
+  ...chatProviderKinds.filter((kind) => (catalogProviderOfKind(kind)?.endpoints.length ?? 0) > 0),
   "openai-compatible",
-] as const satisfies readonly ChatProviderKind[];
+];
 
-type FormKind = (typeof formKinds)[number];
+type FormKind = ChatProviderKind;
 
-/** Prefilled when a provider is picked; the User can type any model their account has. */
-const suggestedModels: Record<FormKind, string> = {
-  openai: "gpt-5.5",
-  anthropic: "claude-opus-5-5",
-  google: "gemini-pro-latest",
-  "openai-compatible": "",
-};
+/**
+ * Prefilled when a provider is picked: its Answers model in the catalog, none
+ * for a server. The User can type any model their account has.
+ */
+const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.roles.answers ?? "";
 
-const isSuggestion = (model: string) => Object.values(suggestedModels).includes(model);
+const isSuggestion = (model: string) => formKinds.some((kind) => suggestedModel(kind) === model);
 
-const sameServer = (provider: ChatProvider, kind: FormKind, baseUrl: string) =>
+const sameServer = (provider: ChatProvider, kind: FormKind, endpoint: string, baseUrl: string) =>
   provider.kind === kind &&
-  (kind !== "openai-compatible" || provider.baseUrl === baseUrl.trim().replace(/\/+$/, ""));
+  (kind === "openai-compatible"
+    ? provider.baseUrl === baseUrl.trim().replace(/\/+$/, "")
+    : provider.endpoint === endpoint);
 
 /**
  * Pick a provider, paste a key (and a URL for an OpenAI-compatible server),
@@ -63,7 +66,10 @@ export function ProviderForm({
 }) {
   const t = useT();
   const id = useId();
+  const language = useLanguage();
   const [kind, setKind] = useState<FormKind | null>(null);
+  /** The region of a provider that has several; its first otherwise. */
+  const [endpointId, setEndpointId] = useState("");
   const key = useProviderKey();
   const { apiKey } = key;
   const [baseUrl, setBaseUrl] = useState("");
@@ -77,7 +83,11 @@ export function ProviderForm({
     core.getSecretStorage().then(setSecretStorage, () => undefined);
   }, []);
 
-  const saved = kind ? providers.find((each) => sameServer(each, kind, baseUrl)) : undefined;
+  const catalog = kind ? catalogProviderOfKind(kind) : undefined;
+  const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
+  const saved = kind
+    ? providers.find((each) => sameServer(each, kind, endpoint?.id ?? "", baseUrl))
+    : undefined;
   const keyRequired = kind !== null && kind !== "openai-compatible";
   const hasKey = apiKey.trim() !== "" || Boolean(saved?.hasApiKey);
   const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
@@ -91,8 +101,9 @@ export function ProviderForm({
     // A key typed for one provider is never sent to another.
     if (next !== kind) key.clear();
     setKind(next);
+    setEndpointId("");
     setModelId((current) =>
-      current === "" || isSuggestion(current) ? suggestedModels[next] : current,
+      current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
     setTest(null);
     setError(null);
@@ -103,6 +114,7 @@ export function ProviderForm({
     return {
       kind,
       modelId: modelId.trim(),
+      ...(endpoint ? { endpoint: endpoint.id } : {}),
       ...(kind === "openai-compatible" ? { baseUrl: baseUrl.trim() } : {}),
       ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
     };
@@ -179,6 +191,43 @@ export function ProviderForm({
 
       {kind && (
         <>
+          {catalog && (
+            <div className="flex flex-col gap-1" data-testid="provider-facts">
+              {/* Where the data goes and what the provider does with it, before a key is pasted. */}
+              <p className={hintClass}>
+                <span className="font-semibold text-ink">{t("providers.form.dataUse")}.</span>{" "}
+                {catalog.dataUse.summary[language === "zh-CN" ? "zh" : "en"]}
+              </p>
+            </div>
+          )}
+
+          {catalog && catalog.endpoints.length > 1 && (
+            <fieldset>
+              <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("providers.form.region")}</legend>
+              <div className={`${choiceListClass} bg-sheet`}>
+                {catalog.endpoints.map((option) => (
+                  <label key={option.id} className={compactChoiceRowClass}>
+                    <input
+                      type="radio"
+                      name={`${id}-region`}
+                      value={option.id}
+                      checked={endpoint?.id === option.id}
+                      onChange={() => {
+                        // A key belongs to its region: it is never sent to another.
+                        if (endpoint?.id !== option.id) key.clear();
+                        setEndpointId(option.id);
+                        setTest(null);
+                        setError(null);
+                      }}
+                      className={compactChoiceRadioClass}
+                    />
+                    {option.label[language === "zh-CN" ? "zh" : "en"]}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           {kind === "openai-compatible" && (
             <label className={fieldLabelClass}>
               {t("providers.form.baseUrl")}
@@ -208,6 +257,16 @@ export function ProviderForm({
             />
             {saved?.hasApiKey && (
               <span className={hintClass}>{t("providers.form.apiKeySaved")}</span>
+            )}
+            {(endpoint?.keyUrl ?? catalog?.keyUrl) && (
+              <a
+                href={endpoint?.keyUrl ?? catalog?.keyUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`${hintClass} underline`}
+              >
+                {t("providers.form.getKey")} ↗
+              </a>
             )}
           </label>
 

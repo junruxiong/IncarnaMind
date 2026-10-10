@@ -644,6 +644,39 @@ export const migrations: readonly Migration[] = [
         ELSE colour END;
     `,
   },
+  {
+    version: 29,
+    description: "Chat providers name their provider in the catalog, and its endpoint",
+    // The catalog is src/core/providers/catalog/providers.ts: each kind saved so far is one
+    // of its providers, except the ChatGPT plan, which has none. A hosted provider is on its
+    // one endpoint, "global"; a server keeps its URL in base_url. Keys stay in the keychain
+    // under the row's id, which doesn't change.
+    sql: `
+      ALTER TABLE chat_providers ADD COLUMN catalog_id TEXT;
+      ALTER TABLE chat_providers ADD COLUMN endpoint TEXT;
+      UPDATE chat_providers SET catalog_id = kind
+        WHERE kind IN ('openai', 'anthropic', 'google', 'openai-compatible', 'ollama');
+      UPDATE chat_providers SET endpoint = 'global'
+        WHERE kind IN ('openai', 'anthropic', 'google');
+      -- A provider is one per catalog provider and server, as it was one per kind and server.
+      DROP INDEX chat_providers_by_server;
+      CREATE UNIQUE INDEX chat_providers_by_server
+        ON chat_providers (coalesce(catalog_id, kind), coalesce(base_url, ''))
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 30,
+    description: "A provider is one per catalog provider, server and endpoint",
+    // Keys and model lists differ by region (Qwen's Beijing and Singapore, Kimi's .cn and .ai),
+    // so each endpoint of a hosted provider is its own row with its own key.
+    sql: `
+      DROP INDEX chat_providers_by_server;
+      CREATE UNIQUE INDEX chat_providers_by_server
+        ON chat_providers (coalesce(catalog_id, kind), coalesce(base_url, ''), coalesce(endpoint, ''))
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

@@ -1135,6 +1135,14 @@ export const chatProviderKinds = [
   "openai",
   "anthropic",
   "google",
+  "deepseek",
+  "qwen",
+  "kimi",
+  "glm",
+  "siliconflow",
+  "mistral",
+  "xai",
+  "openrouter",
   "openai-compatible",
   "ollama",
   "chatgpt",
@@ -1154,6 +1162,13 @@ export interface ChatProvider {
   /** A random UUID generated on this device. */
   id: string;
   kind: ChatProviderKind;
+  /**
+   * The provider in the catalog of providers and models (`src/core/providers/catalog`);
+   * null for one it doesn't have, the ChatGPT plan.
+   */
+  catalogId: string | null;
+  /** A hosted provider's endpoint, by its id in the catalog (e.g. "global"); null for a server's. */
+  endpoint: string | null;
   /** The server's URL for "openai-compatible" and "ollama"; null for the others. */
   baseUrl: string | null;
   /** Whether an API key is stored for it. Keys live in the keychain, never in the database. */
@@ -1164,6 +1179,12 @@ export interface ChatProvider {
 
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
+  /**
+   * A hosted provider's endpoint (its region), by its id in the catalog, e.g.
+   * "intl" for Qwen. Left out: its first. Each endpoint is its own provider
+   * with its own key, as keys and model lists differ by region.
+   */
+  endpoint?: string;
   /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
   baseUrl?: string;
   /** A new API key. Leave it out to keep the stored one; null removes it. */
@@ -1174,6 +1195,8 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
+  /** The endpoint to test (see `SaveChatProviderInput`). */
+  endpoint?: string;
   baseUrl?: string;
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
@@ -1250,6 +1273,12 @@ export interface ChatModelGroup {
    * the default model if it is on this provider. The default comes first.
    */
   models: string[];
+  /**
+   * The ids in `models` whose capabilities are unknown: neither the catalog
+   * nor the provider says what they can do. They still work; an Answer finds
+   * out as it goes.
+   */
+  unknown: string[];
 }
 
 // ---------------------------------------------------------------------------
