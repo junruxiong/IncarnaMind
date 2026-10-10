@@ -120,8 +120,10 @@ interface Cited {
  * The Units a record cites, in order. A record names a Location ("slide 4",
  * "Revenue, rows 12–14", "§ 2.1 Sensitivity"), or for a PDF or deck, its
  * pages. One that names none cites the Passage's own Units; when they are
- * more than two, the quote's own Unit (or two) among them, if it is there.
- * `units` are the Passage's.
+ * more than two, the quote's own Unit (or two) among them, if it is there:
+ * a PDF's too, as a small model often names no page, and a Passage of a
+ * page with little text runs over three or four (#67: 梯度下降法's covers
+ * pp. 1–4). `units` are the Passage's.
  */
 function citedUnits(
   record: Pick<CitationRecordInput, "pageFrom" | "pageTo" | "location" | "quote">,
@@ -158,7 +160,7 @@ function citedUnits(
       unresolved: false,
     };
   }
-  if (kind !== "page" && own.pageTo - own.pageFrom + 1 > MAX_CITED_PAGES) {
+  if (own.pageTo - own.pageFrom + 1 > MAX_CITED_PAGES) {
     const quote = cleanQuote(typeof record.quote === "string" ? record.quote : "");
     const found = locateQuote(units, quote);
     if (found) return { range: found, requested: null, unresolved: false };

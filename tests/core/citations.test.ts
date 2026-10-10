@@ -348,6 +348,37 @@ describe("The page-range rule", { timeout: 30_000 }, () => {
     expect(citeFeedback(model)).toMatch(/cite one page, or two consecutive pages/);
   });
 
+  test("a record that names no page, for a Passage over three pages, cites the page its quote is on", async () => {
+    // Three short pages: one Passage covers them all. A small model often names no page (#67).
+    const threePages = buildPdf([
+      { lines: ["Tides rise and fall twice a day."] },
+      { lines: ["Spring tides happen at new moon and at full moon."] },
+      { lines: ["Neap tides are the smallest."] },
+    ]);
+    let shown: ShownPassage[] = [];
+    const model = citingModel({
+      query: "spring tides",
+      records: (passages) => {
+        shown = passages;
+        return [{ marker: 1, passage: first(passages).id, quote: SPRING }];
+      },
+      answer: "At new and full moon [^1].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Three.pdf", contents: threePages },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "When are spring tides?");
+
+    expect(first(shown).pages).toBe("1-3");
+    expect(onlyCitation(client, answerId)).toMatchObject({
+      pageFrom: 2,
+      pageTo: 2,
+      location: { kind: "page", from: 2, to: 2 },
+      check: "found",
+    });
+  });
+
   test("a quote from another page than the one cited is 'not found'", async () => {
     const model = citingModel({
       query: "spring tides",
