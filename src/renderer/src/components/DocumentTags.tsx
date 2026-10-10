@@ -101,7 +101,7 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
           onClick={() => {
             close();
             if (organizing && !library?.settings.classifier)
-              useAppStore.getState().openSettings("organization");
+              useAppStore.getState().openSettings("models");
             else void useAppStore.getState().retagDocuments([item.id]);
           }}
           className={footerButton}

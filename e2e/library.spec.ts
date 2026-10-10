@@ -202,7 +202,8 @@ test("onboarding offers starter folders and Chinese organization settings", asyn
       .getByTestId("library")
       .getByRole("button", { name: "文档整理", exact: true })
       .click();
-    await expect(window.getByTestId("settings-page-title")).toHaveText("文档整理");
+    await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
+    await expect(window.getByTestId("organization-settings")).toContainText("文档整理");
     await window.getByTestId("settings-close").click();
     await window.screenshot({ path: "/tmp/incarnamind-organize-chinese.png" });
   } finally {

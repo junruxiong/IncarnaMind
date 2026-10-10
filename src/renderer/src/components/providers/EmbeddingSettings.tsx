@@ -98,7 +98,7 @@ export function embeddingProviderLabel(provider: EmbeddingProvider, t: Translate
 }
 
 /**
- * Settings → Document search: embeddings, off by default, or the embedding
+ * Settings → Search: embeddings, off by default, or the embedding
  * model search uses (the built-in one, or a provider chosen instead),
  * turning them on or off or switching model with a warning, its error and
  * rebuild, and local mode.

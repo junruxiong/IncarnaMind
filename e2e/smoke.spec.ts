@@ -224,7 +224,7 @@ test("added files are processed, show as ready in the sidebar, and can be delete
 test("the experimental ChatGPT plan is off by default, and turning it on shows the warning and the sign-in", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await openSettings(window, "chat-model");
+  await openSettings(window, "models");
 
   const experimental = window.getByTestId("experimental-settings");
   const toggle = experimental.getByTestId("codex-switch");
@@ -278,9 +278,9 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await expect(second.window.getByTestId("chat-readiness")).toBeVisible();
   await expect(second.window.getByTestId("chat-setup")).toBeHidden();
 
-  // The notice opens Settings on its Chat model page, where a provider can be set up.
+  // The notice opens Settings on its Models page, where a provider can be set up.
   await second.window.getByTestId("chat-readiness").getByRole("button").click();
-  await expect(second.window.getByTestId("settings")).toHaveAttribute("data-page", "chat-model");
+  await expect(second.window.getByTestId("settings")).toHaveAttribute("data-page", "models");
   await expect(second.window.getByTestId("chat-model-settings")).toBeVisible();
   // What is sent to other services lives on the Privacy page.
   await showSettingsPage(second.window, "privacy");
