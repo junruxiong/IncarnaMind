@@ -16,6 +16,7 @@ import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
 import { ExtractionError, extractText, pdfCreationDates } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
+import { readWebPage } from "./formats/web";
 import { packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
@@ -53,6 +54,7 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pptx: 5,
   xlsx: 5,
   csv: 5,
+  web: 7,
 };
 
 /**
@@ -259,7 +261,7 @@ export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
 }
 
 const hasMetadata = (kind: DocumentKind) =>
-  kind === "pdf" || kind === "docx" || kind === "pptx" || kind === "xlsx";
+  kind === "pdf" || kind === "docx" || kind === "pptx" || kind === "xlsx" || kind === "web";
 
 /** The local calendar year now: no later creation date is plausible. */
 const thisYear = () => new Date().getFullYear();
@@ -278,6 +280,18 @@ async function readMetadataOf(
   let fromMetadata: (string | null)[] = [];
   let property: string | null = null;
   try {
+    if (kind === "web") {
+      // When it was published, if it says; a year in its text is no date of the page's.
+      const { meta } = readWebPage(new TextDecoder().decode(bytes));
+      return {
+        creationDate: creationDate(
+          [meta.published === null ? null : w3cDate(meta.published)],
+          null,
+          thisYear(),
+        ),
+        title: documentTitle(meta.title, firstUnit),
+      };
+    }
     if (kind === "pdf") {
       const { info, xmp, title } = await pdfCreationDates(bytes);
       fromMetadata = [info === null ? null : pdfDate(info), xmp === null ? null : w3cDate(xmp)];

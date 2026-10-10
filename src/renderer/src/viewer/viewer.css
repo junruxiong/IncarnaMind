@@ -95,6 +95,15 @@
   .viewer-divider {
     @apply mx-1 h-4 w-px shrink-0 bg-rule;
   }
+  /* What the header says of a web page: when it was fetched. Gives way in a narrow viewer. */
+  .viewer-meta {
+    @apply shrink-0 px-1 text-[12px] leading-5 whitespace-nowrap text-ink-meta;
+  }
+  @container viewer (width < 460px) {
+    .viewer-meta {
+      @apply sr-only;
+    }
+  }
   .viewer-page-input {
     @apply h-6 shrink-0 rounded-sm border border-rule bg-sheet px-1 text-center text-ink tabular-nums;
 
@@ -196,6 +205,20 @@
     .viewer-text-page {
       @apply pt-6 pr-12 pb-8 pl-6;
     }
+  }
+
+  /* A saved web page's title, over its site's name and its byline. */
+  .document-web-header {
+    @apply mb-8 border-b border-rule pb-6;
+  }
+  .document-web-site {
+    @apply font-sans text-label font-semibold text-ink-meta;
+  }
+  .document-web-title {
+    @apply mt-1 font-serif text-[28px] leading-9 font-semibold tracking-[-0.01em] break-words text-ink;
+  }
+  .document-web-byline {
+    @apply mt-2 font-sans text-[13px] leading-5 text-ink-meta;
   }
 
   .document-plain {

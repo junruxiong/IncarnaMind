@@ -1,13 +1,15 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ClipboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
+import { linksIn, useWebPages } from "../webPages";
 import { DeleteMindDialog } from "./DeleteMindDialog";
 import { DocumentsSection } from "./DocumentsSection";
 import { ExampleChip, GetStartedCard, useIsExample } from "./GettingStarted";
 import {
   AppMark,
+  DocumentLineIcon,
   FolderPlusLineIcon,
   MindLineIcon,
   PencilLineIcon,
@@ -51,6 +53,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
       data-testid="sidebar"
       className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
+      onPaste={pasteLinks}
     >
       <SidebarHeader>
         <PlusMenu />
@@ -151,8 +154,23 @@ export function PlusMenuPlaceholder() {
 }
 
 /**
- * The one "+" menu: New Mind, Add Documents… and Link a folder…. Opened by
- * keyboard or mouse, its items are menu items reached with the arrow keys.
+ * Links pasted on the sidebar are saved as web pages: in the Folder whose
+ * row has the focus, if one has.
+ */
+function pasteLinks(event: ClipboardEvent<HTMLElement>) {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  if (target?.isContentEditable || target?.closest("input, textarea")) return;
+  const addresses = linksIn(event.clipboardData);
+  if (addresses.length === 0) return;
+  event.preventDefault();
+  const folder = target?.closest('[data-testid="library-folder"]')?.getAttribute("data-folder-id");
+  void useWebPages.getState().add(addresses, folder && folder !== "unsorted" ? folder : null);
+}
+
+/**
+ * The one "+" menu: New Mind, Add Documents…, Add a web page… and Link a
+ * folder…. Opened by keyboard or mouse, its items are menu items reached
+ * with the arrow keys.
  */
 function PlusMenu() {
   const t = useT();
@@ -208,6 +226,16 @@ function PlusMenu() {
         >
           <PlusLineIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.plus.addDocuments")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-add-web-page"
+          onClick={choose(() => useWebPages.getState().openDialog())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <DocumentLineIcon kind="web" className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("sidebar.plus.addWebPage")}</span>
         </button>
         <button
           type="button"

@@ -16,6 +16,7 @@ const SlidesView = lazy(() =>
   import("../viewer/SlidesView").then((m) => ({ default: m.SlidesView })),
 );
 const SheetView = lazy(() => import("../viewer/SheetView").then((m) => ({ default: m.SheetView })));
+const WebView = lazy(() => import("../viewer/WebView").then((m) => ({ default: m.WebView })));
 
 /**
  * What the viewer shows of a Document's file, as a key that changes when
@@ -67,6 +68,8 @@ function DocumentView({ document, target }: { document: Document; target: Viewer
     case "xlsx":
     case "csv":
       return <SheetView document={document} target={target} />;
+    case "web":
+      return <WebView document={document} target={target} />;
   }
 }
 

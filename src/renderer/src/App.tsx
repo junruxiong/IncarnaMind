@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { AddWebPageDialog } from "./components/AddWebPageDialog";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
@@ -17,6 +18,7 @@ import { useLanguage, useT } from "./i18n";
 import { isNarrow, sidebarIsHidden } from "./sidebarLayout";
 import { useAppStore } from "./store";
 import { useDevViewerShortcut } from "./viewerControls";
+import { useWebPages } from "./webPages";
 
 // Pane limits, from the old frontend's layout store. The divider inside the card is a 1px rule.
 const ROD_WIDTH = 1;
@@ -201,7 +203,7 @@ function useSidebarPeek(hidden: boolean) {
  * the window's other edges. The Document viewer panel appears on the right,
  * inside the card, only while open, narrowing the Mind area.
  * Files dropped anywhere are added as Documents; a folder dropped is offered
- * for linking.
+ * for linking; links dropped are saved as web pages.
  */
 function Workspace() {
   const t = useT();
@@ -211,7 +213,10 @@ function Workspace() {
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const addDropped = useAppStore((state) => state.addDropped);
-  const fileDrop = useFileDrop((files, folders) => void addDropped(files, folders));
+  const fileDrop = useFileDrop(
+    (files, folders) => void addDropped(files, folders),
+    (addresses) => void useWebPages.getState().add(addresses),
+  );
   const windowWidth = useWindowWidth();
   const openSettings = useAppStore((state) => state.openSettings);
   useDevViewerShortcut();
@@ -321,6 +326,7 @@ function Workspace() {
         </div>
         <SettingsDialog />
         <TagsDialog />
+        <AddWebPageDialog />
         <ChatSetupDialog />
         <UsageDataDialog />
         {/* Opens after the dialog that triggered the request, so it shows on top of it. */}

@@ -15,6 +15,7 @@ import {
   isCited,
 } from "./answers/citedVersions";
 import type {
+  AddDocumentsResult,
   ChatModelChoice,
   CoreApi,
   CoreEventSource,
@@ -34,9 +35,16 @@ import {
   parseListOptions,
 } from "./documents";
 import { fsWatchFolder } from "./documents/watcher";
+import { createWebPages } from "./documents/web";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
-import { InvalidInputError, isRecord, MindReadOnlyError, TaggingNotReadyError } from "./errors";
+import {
+  InvalidInputError,
+  isRecord,
+  MindReadOnlyError,
+  NotFoundError,
+  TaggingNotReadyError,
+} from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
@@ -102,7 +110,8 @@ export interface Core extends CoreApi, CoreEventSource {
   openDocumentImage(documentId: string, path: string): Promise<DocumentImage>;
   /**
    * Opens a live Document's file, where it is, in the default app for its
-   * type, through the `shell` adapter. Throws NotFoundError as
+   * type, through the `shell` adapter; a web page opens live, at its
+   * address, through the `browser` adapter. Throws NotFoundError as
    * `openDocumentFile` does.
    */
   openDocumentInApp(documentId: string): Promise<void>;
@@ -298,6 +307,15 @@ export function createCore(adapters: CoreAdapters): Core {
     db.close();
     throw error;
   }
+  const webPages = createWebPages({
+    db,
+    dataDir,
+    now,
+    documents,
+    languages: () =>
+      settings.get().language === "zh-CN" ? ["zh-CN", "zh;q=0.9", "en;q=0.8"] : ["en", "*;q=0.5"],
+    ...adapters.webPages,
+  });
   let skills: ReturnType<typeof createSkills>;
   try {
     skills = createSkills({
@@ -940,6 +958,30 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
       return result;
     },
+    saveWebPage: async (input) => {
+      const folderId = isRecord(input) ? input.folderId : undefined;
+      if (
+        folderId !== undefined &&
+        folderId !== null &&
+        !library.snapshot().groups.some((group) => group.id === folderId)
+      ) {
+        throw new NotFoundError("There is no such Folder.");
+      }
+      const since = now();
+      const result = await webPages.save(input);
+      if (result.outcome === "saved" && !result.existing && typeof folderId === "string") {
+        library.assign(result.document.id, folderId);
+      }
+      const added: AddDocumentsResult =
+        result.outcome === "saved"
+          ? { documents: [result.document], skipped: [] }
+          : { documents: [], skipped: [{ path: result.address, reason: "unreadable" }] };
+      usageData.record({ event: "documents_added", fields: addedCounts(added, since) });
+      return result.outcome === "saved"
+        ? { ...result, document: documents.get(result.document.id) }
+        : result;
+    },
+    fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
         throw new InvalidInputError("There is no text to save.");
@@ -1289,6 +1331,8 @@ export function createCore(adapters: CoreAdapters): Core {
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
+      const address = documents.get(documentId).web?.address;
+      if (address) return adapters.browser.open(address);
       const path = await documents.filePath(documentId);
       if (!adapters.shell)
         throw new Error("This copy of IncarnaMind can't open files in other apps.");

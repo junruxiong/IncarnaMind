@@ -23,6 +23,8 @@ export const DOCUMENT_EXTENSIONS: Readonly<Record<DocumentKind, readonly string[
   pptx: ["pptx"],
   xlsx: ["xlsx"],
   csv: ["csv"],
+  // Saved by their address, never added as files: a .html file isn't a web page Document.
+  web: [],
 };
 
 const KINDS: ReadonlyMap<string, DocumentKind> = new Map(
