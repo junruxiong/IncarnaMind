@@ -269,7 +269,6 @@ export function createLibrary(options: {
     }
   };
 
-  /** Changes the Suggested Folders of these Documents, all or none, then says so. */
   const review = (input: unknown, change: (row: AssignmentRow) => void): AssignmentChange[] => {
     if (!Array.isArray(input) || !input.every((id) => typeof id === "string" && id !== ""))
       throw new InvalidInputError("Choose valid Documents.");
@@ -619,13 +618,11 @@ export function createLibrary(options: {
           );
       });
     },
-    /** The Folder Documents are added to, checked, or null. */
     target(input: unknown): string | null {
       if (input === undefined || input === null) return null;
       if (!isRecord(input)) throw new InvalidInputError("Choose where to add the Documents.");
       return input.groupId === undefined || input.groupId === null ? null : group(input.groupId).id;
     },
-    /** Files a Document just added into the Folder it was added to, as the User's choice. */
     file(id: string, groupId: string) {
       if (!groups().some((item) => item.id === groupId)) return;
       const { automatic, classifier } = getSettings();
