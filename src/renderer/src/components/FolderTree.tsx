@@ -10,6 +10,7 @@ import {
   rowStateLabel,
 } from "../linkedFolders";
 import { selectTagFilterKey, useAppStore } from "../store";
+import { TREE_ROW } from "../treeKeys";
 import { ExampleChip } from "./GettingStarted";
 import { LinkedFolderMenu, UnlinkFolderDialog } from "./LinkedFolderMenu";
 import {
@@ -381,6 +382,7 @@ function GroupItem(props: GroupItemProps) {
         {expandable ? (
           <button
             type="button"
+            {...TREE_ROW}
             data-testid="folder-toggle"
             aria-expanded={open}
             title={title ?? name}
