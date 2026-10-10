@@ -294,8 +294,10 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await expect(window.getByTestId("pdf-fit-width")).toHaveAttribute("aria-pressed", "true");
   const scroller = window.getByTestId("pdf-scroller");
   await expect.poll(() => fitsAcross(scroller, page1)).toBe(true);
-  // The page fills the width beside the outline, less the backdrop's margins.
-  expect(await widthOf(page1)).toBeGreaterThan((await widthOf(scroller)) - 2 * 24 - 2);
+  // The page fills the width beside the outline, less the backdrop's margins, and less the
+  // scrollbar where the system always shows one (with a mouse and no trackpad, as on CI).
+  const room = await scroller.evaluate((element) => element.clientWidth);
+  expect(await widthOf(page1)).toBeGreaterThan(room - 2 * 24 - 2);
   await screenshot(viewer, "viewer-fit-width-outline");
 
   // A Word file's pages fit beside its outline too.
