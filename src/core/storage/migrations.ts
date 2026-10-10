@@ -695,7 +695,8 @@ export const migrations: readonly Migration[] = [
   },
   {
     version: 34,
-    description: "Meetings: a recording's state, its stretches and how long its audio is kept (#135)",
+    description:
+      "Meetings: a recording's state, its stretches and how long its audio is kept (#135)",
     // The audio itself is in the data folder, meetings/<id>/, one WAV file per 10 seconds per
     // source (src/core/meetings/audioFiles.ts): the files are what survives a crash, so they
     // aren't listed here. periods is JSON, the stretches recorded, in order: each

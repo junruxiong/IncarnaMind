@@ -1,11 +1,13 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { Core, Meeting } from "../../src/core";
+import type { Core, Embedder, Meeting } from "../../src/core";
 import { MEETING_AUDIO_KEPT_MS } from "../../src/core/api";
+import { createFakeEmbedder } from "../../src/core/embedding/fake";
 import { listParts, meetingFolder } from "../../src/core/meetings/audioFiles";
 import { createFakeCapture, type FakeCaptureOptions } from "../../src/core/meetings/fakeCapture";
 import { createTempDataFolder, manualClock, nextEvent, startCore } from "../helpers/core";
+import { createSourceFolder, waitForProcessing, writeSourceFile } from "../helpers/documents";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -66,7 +68,10 @@ describe("Recording a Meeting", () => {
       audio: { kept: false, expiresAt: null, deletedAt: null },
     });
 
-    await core.updateSettings({ user: { language: "zh-CN" }, device: { meetingSystemAudio: false } });
+    await core.updateSettings({
+      user: { language: "zh-CN" },
+      device: { meetingSystemAudio: false },
+    });
     const chinese = await core.createMeeting();
     const chineseMind = (await core.listMinds()).find((each) => each.id === chinese.mindId);
     expect(chineseMind?.title).toBe("会议，10月6日");
@@ -237,11 +242,7 @@ describe("Recording a Meeting", () => {
     expect(capture.started).toBe(1);
 
     await core.stopMeeting(id);
-    expect(partsOf(dataDir, id)).toEqual([
-      "microphone@0+6",
-      "microphone@8+10",
-      "microphone@18+2",
-    ]);
+    expect(partsOf(dataDir, id)).toEqual(["microphone@0+6", "microphone@8+10", "microphone@18+2"]);
   });
 });
 
@@ -399,6 +400,76 @@ describe("What a Meeting needs", () => {
     await expect(core.createMeeting({ mindId: mind.id })).rejects.toThrow(/already/);
     await core.startMeeting({ meetingId: inMind.id });
     await expect(core.discardMeeting(inMind.id)).rejects.toThrow(/hasn't started/);
+  });
+
+  test("while a Meeting records, Documents wait to be read, and are read once it pauses", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core } = await meetingCore(dataDir);
+    const { id } = await core.createMeeting();
+    await core.startMeeting({ meetingId: id });
+
+    const file = await writeSourceFile(
+      await createSourceFolder(),
+      "Notes.md",
+      "# Tides\n\nHigh water.",
+    );
+    const { documents } = await core.addDocuments([file]);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect((await core.listDocuments()).map((each) => each.status)).toEqual(["queued"]);
+
+    await core.pauseMeeting(id);
+    const [read] = await waitForProcessing(core, [documents[0]?.id ?? ""]);
+    expect(read?.status).toBe("ready");
+  });
+
+  test("while a Meeting records, embedding stops after the Passage in hand, and goes on once it stops", async () => {
+    const fake = createFakeEmbedder();
+    const embedded: string[] = [];
+    let release = () => {};
+    let gate: Promise<void> | null = new Promise((resolve) => {
+      release = resolve;
+    });
+    const embedder: Embedder = {
+      load: (files) => fake.load(files),
+      async embed(text) {
+        const waiting = gate;
+        gate = null;
+        if (waiting) await waiting;
+        embedded.push(text);
+        return fake.embed(text);
+      },
+      close: () => fake.close(),
+    };
+    const core = startCore(await createTempDataFolder(), {
+      audioCapture: createFakeCapture(),
+      embedder,
+    });
+    await core.updateSettings({ device: { meetingsEnabled: true, meetingNoticeAccepted: true } });
+    await core.saveEmbeddingProvider({ kind: "built-in" });
+    const paragraphs = Array.from(
+      { length: 40 },
+      (_, i) => `Paragraph ${i} about the tides. ${"High water comes twice a day. ".repeat(20)}`,
+    );
+    const file = await writeSourceFile(
+      await createSourceFolder(),
+      "Tides.md",
+      paragraphs.join("\n\n"),
+    );
+    const { documents } = await core.addDocuments([file]);
+    await vi.waitFor(() => expect(gate).toBeNull());
+
+    const { id } = await core.createMeeting();
+    await core.startMeeting({ meetingId: id });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(embedded).toHaveLength(1);
+    // Waiting its turn again, first in line.
+    expect((await core.listDocuments())[0]?.status).toBe("queued");
+
+    await core.stopMeeting(id);
+    const [ready] = await waitForProcessing(core, [documents[0]?.id ?? ""]);
+    expect(ready?.status).toBe("ready");
+    expect(embedded.length).toBeGreaterThan(1);
   });
 
   test("deleting the Mind stops its Meeting and deletes its audio", async () => {

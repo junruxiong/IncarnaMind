@@ -25,6 +25,9 @@ describe("Settings", () => {
         },
         skillScriptsEnabled: true,
         skillScriptTimeoutSeconds: 60,
+        meetingsEnabled: false,
+        meetingSystemAudio: true,
+        meetingNoticeAccepted: false,
       },
       language: "en",
       scriptSandbox: "none",
@@ -106,6 +109,9 @@ describe("Settings", () => {
       },
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
+      meetingsEnabled: false,
+      meetingSystemAudio: true,
+      meetingNoticeAccepted: false,
     });
   });
 
@@ -143,6 +149,9 @@ describe("Settings", () => {
       },
       skillScriptsEnabled: false,
       skillScriptTimeoutSeconds: 15,
+      meetingsEnabled: true,
+      meetingSystemAudio: false,
+      meetingNoticeAccepted: true,
     };
     await before.updateSettings({ user: { language: "zh-CN" }, device });
     before.close();

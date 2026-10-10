@@ -4,7 +4,12 @@
  * (or silence). The tests push audio by hand; the smoke tests' copy makes it in
  * real time (`realTime`). Never the real microphone.
  */
-import { type AudioCapture, type AudioSink, type CaptureState, MEETING_SAMPLE_RATE } from "../adapters";
+import {
+  type AudioCapture,
+  type AudioSink,
+  type CaptureState,
+  MEETING_SAMPLE_RATE,
+} from "../adapters";
 import type { AudioSource } from "../api";
 
 export interface FakeCaptureOptions {
