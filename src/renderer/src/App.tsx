@@ -16,8 +16,10 @@ import { useLanguage, useT } from "./i18n";
 import { useAppStore } from "./store";
 import { useDevViewerShortcut } from "./viewerControls";
 
-// Pane limits, from the old frontend's layout store. A divider is a 1px rule.
+// Pane limits, from the old frontend's layout store. The divider inside the card is a 1px rule.
 const ROD_WIDTH = 1;
+/** The card's distance from the sidebar, and from the window's top, right and bottom edges. */
+const CARD_GAP = 8;
 const SIDEBAR = { min: 165, max: 480 };
 const VIEWER = { min: 220, max: 900 };
 const CENTRE_MIN = 300;
@@ -75,8 +77,9 @@ function useMenuCommands(): void {
 
 /**
  * Sidebar with Minds and Documents on the left, on the frame, and the open
- * Mind filling the rest, on the sheet; 1px rules divide them. The Document
- * viewer panel appears on the right only while open, narrowing the Mind area.
+ * Mind filling the rest in a card on the sheet, 8px from the sidebar and from
+ * the window's other edges. The Document viewer panel appears on the right,
+ * inside the card, only while open, narrowing the Mind area.
  * Files dropped anywhere are added as Documents; a folder dropped is offered
  * for linking.
  */
@@ -98,10 +101,12 @@ function Workspace() {
 
   if (!device) return null;
   const { sidebarWidth } = device;
-  const room = windowWidth - ROD_WIDTH - CENTRE_MIN;
-  // Until the User resizes it, the viewer opens at half the room beside the sidebar (DESIGN.md).
+  // What the sidebar and the viewer may take, with the card's gap and margin and the Mind's minimum kept.
+  const room = windowWidth - 2 * CARD_GAP - CENTRE_MIN;
+  // Until the User resizes it, the viewer opens at half the card (DESIGN.md).
   const preferredViewerWidth =
-    device.viewerWidth ?? Math.min(VIEWER.max, Math.round((windowWidth - sidebarWidth) / 2));
+    device.viewerWidth ??
+    Math.min(VIEWER.max, Math.round((windowWidth - sidebarWidth - 2 * CARD_GAP) / 2));
   // In a window too narrow for the saved width, the viewer gives way to the
   // Mind (down to its own minimum); the saved width comes back as the window grows.
   const viewerWidth = Math.max(
@@ -111,7 +116,9 @@ function Workspace() {
   const shownViewerWidth = viewerOpen ? viewerWidth + ROD_WIDTH : 0;
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-sheet" {...fileDrop.handlers}>
+    <div className="relative flex h-screen overflow-hidden bg-frame" {...fileDrop.handlers}>
+      {/* The 8px above the card moves the window like the band does. */}
+      <div aria-hidden="true" className="title-bar absolute inset-x-0 top-0 h-2" />
       <Sidebar width={sidebarWidth} onOpenSettings={openSettings} />
       <ResizeRod
         label={t("sidebar.resize")}
@@ -119,26 +126,30 @@ function Workspace() {
         min={SIDEBAR.min}
         max={Math.min(SIDEBAR.max, room - shownViewerWidth)}
         direction={1}
+        gap
+        testId="sidebar-resize"
         onPreview={(width) => previewLayout({ sidebarWidth: width })}
         onCommit={(width) => void updateSettings({ device: { sidebarWidth: width } })}
       />
-      {libraryOpen ? <LibraryPane /> : <MindPane />}
-      {viewerOpen && (
-        <>
-          <ResizeRod
-            testId="viewer-resize"
-            belowBand
-            label={t("viewer.resize")}
-            width={viewerWidth}
-            min={VIEWER.min}
-            max={Math.min(VIEWER.max, room - ROD_WIDTH - sidebarWidth)}
-            direction={-1}
-            onPreview={(width) => previewLayout({ viewerWidth: width })}
-            onCommit={(width) => void updateSettings({ device: { viewerWidth: width } })}
-          />
-          <ViewerPanel width={viewerWidth} onClose={closeViewer} />
-        </>
-      )}
+      <div data-testid="card" className="app-card">
+        {libraryOpen ? <LibraryPane /> : <MindPane />}
+        {viewerOpen && (
+          <>
+            <ResizeRod
+              testId="viewer-resize"
+              belowBand
+              label={t("viewer.resize")}
+              width={viewerWidth}
+              min={VIEWER.min}
+              max={Math.min(VIEWER.max, room - ROD_WIDTH - sidebarWidth)}
+              direction={-1}
+              onPreview={(width) => previewLayout({ viewerWidth: width })}
+              onCommit={(width) => void updateSettings({ device: { viewerWidth: width } })}
+            />
+            <ViewerPanel width={viewerWidth} onClose={closeViewer} />
+          </>
+        )}
+      </div>
       <SettingsDialog />
       <TagsDialog />
       <ChatSetupDialog />

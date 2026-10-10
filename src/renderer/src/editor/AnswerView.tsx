@@ -15,7 +15,8 @@ import { useApprovals, waitingFor } from "../approvals";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { useT } from "../i18n";
-import { type SettingsPage, useAppStore } from "../store";
+import type { SettingsPage } from "../settingsPages";
+import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
 

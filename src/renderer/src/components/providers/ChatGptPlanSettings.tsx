@@ -32,7 +32,7 @@ export function useChatGptPlan(): [ChatGptPlanStatus | null, (status: ChatGptPla
 }
 
 /**
- * Settings → Experimental: the "ChatGPT plan (via Codex sign-in)" provider.
+ * Settings → Models → ChatGPT plan: the "ChatGPT plan (via Codex sign-in)" provider.
  * Off by default. Turning it on shows what it is (not an official OpenAI
  * integration, may be blocked, counts against the plan's limits) and the
  * sign-in; turning it off signs out and removes the provider.
