@@ -1145,6 +1145,13 @@ export interface ChatProvider {
   /** A random UUID generated on this device. */
   id: string;
   kind: ChatProviderKind;
+  /**
+   * The provider in the catalog of providers and models (`src/core/providers/catalog`);
+   * null for one it doesn't have, the ChatGPT plan.
+   */
+  catalogId: string | null;
+  /** A hosted provider's endpoint, by its id in the catalog (e.g. "global"); null for a server's. */
+  endpoint: string | null;
   /** The server's URL for "openai-compatible" and "ollama"; null for the others. */
   baseUrl: string | null;
   /** Whether an API key is stored for it. Keys live in the keychain, never in the database. */
@@ -1241,6 +1248,12 @@ export interface ChatModelGroup {
    * the default model if it is on this provider. The default comes first.
    */
   models: string[];
+  /**
+   * The ids in `models` whose capabilities are unknown: neither the catalog
+   * nor the provider says what they can do. They still work; an Answer finds
+   * out as it goes.
+   */
+  unknown: string[];
 }
 
 // ---------------------------------------------------------------------------

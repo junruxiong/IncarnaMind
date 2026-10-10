@@ -47,10 +47,10 @@ import { documentPageImages } from "./library/pageImages";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
+import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
-import { chatModelReadsImages } from "./providers/imageInput";
 import { ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
 import {
@@ -668,7 +668,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (embedding.localOnly() && prepared.provider.service)
         throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
       // prepareModel got consent for everything the classification flow sends, page images included.
-      const images = chatModelReadsImages(prepared.provider.kind, prepared.modelId);
+      const images = readsImages(prepared.capabilities);
       return {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
         model: { id: classifier.choice.modelId, images, reason: "selected" as const },
