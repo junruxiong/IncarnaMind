@@ -1,0 +1,350 @@
+/**
+ * The files IncarnaMind creates (#124): exports now, and later transcripts,
+ * saved web pages and what Tasks make. Each goes to the Output location, which
+ * the first save asks for and each device keeps, or inside a Linked folder,
+ * e.g. next to the original it was made from, once the User has allowed that
+ * folder (ADR-0010). A new file never replaces anything: it takes the next
+ * free name. Folders are checked with symbolic links resolved, so nothing
+ * lands outside the place the User chose.
+ *
+ * Questions work as consent's do: a save that needs an answer raises
+ * "fileWrite.requested" and waits; saves waiting for the same answer share it.
+ */
+import { randomUUID } from "node:crypto";
+import { mkdir, realpath, stat } from "node:fs/promises";
+import { extname, isAbsolute, join } from "node:path";
+import type {
+  FileWriteRequest,
+  LinkedFolder,
+  LinkedFolderWriting,
+  OutputSettings,
+  SavedFile,
+} from "./api";
+import { isInside } from "./documents/files";
+import {
+  FileWriteCancelledError,
+  InvalidInputError,
+  LinkedFolderWritesDeclinedError,
+  NotFoundError,
+} from "./errors";
+import type { createEventHub } from "./events";
+import { safeFileName, writeNewFile } from "./fileNames";
+import type { SettingsStore } from "./settings";
+import type { Database } from "./storage";
+
+/** The device value holding the Output location: paths belong to one computer (ADR-0003). */
+const OUTPUT_LOCATION = "outputLocation";
+
+const OUTSIDE =
+  "IncarnaMind saves new files only in the output location, or inside a Linked folder it may add files to.";
+
+/** A file to save (see `OutputFiles.save`). */
+export interface NewFile {
+  /** The name it should have, e.g. "Tides.docx". Characters file systems refuse are replaced. */
+  name: string;
+  data: Uint8Array;
+  /**
+   * The folder to save it in, if not the Output location: one inside a Linked
+   * folder, e.g. next to the original it was made from. Anywhere else is refused.
+   */
+  folder?: string;
+}
+
+export interface OutputFilesOptions {
+  db: Database;
+  events: ReturnType<typeof createEventHub>;
+  now: () => string;
+  settings: SettingsStore;
+  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  suggested: string;
+  /** The live Linked folders. */
+  linkedFolders(): readonly Pick<LinkedFolder, "id" | "path">[];
+}
+
+/** A question as a save raises it, before it has an id. */
+type Question = FileWriteRequest extends infer R
+  ? R extends FileWriteRequest
+    ? Omit<R, "requestId">
+    : never
+  : never;
+
+interface Pending {
+  key: string;
+  request: FileWriteRequest;
+  promise: Promise<void>;
+  settle(): void;
+  fail(error: Error): void;
+}
+
+interface AnswerRow {
+  linked_folder_id: string;
+  allowed: number;
+  updated_at: string;
+}
+
+export type OutputFiles = ReturnType<typeof createOutputFiles>;
+
+/** The name to save under: the one asked for, with what file systems refuse taken out. */
+function fileNameOf(input: unknown): string {
+  if (typeof input !== "string") throw new InvalidInputError("A file name must be text.");
+  const extension = extname(input);
+  const kept = /^\.[\p{L}\p{N}]{1,16}$/u.test(extension) ? extension : "";
+  return `${safeFileName(input.slice(0, input.length - kept.length), "Untitled")}${kept}`;
+}
+
+/** A folder's real path, links followed; throws if it isn't a folder. */
+async function realFolder(path: string): Promise<string> {
+  const real = await realpath(path);
+  if (!(await stat(real)).isDirectory()) throw new InvalidInputError("That path isn't a folder.");
+  return real;
+}
+
+const isGone = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
+
+export function createOutputFiles(options: OutputFilesOptions) {
+  const { db, events, now, settings, suggested } = options;
+  const pending = new Map<string, Pending>();
+  /** Files saved since the core started: the only ones the window may ask to show. */
+  const saved = new Set<string>();
+
+  const location = (): string | null => {
+    const value = settings.readDeviceValue(OUTPUT_LOCATION);
+    return typeof value === "string" ? value : null;
+  };
+
+  const liveFolder = (linkedFolderId: string) =>
+    options.linkedFolders().find((each) => each.id === linkedFolderId);
+
+  /** The Linked folder a folder is in, if any. */
+  const ownerOf = (folder: string) =>
+    options
+      .linkedFolders()
+      .filter((each) => isInside(each.path, folder))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+
+  const answerOf = (linkedFolderId: string) =>
+    db.get<AnswerRow>(
+      `SELECT linked_folder_id, allowed, updated_at FROM linked_folder_writes
+       WHERE linked_folder_id = ? AND deleted_at IS NULL`,
+      [linkedFolderId],
+    );
+
+  const current = (): OutputSettings => {
+    const paths = new Map(options.linkedFolders().map((each) => [each.id, each.path]));
+    const linkedFolders: LinkedFolderWriting[] = [];
+    for (const row of db.all<AnswerRow>(
+      `SELECT linked_folder_id, allowed, updated_at FROM linked_folder_writes
+       WHERE deleted_at IS NULL ORDER BY created_at, rowid`,
+    )) {
+      const path = paths.get(row.linked_folder_id);
+      if (path === undefined) continue;
+      linkedFolders.push({
+        linkedFolderId: row.linked_folder_id,
+        path,
+        allowed: row.allowed === 1,
+        decidedAt: row.updated_at,
+      });
+    }
+    return { location: location(), suggested, linkedFolders };
+  };
+
+  const changed = () => events.emit("outputSettings.changed", current());
+
+  const record = (linkedFolderId: string, allowed: boolean) => {
+    const at = now();
+    db.transaction(() => {
+      if (answerOf(linkedFolderId)) {
+        db.run(
+          `UPDATE linked_folder_writes SET allowed = ?, updated_at = ?
+           WHERE linked_folder_id = ? AND deleted_at IS NULL`,
+          [allowed ? 1 : 0, at, linkedFolderId],
+        );
+      } else {
+        db.run(
+          `INSERT INTO linked_folder_writes (id, linked_folder_id, allowed, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [randomUUID(), linkedFolderId, allowed ? 1 : 0, at, at],
+        );
+      }
+    });
+  };
+
+  /** Raises a question, or joins the one already waiting for the same answer. */
+  const ask = (key: string, question: Question): Promise<void> => {
+    for (const entry of pending.values()) if (entry.key === key) return entry.promise;
+    let settle!: () => void;
+    let fail!: (error: Error) => void;
+    const promise = new Promise<void>((resolve, reject) => {
+      settle = resolve;
+      fail = reject;
+    });
+    const request: FileWriteRequest = { ...question, requestId: randomUUID() };
+    pending.set(request.requestId, { key, request, promise, settle, fail });
+    events.emit("fileWrite.requested", request);
+    return promise;
+  };
+
+  /** Lets the saves waiting for an answer go on; each checks what was answered. */
+  const finish = (key: string) => {
+    for (const entry of [...pending.values()]) {
+      if (entry.key !== key) continue;
+      pending.delete(entry.request.requestId);
+      events.emit("fileWrite.resolved", { requestId: entry.request.requestId });
+      entry.settle();
+    }
+  };
+
+  const setLocation = async (input: unknown): Promise<OutputSettings> => {
+    if (typeof input !== "string" || !isAbsolute(input)) {
+      throw new InvalidInputError("The output location must be an absolute folder path.");
+    }
+    let real: string;
+    try {
+      real = await realFolder(input);
+    } catch (error) {
+      if (!isGone(error)) throw error;
+      if (input !== suggested) throw new NotFoundError("There is no folder at that path.");
+      await mkdir(input, { recursive: true });
+      real = await realFolder(input);
+    }
+    settings.writeDeviceValue(OUTPUT_LOCATION, real);
+    changed();
+    finish("output-location");
+    return current();
+  };
+
+  /** The Output location, asking the first time; made again if it was removed from a folder still there. */
+  const outputFolder = async (fileName: string): Promise<string> => {
+    let chosen = location();
+    if (chosen === null) {
+      await ask("output-location", { kind: "output-location", suggested, fileName });
+      chosen = location();
+      if (chosen === null) throw new FileWriteCancelledError();
+    }
+    let real: string;
+    try {
+      real = await realFolder(chosen);
+    } catch (error) {
+      if (!isGone(error)) throw error;
+      await mkdir(chosen);
+      real = await realFolder(chosen);
+    }
+    // A link put in its place, or above it, that leads elsewhere.
+    if (!isInside(chosen, real)) throw new InvalidInputError(OUTSIDE);
+    return real;
+  };
+
+  /** A folder the caller named: inside the Output location or a Linked folder, links followed. */
+  const givenFolder = async (folder: unknown): Promise<string> => {
+    if (typeof folder !== "string" || !isAbsolute(folder)) {
+      throw new InvalidInputError("A folder must be given as an absolute path.");
+    }
+    const real = await realFolder(folder);
+    const chosen = location();
+    if ((chosen === null || !isInside(chosen, real)) && !ownerOf(real)) {
+      throw new InvalidInputError(OUTSIDE);
+    }
+    return real;
+  };
+
+  /**
+   * True if the User allows new files in the Linked folder. Not answered yet,
+   * it asks, and resolves false once answered, for the save to look again.
+   */
+  const allowedIn = async (
+    linked: Pick<LinkedFolder, "id" | "path">,
+    fileName: string,
+  ): Promise<boolean> => {
+    const answer = answerOf(linked.id);
+    if (answer?.allowed === 1) return true;
+    if (answer) throw new LinkedFolderWritesDeclinedError(linked.id, linked.path);
+    await ask(`linked-folder:${linked.id}`, {
+      kind: "linked-folder",
+      linkedFolderId: linked.id,
+      linkedFolderPath: linked.path,
+      fileName,
+    });
+    return false;
+  };
+
+  return {
+    settings: current,
+    setLocation,
+
+    /** Allows or stops new files in a live Linked folder, from Settings or its question. */
+    setLinkedFolderWriting(linkedFolderId: unknown, allowed: unknown): OutputSettings {
+      if (typeof linkedFolderId !== "string" || !liveFolder(linkedFolderId)) {
+        throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
+      }
+      if (typeof allowed !== "boolean")
+        throw new InvalidInputError("allowed must be true or false.");
+      record(linkedFolderId, allowed);
+      changed();
+      finish(`linked-folder:${linkedFolderId}`);
+      return current();
+    },
+
+    requests: (): FileWriteRequest[] => [...pending.values()].map((entry) => entry.request),
+
+    async respond(requestId: unknown, accept: unknown): Promise<void> {
+      if (typeof requestId !== "string") throw new InvalidInputError("requestId must be text.");
+      if (typeof accept !== "boolean") throw new InvalidInputError("accept must be true or false.");
+      const entry = pending.get(requestId);
+      if (!entry) return; // Already answered, e.g. in another window.
+      const { request } = entry;
+      if (request.kind === "linked-folder") {
+        this.setLinkedFolderWriting(request.linkedFolderId, accept);
+      } else if (accept) {
+        await setLocation(request.suggested);
+      } else {
+        finish(entry.key);
+      }
+    },
+
+    /**
+     * Saves a new file: in the Output location, or in `folder`, asking first
+     * where the User hasn't answered yet. Throws `FileWriteCancelledError` if
+     * they didn't choose an Output location, `LinkedFolderWritesDeclinedError`
+     * if the folder is in a Linked folder they said no to, and
+     * `InvalidInputError` if it leads anywhere else.
+     */
+    async save(file: NewFile): Promise<SavedFile> {
+      const name = fileNameOf(file.name);
+      // Checked again after every answer: the folder may have been unlinked meanwhile.
+      for (;;) {
+        const folder =
+          file.folder === undefined ? await outputFolder(name) : await givenFolder(file.folder);
+        const linked = ownerOf(folder);
+        if (linked && !(await allowedIn(linked, name))) continue;
+        const used = await writeNewFile(folder, name, file.data);
+        const path = join(folder, used);
+        saved.add(path);
+        return { path, name: used };
+      }
+    },
+
+    /** Whether IncarnaMind saved this file since it started. */
+    saved: (path: unknown): path is string => typeof path === "string" && saved.has(path),
+
+    /** A Linked folder was unlinked: its answer goes with it, and saves waiting on it look again. */
+    forgetLinkedFolder(linkedFolderId: string): void {
+      const answered = answerOf(linkedFolderId) !== undefined;
+      if (answered) {
+        const at = now();
+        db.run(
+          `UPDATE linked_folder_writes SET deleted_at = ?, updated_at = ?
+           WHERE linked_folder_id = ? AND deleted_at IS NULL`,
+          [at, at, linkedFolderId],
+        );
+      }
+      finish(`linked-folder:${linkedFolderId}`);
+      if (answered) changed();
+    },
+
+    /** Fails every save still waiting, so nothing is left hanging after the core closes. */
+    close(): void {
+      for (const entry of pending.values()) entry.fail(new Error("IncarnaMind closed."));
+      pending.clear();
+    },
+  };
+}

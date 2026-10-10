@@ -233,27 +233,14 @@ export async function filterByTag(window: Page, name: string): Promise<void> {
 }
 
 /**
- * Test hook for the system save dialog: from now on the main process answers
- * it with `filePath` instead of showing it, and records what each call asked
- * (see `saveDialogsAsked`).
+ * Sets where new files go (the Output location) through the core's bridge, as
+ * Settings › General would, so the next save goes there without asking.
  */
-export async function interceptSaveDialog(app: ElectronApplication, filePath: string) {
-  await app.evaluate(({ dialog }, path) => {
-    const asked: Electron.SaveDialogOptions[] = [];
-    (globalThis as { saveDialogsAsked?: unknown }).saveDialogsAsked = asked;
-    dialog.showSaveDialog = (async (...args: unknown[]) => {
-      asked.push(args.at(-1) as Electron.SaveDialogOptions);
-      return { canceled: false, filePath: path };
-    }) as typeof dialog.showSaveDialog;
-  }, filePath);
-}
-
-/** What the intercepted save dialog was asked, call by call. */
-export function saveDialogsAsked(app: ElectronApplication) {
-  return app.evaluate(
-    () =>
-      (globalThis as { saveDialogsAsked?: Electron.SaveDialogOptions[] }).saveDialogsAsked ?? [],
-  );
+export async function useOutputLocation(window: Page, folder: string): Promise<void> {
+  await window.evaluate(async (path) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.setOutputLocation(path);
+  }, folder);
 }
 
 /**

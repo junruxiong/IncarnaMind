@@ -1,5 +1,5 @@
 /** Names shared by the main process and the preload script for the typed core bridge. */
-import type { CoreApiMethod, ExportMindOptions } from "../core/api";
+import type { CoreApiMethod } from "../core/api";
 import type { TitleBar } from "./titleBar";
 
 /** The renderer reaches the core as `window.incarnamind`. */
@@ -20,13 +20,14 @@ export const FILES_BRIDGE_KEY = "incarnamindFiles";
 export interface FilesBridge {
   /** The absolute path of a dropped or picked file, or "" for a file that isn't on disk. */
   pathForFile(file: File): string;
+  /** Shows a file IncarnaMind saved (`CoreApi.saveMindExport`), selected in the system's file manager. */
+  showSavedFile(path: string): Promise<void>;
   /**
-   * Exports a Mind (see `CoreApi.exportMind`) to a file the User picks in the
-   * system save dialog. Resolves with the file's path, or null if they cancelled.
+   * Shows the system's open dialog for the Output location (see
+   * `CoreApi.setOutputLocation`), starting at the current one. Resolves with
+   * the folder's absolute path, or null if the User cancelled.
    */
-  saveMindExport(mindId: string, options: ExportMindOptions): Promise<string | null>;
-  /** Shows a file `saveMindExport` wrote, selected in the system's file manager. */
-  showExportInFolder(path: string): Promise<void>;
+  pickOutputLocation(): Promise<string | null>;
   /** Shows the data folder in the system's file manager, e.g. to back it up. */
   openDataFolder(): Promise<void>;
   /** Shows the data folder's `logs/` in the system's file manager, e.g. to attach the log to a bug report. */
@@ -95,8 +96,8 @@ export interface RendererErrorReport {
 
 /** The main process's channels for the `FilesBridge` methods that need it. */
 export const FILES_CHANNELS = {
-  saveMindExport: "files:saveMindExport",
-  showExportInFolder: "files:showExportInFolder",
+  showSavedFile: "files:showSavedFile",
+  pickOutputLocation: "files:pickOutputLocation",
   openDataFolder: "files:openDataFolder",
   openLogsFolder: "files:openLogsFolder",
   pickSkill: "files:pickSkill",
