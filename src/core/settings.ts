@@ -79,6 +79,7 @@ const deviceScope: Scope<DeviceSettings> = {
   defaults: {
     // DESIGN.md: the sidebar is 248px by default; the viewer opens at about half the room beside the sidebar.
     sidebarWidth: 248,
+    sidebarHidden: false,
     viewerWidth: null,
     openMinds: [],
     activeMind: null,
@@ -96,6 +97,7 @@ const deviceScope: Scope<DeviceSettings> = {
   },
   validators: {
     sidebarWidth: isPaneWidth,
+    sidebarHidden: isBoolean,
     viewerWidth: (value): value is number | null => value === null || isPaneWidth(value),
     openMinds: isMindIdList,
     activeMind: (value): value is string | null => value === null || isMindId(value),
