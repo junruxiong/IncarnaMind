@@ -426,8 +426,8 @@ export function createLibrary(options: {
     folder: group,
     /**
      * Puts these Documents in a Folder (or in none) as the User's choice, as
-     * `assign` does for one, all or none, and returns where each was. One
-     * "library.assignments" says so.
+     * `assign` does for one, all or none, and returns where each was. It says
+     * nothing yet: the caller calls `moved` once what it is part of is saved.
      */
     move(ids: readonly string[], groupId: string | null): { id: string; from: string | null }[] {
       if (groupId !== null) group(groupId);
@@ -444,11 +444,13 @@ export function createLibrary(options: {
           return { id: doc.id, from };
         }),
       );
-      if (docs.length > 0) {
-        options.tagged(docs.map((doc) => doc.id));
-        announce(docs.map((doc) => doc.id));
-      }
       return moved;
+    },
+    /** Says that these Documents moved (`move`): one "library.assignments", and their tagging. */
+    moved(ids: readonly string[]) {
+      if (ids.length === 0) return;
+      options.tagged([...ids]);
+      announce(ids);
     },
     create,
     update(id: unknown, input: unknown) {
