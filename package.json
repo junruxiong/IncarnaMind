@@ -22,7 +22,6 @@
     "test:watch": "vitest",
     "test:smoke": "electron-vite build --mode test && playwright test",
     "eval": "vitest run --config eval/vitest.config.ts",
-    "eval:grouping": "vitest run --config eval/grouping/vitest.config.ts",
     "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
     "eval:organize": "vitest run --config eval/organize/vitest.config.ts",
     "eval:hard": "vitest run --config eval/hard/vitest.config.ts",

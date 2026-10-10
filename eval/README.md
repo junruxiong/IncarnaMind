@@ -414,7 +414,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 
 ## The grouping check
 
-`npm run eval:grouping` is the check before building the Library's grouping (#51): how Documents are grouped into Topics, on its own fixture set, with the same data folder setup and model. `npm run eval` doesn't run it. See `grouping/README.md`.
+The check before building the Library's grouping (#51) found that clustering Documents' vectors into Topics splits them by language, and ADR-0012 replaced Topics with Folders and Tags. It was removed on 2026-10-10 with the Topic code. Its fixture set stays in `grouping/`, because the classification comparison (`classification/`) reads it; `grouping/README.md` gives the set and the check's results.
 
 ## The Organize benchmark
 
