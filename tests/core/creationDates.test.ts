@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { DATABASE_FILE, type Document, type DocumentKind } from "../../src/core";
 import { creationDate, pdfDate, w3cDate, yearWritten } from "../../src/core/documents/creationDate";
-import { METADATA_VERSION } from "../../src/core/documents/processing";
+import { METADATA_VERSION, PROCESSING_VERSION } from "../../src/core/documents/processing";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
@@ -350,7 +350,7 @@ async function beforeCreationDates(existing: readonly Existing[]): Promise<strin
         `INSERT INTO documents (id, content_hash, name, kind, size, status, page_count, path,
            file_status, file_mtime_ms, processing_version, embedding_model, embedding_dimensions,
            tagging_status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'ready', ?, ?, 'available', ?, 5, 'multilingual-e5-small-int8',
+         VALUES (?, ?, ?, ?, ?, 'ready', ?, ?, 'available', ?, ?, 'multilingual-e5-small-int8',
            384, 'tagged', ?, ?)`,
         [
           document.id,
@@ -361,6 +361,7 @@ async function beforeCreationDates(existing: readonly Existing[]): Promise<strin
           document.kind === "pdf" ? BigInt(document.units.length) : null,
           path,
           info.mtimeMs,
+          BigInt(PROCESSING_VERSION),
           at,
           at,
         ],

@@ -18,6 +18,7 @@ import {
   waitForProcessing,
   writeSourceFile,
 } from "../helpers/documents";
+import { turnOnEmbeddings } from "../helpers/embedding";
 import { buildPdf } from "../helpers/pdf";
 
 const SPRING = "Spring tides happen at new moon and at full moon.";
@@ -189,12 +190,13 @@ async function rewrite(core: Core, documentId: string, path: string, contents: U
   return processed;
 }
 
-/** A Linked folder holding Tides.pdf at version 1, processed. */
+/** A Linked folder holding Tides.pdf at version 1, processed, with embeddings on, so it has vectors. */
 async function linkedTides() {
   const dataDir = await createTempDataFolder();
   const library = await createSourceFolder();
   const path = await writeSourceFile(library, "Tides.pdf", V1);
   const core = startCore(dataDir);
+  await turnOnEmbeddings(core);
   const [document] = await linkAndProcess(core, library);
   if (!document) throw new Error("Nothing was linked.");
   return { dataDir, core, path, document };

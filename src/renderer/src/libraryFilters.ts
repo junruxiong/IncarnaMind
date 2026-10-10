@@ -128,8 +128,9 @@ export function documentYear({ creationDate }: Pick<Document, "creationDate">): 
  * A Document's status, as the status filter puts it. Its file comes first,
  * as on its sidebar row: "missing" or "unavailable" (`DocumentFileStatus`).
  * Otherwise its processing (`DocumentStatus`): "available" once it is ready,
- * "not-indexed" while it is queued, read, waiting for the embedding model
- * or embedded, "failed", or "no-text" when the file has no text to read.
+ * "not-indexed" while it is queued or read (and, with embeddings on, waiting
+ * for the embedding model or embedded), "failed", or "no-text" when the file
+ * has no text to read.
  */
 export type LibraryStatus =
   | "available"

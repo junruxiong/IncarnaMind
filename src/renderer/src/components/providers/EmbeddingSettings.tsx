@@ -67,10 +67,13 @@ function isOnThisComputer(url: string): boolean {
   }
 }
 
+/** Kinds that take no server, key or model name: embeddings off, and the built-in model. */
+const isPlainKind = (kind: EmbeddingProviderKind) => kind === "off" || kind === "built-in";
+
 /** Where a provider the form describes would send Document text, or null when it stays here. */
 function cloudServiceOf(kind: EmbeddingProviderKind, baseUrl: string, t: Translate) {
   if (CLOUD_KINDS.has(kind)) return t(`embeddingProviders.kind.${kind}`);
-  if (kind === "built-in") return null;
+  if (isPlainKind(kind)) return null;
   const url = baseUrl.trim() || (kind === "ollama" ? OLLAMA_URL : "");
   if (!url || isOnThisComputer(url)) return null;
   try {
@@ -80,8 +83,9 @@ function cloudServiceOf(kind: EmbeddingProviderKind, baseUrl: string, t: Transla
   }
 }
 
-/** "Built-in model (multilingual-e5-small)", "OpenAI · text-embedding-3-small". */
+/** "Off", "Built-in model (multilingual-e5-small)", "OpenAI · text-embedding-3-small". */
 export function embeddingProviderLabel(provider: EmbeddingProvider, t: Translate): string {
+  if (provider.kind === "off") return t("embeddingProviders.settings.off");
   if (provider.kind === "built-in") {
     return t("embeddingProviders.settings.builtIn", { model: provider.modelId });
   }
@@ -94,9 +98,10 @@ export function embeddingProviderLabel(provider: EmbeddingProvider, t: Translate
 }
 
 /**
- * Settings → Document search: the embedding model search uses (the built-in
- * one, or a provider chosen instead), switching it with a warning, its error
- * and rebuild, and local mode.
+ * Settings → Document search: embeddings, off by default, or the embedding
+ * model search uses (the built-in one, or a provider chosen instead),
+ * turning them on or off or switching model with a warning, its error and
+ * rebuild, and local mode.
  */
 export function EmbeddingSettingsSection() {
   const t = useT();
@@ -106,6 +111,7 @@ export function EmbeddingSettingsSection() {
 
   if (!embedding) return null;
   const { provider, error, rebuild } = embedding;
+  const off = provider.kind === "off";
   return (
     <section data-testid="embedding-settings" className="flex flex-col gap-4">
       <p className={pageIntroClass}>{t("embeddingProviders.settings.body")}</p>
@@ -118,9 +124,11 @@ export function EmbeddingSettingsSection() {
               {embeddingProviderLabel(provider, t)}
             </p>
             <p className={rowTextClass}>
-              {provider.service
-                ? t("embeddingProviders.settings.sendsTo", { service: provider.service.name })
-                : t("embeddingProviders.settings.local")}
+              {off
+                ? t("embeddingProviders.settings.offNote")
+                : provider.service
+                  ? t("embeddingProviders.settings.sendsTo", { service: provider.service.name })
+                  : t("embeddingProviders.settings.local")}
             </p>
             {rebuild && (
               <p data-testid="embedding-rebuild" className={rowTextClass}>
@@ -149,7 +157,9 @@ export function EmbeddingSettingsSection() {
                 onClick={() => setEditing(true)}
                 className={buttonClass}
               >
-                {t("embeddingProviders.settings.change")}
+                {off
+                  ? t("embeddingProviders.settings.turnOn")
+                  : t("embeddingProviders.settings.change")}
               </button>
             )}
           </div>
@@ -221,7 +231,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   const key = useProviderKey();
   const { apiKey } = key;
   const [modelId, setModelId] = useState(
-    current.provider.kind === "built-in" ? "" : current.provider.modelId,
+    isPlainKind(current.provider.kind) ? "" : current.provider.modelId,
   );
   const [busy, setBusy] = useState<"testing" | "saving" | null>(null);
   const [test, setTest] = useState<EmbeddingConnectionTestResult | null>(null);
@@ -241,12 +251,12 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   const hasKey = apiKey.trim() !== "" || (sameServer && saved.hasApiKey);
   const keyBlocked = apiKey.trim() !== "" && secretStorage !== null && !secretStorage.canSave;
   const complete =
-    kind === "built-in" ||
+    isPlainKind(kind) ||
     (modelId.trim() !== "" &&
       (kind !== "openai-compatible" || baseUrl.trim() !== "") &&
       (!keyRequired || hasKey));
   const unchanged =
-    sameServer && apiKey.trim() === "" && (kind === "built-in" || modelId.trim() === saved.modelId);
+    sameServer && apiKey.trim() === "" && (isPlainKind(kind) || modelId.trim() === saved.modelId);
   const cloudService = cloudServiceOf(kind, baseUrl, t);
   // A server elsewhere, in local mode: said as the address is typed, not refused at the end.
   const outsideLocalMode = current.localOnly && cloudService !== null;
@@ -257,7 +267,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
     setKind(next);
     setBaseUrl(next === saved.kind ? (saved.baseUrl ?? "") : "");
     setModelId(
-      next === "built-in"
+      next === "off" || next === "built-in"
         ? ""
         : next === saved.kind
           ? saved.modelId
@@ -268,7 +278,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
   };
 
   const input = (): SaveEmbeddingProviderInput =>
-    kind === "built-in"
+    isPlainKind(kind)
       ? { kind }
       : {
           kind,
@@ -342,8 +352,17 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
             </label>
           ))}
         </div>
+        <p data-testid="embedding-trade-off" className={hintClass}>
+          {t("embeddingProviders.form.tradeOff")}
+        </p>
         {current.localOnly && <p className={hintClass}>{t("embeddingProviders.form.localOnly")}</p>}
       </fieldset>
+
+      {kind === "off" && (
+        <p className="text-[13px] leading-5 text-ink-secondary">
+          {t("embeddingProviders.form.offHint")}
+        </p>
+      )}
 
       {kind === "built-in" && (
         <p className="text-[13px] leading-5 text-ink-secondary">
@@ -399,7 +418,7 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
         <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
       )}
 
-      {kind !== "built-in" && (
+      {!isPlainKind(kind) && (
         <label className={fieldLabelClass}>
           {t("embeddingProviders.form.model")}
           <input
@@ -419,9 +438,15 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
           disabled={!complete || unchanged || keyBlocked || outsideLocalMode || busy !== null}
           className={primaryButtonClass}
         >
-          {busy === "saving" ? t("providers.form.saving") : t("embeddingProviders.form.switch")}
+          {busy === "saving"
+            ? t("providers.form.saving")
+            : kind === "off"
+              ? t("embeddingProviders.form.turnOff")
+              : saved.kind === "off"
+                ? t("embeddingProviders.form.turnOn")
+                : t("embeddingProviders.form.switch")}
         </button>
-        {kind !== "built-in" && (
+        {!isPlainKind(kind) && (
           <button
             type="button"
             disabled={!complete || outsideLocalMode || busy !== null}
@@ -453,10 +478,11 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
       <SwitchConfirmation
         open={confirming}
         provider={
-          kind === "built-in"
-            ? t("embeddingProviders.kind.built-in")
+          isPlainKind(kind)
+            ? t(`embeddingProviders.kind.${kind}`)
             : `${t(`embeddingProviders.kind.${kind}`)} · ${modelId.trim()}`
         }
+        change={kind === "off" ? "turn-off" : saved.kind === "off" ? "turn-on" : "switch"}
         cloudService={cloudService}
         onCancel={() => setConfirming(false)}
         onConfirm={() => void save()}
@@ -466,18 +492,22 @@ function EmbeddingForm({ current, onDone }: { current: EmbeddingSettings; onDone
 }
 
 /**
- * The warning before a switch: every Document is processed again, and a
- * cloud provider receives all their text and every search. Cancelling changes nothing.
+ * The warning before a change: turned on, or switched, every Document is
+ * embedded (again), and a cloud provider receives all their text and every
+ * search; turned off, search goes by words alone, and the vectors stay.
+ * Cancelling changes nothing.
  */
 function SwitchConfirmation({
   open,
   provider,
+  change,
   cloudService,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   provider: string;
+  change: "turn-on" | "turn-off" | "switch";
   cloudService: string | null;
   onCancel(): void;
   onConfirm(): void;
@@ -500,20 +530,32 @@ function SwitchConfirmation({
       {open && (
         <div className={dialogBodyClass}>
           <h2 id="embedding-confirm-title" className={dialogTitleClass}>
-            {t("embeddingProviders.confirm.title", { provider })}
+            {change === "turn-off"
+              ? t("embeddingProviders.confirm.offTitle")
+              : change === "turn-on"
+                ? t("embeddingProviders.confirm.onTitle", { provider })
+                : t("embeddingProviders.confirm.title", { provider })}
           </h2>
-          <p className={dialogTextClass}>
-            {t("embeddingProviders.confirm.reprocess", { count: documentCount })}
-          </p>
-          {cloudService ? (
-            <p
-              data-testid="embedding-confirm-cloud"
-              className="rounded-lg border border-rule bg-frame px-3 py-2 text-ui font-semibold text-ink"
-            >
-              {t("embeddingProviders.confirm.cloud", { service: cloudService })}
-            </p>
+          {change === "turn-off" ? (
+            <p className={dialogTextClass}>{t("embeddingProviders.confirm.off")}</p>
           ) : (
-            <p className={dialogTextClass}>{t("embeddingProviders.confirm.local")}</p>
+            <>
+              <p className={dialogTextClass}>
+                {change === "turn-on"
+                  ? t("embeddingProviders.confirm.embed", { count: documentCount })
+                  : t("embeddingProviders.confirm.reprocess", { count: documentCount })}
+              </p>
+              {cloudService ? (
+                <p
+                  data-testid="embedding-confirm-cloud"
+                  className="rounded-lg border border-rule bg-frame px-3 py-2 text-ui font-semibold text-ink"
+                >
+                  {t("embeddingProviders.confirm.cloud", { service: cloudService })}
+                </p>
+              ) : (
+                <p className={dialogTextClass}>{t("embeddingProviders.confirm.local")}</p>
+              )}
+            </>
           )}
           <div className={dialogActionsClass}>
             <button
@@ -530,7 +572,11 @@ function SwitchConfirmation({
               onClick={onConfirm}
               className={primaryButtonClass}
             >
-              {t("embeddingProviders.confirm.switch")}
+              {change === "turn-off"
+                ? t("embeddingProviders.confirm.turnOff")
+                : change === "turn-on"
+                  ? t("embeddingProviders.confirm.turnOn")
+                  : t("embeddingProviders.confirm.switch")}
             </button>
           </div>
         </div>

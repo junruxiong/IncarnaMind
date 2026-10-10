@@ -14,6 +14,7 @@ import { type EvalReport, terminalSummary, writeReports } from "../../eval/lib/r
 import {
   GATING_MODE,
   HYBRID,
+  HYBRID_RERANK_MODE,
   type QuestionResult,
   type RetrievalRun,
   summarise,
@@ -52,26 +53,30 @@ const SET: EvaluationSet = {
   ],
 };
 
-/** Hits in the default mode (reranked), and in plain hybrid search. */
-const HITS: Record<string, [boolean, boolean]> = {
-  "ppt-en-01": [true, true],
-  "ppt-zh-01": [false, true],
-  "ppt-en-02": [true, false],
-  "pdf-en-01": [false, false],
-  "sheet-en-01": [true, true],
-  "sheet-zh-01": [false, false],
-  "x-zh-01": [true, false],
+/** Hits in the default mode (keyword + rerank), in plain hybrid search, and in hybrid + rerank. */
+const HITS: Record<string, [boolean, boolean, boolean]> = {
+  "ppt-en-01": [true, true, true],
+  "ppt-zh-01": [false, true, false],
+  "ppt-en-02": [true, false, false],
+  "pdf-en-01": [false, false, false],
+  "sheet-en-01": [true, true, true],
+  "sheet-zh-01": [false, false, true],
+  "x-zh-01": [true, false, false],
 };
 
 const RESULTS: QuestionResult[] = SET.questions.map((each) => {
-  const [reranked, hybrid] = HITS[each.id] as [boolean, boolean];
+  const [reranked, hybrid, hybridReranked] = HITS[each.id] as [boolean, boolean, boolean];
   const result = (hit: boolean) => ({ hit, rank: hit ? 1 : null, top: [] });
   return {
     id: each.id,
     language: each.language,
     crossLingual: each.crossLingual,
     question: each.question,
-    modes: { [GATING_MODE]: result(reranked), [HYBRID]: result(hybrid) },
+    modes: {
+      [GATING_MODE]: result(reranked),
+      [HYBRID]: result(hybrid),
+      [HYBRID_RERANK_MODE]: result(hybridReranked),
+    },
   };
 });
 
@@ -157,7 +162,23 @@ describe("The every-format set's report", () => {
         zh: { hits: 1, total: 1 },
         all: { hits: 2, total: 3 },
       },
+      [HYBRID_RERANK_MODE]: {
+        en: { hits: 1, total: 2 },
+        zh: { hits: 0, total: 1 },
+        all: { hits: 1, total: 3 },
+      },
     });
+    // A mode that didn't run isn't reported as all misses.
+    const hybridOnly = RESULTS.map((result) => ({
+      ...result,
+      modes: { [GATING_MODE]: result.modes[GATING_MODE], [HYBRID]: result.modes[HYBRID] },
+    }));
+    expect(
+      Object.keys(
+        summariseFormats(SET, { ...RETRIEVAL, summary: summarise(hybridOnly) }, CITATIONS)[1]
+          ?.retrieval ?? {},
+      ),
+    ).toEqual([GATING_MODE, HYBRID]);
     expect(of("powerpoint")?.places.map((place) => [place.place, place.hits.all])).toEqual([
       ["slide-text", { hits: 1, total: 2 }],
       ["speaker-notes", { hits: 1, total: 1 }],
@@ -207,7 +228,7 @@ describe("The every-format set's report", () => {
       evaluationSet: {
         source: "",
         hitRule: "",
-        questions: { gating: { en: 0, zh: 0 }, crossLingual: 0 },
+        questions: { gating: { en: 0, zh: 0 }, crossLingual: 0, paraphrase: 0 },
       },
       documents: [],
       retrieval: { topK: 5, gatingMode: GATING_MODE, runs: [{ ...RETRIEVAL, gating: true }] },
@@ -218,7 +239,7 @@ describe("The every-format set's report", () => {
     const lines = terminalSummary(report, "/repo/eval/results/x", "/repo").split("\n");
 
     expect(lines.find((line) => line.trim().startsWith("PowerPoint"))).toMatch(
-      /English 2\/2 +Chinese 0\/1 +known gaps 0\/0$/,
+      /English 2\/2 +Chinese 0\/1 +known gaps 0\/0; hybrid \+ .+ 1\/3$/,
     );
     expect(lines.find((line) => line.trim().startsWith("PDF"))).toContain("known gaps 0/1");
     expect(lines.find((line) => line.trim().startsWith("Cross-lingual"))).toContain("1/1");
@@ -229,7 +250,12 @@ describe("The every-format set's report", () => {
       const dir = await writeReports(report, results, "/");
       const markdown = (await readFile(join(dir, "report.md"), "utf8")).split("\n");
       expect(markdown).toContain("## Every format (reported, not gating)");
-      expect(markdown).toContain("| PowerPoint | 1 | 2 / 1 | 2/2 | 0/1 | **2/3** | 2/3 | 0/0 |");
+      expect(markdown).toContain(
+        "| PowerPoint | 1 | 2 / 1 | 2/2 | 0/1 | **2/3** | 2/3 | 1/3 | 0/0 |",
+      );
+      expect(markdown).toContain(
+        "| Excel and CSV | 2 | 1 / 1 | 1/1 | 0/1 | **1/2** | 1/2 | 2/2 | 0/0 |",
+      );
       expect(markdown).toContain("| PDF | scanned | 0/1 | 0/0 | known gap: No text layer. |");
     } finally {
       await rm(results, { recursive: true, force: true });

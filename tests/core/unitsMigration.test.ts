@@ -144,8 +144,7 @@ describe("Migration 22: Units", { timeout: 30_000 }, () => {
   });
 
   test("at startup, Markdown and TXT are processed again into sections and lines; PDFs are left as they are", async () => {
-    expect(PROCESSING_VERSION).toBe(5);
-    expect(CURRENT_SINCE.pdf).toBe(4);
+    expect(CURRENT_SINCE).toMatchObject({ pdf: 4, markdown: 5, text: 5 });
     const { dataDir } = await beforeUnits();
     const core = startCore(dataDir);
     const statuses: [string, Document["status"]][] = [];
@@ -178,12 +177,14 @@ describe("Migration 22: Units", { timeout: 30_000 }, () => {
       { id: "d3-passage-1", live: 1 },
       { id: "d3-passage-2", live: 1 },
     ]);
+    // Having no Han characters to fold either (see `HAN_CURRENT_SINCE`), it is set to this
+    // version as it is.
     expect(
       queryDatabase(dataDir, "SELECT id, processing_version FROM documents ORDER BY id"),
     ).toEqual([
-      { id: "d1", processing_version: 5 },
-      { id: "d2", processing_version: 5 },
-      { id: "d3", processing_version: 4 },
+      { id: "d1", processing_version: PROCESSING_VERSION },
+      { id: "d2", processing_version: PROCESSING_VERSION },
+      { id: "d3", processing_version: PROCESSING_VERSION },
     ]);
 
     // A Citation of a whole file, from before Units, is still checked: now in its section.
