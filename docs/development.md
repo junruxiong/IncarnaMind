@@ -32,6 +32,18 @@ Embeddings can also come from OpenAI, Google, an OpenAI-compatible server or Oll
 
 `npm run eval` measures retrieval, and optionally Citation quality, against the project's targets. It adds the sample PDFs in `data/` and the Chinese articles in `eval/retrieval/fixtures/` to a temporary data folder and searches for each Question in `eval/retrieval/questions.json`. Retrieval needs no keys; the first run downloads the embedding and reranking models into `~/.cache/incarnamind-eval/`. It isn't part of `npm test` or CI's default run. See [`eval/README.md`](../eval/README.md) for the Citation part, the variables and the latest results.
 
+## Model catalog
+
+What the app knows about model providers lives in `src/core/providers/catalog/` (ADR-0005). The providers (`providers.ts`), the corrections (`overrides.ts`) and the local models (`local.ts`) are written by hand. `models.json`, each model's inputs, Tools, context, limits and price, is generated:
+
+```
+npm run catalog:update
+```
+
+It fetches models.dev and LiteLLM's model list (both MIT; their notice is `resources/notices/model-catalog.txt`), rewrites `models.json`, and prints what changed: new and removed models, changed prices, limits and abilities, and any provider default (a role in `providers.ts`) whose model changed or is gone. Where LiteLLM disagrees it only prints; correct a fact in `overrides.ts`. Running it twice gives no diff. `--models-dev <file>` and `--litellm <file>` read copies, and `--diff-file <file>` also writes the diff as Markdown.
+
+A weekly workflow (`.github/workflows/catalog-update.yml`, also runnable by hand) does this and opens one pull request, from the branch `automation/catalog-update`, with the diff in its description; the next run updates that pull request instead of opening another, and closes it if the sources match again. A person reviews and merges it. If a default changed, run the evaluation for that model and cite it in the pull request before merging. Pull requests opened with the workflow's token don't start CI by themselves: push an empty commit to the branch, or close and reopen the pull request, to run the checks.
+
 ## Architecture
 
 [`CONTEXT.md`](../CONTEXT.md) is the glossary, and [`docs/adr/`](adr/) records the decisions behind the design, from the local-first Electron app (ADR-0004, ADR-0006) to SQLite storage (ADR-0008) and retrieval (ADR-0009).

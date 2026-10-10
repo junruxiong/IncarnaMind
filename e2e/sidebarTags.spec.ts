@@ -444,7 +444,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     // In Chinese.
     await setLanguage(window, "zh-CN");
     await expect(browse).toHaveAccessibleName("浏览文档");
-    await expect(views).toHaveText(["文件夹", "标签", "来源位置"]);
+    await expect(views).toHaveText(["文件夹", "标签", "文件位置"]);
     await expect(byName("待确认")).toHaveCount(1);
     await slideAndClick(window, tagList.getByRole("button", { name: "展开 Report" }));
     await expect(tagList.getByRole("button", { name: "收起 Report" })).toBeVisible();
