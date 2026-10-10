@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -32,7 +33,7 @@ test.afterEach(async () => {
 
 /** Asks a Question in a new Mind and waits for its Answer to finish. */
 async function ask(window: Page, text: string) {
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
