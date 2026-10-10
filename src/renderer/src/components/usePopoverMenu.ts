@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent,
   type ToggleEvent,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -58,7 +59,9 @@ function focusFirst(menu: HTMLElement | null): void {
  * Document viewer too). It shows below the button, or above it if the window
  * is too short; opening focuses the checked item (or the first), and the
  * arrow keys, Home and End move between items. The menu may render its items
- * only while `open`.
+ * only while `open`, and may get them a moment later (a list that loads): it
+ * is then placed again, and the checked item takes the focus, unless the
+ * User has already pressed a key or the pointer in the menu.
  *
  * Spread `buttonProps` on the button and `menuProps` on the menu's element,
  * which also takes `role="menu"`, an `aria-label` and `menuClass` (./ui).
@@ -76,6 +79,8 @@ export function usePopoverMenu({
   const [open, setOpen] = useState(false);
   const outer = useRef(around);
   outer.current = around;
+  /** Whether the User has pressed a key or the pointer in the menu since it opened. */
+  const touched = useRef(false);
 
   // Once rendered with its items, and before it is drawn: placed. A click
   // renders it just before the popover shows, so it shows where it belongs;
@@ -89,7 +94,23 @@ export function usePopoverMenu({
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current);
   }, [open]);
 
+  // Items that come after it opened, such as models still being listed then: placed again for
+  // the menu's new size, and the checked one focused, as it would have been had it been there.
+  useEffect(() => {
+    const element = menu.current;
+    if (!open || !element) return;
+    touched.current = false;
+    const observer = new MutationObserver(() => {
+      const anchor = button.current;
+      place(anchor, element, anchor && outer.current ? outer.current(anchor) : null);
+      if (!touched.current && element.matches(":popover-open")) focusFirst(element);
+    });
+    observer.observe(element, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [open]);
+
   const onKeyDown = (event: KeyboardEvent) => {
+    touched.current = true;
     if (event.key === "Escape") {
       // Handled here, so the Document viewer's Esc doesn't close it too.
       event.preventDefault();
@@ -136,6 +157,9 @@ export function usePopoverMenu({
         if (event.newState === "open") focusFirst(menu.current);
       },
       onKeyDown,
+      onPointerDown: () => {
+        touched.current = true;
+      },
     },
   };
 }

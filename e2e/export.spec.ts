@@ -106,6 +106,8 @@ test("maths exports to .docx as Word equations, which a Word viewer shows as equ
   await window.getByTestId("math-editor").fill("F = G\\frac{m_1 m_2}{r^2}");
   await window.getByTestId("math-editor").press("Enter");
   await expect(editor.locator('[data-type="block-math"] .katex')).toBeVisible();
+  // The cursor comes back after the formula a frame later: type once the editor has it.
+  await expect(editor).toBeFocused();
   await window.keyboard.press("Enter");
   await window.keyboard.type("The tide-raising pull falls off as /inline");
   await expect(window.getByTestId("slash-item-inline-math")).toHaveAttribute(
