@@ -37,6 +37,7 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
   searches: [],
   droppedMarkers: 0,
   droppedRecords: 0,
+  rejectedRecords: [],
   sentences: [],
   citations: [],
   seconds: 1,
@@ -692,7 +693,7 @@ describe("Why Citations aren't found, in report.md", () => {
         '| en-01 | 1 | "Not found": quote on other pages | quote-not-on-pages | Tides | p. 7 | pp. 7–8 | p. 8 | a quote \\| with a pipe |',
       );
       expect(markdown).toContain(
-        "| zh-02 | 1 | done | structured-output | 2 | 0 | 交通事故 | 文档没有提到。 |",
+        "| zh-02 | 1 | done | structured-output | 2 | 0 |  | 交通事故 | 文档没有提到。 |",
       );
       expect(markdown).toContain("Skipped: INCARNAMIND_EVAL_FORMATS is off.");
       const summary = terminalSummary(report, "/repo/eval/results/x", "/repo");

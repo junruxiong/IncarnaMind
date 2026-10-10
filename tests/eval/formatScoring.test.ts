@@ -111,6 +111,7 @@ const answer = (questionId: string, citations: CitationRecord[]): AnswerRecord =
     searches: [],
     droppedMarkers: 0,
     droppedRecords: 0,
+    rejectedRecords: [],
     sentences: citations.map(() => ({ text: "A claim.", cited: true })),
     citations,
     seconds: 1,

@@ -28,6 +28,7 @@ import {
   type OllamaModels,
   type ProviderError,
   QUESTION_BLOCK,
+  type RejectedRecord,
 } from "../../src/core";
 import { outputTokensFor } from "../../src/core/providers/ollamaModels";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
@@ -107,6 +108,8 @@ export interface AnswerRecord {
   searches: string[];
   droppedMarkers: number;
   droppedRecords: number;
+  /** The records the core couldn't take, as the model gave them, and why. */
+  rejectedRecords: RejectedRecord[];
   /** Each sentence of the Answer (headings and code left out), and whether a Citation is anchored in it. */
   sentences: { text: string; cited: boolean }[];
   citations: CitationRecord[];
@@ -358,12 +361,25 @@ export function citationLine(citation: CitationRecord, unit: "p." | "Unit" = "p.
   return `${OUTCOME_WORDS[citation.outcome]}${reason}: ${citation.documentName}, cites ${cited} of a Passage on ${pagesLabel(citation.passagePages, unit)}; ${on}: "${shortQuote(citation.quote)}"`;
 }
 
+/** The records the core couldn't take, as given: '[^1] "JP Morgan…" (no such Passage)'. */
+export function rejectedLine(records: readonly RejectedRecord[]): string {
+  return records
+    .map(
+      (record) =>
+        `${record.marker === null ? "[^?]" : `[^${record.marker}]`} "${shortQuote(record.passage, 60)}" (${record.reason === "marker" ? "no marker number" : "no such Passage"})`,
+    )
+    .join(", ");
+}
+
 /** Why an Answer has no Citation, in a line: how it cited, what was dropped, and how it begins. */
 export function uncitedLine(answer: AnswerRecord): string {
   const begins = answer.sentences[0]?.text;
   return [
     `${answer.status}, ${answer.citationSupport ?? "unknown"}`,
     `${answer.droppedMarkers} markers without records removed, ${answer.droppedRecords} records dropped`,
+    ...(answer.rejectedRecords.length > 0
+      ? [`rejected: ${rejectedLine(answer.rejectedRecords)}`]
+      : []),
     ...(answer.error ? [`${answer.error.kind}: ${answer.error.message}`] : []),
     begins ? `begins "${shortQuote(begins, 120)}"` : "no text",
   ].join("; ");
@@ -518,6 +534,7 @@ async function askOne(
     searches,
     droppedMarkers: finished?.droppedMarkers ?? 0,
     droppedRecords: finished?.droppedRecords ?? 0,
+    rejectedRecords: finished?.rejectedRecords ?? [],
     sentences: sentences.map((sentence) => ({
       text: sentence.text,
       cited: sentence.citations.length > 0,
@@ -703,6 +720,9 @@ export async function runCitations(
         );
         // Why, as it happens, so a run stopped before its report still says.
         if (answer.citations.length === 0) log(`  no Citation: ${uncitedLine(answer)}`);
+        else if (answer.rejectedRecords.length > 0) {
+          log(`  records rejected: ${rejectedLine(answer.rejectedRecords)}`);
+        }
         for (const citation of answer.citations) {
           if (citation.outcome !== "found") log(`  ${citationLine(citation, unit)}`);
         }
