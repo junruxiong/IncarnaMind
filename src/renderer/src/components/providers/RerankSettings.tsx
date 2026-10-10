@@ -46,7 +46,7 @@ const FAILURE_KEYS = {
 } as const;
 
 /**
- * Settings → Reranking: the built-in model on this computer reorders document
+ * Settings → Search → Reranking: the built-in model on this computer reorders document
  * search's best matches by default; a Cohere or Voyage AI key can do it
  * instead, or the User turns it off.
  */

@@ -59,16 +59,16 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await expect(book.getByTestId("connector-tool-approval")).toHaveValue("ask");
 
   // The claim is only a hint: the read-only Tool can be switched to ask every time, which the
-  // Approvals page lists, and revoking it there goes back to the default.
+  // Tools page lists, and revoking it there goes back to the default.
   const approvals = window.getByTestId("approvals-settings");
-  await showSettingsPage(window, "approvals");
+  await showSettingsPage(window, "tools");
   await expect(approvals).toContainText("No Tool is set to always allow or to ask every time.");
   await showSettingsPage(window, "connectors");
   await lookup
     .getByRole("combobox", { name: "When an Answer calls lookup_tide" })
     .selectOption("ask");
   await expect(lookup).toHaveAttribute("data-asks", "true");
-  await showSettingsPage(window, "approvals");
+  await showSettingsPage(window, "tools");
   const policy = approvals.getByTestId("approval-policy");
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Tides · lookup_tide");
