@@ -23,6 +23,7 @@ import type {
 } from "../../core/api";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
+import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
 import { isSettingsPage, type SettingsPage } from "./settingsPages";
@@ -313,6 +314,20 @@ export const selectVisibleDocuments = (state: AppState): Document[] =>
 export const selectTagFilterKey = (state: AppState): string | null =>
   state.tagFilter.length === 0 ? null : [...state.tagFilter].sort().join(" ");
 
+/**
+ * The core's per-Document events (status, Tags, moves, removals, Library
+ * assignments), applied to the store together at most every 100ms (see
+ * `createDocumentUpdates`). A store action that sets the Documents or the
+ * Library itself flushes them first, so nothing older lands on top of it.
+ */
+const documentUpdates = createDocumentUpdates((changes) =>
+  useAppStore.setState((state) => ({
+    documents: applyDocumentChanges(state.documents, changes.upserted, changes.removed),
+    // Before the Library is loaded there is nothing to change: loading reads it whole.
+    ...(state.library && { library: applyAssignments(state.library, changes.assignments) }),
+  })),
+);
+
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
   /** Runs an action, reporting a failure instead of throwing. */
@@ -375,6 +390,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     notOnDisk: readonly string[],
   ) => {
     // Before adding: what status events bring meanwhile is new, not something added before.
+    documentUpdates.flush();
     const known = new Set(get().documents.map((each) => each.id));
     const result =
       paths.length > 0 ? await core.addDocuments([...paths]) : { documents: [], skipped: [] };
@@ -386,6 +402,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (preview) linkable.push({ path, preview, error: null });
       else skipped.push(fileName(path));
     }
+    documentUpdates.flush();
     set((state) => {
       // Status events may already have brought newer copies of these; keep those.
       const listed = new Set(state.documents.map((each) => each.id));
@@ -453,16 +470,18 @@ export const useAppStore = create<AppState>()((set, get) => {
     refreshLibrary: async () => {
       const ticket = ++libraryRequest;
       const library = await core.getLibrary();
-      if (ticket === libraryRequest)
-        set({
-          library,
-          ...(get().libraryFilter !== "all" &&
-          get().libraryFilter !== "unsorted" &&
-          get().libraryFilter !== "new" &&
-          !library.groups.some((g) => g.id === get().libraryFilter)
-            ? { libraryFilter: "all" }
-            : {}),
-        });
+      if (ticket !== libraryRequest) return;
+      // The assignments that came before the snapshot are in it already: it replaces them.
+      documentUpdates.flush();
+      set({
+        library,
+        ...(get().libraryFilter !== "all" &&
+        get().libraryFilter !== "unsorted" &&
+        get().libraryFilter !== "new" &&
+        !library.groups.some((g) => g.id === get().libraryFilter)
+          ? { libraryFilter: "all" }
+          : {}),
+      });
     },
     openLibrary: (filter = "all") =>
       set((state) => ({
@@ -515,6 +534,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
         const active = settings.device.activeMind;
+        // What the core's events brought before this is in the lists just read.
+        documentUpdates.flush();
         set({
           linkedFolders,
           minds,
@@ -741,12 +762,14 @@ export const useAppStore = create<AppState>()((set, get) => {
     renameDocument: (id, name) =>
       attempt(async () => {
         const renamed = await core.renameDocument(id, name);
+        documentUpdates.flush();
         set((state) => ({ documents: upsert(state.documents, renamed) }));
       }),
 
     deleteDocument: (id) =>
       attempt(async () => {
         await core.deleteDocument(id);
+        documentUpdates.flush();
         set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
       }),
 
@@ -754,6 +777,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     retryDocument: (id) =>
       attempt(async () => {
         const retried = await core.retryDocument(id);
+        documentUpdates.flush();
         set((state) => ({ documents: upsert(state.documents, retried) }));
       }),
 
@@ -990,7 +1014,7 @@ core.on("minds.changed", (minds) => {
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {
-  useAppStore.setState((state) => ({ documents: upsert(state.documents, changed) }));
+  documentUpdates.upsert([changed]);
   const { examples, updateGettingStarted } = useAppStore.getState();
   if (isOwnDocument(changed, examples)) updateGettingStarted({ indexed: true });
 });
@@ -1030,19 +1054,10 @@ core.on("keptCitationTexts.changed", (keptCitationTexts) =>
 );
 
 // Documents removed from the index, e.g. with their Linked folder.
-core.on("documents.removed", (removed) => {
-  const gone = new Set(removed);
-  useAppStore.setState((state) => ({
-    documents: state.documents.filter((each) => !gone.has(each.id)),
-  }));
-});
+core.on("documents.removed", (removed) => documentUpdates.remove(removed));
 
 // Documents whose files moved to another Folder on disk.
-core.on("documents.moved", (moved) => {
-  useAppStore.setState((state) => ({
-    documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
-  }));
-});
+core.on("documents.moved", (moved) => documentUpdates.upsert(moved));
 
 // Tags change through this window or another: follow the list, and drop a deleted Tag from the filter.
 core.on("tags.changed", (tags) => {
@@ -1057,12 +1072,12 @@ core.on("tags.changed", (tags) => {
 core.on("skills.changed", (skills) => useAppStore.setState({ skills }));
 
 // Documents' Tags, or their tagging, changed: by the User, by automatic tagging, or with a deleted Tag.
-core.on("documents.tagged", (tagged) => {
-  useAppStore.setState((state) => ({
-    documents: tagged.reduce((documents, item) => upsert(documents, item), state.documents),
-  }));
-});
+core.on("documents.tagged", (tagged) => documentUpdates.upsert(tagged));
 
+// Organize queued, started, finished or failed on Documents, or the User put one in a Folder.
+core.on("library.assignments", (assignments) => documentUpdates.assign(assignments));
+
+// The Folders or the settings changed: read the Library again.
 core.on("library.changed", () => {
   void useAppStore
     .getState()

@@ -59,6 +59,18 @@ interface DocumentRow {
 }
 const GROUP_COLUMNS = "id, name, description, created_at AS createdAt, updated_at AS updatedAt";
 
+/** A stored assignment as the API gives it. */
+const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
+  documentId: row.document_id,
+  groupId: row.group_id,
+  source: row.source,
+  status: row.status,
+  error: row.error_kind ? { kind: row.error_kind, message: row.error_message ?? "" } : null,
+  model: row.classification_model
+    ? (JSON.parse(row.classification_model) as ClassificationModel)
+    : null,
+});
+
 /**
  * What Organize sends to a cloud model: the Folders and Tags, each
  * Document's excerpt, and a scan's page images, which go only to a chat
@@ -78,7 +90,10 @@ export function createLibrary(options: {
   now(): string;
   settings: SettingsStore;
   background: BackgroundQueue;
+  /** The Folders or settings changed, or many assignments at once: the snapshot is to be read again. */
   changed(): void;
+  /** These Documents' assignments changed, each whole. */
+  assigned(assignments: DocumentGroupAssignment[]): void;
   tags: TagsStore;
   tagged(ids: string[]): void;
   prepare(settings: LibrarySettings): Promise<GroupClassifier>;
@@ -120,6 +135,19 @@ export function createLibrary(options: {
       "SELECT * FROM document_groups WHERE document_id = ? AND deleted_at IS NULL",
       [id],
     );
+  /**
+   * Announces these Documents' assignments, as the snapshot lists them (those
+   * of Documents still there), so a client changes only these.
+   */
+  const announce = (ids: readonly string[]) => {
+    const changed = db
+      .all<AssignmentRow>(
+        "SELECT g.* FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL AND g.document_id IN (SELECT value FROM json_each(?))",
+        [JSON.stringify(ids)],
+      )
+      .map(assignmentOf);
+    if (changed.length > 0) options.assigned(changed);
+  };
   const hasContent = (doc: DocumentRow) => {
     const classifier = getSettings().classifier;
     const canReadPages =
@@ -179,7 +207,7 @@ export function createLibrary(options: {
     );
     tagState(id, status, error);
     options.tagged([id]);
-    changed();
+    announce([id]);
   };
   const write = (
     doc: DocumentRow,
@@ -305,7 +333,7 @@ export function createLibrary(options: {
             tagState(id, "classified");
           });
           options.tagged([id]);
-          changed();
+          announce([id]);
         } catch (error) {
           if (!stale()) {
             if (error instanceof NotFoundError) return;
@@ -384,20 +412,11 @@ export function createLibrary(options: {
         .map((row) => row.document_id);
     },
     snapshot(): LibrarySnapshot {
-      const assignments: DocumentGroupAssignment[] = db
+      const assignments = db
         .all<AssignmentRow>(
           "SELECT g.* FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL",
         )
-        .map((row) => ({
-          documentId: row.document_id,
-          groupId: row.group_id,
-          source: row.source,
-          status: row.status,
-          error: row.error_kind ? { kind: row.error_kind, message: row.error_message ?? "" } : null,
-          model: row.classification_model
-            ? (JSON.parse(row.classification_model) as ClassificationModel)
-            : null,
-        }));
+        .map(assignmentOf);
       return { groups: groups(), assignments, settings: getSettings() };
     },
     create,
@@ -524,7 +543,7 @@ export function createLibrary(options: {
         }
       });
       options.tagged(docs.map((doc) => doc.id));
-      changed();
+      announce(docs.map((doc) => doc.id));
       resume();
     },
     assign(id: unknown, groupId: unknown) {
@@ -537,7 +556,7 @@ export function createLibrary(options: {
         [doc.id],
       );
       options.tagged([doc.id]);
-      changed();
+      announce([doc.id]);
     },
     documentChanged(id: string) {
       if (lifetime.signal.aborted) return;
@@ -550,7 +569,7 @@ export function createLibrary(options: {
         (!existing || existing.content_hash !== doc.content_hash)
       ) {
         write(doc, existing?.group_id ?? null, existing?.source ?? "automatic", "pending");
-        changed();
+        announce([id]);
       }
       const status = assignment(id)?.status;
       if (status === "pending" || status === "waiting") enqueue(id);
