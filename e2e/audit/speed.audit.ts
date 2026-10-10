@@ -626,7 +626,7 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
 });
 
 test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a warm start", async () => {
-  test.setTimeout(30 * 60_000);
+  test.setTimeout(60 * 60_000);
   const dataDir = tempDir("data");
   const root = tempDir("fixtures");
   const fixtures = writeFixtures(root, 2000);
@@ -874,57 +874,75 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
       const stopOrg = await startFrames(window);
       const started = Date.now();
       await click(window, organize);
-      // How long the renderer takes to answer at all (one frame, a screenshot), every second, while it organizes.
-      const pings: { frameMs: number; screenshotMs: number | null }[] = [];
+      // Every second until it's done (up to 20 minutes: on a big library it has taken
+      // minutes): how long the renderer takes to give one frame, how many Documents are
+      // organized, and the renderer's memory; a screenshot at first, and a scroll as a person
+      // reading would. The core answers from the main process, which stays responsive.
+      const timeline: {
+        atMs: number;
+        frameMs: number;
+        organized: number | null;
+        rendererMB: number | null;
+        screenshotMs?: number | null;
+      }[] = [];
+      let organized = false;
       const organizingProfile = await profile(
         session,
         async () => {
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; !organized && Date.now() - started < 20 * 60_000; i++) {
             const t0 = Date.now();
             await window.evaluate(
               () => new Promise((resolve) => requestAnimationFrame(() => resolve(0))),
             );
             const frameMs = Date.now() - t0;
-            const t1 = Date.now();
-            let screenshotMs: number | null = null;
-            try {
-              await window.screenshot({
-                path: join(AUDIT_SHOTS, `B24-organizing-${i}.png`),
-                timeout: 15_000,
-              });
-              screenshotMs = Date.now() - t1;
-            } catch {
-              screenshotMs = null;
+            const counts = await window.evaluate(async () => {
+              const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+              const library = await bridge.getLibrary();
+              const busy = library.assignments.filter(
+                (a) => a.status === "pending" || a.status === "classifying",
+              ).length;
+              return { busy, organized: library.assignments.length - busy };
+            });
+            organized = counts.busy === 0;
+            const used = await memory(app.app);
+            const point: (typeof timeline)[number] = {
+              atMs: t0 - started,
+              frameMs,
+              organized: counts.organized,
+              rendererMB: used.byType.Tab ?? null,
+            };
+            if (i < 3) {
+              const t1 = Date.now();
+              point.screenshotMs = await window
+                .screenshot({ path: join(AUDIT_SHOTS, `B24-organizing-${i}.png`), timeout: 15_000 })
+                .then(() => Date.now() - t1)
+                .catch(() => null);
             }
-            pings.push({ frameMs, screenshotMs });
-            await window.waitForTimeout(1000);
+            if (i === 5) {
+              for (let k = 0; k < 30; k++) {
+                await window.mouse.wheel(0, k % 2 ? -200 : 200);
+                await window.waitForTimeout(100);
+              }
+            }
+            timeline.push(point);
+            if (!organized) await window.waitForTimeout(1000);
           }
         },
         15,
       );
-      record("speed.scale.organizePings", { pings, profile: organizingProfile });
-      // Scroll while it works, as a person reading would.
-      for (let i = 0; i < 30; i++) {
-        await window.mouse.wheel(0, i % 2 ? -200 : 200);
-        await window.waitForTimeout(100);
-      }
-      let organized = false;
-      for (let i = 0; i < 300 && !organized; i++) {
-        organized = await window.evaluate(async () => {
-          const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-          const library = await bridge.getLibrary();
-          return library.assignments.every(
-            (a) => a.status !== "pending" && a.status !== "classifying",
-          );
-        });
-        if (!organized) await window.waitForTimeout(1000);
-      }
+      const rendererFrames = await stopOrg();
+      const stalls = timeline.map((point) => point.frameMs);
       record("speed.scale.organize", {
         finished: organized,
         ms: Date.now() - started,
-        rendererFrames: await stopOrg(),
+        worstFrameMs: Math.max(0, ...stalls),
+        stalledMs: stalls.filter((ms) => ms > 1000).reduce((sum, ms) => sum + ms, 0),
+        peakRendererMB: Math.max(0, ...timeline.map((point) => point.rendererMB ?? 0)),
+        rendererFrames,
         mainProcessLag: await stopLag2(),
         ipcRoundTrip: await stopIpc2(),
+        timeline,
+        profile: organizingProfile,
       });
     } else {
       record("speed.scale.organize", { skipped: "Organize button not available" });
