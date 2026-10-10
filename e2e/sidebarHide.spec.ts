@@ -144,6 +144,10 @@ test("a hidden sidebar peeks at the left edge, and keyboard focus shows it", asy
   await window.keyboard.press(`${COMMAND}+Backslash`);
   await expect.poll(() => isHidden(window)).toBe(true);
   const panel = window.getByTestId("sidebar-panel");
+  // It slides away over 160ms: until it has, it covers the left edge the pointer goes to.
+  await panel.evaluate((element) =>
+    Promise.all(element.getAnimations().map((animation) => animation.finished)),
+  );
 
   // The pointer slides to the left edge: the sidebar comes out over the content.
   await window.mouse.move(600, 300);
