@@ -17,7 +17,6 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 /** Lists whose items can be selected, where a list's own keys act. */
 const SELECTABLE_LIST = '[role="listbox"], [role="tree"], [role="treegrid"], [role="grid"]';
 
-/** Whether a key goes to something the User types in, where it keeps its text meaning. */
 function typesText(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
@@ -41,7 +40,6 @@ function surfaceOf(target: EventTarget | null): Surface {
   return isSurface(marked) ? marked : "mind";
 }
 
-/** The context of a key pressed, or a menu item chosen, with the focus on `target`. */
 const contextAt = (target: EventTarget | null): CommandContext => ({
   selection: [],
   focus: null,

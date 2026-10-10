@@ -1,6 +1,5 @@
 import type { Keys, ShortcutKeys } from "../../../shared/commands";
 
-/** A key pressed, as a keyboard event has it. */
 interface KeyPress {
   code: string;
   metaKey: boolean;
@@ -54,7 +53,6 @@ const MAC_GLYPHS: Readonly<Record<string, string>> = {
   Right: "→",
 };
 
-/** The keys for this system. */
 export const keysOn = (shortcut: ShortcutKeys, mac: boolean): Keys =>
   typeof shortcut === "string" ? shortcut : mac ? shortcut.mac : shortcut.other;
 

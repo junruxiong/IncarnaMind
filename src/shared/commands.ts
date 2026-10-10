@@ -10,7 +10,6 @@ export type CommandId = `${string}.${string}`;
  */
 export type Keys = string;
 
-/** The same keys on every system, or other keys on macOS. */
 export type ShortcutKeys = Keys | { readonly mac: Keys; readonly other: Keys };
 
 /**

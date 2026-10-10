@@ -5,10 +5,8 @@ export interface Handle<T> {
   current: T | null;
 }
 
-/** The open Mind's composer. */
 export const composerHandle: Handle<{ focus(): void }> = { current: null };
 
-/** The sidebar's show and hide (see `useSidebarControl` in App.tsx). */
 export const sidebarHandle: Handle<{ hidden: boolean; toggle(): void }> = { current: null };
 
 /** Lends `value` to commands through `handle` while the calling component is mounted. */

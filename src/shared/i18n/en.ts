@@ -1296,7 +1296,6 @@ export const en = {
   "menu.zoom": "Zoom",
   "menu.front": "Bring All to Front",
 
-  // Commands (src/renderer/src/commands/app.ts); those in the application menu use its labels.
   "command.tab.new": "New Tab",
   "command.tab.next": "Next Tab",
   "command.tab.previous": "Previous Tab",
