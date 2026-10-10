@@ -491,6 +491,20 @@ const cases: Case[] = [
   {
     language: "en",
     topic: "lost ligatures",
+    name: "a quote with ligatures the text lost and one it kept: 'Firm' kept its 'Fi' (JP Morgan, p. 9, en-19)",
+    pages: [
+      "In 2022, our Firm fnanced and facilitated approximately $197 billion toward the\nTarget; $70 billion toward green, $87 billion toward development fnance and $40\nbillion toward community development.",
+    ],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote:
+      "In 2022, our Firm financed and facilitated approximately $197 billion toward the Target; $70 billion toward green, $87 billion toward development finance and $40 billion toward community development.",
+    lostLigatures: true,
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "lost ligatures",
     name: "where the Document's text keeps them, a lone f is an f: 'flight' isn't 'fight'",
     pages: ["The fight was delayed by fog."],
     cited: [1, 1],
