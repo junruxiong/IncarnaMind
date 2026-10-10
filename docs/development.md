@@ -1,0 +1,37 @@
+# Development
+
+How to run, test and evaluate IncarnaMind from source. For how to contribute, see [CONTRIBUTING.md](../CONTRIBUTING.md); for packaging and releases, see [releasing.md](releasing.md).
+
+## Run it
+
+You need Node.js 24 or newer (`.nvmrc`). After cloning:
+
+```shell
+npm install
+npm run dev          # start the app in development
+npm run typecheck    # TypeScript, strict
+npm run lint         # Biome (npm run format fixes what it can)
+npm test             # Vitest: drives the core's public interface; no keys, no network
+npm run test:smoke   # Playwright: builds the app and drives it in Electron
+npm run eval         # the retrieval evaluation (see below)
+```
+
+Keep development data apart from your real data folder by pointing the app at another one: `INCARNAMIND_DATA_DIR=/tmp/incarnamind-dev npm run dev`.
+
+## Embeddings
+
+Embeddings are off by default: document search is keyword search, reranked. Turned on in Settings, it runs a built-in embedding model, multilingual-e5-small (int8 ONNX, 135 MB), on your CPU in an Electron utility process. The app downloads it from Hugging Face into the data folder (`models/`) the first time a Document needs it, and checks each file's SHA-256; after that, indexing works offline. The tests use a deterministic fake instead. `INCARNAMIND_REAL_MODEL=1 npm test` also runs one test with the real model, downloading it unless `INCARNAMIND_MODEL_DIR` points at a folder holding its files. On Linux x64, set `ONNXRUNTIME_NODE_INSTALL=skip` when you run `npm install`, or onnxruntime-node also downloads its CUDA libraries, which the app doesn't use.
+
+Embeddings can also come from OpenAI, Google, an OpenAI-compatible server or Ollama, and reranking can use Cohere or Voyage AI instead of the built-in model.
+
+## Evaluation
+
+`npm run eval` measures retrieval, and optionally Citation quality, against the project's targets. It adds the sample PDFs in `data/` and the Chinese articles in `eval/retrieval/fixtures/` to a temporary data folder and searches for each Question in `eval/retrieval/questions.json`. Retrieval needs no keys; the first run downloads the embedding and reranking models into `~/.cache/incarnamind-eval/`. It isn't part of `npm test` or CI's default run. See [`eval/README.md`](../eval/README.md) for the Citation part, the variables and the latest results.
+
+## Architecture
+
+[`CONTEXT.md`](../CONTEXT.md) is the glossary, and [`docs/adr/`](adr/) records the decisions behind the design, from the local-first Electron app (ADR-0004, ADR-0006) to SQLite storage (ADR-0008) and retrieval (ADR-0009).
+
+In short: the React UI in the renderer talks over a typed bridge to the core, a TypeScript module in the Electron main process with no Electron imports. The core keeps each Mind as a Yjs document and everything else in SQLite, in the data folder. Documents are indexed in place from Linked folders, never copied (ADR-0010). Answers come from a tool-calling loop (ADR-0007), through the AI SDK.
+
+Code lives in `src/`: `core` (app logic), `main` (Electron main process), `preload` (the typed bridge to the UI), `renderer` (React UI) and `shared` (i18n dictionaries, bridge names and the text normaliser).
