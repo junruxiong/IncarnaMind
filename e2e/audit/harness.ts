@@ -3,9 +3,10 @@
  * and a temporary HOME, moving and typing like a person, and the probes the
  * audit reads (contrast, focus, frames, long tasks, memory). Not a test suite.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   type CDPSession,
   type ElectronApplication,
@@ -14,6 +15,8 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+// Vite's own source-map reader (the audit adds no dependency of its own).
+import { SourceMapConsumer } from "source-map-js";
 
 const appDir = resolve(__dirname, "..", "..");
 
@@ -596,7 +599,37 @@ export async function takeKeyLatency(window: Page) {
   });
 }
 
-/** CPU profile of `action` in the renderer: the functions with the most self time. */
+/** The source maps next to the build's files, read once each (null: the build has none). */
+const sourceMaps = new Map<string, SourceMapConsumer | null>();
+
+/**
+ * Where a function of the built renderer comes from, by the source map a build
+ * made with `--sourcemap` puts beside it: the renderer is minified, so its own
+ * names say nothing. Null without a map.
+ */
+function originalOf(url: string, line: number, column: number): string | null {
+  if (!url.startsWith("file://")) return null;
+  const file = fileURLToPath(url);
+  let consumer = sourceMaps.get(file);
+  if (consumer === undefined) {
+    consumer = existsSync(`${file}.map`)
+      ? new SourceMapConsumer(JSON.parse(readFileSync(`${file}.map`, "utf8")))
+      : null;
+    sourceMaps.set(file, consumer);
+  }
+  if (!consumer) return null;
+  const at = consumer.originalPositionFor({ line: line + 1, column });
+  if (!at.source) return null;
+  const source = at.source.replace(/^(\.\.\/)+/, "").replace(/^.*node_modules\//, "");
+  return `${at.name ?? "(anonymous)"} ${source}:${at.line}`;
+}
+
+/**
+ * CPU profile of `action` in the renderer: the functions with the most self
+ * time, named from the source maps when the build has them. A browser
+ * function (such as `getClientRects`) also names the app's function that
+ * called it, after "←".
+ */
 export async function profile(session: CDPSession | null, action: () => Promise<void>, top = 12) {
   if (!session) {
     await action();
@@ -608,18 +641,35 @@ export async function profile(session: CDPSession | null, action: () => Promise<
   await action();
   const { profile: cpu } = (await session.send("Profiler.stop")) as {
     profile: {
-      nodes: { id: number; callFrame: { functionName: string; url: string; lineNumber: number } }[];
+      nodes: {
+        id: number;
+        callFrame: { functionName: string; url: string; lineNumber: number; columnNumber: number };
+        children?: number[];
+      }[];
       samples: number[];
       timeDeltas: number[];
     };
   };
+  type ProfileNode = (typeof cpu.nodes)[number];
   const byId = new Map(cpu.nodes.map((n) => [n.id, n]));
+  const parentOf = new Map<number, ProfileNode>();
+  for (const node of cpu.nodes) {
+    for (const child of node.children ?? []) parentOf.set(child, node);
+  }
+  const nameOf = ({ callFrame: { functionName, url, lineNumber, columnNumber } }: ProfileNode) =>
+    originalOf(url, lineNumber, columnNumber) ??
+    `${functionName || "(anonymous)"} ${url.split("/").pop() ?? ""}:${lineNumber + 1}`;
   const self = new Map<string, number>();
   cpu.samples.forEach((id, i) => {
     const node = byId.get(id);
     if (!node) return;
-    const { functionName, url, lineNumber } = node.callFrame;
-    const key = `${functionName || "(anonymous)"} ${url.split("/").pop() ?? ""}:${lineNumber + 1}`;
+    let key = nameOf(node);
+    if (!node.callFrame.url) {
+      // A browser function: the nearest caller with a script of its own.
+      let caller = parentOf.get(node.id);
+      while (caller && !caller.callFrame.url) caller = parentOf.get(caller.id);
+      if (caller) key = `${key} ← ${nameOf(caller)}`;
+    }
     self.set(key, (self.get(key) ?? 0) + (cpu.timeDeltas[i] ?? 0) / 1000);
   });
   return [...self.entries()]
