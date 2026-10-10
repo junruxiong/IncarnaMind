@@ -9,6 +9,8 @@
  */
 import type { ExternalService, OllamaPullProgress, OllamaStatus } from "../api";
 import { isRecord } from "../errors";
+import { LOCAL_MODELS } from "./catalog/local";
+import { catalogProvider } from "./catalog/providers";
 
 /** Where Ollama downloads the models it pulls from: its registry, not this app. */
 export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
@@ -17,23 +19,27 @@ export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
 };
 
 /**
- * The model one click pulls and selects: the one place the choice is made.
+ * The model one click pulls and selects: Ollama's Answers model in the
+ * catalog (see ./catalog/providers), the one place the choice is made.
  * Qwen3.5-4B: Apache-2.0, multilingual (English and Chinese), calls Tools,
  * and its context needs little memory (only a quarter of its layers use full
  * attention), so a 16 GB laptop holds a 16k window. It can think, but every
  * request to it turns thinking off (see ./ollamaModels). Not the bare
  * "qwen3:4b", which now points to a thinking-only build that takes minutes
- * per Answer (docs/research/ollama-integration.md). No quality promise until
- * the evaluation runs against local models (design record, "Local mode").
+ * per Answer (docs/research/ollama-integration.md). Measured with the
+ * evaluation in #67.
  *
- * Changing it: set `RECOMMENDED_OLLAMA_DOWNLOAD_GB` to its download, and the
- * size in the "providers.ollama.use" and "providers.ollama.pulling" strings
- * (a test checks they agree).
+ * Changing it: change the catalog's role, give the model an entry in
+ * ./catalog/local, and set the size in the "providers.ollama.use" and
+ * "providers.ollama.pulling" strings (a test checks they agree).
  */
-export const RECOMMENDED_OLLAMA_MODEL = "qwen3.5:4b";
+export const RECOMMENDED_OLLAMA_MODEL: string = catalogProvider("ollama")?.roles.answers ?? "";
 
-/** Its download in Ollama's library, in GB, as the one-click copy names it. */
-export const RECOMMENDED_OLLAMA_DOWNLOAD_GB = 3.3;
+/** Its download in Ollama's library (the GGUF build), in GB to one decimal, as the one-click copy names it. */
+export const RECOMMENDED_OLLAMA_DOWNLOAD_GB =
+  Math.round(
+    (LOCAL_MODELS.find((model) => model.tag === RECOMMENDED_OLLAMA_MODEL)?.download.gguf ?? 0) * 10,
+  ) / 10;
 
 const DETECT_TIMEOUT_MS = 2_000;
 

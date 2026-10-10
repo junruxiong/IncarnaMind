@@ -309,7 +309,12 @@ describe("Data-flow consent", () => {
 
     expect(await prepared).toMatchObject({ model: models.model, modelId: "gpt-5.4-mini" });
     expect(models.specs).toEqual([
-      { kind: "openai", baseUrl: null, apiKey: "sk-test-openai", modelId: "gpt-5.4-mini" },
+      {
+        kind: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "sk-test-openai",
+        modelId: "gpt-5.4-mini",
+      },
     ]);
   });
 

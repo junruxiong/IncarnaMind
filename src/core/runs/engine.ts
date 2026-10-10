@@ -53,8 +53,8 @@ export interface RunToolCall {
 export type GateDecision = { run: true } | { run: false; result: string };
 
 /**
- * A local model's context window (see ../answers/window): how a Run is kept
- * within it. Its policy is the caller's; the engine only applies it.
+ * A model's context window (see ../answers/window): how a Run is kept within
+ * it. Its policy is the caller's; the engine only applies it.
  */
 export interface RunWindow {
   /**
@@ -103,7 +103,7 @@ export interface RunRequest {
    * sent once, where it was taken, and stays in the history after.
    */
   steering?(): readonly RunMessage[];
-  /** A local model's window. None for a cloud model. */
+  /** The model's window, when it is known (a local model's, or a cloud model's own). */
   window?: RunWindow;
   /** Left out: the provider's default. A refusal comes back as a "refused" event. */
   temperature?: number;

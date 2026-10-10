@@ -65,7 +65,7 @@ const documentData = (excerpt: DocumentExcerpt, pages: DocumentPageImage[]) => (
 
 /**
  * Organize with the User's connected chat model. One that reads images
- * (`readsImages`, see ../providers/imageInput) gets the page images of a PDF
+ * (`readsImages`, see ../providers/capabilities) gets the page images of a PDF
  * with no text, a scan, in the same request: the previews Clef-Flash reads
  * (`PDF_IMAGE_LIMITS` in ./pdfImages): at most 3 pages, page 1 and the two
  * most illustrated of pages 2–12 (2 and 3 of a plain scan), each a JPEG of at
