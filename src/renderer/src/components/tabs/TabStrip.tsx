@@ -224,6 +224,9 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       aria-controls={selected ? `tabpanel-${groupId}` : undefined}
       tabIndex={selected ? 0 : -1}
       title={tooltip}
+      // Its name is its title, not its buttons' too; a preview or a pin is said after it.
+      aria-label={title}
+      aria-description={tooltip === title ? undefined : tooltip}
       data-testid={`${tab.item.kind}-tab`}
       data-tab-id={tab.id}
       data-group-id={groupId}
