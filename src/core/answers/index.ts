@@ -53,6 +53,7 @@ import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from ".
 import type { createEventHub } from "../events";
 import type { ExecAccess } from "../execution";
 import type { MindContent } from "../mindContent";
+import { plainText } from "../mindText";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { GateDecision } from "../runs/engine";
@@ -75,7 +76,6 @@ import {
   contentHash,
   createElement,
   findBlock,
-  plainText,
   syncContent,
   textAttribute,
   topLevelBlocks,
