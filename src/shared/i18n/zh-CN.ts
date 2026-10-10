@@ -144,6 +144,11 @@ export const zhCN = {
   "mind.noneOpen.body": "Mind 是为一个主题或项目准备的笔记本。",
   "mind.title.label": "Mind 标题",
   "mind.editor.label": "Mind 内容",
+  "mind.update.title": "更新 IncarnaMind 后即可打开",
+  "mind.update.body": "这是用较新版本的 IncarnaMind 创建的。内容没有任何改动，更新后即可在此打开。",
+  "mind.readOnly.title": "只读",
+  "mind.readOnly.body":
+    "较新版本的 IncarnaMind 写入了这个 Mind。更新 IncarnaMind 后才能编辑；这里的内容没有任何改动。",
   "mind.delete": "删除 Mind",
   "mind.rename": "重命名",
   "mind.renameLabel": "{title} 的新标题",
