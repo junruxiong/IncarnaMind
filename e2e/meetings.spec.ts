@@ -13,6 +13,7 @@ import {
   openSettings,
   removeDataFolder,
   setWindowSize,
+  showSettingsPage,
 } from "./app";
 
 /**
@@ -44,12 +45,13 @@ const bridge = (window: Page) =>
   );
 
 /** Settings → Meetings → Record meetings, by its switch. */
-async function turnOnMeetings(window: Page): Promise<void> {
+async function turnOnMeetings(window: Page, name?: string): Promise<void> {
   const settings = await openSettings(window, "meetings");
   const recording = settings.getByTestId("meetings-enabled");
   await recording.hover();
   await recording.click();
   await expect(recording).toBeChecked();
+  if (name) await shot(window, name);
   await closeSettings(window);
 }
 
@@ -105,7 +107,13 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await window.getByTestId("plus-menu").click();
   await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toHaveCount(0);
   await window.keyboard.press("Escape");
-  await turnOnMeetings(window);
+  await turnOnMeetings(window, "settings-meetings-en");
+  if (SCREENSHOTS) {
+    await window.getByTestId("plus-menu").click();
+    await expect(window.getByRole("menuitem", { name: "Record a meeting" })).toBeVisible();
+    await shot(window, "plus-menu-record-en");
+    await window.keyboard.press("Escape");
+  }
 
   const start = await recordMeeting(window);
   await expect(window.getByTestId("mind-title")).toHaveValue(/^Meeting, \d{1,2} [A-Z][a-z]+$/);
@@ -202,6 +210,13 @@ test("with the computer's sound denied, a line says so and opens System Settings
   await expect(line).toContainText("只录到了你的麦克风：IncarnaMind 没有录制电脑声音的权限。");
   await expect(bar).toContainText("正在录制");
   await shot(window, "meeting-system-denied-zh");
+  if (SCREENSHOTS) {
+    await window.getByTestId("sidebar-footer").getByRole("button", { name: "设置" }).click();
+    await showSettingsPage(window, "meetings");
+    await shot(window, "settings-meetings-zh");
+    await window.keyboard.press("Escape");
+    await expect(window.getByTestId("settings")).toBeHidden();
+  }
 
   // At the narrowest window, the bar keeps its controls on one row under the text.
   await setWindowSize(app, window, 900, 660);
