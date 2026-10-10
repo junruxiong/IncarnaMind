@@ -63,6 +63,8 @@ export interface LibraryOptions {
    * counted in the log, and skipped files are left out of `documents`.
    */
   allowUnprocessed?: boolean;
+  /** Called with the core as soon as it is created, before any Document is added: to watch its events. */
+  watch?: (core: Core) => void;
 }
 
 export interface Library {
@@ -226,6 +228,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
         }),
   };
   const core = createCore(adapters);
+  options.watch?.(core);
   const close = async () => {
     core.close();
     if (options.keep) {
