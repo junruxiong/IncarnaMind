@@ -20,7 +20,9 @@
   <!-- After the first release, add: <a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/hero.png" width="880" alt="A PDF page on the left with the quoted sentence highlighted green and a check mark numbered 2 beside it. On the right, a Mind called Lit review: urban heat islands, with an Answer whose Citations 1 and 2 have green check marks and whose Citation 3 is marked amber because its quote wasn't found."></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="Nine screens in turn: pointing at a Citation shows its quote; opening it shows the PDF page with the quote highlighted; all your Documents in every format, with Folders and Tags; asking about selected cells in an Excel sheet; a comparison table across ten contracts; a Word contract with tracked changes and comments; notes beside a live meeting transcript; background Tasks, running and scheduled; and Settings with Claude, GPT, DeepSeek and a local model through Ollama."></p>
+
+<p align="center"><sub>Asking about a selection, comparison tables, Word tracked changes and comments, meetings and background Tasks are <a href="#coming-next">coming next</a>; the rest is in the app today.</sub></p>
 
 ## Download
 
@@ -50,9 +52,7 @@ npm install && npm run dev
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind can sort Documents into your Folders, and the choices you make yourself are kept.
 
-
 **Choose your AI.** Use your own OpenAI, Anthropic or Google key, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
-
 
 **Hand it in.** Export a Mind to Word with its citations as footnotes, or to Markdown. A citation that didn't pass the check is marked "[unverified]".
 
@@ -83,14 +83,6 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 ## Coming next
 
 Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): meetings with a live transcript that answers can cite; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; AI edits you accept or reject; and research Tasks that run in the background.
-
-<p align="center"><img src="docs/images/coming-compare.png" width="880" alt="Coming next: a Mind called Shortlist: contract terms with a comparison table of ten contracts against termination notice, liability cap and governing law. Every cell is a short answer with its own numbered Citation, and two are marked amber."></p>
-
-<p align="center"><sub>Coming next: a comparison table across ten contracts, every cell an answer with its own Citation.</sub></p>
-
-<p align="center"><img src="docs/images/coming-meetings.png" width="880" alt="Coming next: notes from a supply call, each line with the time it was said, above a live transcript with speakers told apart and a button to add a line to the notes. The bar at the bottom shows Recording 24:16."></p>
-
-<p align="center"><sub>Coming next: notes taken during a call, each tied to the moment it was said, beside a live transcript.</sub></p>
 
 ## Contributing
 
