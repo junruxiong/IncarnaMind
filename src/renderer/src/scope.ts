@@ -13,6 +13,8 @@ import { buildFolderTree, flattenFolderTree } from "./folders";
 export interface ScopeLibrary {
   folders: readonly Folder[];
   groups?: readonly LibraryGroup[];
+  /** In-app Folders deleted since: a scope naming one still shows its name. */
+  deletedGroups?: readonly LibraryGroup[];
   tags: readonly Tag[];
   documents: readonly Document[];
 }
@@ -33,8 +35,13 @@ export interface ScopeChoice {
 export interface ScopeChip {
   kind: ScopeKind;
   id: string;
-  /** Null once its Folder, Tag or Document is deleted: the search ignores it. */
+  /**
+   * Its name, or null once it is deleted and its name is gone with it. An
+   * in-app Folder deleted keeps its name here.
+   */
   name: string | null;
+  /** Deleted since: the search ignores it. */
+  deleted: boolean;
   documentKind: DocumentKind | null;
 }
 
@@ -132,31 +139,31 @@ export function scopeChips(library: ScopeLibrary, scope: SearchScope): ScopeChip
   const folders = new Map(
     [...library.folders, ...(library.groups ?? [])].map((folder) => [folder.id, folder]),
   );
+  const deletedFolders = new Map((library.deletedGroups ?? []).map((group) => [group.id, group]));
   const tags = new Map(library.tags.map((tag) => [tag.id, tag]));
   const documents = new Map(library.documents.map((document) => [document.id, document]));
   return [
-    ...scope.folderIds.map(
-      (id): ScopeChip => ({
+    ...scope.folderIds.map((id): ScopeChip => {
+      const live = folders.get(id);
+      return {
         kind: "folder",
         id,
-        name: folders.get(id)?.name ?? null,
+        name: live?.name ?? deletedFolders.get(id)?.name ?? null,
+        deleted: !live,
         documentKind: null,
-      }),
-    ),
-    ...scope.tagIds.map(
-      (id): ScopeChip => ({
-        kind: "tag",
-        id,
-        name: tags.get(id)?.name ?? null,
-        documentKind: null,
-      }),
-    ),
+      };
+    }),
+    ...scope.tagIds.map((id): ScopeChip => {
+      const tag = tags.get(id);
+      return { kind: "tag", id, name: tag?.name ?? null, deleted: !tag, documentKind: null };
+    }),
     ...scope.documentIds.map((id): ScopeChip => {
       const document = documents.get(id);
       return {
         kind: "document",
         id,
         name: document?.name ?? null,
+        deleted: !document,
         documentKind: document?.kind ?? null,
       };
     }),

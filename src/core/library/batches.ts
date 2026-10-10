@@ -180,7 +180,7 @@ export function createBatches(options: {
         if (batch) touch(batch);
       }
     },
-    /** Folders changed: a deleted one leaves its suggestions Unsorted. */
+    /** Folders changed: a deleted one leaves its suggestions Not in a Folder. */
     libraryChanged(): void {
       for (const batch of batches.values()) touch(batch);
     },
