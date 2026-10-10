@@ -1301,9 +1301,16 @@ export interface AnswerDelta {
  * "waiting-for-consent", the User is asked whether to send the Question to
  * the model's service, and nothing is sent until they say; "loading", Ollama
  * is loading the local model; "searching", the User's Documents are being
- * searched; "writing", the model is at work.
+ * searched; "writing", the model is at work; "checking-quotes", a local model
+ * that answered with structured output is asked once more for the quotes of
+ * its Citations that the check didn't find (ADR-0007).
  */
-export type AnswerPhase = "waiting-for-consent" | "loading" | "searching" | "writing";
+export type AnswerPhase =
+  | "waiting-for-consent"
+  | "loading"
+  | "searching"
+  | "writing"
+  | "checking-quotes";
 
 /** An Answer being written moved to another phase. */
 export interface AnswerPhaseEvent {
@@ -1360,6 +1367,22 @@ export interface AnswerFinished {
   placedMarkers: number;
   /** How the model could give Citations; null when there were no Documents to search. */
   citationSupport: CitationSupport | null;
+  /**
+   * The one request for exact quotes a local model in structured output gets
+   * when the check doesn't find some of its quotes (ADR-0007); null when none
+   * was made. The evaluation counts these.
+   */
+  quoteRetry: QuoteRetry | null;
+}
+
+/** What an Answer's one request for exact quotes did (see `AnswerFinished.quoteRetry`). */
+export interface QuoteRetry {
+  /** The records whose quotes it asked for again. */
+  records: number;
+  /** Those whose new quote the check found on the pages it cites: it replaced theirs. */
+  recovered: number;
+  /** How long it took, in milliseconds, from the request to the records taken. */
+  durationMs: number;
 }
 
 /** An Answer failed; the Answer shows the error by kind. */

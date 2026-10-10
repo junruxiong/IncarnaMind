@@ -923,6 +923,7 @@ export const en = {
   "answer.phase.loading": "Loading the model…",
   "answer.phase.searching": "Searching your Documents…",
   "answer.phase.writing": "Writing…",
+  "answer.phase.checking-quotes": "Checking quotes…",
   "answer.status.stopped": "Stopped",
   "answer.stop": "Stop",
   "answer.regenerate": "Regenerate",

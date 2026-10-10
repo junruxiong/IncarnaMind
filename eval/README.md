@@ -103,7 +103,7 @@ npm run eval
   npm run eval
   ```
 
-  These ten are the gating Questions whose Citations the long PDFs made hardest to get found (`tests/eval/smallModelCitations.test.ts`), each now handled by the engine or the check: an answer on the second page of a two-page Passage (en-02, en-08, zh-02), or across a page break (en-17), which structured output now places; JP Morgan's report, whose stored text lost its f-ligatures (en-07, en-19); pages in traditional characters (zh-02, zh-04, zh-14, zh-17); and a Passage over four pages (zh-08, zh-14). In this library of English and Chinese Documents, each Answer also makes one short call to translate its query and a second search. Such a run should take about 20 minutes on an Apple M2 Max: about 12 to process and search the Documents, as always, seven of them for the other ways to find the candidates, then the ten Answers, while the model also tags the 12 Documents.
+  These ten are the gating Questions whose Citations the long PDFs made hardest to get found (`tests/eval/smallModelCitations.test.ts`), each now handled by the engine or the check: an answer on the second page of a two-page Passage (en-02, en-08, zh-02), or across a page break (en-17), which structured output now places; JP Morgan's report, whose stored text lost its f-ligatures (en-07, en-19); pages in traditional characters (zh-02, zh-04, zh-14, zh-17); and a Passage over four pages (zh-08, zh-14). In this library of English and Chinese Documents, each Answer also makes one short call to translate its query and a second search; one whose quotes the check doesn't all find makes one more, for exact quotes, which the "Quotes asked again" rows count and time. Such a run should take about 20 minutes on an Apple M2 Max: about 12 to process and search the Documents, as always, seven of them for the other ways to find the candidates, then the ten Answers, while the model also tags the 12 Documents.
 
 ### Cloud embeddings
 
@@ -199,6 +199,7 @@ Each Answer is read back from its Mind, as the editor shows it, and split into s
 | "Can't check" | The cited pages have no text. | reported |
 | Coverage | The share of sentences with at least one Citation. A Citation just after a sentence's full stop counts for that sentence. Every sentence is treated as drawn from Documents, so this is a lower bound: a sentence saying the Documents don't cover something counts as uncited. | reported |
 | Dropped markers and records | From `answer.finished`: markers the model wrote without a valid record, which were removed, and records given for no marker, which were dropped. | reported |
+| Quotes asked again | From `answer.finished`'s `quoteRetry`: a local model answering with structured output whose quotes the check didn't find is asked once more for exact quotes, in one request (ADR-0007). How many Answers made that request; how many records it asked about, and how many it recovered (the check found the new quote, which replaced the old); the time it added to an Answer that made it, the median and the most; and the time all such requests added per Answer, counting those that made none. Cloud models and the Tool loop never make it. | reported |
 | Support | The share of "found" quotes that support their sentence. A reviewer judges this in `reviewer-sheet.csv`. | at least 80% |
 
 Below the figures, `report.md` lists why, Citation by Citation and Answer by Answer, for the gating set and per format alike:
@@ -206,7 +207,7 @@ Below the figures, `report.md` lists why, Citation by Citation and Answer by Ans
 - **Citations not found:** each Citation the check didn't find, with its outcome and the check's reason, the pages it cites, its Passage's pages, where its quote is in the Document under the looser normalisation (the first page that holds it, or two consecutive ones; "–" when it isn't there, e.g. paraphrased, or written in other characters), and the quote.
 - **Answers without a Citation:** how the model cited, the markers removed and records dropped, what it searched for, and how the Answer begins.
 
-The log prints the same lines as each Answer ends, so a run stopped before its report still says why.
+The log prints the same lines as each Answer ends, so a run stopped before its report still says why, with what an Answer's request for exact quotes recovered and how long it took. The terminal summary adds a line per group whose Answers made such requests.
 
 The run gates on the first three targets for a cloud model. Support is judged by hand:
 

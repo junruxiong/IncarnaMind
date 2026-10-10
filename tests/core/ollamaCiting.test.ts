@@ -139,12 +139,14 @@ describe("Choosing how a local model cites, before the first request", () => {
     const { ended } = await askAndEnd(core, client, mind.id, asked.attrs.id);
 
     expect(ended.event).toBe("finished");
-    // One request: nothing goes back to the model to fix its records.
+    // One Answer request; the first record is placed without the model.
     expect(answerChats(ollama)).toHaveLength(1);
     expect(ended.event === "finished" && ended.payload.citations).toMatchObject([
       { pageFrom: 2, pageTo: 2, location: { kind: "page", from: 2, to: 2 }, check: "found" },
       { pageFrom: 2, pageTo: 2, check: "not-found", checkReason: "quote-not-on-pages" },
     ]);
+    // Only the second's quote is asked for again (./quoteRetry.test.ts); the stub gives none back.
+    expect(ended.payload).toMatchObject({ quoteRetry: { records: 1, recovered: 0 } });
   });
 
   test("a small model's records that name their Passage loosely, or by its Document, are taken; one whose quote is nowhere is rejected, and reported", async () => {

@@ -872,6 +872,7 @@ export const zhCN = {
   "answer.phase.loading": "正在加载模型…",
   "answer.phase.searching": "正在搜索你的文档…",
   "answer.phase.writing": "正在回答…",
+  "answer.phase.checking-quotes": "正在核对引文…",
   "answer.status.stopped": "已停止",
   "answer.stop": "停止",
   "answer.regenerate": "重新生成",
