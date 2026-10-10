@@ -20,7 +20,13 @@
  *   reference "[36]" in the syntax of our own Citation markers. Only matching
  *   reads it so: the markers in an Answer's text are never touched;
  * - a soft hyphen that ends a line is read as a hyphen, so the word split
- *   there is joined like any other ("inter\u00ad\nnational").
+ *   there is joined like any other ("inter\u00ad\nnational");
+ * - traditional Chinese characters are read as simplified ones, character by
+ *   character, by OpenCC's table (./hanVariants): a page in traditional
+ *   characters is quoted in simplified ones when the Answer is written in
+ *   them ("讓全球" as "让全球"), and the other way round. Phrases aren't
+ *   converted, and a character stays one character, so offsets hold
+ *   (ADR-0009).
  *
  * The match itself has two tolerances:
  *
@@ -55,6 +61,7 @@
  * - a number is matched whole: "4812" isn't found in "14812", "48125",
  *   "4812.5" or "-4812".
  */
+import { SIMPLIFIED } from "./hanVariants";
 import { type NormalisedUnit, normaliseWithOffsets } from "./text";
 
 /** A span of the original text, in UTF-16 offsets; `end` is exclusive. */
@@ -101,11 +108,14 @@ const ELLIPSIS = / ?\.{3,} ?/;
 const DIGIT = /^[0-9]$/;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
 
-/** A letter in lower case, folded as `FOLDED` says. Stays one UTF-16 code unit, so offsets hold. */
+/**
+ * A letter in lower case, folded as `FOLDED` says, and a traditional Chinese
+ * character as its simplified one. Stays one UTF-16 code unit, so offsets hold.
+ */
 function fold(char: string): string {
   const lower = char.toLowerCase();
   const one = lower.length === 1 ? lower : char;
-  return FOLDED[one] ?? one;
+  return FOLDED[one] ?? SIMPLIFIED.get(one) ?? one;
 }
 
 /** How matching treats numbers (see the module comment). */

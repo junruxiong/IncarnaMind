@@ -1,15 +1,15 @@
 /**
- * Why a small local model's Citations of the gating set's long PDFs aren't
- * found (#67), cause by cause, without a model: records written by hand as a
- * small model may write them, given to the core's own citation session over
- * the stored text of the evaluation's PDFs (cut short), and sorted as the
- * evaluation sorts them, as the Tool loop gives them and, where it differs,
- * as structured output does (which places a record where its quote is in
- * its Passage, `CiteOptions`). qwen3.5:4b in structured output found 78% of its
- * English quotes and 64% of its Chinese ones on the gating set; these are the
- * ways the code and the data let a record fail. A quote of JP Morgan's
- * report, whose stored text lost its f-ligatures ("fnance"), is in
- * ./scoring.test.ts ("What became of a Citation").
+ * Why a small local model's Citations of the gating set's long PDFs weren't
+ * found (#67), cause by cause, without a model, and what the fixes made of
+ * them: records written by hand as a small model may write them, given to
+ * the core's own citation session over the stored text of the evaluation's
+ * PDFs (cut short), and sorted as the evaluation sorts them, as the Tool loop
+ * gives them and, where it differs, as structured output does (which places
+ * a record where its quote is in its Passage, `CiteOptions`). qwen3.5:4b in
+ * structured output found 78% of its English quotes and 64% of its Chinese
+ * ones on the gating set before them. A quote of JP Morgan's report, whose
+ * stored text lost its f-ligatures ("fnance"), is in ./scoring.test.ts
+ * ("What became of a Citation").
  */
 import { describe, expect, test } from "vitest";
 import { type CitationOutcome, outcomeOf, quotePages } from "../../eval/lib/citations";
@@ -170,7 +170,7 @@ const GRADIENT: Excerpt = {
 };
 
 describe("Why a small model's Citations of long PDFs aren't found", () => {
-  test("a page in traditional characters, quoted in simplified ones, is 'not in the Document' (zh-02; ADR-0009)", async () => {
+  test("a page in traditional characters, quoted in simplified ones, is found character by character (zh-02; ADR-0009)", async () => {
     const goals = sessionOver(GOALS);
     // The model reads the page's own characters, radical look-alikes folded: 讓, 為, 傷, 數, 減.
     expect(await goals.shown()).toContain(
@@ -191,18 +191,16 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
         location: "p. 4",
         quote: "让全球因为交通事故而伤亡的人数减少一半",
       },
+      // Reworded, it is in neither.
+      { marker: 3, passage: "P1", location: "p. 4", quote: "让全球交通事故伤亡人数减半" },
     ]);
 
     expect(outcomes).toMatchObject([
       { check: "found", quoteOn: [4, 4] },
-      {
-        check: "not-found",
-        checkReason: "quote-not-on-pages",
-        outcome: "not-in-document",
-        quoteOn: null,
-      },
+      { check: "found", quoteOn: [4, 4] },
+      { check: "not-found", outcome: "not-in-document", quoteOn: null },
     ]);
-    // Structured output places a quote only where it is word for word: this one is nowhere.
+    // Structured output places a quote only where it is: the simplified one on p. 4, the reworded one nowhere.
     const placed = sessionOver(GOALS);
     await placed.shown();
     expect(
@@ -214,10 +212,14 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
             location: "p. 3",
             quote: "让全球因为交通事故而伤亡的人数减少一半",
           },
+          { marker: 2, passage: "P1", location: "p. 3", quote: "让全球交通事故伤亡人数减半" },
         ],
         { structured: true },
       ).outcomes,
-    ).toMatchObject([{ check: "not-found", pages: [3, 3], outcome: "not-in-document" }]);
+    ).toMatchObject([
+      { check: "found", pages: [4, 4] },
+      { check: "not-found", pages: [3, 3], outcome: "not-in-document" },
+    ]);
   });
 
   test("the Passage's first page, for a quote on its second, is a wrong page that cite's feedback lets the Tool loop fix; structured output's is placed (en-02)", async () => {

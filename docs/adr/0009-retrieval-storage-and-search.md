@@ -44,3 +44,10 @@ The retrieval prototype (issue #21, `prototype/retrieval/` on the `prototype/ret
 - The window of 3 was not tuned. The hit rule scores single Passages, and the window only matters for the grouping step inside the search Tool.
 - The Add Documents code (#25) marks its FTS5 trigram tokenizer and 400/200 Passages as provisional until this decision. Both should change to the values above in a follow-up, along with the text normalisation.
 - The evaluation set and the Chinese fixtures live in `eval/retrieval/` (CC BY-SA 4.0 for the Wikipedia fixtures, see its `ATTRIBUTION.md`) for the retrieval evaluation ticket (#31). The prototype's harness stays on the `prototype/retrieval` branch.
+
+## Amendment: the Citation check folds what PDFs and Answers write differently (proposed, 2026-10-10, #67)
+
+Status: proposed. It changes what "Quote found" means, so it waits for the User.
+
+- **Simplified and traditional Chinese, character by character.** The Chinese fixtures are written partly in traditional characters (10 of the 20 Chinese gating Questions' answers), the Questions in simplified ones, and an Answer quotes in the characters it writes: qwen3.5:4b's quotes of traditional pages were "not found" though word for word but for the script (ADR-0007). The check (`findQuote`, `src/shared/quoteMatch.ts`, so the viewer's highlight too) now reads each traditional character as its simplified one, on both sides: the page's text and the quote. The table is OpenCC's `TSCharacters.txt` (Apache-2.0), from the `opencc-data` package 1.4.2 (Apache-2.0, 1.4 MB, a devDependency only, maintained by OpenCC's authors), turned by `scripts/hanVariants.ts` into `src/shared/hanVariants.ts`: 2,966 pairs, 19 KB, each one UTF-16 code unit to one, so offsets hold. Characters only: a phrase another region writes with other characters ("披露" for "揭露") stays "not found", as any other word does. Keyword search and embeddings are unchanged.
+
