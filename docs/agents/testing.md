@@ -39,6 +39,16 @@ CI (`.github/workflows/ci.yml`) runs three checks on every push and pull request
 - **Unit tests run in plain Node.** They must not need the Electron binary (CI doesn't download it) or a model download.
 - **Write paths and text that work on every platform.** Use `path.join`, never assume `/` or a case-insensitive file system, and give the Chinese strings the same tests as the English ones.
 
+## Trying AI features by hand
+
+The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with a real model:
+
+- **A cloud model on your own key.** A small, fast model, such as Anthropic's Haiku or Sonnet, is enough.
+- **A small local model through Ollama.** For example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards.
+- **An Ollama cloud model, if your computer is busy.** Its name ends in `-cloud`. The app treats it as leaving the computer, which is fine for test Documents.
+
+Use a temporary data folder and test Documents, never your own files. Say in the pull request which model you used and what you checked: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
+
 ## In a pull request
 
 The template's "How it was tested" section asks for the commands you ran and a green CI run. Paste the run's link.
