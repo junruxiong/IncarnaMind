@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { translate } from "../shared/i18n";
@@ -39,6 +39,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { safeFileName } from "./fileNames";
 import { createFolders } from "./folders";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
@@ -920,6 +921,22 @@ export function createCore(adapters: CoreAdapters): Core {
       const result = await documents.add(paths);
       usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
       return result;
+    },
+    saveTextAsDocument: async (input) => {
+      if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
+        throw new InvalidInputError("There is no text to save.");
+      }
+      const title = typeof input.name === "string" ? input.name : "";
+      const folder = join(dataDir, "Saved text");
+      mkdirSync(folder, { recursive: true });
+      const base = safeFileName(title, "Pasted text");
+      let path = join(folder, `${base}.md`);
+      for (let n = 2; existsSync(path); n++) path = join(folder, `${base} ${n}.md`);
+      writeFileSync(path, input.text.endsWith("\n") ? input.text : `${input.text}\n`);
+      const { documents: added } = await documents.add([path]);
+      const saved = added[0];
+      if (!saved) throw new InvalidInputError("The text couldn't be saved.");
+      return saved;
     },
     listDocuments: async (options) => {
       const { folderId, includeSubfolders, tagId, linkedFolderId } = parseListOptions(options);
