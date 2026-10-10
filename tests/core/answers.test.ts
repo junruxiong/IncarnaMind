@@ -52,6 +52,23 @@ async function setUp(model: MockLanguageModelV4, dataDir?: string) {
   return { core, models, provider, mind, writer, reader };
 }
 
+interface CloudProvider {
+  kind: "openai" | "anthropic" | "google";
+  modelId: string;
+}
+
+/** A core with a cloud chat model whose service the User has allowed Questions to go to, and a Mind. */
+async function setUpCloud(model: MockLanguageModelV4, provider: CloudProvider) {
+  const models = scriptedModels(model);
+  const core = startCore(await createTempDataFolder(), { createChatModel: models.createChatModel });
+  const saved = await core.saveChatProvider({ ...provider, apiKey: "sk-test" });
+  if (saved.service) await core.allowDataFlow("chat", saved.service.id);
+  const mind = await core.createMind({ title: "Tides" });
+  const writer = await connectToMind(core, mind.id);
+  const reader = await connectToMind(core, mind.id);
+  return { core, models, provider: saved, mind, writer, reader };
+}
+
 /** Resolves with the next "answer.finished" or "answer.failed" event for this Answer. */
 function answerEnded(core: Core, answerId: string) {
   return new Promise<
@@ -692,6 +709,10 @@ describe("Choosing the model", () => {
     const core = startCore(await createTempDataFolder());
     const ollama = await startOllamaStub({
       models: ["llama3.2:latest", "nomic-embed-text:latest", "qwen3:4b"],
+      capabilities: {
+        "llama3.2:latest": ["completion", "tools"],
+        "nomic-embed-text:latest": ["embedding"],
+      },
     });
     const server = await startModelListStub(["deepseek-reasoner", "deepseek-chat"]);
     const local = await core.saveChatProvider({
@@ -707,9 +728,14 @@ describe("Choosing the model", () => {
     });
 
     expect(await core.listChatModels()).toEqual([
-      // Embedding models can't answer, so they aren't offered.
-      { provider: local, models: ["llama3.2:latest", "qwen3:4b"] },
-      { provider: compatible, models: ["deepseek-chat", "deepseek-reasoner"] },
+      // Embedding models can't answer, so they aren't offered. Ollama says what llama3.2 can
+      // do; nothing says what the others can.
+      { provider: local, models: ["llama3.2:latest", "qwen3:4b"], unknown: ["qwen3:4b"] },
+      {
+        provider: compatible,
+        models: ["deepseek-chat", "deepseek-reasoner"],
+        unknown: ["deepseek-chat", "deepseek-reasoner"],
+      },
     ]);
     expect(server.authorizations).toEqual(["Bearer sk-local"]);
   });
@@ -724,7 +750,9 @@ describe("Choosing the model", () => {
     const fetch = vi.spyOn(globalThis, "fetch");
     onTestFinished(() => fetch.mockRestore());
 
-    expect(await core.listChatModels()).toEqual([{ provider, models: ["gpt-test"] }]);
+    expect(await core.listChatModels()).toEqual([
+      { provider, models: ["gpt-test"], unknown: ["gpt-test"] },
+    ]);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -736,7 +764,9 @@ describe("Choosing the model", () => {
       modelId: "qwen3:4b",
     });
 
-    expect(await core.listChatModels()).toEqual([{ provider, models: ["qwen3:4b"] }]);
+    expect(await core.listChatModels()).toEqual([
+      { provider, models: ["qwen3:4b"], unknown: ["qwen3:4b"] },
+    ]);
   });
 });
 
@@ -795,43 +825,33 @@ describe("Temperature", () => {
     expect(model.doStreamCalls[0]?.temperature).toBe(ANSWER_TEMPERATURE);
   });
 
-  test("models that reject a temperature, or should run at their default, are sent none", async () => {
-    const model = scriptedModel(() => ({ text: "Twice a day." }), { modelId: "o3-mini" });
-    const { core, mind, writer, reader } = await setUp(model);
-    const asked = question("How often are high tides?");
-    writeMind(writer, [asked]);
+  test("a model the catalog says takes no temperature is sent none; one it says takes one, or doesn't know, gets the Answer's", async () => {
+    const temperatureFor = async (provider: CloudProvider) => {
+      const model = streamingModel("Twice a day.");
+      const { core, mind, writer, reader } = await setUpCloud(model, provider);
+      const asked = question("How often are high tides?");
+      writeMind(writer, [asked]);
+      const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+      expect(answerText(reader, answerId)).toBe("Twice a day.");
+      return model.doStreamCalls[0]?.temperature;
+    };
 
-    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
-
-    expect(answerText(reader, answerId)).toBe("Twice a day.");
-    expect(model.doStreamCalls[0]?.temperature).toBeUndefined();
-
-    // OpenAI's reasoning models, wherever they are served, and Gemini 3 and later.
-    for (const modelId of [
-      "o1",
-      "o4-mini",
-      "openai/o3",
-      "gpt-5",
-      "gpt-5.1",
-      "gpt-6.1-sol",
-      "gemini-3-pro-preview",
-      "models/gemini-3.1-flash",
-    ]) {
-      expect(answerTemperature({ modelId }), modelId).toBeUndefined();
-    }
-    // Models that take one.
-    for (const modelId of [
-      "gpt-4.1",
-      "gpt-4o-mini",
-      "gpt-5-chat-latest",
-      "gpt-oss:20b",
-      "gemini-2.5-flash",
-      "claude-sonnet-4-5",
-      "llama3.2:latest",
-      "omni-local",
-    ]) {
-      expect(answerTemperature({ modelId }), modelId).toBe(ANSWER_TEMPERATURE);
-    }
+    // Claude's newest reject one, as do OpenAI's reasoning models; Google wants its default.
+    expect(
+      await temperatureFor({ kind: "anthropic", modelId: "claude-sonnet-5-5" }),
+    ).toBeUndefined();
+    expect(await temperatureFor({ kind: "openai", modelId: "o3-mini" })).toBeUndefined();
+    expect(await temperatureFor({ kind: "google", modelId: "gemini-3.8-flash" })).toBeUndefined();
+    // Models that take one, a dated snapshot of one, and an id the catalog doesn't know.
+    expect(await temperatureFor({ kind: "openai", modelId: "gpt-4.1" })).toBe(ANSWER_TEMPERATURE);
+    expect(await temperatureFor({ kind: "openai", modelId: "gpt-4o-2024-08-06" })).toBe(
+      ANSWER_TEMPERATURE,
+    );
+    expect(await temperatureFor({ kind: "openai", modelId: "gpt-7-preview" })).toBe(
+      ANSWER_TEMPERATURE,
+    );
+    expect(answerTemperature(false)).toBeUndefined();
+    expect(answerTemperature(undefined)).toBe(ANSWER_TEMPERATURE);
   });
 
   test("a provider that refuses the temperature gets the request again without one, and the model gets none from then on", async () => {
