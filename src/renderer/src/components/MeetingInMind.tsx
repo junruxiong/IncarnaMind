@@ -134,12 +134,53 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** How long was recorded, how long the audio stays on this computer, and "Delete audio now". */
+/**
+ * How long was recorded, how long the audio stays on this computer, and
+ * "Delete audio now", which asks first, on the same line: it can't be undone.
+ */
 function MeetingAudioLine({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const language = useLanguage();
   const { deleteAudio } = useMeetings.getState();
+  const [confirming, setConfirming] = useState(false);
   const { audio } = meeting;
+  if (confirming && audio.kept) {
+    return (
+      <p
+        role="alert"
+        data-testid="meeting-audio-confirm"
+        className="mb-4 font-sans text-[13px] leading-5 break-words text-ink-meta"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          setConfirming(false);
+        }}
+      >
+        {t("meetings.audio.confirm")}{" "}
+        <button
+          type="button"
+          // biome-ignore lint/a11y/noAutofocus: the User just asked to delete: the choice is here.
+          autoFocus
+          data-testid="meeting-audio-delete-confirm"
+          onClick={() => {
+            setConfirming(false);
+            void deleteAudio(meeting.id);
+          }}
+          className="rounded-sm font-semibold text-ink underline underline-offset-2"
+        >
+          {t("meetings.audio.deleteConfirm")}
+        </button>
+        <span aria-hidden="true"> · </span>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="rounded-sm font-semibold text-accent underline-offset-2 hover:underline"
+        >
+          {t("meetings.audio.keep")}
+        </button>
+      </p>
+    );
+  }
   const kept =
     audio.expiresAt === null
       ? t("meetings.audio.keptWhile")
@@ -161,7 +202,7 @@ function MeetingAudioLine({ meeting }: { meeting: Meeting }) {
           ? {
               label: t("meetings.audio.delete"),
               testId: "meeting-audio-delete",
-              onClick: () => void deleteAudio(meeting.id),
+              onClick: () => setConfirming(true),
             }
           : undefined
       }

@@ -1568,6 +1568,10 @@ export const en = {
   "meetings.audio.keptUntil": "Audio kept on this computer until {time}",
   "meetings.audio.keptWhile": "Audio kept on this computer until a day after the meeting",
   "meetings.audio.delete": "Delete audio now",
+  "meetings.audio.confirm":
+    "Delete this meeting’s audio? It can’t be brought back. Your notes stay.",
+  "meetings.audio.deleteConfirm": "Delete audio",
+  "meetings.audio.keep": "Keep it",
   "meetings.audio.deleted": "Audio deleted",
   "meetings.audio.none": "No audio was recorded",
   "meetings.settings.title": "Recording",
