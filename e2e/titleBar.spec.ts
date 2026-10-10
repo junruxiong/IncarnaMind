@@ -173,10 +173,13 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   ]) {
     expect(await regionOf(window, control)).toBe("no-drag");
   }
-  // The sidebar's divider can still be grabbed in the band, either side of its rule.
+  // The sidebar's divider, the 8px gap before the card, can still be grabbed in the band.
   const rod = await boxOf(window.locator("hr.pane-divider").first());
-  expect(await regionAt(window, rod.x - 3, 22)).toBe("no-drag");
-  expect(await regionAt(window, rod.x + 3, 22)).toBe("no-drag");
+  expect(rod.width).toBe(8);
+  expect(await regionAt(window, rod.x + 1, 22)).toBe("no-drag");
+  expect(await regionAt(window, rod.x + 6, 22)).toBe("no-drag");
+  // The 8px above the card moves the window.
+  expect(await regionAt(window, rod.x + 400, 3)).toBe("drag");
 
   // A click on a tab shows its Mind; its ✕ closes it; a drag moves it.
   await slideAndClick(window, tabNamed(window, "Alpha"));
@@ -202,7 +205,7 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   await openViewer(window);
   const toolbar = window.getByTestId("viewer-header");
   const toolbarBox = await boxOf(toolbar);
-  expect(toolbarBox).toMatchObject({ y: 0, height: 44 });
+  expect(toolbarBox).toMatchObject({ y: 8, height: 36 });
   expect(await regionAt(window, toolbarBox.x + 40, 22)).toBe("drag");
   const close = window.getByTestId("viewer-close");
   expect(await regionOf(window, close)).toBe("no-drag");
