@@ -121,3 +121,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --linux --x64 --publish always
+
+      # Fails the job when app.asar holds anything but out/, node_modules/ and package.json
+      # (sources, tests, sample data), or when an app.asar or an installer is over its size
+      # budget. The budgets are in scripts/check-package.mjs.
+      - name: Check the package contents and sizes
+        run: npm run check:package
