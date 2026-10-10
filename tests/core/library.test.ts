@@ -1,6 +1,7 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import type { Core } from "../../src/core";
+import type { DocumentGroupAssignment } from "../../src/core/api";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { startFakeJev } from "../helpers/jev";
@@ -130,6 +131,32 @@ describe("Library groups", () => {
     const reopened = startCore(dataDir, { createChatModel: () => fake.model });
     expect((await reopened.getLibrary()).assignments[0]?.groupId).toBe(group.id);
     expect(fake.calls).toHaveLength(calls);
+  });
+
+  test("a Document's progress comes as its assignment alone; Folder changes ask to read the Library", async () => {
+    const { core, group } = await setup();
+    const doc = await add(core);
+    const assigned: DocumentGroupAssignment[][] = [];
+    let changed = 0;
+    core.on("library.assignments", (list) => assigned.push(list));
+    core.on("library.changed", () => changed++);
+    await core.classifyDocuments([doc.id]);
+    await settled(core, doc.id);
+    expect(assigned.map((list) => list.map((each) => [each.documentId, each.status]))).toEqual([
+      [[doc.id, "pending"]],
+      [[doc.id, "classifying"]],
+      [[doc.id, "classified"]],
+    ]);
+    // Each whole, as the snapshot lists it.
+    expect(assigned.at(-1)).toEqual((await core.getLibrary()).assignments);
+    await core.assignDocumentGroup(doc.id, null);
+    expect(assigned.at(-1)).toEqual([
+      expect.objectContaining({ documentId: doc.id, groupId: null, source: "user" }),
+    ]);
+    expect(changed).toBe(0);
+    await core.updateLibraryGroup(group.id, { name: "Papers", description: "Research papers" });
+    expect(changed).toBe(1);
+    expect(assigned).toHaveLength(4);
   });
 
   test("a manual move made during classification wins, including a manual Unsorted choice", async () => {

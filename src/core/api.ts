@@ -1,9 +1,11 @@
 import type {
+  DocumentGroupAssignment,
   LibraryGroup,
   LibraryGroupInput,
   LibrarySettings,
   LibrarySnapshot,
 } from "./library/types";
+import type { UiUsageEvent } from "./usageEvents";
 
 export type {
   ClassificationStatus,
@@ -33,14 +35,73 @@ export interface Mind {
   id: string;
   /** May be empty: the UI shows an "Untitled" placeholder. */
   title: string;
+  /**
+   * What the Mind is: a `MindKind` this version knows, or the name of a kind a
+   * newer version wrote, which is listed but not opened (see `MindAccess`).
+   */
+  kind: string;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
 
+/** The kinds of Mind this version opens. `chat` is a conversation with no note behind it. */
+export const MIND_KINDS = ["mind", "chat"] as const;
+export type MindKind = (typeof MIND_KINDS)[number];
+
+/** The kind of every Mind made before kinds existed, and of a new Mind by default. */
+export const DEFAULT_MIND_KIND: MindKind = "mind";
+
 export interface CreateMindInput {
   title?: string;
+  /** Defaults to `"mind"`. */
+  kind?: MindKind;
+}
+
+/**
+ * The newest content schema this version understands: the node types, marks
+ * and attributes a Mind's Yjs document may hold. Raise it when a change would
+ * make an older version lose or misread content (a new node type or mark, a
+ * new attribute); a Mind without a recorded version is version 1.
+ */
+export const CONTENT_SCHEMA_VERSION = 1;
+
+/**
+ * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
+ * schema version the Mind was last written with. The core records it on every
+ * write; it is never lowered.
+ */
+export const CONTENT_SCHEMA_VERSION_KEY = "schemaVersion";
+
+/**
+ * How a Mind opens:
+ * - "edit": as usual.
+ * - "read-only": a newer version wrote its content (`CONTENT_SCHEMA_VERSION`).
+ *   The editor's Yjs binding deletes node types, marks and attributes its
+ *   schema doesn't know, so the Mind is shown but never written to, by the
+ *   editor or the core, until IncarnaMind is updated.
+ * - "update-required": its kind is one this version doesn't know. It is not
+ *   shown in the editor, only a prompt to update.
+ */
+export type MindAccess = "edit" | "read-only" | "update-required";
+
+/** A place in an artifact that a reference points to. Only Blocks for now; sheets, decks and boards add their own. */
+export interface BlockAnchor {
+  kind: "block";
+  /** The Block's stable UUID (`BLOCK_ID_ATTRIBUTE`), never its position. */
+  blockId: string;
+}
+export type ReferenceAnchor = BlockAnchor;
+
+/**
+ * One reference from one artifact to another: a Block's origin, the link back
+ * from a Note to the chat it came from. An artifact is a Mind now (a chat is a
+ * Mind of kind `chat`); other kinds will have their own IDs.
+ */
+export interface ArtifactReference {
+  artifactId: string;
+  anchor: ReferenceAnchor;
 }
 
 /**
@@ -48,6 +109,14 @@ export interface CreateMindInput {
  * (ADR-0003). The editor binds to it, and the core reads it.
  */
 export const MIND_CONTENT_FIELD = "blocks";
+
+/**
+ * The name of the Y.Map that holds a Mind's own choices in its Yjs document,
+ * beside its Blocks, so they go wherever the Mind goes: the model its next
+ * Questions are asked with (see `src/shared/mindModel.ts`). A Mind written
+ * before has none, and uses the defaults.
+ */
+export const MIND_SETTINGS_FIELD = "settings";
 
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
@@ -319,19 +388,27 @@ export const MAX_CITED_PAGES = 2;
  * Where in a Document a Citation points, as its short label shows it
  * (ADR-0011), stored with it so the label still reads after the Document is
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
- * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134").
+ * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
+ * Reviewer", "lines 120–134").
  * - "page", "slide": the cited pages or slides.
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
  *   the first heading. `notes`: a Word file's footnotes and endnotes.
+ *   `comment`: the quote is in a Word comment anchored in that section, by
+ *   its author (null when the file names none) (#76).
  * - "lines": the lines the quote covers, or the cited block's.
  */
 export type CitationLocation =
   | { kind: "page" | "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "section"; heading: string | null; notes?: boolean };
+  | {
+      kind: "section";
+      heading: string | null;
+      notes?: boolean;
+      comment?: { author: string | null };
+    };
 
 /**
  * A Citation's attributes, as stored on its node in the Mind's Yjs document.
@@ -386,7 +463,12 @@ export interface Citation {
 /** A Mind opened for editing. */
 export interface OpenedMind {
   mind: Mind;
-  /** The Mind's whole Yjs document, encoded as one update: apply it to an empty `Y.Doc`. */
+  /** How to show it. Anything but "edit" must not be written to; the core refuses. */
+  access: MindAccess;
+  /**
+   * The Mind's whole Yjs document, encoded as one update: apply it to an empty
+   * `Y.Doc`. Empty when `access` is "update-required".
+   */
   state: Uint8Array;
 }
 
@@ -426,6 +508,8 @@ export interface GettingStarted {
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
   sidebarWidth: number;
+  /** The User hid the sidebar (⌘\, the button, View menu, or dragging it shut). Its width is kept. */
+  sidebarHidden: boolean;
   /**
    * Width of the right Document viewer pane, in CSS pixels, once the User
    * has resized it. Null until then: it opens at about half the room beside the sidebar.
@@ -438,6 +522,11 @@ export interface DeviceSettings {
   openMinds: string[];
   /** The tab shown, one of `openMinds`, or null when none is open. */
   activeMind: string | null;
+  /**
+   * The Library's tab (#119): "closed", "open" beside the Mind tabs, or
+   * "shown" (open, and the tab in front), so it comes back after a restart.
+   */
+  libraryTab: "closed" | "open" | "shown";
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
@@ -658,6 +747,12 @@ export interface Document {
    * in the background. Not to be confused with `createdAt`.
    */
   creationDate: string | null;
+  /**
+   * The Document's own title (#213), for when its file name is machine-made
+   * (a UUID, "Untitled"): the title in its properties, else its first
+   * heading, else its first line. Null if it has none, or until it is read.
+   */
+  title: string | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -1756,6 +1851,9 @@ export interface RegisteredDataFlow {
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
  *   carry the User's content, are the "connectors" data flow.
+ * - "usage-data": anonymous product events (src/core/usageEvents.ts), only
+ *   while the User agrees, and only from a copy built with an analytics
+ *   project (see `PrivacySettings.usageData`).
  */
 export const networkTrafficIds = [
   "update-check",
@@ -1764,6 +1862,7 @@ export const networkTrafficIds = [
   "ollama-pull",
   "chatgpt-sign-in",
   "remote-connectors",
+  "usage-data",
 ] as const;
 
 export type NetworkTrafficId = (typeof networkTrafficIds)[number];
@@ -1776,7 +1875,34 @@ export interface NetworkTraffic {
   enabled: boolean;
 }
 
-/** The privacy choices on this device. IncarnaMind collects no usage data, whatever they are. */
+/**
+ * Usage data (#187): anonymous product events, such as "a Question was asked
+ * with a local model", never the User's files, Questions or Answers. Every
+ * event and field is listed in src/core/usageEvents.ts.
+ */
+export interface UsageDataSettings {
+  /**
+   * Whether this copy of IncarnaMind can send usage data: only a build made
+   * with an analytics project can. Without one, nothing is sent or asked.
+   */
+  available: boolean;
+  /** Usage data is being sent now. */
+  enabled: boolean;
+  /**
+   * A test build (the alpha): usage data is on until the User turns it off,
+   * and the first run says so. Otherwise it is off until the User agrees.
+   */
+  testerBuild: boolean;
+  /**
+   * The User has answered the first run's question about usage data (in a
+   * test build, closed its notice), or chosen on the Privacy page.
+   */
+  asked: boolean;
+  /** Local mode ("Keep everything on this computer") is on, which keeps usage data off. */
+  localMode: boolean;
+}
+
+/** The privacy choices on this device. */
 export interface PrivacySettings {
   crashReports: {
     /**
@@ -1790,12 +1916,19 @@ export interface PrivacySettings {
   };
   /** IncarnaMind checks GitHub Releases for a new version when it starts. On by default. */
   automaticUpdateChecks: boolean;
+  usageData: UsageDataSettings;
 }
 
 /** The choices to change; the others are kept. */
 export interface PrivacySettingsPatch {
   crashReports?: boolean;
   automaticUpdateChecks?: boolean;
+  /**
+   * Sends usage data, or stops at once, dropping what is queued. Either
+   * answers the first run's question. Refused if this copy can't send usage
+   * data, and turning it on while local mode is on.
+   */
+  usageData?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -2332,6 +2465,13 @@ export interface CoreApi {
    */
   addDocuments(paths: string[]): Promise<AddDocumentsResult>;
   /**
+   * Keeps text the User pasted as a Markdown Document, so Answers can cite it.
+   * The file is written in the data folder ("Saved text"), never next to the
+   * User's files, and added on its own like any file (no Folder). A name taken
+   * already gets a number. Throws InvalidInputError for text with no words.
+   */
+  saveTextAsDocument(input: { name: string; text: string }): Promise<Document>;
+  /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its
    * sub-Folders if asked; with a Tag, only the Documents carrying it; with a
@@ -2599,6 +2739,15 @@ export interface CoreApi {
    * this copy can't send crash reports.
    */
   updatePrivacySettings(patch: PrivacySettingsPatch): Promise<PrivacySettings>;
+  /**
+   * Usage data from the interface, such as a Citation opened: sent only while
+   * the User agrees. Checked against src/core/usageEvents.ts either way:
+   * throws InvalidInputError for an event the interface doesn't send, or a
+   * field that isn't declared or doesn't fit.
+   */
+  recordUsage(event: UiUsageEvent): Promise<void>;
+  /** Gives this install a new random ID: events from now on carry it instead of the old one. */
+  resetUsageInstallId(): Promise<void>;
   /**
    * The Folders of every Linked folder, as a flat list in name order (ignoring
    * case). Build the tree from each Folder's `parentId`; siblings keep the
@@ -2876,8 +3025,18 @@ export interface CoreEvents {
   "keptCitationTexts.changed": KeptCitationText[];
   /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
-  /** Library definitions, settings or assignments changed; read the current snapshot. */
+  /**
+   * The Library's Folders or settings changed, or a deleted Folder left its
+   * Documents Unsorted: read the current snapshot.
+   */
   "library.changed": null;
+  /**
+   * Documents' Library assignments changed: Organize queued, started,
+   * finished or failed on them, or the User put one in a Folder. Carries each
+   * one's assignment whole, as `getLibrary` lists it, so the snapshot needn't
+   * be read again.
+   */
+  "library.assignments": DocumentGroupAssignment[];
   /**
    * Documents' Tags changed, or where automatic tagging is for them: the User
    * added or removed a Tag, automatic tagging started, waited, finished or
@@ -2954,6 +3113,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSettings: true,
   updateSettings: true,
   addDocuments: true,
+  saveTextAsDocument: true,
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
@@ -3008,6 +3168,8 @@ const methods: Record<CoreApiMethod, true> = {
   listNetworkTraffic: true,
   getPrivacySettings: true,
   updatePrivacySettings: true,
+  recordUsage: true,
+  resetUsageInstallId: true,
   listFolders: true,
   getLibrary: true,
   createLibraryGroup: true,
