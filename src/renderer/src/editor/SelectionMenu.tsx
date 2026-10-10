@@ -233,6 +233,8 @@ export function SelectionMenu({
   /** Runs an action unless an input method is composing; the selection stays, so the next one can follow. */
   const act = (run: () => unknown) => {
     if (editor.view.composing) return;
+    // Back in the text at once, so a key pressed right after the action reaches it.
+    if (!editor.view.hasFocus()) editor.view.focus();
     asOwnUndoStep(editor, run);
   };
 
