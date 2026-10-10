@@ -218,13 +218,14 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
     expect((await boxOf(row)).height).toBeCloseTo(28, 0);
   }
 
-  // Both pane headers are 44px and line up: the sidebar's, and the Mind pane's strip of tabs.
+  // The sidebar's header is 44px; the card's band of tabs is 36px, 8px down, so its bottom
+  // lines up with the header's rule.
   const mindHeader = window.getByTestId("mind-header");
   const sidebarHeader = await boxOf(header);
   const mindHeaderBox = await boxOf(mindHeader);
   expect(sidebarHeader.height).toBe(44);
-  expect(mindHeaderBox.height).toBe(44);
-  expect(mindHeaderBox.y).toBe(sidebarHeader.y);
+  expect(mindHeaderBox.height).toBe(36);
+  expect(mindHeaderBox.y + mindHeaderBox.height).toBe(sidebarHeader.y + sidebarHeader.height);
   await expect(
     mindHeader.locator('[role="tab"][aria-selected="true"]').getByTestId("mind-tab-title"),
   ).toHaveText("Reading notes: LM scaling");

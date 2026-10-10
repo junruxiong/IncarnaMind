@@ -264,14 +264,65 @@
     }
   }
   /*
-   * The divider before the Document viewer starts below the 44px band the
+   * The divider before the Document viewer starts below the 36px band the
    * Mind's tab strip and the viewer's toolbar share, so the band runs across
    * unbroken and the rule meets it in a T, not a cross.
    */
   .pane-divider--below-band {
     background-image: linear-gradient(var(--color-tab-strip), var(--color-tab-strip));
-    background-size: 100% 44px;
+    background-size: 100% 36px;
     background-repeat: no-repeat;
+  }
+  /*
+   * The divider between the sidebar and the card is the 8px gap itself: no
+   * rule at rest, a hairline while pointed at and the focus ring's line when
+   * reached by keyboard, with the grip over it.
+   */
+  .pane-divider--gap {
+    width: 8px;
+    background: transparent;
+
+    &::after {
+      inset: 0 -2px;
+    }
+    &:hover,
+    &:active {
+      background:
+        linear-gradient(var(--color-rule-strong), var(--color-rule-strong)) center / 1px 100%
+        no-repeat;
+    }
+    &:focus-visible {
+      background:
+        linear-gradient(var(--color-accent), var(--color-accent)) center / 2px 100% no-repeat;
+    }
+  }
+
+  /*
+   * The card (DESIGN.md, Layout): everything right of the sidebar, 8px from
+   * the sidebar and from the window's top, right and bottom edges, radius 10
+   * with a 1px rule edge drawn over its content, no shadow. Its 36px band
+   * ends level with the sidebar header's rule, at y 44.
+   */
+  .app-card {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex: 1 1 0;
+    min-width: 300px;
+    margin: 8px 8px 8px 0;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-sheet);
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      border-radius: 10px;
+      box-shadow: inset 0 0 0 1px var(--color-rule);
+      pointer-events: none;
+    }
   }
 
   /*
@@ -299,8 +350,9 @@
   main:has(~ .viewer-pane) {
     --window-buttons-right: 0px;
   }
+  /* The card is 8px from the window's edge, so Windows' buttons overlap it by 8px less. */
   .library-header {
-    padding-right: calc(16px + var(--window-buttons-right));
+    padding-right: max(16px, calc(8px + var(--window-buttons-right)));
   }
 
   /*
@@ -348,8 +400,8 @@
   /*
    * The Mind tabs (DESIGN.md, Components: Mind tabs), the whole of their look:
    * MindTabs.tsx only sets these classes and data-* attributes, so the look
-   * changes here alone. Chrome-style (option A): a 44px strip in tab-strip,
-   * a step darker than the frame, with no bottom rule. 34px tabs sit on its
+   * changes here alone. Chrome-style (option A): the card's 36px band in tab-strip,
+   * a step darker than the frame, with no bottom rule. 34px slots sit on its
    * bottom edge, 220px wide, shrinking equally to 64px. The shown tab
    * (aria-selected) is the sheet with radius 10 at the top and concave feet
    * flaring into the Mind below; the others hold a 28px inner shape that
@@ -359,12 +411,12 @@
     display: flex;
     flex-shrink: 0;
     align-items: flex-end;
-    height: 44px;
-    padding-right: calc(8px + var(--window-buttons-right));
+    height: 36px;
+    padding-right: max(8px, var(--window-buttons-right));
     background: var(--color-tab-strip);
   }
   /*
-   * The tabs start flush against the sidebar: the shown first tab has no left
+   * The tabs start flush against the card's left edge: the shown first tab has no left
    * foot and a square top-left corner (below). The 10px end padding is room
    * for the last tab's right foot.
    */
@@ -417,6 +469,7 @@
 
     &[aria-selected="true"] {
       z-index: 1;
+      height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
       color: var(--color-ink);
@@ -505,7 +558,7 @@
   .mind-tab[aria-selected="true"] .mind-tab-foot {
     display: block;
   }
-  /* The first tab, shown, starts at the sidebar: no left foot, its content inset 16px. */
+  /* The first tab, shown, starts at the card's edge: no left foot, its content inset 16px. */
   .mind-tab:first-child[aria-selected="true"] {
     .mind-tab-inner {
       padding-left: 16px;
@@ -612,7 +665,7 @@
   }
   .mind-tabs-export {
     gap: 6px;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     padding: 0 10px;
     border-radius: 6px;
     font-size: 13px;

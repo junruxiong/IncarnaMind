@@ -196,11 +196,11 @@ test("the shown tab joins the Mind below with no edge under it, and long titles 
 
   const strip = window.getByTestId("mind-header");
   const stripBox = await boxOf(strip);
-  expect(stripBox.height).toBe(44);
+  expect(stripBox.height).toBe(36);
   const active = activeTab(window);
   const activeBox = await boxOf(active);
   // Its bottom is the strip's bottom, and the Mind starts right there.
-  expect(activeBox.height).toBe(34);
+  expect(activeBox.height).toBe(32);
   expect(activeBox.y + activeBox.height).toBeCloseTo(stripBox.y + stripBox.height, 1);
   const panelBox = await boxOf(window.getByRole("tabpanel"));
   expect(panelBox.y).toBeCloseTo(activeBox.y + activeBox.height, 1);
@@ -395,7 +395,7 @@ test("a Mind is renamed from its sidebar row, and the Minds fold away", async ()
   await app.close();
 });
 
-test("the 44px band runs unbroken: tabs start at the sidebar, the viewer's toolbar sits on it, and no line crosses another", async () => {
+test("the card's band runs unbroken: tabs start at the card's edge, the viewer's toolbar sits on it, and no line crosses another", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const name of ["First", "Second"]) {
@@ -406,10 +406,10 @@ test("the 44px band runs unbroken: tabs start at the sidebar, the viewer's toolb
   await tabsOf(window).first().click();
   await openViewer(window);
 
-  // The first tab, shown, starts flush at the sidebar, rounded at the top, with no left foot.
+  // The first tab, shown, starts flush at the card's edge (8px from the sidebar), rounded at the top, with no left foot.
   const sidebar = await boxOf(window.getByTestId("sidebar"));
   const first = tabsOf(window).first();
-  expect((await boxOf(first)).x).toBeCloseTo(sidebar.x + sidebar.width + 1, 0);
+  expect((await boxOf(first)).x).toBeCloseTo(sidebar.x + sidebar.width + 8, 0);
   expect(await first.evaluate((tab) => getComputedStyle(tab).borderTopLeftRadius)).toBe("10px");
   await expect(first.locator('.mind-tab-foot[data-side="left"]')).toBeHidden();
   // The sidebar header's rule is inset 8px each side, so it never meets the sidebar's edge.

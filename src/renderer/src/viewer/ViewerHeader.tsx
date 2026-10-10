@@ -25,7 +25,7 @@ export function HeaderDivider() {
 }
 
 /**
- * The viewer's one header, 44px like every pane header: the outline toggle
+ * The viewer's one header, the card's 36px band: the outline toggle
  * (`leading`), the Document's name, the view's own controls (`children`: page
  * navigation and zoom for a PDF), then "Open in default app" and close.
  */

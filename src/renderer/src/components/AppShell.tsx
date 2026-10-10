@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { SidebarHeader } from "./Sidebar";
+import { PlusMenuPlaceholder, SidebarHeader } from "./Sidebar";
 
 /** The sidebar's width as last shown on this computer, for the shell. */
 const SIDEBAR_WIDTH_KEY = "incarnamind.sidebarWidth";
@@ -29,8 +29,8 @@ export function useRememberSidebarWidth(width: number | undefined): void {
 
 /**
  * The app's frame, drawn at once while its data loads: the sidebar on the
- * frame with its header, the divider, and the Mind pane's tab strip on the
- * sheet, where the workspace draws them, so nothing moves as the data fills
+ * frame with its header, and the card with its tab band, where the workspace
+ * draws them, so nothing moves as the data fills
  * them in. Nothing in it can be used yet, and there is no spinner: loading
  * takes a fraction of a second.
  */
@@ -39,16 +39,19 @@ export function AppShell() {
     <div
       data-testid="app-shell"
       aria-busy="true"
-      className="flex h-screen overflow-hidden bg-sheet"
+      className="relative flex h-screen overflow-hidden bg-frame"
     >
+      <div aria-hidden="true" className="title-bar absolute inset-x-0 top-0 h-2" />
       <div
         className="flex min-w-[165px] shrink flex-col bg-frame"
         style={{ flexBasis: rememberedSidebarWidth() }}
       >
-        <SidebarHeader />
+        <SidebarHeader>
+          <PlusMenuPlaceholder />
+        </SidebarHeader>
       </div>
-      <div className="w-px shrink-0 bg-rule" />
-      <div className="flex min-w-[300px] flex-1 flex-col">
+      <div className="w-2 shrink-0" />
+      <div className="app-card flex-col">
         <div className="mind-tabs title-bar" />
       </div>
     </div>
