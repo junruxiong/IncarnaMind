@@ -4,6 +4,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openSettings,
   removeDataFolder,
   useLocalChatModel,
@@ -62,7 +63,7 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await closeSettings(window);
 
   // In the composer, "/" offers them like any other Skill.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");

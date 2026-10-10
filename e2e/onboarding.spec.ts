@@ -8,6 +8,7 @@ import {
   launchApp,
   linkedFolderRow,
   removeDataFolder,
+  showSourceLocations,
   useLocalChatModel,
 } from "./app";
 
@@ -81,7 +82,8 @@ test("a first run opens on the example Mind: its Answer is written in advance, i
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
 
-  // The Linked folder's chip, once its status (indexing) leaves the room for it.
+  // The Linked folder's chip, as on disk, once its status (indexing) leaves the room for it.
+  await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Examples").getByTestId("example-chip")).toBeVisible({
     timeout: 30_000,
   });

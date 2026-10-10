@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { type CreateMindInput, DEFAULT_MIND_KIND, type Mind } from "./api";
+import { type CreateMindInput, DEFAULT_MIND_KIND, type Mind, type MovedItem } from "./api";
 import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 import { parseKind } from "./mindAccess";
 import type { Database } from "./storage";
@@ -17,7 +17,10 @@ interface MindRow {
   kind: string;
   created_at: string;
   updated_at: string;
+  folder_id: string | null;
 }
+
+const COLUMNS = "id, title, kind, created_at, updated_at, folder_id";
 
 const toMind = (row: MindRow): Mind => ({
   id: row.id,
@@ -25,6 +28,7 @@ const toMind = (row: MindRow): Mind => ({
   kind: row.kind,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  folderId: row.folder_id,
 });
 
 function parseTitle(title: unknown): string {
@@ -32,13 +36,31 @@ function parseTitle(title: unknown): string {
   return title.trim();
 }
 
-function parseCreateMindInput(input: unknown): Required<CreateMindInput> {
-  if (input === undefined) return { title: "", kind: DEFAULT_MIND_KIND };
+/** A Folder's id, or null for Not in a Folder. Whether it exists is the caller's to check. */
+export function parseFolderChoice(folderId: unknown): string | null {
+  if (folderId === null || folderId === undefined) return null;
+  if (typeof folderId !== "string" || folderId === "") {
+    throw new InvalidInputError("A Folder id must be a non-empty string, or null for none.");
+  }
+  return folderId;
+}
+
+export function parseCreateMindInput(input: unknown): Required<CreateMindInput> {
+  if (input === undefined) return { title: "", kind: DEFAULT_MIND_KIND, folderId: null };
   if (!isRecord(input)) throw new InvalidInputError("createMind expects an object.");
-  const { title = "", kind } = input;
+  const { title = "", kind, folderId } = input;
   const parsedKind = parseKind(kind);
   if (parsedKind === null) throw new InvalidInputError("That kind of Mind isn't known.");
-  return { title: parseTitle(title), kind: parsedKind };
+  return { title: parseTitle(title), kind: parsedKind, folderId: parseFolderChoice(folderId) };
+}
+
+/** A list of ids, each once, in order. */
+export function parseIds(ids: unknown, what: string): string[] {
+  if (ids === undefined) return [];
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string" && id !== "")) {
+    throw new InvalidInputError(`${what} must be a list of ids.`);
+  }
+  return [...new Set(ids as string[])];
 }
 
 export function parseMindId(mindId: unknown): string {
@@ -57,7 +79,7 @@ export function createMinds(db: Database, now: () => string) {
 
   const get = (mindId: unknown): Mind => {
     const row = db.get<MindRow>(
-      "SELECT id, title, kind, created_at, updated_at FROM minds WHERE id = ? AND deleted_at IS NULL",
+      `SELECT ${COLUMNS} FROM minds WHERE id = ? AND deleted_at IS NULL`,
       [parseMindId(mindId)],
     );
     if (!row) throw new NotFoundError("That Mind doesn't exist or has been deleted.");
@@ -67,25 +89,23 @@ export function createMinds(db: Database, now: () => string) {
   return {
     get,
 
-    create(input: unknown): Mind {
-      const { title, kind } = parseCreateMindInput(input);
+    /** Makes a Mind; its Folder, if any, is the caller's to have checked. */
+    create(input: Required<CreateMindInput>): Mind {
+      const { title, kind, folderId } = input;
       const id = randomUUID();
       const at = now();
-      db.run("INSERT INTO minds (id, title, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", [
-        id,
-        title,
-        kind,
-        at,
-        at,
-      ]);
+      db.run(
+        "INSERT INTO minds (id, title, kind, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?)",
+        [id, title, kind, at, at, folderId],
+      );
       touched(id, at);
-      return { id, title, kind, createdAt: at, updatedAt: at };
+      return { id, title, kind, createdAt: at, updatedAt: at, folderId };
     },
 
     list(): Mind[] {
       return db
         .all<MindRow>(
-          `SELECT id, title, kind, created_at, updated_at FROM minds
+          `SELECT ${COLUMNS} FROM minds
            WHERE deleted_at IS NULL
            ORDER BY updated_at DESC, rowid DESC`,
         )
@@ -99,6 +119,41 @@ export function createMinds(db: Database, now: () => string) {
       db.run("UPDATE minds SET title = ?, updated_at = ? WHERE id = ?", [newTitle, at, mind.id]);
       touched(mind.id, at);
       return { ...mind, title: newTitle, updatedAt: at };
+    },
+
+    /**
+     * Puts these Minds in a Folder (checked by the caller), or in none, and
+     * returns where each was. All must exist, or nothing moves. A Mind that
+     * moves counts as changed (`updatedAt`), as a rename does.
+     */
+    move(mindIds: readonly string[], folderId: string | null): MovedItem[] {
+      return db.transaction(() => {
+        const moved = mindIds.map((id) => ({ id, from: get(id).folderId }));
+        const at = now();
+        for (const item of moved) {
+          if (item.from === folderId) continue;
+          db.run("UPDATE minds SET folder_id = ?, updated_at = ? WHERE id = ?", [
+            folderId,
+            at,
+            item.id,
+          ]);
+        }
+        return moved;
+      });
+    },
+
+    /** A Folder was deleted: its Minds go to Not in a Folder. Returns whether there were any. */
+    leaveFolder(folderId: string): boolean {
+      const inIt = db.get<{ count: number }>(
+        "SELECT count(*) AS count FROM minds WHERE folder_id = ? AND deleted_at IS NULL",
+        [folderId],
+      );
+      // Live Minds only: a deleted one stays as it was deleted.
+      db.run(
+        "UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
+        [now(), folderId],
+      );
+      return (inIt?.count ?? 0) > 0;
     },
 
     /** Marks the Mind deleted at `at`. Its content rows are the caller's to mark. */

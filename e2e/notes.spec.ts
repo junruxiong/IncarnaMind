@@ -4,6 +4,7 @@ import {
   dismissChatSetup,
   dragBlock,
   launchApp,
+  newMind,
   removeDataFolder,
   slideToHandle,
 } from "./app";
@@ -22,7 +23,7 @@ test("a heading and a formula inserted from the slash menu are still there, rend
   const first = await launchApp(dataDir);
   const { window } = first;
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
@@ -77,7 +78,7 @@ test("a Block dragged above another stays there after reopening the app", async 
   const first = await launchApp(dataDir);
   const { window } = first;
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   for (const [index, text] of ["First", "Second", "Third"].entries()) {
@@ -106,7 +107,7 @@ test("a Block dragged above another stays there after reopening the app", async 
 test("Esc closes a Block's menu, and the handle then moves on to the Block under the mouse", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   for (const [index, text] of ["One", "Two", "Three"].entries()) {
@@ -135,7 +136,7 @@ test("Esc closes a Block's menu, and the handle then moves on to the Block under
 test("a Block is deleted from its handle's menu, and with the keyboard", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   for (const [index, text] of [
@@ -186,7 +187,7 @@ async function fontsDrawing(window: Page, selector: string) {
 test("Latin text is drawn in the bundled Source Serif 4, and Chinese text in a system serif", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Spring tides come ");
@@ -232,7 +233,7 @@ test("text highlighted with the keyboard stays highlighted after reopening the a
   const first = await launchApp(dataDir);
   const { window } = first;
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 

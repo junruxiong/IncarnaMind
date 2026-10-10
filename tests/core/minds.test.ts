@@ -36,6 +36,8 @@ describe("Minds", () => {
       kind: "mind",
       createdAt: "2026-10-06T12:00:00.000Z",
       updatedAt: "2026-10-06T12:00:00.000Z",
+      // Not in a Folder.
+      folderId: null,
     });
     expect(await core.listMinds()).toEqual([mind]);
   });

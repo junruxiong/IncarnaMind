@@ -44,6 +44,12 @@ export interface Mind {
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+  /**
+   * The Folder (an in-app one, a `LibraryGroup`) the Mind belongs to, or null:
+   * Not in a Folder. A Mind in a Folder starts each Question with the Folder
+   * as its Search scope; one in none searches every Document.
+   */
+  folderId: string | null;
 }
 
 /** The kinds of Mind this version opens. `chat` is a conversation with no note behind it. */
@@ -57,6 +63,8 @@ export interface CreateMindInput {
   title?: string;
   /** Defaults to `"mind"`. */
   kind?: MindKind;
+  /** The Folder to make it in; none, or null: Not in a Folder. */
+  folderId?: string | null;
 }
 
 /**
@@ -102,6 +110,33 @@ export type ReferenceAnchor = BlockAnchor;
 export interface ArtifactReference {
   artifactId: string;
   anchor: ReferenceAnchor;
+}
+
+/**
+ * What to move into a Folder, or out of every Folder (`folderId` null: Not
+ * in a Folder): Minds and Documents, any number of each, in one go.
+ */
+export interface FolderMoveInput {
+  mindIds?: string[];
+  documentIds?: string[];
+  folderId: string | null;
+}
+
+/** One thing a move moved, and the Folder it was in before (null: none), so the move can be undone. */
+export interface MovedItem {
+  id: string;
+  from: string | null;
+}
+
+/**
+ * What a move did: each Mind and Document it moved, with where it was. Those
+ * already in the Folder are listed too, with the Folder as `from`. Undoing
+ * moves each back to its `from`.
+ */
+export interface FolderMove {
+  folderId: string | null;
+  minds: MovedItem[];
+  documents: MovedItem[];
 }
 
 /**
@@ -2416,9 +2451,18 @@ export interface CoreApi {
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
   /** Queues selected documents, or all; manual assignments are preserved. */
   classifyDocuments(documentIds?: string[]): Promise<void>;
-  /** A manual choice, including Unsorted (null), wins over in-flight classification. */
+  /** A manual choice, including Not in a Folder (null), wins over in-flight classification. */
   assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+  /**
+   * Moves Minds and Documents into a Folder, or out of every Folder (null),
+   * all or none: an unknown Mind, Document or Folder changes nothing and
+   * throws. A Document's move is a manual choice, which Organize keeps.
+   * Returns where each was, for Undo (a move back to each one's `from`).
+   * "minds.changed" and "library.assignments" follow, once each.
+   */
+  moveToFolder(move: FolderMoveInput): Promise<FolderMove>;
 
+  /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
   /** Minds that are not deleted, most recently updated first. Editing a Mind's content updates it. */
   listMinds(): Promise<Mind[]>;
@@ -2956,7 +3000,10 @@ export interface CoreApi {
 export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
-  /** Minds were created, renamed, deleted or edited: the list as `listMinds` now returns it. */
+  /**
+   * Minds were created, renamed, moved to another Folder, deleted or edited,
+   * or their Folder was deleted: the list as `listMinds` now returns it.
+   */
   "minds.changed": Mind[];
   "examples.changed": Examples;
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
@@ -3014,7 +3061,7 @@ export interface CoreEvents {
   "tags.changed": Tag[];
   /**
    * The Library's Folders or settings changed, or a deleted Folder left its
-   * Documents Unsorted: read the current snapshot.
+   * Documents Not in a Folder: read the current snapshot.
    */
   "library.changed": null;
   /**
@@ -3166,6 +3213,7 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
+  moveToFolder: true,
   listTags: true,
   createTag: true,
   updateTag: true,

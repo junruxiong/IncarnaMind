@@ -64,6 +64,7 @@ describe("the Mind a Question from the Library goes in", () => {
     kind: "mind",
     createdAt: "",
     updatedAt: "",
+    folderId: null,
   });
   // Most recently edited first, as the sidebar lists them.
   const minds = [mind("edited"), mind("older"), mind("example")];

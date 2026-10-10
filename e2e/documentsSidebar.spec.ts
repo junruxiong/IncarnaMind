@@ -15,6 +15,7 @@ import {
   linkFolderFromSidebar,
   openDocumentMenu,
   removeDataFolder,
+  showSourceLocations,
 } from "./app";
 
 /*
@@ -86,6 +87,7 @@ test("dropping folders offers each for linking in turn; what's there already is 
   await expect(dialog.getByTestId("link-folder-name")).toHaveText("Notes");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
+  await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Papers")).toHaveCount(1);
   await expect(linkedFolderRow(window, "Notes")).toHaveCount(0);
   // Nothing was skipped: a folder isn't an unsupported file.
@@ -103,7 +105,8 @@ test("dropping folders offers each for linking in turn; what's there already is 
 
   // The linked folder picked again: the dialog says it's linked already, and only closes.
   await interceptOpenDialog(app, papers);
-  await window.getByTestId("add-linked-folder").click();
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-link-folder").click();
   await expect(dialog.getByRole("heading")).toHaveText("Already in IncarnaMind");
   await expect(dialog.getByTestId("link-folder-inside")).toHaveText(
     "“Papers” is linked already, so its files are in IncarnaMind. Linking it again changes nothing.",
@@ -142,6 +145,7 @@ test("folding while filtering by a Tag folds the filtered view, and leaves the r
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await linkFolderFromSidebar(app, window, library);
+  await showSourceLocations(window);
   const items = window.getByTestId("document-list-item");
   await expect(items).toHaveCount(3);
   // Tag the two reports, through the core's bridge, as the Tags menu would.
@@ -204,6 +208,7 @@ test("a right-click on a row opens its menu, without selecting its name; a selec
   await dismissChatSetup(window);
   await addDocuments(window, [join(sources, "Field notes.txt")]);
   await linkFolderFromSidebar(app, window, library);
+  await showSourceLocations(window);
   const item = window.getByTestId("document-list-item").filter({ hasText: "Field notes" });
   // Settled: the file added on its own has moved under "Other Documents", so its row stays put.
   await expect(linkedFolderRow(window, "Library")).toHaveAttribute("data-state", "idle");
@@ -282,7 +287,10 @@ test("Add Documents opens a sheet on the window in a folder on this computer, th
         ).openDialogsAsked ?? [],
     );
 
-  await window.getByTestId("empty-add-documents").click();
+  // From the "+" menu, the one place to add; the empty sidebar says so.
+  await expect(window.getByTestId("documents-empty")).toContainText("with the + above");
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-add-documents").click();
   const items = window.getByTestId("document-list-item");
   await expect(items).toHaveCount(2);
   const downloads = await app.evaluate(({ app: electron }) => electron.getPath("downloads"));
@@ -292,7 +300,8 @@ test("Add Documents opens a sheet on the window in a folder on this computer, th
   expect(first?.options.properties).toEqual(["openFile", "multiSelections"]);
 
   // Next time it starts where those came from.
-  await window.getByTestId("add-documents").click();
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-add-documents").click();
   await expect.poll(async () => (await asked()).length).toBe(2);
   expect((await asked())[1]?.options.defaultPath).toBe(sources);
   await app.close();

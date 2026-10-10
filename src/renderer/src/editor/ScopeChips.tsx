@@ -31,12 +31,16 @@ function ChipIcon({ chip }: { chip: ScopeChip }) {
 /**
  * A Search scope as chips: one for each Folder, Tag and Document (its title
  * says which), with a × that takes it out. One deleted since is struck
- * through: the search ignores it. A long scope shows its first chips and
- * "+N more", which shows the rest. In the composer (`onChange`), each chip
- * shows its kind's icon and its name opens the "@" picker, to change the scope.
+ * through (a Folder with its name, the others as "Deleted …"): the search
+ * ignores it. A long scope shows its first chips and "+N more", which shows
+ * the rest. In the composer (`onChange`), each chip shows its kind's icon and
+ * its name opens the "@" picker, to change the scope; the Mind's own Folder
+ * (`ownFolderId`) says how many Documents it searches, and that taking it
+ * out searches everything.
  */
 export function ScopeChips({
   scope,
+  ownFolderId = null,
   onRemove,
   onChange,
   shown: most,
@@ -44,6 +48,8 @@ export function ScopeChips({
   testId,
 }: {
   scope: SearchScope;
+  /** The Folder of the Mind the composer is in: its chip is the Mind's own. */
+  ownFolderId?: string | null;
   onRemove(kind: ScopeKind, id: string): void;
   /** Opens the picker from a chip's name, as "@" does. */
   onChange?(): void;
@@ -55,9 +61,16 @@ export function ScopeChips({
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);
+  const deletedGroups = useAppStore((state) => state.library?.deletedGroups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
-  const chips = scopeChips({ folders, groups, tags, documents }, scope);
+  // How many Documents the Mind's own Folder holds now, for its chip's tooltip.
+  const ownCount = useAppStore((state) =>
+    ownFolderId === null
+      ? 0
+      : (state.library?.assignments.filter((each) => each.groupId === ownFolderId).length ?? 0),
+  );
+  const chips = scopeChips({ folders, groups, deletedGroups, tags, documents }, scope);
   const [expanded, setExpanded] = useState(false);
   const long = chips.length > most;
   const shown = long && !expanded ? chips.slice(0, most - 1) : chips;
@@ -70,10 +83,15 @@ export function ScopeChips({
       className={className}
     >
       {shown.map((chip) => {
-        const deleted = chip.name === null;
+        const { deleted } = chip;
         const name = chip.name ?? t(DELETED_NAMES[chip.kind]);
         const remove = t("scope.chip.remove", { name });
-        const title = deleted ? t("scope.chip.deleted") : t(CHIP_TITLES[chip.kind], { name });
+        const own = !deleted && chip.kind === "folder" && chip.id === ownFolderId;
+        const title = deleted
+          ? t("scope.chip.deleted")
+          : own
+            ? t(ownCount === 1 ? "scope.chip.own.one" : "scope.chip.own", { count: ownCount })
+            : t(CHIP_TITLES[chip.kind], { name });
         const label = deleted ? (
           <>
             <s className="truncate">{name}</s>
@@ -89,6 +107,7 @@ export function ScopeChips({
             data-kind={chip.kind}
             data-id={chip.id}
             data-deleted={deleted ? "true" : undefined}
+            data-own={own ? "true" : undefined}
             title={title}
             className={`scope-chip ${deleted ? "scope-chip--deleted" : ""}`}
           >

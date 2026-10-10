@@ -12,6 +12,7 @@ import {
   interceptOpenPath,
   launchApp,
   linkFolderFromSidebar,
+  newMind,
   openDocumentAt,
   openDocumentMenu,
   pathsOpened,
@@ -761,7 +762,7 @@ test("the viewer has one 36px header, level with the Mind's, holding every contr
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [guide]);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("open-document").click();
   const viewer = window.getByTestId("viewer");
   await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");
