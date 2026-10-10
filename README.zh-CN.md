@@ -20,7 +20,9 @@
   <!-- 第一个版本发布后，加上：<a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/hero.png" width="880" alt="左边是一页 PDF，被引用的句子以绿色高亮，旁边有带勾号的编号 2。右边是名为“Lit review: urban heat islands”的 Mind，其中一个回答的引用 1 和 2 带绿色勾号，引用 3 标成橙色，因为没有找到它的引文。"></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示九个界面：指向一条引用，显示它的引文；打开它，PDF 页面上高亮着这段引文；各种格式的全部文档，带文件夹和标签；在 Excel 表里选中单元格提问；跨十份合同的对比表；带修订和批注的 Word 合同；会议实时转写旁的笔记；正在运行和定时运行的后台任务；以及设置里的 Claude、GPT、DeepSeek 和通过 Ollama 运行的本地模型。"></p>
+
+<p align="center"><sub>选中内容提问、对比表、Word 修订与批注、会议和后台任务<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
 
 ## 下载
 
@@ -50,9 +52,7 @@ npm install && npm run dev
 
 **文档再多也不乱。** 标签会自动添加，IncarnaMind 还能把文档分进你的文件夹；你自己做的选择都会保留。
 
-
 **模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google 密钥，或接入任何兼容 OpenAI 接口的服务；也可以通过 Ollama 使用免费的本地模型，内容不出你的电脑。
-
 
 **写完就能交。** 把 Mind 导出为 Word，引用自动变成脚注；也可以导出为 Markdown。没通过核对的引用会标上“[未核实]”。
 
@@ -83,14 +83,6 @@ npm install && npm run dev
 ## 即将推出
 
 下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/junruxiong/IncarnaMind/issues/74)）：会议实时转写，回答可以引用转写内容；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；由你接受或拒绝的 AI 修改；在后台运行的研究任务。
-
-<p align="center"><img src="docs/images/coming-compare.png" width="880" alt="即将推出：名为“Shortlist: contract terms”的 Mind 里有一张对比表，把十份合同按解约通知期、责任上限和适用法律排开。每个格子都是一句简短的回答，带着自己编号的引用，其中两个标为琥珀色。"></p>
-
-<p align="center"><sub>即将推出：跨十份合同的对比表，每个格子都是一个带引用的回答。</sub></p>
-
-<p align="center"><img src="docs/images/coming-meetings.png" width="880" alt="即将推出：一次供货电话会的笔记，每一行都标着说这句话的时间，下面是实时转写，分出了不同的说话人，还有把一句话加进笔记的按钮。底部的栏显示正在录音 24:16。"></p>
-
-<p align="center"><sub>即将推出：开会时记下的笔记，每条都连着说出它的那一刻，旁边是实时转写。</sub></p>
 
 ## 参与贡献
 
