@@ -10,9 +10,9 @@ import {
   type ChatProviderKind,
   type CitationSupport,
   chatProviderKinds,
-  RERANKING_MODEL_CANDIDATES,
   type RerankingModelDefinition,
 } from "../../src/core";
+import { RERANKING_MODEL_CANDIDATES } from "./rerankingModels";
 
 /** The chat model the Citation part asks Questions with. */
 export interface ChatSettings {

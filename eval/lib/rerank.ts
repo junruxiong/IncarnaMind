@@ -16,9 +16,10 @@ import {
   type CrossEncoderResponse,
   createChannelCrossEncoder,
 } from "../../src/core/reranking/channel";
-import { createRerankingModel, downloadSize } from "../../src/core/reranking/index";
+import { createRerankingModel } from "../../src/core/reranking/index";
 import type { Log } from "./log";
 import startRerankerWorker from "./rerankerWorker?nodeWorker";
+import { downloadSize } from "./rerankingModels";
 
 /** A reranking model, run on a worker thread so it never blocks the core's thread. */
 export function createWorkerCrossEncoder(): CrossEncoder {
