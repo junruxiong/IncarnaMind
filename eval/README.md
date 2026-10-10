@@ -119,6 +119,38 @@ INCARNAMIND_EVAL_EMBED_KEY=sk-... npm run eval
 - **Size:** vectors keep the model's own size (1,536 for `text-embedding-3-small`, 3,072 for `gemini-embedding-001`). The core records the model and size with the vectors.
 - **Cost:** embedding the corpus sends about 1,200 Passages, about 0.6 million tokens.
 
+### Offline scoring
+
+`npm run eval:dump` keeps what search found, so other result orders can be tried in seconds instead of re-running a set, and so any reranking model can be scored from files without running the search again (#193, for #273 and #270). It runs with embeddings off, as the app does by default, in one process, and writes one JSON file per set into `eval/results/<start time>-dumps/`: `gating.json`, `formats.json` and `hard.json` (the hard tier, `hard/README.md`).
+
+```sh
+npm run eval:dump                                      # all three sets
+INCARNAMIND_EVAL_DUMP_SETS=gating,formats npm run eval:dump
+INCARNAMIND_EVAL_QUESTIONS=en-07,zh-02 npm run eval:dump  # only these Questions
+npm run eval:score -- eval/results/<start time>-dumps/gating.json
+```
+
+For each query a Question ran (the Question, and its hand-written translation if it has one), the file holds:
+
+- **`candidates`:** keyword search's best 150 Passages, best first. Each has its `rank` (from 1) and `keywordScore` (BM25, higher is better), the built-in reranking model's `rerankScore` (0 to 1; for the first 60, which is what the search Tool hands its reranker, `null` after), and `hits`: for each Passage the Question's answer needs, whether this one meets the hit rule for it. Each also has `rerankText`, the text a reranker reads (the Document's name, then the normalised text), so any other model can be scored from the file alone, and `passageId`, `documentId` and `position` (neighbours are one apart and overlap by about 200 tokens).
+- **`tool`:** the Passages the search Tool itself hands the model for that query (the windows of Passages it returns, `rank` 0 the most relevant), each with its `hits`. It is run as it is with embeddings off, over the same reranker scores.
+
+Questions have `tags` (the gating and every-format sets: `kind` gating, cross-lingual or paraphrase, and `language`, and for the every-format set `format`; the hard tier: `difficulty`, `domain` and `language`) and `needed`, how many Passages the answer needs. The first lines of a file say the format version (`format: 1`), the set, the commit, the reranker and the depths. Plain JSON, 3 MB for the every-format set, 18 for the gating set and 62 for the hard tier, not gzipped; the folder is ignored by git.
+
+The run also scores the same Questions the way `npm run eval` (and `eval:hard`) score them, for keyword search and for keyword top 60 + rerank, and fails if the dump's top 5 are not the same numbers.
+
+**The scorer** reads dumps and prints, in seconds and without a model, the Questions hit by each order at the top 5, 8 and 10, split by a tag, with what the search Tool handed the model beside them:
+
+```sh
+npm run eval:score -- <dump.json>... [--top 5,8,10] [--depth 60] [--blend 0.5,0.7] [--no-neighbours] [--scores model.json] [--by tag] [--json]
+```
+
+- **Orders:** keyword search's top k; the built-in model's reranked top k over the first `--depth` candidates (up to 60, the default); `--blend w`, a fusion of keyword rank and reranker rank (reciprocal rank fusion, k = 60), with weight `w` on the reranker; `--no-neighbours`, which drops, before reranking, a candidate that sits next to a better-ranked one of its Document, since neighbours overlap.
+- **A hit** is the run's own rule: every Passage the answer needs is in the top k of at least one of the Question's queries (a cross-lingual Question counts either search, as an Answer searches twice). The **Tool** row counts a Question a hit when the Passages the Tool handed the model, over its queries, hold every Passage the answer needs.
+- **Another model:** `--scores model.json` adds `keyword + <model>` (and its blends). The file is one per dump, and the model reads each candidate's `rerankText`: `{ "model": "bge-m3", "set": "gating", "scores": { "en-07/0": [0.1, 2.3, ...] } }`. The key is the Question's id and the index of the query in its `queries`; the numbers are one per candidate, in the file's order, higher is better, at least as many as `--depth`.
+
+`tests/eval/dumps.test.ts` checks the writer and the scorer with small fixtures.
+
 ### Environment variables
 
 Keys are read from these variables only, never from `OPENAI_API_KEY` and the like, so a key set for other tools can't make a run spend money.
@@ -142,6 +174,7 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_ANSWER_TIMEOUT_S` | `300` | An Answer that takes longer is stopped and counted as failed. |
 | `INCARNAMIND_EVAL_QUESTIONS` | all | Question ids separated by commas, e.g. `en-07,zh-02`, from either set: only these are asked, once each. Retrieval still scores every Question. A run that asks only some never gates on Citations, and its report says so. |
 | `INCARNAMIND_EVAL_FORMATS` | `on` | `off` skips the every-format set: its Documents, searches and Questions. |
+| `INCARNAMIND_EVAL_DUMP_SETS` | all | `npm run eval:dump` only: some of `gating`, `formats` and `hard`, separated by commas. `INCARNAMIND_EVAL_QUESTIONS` limits its Questions too. |
 | `INCARNAMIND_EVAL_KEEP_DATA` | off | `1` keeps the temporary data folders, for looking into a run. |
 
 ### In GitHub Actions
@@ -388,6 +421,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 
 - **Entry point:**
   - `run.eval.ts`: the run, from start to finish.
+  - `dumps/run.dump.ts`: `npm run eval:dump`, with its own `vitest.config.ts`. `score.ts`: `npm run eval:score`, the dump format and the scorer, which Node runs as it is.
   - `vitest.config.ts`: Vitest compiles the TypeScript and bundles the worker threads, as it does for the unit tests. Its config includes only `*.eval.ts`.
 - **`lib/`:**
   - `config.ts`: the environment variables.
@@ -399,6 +433,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `retrieval.ts`: the hit rule, searches, reranked modes, the translated second query, and tallies.
   - `citations.ts`: asks Questions, reads Answers, and scores Citations.
   - `report.ts`: the reports and the summary.
+  - `dumps.ts`: writes a set's dump (see Offline scoring); `commit.ts`: the commit a run was made at.
 - **Evaluation set:**
   - `retrieval/questions.json`: the Questions.
   - `retrieval/fixtures/`: the Chinese Documents, CC BY-SA 4.0; see `ATTRIBUTION.md` there.
