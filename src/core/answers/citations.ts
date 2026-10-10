@@ -44,6 +44,7 @@ import {
   type CitationCheckReason,
   type CitationRecheck,
   MAX_CITED_PAGES,
+  type RejectedRecord,
 } from "../api";
 import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
@@ -519,8 +520,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
   const handles = new Map<string, string>();
   const handleOf = new Map<string, string>();
   const records = new Map<number, Accepted>();
-  /** Records naming no Passage the model was given. */
-  let invalidRecords = 0;
+  /** Records naming no Passage the model was given, or no marker: as given, and why. */
+  const rejected: RejectedRecord[] = [];
   let searches = 0;
   /** Markers in the final text, in order of first appearance, and those that had no record. */
   const finalMarkers: number[] = [];
@@ -606,8 +607,33 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     );
   };
 
-  /** A Passage named by its number alone, "1" or "[1]", as structured output may: "P1". */
-  const numbered = (name: string) => name.replace(/^\s*\[?\s*(\d{1,4})\s*\]?\s*$/, "P$1");
+  /**
+   * A Passage as structured output may name it, read as its id: by its number
+   * alone ("1", "[1]", "Passage 1"), or its id with more ("P1 (p. 9)", "P1, P2").
+   */
+  const loosely = (name: string): string => {
+    const alone = /^\s*\[?\s*(?:passage\s*)?(\d{1,4})\s*\]?\s*$/i.exec(name);
+    if (alone) return `P${alone[1]}`;
+    const id = /(?<![\p{L}\p{N}])P\s?(\d{1,4})(?!\p{N})/iu.exec(name);
+    return id ? `P${id[1]}` : name;
+  };
+
+  /** The first Passage the model was given whose pages hold the quote word for word, or null. */
+  const passageWithQuote = (quote: string): { handle: string; passageId: string } | null => {
+    if (!quote) return null;
+    for (const [passageId, handle] of handleOf) {
+      const source = documents.citationSource(passageId);
+      if (!source || source.documentDeleted) continue;
+      const units = documents.pageTexts(
+        source.documentId,
+        source.contentHash,
+        source.pageFrom,
+        source.pageTo,
+      );
+      if (quoteInUnits(units, quote, matchingFor(source))) return { handle, passageId };
+    }
+    return null;
+  };
 
   /** Takes records; returns what to tell the model about them. */
   function cite(inputs: readonly CitationRecordInput[], options: CiteOptions = {}): string {
@@ -615,26 +641,34 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     const problems: string[] = [];
     for (const input of inputs) {
       const marker = input.marker;
+      const given = String(input.passage ?? "").slice(0, 200);
       if (!Number.isInteger(marker) || marker < 1) {
-        invalidRecords++;
+        rejected.push({
+          marker: Number.isFinite(marker) ? marker : null,
+          passage: given,
+          reason: "marker",
+        });
         problems.push(`A record needs a marker number (1, 2, …) that is in the Answer as [^n].`);
         continue;
       }
       const label = `[^${marker}]`;
-      const named =
-        typeof input.passage === "string" && options.structured
-          ? numbered(input.passage)
-          : input.passage;
-      const found = typeof named === "string" ? resolve(named) : null;
+      const quote = cleanQuote(typeof input.quote === "string" ? input.quote : "");
+      const named = typeof input.passage === "string" ? input.passage : "";
+      // Structured output can't be told it named no Passage (see `CiteOptions`): its id read loosely,
+      // else the Passage it was given that holds its quote.
+      const known = <Found extends { passageId: string }>(each: Found | null): Found | null =>
+        each && documents.citationSource(each.passageId) ? each : null;
+      const found =
+        known(resolve(named)) ??
+        (options.structured ? (known(resolve(loosely(named))) ?? passageWithQuote(quote)) : null);
       const source = found && documents.citationSource(found.passageId);
       if (!found || !source) {
-        invalidRecords++;
+        rejected.push({ marker, passage: given, reason: "passage" });
         problems.push(
           `${label}: there is no Passage "${String(input.passage)}" in your search results; use a Passage's id, such as P1.`,
         );
         continue;
       }
-      const quote = cleanQuote(typeof input.quote === "string" ? input.quote : "");
       const passageUnits = documents.pageTexts(
         source.documentId,
         source.contentHash,
@@ -795,7 +829,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     },
 
     /** The Answer's Citations and the counts the evaluation reads, after the final nodes. */
-    summary(): { citations: Citation[]; droppedMarkers: number; droppedRecords: number } {
+    summary(): {
+      citations: Citation[];
+      droppedMarkers: number;
+      droppedRecords: number;
+      rejectedRecords: RejectedRecord[];
+    } {
       const citations = finalMarkers.flatMap((marker) => {
         const record = records.get(marker);
         return record ? [toCitation(record, record.result)] : [];
@@ -804,7 +843,8 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       return {
         citations,
         droppedMarkers: removedMarkers,
-        droppedRecords: unused + invalidRecords,
+        droppedRecords: unused + rejected.length,
+        rejectedRecords: rejected,
       };
     },
   };

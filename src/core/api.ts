@@ -1315,6 +1315,15 @@ export interface AnswerCitationAdded {
   citation: Citation;
 }
 
+/** A Citation record the core couldn't take: its marker and the Passage it named, as given (cut to 200 characters). */
+export interface RejectedRecord {
+  /** Null when it wasn't a number. */
+  marker: number | null;
+  passage: string;
+  /** "marker": no marker number of 1 or more. "passage": it named no Passage the model was given. */
+  reason: "marker" | "passage";
+}
+
 /** An Answer is complete ("done") or the User stopped it ("stopped"), keeping what was written. */
 export interface AnswerFinished {
   mindId: string;
@@ -1326,6 +1335,11 @@ export interface AnswerFinished {
   droppedMarkers: number;
   /** Records the model gave for no marker in the text, or naming no Passage it was given: dropped. */
   droppedRecords: number;
+  /**
+   * The records among those that the core couldn't take, as the model gave
+   * them, and why: for looking into how a model cites (the evaluation reports them).
+   */
+  rejectedRecords: RejectedRecord[];
   /** Markers the model left out of its text for records it gave, which the engine put in. */
   placedMarkers: number;
   /** How the model could give Citations; null when there were no Documents to search. */

@@ -33,6 +33,7 @@ const NO_CITATIONS = {
   citations: [],
   droppedMarkers: 0,
   droppedRecords: 0,
+  rejectedRecords: [],
   placedMarkers: 0,
   citationSupport: null,
 };

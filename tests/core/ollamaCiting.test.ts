@@ -146,4 +146,45 @@ describe("Choosing how a local model cites, before the first request", () => {
       { pageFrom: 2, pageTo: 2, check: "not-found", checkReason: "quote-not-on-pages" },
     ]);
   });
+
+  test("a small model's records that name their Passage loosely, or by its Document, are taken; one whose quote is nowhere is rejected, and reported", async () => {
+    const ollama = await startOllamaServer({
+      models: [QWEN35],
+      reply: answering(() => ({
+        content: JSON.stringify({
+          answer: "Spring tides come at new and full moon [^1][^2]. Neap tides are smallest [^3].",
+          citations: [
+            // The marker as the Answer writes it, and the Document's name for its Passage.
+            {
+              marker: "[^1]",
+              passage: "Tides",
+              location: "p. 2",
+              quote: "Spring tides happen at new moon and at full moon.",
+            },
+            { marker: 2, passage: "P1 (p. 2)", quote: "Spring tides happen at new moon" },
+            { marker: 3, passage: "Nowhere", quote: "Neap tides are the smallest." },
+          ],
+        }),
+      })),
+    });
+    const { core, mind, client } = await setUpLocalModel(ollama, QWEN35.name, {
+      documents: [{ name: "Tides.pdf", contents: TIDES_PDF }],
+    });
+    const asked = question("When are spring tides?");
+    writeMind(client, [asked]);
+
+    const { ended } = await askAndEnd(core, client, mind.id, asked.attrs.id);
+
+    expect(ended.event).toBe("finished");
+    expect(ended.payload).toMatchObject({
+      citations: [
+        { pageFrom: 2, pageTo: 2, check: "found" },
+        // No page named: its Passage's two.
+        { pageFrom: 1, pageTo: 2, check: "found" },
+      ],
+      droppedMarkers: 1,
+      droppedRecords: 1,
+      rejectedRecords: [{ marker: 3, passage: "Nowhere", reason: "passage" }],
+    });
+  });
 });

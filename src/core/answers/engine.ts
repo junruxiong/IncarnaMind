@@ -103,10 +103,13 @@ export interface CitationRecordInput {
 export interface CiteOptions {
   /**
    * In structured output, which gets no word back to fix its records with
-   * (see `structured`): a Passage named by its number alone ("1") is "P1",
-   * and a quote that isn't on the pages its record names, but is word for
-   * word on a page of the Passage it names, or on two consecutive ones, is
-   * cited there, as `cite`'s feedback lets a model in the Tool loop do.
+   * (see `structured`): a Passage named by its number alone ("1"), or with
+   * more ("P1 (p. 9)"), is "P1"; a record naming none it was given (a
+   * Document's name, say) cites the first Passage it was given whose pages
+   * hold its quote word for word; and a quote that isn't on the pages its
+   * record names, but is word for word on a page of the Passage it names, or
+   * on two consecutive ones, is cited there, as `cite`'s feedback lets a
+   * model in the Tool loop do.
    */
   structured?: boolean;
 }
@@ -408,8 +411,11 @@ function parseRecords(value: unknown): CitationRecordInput[] {
   return value.flatMap((item): CitationRecordInput[] => {
     if (typeof item !== "object" || item === null) return [];
     const { marker, passage, location, pageFrom, pageTo, quote } = item as Record<string, unknown>;
-    const number = typeof marker === "string" ? Number.parseInt(marker, 10) : marker;
-    if (typeof number !== "number" || typeof passage !== "string" || typeof quote !== "string") {
+    // A marker as the Answer writes it ("[^1]"), or a Passage by its number alone (1), as small models give them.
+    const number =
+      typeof marker === "string" ? Number(/\d{1,4}/.exec(marker)?.[0] ?? Number.NaN) : marker;
+    const named = typeof passage === "number" ? String(passage) : passage;
+    if (typeof number !== "number" || typeof named !== "string" || typeof quote !== "string") {
       return [];
     }
     const page = (value: unknown) =>
@@ -417,7 +423,7 @@ function parseRecords(value: unknown): CitationRecordInput[] {
     return [
       {
         marker: number,
-        passage,
+        passage: named,
         ...(typeof location === "string" && location.trim() ? { location } : {}),
         pageFrom: page(pageFrom),
         pageTo: page(pageTo),
