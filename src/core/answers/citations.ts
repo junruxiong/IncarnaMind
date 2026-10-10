@@ -715,7 +715,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
           text: foldRadicals(marked),
         };
       });
-      return { text: formatPassages(formatted), passageCount: found.length };
+      return {
+        text: formatPassages(formatted),
+        passageCount: found.length,
+        ranks: found.map((passage, index) => passage.rank ?? index),
+      };
     },
 
     cite,

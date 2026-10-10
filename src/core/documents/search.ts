@@ -169,6 +169,13 @@ export interface WindowedPassage extends PassageSearchResult {
   /** Positions of the first and last Passage in this Passage's sliding window. */
   windowFrom: number;
   windowTo: number;
+  /**
+   * How relevant the search Tool found it among the Passages it returned: 0
+   * the most. Set by the search Tool only (see ./searchTool), which returns
+   * Passages in reading order: a window too small for all of them keeps the
+   * most relevant (see ../answers/window).
+   */
+  rank?: number;
 }
 
 interface WindowedRow extends ResultRow {
