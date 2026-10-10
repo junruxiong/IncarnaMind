@@ -678,7 +678,7 @@ export function createLibrary(options: {
         changed();
         return;
       }
-      // One being classified goes back to waiting its turn.
+      // The move cancelled its classification: it waits its turn again.
       const status = previous.status === "classifying" ? "pending" : previous.status;
       db.transaction(() => {
         write(doc, previous.groupId, previous.source, status, previous.model);

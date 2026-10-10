@@ -38,8 +38,7 @@ const KINDS: readonly DeletedKind[] = ["mind", "chat", "document", "folder", "ta
 
 const stored = (kind: DeletedKind): Stored => (kind === "chat" ? "mind" : kind);
 
-/** The earliest `deleted_at` that can still be restored. */
-const cutoff = (now: string) =>
+const earliestRestorable = (now: string) =>
   new Date(Date.parse(now) - RECENTLY_DELETED_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
 function parseRefs(input: unknown, what: string): RestoreRef[] {
@@ -75,9 +74,8 @@ function purge(db: Database, kind: Stored, ids: readonly string[], at: string): 
   );
 }
 
-/** At start-up: what was deleted more than `RECENTLY_DELETED_DAYS` ago is deleted permanently. */
 export function purgeExpired(db: Database, now: string): void {
-  const before = cutoff(now);
+  const before = earliestRestorable(now);
   db.transaction(() => {
     for (const kind of Object.keys(TABLES) as Stored[]) {
       const ids = db.all<{ id: string }>(
@@ -112,7 +110,6 @@ export function createRecentlyDeleted(options: {
   library: ReturnType<typeof createLibrary>;
   mindsChanged(): void;
   tagsChanged(): void;
-  /** These Documents' Tags changed. */
   tagged(documentIds: string[]): void;
 }) {
   const { db, now, say, minds, content, documents, tags, library } = options;
@@ -127,7 +124,6 @@ export function createRecentlyDeleted(options: {
   const nameOf = (kind: Stored, row: DeletedRow) =>
     kind === "mind" && row.name === "" ? say("mind.untitled") : row.name;
 
-  /** The Document's file can come back where it was. */
   function checkDocument(id: string, name: string): void {
     const row = db.get<{ path: string; linked_folder_id: string | null }>(
       "SELECT path, linked_folder_id FROM documents WHERE id = ?",
@@ -145,7 +141,6 @@ export function createRecentlyDeleted(options: {
       throw new InvalidInputError(say("restore.error.documentBack", { name }));
   }
 
-  /** Each link's Document and Tag are there. */
   function checkLinks(links: readonly TagLinkState[]): void {
     for (const { documentId, tagId } of links) {
       if (!db.get("SELECT 1 FROM documents WHERE id = ? AND deleted_at IS NULL", [documentId]))
@@ -158,7 +153,7 @@ export function createRecentlyDeleted(options: {
 
   return {
     list(): DeletedItem[] {
-      const since = cutoff(now());
+      const since = earliestRestorable(now());
       const item = (
         kind: DeletedKind,
         row: { id: string; name: string; deleted_at: string },
@@ -224,7 +219,7 @@ export function createRecentlyDeleted(options: {
     /** See `CoreApi.restore`. */
     restore(input: unknown): void {
       const refs = parseRefs(input, "restore");
-      const since = cutoff(now());
+      const since = earliestRestorable(now());
       const done = db.transaction(() => {
         const restored = {
           minds: false,
