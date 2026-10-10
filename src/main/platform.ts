@@ -15,6 +15,7 @@ import {
   type FileShell,
   type Keychain,
   type Logger,
+  type UsageDataSender,
 } from "../core";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
@@ -22,6 +23,7 @@ import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
+import { createPostHogSender } from "./usageData";
 
 /**
  * `safeStorage` encrypts with a key held by the OS secret store: the macOS
@@ -192,12 +194,60 @@ function createCrashReporter(dataDir: string): CrashReporter | undefined {
   });
 }
 
+/**
+ * The PostHog project this copy sends usage data to, if any: its key and host
+ * (`MAIN_VITE_POSTHOG_KEY`, `MAIN_VITE_POSTHOG_HOST`), both needed, the host
+ * over https; and whether it is a test build (`MAIN_VITE_TESTER_BUILD=1`, the
+ * alpha). A smoke-test build ignores them, so the smoke tests never reach
+ * PostHog; they may point it at a local server instead
+ * (`INCARNAMIND_TEST_POSTHOG_KEY`, `INCARNAMIND_TEST_POSTHOG_HOST`,
+ * `INCARNAMIND_TEST_TESTER_BUILD`).
+ */
+function usageDataProject(): { key: string; host: string; testerBuild: boolean } | undefined {
+  const test = import.meta.env.MODE === "test";
+  const key = (
+    test ? process.env.INCARNAMIND_TEST_POSTHOG_KEY : import.meta.env.MAIN_VITE_POSTHOG_KEY
+  )?.trim();
+  const host = (
+    test ? process.env.INCARNAMIND_TEST_POSTHOG_HOST : import.meta.env.MAIN_VITE_POSTHOG_HOST
+  )?.trim();
+  const tester = test
+    ? process.env.INCARNAMIND_TEST_TESTER_BUILD
+    : import.meta.env.MAIN_VITE_TESTER_BUILD;
+  if (!key || !host) return undefined;
+  let url: URL;
+  try {
+    url = new URL(host);
+  } catch {
+    return undefined;
+  }
+  const local = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+  if (url.protocol !== "https:" && !(test && local && url.protocol === "http:")) return undefined;
+  return { key, host, testerBuild: tester?.trim() === "1" };
+}
+
+/** Sends usage data, if this copy was built to. The core starts it only while the User agrees. */
+function createUsageDataSender(): UsageDataSender | undefined {
+  const project = usageDataProject();
+  if (!project) return undefined;
+  return createPostHogSender({
+    projectKey: project.key,
+    host: project.host,
+    testerBuild: project.testerBuild,
+    appVersion: app.getVersion(),
+    // The smoke tests don't wait half a minute for events.
+    ...(import.meta.env.MODE === "test" && { flushIntervalMs: 500 }),
+  });
+}
+
 /** Builds the core's adapters, with the log the core writes to. Call after `app` is ready. */
 export function createElectronAdapters(log: Logger): CoreAdapters {
   const dataDir = app.getPath("userData");
   const crashReporter = createCrashReporter(dataDir);
+  const usageData = createUsageDataSender();
   return {
     ...(crashReporter && { crashReporter }),
+    ...(usageData && { usageData }),
     log,
     paths: { dataDir, builtInSkills: builtInSkillsFolder(), examples: examplesFolder() },
     systemLanguages: () => app.getPreferredSystemLanguages(),
