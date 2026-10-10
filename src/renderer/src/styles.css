@@ -1125,11 +1125,11 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 0 8px 0 4px;
+    padding: 0 4px;
     white-space: nowrap;
   }
   .meeting-time {
-    min-width: 2.75rem;
+    min-width: 2.25rem;
     font-variant-numeric: tabular-nums;
     color: var(--color-ink-secondary);
   }

@@ -125,12 +125,3 @@ export function useMeetingTime(meeting: Meeting): number {
   }, [since]);
   return meeting.recordedMs + (since === null ? 0 : Math.max(0, now - Date.parse(since)));
 }
-
-/** A Meeting's time as a clock reads it: "4:07", "24:16" or "1:02:05". */
-export function clockTime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const rest = String(seconds % 60).padStart(2, "0");
-  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
-}

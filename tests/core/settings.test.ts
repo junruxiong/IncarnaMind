@@ -31,6 +31,8 @@ describe("Settings", () => {
       },
       language: "en",
       scriptSandbox: "none",
+      // No capture in these tests: Meetings can't record.
+      meetingAudio: "none",
     });
   });
 
@@ -163,6 +165,7 @@ describe("Settings", () => {
       device,
       language: "zh-CN",
       scriptSandbox: "none",
+      meetingAudio: "none",
     });
   });
 

@@ -10,7 +10,8 @@ import {
 } from "../components/lineIcons";
 import { type ProblemAction, ProblemLine } from "../components/ProblemLine";
 import { useT } from "../i18n";
-import { clockTime, useMeetings, useMeetingTime } from "../meetings";
+import { useMeetings, useMeetingTime } from "../meetings";
+import { clockTime, durationLabel } from "../meetingTime";
 
 /** Pause and Resume (DESIGN.md, Names and shortcuts). */
 export const PAUSE_SHORTCUT = isMacOS() ? "⌘⇧P" : "Ctrl+Shift+P";
@@ -176,15 +177,3 @@ const SYSTEM_LINES: Partial<Record<MeetingSourceState, MessageKey>> = {
   ended: "meetings.line.systemEnded",
   unavailable: "meetings.line.systemUnavailable",
 };
-
-/** How long, roughly, in words: "45 s", "3 min", "2 h 5 min". */
-export function durationLabel(ms: number, t: ReturnType<typeof useT>): string {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return t("meetings.duration.seconds", { count: seconds });
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return t("meetings.duration.minutes", { count: minutes });
-  return t("meetings.duration.hours", {
-    hours: Math.floor(minutes / 60),
-    minutes: minutes % 60,
-  });
-}
