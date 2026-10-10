@@ -11,7 +11,8 @@
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { BUILT_IN_RERANKING_MODEL, RERANKING_MODEL_CANDIDATES } from "../../src/core";
+import { RERANKING_MODEL_CANDIDATES } from "../../eval/lib/rerankingModels";
+import { BUILT_IN_RERANKING_MODEL } from "../../src/core";
 import { createRerankingModel } from "../../src/core/reranking/index";
 import { createOnnxCrossEncoder } from "../../src/core/reranking/onnx";
 import { createTempDataFolder } from "../helpers/core";
