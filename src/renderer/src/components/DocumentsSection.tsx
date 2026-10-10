@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
@@ -115,8 +114,8 @@ export function DocumentsSection() {
   const libraryOpen = useAppStore(
     (state) => state.libraryOpen && ["all", "new"].includes(state.libraryFilter),
   );
-  // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
-  const documents = useAppStore(useShallow(selectVisibleDocuments));
+  // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
+  const documents = useAppStore(selectVisibleDocuments);
   const filtering = useAppStore((state) => state.tagFilter.length > 0);
   const hasFolders = useAppStore(
     (state) => state.folders.length > 0 || state.linkedFolders.length > 0,

@@ -304,11 +304,27 @@ function saveTabs(tabs: readonly string[], openMindId: string | null): void {
     .catch(() => undefined);
 }
 
-/** The Documents the sidebar lists: all of them, or those with a Tag it filters by. */
-export const selectVisibleDocuments = (state: AppState): Document[] =>
-  state.tagFilter.length === 0
-    ? state.documents
-    : state.documents.filter((item) => matchesTags(item, state.tagFilter));
+/** The last list `selectVisibleDocuments` filtered, and what from. */
+let visible: { documents: Document[]; tagFilter: readonly string[]; shown: Document[] } | null =
+  null;
+
+/**
+ * The Documents the sidebar lists: all of them, or those with a Tag it
+ * filters by. The same array until the Documents or the filter change, so it
+ * needn't be compared item by item at each change to the store (#156).
+ */
+export const selectVisibleDocuments = (state: AppState): Document[] => {
+  const { documents, tagFilter } = state;
+  if (tagFilter.length === 0) return documents;
+  if (visible?.documents !== documents || visible.tagFilter !== tagFilter) {
+    visible = {
+      documents,
+      tagFilter,
+      shown: documents.filter((item) => matchesTags(item, tagFilter)),
+    };
+  }
+  return visible.shown;
+};
 
 /** What the Tag filter is, as a key: folds made while filtering belong to it. Null without one. */
 export const selectTagFilterKey = (state: AppState): string | null =>
