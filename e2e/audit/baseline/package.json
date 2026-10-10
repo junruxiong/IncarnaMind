@@ -1,0 +1,5 @@
+{
+  "name": "incarnamind-audit-baseline",
+  "private": true,
+  "main": "main.cjs"
+}
