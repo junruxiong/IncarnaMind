@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -7,6 +7,8 @@ import { rowButtonClass, rowClass } from "./sidebarRows";
 
 /** How many Documents a Folder or Tag lists under it in the sidebar; the Library shows them all. */
 const LISTED = 50;
+
+const NONE: readonly Document[] = [];
 
 /** These folders are index entries. Linked source locations remain a separate view. */
 export function LibraryFolders({
@@ -17,11 +19,23 @@ export function LibraryFolders({
   renderDocument(document: Document, depth: number): ReactNode;
 }) {
   const t = useT();
-  const library = useAppStore((state) => state.library);
+  const groups = useAppStore((state) => state.library?.groups);
+  const assignments = useAppStore((state) => state.library?.assignments);
   const active = useAppStore((state) => (state.libraryOpen ? state.libraryFilter : null));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const assignments = new Map(library?.assignments.map((item) => [item.documentId, item.groupId]));
-  const folders = [...(library?.groups ?? []), { id: "unsorted", name: t("library.unsorted") }];
+  // Each Folder's Documents (Unsorted's under "unsorted"), in one pass, again only when they change.
+  const byFolder = useMemo(() => {
+    const folderOf = new Map(assignments?.map((item) => [item.documentId, item.groupId]));
+    const grouped = new Map<string, Document[]>();
+    for (const doc of documents) {
+      const key = folderOf.get(doc.id) ?? "unsorted";
+      const list = grouped.get(key);
+      if (list) list.push(doc);
+      else grouped.set(key, [doc]);
+    }
+    return grouped;
+  }, [documents, assignments]);
+  const folders = [...(groups ?? []), { id: "unsorted", name: t("library.unsorted") }];
   return (
     <nav aria-label={t("library.groups")} data-testid="library-folders">
       <ul>
@@ -32,9 +46,7 @@ export function LibraryFolders({
             data={{ "data-folder-id": folder.id }}
             icon={<FolderLineIcon className="size-4 shrink-0" />}
             name={folder.name}
-            documents={documents.filter(
-              (doc) => (assignments.get(doc.id) ?? "unsorted") === folder.id,
-            )}
+            documents={byFolder.get(folder.id) ?? NONE}
             selected={active === folder.id}
             expanded={!collapsed.has(folder.id)}
             onOpen={() => useAppStore.getState().openLibrary(folder.id)}
