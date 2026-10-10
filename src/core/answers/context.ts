@@ -99,20 +99,51 @@ export function buildQuestionContext(
   index: number,
   budget = QUESTION_CONTEXT_TOKEN_BUDGET,
 ): QuestionContext {
+  return contextOf(blocks, index, piecesBefore(blocks, index), budget);
+}
+
+/**
+ * The Question context of the Question at `index` in one of the Mind's chats
+ * (#201): the chat is about the Mind, so everything in its note comes first,
+ * as the Blocks above the thread (Notes the User switched off left out), then
+ * the chat's earlier Questions and Answers. When that is over the budget, the
+ * oldest goes first: the start of the note, then of the chat.
+ */
+export function buildChatQuestionContext(
+  note: Y.XmlFragment,
+  chat: Y.XmlFragment,
+  index: number,
+  budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+): QuestionContext {
+  const above = function* (): Generator<Piece> {
+    yield* piecesBefore(chat, index);
+    yield* piecesBefore(note, note.length);
+  };
+  return contextOf(chat, index, above(), budget);
+}
+
+/** What the top-level Blocks before `end` contribute, newest first, read only as far as asked. */
+function* piecesBefore(blocks: Y.XmlFragment, end: number): Generator<Piece> {
   const children = blocks.toArray();
-  const question = children[index];
+  for (let at = Math.min(end, children.length) - 1; at >= 0; at--) {
+    const block = children[at];
+    const piece = block instanceof Y.XmlElement ? pieceOf(block) : null;
+    if (piece) yield piece;
+  }
+}
+
+/** The context of the Question at `index` among `blocks`, from what is `above` it, newest first. */
+function contextOf(
+  blocks: Y.XmlFragment,
+  index: number,
+  above: Iterable<Piece>,
+  budget: number,
+): QuestionContext {
+  const question = blocks.get(index);
   if (!(question instanceof Y.XmlElement)) throw new Error("No Question at that index.");
   const questionText = toMarkdown(question);
-  /** What the Blocks above contribute, newest first, read only as far as the budget goes. */
-  const newestFirst = function* (): Generator<Piece> {
-    for (let at = index - 1; at >= 0; at--) {
-      const block = children[at];
-      const piece = block instanceof Y.XmlElement ? pieceOf(block) : null;
-      if (piece) yield piece;
-    }
-  };
   return {
-    messages: withinBudget(newestFirst(), questionText, budget - estimateTokens(questionText)),
+    messages: withinBudget(above, questionText, budget - estimateTokens(questionText)),
     question: questionText,
   };
 }

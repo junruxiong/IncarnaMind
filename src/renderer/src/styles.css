@@ -693,7 +693,8 @@
    */
   .mind-column {
     container: mind / inline-size;
-    padding-block: 64px 160px;
+    /* Under the note, room for the thread over its foot (#201), so its end can scroll above it. */
+    padding-block: 64px max(160px, calc(var(--thread-room, 0px) + 48px));
   }
   .mind-measure {
     width: 680px;
@@ -1070,6 +1071,439 @@
       cursor: default;
     }
   }
+  /*
+   * The thread (#201, DESIGN.md D124; boards Chat-B1, B2 and C2): what is
+   * asked rises from the composer over the lower part of the Mind, the
+   * composer's width, joined to its top, and the note stays as it is. One card
+   * with the composer: a 1px rule-strong edge, radius 10, popover depth (drawn
+   * once, under both, by `.thread-shadow`). Its header is 36px; folded (Esc),
+   * only the header stays. Questions are bubbles at the right; Answers keep
+   * their text, Citations and checks, with their actions under them.
+   */
+  .composer-dock {
+    position: relative;
+    z-index: 3;
+  }
+  .thread-panel {
+    position: absolute;
+    /* Down to the composer's top edge: the dock's top padding is 8px. */
+    bottom: calc(100% - 8px);
+    left: calc((100% - 784px) / 2 + 56px);
+    display: flex;
+    flex-direction: column;
+    width: 680px;
+    border: 1px solid var(--color-rule-strong);
+    border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+  }
+  .thread-shadow {
+    position: absolute;
+    z-index: -1;
+    top: calc(8px - var(--thread-height, 0px));
+    bottom: 16px;
+    left: calc((100% - 784px) / 2 + 56px);
+    width: 680px;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgb(23 25 28 / 0.12);
+    pointer-events: none;
+  }
+  /* The composer under it: the card's edge, and the thread's rule as its top. */
+  .composer-dock:has(> .thread-panel) > .composer {
+    border-color: var(--color-rule-strong);
+    border-top-color: var(--color-rule);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+  .thread-head {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 6px 0 14px;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  .thread-panel:not(.thread-panel--open) > .thread-head {
+    border-bottom: 0;
+  }
+  .thread-spark {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    color: var(--color-ink-secondary);
+  }
+  .thread-title {
+    flex-shrink: 0;
+    margin: 0;
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .thread-subtitle {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-meta);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    cursor: default;
+  }
+  .thread-panel:not(.thread-panel--open) .thread-subtitle {
+    cursor: pointer;
+  }
+  .thread-head-button {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+
+    &:hover,
+    &[aria-expanded="true"][aria-haspopup] {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .thread-body {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+  /* Newest at the foot, kept in view as it is written; 400px with the header, at most half the window. */
+  .thread-scroller {
+    display: flex;
+    flex-direction: column-reverse;
+    max-height: min(364px, 50vh - 36px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .thread-log-frame {
+    position: relative;
+    margin: 12px 52px 14px 16px;
+  }
+  .thread-empty {
+    margin: 0;
+    padding: 12px 16px 14px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  /* A Question: the User's words in a bubble at the right, reaching into the checks' margin. */
+  .thread-question {
+    display: flex;
+    justify-content: flex-end;
+    margin-right: -36px;
+  }
+  .thread-question-bubble {
+    max-width: 88%;
+    padding: 4px 12px;
+    border-radius: 10px;
+    background: var(--color-chip);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 28px;
+    font-weight: 500;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+  }
+  .thread-question-skill {
+    margin-right: 6px;
+    font-size: var(--text-meta);
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+  }
+  /*
+   * Under an Answer: Copy · Add to note ▾ · Regenerate, its model and what it
+   * searched; on hover or focus, and always on the newest, while it is written
+   * and once added. Hidden ones keep their room and stay in the Tab order.
+   */
+  .thread-answer-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 28px;
+    margin: -8px 0 0 -6px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+    user-select: none;
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+  }
+  .answer-block:hover > .thread-answer-actions,
+  .answer-block:focus-within > .thread-answer-actions,
+  .answer-block[data-status="streaming"] > .thread-answer-actions,
+  .thread-editor > .node-answer:last-child .thread-answer-actions,
+  .thread-answer-actions--added {
+    opacity: 1;
+  }
+  .thread-answer-action {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px 0 6px;
+    border-radius: 6px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .thread-add {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .thread-add-main {
+    padding-right: 6px;
+    border-radius: 6px 0 0 6px;
+  }
+  .thread-add-more {
+    justify-content: center;
+    width: 22px;
+    padding: 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .thread-add:hover > .thread-answer-action {
+    background: var(--color-hover);
+  }
+  .thread-answer-meta {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 0 6px;
+    min-width: 0;
+    padding-left: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--text-meta);
+    line-height: 20px;
+    color: var(--color-ink-meta);
+
+    > * {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+  }
+  .thread-answer-actions--added {
+    gap: 4px;
+    min-height: 24px;
+    margin-left: 0;
+  }
+  .thread-added-icon {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    width: 16px;
+    color: var(--color-ink-secondary);
+  }
+  .thread-added-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .thread-undo {
+    flex-shrink: 0;
+    height: 24px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  /* The Answer a Note's link back opened: washed for a moment. */
+  .thread-answer--sought {
+    border-radius: 2px;
+    background: var(--color-frame);
+    box-shadow: 0 0 0 8px var(--color-frame);
+    outline: none;
+  }
+  /* A Note just added from a chat: washed for a moment, then as any Note (DESIGN.md D124). */
+  .mind-editor > .block-just-added {
+    border-radius: 2px;
+    animation: block-just-added 1600ms ease-in both;
+  }
+  @container mind (width < 900px) {
+    .thread-panel,
+    .thread-shadow {
+      left: 24px;
+      width: auto;
+      right: 24px;
+    }
+    .thread-log-frame {
+      margin-right: 16px;
+    }
+    .thread-question {
+      margin-right: 0;
+    }
+  }
+
+  /* "Add to note ▾" (board Chat-C2): find a Mind, This Mind, Recent, New Mind…. */
+  .add-to-picker {
+    display: flex;
+    flex-direction: column;
+    width: 340px;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    text-align: left;
+    color: var(--color-ink);
+  }
+  .add-to-search {
+    padding: 8px 8px 4px;
+  }
+  .add-to-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    color: var(--color-ink-meta);
+
+    &:focus-within {
+      box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+    > input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 28px;
+      border: 0;
+      outline: none;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      line-height: 20px;
+      color: var(--color-ink);
+
+      &::placeholder {
+        color: var(--color-ink-placeholder);
+      }
+    }
+  }
+  .add-to-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 360px;
+    padding: 0 4px 4px;
+    overflow-y: auto;
+  }
+  .add-to-option {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    align-items: start;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+
+    &[aria-selected="true"] {
+      background: var(--color-chip);
+    }
+  }
+  .add-to-option-icon {
+    padding-top: 2px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+  .add-to-option-title,
+  .add-to-option-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .add-to-option-title {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-ink);
+  }
+  .add-to-option-detail,
+  .add-to-option-key {
+    font-size: var(--text-meta);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-key {
+    line-height: 20px;
+  }
+  .add-to-heading {
+    margin: 0;
+    padding: 8px 8px 2px;
+    font-size: var(--text-meta);
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .add-to-separator {
+    flex-shrink: 0;
+    height: 1px;
+    margin: 4px;
+    background: var(--color-rule);
+  }
+  .add-to-empty {
+    margin: 0;
+    padding: 4px 8px;
+    font-size: 13px;
+    color: var(--color-ink-meta);
+  }
+  /* The thread's history: New chat, then each chat, its first Question and when. */
+  .thread-history {
+    width: 300px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .editor-menu-item.thread-history-chat {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    height: auto;
+    padding: 5px 8px;
+
+    &[aria-checked="true"] {
+      background: var(--color-chip);
+    }
+  }
+  .thread-history-title,
+  .thread-history-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .thread-history-detail {
+    font-size: var(--text-meta);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+
   /* The "@" and "/" pickers: above the composer, at its left edge. */
   .composer-picker {
     position: absolute;
@@ -1393,6 +1827,23 @@
       height: 0;
       pointer-events: none;
       color: var(--color-ink-placeholder);
+    }
+  }
+  /* The thread's Questions and Answers (#201): no margin for controls, 14px apart. */
+  .mind-editor.thread-editor {
+    --editor-gutter: 0px;
+
+    min-height: 0;
+    margin-left: 0;
+    padding-left: 0;
+    cursor: text;
+
+    > * + *,
+    > * + :where(.node-question),
+    > * + :where(.node-answer),
+    > :where(.node-answer) + *,
+    > :where(.node-question) + :where(.node-answer) {
+      margin-top: 14px;
     }
   }
   /* An empty Mind showing the three steps under its line: no room kept for writing between them. */
@@ -2655,6 +3106,18 @@
   }
 }
 
+@keyframes block-just-added {
+  from,
+  60% {
+    background: var(--color-frame);
+    box-shadow: 0 0 0 8px var(--color-frame);
+  }
+  to {
+    background: transparent;
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
 @keyframes margin-check-in {
   from {
     opacity: 0;
@@ -2697,4 +3160,13 @@
 /* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */
 :root[data-title-bar="inset"]:not([data-full-screen]) .app-mark {
   display: none;
+}
+
+/* Reduced motion: a Note just added is washed, then not, with no fade. */
+@media (prefers-reduced-motion: reduce) {
+  .mind-editor > .block-just-added {
+    animation: none;
+    background: var(--color-frame);
+    box-shadow: 0 0 0 8px var(--color-frame);
+  }
 }

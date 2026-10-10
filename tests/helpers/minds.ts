@@ -4,6 +4,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "@tiptap/y-tiptap";
 import type { SearchScope } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
+import { chatBlocks, createChat } from "../../src/shared/mindChats";
 import { SCOPE_ATTRIBUTES } from "../../src/shared/searchScope";
 import type { MindClient } from "./mindClient";
 
@@ -98,4 +99,44 @@ export function answerIn(client: MindClient, answerId: string): ProseMirrorNode 
 export function answerText(client: MindClient, answerId: string): string {
   const answer = answerIn(client, answerId);
   return answer.textBetween(0, answer.content.size, "\n\n");
+}
+
+// ---------------------------------------------------------------------------
+// Chats (#201): Questions and Answers kept beside the note
+
+/** A chat's Questions and Answers as the thread's editor reads them. */
+export function readChat(client: MindClient, chatId: string): ProseMirrorNode {
+  const blocks = chatBlocks(client.doc, chatId);
+  if (!blocks) throw new Error(`No chat ${chatId} in the Mind.`);
+  const doc = yXmlFragmentToProseMirrorRootNode(blocks, mindSchema);
+  if (doc.childCount > 0) doc.check();
+  return doc;
+}
+
+/** Starts a chat, if there isn't one with this id, and writes its Blocks as the thread does. */
+export function writeChat(client: MindClient, chatId: string, blocks: JSONContent[]): void {
+  const fragment = createChat(client.doc, chatId, new Date().toISOString());
+  const doc = mindSchema.nodeFromJSON({ type: "doc", content: blocks });
+  client.doc.transact(() =>
+    updateYFragment(client.doc, fragment, doc, { mapping: new Map(), isOMark: new Map() }),
+  );
+}
+
+/** Each of a chat's Blocks' types, with an Answer's status. */
+export function chatOutline(client: MindClient, chatId: string): string[] {
+  const types: string[] = [];
+  readChat(client, chatId).forEach((block) => {
+    types.push(block.type.name === "answer" ? `answer:${block.attrs.status}` : block.type.name);
+  });
+  return types;
+}
+
+/** The Answer with this Block ID in a chat. */
+export function chatAnswer(client: MindClient, chatId: string, answerId: string): ProseMirrorNode {
+  let found: ProseMirrorNode | null = null;
+  readChat(client, chatId).forEach((block) => {
+    if (block.type.name === "answer" && block.attrs.id === answerId) found = block;
+  });
+  if (!found) throw new Error(`No Answer ${answerId} in chat ${chatId}.`);
+  return found;
 }

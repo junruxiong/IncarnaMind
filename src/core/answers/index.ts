@@ -6,6 +6,11 @@
  * called (searches, and the Skills it used). It also pushes the Answer event
  * stream for UI state and the evaluation.
  *
+ * A Question asked in the thread above the composer (#201) is in one of the
+ * Mind's chats (`MIND_CHATS_FIELD`): its Answer is written there, right after
+ * it, and the note is left as it is. Its Question context is the whole note,
+ * then the chat's earlier Questions and Answers.
+ *
  * Skills: the instructions list the enabled Skills' names and descriptions,
  * and the model loads one with `use_skill` when it needs it. A Skill the
  * Question forces is loaded up front, and shown as a Tool call too.
@@ -28,6 +33,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { chatBlocks, citingFragments } from "../../shared/mindChats";
 import { searchScopeOf } from "../../shared/searchScope";
 import {
   ANSWER_BLOCK,
@@ -40,6 +46,7 @@ import {
   type ChatReadiness,
   type CitationSupport,
   type Effect,
+  MIND_CONTENT_FIELD,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -87,7 +94,7 @@ import {
   withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { buildQuestionContext, type QuestionContext } from "./context";
+import { buildChatQuestionContext, buildQuestionContext, type QuestionContext } from "./context";
 import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
@@ -245,6 +252,22 @@ function parseId(value: unknown, what: string): string {
   return value;
 }
 
+/** A chat's id, or null for the Mind's own Blocks (`AskQuestionInput.chatId`). */
+function parseChatId(value: unknown): string | null {
+  return value === undefined || value === null ? null : parseId(value, "A chat id");
+}
+
+/**
+ * The Blocks a Question and its Answer are in: one of the Mind's chats
+ * (#201), or, with no chat, the Mind's own. Throws when the chat isn't there.
+ */
+function blocksIn(doc: Y.Doc, chatId: string | null): Y.XmlFragment {
+  if (chatId === null) return doc.getXmlFragment(MIND_CONTENT_FIELD);
+  const blocks = chatBlocks(doc, chatId);
+  if (!blocks) throw new NotFoundError("That chat isn't in this Mind.");
+  return blocks;
+}
+
 /** The Answer to a Question, wherever it is in the Mind. */
 function answerFor(blocks: Y.XmlFragment, questionId: string): Y.XmlElement | null {
   return (
@@ -312,27 +335,23 @@ export function createAnswers(options: AnswersOptions) {
   /** Answers being written, by id. */
   const active = new Map<string, Generation>();
 
-  /** Marks Answers left "streaming" by an earlier run of the app as stopped: nothing writes them any more. */
-  const settleOrphans = (mindId: string) => {
-    const orphans = content.read(mindId, (blocks) =>
-      topLevelBlocks(blocks).some(
+  /** Answers left "streaming" by an earlier run of the app, in the note and in every chat. */
+  const orphansIn = (doc: Y.Doc): Y.XmlElement[] =>
+    citingFragments(doc).flatMap((blocks) =>
+      topLevelBlocks(blocks).filter(
         (block) =>
           block.nodeName === ANSWER_BLOCK &&
           block.getAttribute("status") === "streaming" &&
           !active.has(textAttribute(block, BLOCK_ID_ATTRIBUTE) ?? ""),
       ),
     );
-    if (!orphans) return;
-    content.edit(mindId, (blocks) => {
-      for (const block of topLevelBlocks(blocks)) {
-        const id = textAttribute(block, BLOCK_ID_ATTRIBUTE) ?? "";
-        if (
-          block.nodeName === ANSWER_BLOCK &&
-          block.getAttribute("status") === "streaming" &&
-          !active.has(id)
-        ) {
-          setAttributes(block, { status: "stopped", generatedHash: contentHash(block) });
-        }
+
+  /** Marks Answers left "streaming" by an earlier run of the app as stopped: nothing writes them any more. */
+  const settleOrphans = (mindId: string) => {
+    if (content.readDoc(mindId, (doc) => orphansIn(doc).length === 0)) return;
+    content.editDoc(mindId, (doc) => {
+      for (const block of orphansIn(doc)) {
+        setAttributes(block, { status: "stopped", generatedHash: contentHash(block) });
       }
     });
   };
@@ -347,6 +366,8 @@ export function createAnswers(options: AnswersOptions) {
 
   function start(input: {
     mindId: string;
+    /** The chat the Answer is in; null for the Mind's own Blocks. */
+    chatId: string | null;
     answerId: string;
     questionId: string;
     model: ChatModelChoice;
@@ -360,7 +381,7 @@ export function createAnswers(options: AnswersOptions) {
     /** The User has yet to allow the chat flow to the model's service: they are asked first. */
     consentNeeded: boolean;
   }): void {
-    const { mindId, answerId, model, context, documentIds, forcedSkill } = input;
+    const { mindId, chatId, answerId, model, context, documentIds, forcedSkill } = input;
     const controller = new AbortController();
     /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
@@ -389,8 +410,9 @@ export function createAnswers(options: AnswersOptions) {
     const write = (outcome?: Outcome): boolean => {
       if (!options.mindExists(mindId)) return false;
       try {
-        return content.edit(mindId, (blocks) => {
-          const found = findBlock(blocks, ANSWER_BLOCK, answerId);
+        return content.editDoc(mindId, (doc) => {
+          const blocks = chatId === null ? blocksIn(doc, null) : chatBlocks(doc, chatId);
+          const found = blocks && findBlock(blocks, ANSWER_BLOCK, answerId);
           if (!found) return false;
           const { element } = found;
           syncContent(element, blocksOf(outcome !== undefined));
@@ -933,15 +955,17 @@ export function createAnswers(options: AnswersOptions) {
     mindIdInput: unknown,
     questionIdInput: unknown,
     discardEdits: unknown,
+    chatIdInput: unknown,
   ): Promise<AskResult> {
     const mindId = options.requireMind(mindIdInput);
     const questionId = parseId(questionIdInput, "A Question id");
+    const chatId = parseChatId(chatIdInput);
     if (discardEdits !== undefined && typeof discardEdits !== "boolean") {
       throw new InvalidInputError("discardEdits must be true or false.");
     }
 
-    const { picked, forcedSkill } = content.read(mindId, (blocks) => {
-      const found = findBlock(blocks, QUESTION_BLOCK, questionId);
+    const { picked, forcedSkill } = content.readDoc(mindId, (doc) => {
+      const found = findBlock(blocksIn(doc, chatId), QUESTION_BLOCK, questionId);
       if (!found) throw new NotFoundError("That Question isn't in this Mind.");
       if (plainText(found.element).trim() === "") {
         throw new InvalidInputError("Write the Question before asking it.");
@@ -960,18 +984,23 @@ export function createAnswers(options: AnswersOptions) {
     const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
 
     // From here on nothing awaits, so the Mind can't change underneath.
-    const current = content.read(mindId, (blocks) => answerFor(blocks, questionId));
+    const current = content.readDoc(mindId, (doc) => answerFor(blocksIn(doc, chatId), questionId));
     const currentId = current && textAttribute(current, BLOCK_ID_ATTRIBUTE);
     if (currentId) active.get(currentId)?.finish({ status: "stopped" });
 
     /** What the Answer is written from: its Question context and Search scope, as they are now. */
     type Asked = { context: QuestionContext; documentIds: string[] | null; emptyScope: boolean };
-    const written = content.edit(
+    const written = content.editDoc(
       mindId,
-      (blocks): { edited: string } | ({ answerId: string } & Asked) => {
+      (doc): { edited: string } | ({ answerId: string } & Asked) => {
+        const blocks = blocksIn(doc, chatId);
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError("That Question isn't in this Mind.");
-        const context = buildQuestionContext(blocks, question.index);
+        // In a chat, the Mind's note comes first, as everything above the thread.
+        const context =
+          chatId === null
+            ? buildQuestionContext(blocks, question.index)
+            : buildChatQuestionContext(blocksIn(doc, null), blocks, question.index);
         const asked = askedWith(context, question.element);
         const attributes: Partial<AnswerAttributes> = {
           questionId,
@@ -1004,29 +1033,33 @@ export function createAnswers(options: AnswersOptions) {
         });
         const at = question.index + 1;
         blocks.insert(at, [element]);
-        // Somewhere to go on writing, or to ask the next Question.
-        if (at + 1 === blocks.length) blocks.insert(at + 1, [createElement({ type: "paragraph" })]);
+        // Somewhere to go on writing, or to ask the next Question; a chat has no Notes.
+        if (chatId === null && at + 1 === blocks.length) {
+          blocks.insert(at + 1, [createElement({ type: "paragraph" })]);
+        }
         return { answerId: id, ...asked };
       },
     );
     if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
     const consentNeeded = readiness.consent === "needed";
-    start({ mindId, questionId, model, ...written, forcedSkill, consentNeeded });
+    start({ mindId, chatId, questionId, model, ...written, forcedSkill, consentNeeded });
     return { asked: true, answerId: written.answerId };
   }
 
   return {
     ask(input: unknown): Promise<AskResult> {
       if (!isRecord(input)) throw new InvalidInputError("askQuestion expects an object.");
-      return ask(input.mindId, input.questionId, input.discardEdits);
+      return ask(input.mindId, input.questionId, input.discardEdits, input.chatId);
     },
 
     regenerate(input: unknown): Promise<AskResult> {
       if (!isRecord(input)) throw new InvalidInputError("regenerateAnswer expects an object.");
       const mindId = options.requireMind(input.mindId);
       const answerId = parseId(input.answerId, "An Answer id");
-      const questionId = content.read(mindId, (blocks) => {
+      const chatId = parseChatId(input.chatId);
+      const questionId = content.readDoc(mindId, (doc) => {
+        const blocks = blocksIn(doc, chatId);
         const found = findBlock(blocks, ANSWER_BLOCK, answerId);
         if (!found) throw new NotFoundError("That Answer isn't in this Mind.");
         const id = textAttribute(found.element, "questionId");
@@ -1035,7 +1068,7 @@ export function createAnswers(options: AnswersOptions) {
         }
         return id;
       });
-      return ask(mindId, questionId, input.discardEdits);
+      return ask(mindId, questionId, input.discardEdits, chatId);
     },
 
     stop(input: unknown): void {

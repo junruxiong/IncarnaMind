@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { translate } from "../shared/i18n";
+import { citingFragments } from "../shared/mindChats";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
@@ -14,14 +15,15 @@ import {
   type CitedVersions,
   isCited,
 } from "./answers/citedVersions";
-import type {
-  ChatModelChoice,
-  CoreApi,
-  CoreEventSource,
-  EmbeddingSettings,
-  Mind,
-  ProviderError,
-  Unsubscribe,
+import {
+  type ChatModelChoice,
+  type CoreApi,
+  type CoreEventSource,
+  DEFAULT_MIND_KIND,
+  type EmbeddingSettings,
+  type Mind,
+  type ProviderError,
+  type Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
@@ -50,6 +52,7 @@ import { documentPageImages } from "./library/pageImages";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
+import { createNoteAdding } from "./noteAdding";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
@@ -251,12 +254,14 @@ export function createCore(adapters: CoreAdapters): Core {
         prepareRerank();
         documentReady(documentId);
       },
-      // Citations live in Minds, anywhere: in Answers, or copied into Notes.
+      // Citations live in Minds, anywhere: in Answers, copied into Notes, or in chats.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
         const cited: CitedUnits[] = [];
         for (const mind of minds.list()) {
-          content.peek(mind.id, (fragment) => addCitedUnits(fragment, wanted, cited));
+          content.peekDoc(mind.id, (doc) => {
+            for (const fragment of citingFragments(doc)) addCitedUnits(fragment, wanted, cited);
+          });
         }
         return cited;
       },
@@ -283,7 +288,9 @@ export function createCore(adapters: CoreAdapters): Core {
     if (documents.hasOldVersions() || documents.keptCitationTexts().length > 0) {
       const cited: CitedVersions = new Map();
       for (const mind of minds.list()) {
-        content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
+        content.peekDoc(mind.id, (doc) => {
+          for (const fragment of citingFragments(doc)) addCitedVersions(fragment, cited);
+        });
       }
       const quoted = (documentId: string, contentHash: string) =>
         isCited(cited, documentId, contentHash);
@@ -573,6 +580,19 @@ export function createCore(adapters: CoreAdapters): Core {
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => background.setAnswering(writing),
     reportError: (error) => console.error(error),
+  });
+
+  // "Add to note" into a Mind that isn't open (#201): only a Mind's note takes it, not a chat's.
+  const noteAdding = createNoteAdding({
+    content,
+    requireNote: (mindId) => {
+      const mind = writableMind(mindId);
+      if (mind.kind !== DEFAULT_MIND_KIND) {
+        throw new InvalidInputError("Answers are added to a Mind's note, not to a chat.");
+      }
+      return mind.id;
+    },
+    recheck: (input) => recheckCitation(documents, input),
   });
 
   const mindExports = createExports({
@@ -1054,6 +1074,8 @@ export function createCore(adapters: CoreAdapters): Core {
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
     stopAnswer: async (input) => answers.stop(input),
+    addToNote: (input) => noteAdding.add(input),
+    undoAddToNote: async (input) => noteAdding.undo(input),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),

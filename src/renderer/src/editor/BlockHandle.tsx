@@ -5,10 +5,17 @@ import { NodeRangeSelection } from "@tiptap/extension-node-range";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
-import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
+import {
+  type BlockOrigin,
+  INCLUDE_IN_CONTEXT_ATTRIBUTE,
+  NOTE_BLOCK_TYPES,
+  QUESTION_BLOCK,
+} from "../../../core/api";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { useT } from "../i18n";
+import { useAppStore } from "../store";
 import { findBlock, questionWithAnswer } from "./blockCommands";
+import { originOf } from "./blockOrigins";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 import { Popover } from "./Popover";
 
@@ -65,6 +72,22 @@ function handleAnchor(
   };
 }
 
+/** A speech bubble: the chat a Note came from. */
+const ChatIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.75}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    className="size-3.5"
+  >
+    <path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+  </svg>
+);
+
 const DELETE_SHORTCUT_LABEL = isMacOS() ? "⌘⇧⌫" : "Ctrl+Shift+Backspace";
 
 const isNote = (node: ProseMirrorNode) =>
@@ -76,6 +99,8 @@ interface MenuTarget {
   pos: number;
   /** Null for Blocks that aren't Notes (Questions, Answers), which have no context flag. */
   included: boolean | null;
+  /** Where it came from, when it was added from a chat (#201): the menu opens the chat. */
+  origin: BlockOrigin | null;
 }
 
 /**
@@ -145,6 +170,7 @@ export function BlockHandle({ editor }: { editor: Editor }) {
       included: isNote(block.node)
         ? block.node.attrs[INCLUDE_IN_CONTEXT_ATTRIBUTE] !== false
         : null,
+      origin: originOf(editor.state, block.node.attrs[BLOCK_ID_ATTRIBUTE]),
     });
   };
 
@@ -209,6 +235,12 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         <BlockMenu
           anchor={grip.current}
           included={menuFor.included}
+          origin={menuFor.origin}
+          onOpenChat={() => {
+            const origin = menuFor.origin;
+            closeMenu(false);
+            if (origin) useAppStore.getState().openChat(origin.from);
+          }}
           onDelete={deleteBlock}
           onToggleContext={toggleContext}
           onClose={closeMenu}
@@ -221,6 +253,8 @@ export function BlockHandle({ editor }: { editor: Editor }) {
 function BlockMenu({
   anchor,
   included,
+  origin,
+  onOpenChat,
   onDelete,
   onToggleContext,
   onClose,
@@ -228,6 +262,9 @@ function BlockMenu({
   anchor: Element;
   /** The Note's context flag, or null when the Block isn't a Note. */
   included: boolean | null;
+  /** Where it was added from, if from a chat. */
+  origin: BlockOrigin | null;
+  onOpenChat(): void;
   onDelete(): void;
   onToggleContext(): void;
   onClose(refocus: boolean): void;
@@ -251,9 +288,25 @@ function BlockMenu({
       }}
       className="editor-menu w-[240px]"
     >
-      {included !== null && (
+      {origin && (
         <button
           ref={first}
+          type="button"
+          role="menuitem"
+          data-testid="block-menu-open-chat"
+          title={origin.label}
+          onClick={onOpenChat}
+          className="editor-menu-item"
+        >
+          <span className="editor-menu-icon">
+            <ChatIcon />
+          </span>
+          <span className="flex-1">{t("thread.link.open")}</span>
+        </button>
+      )}
+      {included !== null && (
+        <button
+          ref={origin ? undefined : first}
           type="button"
           role="menuitemcheckbox"
           aria-checked={included}
@@ -266,7 +319,7 @@ function BlockMenu({
         </button>
       )}
       <button
-        ref={included === null ? first : undefined}
+        ref={included === null && !origin ? first : undefined}
         type="button"
         role="menuitem"
         data-testid="block-menu-delete"

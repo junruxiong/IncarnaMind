@@ -1,8 +1,14 @@
 import "katex/dist/katex.min.css";
 import Collaboration from "@tiptap/extension-collaboration";
 import { Focus, Placeholder } from "@tiptap/extensions";
-import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
-import { useContext, useEffect, useRef, useState } from "react";
+import {
+  type Editor,
+  EditorContent,
+  ReactNodeViewRenderer,
+  useEditor,
+  useEditorState,
+} from "@tiptap/react";
+import { type RefObject, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
@@ -12,6 +18,7 @@ import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
+import { BlockOrigins } from "../editor/blockOrigins";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
@@ -28,10 +35,12 @@ import { QuestionFold } from "../editor/questionFold";
 import { ScopePicker } from "../editor/ScopePicker";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
+import { ThreadPanel, useChats } from "../editor/Thread";
 import { SmartTypography } from "../editor/typography";
 import { useT } from "../i18n";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
+import { useThreads } from "../threads";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
 import { MindNotice } from "./MindNotice";
 
@@ -230,6 +239,14 @@ function MindEditorView({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),
         QuestionFold.configure({ mindId }),
+        // Notes added from a chat: their link back, and a wash just after (#201).
+        BlockOrigins.configure({
+          doc,
+          describe: (origin) =>
+            translate(useAppStore.getState().settings?.language ?? "en", "thread.link.title", {
+              chat: origin.label,
+            }),
+        }),
       ],
     },
     [doc, readOnly],
@@ -290,12 +307,12 @@ function MindEditorView({
       {dock &&
         !readOnly &&
         createPortal(
-          <Composer
-            ref={composer}
-            editor={editor}
-            doc={doc}
+          <AskArea
             mindId={mindId}
+            doc={doc}
+            editor={editor}
             cursorInMind={cursorInMind}
+            composer={composer}
           />,
           dock,
         )}
@@ -311,5 +328,47 @@ function MindEditorView({
         />
       )}
     </MindIdContext.Provider>
+  );
+}
+
+/**
+ * What the dock at the foot of the Mind holds (#201): the thread, joined to
+ * the top of the composer once something has been asked, and the composer.
+ */
+function AskArea({
+  mindId,
+  doc,
+  editor,
+  cursorInMind,
+  composer,
+}: {
+  mindId: string;
+  doc: Y.Doc;
+  editor: Editor;
+  cursorInMind: RefObject<boolean>;
+  composer: RefObject<ComposerHandle | null>;
+}) {
+  const t = useT();
+  const chats = useChats(doc);
+  const view = useThreads((state) => state.views[mindId]);
+  const up = view?.open === true && (view.fresh || chats.length > 0);
+  return (
+    <>
+      <ThreadPanel
+        mindId={mindId}
+        doc={doc}
+        note={editor}
+        cursorInMind={cursorInMind}
+        focusComposer={() => useComposer.getState().requestFocus()}
+      />
+      <Composer
+        ref={composer}
+        editor={editor}
+        doc={doc}
+        mindId={mindId}
+        cursorInMind={cursorInMind}
+        placeholder={up ? t("thread.followUp") : undefined}
+      />
+    </>
   );
 }
