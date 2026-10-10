@@ -10,6 +10,7 @@ import {
   questionContent,
   questionPlace,
   takeBackQuestion,
+  whenAnswerShown,
 } from "../../src/renderer/src/editor/composerAsk";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 
@@ -243,5 +244,14 @@ describe("after asking, the Mind's cursor", () => {
     expect(blocks(end)).toHaveLength(3);
     expect(end.state.selection.$from.index(0)).toBe(2);
     expect(cursorBelowAnswer(end, "no-such-answer")).toBe(false);
+  });
+
+  test("waits for the Answer when its change reaches the editor after the reply to the ask", async () => {
+    const editor = editorWith([question("q1", "Why?"), paragraph("")]);
+    const shown = whenAnswerShown(editor, "answer-of-q1", 2_000);
+    editor.commands.insertContentAt(posOf(editor, 1), answer("q1", "Because."));
+    await expect(shown).resolves.toBe(true);
+    await expect(whenAnswerShown(editor, "answer-of-q1")).resolves.toBe(true);
+    await expect(whenAnswerShown(editor, "never-written", 50)).resolves.toBe(false);
   });
 });
