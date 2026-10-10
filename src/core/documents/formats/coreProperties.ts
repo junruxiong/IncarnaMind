@@ -19,15 +19,6 @@ const DEFAULT_PART = "docProps/core.xml";
 /** The core properties part is a few hundred bytes: more than this isn't one. */
 const MAX_BYTES = 1024 * 1024;
 
-/**
- * The package's creation date (dcterms:created) as written, or null if it
- * has none. Throws `ExtractionError` for a file that isn't a package, or
- * whose core properties can't be read.
- */
-export async function officeCreated(bytes: Uint8Array): Promise<string | null> {
-  return (await officeProperties(bytes)).created;
-}
-
 /** The package's creation date (dcterms:created) and title (dc:title) as written, each null if absent. */
 export async function officeProperties(
   bytes: Uint8Array,

@@ -250,10 +250,3 @@ export async function askJevOrganization(
   }
   return { group: result.choice, tags: probabilities(answer, Object.keys(input.tags ?? {})) };
 }
-
-/** One primary group, retained for standalone folder benchmarks. */
-export async function askJevChoice(
-  input: Omit<AskJevInput, "questions"> & { criteria: Record<string, string> },
-): Promise<string> {
-  return (await askJevOrganization(input)).group;
-}
