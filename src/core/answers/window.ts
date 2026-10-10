@@ -1,9 +1,11 @@
 /**
- * Keeping an Answer's requests within a local model's context window (see
- * `ContextWindow`). Ollama is told the window (`num_ctx`) and to refuse a
- * longer request rather than cut it (see ../providers/ollamaChat), so nothing
- * is lost without notice: the engine makes each request fit, by IncarnaMind's
- * own rules, giving up first what matters least:
+ * Keeping an Answer's requests within a model's context window (see
+ * `ContextWindow`): a local model's, or a cloud model's own when the catalog
+ * gives it (see ../providers/capabilities). Ollama is told the window
+ * (`num_ctx`) and to refuse a longer request rather than cut it (see
+ * ../providers/ollamaChat), so nothing is lost without notice: the engine
+ * makes each request fit, by IncarnaMind's own rules, giving up first what
+ * matters least:
  *
  * 1. The Question context loses its oldest content first, as
  *    `buildQuestionContext` does (see `fitQuestionContext`), down to the

@@ -57,6 +57,8 @@ describe("Ollama", () => {
     expect(provider).toEqual({
       id: expect.any(String),
       kind: "ollama",
+      catalogId: "ollama",
+      endpoint: null,
       baseUrl: ollama.baseUrl,
       hasApiKey: false,
       service: null,
