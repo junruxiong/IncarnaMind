@@ -7,7 +7,7 @@
  */
 import type { ChildProcess } from "node:child_process";
 import type { AnswerEngine } from "./answers/engine";
-import type { SandboxLevel, SecretProtection } from "./api";
+import type { ExternalService, SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { WatchFolder } from "./documents/watcher";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
@@ -16,6 +16,7 @@ import type { ChatModelFactory } from "./providers/models";
 import type { OllamaModels } from "./providers/ollamaModels";
 import type { RerankingModelFactory } from "./providers/rerank";
 import type { RunEngine } from "./runs/engine";
+import type { UsageEventName, UsageValue } from "./usageEvents";
 
 export interface Paths {
   /**
@@ -336,6 +337,38 @@ export interface CrashReporter {
   setEnabled(enabled: boolean): void;
 }
 
+/** One usage event, checked against the catalog (./usageEvents), ready to send. */
+export interface UsageEventMessage {
+  /** The install's random ID, which the User can reset. */
+  installId: string;
+  event: UsageEventName;
+  /** The event's fields, then the common fields (`COMMON_FIELDS`). Nothing else. */
+  properties: Readonly<Record<string, UsageValue>>;
+}
+
+/**
+ * Sends usage data (#187): anonymous product events, never the User's files,
+ * Questions or Answers. The desktop app passes one only when it was built with
+ * an analytics project (PostHog); the core turns it on only while the User
+ * agrees, and off the moment they don't.
+ */
+export interface UsageDataSender {
+  /** Where events go, for the Privacy page. */
+  readonly service: ExternalService;
+  /**
+   * A test build (the alpha): usage data is on until the User turns it off,
+   * as testers agree to when they join, and a first-run notice says so.
+   * Otherwise it is off until the User agrees.
+   */
+  readonly testerBuild: boolean;
+  /** This build's version, sent with every event. */
+  readonly appVersion: string;
+  /** Starts sending, or stops at once and drops everything queued. Must not throw. */
+  setEnabled(enabled: boolean): void;
+  /** Queues an event. Called only while sending is on. Must not throw, offline or not. */
+  capture(message: UsageEventMessage): void;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -437,6 +470,12 @@ export interface CoreAdapters {
    * when this copy can't send any: Settings then doesn't offer them.
    */
   crashReporter?: CrashReporter;
+  /**
+   * Sends usage data while the User agrees (see `UsageDataSender`). Absent
+   * when this copy can't send any: nothing is sent or asked, and Settings
+   * says IncarnaMind collects no usage data.
+   */
+  usageData?: UsageDataSender;
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

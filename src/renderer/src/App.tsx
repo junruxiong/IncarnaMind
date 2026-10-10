@@ -9,6 +9,7 @@ import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TagsDialog } from "./components/TagsDialog";
+import { UsageDataDialog } from "./components/UsageDataDialog";
 import { buttonStyle } from "./components/ui";
 import { ViewerPanel } from "./components/ViewerPanel";
 import { files } from "./core";
@@ -153,6 +154,7 @@ function Workspace() {
       <SettingsDialog />
       <TagsDialog />
       <ChatSetupDialog />
+      <UsageDataDialog />
       {/* Opens after the dialog that triggered the request, so it shows on top of it. */}
       <ConsentDialog />
       <ActionError />

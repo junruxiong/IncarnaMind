@@ -37,3 +37,13 @@ Key routing rules:
 Read DESIGN.md before visual or UI work: it defines the fonts, colors, spacing, and
 aesthetic direction. Ask the user before departing from it. When reviewing or QA-ing
 UI, flag code that doesn't match DESIGN.md.
+
+## Interaction rules
+Read `docs/agents/interaction.md` before building or changing any UI. The bar: easy to
+use and easy to pick up, not fewer features. Edit in place, drag with a non-drag
+alternative, never replace the Mind the User is in, Undo instead of confirmations,
+one right-click menu order, one selection model, keyboard and ⌘K for everything,
+feedback within 100 ms, layouts that hold at every width in English and Chinese. A UI
+pull request ticks the template's interaction checklist, shows before and after
+screenshots, and sets the built screen beside the design board it implements, explaining
+every difference. When briefing another agent on UI work, pass these rules on.

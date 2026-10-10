@@ -475,7 +475,7 @@ export const zhCN = {
   "embeddingProviders.confirm.turnOff": "关闭",
   "embeddingProviders.localOnly.label": "所有内容都留在这台电脑上",
   "embeddingProviders.localOnly.body":
-    "开启嵌入时只使用内置模型或 Ollama，搜索结果也不会发送去重新排序。开启后，云端嵌入模型会切换回内置模型，并重新处理你的文档。",
+    "开启嵌入时只使用内置模型或 Ollama，搜索结果不会发送去重新排序，也不发送使用数据。开启后，云端嵌入模型会切换回内置模型，并重新处理你的文档。",
   "embeddingProviders.localOnly.cloudChat":
     "你的对话模型仍会把问题发送到 {service}。如果也想让问题留在本机，请在“对话模型”中选择本地模型。",
   "embeddingProviders.rebuild.title": "正在为搜索嵌入文档：{done} / {total} 个",
@@ -837,6 +837,35 @@ export const zhCN = {
   "privacy.crashReports.toggle": "发送崩溃报告",
   "privacy.crashReports.body":
     "除非你开启，否则不会发送。IncarnaMind 崩溃或出错时，会通过 Sentry 向开发者发送一份报告：错误内容、出错的代码位置、应用版本和你的操作系统。文件路径、文档文本、Mind、问题和回答都会先被移除，也不会保存 IP 地址。",
+  "privacy.intro.usageData":
+    "只有在你同意后，IncarnaMind 才会收集使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
+  "privacy.traffic.usage-data": "使用数据",
+  "privacy.traffic.usage-data.description":
+    "匿名事件，只在开启时发送：用了哪些功能、在哪里卡住了，并带上这次安装的随机 ID。绝不包括你的文档或文档名、问题、回答，以及你输入的任何内容。",
+  "privacy.traffic.usage-data.toggle": "发送匿名使用数据",
+  "privacy.usageData.tester": "在这个测试版中，除非你关闭，否则会发送，这是你加入内测时同意的。",
+  "privacy.usageData.localMode": "“所有内容都留在这台电脑上”开启时保持关闭，见“设置”的“搜索”。",
+  "privacy.usageData.details": "所有事件和字段",
+  "privacy.usageData.resetId": "重置安装 ID",
+  "privacy.usageData.resetDone": "已重置：之后的事件会带上新的 ID。",
+
+  "usageData.dialog.title": "帮助改进 IncarnaMind？",
+  "usageData.dialog.body":
+    "IncarnaMind 可以发送匿名使用数据，让我们看到哪些功能有人用、大家在哪里卡住。你不同意就不会发送任何内容。",
+  "usageData.dialog.tester.title": "这个测试版会发送使用数据",
+  "usageData.dialog.tester.body":
+    "按照你加入内测时的约定，这个版本会发送匿名使用数据，让我们看到哪些功能有人用、大家在哪里卡住。你可以在这里关闭。",
+  "usageData.dialog.example": "例如：",
+  "usageData.example.question": "用 Anthropic 的云端模型提了一个问题",
+  "usageData.example.answer": "一个回答用了 6 秒，有 3 处引用，每处都找到了引文",
+  "usageData.example.documents": "添加了 2 个文档：一个 PDF 和一个 Word 文件",
+  "usageData.dialog.never":
+    "绝不包括你的文档或文档名、文件夹或标签名、问题、回答、引文、密钥或文件路径。事件以这次安装的随机 ID 发送到 PostHog，没有账号、邮箱或 IP 地址。",
+  "usageData.dialog.change": "你可以随时在“设置”的“隐私”中更改。",
+  "usageData.dialog.details": "查看所有事件",
+  "usageData.dialog.decline": "不发送",
+  "usageData.dialog.accept": "发送使用数据",
+  "usageData.dialog.done": "完成",
 
   "question.label": "问题：",
   "question.placeholder": "提一个问题…（输入 @ 选择搜索范围）",

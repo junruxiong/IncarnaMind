@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit reviews every pull request into main. Settings not listed keep CodeRabbit's defaults.
+language: en-US
+
+reviews:
+  profile: chill
+  # The pull request description stays as its author wrote it; the summary goes in CodeRabbit's comment.
+  high_level_summary_in_walkthrough: true
+  in_progress_fortune: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    # Third-party documents the evaluation reads, not code.
+    - "!eval/**/fixtures/**"
+  path_instructions:
+    - path: "**/*.{ts,tsx}"
+      instructions: |
+        Use the words defined in CONTEXT.md (a Passage, not a chunk; a Connector, not a plugin).
+        Flag a change that goes against an ADR in docs/adr/ when the pull request doesn't say so.
+    - path: "src/core/**"
+      instructions: |
+        The core must not depend on Electron (ADR-0004, ADR-0006): it takes such a capability as an adapter.
+    - path: "src/**/*.tsx"
+      instructions: |
+        The interface is in English and Simplified Chinese. A new user-facing string goes into both
+        src/shared/i18n/en.ts and src/shared/i18n/zh-CN.ts.
+    - path: "tests/**"
+      instructions: |
+        Tests go through the core's public interface, as the UI uses it, and assert what a User would see.
+        The core tests need no API keys and no network.
+
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - CONTEXT.md
+      - CONTRIBUTING.md
+      - docs/development.md
+      - docs/adr/*.md
+
+# Pull requests only: no plans or comments on issues.
+issue_enrichment:
+  planning:
+    auto_planning:
+      enabled: false
