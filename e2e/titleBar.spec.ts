@@ -213,11 +213,15 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   await slideAndClick(window, close);
   await expect(window.getByTestId("viewer")).toHaveCount(0);
 
-  // So does the Library's header, opened in the Mind's place.
+  // The Library opens as a tab in the same band (#119): past the tabs the band still drags,
+  // and the Library's tab and its ✕ don't.
   await slideAndClick(window, window.getByTestId("open-library"));
-  const library = window.getByTestId("library").locator("header").first();
-  expect(await regionAt(window, (await boxOf(library)).x + 200, 22)).toBe("drag");
-  expect(await regionOf(window, library.getByRole("button"))).toBe("no-drag");
+  const libraryTab = window.getByTestId("library-tab");
+  await expect(libraryTab).toHaveAttribute("aria-selected", "true");
+  const plusNow = await boxOf(newTab);
+  expect(await regionAt(window, plusNow.x + plusNow.width + 40, 22)).toBe("drag");
+  expect(await regionOf(window, libraryTab.getByTestId("library-tab-title"))).toBe("no-drag");
+  expect(await regionOf(window, libraryTab.getByTestId("library-tab-close"))).toBe("no-drag");
   await app.close();
 });
 
