@@ -10,12 +10,7 @@ import type { EmbeddingModelStatus } from "../api";
 import { createDownloadableModel } from "../embedding/downloadable";
 import type { RerankingModelDefinition } from "./model";
 
-export {
-  BUILT_IN_RERANKING_MODEL,
-  downloadSize,
-  RERANKING_MODEL_CANDIDATES,
-  type RerankingModelDefinition,
-} from "./model";
+export { BUILT_IN_RERANKING_MODEL, type RerankingModelDefinition } from "./model";
 
 /** What the model reads of a hit: its Document's name and its text. */
 export interface Rerankable {

@@ -30,7 +30,7 @@ A run takes about two minutes on an Apple M2 Max, most of it spent embedding abo
 
 ### Reranking candidates
 
-The built-in reranking model, on by default in the app (Settings → Reranking), was chosen from three candidates, all multilingual cross-encoders under Apache-2.0, as int8 ONNX (`src/core/reranking/model.ts`). The built-in one always runs and gates; name others to compare with it, or all of them:
+The built-in reranking model, on by default in the app (Settings → Reranking), was chosen from three candidates, all multilingual cross-encoders under Apache-2.0, as int8 ONNX (the built-in one in `src/core/reranking/model.ts`, the other two in `eval/lib/rerankingModels.ts`, because the app doesn't ship them). The built-in one always runs and gates; name others to compare with it, or all of them:
 
 ```sh
 INCARNAMIND_EVAL_RERANK=all npm run eval
