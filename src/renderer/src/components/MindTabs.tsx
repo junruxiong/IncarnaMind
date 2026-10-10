@@ -16,6 +16,7 @@ import {
   MindLineIcon,
   PlusLineIcon,
 } from "./lineIcons";
+import { SidebarToggle } from "./SidebarToggle";
 
 /*
  * The Mind tabs (DESIGN.md, Components: Mind tabs). This file is their
@@ -113,6 +114,7 @@ export function MindTabs({ onExport }: { onExport(): void }) {
 
   return (
     <header data-testid="mind-header" className="mind-tabs title-bar">
+      <SidebarToggle place="band" />
       <div
         ref={list}
         role="tablist"

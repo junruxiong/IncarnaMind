@@ -17,7 +17,12 @@ interface ResizeRodProps {
   belowBand?: boolean;
   /** The 8px gap between the sidebar and the card: no rule, only a grip while pointed at. */
   gap?: boolean;
+  /** Dragging this far past `min` and letting go calls this (the pane folds away) instead of resizing. */
+  onCollapse?(): void;
 }
+
+/** How far past its minimum a drag must go to fold the pane away. */
+const COLLAPSE_PAST_MIN = 40;
 
 /**
  * The divider between two panes: a 1px rule that shows a three-dot grip only
@@ -35,25 +40,37 @@ export function ResizeRod({
   onCommit,
   belowBand = false,
   gap = false,
+  onCollapse,
 }: ResizeRodProps) {
-  const drag = useRef<{ startX: number; startWidth: number; latest: number } | null>(null);
+  const drag = useRef<{
+    startX: number;
+    startWidth: number;
+    latest: number;
+    collapse: boolean;
+  } | null>(null);
   const clamp = (value: number) => Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
 
   const startDrag = (event: PointerEvent<HTMLHRElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { startX: event.clientX, startWidth: width, latest: width };
+    drag.current = { startX: event.clientX, startWidth: width, latest: width, collapse: false };
   };
   const moveDrag = (event: PointerEvent<HTMLHRElement>) => {
     const current = drag.current;
     if (!current) return;
-    current.latest = clamp(current.startWidth + direction * (event.clientX - current.startX));
+    const raw = current.startWidth + direction * (event.clientX - current.startX);
+    current.collapse = onCollapse !== undefined && raw < min - COLLAPSE_PAST_MIN;
+    current.latest = clamp(raw);
     onPreview(current.latest);
   };
   const endDrag = () => {
     const current = drag.current;
     drag.current = null;
-    if (current && current.latest !== current.startWidth) onCommit(current.latest);
+    if (current?.collapse) {
+      // The width it had is kept, for when it comes back.
+      onPreview(current.startWidth);
+      onCollapse?.();
+    } else if (current && current.latest !== current.startWidth) onCommit(current.latest);
   };
   const cancelDrag = () => {
     const current = drag.current;
