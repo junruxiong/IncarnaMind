@@ -15,6 +15,8 @@ import {
   HYBRID_RERANK_MODE,
   RANK_DEPTH,
   type RetrievalMode,
+  rerankedLabel,
+  rerankedSearchOf,
   TOP_K,
 } from "../../lib/retrieval";
 import type { HardCitations } from "./citations";
@@ -167,7 +169,7 @@ function retrievalSection(report: HardReport): string[] {
   const lines = [
     "## Retrieval",
     "",
-    `A Question is a hit when every Passage its answer needs is in the top ${retrieval.topK}, each meeting the gating set's hit rule (the expected Document, covering the expected pages, holding the expected quote). Unanswerable Questions have nothing to find and are scored by the Citation part. A cross-lingual Question is also searched with its translation into its Documents' language, written by hand, as an Answer is told to search again: a Passage either search finds counts. Embeddings are on for this run, so the dense modes can be compared; ${labelOf(report, GATING_MODE)} is what the search Tool does by default.`,
+    `A Question is a hit when every Passage its answer needs is in the top ${retrieval.topK}, each meeting the gating set's hit rule (the expected Document, covering the expected pages, holding the expected quote). Unanswerable Questions have nothing to find and are scored by the Citation part. A cross-lingual Question is also searched with its translation into its Documents' language, written by hand, as an Answer is told to search again: a Passage either search finds counts. Embeddings are on for this run, so the dense modes can be compared: ${labelOf(report, GATING_MODE)} is what the search Tool does by default, with embeddings off, and ${labelOf(report, HYBRID_RERANK_MODE)} what it does with them on, the column to compare it with.`,
     "",
     "### By difficulty",
     "",
@@ -471,9 +473,9 @@ export async function writeHardReports(report: HardReport, resultsDir: string): 
   return dir;
 }
 
-/** The default modes, labelled as people read them. */
-export const modeLabels = (keywordRerank: string, hybridRerank: string) =>
-  HARD_MODES.map((mode) => ({
-    mode,
-    label: mode === GATING_MODE ? keywordRerank : mode === HYBRID_RERANK_MODE ? hybridRerank : mode,
-  }));
+/** The hard tier's modes, labelled as people read them: "keyword top 60 + <reranking model>". */
+export const modeLabels = (rerankingModel: string) =>
+  HARD_MODES.map((mode) => {
+    const search = rerankedSearchOf(mode);
+    return { mode, label: search ? rerankedLabel(search, rerankingModel) : mode };
+  });

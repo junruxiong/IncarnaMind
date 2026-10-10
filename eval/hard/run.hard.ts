@@ -28,13 +28,7 @@ import { createWorkerEmbedder } from "../lib/embedder";
 import { openLibrary } from "../lib/library";
 import { createLog } from "../lib/log";
 import { createWorkerCrossEncoder, openReranker, type RerankerInfo } from "../lib/rerank";
-import {
-  KEYWORD_RERANK_DEPTH,
-  RERANKED_SEARCHES,
-  rerankedLabel,
-  rerankMode,
-  TOP_K,
-} from "../lib/retrieval";
+import { KEYWORD_RERANK_DEPTH, rerankedLabel, rerankMode, TOP_K } from "../lib/retrieval";
 import { type HardCitations, runHardCitations } from "./lib/citations";
 import { fetchLibrary } from "./lib/fetch";
 import { timeKeywordSearch } from "./lib/keywordTiming";
@@ -46,7 +40,7 @@ import {
   textProblems,
 } from "./lib/questions";
 import { type HardReport, hardSummary, modeLabels, writeHardReports } from "./lib/report";
-import { rerankAll, searchAll, summariseHard } from "./lib/scoring";
+import { HARD_RERANKED_SEARCHES, rerankAll, searchAll, summariseHard } from "./lib/scoring";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -224,7 +218,7 @@ test("the hard tier", async () => {
 
       const results = await searchAll(library.core, scored, ids);
       const rerankers: RerankerInfo[] = [];
-      for (const search of RERANKED_SEARCHES) {
+      for (const search of HARD_RERANKED_SEARCHES) {
         const mode = rerankMode(BUILT_IN_RERANKING_MODEL, search);
         log(`Reranking with ${rerankedLabel(search, BUILT_IN_RERANKING_MODEL.name)}`);
         const reranker = await openReranker(BUILT_IN_RERANKING_MODEL, config.cacheDir, log, mode);
@@ -341,10 +335,7 @@ test("the hard tier", async () => {
         },
         retrieval: {
           topK: TOP_K,
-          modes: modeLabels(
-            rerankedLabel("keyword", BUILT_IN_RERANKING_MODEL.name),
-            rerankedLabel("hybrid", BUILT_IN_RERANKING_MODEL.name),
-          ),
+          modes: modeLabels(BUILT_IN_RERANKING_MODEL.name),
           results,
           summary: summariseHard(results),
           rerankers,
