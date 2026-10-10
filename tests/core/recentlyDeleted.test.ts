@@ -122,7 +122,7 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
         name: "Tides",
         deletedAt: "2026-10-06T09:00:01.000Z",
         documentKind: "markdown",
-        folderId: ocean.id,
+        groupId: ocean.id,
         linkedFolderId: null,
       },
     ]);
@@ -403,6 +403,33 @@ describe("Moving back and untagging", { timeout: 30_000 }, () => {
     expect((await documentOf(core, removed.id))?.tags.map((link) => link.tagId)).toEqual([
       findings.id,
     ]);
+  });
+
+  test("a merge leaves deleted Documents as they were, so it can be undone and they restored", async () => {
+    const { core, clock } = await start();
+    const kept = await addText(core, "Kept.txt", "Notes kept for later.");
+    const removed = await addText(core, "Removed.txt", "Notes about removal, kept.");
+    const carried = await addText(core, "Carried.txt", "Notes carried away.");
+    const report = await tagNamed(core, "Report");
+    const findings = await core.createTag({ name: "Findings" });
+    await core.addTagToDocuments([kept.id, removed.id, carried.id], report.id);
+    await core.removeDocumentTag(removed.id, report.id);
+    const before = (await core.listDocuments()).map((each) => [each.id, each.tags]);
+    clock.advance(1000);
+    await core.deleteDocument(removed.id);
+    await core.deleteDocument(carried.id);
+
+    clock.advance(1000);
+    const merge = await core.mergeTags(report.id, findings.id);
+    expect(merge.merged.links?.map((link) => link.documentId)).toEqual([kept.id]);
+    clock.advance(1000);
+    await core.restore([
+      merge.merged,
+      { kind: "document", id: removed.id },
+      { kind: "document", id: carried.id },
+    ]);
+
+    expect((await core.listDocuments()).map((each) => [each.id, each.tags])).toEqual(before);
   });
 });
 

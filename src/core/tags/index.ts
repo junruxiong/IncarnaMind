@@ -357,11 +357,14 @@ export function createTags(db: Database, now: () => string) {
         const from = get(fromInput);
         const into = get(intoInput);
         if (from.id === into.id) throw new InvalidInputError("A Tag can't be merged into itself.");
+        // A deleted Document's links are left as they were, for restoring it.
         const rows = db.all<LinkRow & { document_id: string; deleted: number }>(
-          `SELECT id, document_id, tag_id, source, confidence, needs_review,
-             deleted_at IS NOT NULL AS deleted
-           FROM document_tags WHERE tag_id = ? AND (deleted_at IS NULL OR source = 'user')
-           ORDER BY created_at, rowid`,
+          `SELECT l.id, l.document_id, l.tag_id, l.source, l.confidence, l.needs_review,
+             l.deleted_at IS NOT NULL AS deleted
+           FROM document_tags l JOIN documents d ON d.id = l.document_id
+           WHERE l.tag_id = ? AND d.deleted_at IS NULL
+             AND (l.deleted_at IS NULL OR l.source = 'user')
+           ORDER BY l.created_at, l.rowid`,
           [from.id],
         );
         const changed: string[] = [];
