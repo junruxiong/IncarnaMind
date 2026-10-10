@@ -153,6 +153,30 @@ export interface AnswerTools {
   cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
   hasRecord?(marker: number): boolean;
+  /**
+   * The records taken whose quotes the check doesn't find on the pages they
+   * cite, by marker: what structured output's one request for exact quotes
+   * asks about (see ./quoteRetry).
+   */
+  unfoundQuotes?(): UnfoundQuote[];
+  /**
+   * A new quote for a marker's record, from that request: it replaces the
+   * record's quote, cited where it is in the record's Passage as structured
+   * output's records are (see `CiteOptions`), only when the check finds it
+   * there. Whether it did; if not, the record stays as it was.
+   */
+  correctQuote?(marker: number, quote: string): boolean;
+}
+
+/** A record whose quote the check doesn't find, with the text of the Passage it names (see `AnswerTools.unfoundQuotes`). */
+export interface UnfoundQuote {
+  marker: number;
+  /** The Passage's id, as the model was given it (e.g. "P3"). */
+  passage: string;
+  /** The quote, as taken: without the quotation marks or ellipses around it. */
+  quote: string;
+  /** The Passage's text, as the model was given it, with its location marks. */
+  text: string;
 }
 
 export interface InstructionOptions {
