@@ -29,15 +29,16 @@ import { type BuiltPassage, buildPassages } from "./passages";
  * Citation check). 4: #31 (Passages built from whole lines, as the retrieval
  * prototype built them). 5: ADR-0011 (text stored as Units: Markdown by
  * section, plain text by blocks of lines; Word, PowerPoint, Excel and CSV
- * read).
+ * read). 6: ADR-0009's amendment (the keyword index reads traditional
+ * Chinese characters as simplified ones; see `HAN_CURRENT_SINCE`).
  */
-export const PROCESSING_VERSION = 5;
+export const PROCESSING_VERSION = 6;
 
 /**
  * Per kind, the oldest version whose Passages and Units are still what this
  * version would build: a Document processed by an older one is processed
  * again at startup. Version 5 changed nothing for PDFs, whose Passages
- * (and embeddings) stay as they are.
+ * (and embeddings) stay as they are; version 6 changed no Passage or Unit.
  */
 export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pdf: 4,
@@ -48,6 +49,18 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   xlsx: 5,
   csv: 5,
 };
+
+/**
+ * For a Document with Han characters in its text or name (Chinese, or
+ * Japanese kanji), the oldest version whose keyword index is still what this
+ * version would build: since version 6, the index reads traditional
+ * characters as simplified ones (see ./keywords). Such a Document processed
+ * by an older version, and current for its kind, is processed again at
+ * startup. One without Han characters has nothing to fold: its version is
+ * set to this one without its file being read, so its text is looked
+ * through only once.
+ */
+export const HAN_CURRENT_SINCE = 6;
 
 /**
  * The version of the metadata read: what a Document's creation date is
