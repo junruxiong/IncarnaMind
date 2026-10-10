@@ -6,8 +6,11 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   launchApp,
+  newMind,
   removeDataFolder,
+  sidebarFolder,
 } from "./app";
 
 let dataDir: string;
@@ -52,7 +55,7 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   });
   if (!oceanId) throw new Error("No Ocean Folder.");
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
@@ -167,10 +170,8 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
       },
       [ocean, kitchen],
     );
-    await expect(
-      window.locator('[data-testid="document-list-item"][data-status="ready"]'),
-    ).toHaveCount(2);
-    await window.getByTestId("new-mind").click();
+    await expectReadyDocuments(window, 2);
+    await newMind(window);
     const editor = window.getByTestId("mind-editor");
     await editor.click();
     await window.keyboard.press("ControlOrMeta+j");
@@ -198,11 +199,93 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
     );
     await expect(chip).toHaveAttribute("data-deleted", "true");
     await expect(composerChip).toHaveAttribute("data-deleted", "true");
+    // A deleted Folder keeps its name on the chips that name it, struck through.
+    await expect(chip.locator("s")).toHaveText("Ocean research");
+    await expect(composerChip.locator("s")).toHaveText("Ocean research");
     await answer.hover();
     await answer.getByTestId("answer-regenerate").click();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer).toContainText("has no Documents to search");
     await expect(answer.getByTestId("citation")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a Mind in a Folder asks within it by default: its chip can be taken out to search everything, and deleting the Folder moves the Mind out", async () => {
+  const ocean = join(sources, "Tide tables.txt");
+  const kitchen = join(sources, "Spring menu.txt");
+  await writeFile(
+    ocean,
+    "Neap tides are the smallest of the month.\nSpring tides happen at new moon and at full moon.\n",
+  );
+  await writeFile(kitchen, "Spring tides happen when the market sells mussels.\n");
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await dismissChatSetup(window);
+    await connectLocalChatModel(window);
+    const folderId = await window.evaluate(
+      async (paths) => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const folder = await core.createLibraryGroup({ name: "Ocean research", description: "" });
+        const added = await core.addDocuments(paths);
+        const doc = added.documents.find((each) => each.name === "Tide tables");
+        if (!doc) throw new Error("No tide document");
+        await core.assignDocumentGroup(doc.id, folder.id);
+        return folder.id;
+      },
+      [ocean, kitchen],
+    );
+    await expectReadyDocuments(window, 2);
+
+    // "New Mind here", from the Folder's menu.
+    const folder = sidebarFolder(window, "Ocean research");
+    await folder.getByTestId("folder-row").click({ button: "right" });
+    await folder.getByTestId("folder-new-mind-here").click();
+    await expect(folder.getByTestId("mind-row")).toHaveCount(1);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.press("ControlOrMeta+j");
+    const composer = window.getByTestId("composer");
+    const composerChip = composer.getByTestId("scope-chip");
+    // The Folder is the chip already, without "@".
+    await expect(composerChip).toHaveText("Ocean research");
+    await expect(composerChip).toHaveAttribute("data-id", folderId);
+    await expect(composerChip).toHaveAttribute("data-own", "true");
+    await window.keyboard.type("When do spring tides happen?");
+    await window.keyboard.press("Enter");
+    const answers = editor.getByTestId("answer");
+    await expect(answers.first()).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(answers.first().getByTestId("citation-chip")).toHaveAttribute(
+      "aria-label",
+      /^Citation 1: Tide tables/,
+    );
+
+    // Its ×: every Document, kept for the Mind's next Questions.
+    await composerChip.getByTestId("scope-chip-remove").click();
+    await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
+    await composer.getByTestId("composer-input").click();
+    await window.keyboard.type("When do spring tides happen, anywhere?");
+    await window.keyboard.press("Enter");
+    const second = answers.nth(1);
+    await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await second.getByTestId("answer-tools-toggle").click();
+    await expect(second.getByTestId("answer-tool-call")).toContainText("2 Passages");
+    await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
+
+    // Deleted, the Folder's Mind is Not in a Folder; the first Question keeps its name.
+    await window.evaluate(
+      async (id) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.deleteLibraryGroup(id),
+      folderId,
+    );
+    await expect(window.getByTestId("not-in-a-folder").getByTestId("mind-list-item")).toHaveCount(
+      1,
+    );
+    const firstChip = editor.getByTestId("question").first().getByTestId("scope-chip");
+    await expect(firstChip).toHaveAttribute("data-deleted", "true");
+    await expect(firstChip.locator("s")).toHaveText("Ocean research");
+    await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
   } finally {
     await app.close();
   }

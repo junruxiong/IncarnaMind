@@ -11,6 +11,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -141,7 +142,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await useMockupSize(app, window);
 
   // A title, a Note, a heading, a list, then a Question.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const title = window.getByTestId("mind-title");
   await title.fill("Reading notes: tides");
   await title.press("Enter");
@@ -302,7 +303,7 @@ test("a quote, a highlight, a code block and a formula keep the text edge too; t
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await useMockupSize(app, window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const title = window.getByTestId("mind-title");
   await title.fill("Tide tables");
   await title.press("Enter");
@@ -402,7 +403,7 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await importGreeterSkill(window);
   await useMockupSize(app, window);
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const title = window.getByTestId("mind-title");
   await title.fill("Boat trips");
   await title.press("Enter");

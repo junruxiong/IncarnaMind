@@ -12,6 +12,7 @@ import {
   openViewer,
   previewLink,
   removeDataFolder,
+  showSourceLocations,
   widthOf,
 } from "./app";
 
@@ -146,14 +147,14 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await expect(plus).toHaveAccessibleName("New or add");
   await expect(plus).toHaveAttribute("aria-haspopup", "menu");
 
-  // Opened by the mouse, its three actions are menu items, and the first has the focus.
+  // Opened by the mouse, its four actions are menu items, and the first has the focus.
   await window.mouse.move(button.x - 40, button.y + 14);
   await window.mouse.move(button.x + 14, button.y + 14, { steps: 6 });
   await window.mouse.down();
   await window.mouse.up();
   await expect(menu).toBeVisible();
   const items = menu.getByRole("menuitem");
-  await expect(items).toHaveText([/New Mind/, /Add Documents…/, /Link a folder…/]);
+  await expect(items).toHaveText([/New Mind/, /New Folder…/, /Add Documents…/, /Link a folder…/]);
   await expect(items.first()).toBeFocused();
   await expect(plus).toHaveAttribute("aria-expanded", "true");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-menu-en.png") });
@@ -162,7 +163,7 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await window.keyboard.press("ArrowDown");
   await expect(items.nth(1)).toBeFocused();
   await window.keyboard.press("End");
-  await expect(items.nth(2)).toBeFocused();
+  await expect(items.nth(3)).toBeFocused();
   await window.keyboard.press("ArrowDown");
   await expect(items.first()).toBeFocused();
   await window.keyboard.press("Escape");
@@ -186,6 +187,7 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
   await window.keyboard.press("ArrowDown");
+  await window.keyboard.press("ArrowDown");
   await window.keyboard.press("Enter");
   await expect(window.getByTestId("document-list-item")).toHaveCount(1);
 
@@ -196,8 +198,9 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await plus.focus();
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
-  const dialog = await previewLink(app, window, folder, items.nth(2));
+  const dialog = await previewLink(app, window, folder, items.nth(3));
   await confirmLink(dialog);
+  await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Library")).toHaveCount(1);
   await app.close();
 });
@@ -212,7 +215,12 @@ test("the + menu and the shell speak Chinese too", async () => {
   const plus = window.getByTestId("plus-menu");
   await expect(plus).toHaveAccessibleName("新建或添加");
   await plus.click();
-  await expect(window.getByRole("menuitem")).toHaveText([/新建 Mind/, /添加文档…/, /关联文件夹…/]);
+  await expect(window.getByRole("menuitem")).toHaveText([
+    /新建 Mind/,
+    /新建文件夹…/,
+    /添加文档…/,
+    /关联文件夹…/,
+  ]);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-zh-menu.png") });
   await window.keyboard.press("Escape");
   await window.getByTestId("plus-menu").focus();

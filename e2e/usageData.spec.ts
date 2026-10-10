@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openPrivacySettings,
   removeDataFolder,
   showSettingsPage,
@@ -101,7 +102,7 @@ test("a release build asks on the first run, sends nothing when declined, and on
   await dialog.getByTestId("usage-data-decline").click();
   await expect(dialog).toBeHidden();
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const privacy = await openPrivacySettings(window);
   await expect(privacy).toContainText("collects usage data only if you agree");
   const row = privacy.locator('[data-testid="network-traffic-item"][data-traffic-id="usage-data"]');
@@ -149,7 +150,7 @@ test("a release build asks on the first run, sends nothing when declined, and on
   const sent = posthog.events().length;
   await showSettingsPage(second.window, "models");
   await closeSettings(second.window);
-  await second.window.getByTestId("new-mind").click();
+  await newMind(second.window);
   await settle(second.window);
   expect(posthog.events()).toHaveLength(sent);
   await second.app.close();
@@ -181,7 +182,7 @@ test("a test build says so on the first run, with the switch, and stops at once 
   await settle(window);
   const sent = posthog.events().length;
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const privacy = await openPrivacySettings(window);
   const row = privacy.locator('[data-traffic-id="usage-data"]');
   await expect(row.getByTestId("usage-data-switch")).not.toBeChecked();

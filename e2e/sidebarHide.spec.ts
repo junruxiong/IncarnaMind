@@ -5,6 +5,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openViewer,
   removeDataFolder,
   setWindowSize,
@@ -75,7 +76,7 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
   await setWindowSize(app, window, 1280, 800);
 
   // A Mind with some text in its title, the focus in it.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const title = window.getByTestId("mind-title");
   await title.fill("A place to keep");
   await title.click();
@@ -162,11 +163,11 @@ test("a hidden sidebar peeks at the left edge, and keyboard focus shows it", asy
   await expect.poll(() => sidebarLeft(window)).toBeLessThan(0);
 
   // Keyboard focus into it (Tab, as ⌘K will) shows it, and leaving the sidebar hides it.
-  const newMind = window.getByTestId("new-mind");
-  await newMind.focus();
+  const allDocuments = window.getByTestId("open-library");
+  await allDocuments.focus();
   await window.keyboard.press("Shift+Tab");
   await window.keyboard.press("Tab");
-  await expect(newMind).toBeFocused();
+  await expect(allDocuments).toBeFocused();
   await expect(panel).toHaveAttribute("data-open", "true");
   await window.getByTestId("mind-area").click({ position: { x: 400, y: 300 } });
   await expect(panel).not.toHaveAttribute("data-open", "true");
