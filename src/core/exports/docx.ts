@@ -4,7 +4,8 @@
  * export needs a fixed, small part of the format (styles, headings, lists,
  * tables, images and footnotes), and the package would bring five more
  * packages (jszip, xml-js, …) and about 17 MB for it. The ZIP container is
- * written with Node's zlib (./zip).
+ * written by the one ZIP module (../documents/formats/zip), deflated with
+ * Node's zlib.
  *
  * Headings use Word's built-in heading styles, so they show in Word's
  * navigation pane; lists are Word lists; each Citation is a real Word
@@ -12,9 +13,22 @@
  * where it can't be converted; code is monospaced paragraphs.
  */
 
+import { deflateRawSync } from "node:zlib";
+import { writeZip } from "../documents/formats/zip";
 import type { Block, Footnote, Image, Inline, Marks, TableCell } from "../mindText";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
-import { zip } from "./zip";
+import {
+  escapeXml,
+  footnote,
+  footnoteReference,
+  footnotesPart,
+  R_NAMESPACE,
+  type RunFormat,
+  run,
+  W_NAMESPACE,
+  WordIds,
+  XML_DECLARATION,
+} from "./wordml";
 
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
@@ -33,8 +47,8 @@ export interface DocxOptions {
 }
 
 const NS = {
-  w: "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-  r: "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+  w: W_NAMESPACE,
+  r: R_NAMESPACE,
   wp: "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
   a: "http://schemas.openxmlformats.org/drawingml/2006/main",
   pic: "http://schemas.openxmlformats.org/drawingml/2006/picture",
@@ -56,8 +70,6 @@ const RELATIONSHIP = {
 } as const;
 
 const MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml";
-
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 /** Page sizes and margins, in twentieths of a point ("twips"): 1 inch margins. */
 const PAPER = {
@@ -94,24 +106,27 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     ...writer.relationships,
   ];
 
-  return zip([
-    { name: "[Content_Types].xml", data: contentTypes() },
-    {
-      name: "_rels/.rels",
-      data: relationshipsXml([
-        { id: "rIdDocument", type: RELATIONSHIP.officeDocument, target: "word/document.xml" },
-        { id: "rIdCore", type: RELATIONSHIP.coreProperties, target: "docProps/core.xml" },
-      ]),
-    },
-    { name: "docProps/core.xml", data: coreProperties(options) },
-    { name: "word/document.xml", data: document },
-    { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
-    { name: "word/styles.xml", data: styles(options.language) },
-    { name: "word/settings.xml", data: SETTINGS },
-    { name: "word/numbering.xml", data: numbering(writer.lists) },
-    { name: "word/footnotes.xml", data: footnotesXml(writer.footnotes) },
-    ...writer.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
-  ]);
+  return writeZip(
+    [
+      { name: "[Content_Types].xml", data: contentTypes() },
+      {
+        name: "_rels/.rels",
+        data: relationshipsXml([
+          { id: "rIdDocument", type: RELATIONSHIP.officeDocument, target: "word/document.xml" },
+          { id: "rIdCore", type: RELATIONSHIP.coreProperties, target: "docProps/core.xml" },
+        ]),
+      },
+      { name: "docProps/core.xml", data: coreProperties(options) },
+      { name: "word/document.xml", data: document },
+      { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
+      { name: "word/styles.xml", data: styles(options.language) },
+      { name: "word/settings.xml", data: SETTINGS },
+      { name: "word/numbering.xml", data: numbering(writer.lists) },
+      { name: "word/footnotes.xml", data: footnotesPart(writer.footnotes) },
+      ...writer.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
+    ],
+    deflateRawSync,
+  );
 }
 
 interface Relationship {
@@ -149,7 +164,8 @@ class DocxWriter {
   /** Each list written: a Word numbering instance, numbered from 1. */
   readonly lists: List[] = [];
   private readonly links = new Map<string, string>();
-  private drawings = 0;
+  /** The footnotes' and drawings' ids, each from 1. */
+  private readonly ids = new WordIds();
 
   constructor(
     private readonly options: DocxOptions,
@@ -331,15 +347,13 @@ class DocxWriter {
   }
 
   /** A Citation's footnote, and the reference to it in the text. */
-  private footnote(footnote: Footnote): string {
-    const id = this.footnotes.length + 1;
-    const marker = footnote.unverified
+  private footnote(citation: Footnote): string {
+    const id = this.ids.take("footnote");
+    const marker = citation.unverified
       ? run(` ${this.options.labels.unverified}`, { bold: true })
       : "";
-    this.footnotes.push(
-      `<w:footnote w:id="${id}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>${run(` ${footnote.source}`)}${marker}</w:p></w:footnote>`,
-    );
-    return `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+    this.footnotes.push(footnote(id, run(` ${citation.source}`) + marker));
+    return footnoteReference(id);
   }
 
   private link(href: string): string {
@@ -370,7 +384,7 @@ class DocxWriter {
       cy = Math.round((cy * maxWidth) / cx);
       cx = maxWidth;
     }
-    const drawing = ++this.drawings;
+    const drawing = this.ids.take("drawing");
     const description = escapeXml(image.alt);
     return (
       `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
@@ -415,19 +429,6 @@ function paragraph(properties: ParagraphProperties, content: string): string {
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 }
 
-interface RunFormat {
-  /** A character style, e.g. "Hyperlink". */
-  style?: string;
-  bold?: boolean;
-  italic?: boolean;
-  strike?: boolean;
-  /** Word's yellow text highlight, as the editor's. */
-  highlight?: boolean;
-  underline?: boolean;
-  /** Monospaced, for code inside a link (code elsewhere uses its character style). */
-  monospace?: boolean;
-}
-
 function formatOf(marks: Marks, context: Context, style?: string): RunFormat {
   return {
     style: style ?? (marks.code ? "CodeChar" : undefined),
@@ -438,40 +439,6 @@ function formatOf(marks: Marks, context: Context, style?: string): RunFormat {
     underline: marks.underline,
     monospace: marks.code && style !== undefined,
   };
-}
-
-function run(text: string, format: RunFormat = {}): string {
-  if (!text) return "";
-  // In the order the schema requires.
-  const rPr = [
-    format.style ? `<w:rStyle w:val="${format.style}"/>` : "",
-    format.monospace ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>' : "",
-    format.bold ? "<w:b/>" : "",
-    format.italic ? "<w:i/>" : "",
-    format.strike ? "<w:strike/>" : "",
-    format.highlight ? '<w:highlight w:val="yellow"/>' : "",
-    format.underline ? '<w:u w:val="single"/>' : "",
-  ].join("");
-  let content = "";
-  for (const part of text.split(/(\r\n|\r|\n|\t)/)) {
-    if (part === "\t") content += "<w:tab/>";
-    else if (part === "\n" || part === "\r\n" || part === "\r") content += "<w:br/>";
-    else if (part) content += `<w:t xml:space="preserve">${escapeXml(part)}</w:t>`;
-  }
-  return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ""}${content}</w:r>`;
-}
-
-/** Characters XML can't hold at all, even escaped. */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: these are the characters it removes.
-const NOT_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
-
-function escapeXml(text: string): string {
-  return text
-    .replace(NOT_XML, "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 // ---------------------------------------------------------------------------
@@ -560,19 +527,6 @@ function coreProperties({ title, created }: DocxOptions): string {
     (title ? `<dc:title>${escapeXml(title)}</dc:title>` : "") +
     `<dcterms:created xsi:type="dcterms:W3CDTF">${date}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${date}</dcterms:modified>` +
     "</cp:coreProperties>"
-  );
-}
-
-/** Footnotes 1 and up are the Citations'; -1 and 0 are the separator lines Word draws above them. */
-function footnotesXml(footnotes: readonly string[]): string {
-  const separator = (type: string, id: number, mark: string) =>
-    `<w:footnote w:type="${type}" w:id="${id}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><${mark}/></w:r></w:p></w:footnote>`;
-  return (
-    `${XML_DECLARATION}<w:footnotes xmlns:w="${NS.w}" xmlns:r="${NS.r}">` +
-    separator("separator", -1, "w:separator") +
-    separator("continuationSeparator", 0, "w:continuationSeparator") +
-    footnotes.join("") +
-    "</w:footnotes>"
   );
 }
 

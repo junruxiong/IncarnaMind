@@ -11,6 +11,8 @@
  * beyond them (huge sheets, broken files) are built here (tests/helpers/office.ts).
  */
 import { readFileSync } from "node:fs";
+import { truncate } from "node:fs/promises";
+import { deflateRawSync } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import { createIgnore } from "../../src/core/documents/files";
 import { extractUnits } from "../../src/core/documents/formats";
@@ -22,6 +24,12 @@ import { formatNumber } from "../../src/core/documents/formats/numbers";
 import { extractPptx, imageDataUrl } from "../../src/core/documents/formats/pptx";
 import { lineUnits, markdownUnits } from "../../src/core/documents/formats/text";
 import { extractXlsx, readWorkbook } from "../../src/core/documents/formats/xlsx";
+import {
+  crc32,
+  MAX_PACKAGE_BYTES,
+  type RawEntry,
+  writeZip,
+} from "../../src/core/documents/formats/zip";
 import { anchorsOf } from "../../src/shared/units";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
@@ -35,6 +43,9 @@ const DOCX = fixture("Coastal Flood Risk Review.docx");
 const PPTX = fixture("Quarterly Research Update.pptx");
 const XLSX = fixture("Regional Revenue.xlsx");
 const CSV = fixture("Orders.csv");
+
+const PRESENTATION_NS = "http://schemas.openxmlformats.org/presentationml/2006/main";
+const RELATIONSHIPS_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 describe("Word", () => {
   test("is read by section, each labelled with its heading path, the title before the first heading", async () => {
@@ -315,6 +326,83 @@ describe("Files that can't be read fail cleanly, with a reason", () => {
     expect((failure as Error).message).toMatch(/DOCTYPE/);
   });
 
+  test("a Word, PowerPoint or Excel file over 500 MB is refused before it is read, with the limit", async () => {
+    // Zeros, never touched: the size alone refuses it.
+    const huge = new Uint8Array(MAX_PACKAGE_BYTES + 1);
+
+    for (const kind of ["docx", "pptx", "xlsx"] as const) {
+      const failure = await extractUnits(kind, huge).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(ExtractionError);
+      expect(failure).toMatchObject({
+        reason: "too-large",
+        message: "Too large to open (limit 500 MB).",
+      });
+    }
+    // At the limit it is opened (and these zeros aren't a package).
+    const atLimit = await extractUnits("docx", huge.subarray(1)).catch((error: unknown) => error);
+    expect(atLimit).toMatchObject({ reason: "unreadable" });
+  });
+
+  test("a package whose parts inflate past 1 GB together is refused, though each part is within its own limit", {
+    timeout: 60_000,
+  }, async () => {
+    // Twenty slides of 60 MB each, mostly a comment: one compressed body, so the file is small.
+    const slides = 20;
+    const slide = Buffer.concat([
+      Buffer.from(
+        `<?xml version="1.0"?><p:sld xmlns:p="${PRESENTATION_NS}"><p:cSld><p:spTree/></p:cSld><!--`,
+      ),
+      Buffer.alloc(60 * 1024 * 1024, "x"),
+      Buffer.from("--></p:sld>"),
+    ]);
+    const body: RawEntry = {
+      method: 8,
+      crc32: crc32(slide),
+      size: slide.length,
+      data: deflateRawSync(slide),
+    };
+    const ids = Array.from({ length: slides }, (_, index) => index + 1);
+    const deck = writeZip(
+      [
+        {
+          name: "ppt/presentation.xml",
+          data: `<?xml version="1.0"?><p:presentation xmlns:p="${PRESENTATION_NS}" xmlns:r="${RELATIONSHIPS_NS}"><p:sldIdLst>${ids.map((id) => `<p:sldId id="${255 + id}" r:id="rId${id}"/>`).join("")}</p:sldIdLst></p:presentation>`,
+        },
+        {
+          name: "ppt/_rels/presentation.xml.rels",
+          data: `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${ids.map((id) => `<Relationship Id="rId${id}" Type="${RELATIONSHIPS_NS}/slide" Target="slides/slide${id}.xml"/>`).join("")}</Relationships>`,
+        },
+        ...ids.map((id) => ({ name: `ppt/slides/slide${id}.xml`, raw: body })),
+      ],
+      deflateRawSync,
+    );
+    expect(deck.length).toBeLessThan(5 * 1024 * 1024);
+
+    const failure = await extractUnits("pptx", deck).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ExtractionError);
+    expect(failure).toMatchObject({
+      reason: "too-large",
+      message: "Too large to open (limit 1 GB).",
+    });
+    // A deck of a few such slides is within the limit, and opens.
+    const few = writeZip(
+      [
+        {
+          name: "ppt/presentation.xml",
+          data: `<?xml version="1.0"?><p:presentation xmlns:p="${PRESENTATION_NS}" xmlns:r="${RELATIONSHIPS_NS}"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+        },
+        {
+          name: "ppt/_rels/presentation.xml.rels",
+          data: `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${RELATIONSHIPS_NS}/slide" Target="slides/slide1.xml"/></Relationships>`,
+        },
+        { name: "ppt/slides/slide1.xml", raw: body },
+      ],
+      deflateRawSync,
+    );
+    expect((await extractUnits("pptx", few)).map((unit) => unit.page)).toEqual([1]);
+  });
+
   test("an entry that inflates past its limit is refused, so a zip bomb fails", async () => {
     const bomb = buildZip([
       { name: "xl/workbook.xml", data: `<workbook>${" ".repeat(70 * 1024 * 1024)}</workbook>` },
@@ -363,6 +451,26 @@ describe("Processing", { timeout: 30_000 }, () => {
     for (const passage of passages) expect(passage.pageFrom).toBe(passage.pageTo);
     // Office's lock files beside an open file aren't Documents.
     expect(createIgnore()("Sub/~$Regional Revenue.xlsx")).toBe(true);
+    core.close();
+  });
+
+  test("a Word file over 500 MB fails as too large to open, with the limit; one beside it is indexed as before", async () => {
+    const sources = await createSourceFolder();
+    const core = startCore(await createTempDataFolder());
+    // Sparse: 500 MB and a byte on disk, with nothing written.
+    const huge = await writeSourceFile(sources, "Huge.docx", "");
+    await truncate(huge, MAX_PACKAGE_BYTES + 1);
+    const normal = await writeSourceFile(sources, "Review.docx", DOCX);
+
+    const [refused, indexed] = await addAndProcess(core, [huge, normal]);
+
+    expect(refused).toMatchObject({
+      status: "failed",
+      failure: { reason: "too-large", message: "Too large to open (limit 500 MB)." },
+      size: MAX_PACKAGE_BYTES + 1,
+      pageCount: null,
+    });
+    expect(indexed).toMatchObject({ status: "ready", failure: null });
     core.close();
   });
 });

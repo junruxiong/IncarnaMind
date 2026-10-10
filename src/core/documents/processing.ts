@@ -8,13 +8,15 @@
  * core writes the result.
  */
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import type { TextUnit } from "../../shared/units";
 import type { DocumentFailureReason, DocumentKind } from "../api";
 import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
 import { ExtractionError, extractText, pdfCreationDates } from "./extract";
 import { officeCreated } from "./formats/coreProperties";
+import { packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
 
@@ -174,24 +176,58 @@ export function runJob(job: WorkerJob): Promise<WorkerResult> {
   return job.task === "process" ? processFile(job) : readMetadata(job);
 }
 
+/** Why the file couldn't be read: it is gone, or can't be read now. */
+function unreadable(error: unknown): FileUnreadable {
+  const code = (error as NodeJS.ErrnoException).code;
+  return {
+    outcome: "file-unreadable",
+    gone: code === "ENOENT" || code === "ENOTDIR",
+    message: messageOf(error),
+  };
+}
+
 /** The file's bytes, or why they couldn't be read. */
 async function readBytes(file: string): Promise<Uint8Array | FileUnreadable> {
   try {
     return await readFile(file);
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    return {
-      outcome: "file-unreadable",
-      gone: code === "ENOENT" || code === "ENOTDIR",
-      message: messageOf(error),
-    };
+    return unreadable(error);
   }
 }
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
+const isPackage = (kind: DocumentKind) => kind === "docx" || kind === "pptx" || kind === "xlsx";
+
+/**
+ * A Word, PowerPoint or Excel file too large to open (see
+ * `packageSizeError`), refused before it is read: its bytes are only hashed
+ * as they stream past, for the version it is. Null for a file that isn't.
+ */
+async function refuseTooLarge(file: string): Promise<ProcessingResult | null> {
+  try {
+    const { size } = await stat(file);
+    const refused = packageSizeError(size);
+    if (!refused) return null;
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(file)) hash.update(chunk as Buffer);
+    return {
+      outcome: "failed",
+      reason: refused.reason,
+      message: refused.message,
+      contentHash: hash.digest("hex"),
+      size,
+      creationDate: null,
+    };
+  } catch (error) {
+    return unreadable(error);
+  }
+}
+
 /** Never throws: every problem becomes a "failed" result. */
 export async function processFile(job: ProcessingJob): Promise<ProcessingResult> {
+  const refused = isPackage(job.kind) ? await refuseTooLarge(job.file) : null;
+  if (refused) return refused;
   const bytes = await readBytes(job.file);
   if (!(bytes instanceof Uint8Array)) return bytes;
   const version = { contentHash: sha256(bytes), size: bytes.byteLength };

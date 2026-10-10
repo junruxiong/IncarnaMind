@@ -284,6 +284,7 @@ export const en = {
   "documents.statusShort.failed": "Failed",
   "documents.failure.unreadable": "the file couldn't be read",
   "documents.failure.passwordProtected": "the file needs a password",
+  "documents.failure.tooLarge": "the file is too large to open",
   "documents.failure.fileMissing": "its file is missing",
   "documents.file.missing":
     "File missing: it was removed from its folder. Its text and Citations are kept; new searches leave it out.",
