@@ -19,7 +19,12 @@ function apiKey(): string | null {
   const line = readFileSync(file, "utf8")
     .split("\n")
     .find((each) => each.startsWith("OPENAI_API_KEY="));
-  return line?.slice("OPENAI_API_KEY=".length).trim().replace(/^["']|["']$/g, "") || null;
+  return (
+    line
+      ?.slice("OPENAI_API_KEY=".length)
+      .trim()
+      .replace(/^["']|["']$/g, "") || null
+  );
 }
 
 const passage = `<passage id="P1" document="Tides" pages="1">\nSpring tides happen when the Sun, Moon and Earth line up.\n</passage>`;
