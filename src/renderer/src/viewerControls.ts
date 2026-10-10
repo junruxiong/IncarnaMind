@@ -6,6 +6,7 @@
  * picker without the system's dialog, or add files and folders by path as a drop would.
  */
 import type { TestHooks } from "../../shared/testHooks";
+import { currentTabOf } from "./layoutSlice";
 import { interceptSkillPicker } from "./skills";
 import { useAppStore } from "./store";
 
@@ -20,7 +21,10 @@ export function installTestHooks(): void {
   window.incarnamindTestHooks = {
     openDocument: (location) => {
       const { layout, openDocument } = useAppStore.getState();
-      openDocument(location, { as: "citation", ...(layout && { from: layout.focusedGroupId }) });
+      // From the Mind the User is in, as a Citation in it; with no Mind in front, as from a list.
+      if (currentTabOf(layout)?.item.kind === "mind" && layout) {
+        openDocument(location, { as: "citation", from: layout.focusedGroupId });
+      } else openDocument(location, { as: "list" });
     },
     interceptSkillPicker,
     addPaths: (paths) => useAppStore.getState().addPaths(paths),

@@ -55,41 +55,43 @@ export function TabGroups() {
   const room = Math.max(0, width - (groups.length - 1));
 
   return (
-    <div
-      ref={setContainer}
-      data-testid="tab-groups"
-      data-merged={merged || undefined}
-      className="tab-groups"
-    >
-      {groups.map((group, index) => (
-        <Fragment key={group.id}>
-          {index > 0 && (
-            <GroupDivider
-              index={index}
-              shares={shares}
-              room={room}
-              onPreview={setDragging}
-              onCommit={(next) => {
-                void useAppStore
-                  .getState()
-                  .changeLayout({ type: "resize", widths: next })
-                  .finally(() => setDragging(null));
-              }}
+    <>
+      <div
+        ref={setContainer}
+        data-testid="tab-groups"
+        data-merged={merged || undefined}
+        className="tab-groups"
+      >
+        {groups.map((group, index) => (
+          <Fragment key={group.id}>
+            {index > 0 && (
+              <GroupDivider
+                index={index}
+                shares={shares}
+                room={room}
+                onPreview={setDragging}
+                onCommit={(next) => {
+                  void useAppStore
+                    .getState()
+                    .changeLayout({ type: "resize", widths: next })
+                    .finally(() => setDragging(null));
+                }}
+              />
+            )}
+            <TabGroup
+              group={group}
+              index={merged ? 0 : index}
+              share={merged ? 1 : (shares[index] ?? 1)}
+              merged={merged}
+              drag={drag}
+              onExport={setExporting}
             />
-          )}
-          <TabGroup
-            group={group}
-            index={merged ? 0 : index}
-            share={merged ? 1 : (shares[index] ?? 1)}
-            merged={merged}
-            drag={drag}
-            onExport={setExporting}
-          />
-        </Fragment>
-      ))}
+          </Fragment>
+        ))}
+      </div>
       <DragFeedback dragged={drag.dragged} target={drag.target} />
       <ExportDialog mind={exportMind ?? null} onClose={() => setExporting(null)} />
-    </div>
+    </>
   );
 }
 
@@ -267,7 +269,10 @@ function DragGhost({ x, y, item }: { x: number; y: number; item: TabItem }) {
     <div
       aria-hidden="true"
       className="tab-drag-ghost"
-      style={{ transform: `translate(${x + 12}px, ${y + 14}px)` }}
+      // Beside the pointer; left of it near the window's right edge, so it stays in sight.
+      style={{
+        transform: `translate(${x + 272 > window.innerWidth - 8 ? x - 272 : x + 12}px, ${y + 14}px)`,
+      }}
     >
       <span className="tab-icon">
         <TabIcon item={item} />

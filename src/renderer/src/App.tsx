@@ -207,7 +207,12 @@ function Workspace() {
 
   return (
     <SidebarControlContext.Provider value={control}>
-      <div className="relative flex h-screen overflow-hidden bg-frame" {...fileDrop.handlers}>
+      <div
+        className="relative flex h-screen overflow-hidden bg-frame"
+        // The sidebar's panel, and the line about tabs above its foot, are as wide as it.
+        style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
+        {...fileDrop.handlers}
+      >
         {/* The 8px above the card moves the window like the band does. */}
         <div aria-hidden="true" className="title-bar absolute inset-x-0 top-0 h-2" />
         {/* Shown, this wrapper takes no box of its own; hidden, it is the panel that slides out. */}
@@ -216,7 +221,6 @@ function Workspace() {
           data-hidden={sidebar.hidden || undefined}
           data-open={peek.peeking || undefined}
           className="sidebar-panel"
-          style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
           {...peek.panel}
         >
           <Sidebar width={sidebarWidth} onOpenSettings={openSettings} />

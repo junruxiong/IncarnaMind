@@ -498,12 +498,13 @@
     flex-shrink: 0;
     align-items: flex-end;
     height: 36px;
-    padding-right: 4px;
+    /* At the card's right end: clear of Windows' window buttons (see "The title bar"). */
+    padding-right: max(4px, var(--window-buttons-right));
     background: var(--color-tab-strip);
   }
-  /* At the card's right end: clear of Windows' window buttons (see "The title bar"). */
-  .tab-group:last-child .tab-strip {
-    padding-right: max(4px, var(--window-buttons-right));
+  /* Only the last group reaches the window's buttons. */
+  .tab-group:not(:last-of-type) {
+    --window-buttons-right: 0px;
   }
   .tab-strip > .sidebar-toggle {
     align-self: center;
@@ -897,7 +898,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    width: min(320px, calc(var(--sidebar-width, 248px) - 16px));
+    width: max(200px, min(320px, calc(var(--sidebar-width) - 16px)));
     padding: 6px 6px 6px 10px;
     border-radius: 6px;
     background: var(--color-sheet);

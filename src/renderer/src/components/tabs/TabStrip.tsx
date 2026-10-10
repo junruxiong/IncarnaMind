@@ -66,7 +66,7 @@ export function TabStrip({
 
   /** Arrow keys, Home and End move to another tab of the strip and show it, as in any tab list. */
   const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
-    if ((event.target as Element).closest("input")) return;
+    if (fromInside(event)) return;
     const current = tabs.findIndex((tab) => tab.id === shownId);
     const next =
       event.key === "ArrowRight"
@@ -174,6 +174,13 @@ function ExportButton({ mindId, onExport }: { mindId: string; onExport(mindId: s
   );
 }
 
+/**
+ * Whether an event comes from inside a tab's menu or its name being typed,
+ * which sit in the tab but aren't the tab: they keep their keys and clicks.
+ */
+const fromInside = (event: { target: EventTarget }) =>
+  (event.target as Element).closest('[role="menu"], input') !== null;
+
 interface TabProps {
   tab: LayoutTab;
   /** The group it is in. */
@@ -230,20 +237,20 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       data-dragging={dragged || undefined}
       className="tab"
       onPointerDown={(event) => {
-        if (!renaming) drag.onTabPointerDown(event, tab.id);
+        if (!renaming && !fromInside(event)) drag.onTabPointerDown(event, tab.id);
       }}
-      onClick={() => {
-        if (!drag.justDragged() && !renaming) show();
+      onClick={(event) => {
+        if (!drag.justDragged() && !renaming && !fromInside(event)) show();
       }}
       onDoubleClick={(event) => {
-        if ((event.target as Element).closest("button, input")) return;
+        if (fromInside(event) || (event.target as Element).closest("button")) return;
         // A preview is kept; a Mind's tab is renamed in place.
         if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
         else rename();
       }}
       onContextMenu={(event) => openRowMenu(event, "tab-menu")}
       onKeyDown={(event) => {
-        if ((event.target as Element).closest("input")) return;
+        if (fromInside(event)) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
@@ -264,7 +271,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
       }}
       onAuxClick={(event) => {
         // A middle click closes it, as in a browser; a pinned tab stays, as with ⌘W.
-        if (event.button === 1 && !tab.pinned) closeTab(tab.id);
+        if (event.button === 1 && !tab.pinned && !fromInside(event)) closeTab(tab.id);
       }}
     >
       {/* The shown tab's feet, flaring into the page below; the others hide them. */}

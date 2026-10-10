@@ -69,8 +69,13 @@ async function addSources(window: Page) {
     report: join(sources, "Urban heat.pdf"),
     paper: join(sources, "Bowler 2010.md"),
     notes: join(sources, "Field notes.txt"),
+    list: join(sources, "Reading list.md"),
   };
   await writeFile(paths.report, REPORT);
+  await writeFile(
+    paths.list,
+    "# Reading list\n\nOke 1982 explains why the heat island is a night-time effect.\n",
+  );
   await writeFile(paths.paper, "# Bowler 2010\n\nParks were about 1 degree cooler than streets.\n");
   await writeFile(paths.notes, "Field notes from July.\n\nNorthgate was cooler at night.\n");
   await addDocuments(window, Object.values(paths));
@@ -78,6 +83,7 @@ async function addSources(window: Page) {
     report: await documentIdOf(window, "Urban heat"),
     paper: await documentIdOf(window, "Bowler 2010"),
     notes: await documentIdOf(window, "Field notes"),
+    list: await documentIdOf(window, "Reading list"),
   };
 }
 
@@ -178,6 +184,33 @@ test("a Citation opens its Document as a preview in the group to the right, the 
   });
   await window.mouse.wheel(0, 600);
   await expect(reportTab).not.toHaveAttribute("data-preview");
+
+  // Dragged, even within its strip, a preview is kept.
+  await window.keyboard.press("ControlOrMeta+1");
+  await openDocumentAt(window, { documentId: ids.list, quote: "Oke 1982" });
+  const listTab = right.getByTestId("document-tab").filter({ hasText: "Reading list" });
+  await expect(listTab).toHaveAttribute("data-preview", "true");
+  const firstTab = await boxOf(right.getByRole("tab").first());
+  await dragTabTo(window, listTab, { x: firstTab.x + 12, y: firstTab.y + firstTab.height / 2 });
+  await expect(titlesIn(right).first()).toHaveText("Reading list");
+  await expect(right.getByTestId("document-tab").first()).not.toHaveAttribute("data-preview");
+
+  // Selecting some of a preview's text keeps it too.
+  await right
+    .getByTestId("document-tab")
+    .filter({ hasText: "Bowler 2010" })
+    .getByTestId("tab-close")
+    .click();
+  await window.keyboard.press("ControlOrMeta+1");
+  await openDocumentAt(window, { documentId: ids.paper, quote: "Parks were about 1 degree" });
+  const paperTab = right.getByTestId("document-tab").filter({ hasText: "Bowler 2010" });
+  await expect(paperTab).toHaveAttribute("data-preview", "true");
+  const words = await boxOf(right.getByTestId("viewer-text").getByText("cooler than streets"));
+  await window.mouse.move(words.x + 2, words.y + words.height / 2, { steps: 6 });
+  await window.mouse.down();
+  await window.mouse.move(words.x + words.width - 2, words.y + words.height / 2, { steps: 8 });
+  await window.mouse.up();
+  await expect(paperTab).not.toHaveAttribute("data-preview");
 });
 
 test("tabs split off and move by dragging with the mouse, by the tab's menu and by ⌘\\, three groups at most; a group goes with its last tab", async () => {
@@ -360,8 +393,12 @@ test("groups, tabs, previews, pins, widths and the focused group come back after
   await chooseFromTabMenu(window, tabNamed(window, "Beta"), "Pin");
   await openDocumentAt(window, { documentId: ids.paper, quote: "Parks were about 1 degree" });
   await openDocumentAt(window, { documentId: ids.notes, quote: "Northgate" });
-  await expect(groupsOf(window)).toHaveCount(2);
+  await expect(titlesIn(groupAt(window, 1))).toHaveText(["Field notes"]);
+  const before = await widthOf(groupAt(window, 0));
   await dragBy(window, window.getByTestId("group-divider"), 120);
+  await expect
+    .poll(async () => Math.abs((await widthOf(groupAt(window, 0))) - (before + 120)))
+    .toBeLessThanOrEqual(1);
   await groupAt(window, 1).getByRole("tab").click();
   await expect(groupAt(window, 1)).toHaveAttribute("data-focused", "true");
   const widths = [await widthOf(groupAt(window, 0)), await widthOf(groupAt(window, 1))];
@@ -379,7 +416,9 @@ test("groups, tabs, previews, pins, widths and the focused group come back after
   );
   await expect(groupAt(window, 1)).toHaveAttribute("data-focused", "true");
   await expect(groupAt(window, 1).getByTestId("viewer-title")).toHaveText("Field notes");
-  await expect.poll(() => widthOf(groupAt(window, 0))).toBeCloseTo(widths[0] ?? 0, 0);
+  await expect
+    .poll(async () => Math.abs((await widthOf(groupAt(window, 0))) - (widths[0] ?? 0)))
+    .toBeLessThanOrEqual(1);
   await session.app.close();
 });
 
