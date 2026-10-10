@@ -1,11 +1,9 @@
 import type { Editor } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
-import { TextSelection } from "@tiptap/pm/state";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { ANSWER_BLOCK, QUESTION_BLOCK, type SearchScope } from "../../../core/api";
-import { scopeAttributesOf } from "../../../shared/searchScope";
+import { ANSWER_BLOCK } from "../../../core/api";
 
 /** Where the hint shows: on an empty Mind's line, or on the empty line after an Answer. */
 export type HintPlace = "empty" | "afterAnswer";
@@ -54,48 +52,23 @@ export function hintLine(state: EditorState, focused: boolean): HintLine | null 
 }
 
 /**
- * Starts a Question at the end of the Mind: on its empty last line, or on a
- * new line after its last Block, with a Search scope if given.
- */
-export function startQuestionAtEnd(editor: Editor, scope: SearchScope | null = null): void {
-  if (editor.isDestroyed) return;
-  editor
-    .chain()
-    .focus()
-    .command(({ tr, state }) => {
-      const last = state.doc.lastChild;
-      let end = state.doc.content.size;
-      if (isEmptyLine(last) && last) {
-        end -= last.nodeSize;
-      } else {
-        const paragraph = state.schema.nodes.paragraph?.create();
-        if (!paragraph) return false;
-        tr.insert(end, paragraph);
-      }
-      tr.setSelection(TextSelection.create(tr.doc, end + 1));
-      return true;
-    })
-    .setQuestion()
-    .updateAttributes(QUESTION_BLOCK, scope ? scopeAttributesOf(scope) : {})
-    .scrollIntoView()
-    .run();
-}
-
-/**
  * The hint on an empty line where the next Block is likely written: "Start
  * writing, or press ⌘J to ask a Question…", or after an Answer "Keep
  * writing, or press ⌘J to ask a follow-up". It is drawn over the line, not in
  * the editor's text (so typing there, IME composition too, is left alone),
- * and its "press ⌘J…" part is a button that turns the line into a Question.
- * The button takes clicks once the cursor is on the line: before, a click
- * anywhere on the line puts the cursor there, to write.
+ * and its "press ⌘J…" part is a button that focuses the composer, the
+ * Question to go on this line (`onAsk`, with the line's position). The button
+ * takes clicks once the cursor is on the line: before, a click anywhere on
+ * the line puts the cursor there, to write.
  */
 export function EndHint({
   editor,
   text,
+  onAsk,
 }: {
   editor: Editor;
   text: (place: HintPlace) => HintText;
+  onAsk(pos: number): void;
 }) {
   const layer = useRef<HTMLDivElement>(null);
   const [hint, setHint] = useState<(HintLine & { style: CSSProperties }) | null>(null);
@@ -173,17 +146,9 @@ export function EndHint({
             type="button"
             data-testid="end-hint-ask"
             className={`end-hint-ask ${hint.armed ? "end-hint-ask--armed" : ""}`}
-            // The editor keeps the focus, so the Question starts where its line is.
+            // The cursor stays on the line, so the Question asked goes there.
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              editor
-                .chain()
-                .focus()
-                .setTextSelection(hint.pos + 1)
-                .setQuestion()
-                .scrollIntoView()
-                .run();
-            }}
+            onClick={() => onAsk(hint.pos)}
           >
             {words.ask}
           </button>

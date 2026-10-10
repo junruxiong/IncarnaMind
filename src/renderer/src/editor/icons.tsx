@@ -25,14 +25,12 @@ function Stroke({ weight, children, ...props }: IconProps & { weight: number }) 
   );
 }
 
-/** A filled play triangle: ask the Question. */
-export const AskPlayIcon = (props: IconProps) => (
-  <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-    <path
-      d="M8 5.2v13.6a1 1 0 0 0 1.52.85l11-6.8a1 1 0 0 0 0-1.7l-11-6.8A1 1 0 0 0 8 5.2z"
-      fill="currentColor"
-    />
-  </svg>
+/** An up arrow: ask, at the composer's right end. */
+export const AskArrowIcon = (props: IconProps) => (
+  <Stroke weight={1.75} {...props}>
+    <path d="M12 19V5.5" />
+    <path d="m6 11 6-6 6 6" />
+  </Stroke>
 );
 
 /** The marks of the Citation checks, small and bold: tick, "!", dash, and a dot while checking. */
