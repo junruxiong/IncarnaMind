@@ -215,7 +215,10 @@ test("the composer grows to 8 lines then scrolls; from 4 lines Expand opens a ta
   await pointAndClick(window, expand);
   await expect(composer).toHaveAttribute("data-expanded", "true");
   await expect(input).toBeFocused();
-  expect(await height()).toBeGreaterThan(300);
+  // Over the lower 60% of the window (styles.css), as tall as the screen lets the window be.
+  const tall = await window.evaluate(() => Math.floor(globalThis.innerHeight * 0.6 - 128));
+  expect(await height()).toBeGreaterThanOrEqual(tall);
+  expect(await height()).toBeGreaterThan(168);
   await screenshot(window, "composer-expanded");
   await window.keyboard.press("Escape");
   await expect(composer).not.toHaveAttribute("data-expanded", "true");
