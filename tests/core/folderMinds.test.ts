@@ -216,7 +216,7 @@ describe("A Mind in a Folder", () => {
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     migrate(
       db,
-      migrations.filter((migration) => migration.version < 32),
+      migrations.filter((migration) => migration.version < 34),
     );
     const at = "2026-10-01T09:00:00.000Z";
     db.run("INSERT INTO minds (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)", [
