@@ -2,31 +2,29 @@ import "katex/dist/katex.min.css";
 import Collaboration from "@tiptap/extension-collaboration";
 import { Focus, Placeholder } from "@tiptap/extensions";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
+import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
+import { Composer, type ComposerHandle } from "../editor/Composer";
 import { CitationNumbers } from "../editor/citationNumbers";
-import {
-  EndHint,
-  type HintPlace,
-  type HintText,
-  isEmptyMind,
-  startQuestionAtEnd,
-} from "../editor/EndHint";
+import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { FormatMenu } from "../editor/FormatMenu";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
-import { MindIdContext } from "../editor/mindContext";
+import { ComposerDockContext, MindIdContext } from "../editor/mindContext";
 import { noteExtensions } from "../editor/noteSchema";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QUESTION_SHORTCUT_LABEL, QuestionCommands } from "../editor/questionCommands";
+import { QuestionFold } from "../editor/questionFold";
 import { ScopePicker } from "../editor/ScopePicker";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
@@ -118,15 +116,24 @@ const citationView = ReactNodeViewRenderer(CitationView, {
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
  * the drag handle, the formatting menu, smart typography, the LaTeX field,
- * and the margin column of Citation checks.
+ * the margin column of Citation checks, and the composer at the column's
+ * foot, where Questions are asked (drawn in the dock, `ComposerDockContext`).
  *
  * Every text starts at one edge: the column (styles.css, `.mind-column`) has
- * a left margin for the controls (the block handle, the Ask button, the
- * "Answer" label) and a right margin for the checks.
+ * a left margin for the controls (the block handle, a Question's spark and
+ * fold chevron) and a right margin for the checks.
  */
 function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
   const t = useT();
   const isExample = useIsExample(mindId);
+  const dock = useContext(ComposerDockContext);
+  const composer = useRef<ComposerHandle>(null);
+  /**
+   * Whether the Mind's cursor is where the next Question goes: since the
+   * editor last had the focus, only the composer (and its menus) has had it.
+   * Otherwise a Question goes at the end of the Mind.
+   */
+  const cursorInMind = useRef(false);
   const placeholder = useRef("");
   placeholder.current = t("editor.placeholder");
   // The example Mind invites a Question of one's own at its end.
@@ -173,8 +180,14 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
           items: (place) => {
             const { skills: all, settings } = useAppStore.getState();
             const language = settings?.language ?? "en";
-            const skills = skillSlashItems(all, (skill) =>
-              skillDescription(skill, (key, params) => translate(language, key, params)),
+            const skills = skillSlashItems(
+              all,
+              (skill) => skillDescription(skill, (key, params) => translate(language, key, params)),
+              (skill) => {
+                // For the Question asked next, from the composer, which goes on this line.
+                useComposer.getState().update(mindId, { skill });
+                useComposer.getState().requestFocus();
+              },
             );
             return place === "question" ? skills : [...noteSlashItems, ...skills];
           },
@@ -185,6 +198,7 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
         QuestionCommands.configure({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),
+        QuestionFold.configure({ mindId }),
       ],
     },
     [doc],
@@ -195,14 +209,37 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
     editor.setOptions({ editorProps: editorPropsFor(label, emptyFormula) });
   }, [editor, label, emptyFormula]);
 
-  // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
-  // started, or "Ask about this Folder" in the Library, which gives its Search scope.
-  const questionHere = useAppStore((state) => state.questionToStart?.mindId === mindId);
+  // The cursor is where the next Question goes while the focus is in the editor, or has gone
+  // from it only to the composer; anywhere else, Questions go at the end of the Mind.
   useEffect(() => {
-    if (!questionHere) return;
-    startQuestionAtEnd(editor, useAppStore.getState().questionToStart?.scope ?? null);
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (editor.view.dom.contains(target)) cursorInMind.current = true;
+      else if (!dock?.contains(target)) cursorInMind.current = false;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, [editor, dock]);
+
+  // A Question asked for from outside the editor, e.g. "Ask your own Question" in Get
+  // started, or "Ask about this Folder" in the Library, which gives its Search scope:
+  // the composer takes the focus, the Question to go at the end of the Mind.
+  const questionHere = useAppStore((state) => state.questionToStart?.mindId === mindId);
+  const composerShown = dock !== null;
+  useEffect(() => {
+    if (!questionHere || !composerShown) return;
+    composer.current?.focus(useAppStore.getState().questionToStart?.scope ?? null);
     useAppStore.getState().questionStarted();
-  }, [questionHere, editor]);
+  }, [questionHere, composerShown]);
+
+  /** The hint's "press ⌘J…": the composer takes the focus, the Question to go on the hint's line. */
+  const askOnLine = (pos: number) => {
+    if (editor.isDestroyed) return;
+    editor.commands.setTextSelection(pos + 1);
+    cursorInMind.current = true;
+    useComposer.getState().requestFocus();
+  };
 
   // An empty Mind of the User's own shows the three steps while Get started is shown.
   const empty = useEditorState({
@@ -215,9 +252,20 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
     <MindIdContext.Provider value={mindId}>
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         <EditorContent editor={editor} />
-        <EndHint editor={editor} text={hintText} />
+        <EndHint editor={editor} text={hintText} onAsk={askOnLine} />
         <MarginChecks editor={editor} />
       </div>
+      {dock &&
+        createPortal(
+          <Composer
+            ref={composer}
+            editor={editor}
+            doc={doc}
+            mindId={mindId}
+            cursorInMind={cursorInMind}
+          />,
+          dock,
+        )}
       {guide && <StartGuide />}
       <BlockHandle editor={editor} />
       <FormatMenu editor={editor} />

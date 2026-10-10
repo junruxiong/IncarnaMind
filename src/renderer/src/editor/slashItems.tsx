@@ -2,7 +2,7 @@ import type { Editor, JSONContent, Range } from "@tiptap/core";
 import type { ReactNode } from "react";
 import { QUESTION_BLOCK, type Skill } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import { QuestionIcon, SkillIcon } from "../components/icons";
+import { SkillIcon } from "../components/icons";
 
 /**
  * One entry of the slash menu. To add one, add it to `noteSlashItems`, or
@@ -114,26 +114,18 @@ export const noteSlashItems: readonly SlashItem[] = [
       editor.commands.editMath(range.from);
     },
   },
-  {
-    id: "question",
-    label: "question.slash",
-    keywords: ["ask", "question", "ai", "chat", "prompt"],
-    icon: <QuestionIcon className="size-3.5" />,
-    // The line becomes a Question, keeping what was typed before the slash.
-    run(editor, range) {
-      editor.chain().focus().deleteRange(range).setQuestion().run();
-    },
-  },
 ];
 
 /**
  * The slash menu's entries for the enabled Skills, labelled with their names
  * as they are. Choosing one forces the Skill on the Question the cursor is
- * in: in a Note, the line becomes that Question first.
+ * in; in a Note, it goes to the composer as a chip, for the Question asked
+ * there next (`onComposer`), and the composer takes the focus.
  */
 export function skillSlashItems(
   skills: readonly Skill[],
   describe: (skill: Skill) => string = (skill) => skill.description,
+  onComposer: (skill: string) => void = () => undefined,
 ): SlashItem[] {
   return skills
     .filter((skill) => skill.enabled)
@@ -144,11 +136,16 @@ export function skillSlashItems(
       keywords: ["skill"],
       icon: <SkillIcon className="size-3.5" />,
       run(editor, range) {
+        const inQuestion = editor.state.selection.$from.parent.type.name === QUESTION_BLOCK;
+        if (!inQuestion) {
+          editor.chain().focus().deleteRange(range).run();
+          onComposer(skill.name);
+          return;
+        }
         editor
           .chain()
           .focus()
           .deleteRange(range)
-          .setQuestion()
           .updateAttributes(QUESTION_BLOCK, { forcedSkill: skill.name })
           .run();
       },
