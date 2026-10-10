@@ -1,11 +1,21 @@
 /**
- * Keyword search terms (ADR-0009): text is normalised, then split into words
+ * Keyword search terms (ADR-0009): text is normalised, its traditional
+ * Chinese characters are read as simplified ones, then it is split into words
  * with `Intl.Segmenter`, which finds the words in Chinese and Japanese text
  * too. The FTS5 index stores the words joined by spaces, so its default
  * `unicode61` tokenizer sees the same words; queries go through the same steps,
  * minus a short list of stopwords. `Intl.Segmenter` uses the ICU data bundled
  * with Node and Electron, so this adds no dependency.
+ *
+ * The characters are folded one by one, by the Citation check's table
+ * (../../shared/hanVariants), before the text is split, so both scripts split
+ * into the same words: split first, "聯合國大會" is one word and "联合国大会"
+ * three, and the evaluation's Chinese fixtures, turned into traditional
+ * characters by OpenCC, gave 7% other Chinese words than in simplified ones.
+ * Only the index and the queries are folded: a Passage's stored text, which
+ * Citations quote and the viewer shows, keeps the characters it was written in.
  */
+import { SIMPLIFIED } from "../../shared/hanVariants";
 import { normaliseText } from "../../shared/text";
 
 // The "zh" locale makes ICU use its Chinese and Japanese dictionary; other scripts split as usual.
@@ -24,10 +34,16 @@ const STOPWORDS: ReadonlySet<string> = new Set([
   ),
 ]);
 
-/** The words in normalised text, lowercased, in order. */
+/** The blocks the traditional characters of `SIMPLIFIED` are in: CJK Unified Ideographs and Extension A. */
+const HAN = /[\u3400-\u9fff]/g;
+
+/** Text with each traditional Chinese character read as its simplified one. */
+const simplified = (text: string) => text.replace(HAN, (char) => SIMPLIFIED.get(char) ?? char);
+
+/** The words in normalised text, folded to simplified characters and lowercased, in order. */
 function words(normalised: string): string[] {
   const found: string[] = [];
-  for (const segment of segmenter.segment(normalised)) {
+  for (const segment of segmenter.segment(simplified(normalised))) {
     if (segment.isWordLike) found.push(segment.segment.toLowerCase());
   }
   return found;

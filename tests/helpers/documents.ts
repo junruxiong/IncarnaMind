@@ -3,6 +3,7 @@ import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { vi } from "vitest";
 import type { Core, Document, DocumentStatus } from "../../src/core";
+import { normaliseText } from "../../src/shared/text";
 import { createTempDataFolder } from "./core";
 
 /**
@@ -31,6 +32,19 @@ export async function createSourceFolder(): Promise<string> {
 
 export const sha256 = (contents: string | Uint8Array) =>
   createHash("sha256").update(contents).digest("hex");
+
+const wordSegmenter = new Intl.Segmenter("zh", { granularity: "word" });
+
+/**
+ * What the keyword index held for a text before it read traditional Chinese
+ * characters as simplified ones (processing version 5): its normalised words,
+ * as written, lowercased, joined by spaces.
+ */
+export const unfoldedKeywords = (text: string) =>
+  [...wordSegmenter.segment(normaliseText(text))]
+    .filter((segment) => segment.isWordLike)
+    .map((segment) => segment.segment.toLowerCase())
+    .join(" ");
 
 /** Where the old layout (before ADR-0010) kept a Document's copy in the data folder. */
 export const storedFile = (dataDir: string, contentHash: string) =>
