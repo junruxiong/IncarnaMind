@@ -40,7 +40,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 9. **Keep secrets and the User's data safe.**
    - No keys or tokens in code, logs, tests, issues or pull requests. Store secrets only through `src/core/secrets.ts`.
    - Nothing leaves the computer without the User's consent (ADR-0014, `src/core/consent.ts`).
-10. **Every interface string comes in English and Simplified Chinese**, in `src/shared/i18n/`.
+10. **Every interface string comes in English and Simplified Chinese**, in `src/shared/i18n/`. Chinese strings follow [`docs/agents/zh-CN.md`](docs/agents/zh-CN.md).
 11. **Comments say why, not what,** at the density of the code around them.
 12. **Work in your own branch and worktree.**
     - Don't change another checkout or the User's data folder, and don't drive the User's apps.
