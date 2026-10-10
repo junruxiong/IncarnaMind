@@ -31,7 +31,6 @@ import {
 } from "../composer";
 import { core } from "../core";
 import { useT } from "../i18n";
-import { isLive, useMeetingOf } from "../meetings";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
@@ -45,7 +44,6 @@ import {
   whenAnswerShown,
 } from "./composerAsk";
 import { AskArrowIcon, CollapseIcon, ExpandIcon } from "./icons";
-import { MeetingControls, MeetingLines } from "./MeetingBar";
 import { ModelChip } from "./ModelChip";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
@@ -102,10 +100,6 @@ export interface ComposerHandle {
  * Search scope (a chip for each Folder, Tag or Document, or "All Documents";
  * "@" adds more), and the Ask button (an up arrow). Why a Question couldn't
  * be asked shows on one line above them, with the one thing that fixes it.
- *
- * While the Mind's Meeting records or is paused, the composer is the meeting
- * bar: the text on its first row, the recording's controls at the left of the
- * second, before the model, the scope and Ask.
  */
 export function Composer({
   editor,
@@ -149,8 +143,6 @@ export function Composer({
   const caret = useRef<number | null>(null);
   const enabledSkills = skills.filter((skill) => skill.enabled);
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
-  const meeting = useMeetingOf(mindId);
-  const live = isLive(meeting) ? meeting : undefined;
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(mindId, change);
 
@@ -455,10 +447,8 @@ export function Composer({
       ref={root}
       data-testid="composer"
       data-expanded={expanded || undefined}
-      data-meeting={live?.status}
       className={expanded ? "composer composer--expanded" : "composer"}
     >
-      {live && <MeetingLines meeting={live} />}
       {problem && (
         <ComposerProblem
           problem={problem}
@@ -510,11 +500,7 @@ export function Composer({
           <pre className="composer-view-text">{viewing.text}</pre>
         </section>
       )}
-      <div
-        ref={row}
-        data-stacked={stacked || expanded || live !== undefined || undefined}
-        className="composer-row"
-      >
+      <div ref={row} data-stacked={stacked || expanded || undefined} className="composer-row">
         {draft.pastes.length > 0 && (
           <div className="composer-pastes">
             {draft.pastes.map((paste) => (
@@ -562,7 +548,6 @@ export function Composer({
           }}
           className="composer-input"
         />
-        {live && <MeetingControls meeting={live} />}
         <div ref={controls} className="composer-controls">
           <ModelChip doc={doc} onChosen={() => field.current?.focus()} />
           {hasSearchScope(draft.scope) ? (

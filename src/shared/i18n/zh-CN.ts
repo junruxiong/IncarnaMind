@@ -1463,6 +1463,7 @@ export const zhCN = {
   "meetings.notice.kept.other": "音频只保存在这台电脑上，最多一天后删除。",
   "meetings.notice.tell": "在很多地方，未告知他人就录音是违法的。开始之前，先告诉所有人你在录制。",
   "meetings.notice.cancel": "取消",
+  "meetings.bar.label": "会议录制",
   "meetings.bar.recording": "正在录制",
   "meetings.bar.paused": "已暂停",
   "meetings.bar.pause": "暂停录制（{shortcut}）",

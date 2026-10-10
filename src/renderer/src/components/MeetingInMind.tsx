@@ -2,24 +2,31 @@ import { isMacOS } from "@tiptap/core";
 import { useEffect, useId, useState } from "react";
 import type { Meeting } from "../../../core/api";
 import { useLanguage, useT } from "../i18n";
-import { useMeetingOf, useMeetings } from "../meetings";
+import { isLive, useMeetingOf, useMeetings } from "../meetings";
 import { clockTime } from "../meetingTime";
 import { useAppStore } from "../store";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
+import { MeetingBar } from "./MeetingBar";
 import { ProblemLine } from "./ProblemLine";
 import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
 
 /**
  * A Meeting's place in its Mind, under the title: the start block while it is
- * ready; once it is paused or stopped, a line about its audio, with "Delete
- * audio now". While it records, the meeting bar is all there is.
+ * ready, the meeting bar while it records or is paused, and a line about its
+ * audio, with "Delete audio now", once it is paused or stopped.
  */
 export function MeetingInMind({ mindId }: { mindId: string }) {
   const meeting = useMeetingOf(mindId);
   if (!meeting) return null;
   if (meeting.status === "ready") return <MeetingStart meeting={meeting} />;
-  if (meeting.status === "recording") return null;
-  return <MeetingAudioLine meeting={meeting} />;
+  if (isLive(meeting)) {
+    return (
+      <MeetingBar meeting={meeting}>
+        {meeting.status === "paused" && <MeetingAudioLine meeting={meeting} />}
+      </MeetingBar>
+    );
+  }
+  return <MeetingAudioLine meeting={meeting} className="mb-4" />;
 }
 
 /**
@@ -138,7 +145,7 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
  * How long was recorded, how long the audio stays on this computer, and
  * "Delete audio now", which asks first, on the same line: it can't be undone.
  */
-function MeetingAudioLine({ meeting }: { meeting: Meeting }) {
+function MeetingAudioLine({ meeting, className = "" }: { meeting: Meeting; className?: string }) {
   const t = useT();
   const language = useLanguage();
   const { deleteAudio } = useMeetings.getState();
@@ -149,7 +156,7 @@ function MeetingAudioLine({ meeting }: { meeting: Meeting }) {
       <p
         role="alert"
         data-testid="meeting-audio-confirm"
-        className="mb-4 font-sans text-[13px] leading-5 break-words text-ink-meta"
+        className={`font-sans text-[13px] leading-5 break-words text-ink-meta ${className}`}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.preventDefault();
@@ -196,7 +203,7 @@ function MeetingAudioLine({ meeting }: { meeting: Meeting }) {
     <ProblemLine
       role="status"
       testId="meeting-audio"
-      className="mb-4"
+      className={className}
       action={
         audio.kept
           ? {

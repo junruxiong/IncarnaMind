@@ -1538,6 +1538,7 @@ export const en = {
   "meetings.notice.tell":
     "In many places it’s against the law to record people without telling them. Tell everyone you’re recording before you start.",
   "meetings.notice.cancel": "Cancel",
+  "meetings.bar.label": "Meeting recording",
   "meetings.bar.recording": "Recording",
   "meetings.bar.paused": "Paused",
   "meetings.bar.pause": "Pause recording ({shortcut})",
