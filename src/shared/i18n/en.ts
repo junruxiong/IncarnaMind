@@ -83,7 +83,6 @@ export const en = {
     "Include up to 3 PDF page images with local Clef-Flash. Other formats use text only.",
   "library.automatic": "Organize new and changed Documents automatically. Keep my manual choices.",
   "library.saveModel": "Save settings",
-  "library.connectModel": "Manage connections…",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
@@ -663,6 +662,9 @@ export const en = {
   "jev.form.save": "Use Jev for tagging",
 
   "settings.title": "Settings",
+  "settings.pages.models": "Models",
+  "settings.pages.search": "Search",
+  "settings.pages.tools": "Tools",
   "settings.language": "Interface language",
   "settings.language.system": "Same as system",
   "settings.language.en": "English",

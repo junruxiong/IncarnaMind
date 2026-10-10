@@ -77,7 +77,6 @@ export const zhCN = {
   "library.pageImages": "向本地 Clef-Flash 提供最多 3 张 PDF 页面图片。其他格式仅读取文本。",
   "library.automatic": "自动整理新增和更新的文档，保留我的手动选择。",
   "library.saveModel": "保存设置",
-  "library.connectModel": "管理连接…",
   "library.preset.research": "研究论文",
   "library.preset.research.description": "学术论文、实验和研究方法。",
   "library.preset.reports": "报告与演示",
@@ -627,6 +626,9 @@ export const zhCN = {
   "jev.form.save": "用 Jev 打标签",
 
   "settings.title": "设置",
+  "settings.pages.models": "模型",
+  "settings.pages.search": "搜索",
+  "settings.pages.tools": "工具",
   "settings.language": "界面语言",
   "settings.language.system": "跟随系统",
   "settings.language.en": "English",

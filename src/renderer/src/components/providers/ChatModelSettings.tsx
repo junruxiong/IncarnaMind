@@ -23,7 +23,7 @@ import { useOllama } from "./OllamaCard";
 import { providerLabel } from "./shared";
 
 /**
- * Settings → Chat model: the provider in use and the default model, as rows
+ * Settings → Models → Chat model: the provider in use and the default model, as rows
  * split by rules, and changing the provider with the same choices as first
  * run (local models with Ollama, or an API key).
  */
