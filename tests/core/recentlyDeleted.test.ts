@@ -213,6 +213,40 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
     expect(await assignmentOf(core, budget.id)).toMatchObject({ groupId: research.id });
   });
 
+  test("a Folder that holds Minds and Documents comes back with all of them in it", async () => {
+    const { core, clock } = await start();
+    const finance = await core.createLibraryGroup({ name: "Finance", description: "Money." });
+    const budget = await addText(core, "Budget.txt", "The budget for next year.");
+    const plan = await core.createMind({ title: "Plan", folderId: finance.id });
+    const chat = await core.createMind({ title: "Ask", kind: "chat", folderId: finance.id });
+    const old = await core.createMind({ title: "Old notes", folderId: finance.id });
+    await core.moveToFolder({ documentIds: [budget.id], folderId: finance.id });
+    const before = {
+      minds: withoutTimes(await core.listMinds()),
+      assignments: (await core.getLibrary()).assignments,
+    };
+    clock.advance(1000);
+    await core.deleteMind(old.id);
+
+    clock.advance(1000);
+    const deletion = await core.deleteLibraryGroup(finance.id);
+    expect(deletion.mindIds.sort()).toEqual([plan.id, chat.id].sort());
+    expect(deletion.assignments.map((each) => each.documentId)).toEqual([budget.id]);
+    expect((await core.listMinds()).map((mind) => mind.folderId)).toEqual([null, null]);
+    expect(await assignmentOf(core, budget.id)).toMatchObject({ groupId: null });
+
+    const changed = nextEvent(core, "minds.changed");
+    clock.advance(1000);
+    await core.restore([
+      { kind: "folder", id: finance.id },
+      { kind: "mind", id: old.id },
+    ]);
+
+    expect(ids(byId(await changed))).toEqual(ids(byId([plan, chat, old])));
+    expect(withoutTimes(await core.listMinds())).toEqual(before.minds);
+    expect((await core.getLibrary()).assignments).toEqual(before.assignments);
+  });
+
   test("a Tag comes back with its links", async () => {
     const { core, clock } = await start();
     const a = await addText(core, "A.txt", "Notes about the first harbour.");
@@ -296,6 +330,13 @@ describe("Moving back and untagging", { timeout: 30_000 }, () => {
     const assigned = nextEvent(core, "library.assignments");
     await core.restoreAssignment(invoice.id, previous);
     expect(await assigned).toEqual([filed]);
+    expect(await assignmentOf(core, invoice.id)).toEqual(filed);
+
+    // The same through a move, as the sidebar's drag and "Move to…" make one.
+    const move = await core.moveToFolder({ documentIds: [invoice.id], folderId: research.id });
+    expect(move.documents).toEqual([{ id: invoice.id, from: finance.id, previous: filed }]);
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({ source: "user" });
+    await core.restoreAssignment(invoice.id, move.documents[0]?.previous ?? null);
     expect(await assignmentOf(core, invoice.id)).toEqual(filed);
 
     // Still automatic: Organize may file it elsewhere.

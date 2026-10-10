@@ -694,7 +694,19 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 32 is reserved by work in progress (#111); 34 was reserved by #178, which needed only 33.
+    version: 34,
+    description: "A Mind belongs to one Folder, or to none (#111)",
+    // The in-app Folder (library_groups) a Mind belongs to; NULL: Not in a
+    // Folder, where every Mind made before is. No foreign key: a later sync
+    // may deliver a Mind before its Folder. Deleting a Folder sets its Minds'
+    // folder_id back to NULL.
+    sql: `
+      ALTER TABLE minds ADD COLUMN folder_id TEXT;
+      CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 32 was reserved by #111, which took 34.
     version: 35,
     description:
       "Recently deleted: what was deleted permanently, and what a Folder's deletion took out",
@@ -710,9 +722,9 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX documents_by_deleted_at ON documents (deleted_at)
         WHERE deleted_at IS NOT NULL AND purged_at IS NULL;
 
-      -- What deleting a Folder (library_groups) took out of it: one row per Document in it
-      -- (item_kind 'document', checked in code), so restoring the Folder puts back those still
-      -- in none. Restoring it marks its rows deleted.
+      -- What deleting a Folder (library_groups) took out of it: one row per Document and Mind
+      -- in it (item_kind 'document' or 'mind', checked in code), so restoring the Folder puts
+      -- back those still in none. Restoring it marks its rows deleted.
       CREATE TABLE deleted_folder_items (
         id TEXT PRIMARY KEY NOT NULL,
         folder_id TEXT NOT NULL,
