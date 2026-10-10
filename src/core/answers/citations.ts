@@ -61,13 +61,18 @@ const CITATION_MARKER = /\[\^(\d{1,4})\]/g;
 /**
  * Where a new Unit starts inside a Passage given to the model ("[p. 4]",
  * "[slide 4]", "[§ 2.1 Sensitivity]", "[Revenue, rows 2–41]", "[lines 51–100]"),
- * and where a slide's speaker notes start ("[speaker notes]").
+ * where a slide's speaker notes start ("[speaker notes]"), and where a Word
+ * comment starts ("[comment by Reviewer]").
  */
 const LOCATION_MARK =
-  /\[(?:p\.\s*\d+(?:[–-]\d+)?|slides?\s+\d+(?:[–-]\d+)?|(?:[^\]\n]{1,100},\s*)?rows?\s+\d+(?:[–-]\d+)?|lines?\s+\d+(?:[–-]\d+)?|§[^\]\n]{0,200}|speaker notes)\]/gi;
+  /\[(?:p\.\s*\d+(?:[–-]\d+)?|slides?\s+\d+(?:[–-]\d+)?|(?:[^\]\n]{1,100},\s*)?rows?\s+\d+(?:[–-]\d+)?|lines?\s+\d+(?:[–-]\d+)?|§[^\]\n]{0,200}|speaker notes|comment(?: by [^\]\n]{1,100})?)\]/gi;
 
 /** Marks where a slide's speaker notes start, inside a Passage given to the model. */
 const NOTES_MARK = "[speaker notes]";
+
+/** Marks where a Word comment starts, inside a Passage given to the model, with its author if known (#76). */
+const commentMark = (author: string | null) =>
+  author ? `[comment by ${author.replace(/[\]\n]+/g, " ")}]` : "[comment]";
 
 const QUOTE_PAIRS: readonly (readonly [string, string])[] = [
   ['"', '"'],
@@ -386,13 +391,33 @@ function unitMark(unit: PageText): string | null {
 const headOf = (text: string) => text.trim().slice(0, 200);
 
 /**
+ * The marks inside a Unit, after a paragraph break: where a slide's speaker
+ * notes start ("[speaker notes]"), and where each Word comment read into a
+ * section starts ("[comment by Reviewer]"), each with the start of what it marks.
+ */
+function innerMarks(unit: PageText): { head: string; mark: string }[] {
+  const marks: { head: string; mark: string }[] = [];
+  for (const anchor of unit.anchors ?? []) {
+    const head = headOf(unit.text.slice(anchor.start, anchor.end));
+    if (unit.kind === "slide" && anchor.target === "notes") {
+      marks.push({ head, mark: NOTES_MARK });
+    } else if (unit.kind === "section" && anchor.target.startsWith("comment")) {
+      const comment = unit.label?.comments?.find((each) => each.target === anchor.target);
+      marks.push({ head, mark: commentMark(comment?.author ?? null) });
+    }
+  }
+  return marks;
+}
+
+/**
  * The Passage's text with marks where each of its later Units starts ("[p. 4]",
- * "[slide 4]", "[§ 2.1 Sensitivity]", "[Revenue, rows 2–41]") and where a
- * slide's speaker notes start ("[speaker notes]"), so the model can tell
- * where a quote is. Found by matching the start of each Unit's stored text
- * after a paragraph break, which is how Units were laid out when the Passages
- * were built (and how a slide's notes follow its text). `units` are the
- * Passage's, in order.
+ * "[slide 4]", "[§ 2.1 Sensitivity]", "[Revenue, rows 2–41]"), and where a
+ * slide's speaker notes or a Word comment start ("[speaker notes]",
+ * "[comment by Reviewer]"), so the model can tell where a quote is, and what
+ * it is. Found by matching the start of each Unit's stored text after a
+ * paragraph break, which is how Units were laid out when the Passages were
+ * built (and how a slide's notes follow its text, and a section's comments
+ * its own). `units` are the Passage's, in order.
  */
 function withUnitMarks(text: string, units: readonly PageText[]): string {
   const marks: { head: string; mark: string; unit: boolean }[] = [];
@@ -401,21 +426,13 @@ function withUnitMarks(text: string, units: readonly PageText[]): string {
     if (index > 0 && mark && unit.text.trim()) {
       marks.push({ head: headOf(unit.text), mark, unit: true });
     }
-    const notes =
-      unit.kind === "slide" ? unit.anchors?.find((each) => each.target === "notes") : null;
-    if (notes) {
-      marks.push({
-        head: headOf(unit.text.slice(notes.start, notes.end)),
-        mark: NOTES_MARK,
-        unit: false,
-      });
-    }
+    for (const inner of innerMarks(unit)) marks.push({ ...inner, unit: false });
   });
   let marked = "";
   let from = 0;
-  for (const { head, mark } of marks) {
+  for (const { head, mark, unit } of marks) {
     if (!head) continue;
-    if (from === 0 && marked === "" && text.startsWith(head) && mark === NOTES_MARK) {
+    if (from === 0 && marked === "" && text.startsWith(head) && !unit) {
       marked = `${mark} `;
       continue;
     }
@@ -776,7 +793,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
               )
             : [];
         const marked =
-          units.length > 1 || units[0]?.kind === "slide"
+          units.length > 1 || units.some((unit) => innerMarks(unit).length > 0)
             ? withUnitMarks(passage.text, units)
             : passage.text;
         return {

@@ -339,6 +339,87 @@ describe("Citing Word, PowerPoint and Excel Documents in an Answer", { timeout: 
     expect(citeFeedback(model)).toMatch(/\[\^4\]: the quote isn't word for word at slide 4/);
   });
 
+  test("a Question about a Word comment finds it, and its Citation, found, names the section and says it is a comment by its author (#76)", async () => {
+    const commented = (paragraphs: Parameters<typeof docxOf>[0]) =>
+      new Uint8Array(docxOf(paragraphs));
+    let shown: ShownPassage[] = [];
+    const model = citingModel({
+      // Words only the comments have.
+      query: "finance lower 合同 续签",
+      records: (passages) => {
+        shown = passages;
+        return [
+          {
+            marker: 1,
+            passage: byDocument(passages, "Library"),
+            location: "§ Costs, comment by Reviewer",
+            // Copied with its mark, which the core takes off.
+            quote:
+              "[comment by Reviewer] Finance has asked to lower the contingency to 8 per cent.",
+          },
+          {
+            marker: 2,
+            passage: byDocument(passages, "食堂"),
+            location: "§ 运营数据，王丽华 的批注",
+            quote: "配送中心的合同将于2026年12月到期，需提前续签。",
+          },
+          // Reworded: not found.
+          {
+            marker: 3,
+            passage: byDocument(passages, "Library"),
+            location: "§ Costs, comment by Reviewer",
+            quote: "Finance wants the contingency lowered to 8 per cent.",
+          },
+        ];
+      },
+      answer: "Finance asked for less [^1], and the contract ends [^2]. Or so [^3].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      {
+        name: "Library.docx",
+        contents: commented([
+          { text: "Costs", heading: 1 },
+          {
+            text: "A contingency of 10 per cent is held.",
+            comment: {
+              text: "Finance has asked to lower the contingency to 8 per cent.",
+              author: "Reviewer",
+            },
+          },
+          { text: "Risks", heading: 1 },
+          { text: "A bat roost may delay the roof works." },
+        ]),
+      },
+      {
+        name: "食堂.docx",
+        contents: commented([
+          { text: "运营数据", heading: 1 },
+          {
+            text: "食材采购统一由区农产品配送中心负责。",
+            comment: { text: "配送中心的合同将于2026年12月到期，需提前续签。", author: "王丽华" },
+          },
+        ]),
+      },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "What did finance ask?");
+
+    // The model sees where each comment starts, and who wrote it.
+    expect(shown.find((passage) => passage.document === "Library")?.text).toContain(
+      "is held.\n\n[comment by Reviewer] Finance has asked",
+    );
+    expect(shown.find((passage) => passage.document === "食堂")?.text).toContain(
+      "[comment by 王丽华] 配送中心的合同",
+    );
+    const citations = citationsIn(client, answerId);
+    expect(citations.map((citation) => [citation.location, citation.check])).toEqual([
+      [{ kind: "section", heading: "Costs", comment: { author: "Reviewer" } }, "found"],
+      [{ kind: "section", heading: "运营数据", comment: { author: "王丽华" } }, "found"],
+      [{ kind: "section", heading: "Costs" }, "not-found"],
+    ]);
+    expect(citations[0]?.quote).toBe("Finance has asked to lower the contingency to 8 per cent.");
+  });
+
   test("a Location the Passage doesn't have is 'not found', and the model is told where it can cite", async () => {
     const model = citingModel({
       query: "west revenue",
