@@ -74,3 +74,34 @@ describe("matching numbers in a sheet's rows", () => {
     expect(findQuote("Total 4812 tonnes", "Total 4,812 tonnes", { numbers: true })).not.toBeNull();
   });
 });
+
+describe("matching numbers in a slide, only when a quote isn't found as it is (#76)", () => {
+  /** A chart's figures as a slide stores them: the values the file caches. */
+  const CHART = "Growth since launch\nNew subscribers\nApr: 820, May: 1140, Jun: 1560, Jul: 1710";
+  const slide = (text: string, quote: string) => {
+    const ranges = findQuote(text, quote, { numbers: "if-needed" });
+    return ranges ? ranges.map((range) => text.slice(range.start, range.end)).join(" … ") : null;
+  };
+
+  test("a chart's figure is found however its thousands are written", () => {
+    expect(slide(CHART, "Jun: 1,560")).toBe("Jun: 1560");
+    expect(slide(CHART, "May: 1,140, Jun: 1,560")).toBe("May: 1140, Jun: 1560");
+    expect(slide(CHART, "Jun: 1560")).toBe("Jun: 1560");
+    expect(slide("新增订户\n4月: 820, 5月: 1140, 6月: 1560", "6月: 1,560")).toBe("6月: 1560");
+  });
+
+  test("a figure that differs, or a part of one, isn't found", () => {
+    expect(slide(CHART, "Jun: 1,650")).toBeNull();
+    expect(slide(CHART, "Jun: 1,56")).toBeNull();
+    expect(slide(CHART, "Jun: 15,600")).toBeNull();
+    expect(slide(CHART, "Jul: 1,560")).toBeNull();
+    expect(slide("新增订户\n4月: 820, 5月: 1140, 6月: 1560", "6月: 1,650")).toBeNull();
+  });
+
+  test("a quote found as it is stays found, where reading numbers would join two", () => {
+    // Read as a sheet's, "12 450" would be one number, and "450 staff" a part of it.
+    const text = "Sites and staff: 12 450 staff in all";
+    expect(findQuote(text, "450 staff", { numbers: true })).toBeNull();
+    expect(slide(text, "450 staff")).toBe("450 staff");
+  });
+});

@@ -95,6 +95,15 @@ describe("The check of a quote in a deck", () => {
     expect(check(DECK, 3, 3, "The western region grew fastest")).toEqual(FOUND);
   });
 
+  test("finds a table row written with pipes, and a figure however its thousands are written (#76)", () => {
+    expect(check(DECK, 4, 4, "Qualified | 42 | 1,260")).toEqual(FOUND);
+    expect(check(DECK, 4, 4, "Qualified 42 1260")).toEqual(FOUND);
+    expect(check(DECK, 4, 4, "| Proposal | 17 | 830 |")).toEqual(FOUND);
+    expect(check(DECK, 4, 4, "Qualified | 42 | 1,620")).toEqual(NOT_FOUND);
+    expect(check(DECK, 4, 4, "Qualified | 1,260")).toEqual(NOT_FOUND);
+    expect(check(DECK, 3, 3, "Qualified | 42 | 1,260")).toEqual(NOT_FOUND);
+  });
+
   test("doesn't find a quote on the wrong slide, or reworded", () => {
     expect(check(DECK, 4, 4, "The western region grew fastest")).toEqual(NOT_FOUND);
     expect(check(DECK, 3, 3, "The western region grew the fastest")).toEqual(NOT_FOUND);

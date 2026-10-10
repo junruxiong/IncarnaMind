@@ -151,9 +151,10 @@ export function unitLocation(unit: UnitText): CitationLocation | null {
 
 /**
  * Where a quote is in the text of Units (see `joinUnits`), matched as the
- * Citation check matches it, number formatting normalised in sheets' rows
- * (and lost f-ligatures forgiven with `lostLigatures`, of their Document);
- * null if it isn't there.
+ * Citation check matches it, number formatting normalised in sheets' rows,
+ * and in slides when the quote isn't found as it is (see `numbersIn`; and
+ * lost f-ligatures forgiven with `lostLigatures`, of their Document); null
+ * if it isn't there.
  */
 export function quoteInUnits(
   units: readonly UnitText[],
@@ -162,10 +163,17 @@ export function quoteInUnits(
 ): TextRange[] | null {
   const { text } = joinUnits(units);
   if (!quote || text.trim() === "") return null;
-  return findQuote(text, quote, {
-    ...options,
-    numbers: units.some((unit) => unit.kind === "rows"),
-  });
+  return findQuote(text, quote, { ...options, numbers: numbersIn(units) });
+}
+
+/**
+ * How number formatting is matched in Units: normalised in sheets' rows; in
+ * slides, whose charts are stored as the values the file caches and drawn in
+ * its number formats, only when a quote isn't found as it is (#76).
+ */
+export function numbersIn(units: readonly Pick<UnitText, "kind">[]): MatchOptions["numbers"] {
+  if (units.some((unit) => unit.kind === "rows")) return true;
+  return units.some((unit) => unit.kind === "slide") ? "if-needed" : false;
 }
 
 /**
