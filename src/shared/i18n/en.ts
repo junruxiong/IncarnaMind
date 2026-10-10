@@ -848,7 +848,7 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it.",
+    "These send your content to a service outside this computer. Nothing is sent on one until you allow it. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
