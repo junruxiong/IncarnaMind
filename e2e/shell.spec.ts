@@ -475,16 +475,7 @@ test("first run and every Settings page", async () => {
 
   await window.getByRole("button", { name: "Settings" }).click();
   const settings = window.getByTestId("settings");
-  for (const page of [
-    "general",
-    "chat-model",
-    "search",
-    "organization",
-    "connectors",
-    "skills",
-    "approvals",
-    "privacy",
-  ]) {
+  for (const page of ["general", "models", "search", "tools", "connectors", "skills", "privacy"]) {
     await settings.getByTestId(`settings-nav-${page}`).click();
     await expect(settings).toHaveAttribute("data-page", page);
     await expect(settings.getByTestId(`settings-page-${page}`)).not.toBeEmpty();

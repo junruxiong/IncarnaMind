@@ -303,7 +303,7 @@ function useStatuses(): Status[] {
       action: {
         label: t("status.setUp"),
         testId: "tagging-waiting-setup",
-        run: () => openSettings("chat-model"),
+        run: () => openSettings("models"),
       },
     });
   }

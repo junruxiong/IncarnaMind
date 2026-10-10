@@ -76,7 +76,7 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await useLocalChatModel(window);
 
   // Settings → Automatic tagging: a key and a Jev-compatible server, tested, then used.
-  await openSettings(window, "chat-model");
+  await openSettings(window, "models");
   const section = window.getByTestId("jev-settings");
   await section.getByTestId("jev-set-up").click();
   const form = section.getByTestId("jev-form");

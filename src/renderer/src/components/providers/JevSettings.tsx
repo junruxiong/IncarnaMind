@@ -34,7 +34,7 @@ const HOSTED_URL = "https://api.typesafe.ai";
 const toPercent = (probability: number) => Math.round(probability * 100);
 
 /**
- * Settings → Automatic tagging: the chat model by default, or TypeSafe Jev
+ * Settings → Models → Automatic tagging: the chat model by default, or TypeSafe Jev
  * with a key (and, for Jev-compatible models, another server), plus the band
  * of probabilities whose Tags are marked for review.
  */

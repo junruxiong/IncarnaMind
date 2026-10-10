@@ -164,7 +164,7 @@ export function SkillsSettings() {
 }
 
 /**
- * Settings → Skill scripts: the switch that lets Skills run their scripts at
+ * Settings → Skills → Skill scripts: the switch that lets Skills run their scripts at
  * all (each run still asks, unless the Skill's scripts always run), with
  * what a script can reach here (`Settings.scriptSandbox`), and how long a
  * script may run before it is stopped. Both belong to this device.
