@@ -1,12 +1,14 @@
 /**
  * Excel, CSV and PowerPoint Documents get no vectors while keyword search
  * alone is measured for them (ADR-0009, 2026-10-10): they are ready all the
- * same, and keyword and hybrid search find them.
+ * same, keyword and hybrid search find them, and hybrid search doesn't rank
+ * them below Passages both searches found only for having no vector.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { DATABASE_FILE } from "../../src/core";
+import { fuseRankingScores } from "../../src/core/documents/search";
 import { embedsPassages, KEYWORD_ONLY_KINDS } from "../../src/core/documents/vectors";
 import { openDatabase } from "../../src/core/storage";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
@@ -81,7 +83,7 @@ describe("Excel, CSV and PowerPoint Documents", { timeout: 30_000 }, () => {
     ).toHaveLength(1);
   });
 
-  test("are found by keyword search and hybrid search, never by vector search", async () => {
+  test("are found by keyword search and hybrid search, never by vector search, and hybrid search keeps their keyword rank", async () => {
     const { core, orders, notes } = await setUp();
     const query = "Evergreen Labs";
     const ids = (found: { documentId: string }[]) => [
@@ -96,7 +98,10 @@ describe("Excel, CSV and PowerPoint Documents", { timeout: 30_000 }, () => {
     // finds only the notes, the one Document with vectors.
     expect(ids(keyword)).toEqual([orders.id, notes.id]);
     expect(ids(vector)).toEqual([notes.id]);
-    expect(ids(hybrid).sort()).toEqual([orders.id, notes.id].sort());
+    // Plain fusion would put the notes first, found by both searches. The orders' Passage
+    // can't be in vector search's list, so its keyword rank counts for both, and it stays first.
+    expect(ids(hybrid)).toEqual([orders.id, notes.id]);
+    expect(hybrid[0]?.passageId).toBe(keyword[0]?.passageId);
   });
 
   test("keep any vectors they had from before unused", async () => {
@@ -164,5 +169,26 @@ describe("Excel, CSV and PowerPoint Documents", { timeout: 30_000 }, () => {
         "SELECT DISTINCT embedding_model AS model FROM documents WHERE deleted_at IS NULL",
       ),
     ).toEqual([{ model: "openai-compatible@http://127.0.0.1:9/v1:mock-embed" }]);
+  });
+});
+
+describe("Hybrid search's fusion", () => {
+  test("counts a Passage with no vector by its keyword rank for both lists, so it isn't ranked below Passages both found", () => {
+    const keyword = [1, 2, 3];
+    const vector = [2, 4];
+    const order = (keywordOnly?: Set<number>) =>
+      fuseRankingScores([keyword, vector], 10, keywordOnly).map((hit) => hit.seq);
+
+    // Plain fusion: 2, in both lists, comes first, though keyword search put 1 first.
+    expect(order()).toEqual([2, 1, 4, 3]);
+    // 1 and 3 have no vector: their keyword ranks count for vector search's list too.
+    expect(order(new Set([1, 3]))).toEqual([1, 2, 3, 4]);
+    expect(fuseRankingScores([keyword, vector], 1, new Set([1]))).toEqual([
+      { seq: 1, score: 2 / 61 },
+    ]);
+    // While vector search returns nothing (the query couldn't be embedded), nothing changes.
+    expect(fuseRankingScores([keyword, []], 10, new Set([1, 3]))).toEqual(
+      fuseRankingScores([keyword, []], 10),
+    );
   });
 });
