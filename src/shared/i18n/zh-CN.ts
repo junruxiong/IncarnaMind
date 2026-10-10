@@ -797,7 +797,7 @@ export const zhCN = {
   "privacy.intro":
     "IncarnaMind 不收集任何使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
   "privacy.flows.intro":
-    "以下数据流会把你的内容发送到这台电脑以外的服务。在你允许之前，不会发送任何内容。",
+    "以下数据流会把你的内容发送到这台电脑以外的服务。在你允许之前，不会发送任何内容。服务商提供选择时，IncarnaMind 会要求它不要保存你的请求。",
   "privacy.flows.service": "发送到 {service}",
   "privacy.flows.local": "留在这台电脑上",
   "privacy.flows.sends": "发送：",
