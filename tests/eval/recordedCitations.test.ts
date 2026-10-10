@@ -124,17 +124,27 @@ describe("The evaluation's PDFs whose stored text lost its f-ligatures", {
     expect(await lost("ABPI Code of Practice for the Pharmaceutical Industry 2021")).toBe(false);
   });
 
-  test("so JP Morgan's quote of p. 8 as the page shows it is found there", async () => {
+  test("so JP Morgan's quotes as its pages show them are found there, also beside a ligature its text kept", async () => {
     const pages = await storedPages("JP Morgan 2022 Environmental Social Governance Report");
-    const range = { pageFrom: 8, pageTo: 8 };
-    const result = checkCitation({
-      quote: "with the goal to finance and facilitate more than $2.5 trillion over 10 years",
-      range,
-      passage: range,
-      documentDeleted: false,
-      pages: pages.filter(({ page }) => page === 8),
-      ...matchingOf(pages),
-    });
-    expect(result).toEqual({ check: "found", checkReason: null });
+    const check = (page: number, quote: string) =>
+      checkCitation({
+        quote,
+        range: { pageFrom: page, pageTo: page },
+        passage: { pageFrom: page, pageTo: page },
+        documentDeleted: false,
+        pages: pages.filter((each) => each.page === page),
+        ...matchingOf(pages),
+      });
+
+    expect(
+      check(8, "with the goal to finance and facilitate more than $2.5 trillion over 10 years"),
+    ).toEqual({ check: "found", checkReason: null });
+    // qwen3.5:4b's quote for en-19 (2026-10-10): its text reads "Firm fnanced", "Firm" with its "Fi".
+    expect(
+      check(
+        9,
+        "In 2022, our Firm financed and facilitated approximately $197 billion toward the Target; $70 billion toward green, $87 billion toward development finance and $40 billion toward community development.",
+      ),
+    ).toEqual({ check: "found", checkReason: null });
   });
 });

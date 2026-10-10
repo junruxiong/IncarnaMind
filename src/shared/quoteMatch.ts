@@ -46,7 +46,9 @@
  * - In a Document whose text lost its f-ligatures (see `lostLigatures`), a
  *   quote's "fi", "fl", "ff", "ffi" or "ffl" may be the lone "f" the text
  *   kept: pdf.js reads some PDFs' ligatures as their first letter only, so a
- *   page that shows "finance" has "fnance" for text. Only there: in other
+ *   page that shows "finance" has "fnance" for text. Not every one is lost
+ *   ("Firm", with a capital, kept its "Fi"), so the quote and the text are
+ *   both read with each ligature's letters as one "f". Only there: in other
  *   text, 4% of words would then match another ("of" an "off", "food" a
  *   "flood", "four" a "flour"), which is a word changed (ADR-0009).
  *
@@ -132,7 +134,7 @@ export interface MatchOptions {
   /**
    * The Document's text lost its f-ligatures (see `lostLigatures`): a quote
    * not found as it is is looked for with each ligature's letters read as
-   * the lone "f" the text kept.
+   * one "f", in the quote and in the text alike.
    */
   lostLigatures?: boolean;
 }
@@ -172,6 +174,25 @@ function withoutLigatures(needle: string): string {
     folded = folded.replace(LIGATURE_LETTERS, "f");
   }
   return folded;
+}
+
+/**
+ * A text's units read as `withoutLigatures` reads a needle: the letters after
+ * each ligature's "f" marked `removed`, so offsets still point into the text.
+ */
+function unitsWithoutLigatures(units: NormalisedUnit[]): NormalisedUnit[] {
+  for (let changed = true; changed; ) {
+    changed = false;
+    const live = units.filter((unit) => !unit.removed);
+    const chars = live.map((unit) => unit.char).join("");
+    for (const match of chars.matchAll(LIGATURE_LETTERS)) {
+      for (let at = 1; at < match[0].length; at++) {
+        (live[match.index + at] as NormalisedUnit).removed = true;
+        changed = true;
+      }
+    }
+  }
+  return units;
 }
 
 /**
@@ -418,20 +439,22 @@ export function findQuote(
   quote: string,
   options: MatchOptions = {},
 ): TextRange[] | null {
-  const found = findShaped(text, quote, options, (needle) => needle);
+  const found = findRead(text, quote, options, false);
   if (found || !options.lostLigatures) return found;
-  return findShaped(text, quote, options, withoutLigatures);
+  return findRead(text, quote, options, true);
 }
 
-/** `findQuote` with the quote's needles passed through `shape`. */
-function findShaped(
+/** `findQuote`, with the quote and the text both read without f-ligatures' letters when asked. */
+function findRead(
   text: string,
   quote: string,
   options: MatchOptions,
-  shape: (needle: string) => string,
+  withoutLigatureLetters: boolean,
 ): TextRange[] | null {
-  if (!options.numbers) return findNeedle(matchUnits(text), shape(needleOf(quote)));
-  const units = matchUnits(text, "text");
+  const shape = withoutLigatureLetters ? withoutLigatures : (needle: string) => needle;
+  const read = withoutLigatureLetters ? unitsWithoutLigatures : (units: NormalisedUnit[]) => units;
+  if (!options.numbers) return findNeedle(read(matchUnits(text)), shape(needleOf(quote)));
+  const units = read(matchUnits(text, "text"));
   const accept = wholeNumbers(units);
   const grouped = shape(needleOf(quote, "all"));
   const found = findNeedle(units, grouped, accept);
