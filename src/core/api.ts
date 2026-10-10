@@ -456,6 +456,11 @@ export interface DeviceSettings {
   openMinds: string[];
   /** The tab shown, one of `openMinds`, or null when none is open. */
   activeMind: string | null;
+  /**
+   * The Library's tab (#119): "closed", "open" beside the Mind tabs, or
+   * "shown" (open, and the tab in front), so it comes back after a restart.
+   */
+  libraryTab: "closed" | "open" | "shown";
   /** The User chose "set up later" on the first-run chat setup screen. */
   chatSetupDismissed: boolean;
   /** The "Get started" checklist's progress on this device (see `GettingStarted`). */
@@ -676,6 +681,12 @@ export interface Document {
    * in the background. Not to be confused with `createdAt`.
    */
   creationDate: string | null;
+  /**
+   * The Document's own title (#213), for when its file name is machine-made
+   * (a UUID, "Untitled"): the title in its properties, else its first
+   * heading, else its first line. Null if it has none, or until it is read.
+   */
+  title: string | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */

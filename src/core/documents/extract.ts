@@ -72,7 +72,7 @@ const XMP_CREATE_DATE = /xmp:CreateDate\s*(?:=\s*(["'])([^"'<>]*)\1|>([^<]*)<)/i
  */
 export async function pdfCreationDates(
   bytes: Uint8Array,
-): Promise<{ info: string | null; xmp: string | null }> {
+): Promise<{ info: string | null; xmp: string | null; title: string | null }> {
   const { getDocument } = await loadPdfJs();
   // pdf.js may take ownership of the buffer, so give it a copy.
   const task = getDocument({ data: new Uint8Array(bytes), verbosity: 0 });
@@ -81,9 +81,12 @@ export async function pdfCreationDates(
     const { info, metadata } = await document.getMetadata();
     const created = isRecord(info) ? info.CreationDate : undefined;
     const xmp = metadata ? XMP_CREATE_DATE.exec(String(metadata.getRaw())) : null;
+    const title = isRecord(info) ? info.Title : undefined;
     return {
       info: typeof created === "string" ? created : null,
       xmp: xmp ? (xmp[2] ?? xmp[3] ?? null) : null,
+      // Its title (#213), read with the dates: the dictionary's Title.
+      title: typeof title === "string" ? title : null,
     };
   } finally {
     await task.destroy();

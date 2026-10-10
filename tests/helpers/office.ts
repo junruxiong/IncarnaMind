@@ -22,12 +22,16 @@ const columnName = (index: number) => {
 };
 
 /** docProps/core.xml as Office writes it, with these dates (W3CDTF), if given. */
-export function corePropertiesXml(dates: { created?: string; modified?: string }): string {
+export function corePropertiesXml(dates: {
+  created?: string;
+  modified?: string;
+  title?: string;
+}): string {
   const date = (name: string, value: string | undefined) =>
     value === undefined
       ? ""
       : `<dcterms:${name} xsi:type="dcterms:W3CDTF">${escapeXml(value)}</dcterms:${name}>`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>IncarnaMind tests</dc:creator>${date("created", dates.created)}${date("modified", dates.modified)}</cp:coreProperties>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>IncarnaMind tests</dc:creator>${dates.title === undefined ? "" : `<dc:title>${escapeXml(dates.title)}</dc:title>`}${date("created", dates.created)}${date("modified", dates.modified)}</cp:coreProperties>`;
 }
 
 /** What a package holds besides its content. */

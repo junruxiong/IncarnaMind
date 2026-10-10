@@ -117,6 +117,7 @@ interface DocumentRow {
   linked_folder_id: string | null;
   file_status: string;
   creation_date: string | null;
+  title: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -151,7 +152,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, created_at, updated_at`;
+  creation_date, title, created_at, updated_at`;
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -421,6 +422,7 @@ export function createDocuments(options: DocumentsOptions) {
             }
           : null,
       creationDate: row.creation_date,
+      title: row.title,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -646,7 +648,7 @@ export function createDocuments(options: DocumentsOptions) {
         `UPDATE documents SET status = ?, page_count = ?, failure_reason = ?, failure_message = ?,
            processing_version = ?, embedding_model = ?, embedding_dimensions = NULL,
            content_hash = ?, size = ?, file_status = 'available', creation_date = ?,
-           metadata_version = ?, updated_at = ?
+           title = ?, metadata_version = ?, updated_at = ?
          WHERE id = ?`,
         [
           status,
@@ -660,6 +662,7 @@ export function createDocuments(options: DocumentsOptions) {
           result.contentHash,
           result.size,
           result.creationDate,
+          result.title,
           BigInt(METADATA_VERSION),
           at,
           job.documentId,
@@ -712,11 +715,12 @@ export function createDocuments(options: DocumentsOptions) {
       if (result.outcome === "read") {
         // Only for the version read, and unless processing it again read it meanwhile.
         const written = db.get<{ id: string }>(
-          `UPDATE documents SET creation_date = ?, metadata_version = ?, updated_at = ?
+          `UPDATE documents SET creation_date = ?, title = ?, metadata_version = ?, updated_at = ?
            WHERE id = ? AND content_hash = ? AND metadata_version < ? AND deleted_at IS NULL
            RETURNING id`,
           [
             result.creationDate,
+            result.title,
             BigInt(METADATA_VERSION),
             now(),
             job.documentId,
@@ -724,7 +728,10 @@ export function createDocuments(options: DocumentsOptions) {
             BigInt(METADATA_VERSION),
           ],
         );
-        const row = written && result.creationDate !== null ? find(job.documentId) : undefined;
+        const row =
+          written && (result.creationDate !== null || result.title !== null)
+            ? find(job.documentId)
+            : undefined;
         if (row) emitStatus(toDocument(row));
       } else {
         // The file changed (processing the new version reads its date), can't
