@@ -9,9 +9,11 @@ import {
   dismissChatSetup,
   launchApp,
   linkedFolderRow,
+  newMind,
   openLinkedFolderMenu,
   previewLink,
   removeDataFolder,
+  showSourceLocations,
   turnOnEmbeddings,
   useLocalChatModel,
 } from "./app";
@@ -125,6 +127,9 @@ const treeRows = (window: Page) =>
  * Every Folder, group and Document row is 28px, puts its icon at x 16 and
  * its text at x 40 (24px deeper per level), and keeps its name, its status
  * at the end and a Linked folder's bar on its one line. Returns how many rows.
+ * Each row is read with its parts in one pass, as `rowEdges` reads its edges:
+ * while a folder is indexed, a status or bar found first could be gone by the
+ * time it was measured.
  */
 async function expectRowsAligned(window: Page): Promise<number> {
   const rows = treeRows(window);
@@ -132,25 +137,38 @@ async function expectRowsAligned(window: Page): Promise<number> {
     expect(icon).toBeCloseTo(16 + depth * 24, 0);
     expect(text).toBeCloseTo(40 + depth * 24, 0);
   }
-  const all = await rows.all();
-  for (const row of all) {
-    const box = await boxOf(row);
-    expect(box.height).toBeCloseTo(28, 0);
+  const measured = await rows.evaluateAll((elements) =>
+    elements.map((row) => {
+      const box = row.getBoundingClientRect();
+      const text = row.querySelector('[data-testid="row-text"]');
+      if (!text) throw new Error("A row has no text.");
+      const ends = row.querySelectorAll(
+        ':scope > button [data-testid$="-status"], :scope > div [data-testid$="-status"], [data-testid="folder-progress"]',
+      );
+      return {
+        top: box.top,
+        height: box.height,
+        textHeight: text.getBoundingClientRect().height,
+        ends: [...ends].map((end) => {
+          const part = end.getBoundingClientRect();
+          return { top: part.top, bottom: part.bottom };
+        }),
+      };
+    }),
+  );
+  for (const row of measured) {
+    expect(row.height).toBeCloseTo(28, 0);
     // One line of text, never wrapped.
-    expect((await boxOf(row.getByTestId("row-text"))).height).toBeLessThanOrEqual(20.5);
-    const ends = row.locator(
-      ':scope > button [data-testid$="-status"], :scope > div [data-testid$="-status"], [data-testid="folder-progress"]',
-    );
-    for (const end of await ends.all()) {
-      const part = await boxOf(end);
-      expect(part.y).toBeGreaterThanOrEqual(box.y - 0.5);
-      expect(part.y + part.height).toBeLessThanOrEqual(box.y + box.height + 0.5);
+    expect(row.textHeight).toBeLessThanOrEqual(20.5);
+    for (const part of row.ends) {
+      expect(part.top).toBeGreaterThanOrEqual(row.top - 0.5);
+      expect(part.bottom).toBeLessThanOrEqual(row.top + row.height + 0.5);
     }
   }
-  return all.length;
+  return measured.length;
 }
 
-test("sidebar rows share one text edge, a Folder's children are one step deeper, and pane headers are 44px", async () => {
+test("sidebar rows share one text edge, in the Folders view and on disk, a folder's children are one step deeper, and pane headers are 44px", async () => {
   // Two Linked folders, one with a folder inside, and a file added on its own.
   const papersPath = join(sources, "Papers");
   const reportsPath = join(sources, "Reports");
@@ -170,7 +188,7 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
     "Literature review, chapter 2",
     "Reading notes: LM scaling",
   ]) {
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.getByTestId("mind-title").fill(title);
     await expect(window.getByTestId("mind-list-item").first()).toHaveText(title);
   }
@@ -181,17 +199,32 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   const folderRow = (folderId: string) =>
     tree.locator(`[data-folder-id="${folderId}"][data-testid="folder-item"]`);
   const documents = window.getByTestId("document-list-item");
+
+  const sidebar = window.getByTestId("sidebar");
+  // The Folders view: the Minds, then the Documents, Not in a Folder, at x 16 / 40.
+  const projectRows = tree.locator(
+    '[data-testid="mind-list-item"], [data-testid="document-list-item"]',
+  );
+  await expect(projectRows).toHaveCount(3 + 4);
+  for (const { icon, text, depth } of await rowEdges(sidebar, projectRows)) {
+    expect(depth).toBe(0);
+    expect(icon).toBeCloseTo(16, 0);
+    expect(text).toBeCloseTo(40, 0);
+  }
+  for (const row of await projectRows.all()) {
+    expect((await boxOf(row)).height).toBeCloseTo(28, 0);
+  }
+
+  // On disk: every Folder, group and Document row, depth 0 at x 16 / 40, each level 24px deeper.
+  await showSourceLocations(window);
+  const rows = tree.locator(
+    '[data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
+  );
+  await expect(rows).toHaveCount(3 + 1 + 4);
   await expect(documents.filter({ hasText: "Attention Is All You Need" })).toHaveAttribute(
     "data-depth",
     "2",
   );
-
-  const sidebar = window.getByTestId("sidebar");
-  // Every Mind, Folder, group and Document row: depth 0 at x 16 / 40, each level 24px deeper.
-  const rows = tree.locator(
-    '[data-testid="mind-list-item"], [data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
-  );
-  await expect(rows).toHaveCount(3 + 3 + 1 + 4);
   const edges = await rowEdges(sidebar, rows);
   for (const { icon, text, depth } of edges) {
     expect(icon).toBeCloseTo(16 + depth * 24, 0);
@@ -202,21 +235,22 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   const child = documents.filter({ hasText: "Language Models" });
   expect(await boxOf(child.locator("svg").first()).then((box) => box.x)).toBeCloseTo(papersText, 0);
   expect(await textLeft(child.getByTestId("row-text"))).toBeCloseTo(papersText + 24, 0);
-  // Minds, both Linked folders and "Other Documents" at the top; 2026 and the Documents in
+  // Both Linked folders and "Other Documents" at the top; 2026 and the Documents in
   // Papers, Reports and Other Documents one step in; the Document in 2026 two.
-  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2]);
+  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 1, 1, 1, 1, 2]);
 
-  // "New Mind", Settings and the section labels share the columns.
+  // "All Documents", Settings and Not in a Folder's label share the columns.
   const sidebarLeft = (await boxOf(sidebar)).x;
-  const newMind = window.getByTestId("new-mind");
-  expect((await boxOf(newMind.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
-  expect((await textLeft(newMind.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
+  const allDocuments = window.getByTestId("open-library");
+  expect((await boxOf(allDocuments.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
+  expect((await textLeft(allDocuments.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
-  for (const label of [window.locator("#minds-heading"), window.locator("#documents-heading")]) {
-    expect((await textLeft(label)) - sidebarLeft).toBeCloseTo(16, 0);
-  }
+  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  const notInAFolder = window.getByTestId("not-in-a-folder-toggle").locator("span");
+  expect((await textLeft(notInAFolder)) - sidebarLeft).toBeCloseTo(16, 0);
+  await showSourceLocations(window);
   // The header starts the window's title bar: macOS's traffic lights there (e2e/titleBar.spec.ts),
   // or else the app's mark, on the icon column.
   const header = window.getByTestId("sidebar-header");
@@ -225,7 +259,7 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   }
 
   // Rows are 28px.
-  for (const row of [newMind, ...(await rows.all())]) {
+  for (const row of [allDocuments, ...(await rows.all())]) {
     expect((await boxOf(row)).height).toBeCloseTo(28, 0);
   }
 
@@ -300,6 +334,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await addDocuments(window, [join(sources, "Supervisor meeting notes.txt")]);
   await linkFolder(window, drivePath);
   await linkFolder(window, projectsPath);
+  await showSourceLocations(window);
   const drive = linkedFolderRow(window, "Drive");
   const projects = linkedFolderRow(window, "Projects");
   await expect(drive).toHaveAttribute("data-state", "idle");
@@ -358,6 +393,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await rename(drivePath, join(sources, "Drive (unplugged)"));
   running = await launchApp(dataDir);
   window = running.window;
+  await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Drive")).toHaveAttribute("data-state", "unavailable", {
     timeout: 15_000,
   });
@@ -371,7 +407,7 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   await writeFile(paper, "A report on attention in language models.\n");
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Field notes");
   // An empty Linked folder: its own Folder is listed, with nothing in it to tag.
   await mkdir(join(sources, "Projects"));
@@ -381,10 +417,10 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   const footer = window.getByTestId("sidebar-footer");
   const status = window.getByTestId("sidebar-status");
   const watched = [
-    window.getByTestId("new-mind"),
+    window.getByTestId("open-library"),
+    window.getByTestId("browse-views"),
+    window.getByTestId("not-in-a-folder-toggle"),
     window.getByTestId("mind-list-item"),
-    window.getByTestId("folder-item"),
-    window.locator("#documents-heading"),
   ];
   const layout = async () => ({
     rows: await Promise.all(watched.map(async (each) => (await boxOf(each)).y)),
@@ -429,9 +465,9 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
     { node: process.execPath, server: TIDE_SERVER },
   );
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Trip");
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Other notes");
   const trip = window.getByTestId("mind-list-item").filter({ hasText: "Trip" });
   await trip.click();

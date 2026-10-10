@@ -681,6 +681,30 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 33,
+    description: "A provider is one per catalog provider, server and endpoint",
+    // Keys and model lists differ by region (Qwen's Beijing and Singapore, Kimi's .cn and .ai),
+    // so each endpoint of a hosted provider is its own row with its own key.
+    sql: `
+      DROP INDEX chat_providers_by_server;
+      CREATE UNIQUE INDEX chat_providers_by_server
+        ON chat_providers (coalesce(catalog_id, kind), coalesce(base_url, ''), coalesce(endpoint, ''))
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 34,
+    description: "A Mind belongs to one Folder, or to none (#111)",
+    // The in-app Folder (library_groups) a Mind belongs to; NULL: Not in a
+    // Folder, where every Mind made before is. No foreign key: a later sync
+    // may deliver a Mind before its Folder. Deleting a Folder sets its Minds'
+    // folder_id back to NULL.
+    sql: `
+      ALTER TABLE minds ADD COLUMN folder_id TEXT;
+      CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
