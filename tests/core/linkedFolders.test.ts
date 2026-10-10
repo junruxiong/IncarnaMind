@@ -2,7 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { chmod, lstat, mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readdir, readFile, rename, rm, utimes } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -201,6 +201,39 @@ describe("Linking a folder", { timeout: 30_000 }, () => {
       suggestLayout([...zotero(20), ...zotero(5).map((path) => path.replace("paper", "notes"))]),
     ).toBe("tree");
     expect(suggestLayout(["a.pdf", "b.pdf"])).toBe("tree");
+  });
+
+  test("new files are indexed newest first, and files modified at the same moment in the order of their paths", async () => {
+    const library = await createSourceFolder();
+    // Three share a modified time, as files do on a file system that keeps times coarsely,
+    // or when copied in together. A folder's files are listed before a file named like it
+    // ("Tides" before "Tides 2025.txt"), but by path the file comes first.
+    const at = (minute: number) => new Date(Date.UTC(2026, 0, 1, 9, minute));
+    const files: [string, Date][] = [
+      ["Kitchen/Recipes.txt", at(0)],
+      ["Tides/Spring.txt", at(5)],
+      ["Tides 2025.txt", at(5)],
+      ["Almanac.txt", at(5)],
+      ["Coast/Delta.txt", at(9)],
+    ];
+    for (const [name, time] of files) {
+      await utimes(await writeSourceFile(library, name, `${name}: the tide turned.\n`), time, time);
+    }
+    const core = startCore(await createTempDataFolder());
+
+    await linkAndProcess(core, library);
+
+    // Listed as added, the most recent first: the reverse of the order they were indexed in.
+    const listed = await core.listDocuments({
+      linkedFolderId: (await core.listLinkedFolders())[0]?.id,
+    });
+    expect(listed.map((document) => document.name).reverse()).toEqual([
+      "Delta",
+      "Almanac",
+      "Tides 2025",
+      "Spring",
+      "Recipes",
+    ]);
   });
 
   test("a folder inside a Linked folder is linked already; one around Linked folders takes them in, their Documents keeping their ids", async () => {
