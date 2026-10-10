@@ -50,11 +50,9 @@ npm install && npm run dev
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind can sort Documents into your Folders, and the choices you make yourself are kept.
 
-<p align="center"><img src="docs/images/library.png" width="880" alt="All Documents: Word, PDF, plain-text, Excel, PowerPoint, CSV and Markdown files with their Tags and Folders. One file is marked Missing with Locate file…, one is Indexing at 40%, and a button offers to Organize 12 Unsorted."></p>
 
 **Choose your AI.** Use your own OpenAI, Anthropic or Google key, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
 
-<p align="center"><img src="docs/images/models.png" width="880" alt="Settings, Models: claude-sonnet-5-5 from Anthropic, gpt-6.1-sol from OpenAI and deepseek-flash from DeepSeek on the User's keys, and qwen3.5:4b on this computer with Ollama. Document search searches the words in the files, and nothing leaves the computer."></p>
 
 **Hand it in.** Export a Mind to Word with its citations as footnotes, or to Markdown. A citation that didn't pass the check is marked "[unverified]".
 
@@ -85,6 +83,14 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 ## Coming next
 
 Planned, not available yet, with no dates (see the [roadmap](https://github.com/junruxiong/IncarnaMind/issues/74)): meetings with a live transcript that answers can cite; Word files opened and exported back with tracked changes; your drafts, and other people's documents, checked against your files; comparison tables across documents; AI edits you accept or reject; and research Tasks that run in the background.
+
+<p align="center"><img src="docs/images/coming-compare.png" width="880" alt="Coming next: a Mind called Shortlist: contract terms with a comparison table of ten contracts against termination notice, liability cap and governing law. Every cell is a short answer with its own numbered Citation, and two are marked amber."></p>
+
+<p align="center"><sub>Coming next: a comparison table across ten contracts, every cell an answer with its own Citation.</sub></p>
+
+<p align="center"><img src="docs/images/coming-meetings.png" width="880" alt="Coming next: notes from a supply call, each line with the time it was said, above a live transcript with speakers told apart and a button to add a line to the notes. The bar at the bottom shows Recording 24:16."></p>
+
+<p align="center"><sub>Coming next: notes taken during a call, each tied to the moment it was said, beside a live transcript.</sub></p>
 
 ## Contributing
 
