@@ -4,7 +4,8 @@
  * export needs a fixed, small part of the format (styles, headings, lists,
  * tables, images and footnotes), and the package would bring five more
  * packages (jszip, xml-js, …) and about 17 MB for it. The ZIP container is
- * written with Node's zlib (./zip).
+ * written by the one ZIP module (../documents/formats/zip), deflated with
+ * Node's zlib.
  *
  * Headings use Word's built-in heading styles, so they show in Word's
  * navigation pane; lists are Word lists; each Citation is a real Word
@@ -12,9 +13,10 @@
  * where it can't be converted; code is monospaced paragraphs.
  */
 
+import { deflateRawSync } from "node:zlib";
+import { writeZip } from "../documents/formats/zip";
 import type { Block, Footnote, Image, Inline, Marks, TableCell } from "../mindText";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
-import { zip } from "./zip";
 
 export interface DocxOptions {
   /** The Mind's title, as the document's title. Empty: none. */
@@ -94,24 +96,27 @@ export function renderDocx(blocks: readonly Block[], options: DocxOptions): Uint
     ...writer.relationships,
   ];
 
-  return zip([
-    { name: "[Content_Types].xml", data: contentTypes() },
-    {
-      name: "_rels/.rels",
-      data: relationshipsXml([
-        { id: "rIdDocument", type: RELATIONSHIP.officeDocument, target: "word/document.xml" },
-        { id: "rIdCore", type: RELATIONSHIP.coreProperties, target: "docProps/core.xml" },
-      ]),
-    },
-    { name: "docProps/core.xml", data: coreProperties(options) },
-    { name: "word/document.xml", data: document },
-    { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
-    { name: "word/styles.xml", data: styles(options.language) },
-    { name: "word/settings.xml", data: SETTINGS },
-    { name: "word/numbering.xml", data: numbering(writer.lists) },
-    { name: "word/footnotes.xml", data: footnotesXml(writer.footnotes) },
-    ...writer.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
-  ]);
+  return writeZip(
+    [
+      { name: "[Content_Types].xml", data: contentTypes() },
+      {
+        name: "_rels/.rels",
+        data: relationshipsXml([
+          { id: "rIdDocument", type: RELATIONSHIP.officeDocument, target: "word/document.xml" },
+          { id: "rIdCore", type: RELATIONSHIP.coreProperties, target: "docProps/core.xml" },
+        ]),
+      },
+      { name: "docProps/core.xml", data: coreProperties(options) },
+      { name: "word/document.xml", data: document },
+      { name: "word/_rels/document.xml.rels", data: relationshipsXml(relationships) },
+      { name: "word/styles.xml", data: styles(options.language) },
+      { name: "word/settings.xml", data: SETTINGS },
+      { name: "word/numbering.xml", data: numbering(writer.lists) },
+      { name: "word/footnotes.xml", data: footnotesXml(writer.footnotes) },
+      ...writer.media.map((file) => ({ name: `word/media/${file.name}`, data: file.data })),
+    ],
+    deflateRawSync,
+  );
 }
 
 interface Relationship {
