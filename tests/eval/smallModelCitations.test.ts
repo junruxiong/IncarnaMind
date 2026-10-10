@@ -339,7 +339,7 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     ]);
   });
 
-  test("a record that names its Passage other than by its id is dropped, and its marker with it; structured output reads a number as the id", async () => {
+  test("a record that names its Passage other than by its id is dropped, and its marker with it; structured output finds the Passage it meant", async () => {
     const attention = sessionOver(ATTENTION);
     await attention.shown();
 
@@ -352,20 +352,25 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     expect(outcomes.map((outcome) => outcome?.check ?? null)).toEqual([null, null, "found"]);
     expect(feedback).toContain('there is no Passage "1" in your search results');
 
-    // "1" is P1 in structured output; a number with no Passage, or a name, is still dropped.
+    // Structured output reads "1" and "P1 (p. 8)" as P1; a record naming no Passage it was given
+    // (its Document, or a Passage it wasn't given) cites the one that holds its quote, if one does.
     const numbered = sessionOver(ATTENTION);
     await numbered.shown();
     const structured = numbered.cite(
       [
         { marker: 1, passage: "1", location: "p. 8", quote: PERPLEXITY },
-        { marker: 2, passage: "Attention Is All You Need", location: "p. 8", quote: PERPLEXITY },
-        { marker: 3, passage: "7", location: "p. 8", quote: PERPLEXITY },
+        { marker: 2, passage: "P1 (p. 8)", location: "p. 8", quote: PERPLEXITY },
+        { marker: 3, passage: "Attention Is All You Need", location: "p. 8", quote: PERPLEXITY },
+        { marker: 4, passage: "7", location: "p. 8", quote: PERPLEXITY },
+        { marker: 5, passage: "Attention Is All You Need", quote: "Label smoothing helps a lot." },
       ],
       { structured: true },
     );
     expect(structured.outcomes.map((outcome) => outcome?.check ?? null)).toEqual([
       "found",
-      null,
+      "found",
+      "found",
+      "found",
       null,
     ]);
   });
