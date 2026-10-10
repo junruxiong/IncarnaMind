@@ -89,13 +89,19 @@ export function LibraryPane() {
     const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
     const folder = groups.find((group) => group.id === filter);
     const wanted = search.toLocaleLowerCase();
+    // Without a search, every Document's words match: they aren't put together then.
+    const found = (doc: Document) =>
+      wanted === "" ||
+      [doc.name, ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(wanted);
     return documents.filter((doc) => {
       const groupId = assignments.get(doc.id)?.groupId ?? null;
-      const terms = [doc.name, ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")].join(" ");
       return (
         ((!folder && filter !== "unsorted") ||
           (filter === "unsorted" ? groupId === null : groupId === folder?.id)) &&
-        terms.toLocaleLowerCase().includes(wanted)
+        found(doc)
       );
     });
   }, [documents, assignments, groups, tags, filter, search]);
