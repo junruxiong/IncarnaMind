@@ -4,10 +4,21 @@
  * key and nothing of the User's; still, like the connection test, the caller
  * asks a cloud service only once the User has allowed the chat flow to it.
  * Any failure gives an empty list: the picker still has the default model.
+ *
+ * What isn't a chat model is left out by what the provider and the catalog
+ * say, never by its name: Google lists the methods each model supports,
+ * Ollama its capabilities, and the catalog the ids its sources know as
+ * embedding, speech, image or video models (see ./catalog). An id none of
+ * them knows is listed, its capabilities unknown. Where a list says what a
+ * model can do (Anthropic's capabilities and limits, Ollama's capabilities),
+ * that is kept as the server's word on it (see ./capabilities).
  */
 import type { ChatProviderKind } from "../api";
 import { isRecord } from "../errors";
+import type { ModelFactsLayer } from "./capabilities";
+import { isNonChatModel, type ModelInput, modelsProviderOfKind } from "./catalog";
 import { CHATGPT_PLAN_MODELS } from "./chatgpt/codexEndpoint";
+import { endpointUrl } from "./kinds";
 
 const LIST_TIMEOUT_MS = 5_000;
 /** The picker shows at most this many models per provider. */
@@ -15,12 +26,18 @@ const MAX_MODELS = 100;
 
 export interface ModelListSpec {
   kind: ChatProviderKind;
+  /** The server's URL, for "openai-compatible" and "ollama". */
   baseUrl: string | null;
   apiKey: string | null;
+  /** A hosted provider's endpoint id; its first when left out. */
+  endpoint?: string | null;
 }
 
-/** Model kinds that can't answer a Question: embeddings, speech, images, moderation. */
-const NOT_CHAT = /embed|rerank|moderation|whisper|tts|transcribe|audio|realtime|image|dall-e/i;
+/** A model a provider lists, with what the list says it can do, if anything. */
+export interface ListedModel {
+  id: string;
+  facts?: ModelFactsLayer;
+}
 
 async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
   const response = await fetch(url, { headers, signal: AbortSignal.timeout(LIST_TIMEOUT_MS) });
@@ -28,20 +45,59 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
   return response.json();
 }
 
-/** `data[].id`, the OpenAI shape that Anthropic and OpenAI-compatible servers share. */
-function dataIds(body: unknown): string[] {
-  const data = isRecord(body) && Array.isArray(body.data) ? body.data : [];
-  return data
-    .map((model: unknown) => (isRecord(model) ? model.id : undefined))
-    .filter((id): id is string => typeof id === "string");
+/** `data[]`, the OpenAI shape that Anthropic and OpenAI-compatible servers share. */
+const dataOf = (body: unknown): Record<string, unknown>[] =>
+  isRecord(body) && Array.isArray(body.data) ? body.data.filter(isRecord) : [];
+
+const idsOf = (body: unknown): ListedModel[] =>
+  dataOf(body)
+    .map((model) => model.id)
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => ({ id }));
+
+/** Whether a capability in Anthropic's tree is supported (`{ supported: true }`); undefined when absent. */
+const supported = (capabilities: Record<string, unknown>, name: string): boolean | undefined => {
+  const node = capabilities[name];
+  return isRecord(node) && typeof node.supported === "boolean" ? node.supported : undefined;
+};
+
+const positive = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+
+/**
+ * What Anthropic's `/v1/models` says of a model: its context window
+ * (`max_input_tokens`), its longest reply (`max_tokens`), and from
+ * `capabilities`, whether it reads images and PDFs and gives structured output.
+ */
+export function anthropicModelFacts(model: Record<string, unknown>): ModelFactsLayer {
+  const facts: ModelFactsLayer = {};
+  const context = positive(model.max_input_tokens);
+  const maxOutput = positive(model.max_tokens);
+  if (context) facts.context = context;
+  if (maxOutput) facts.maxOutput = maxOutput;
+  const capabilities = isRecord(model.capabilities) ? model.capabilities : null;
+  if (capabilities) {
+    const images = supported(capabilities, "image_input");
+    const pdf = supported(capabilities, "pdf_input");
+    if (images !== undefined) {
+      const input: ModelInput[] = ["text"];
+      if (images) input.push("image");
+      if (pdf) input.push("pdf");
+      facts.input = input;
+    }
+    const structured = supported(capabilities, "structured_outputs");
+    if (structured !== undefined) facts.structuredOutput = structured ? "json_schema" : "none";
+  }
+  return facts;
 }
 
-async function fetchModels({ kind, baseUrl, apiKey }: ModelListSpec): Promise<string[]> {
+async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
   const bearer: Record<string, string> = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
+  const hosted = endpointUrl(kind, endpoint);
   switch (kind) {
     case "chatgpt":
       // The plan's endpoint has no model list: these are the ones the Codex CLI offers.
-      return CHATGPT_PLAN_MODELS.map((model) => model.id);
+      return CHATGPT_PLAN_MODELS.map((model) => ({ id: model.id }));
     case "ollama": {
       const body = await getJson(`${baseUrl}/api/tags`, {});
       const models = isRecord(body) && Array.isArray(body.models) ? body.models : [];
@@ -53,31 +109,36 @@ async function fetchModels({ kind, baseUrl, apiKey }: ModelListSpec): Promise<st
             (model) =>
               !Array.isArray(model.capabilities) || model.capabilities.includes("completion"),
           )
-          .map((model) => model.name ?? model.model)
-          .filter((name): name is string => typeof name === "string")
+          .flatMap((model): ListedModel[] => {
+            const name = model.name ?? model.model;
+            if (typeof name !== "string") return [];
+            const capabilities = Array.isArray(model.capabilities) ? model.capabilities : null;
+            return [
+              capabilities
+                ? { id: name, facts: { tools: capabilities.includes("tools") } }
+                : { id: name },
+            ];
+          })
       );
     }
     case "openai-compatible":
-      return dataIds(await getJson(`${baseUrl}/models`, bearer));
+      return idsOf(await getJson(`${baseUrl}/models`, bearer));
     case "openai":
       if (!apiKey) return [];
-      return dataIds(await getJson("https://api.openai.com/v1/models", bearer)).filter((id) =>
-        /^(gpt-|o\d|chatgpt-)/.test(id),
-      );
-    case "anthropic":
+      return idsOf(await getJson(`${hosted}/models`, bearer));
+    case "anthropic": {
       if (!apiKey) return [];
-      return dataIds(
-        await getJson("https://api.anthropic.com/v1/models?limit=100", {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        }),
+      const body = await getJson(`${hosted}/models?limit=100`, {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      });
+      return dataOf(body).flatMap((model): ListedModel[] =>
+        typeof model.id === "string" ? [{ id: model.id, facts: anthropicModelFacts(model) }] : [],
       );
+    }
     case "google": {
       if (!apiKey) return [];
-      const body = await getJson(
-        "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
-        { "x-goog-api-key": apiKey },
-      );
+      const body = await getJson(`${hosted}/models?pageSize=200`, { "x-goog-api-key": apiKey });
       const models = isRecord(body) && Array.isArray(body.models) ? body.models : [];
       return models
         .filter(
@@ -88,16 +149,20 @@ async function fetchModels({ kind, baseUrl, apiKey }: ModelListSpec): Promise<st
         )
         .map((model: unknown) => (isRecord(model) ? model.name : undefined))
         .filter((name): name is string => typeof name === "string")
-        .map((name) => name.replace(/^models\//, ""));
+        .map((name) => ({ id: name.replace(/^models\//, "") }));
     }
   }
 }
 
 /** The chat models a provider lists, sorted; empty if it can't be reached. */
-export async function listProviderModels(spec: ModelListSpec): Promise<string[]> {
+export async function listProviderModels(spec: ModelListSpec): Promise<ListedModel[]> {
   try {
-    const models = (await fetchModels(spec)).filter((id) => !NOT_CHAT.test(id));
-    return [...new Set(models)].sort((a, b) => a.localeCompare(b)).slice(0, MAX_MODELS);
+    const catalogId = modelsProviderOfKind(spec.kind);
+    const byId = new Map<string, ListedModel>();
+    for (const model of await fetchModels(spec)) {
+      if (!byId.has(model.id) && !isNonChatModel(catalogId, model.id)) byId.set(model.id, model);
+    }
+    return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, MAX_MODELS);
   } catch {
     return [];
   }
