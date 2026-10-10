@@ -1481,7 +1481,7 @@
     }
   }
 
-  .add-to-picker {
+  .editor-popover.add-to-picker {
     display: flex;
     flex-direction: column;
     width: 340px;
@@ -3243,6 +3243,10 @@
         font-size: 15px;
         line-height: 22px;
       }
+    }
+    .answer-block[data-status="failed"]
+    > .answer-content:has(> [data-node-view-content-react] > p:only-child > br:only-child) {
+      display: none;
     }
     .answer-info,
     .answer-notice,
