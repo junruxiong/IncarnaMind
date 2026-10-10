@@ -531,9 +531,10 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     // Pointed at, the row's tooltip names its Tags; its description says them to a screen reader.
     const attention = row("Attention").getByTestId("open-document");
     await slideTo(window, row("Attention").getByTestId("row-text"));
+    // The tooltip carries the file's name, with its extension, then the Tags.
     await expect(attention).toHaveAttribute(
       "title",
-      "Attention\nTags: Book, Contract, Paper, Report",
+      /^Attention\nAttention\.\w+\nTags: Book, Contract, Paper, Report$/,
     );
     await expect(attention).toHaveAccessibleDescription("Tags: Book, Contract, Paper, Report");
     expect(await row("Attention").boundingBox()).toEqual(before[await indexOf(items, "Attention")]);
@@ -604,7 +605,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     await setLanguage(window, "zh-CN");
     await expect(attention).toHaveAttribute(
       "title",
-      "Attention\n标签：Book, Contract, Paper, Report",
+      "Attention\nAttention.txt\n标签：Book, Contract, Paper, Report",
     );
     await expect(attention).toHaveAccessibleDescription("标签：Book, Contract, Paper, Report");
     await tabTo(window, attention);

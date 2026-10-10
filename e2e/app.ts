@@ -378,6 +378,20 @@ export async function addDocuments(window: Page, paths: string[]): Promise<void>
   }
 }
 
+/** Sizes the app's window, e.g. to its narrowest (900px wide, the minimum) or a wide one. */
+export async function setWindowSize(
+  app: ElectronApplication,
+  window: Page,
+  width: number,
+  height: number,
+): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
+    { width, height },
+  );
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+}
+
 /** The id of the Document listed in the sidebar under `name`. */
 export async function documentIdOf(window: Page, name: string): Promise<string> {
   const id = await window

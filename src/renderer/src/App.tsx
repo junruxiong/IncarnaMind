@@ -2,7 +2,6 @@ import { useEffect, useSyncExternalStore } from "react";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
-import { LibraryPane } from "./components/LibraryPane";
 import { MindPane } from "./components/MindPane";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
@@ -66,10 +65,12 @@ function useMenuCommands(): void {
     () =>
       files.onMenuCommand((command) => {
         if (document.querySelector("dialog[open]")) return;
-        const { createMind, closeTab, openMindId, openSettings } = useAppStore.getState();
+        const { createMind, closeTab, openMindId, openSettings, libraryOpen, closeLibrary } =
+          useAppStore.getState();
         if (command === "new-mind") void createMind();
         else if (command === "close-tab") {
-          if (openMindId) closeTab(openMindId);
+          if (libraryOpen) closeLibrary();
+          else if (openMindId) closeTab(openMindId);
         } else openSettings();
       }),
     [],
@@ -78,7 +79,7 @@ function useMenuCommands(): void {
 
 /**
  * Sidebar with Minds and Documents on the left, on the frame, and the open
- * Mind filling the rest in a card on the sheet, 8px from the sidebar and from
+ * Mind, or the Library in its tab, filling the rest in a card on the sheet, 8px from the sidebar and from
  * the window's other edges. The Document viewer panel appears on the right,
  * inside the card, only while open, narrowing the Mind area.
  * Files dropped anywhere are added as Documents; a folder dropped is offered
@@ -88,7 +89,6 @@ function Workspace() {
   const t = useT();
   const device = useAppStore((state) => state.settings?.device);
   const viewerOpen = useAppStore((state) => state.viewerOpen);
-  const libraryOpen = useAppStore((state) => state.libraryOpen);
   const closeViewer = useAppStore((state) => state.closeViewer);
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -133,7 +133,7 @@ function Workspace() {
         onCommit={(width) => void updateSettings({ device: { sidebarWidth: width } })}
       />
       <div data-testid="card" className="app-card">
-        {libraryOpen ? <LibraryPane /> : <MindPane />}
+        <MindPane />
         {viewerOpen && (
           <>
             <ResizeRod

@@ -1,7 +1,9 @@
 import type { Document } from "../../../core/api";
+import { displayName } from "../../../shared/documentNames";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import type { LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { MoreLineIcon } from "./lineIcons";
@@ -39,6 +41,21 @@ export function DocumentFileMenu({
   const fileState = fileStatusLabel(item.fileStatus);
   const reason = fileState ? t(fileState.reason) : undefined;
   const canRetry = item.status === "failed" && fileState === null;
+
+  const bridge: LibraryBridge = {
+    kind: "documents",
+    title: displayName(item),
+    count: 1,
+    scope: { folderIds: [], tagIds: [], documentIds: [item.id] },
+  };
+  const ask = [
+    ["ask-document", t("documents.ask"), () => useAppStore.getState().askAbout(bridge)],
+    [
+      "start-mind-document",
+      t("documents.startMind"),
+      () => useAppStore.getState().startMindFrom(bridge),
+    ],
+  ] as const;
 
   const run = (action: (documentId: string) => Promise<unknown>) => {
     if (fileState) return; // its file isn't there: the item says why
@@ -84,6 +101,22 @@ export function DocumentFileMenu({
             <div className={menuRuleClass} />
           </>
         )}
+        {/* The Document's own actions: a Question about it, or a Mind that starts with one (#213). */}
+        {ask.map(([testId, label, run]) => (
+          <button
+            key={testId}
+            type="button"
+            role="menuitem"
+            data-testid={testId}
+            onClick={() => {
+              menu.close();
+              void run();
+            }}
+            className={`${menuItemClass} pl-2`}
+          >
+            {label}
+          </button>
+        ))}
         <button
           type="button"
           role="menuitem"
