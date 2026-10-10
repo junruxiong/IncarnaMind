@@ -2,7 +2,8 @@ The example Documents in this folder are shared under the licences named
 below, each with its source and attribution. The rest of IncarnaMind is under
 its own licence (Apache-2.0); this folder's licence list covers these files
 only. Every Document here may be redistributed with the app; nothing is
-included whose licence could not be confirmed on its source page.
+included whose licence or legal status could not be confirmed on its source
+page.
 
 How the files differ from the originals: unless a Document says otherwise, its
 text is unchanged. Where a PDF is an excerpt, the pages kept are named. To keep
@@ -12,6 +13,7 @@ rewritten; no words were changed. File names were shortened to the names shown.
 Licences: CC BY 4.0 https://creativecommons.org/licenses/by/4.0/legalcode
           CC BY 3.0 IGO https://creativecommons.org/licenses/by/3.0/igo/legalcode
           CC BY-SA 4.0 https://creativecommons.org/licenses/by-sa/4.0/legalcode
+          The Chinese reports have no licence: see their section.
 
 
 === Where tea comes from (tea/) ===
@@ -104,18 +106,47 @@ by this licence. The World Bank's name and logo are not licensed; the covers
 
 === Reports and analysis, Chinese (reports/zh-CN/) ===
 
-Two reports in Chinese from the same research team, each under CC BY 4.0, as
-stated on its Zenodo record. Full reports.
+The Government Work Reports (政府工作报告) of 2024, 2025 and 2026, delivered by
+the Premier of the State Council to the National People's Congress. Full
+reports. They are not under a copyright licence, because they are not
+protected by copyright. Article 5 of the Copyright Law of the People's
+Republic of China (2020 revision, in force 1 June 2021) says:
 
-- "2023年省会城市品牌国际传播影响力报告.pdf": 文化元宇宙专委会大数据智能传播实验室,
-  《2023年中国内地省会城市及计划单列市城市品牌全球媒体国际传播影响力（发布报告）》
-  (2024-11-25). https://zenodo.org/records/18136284 ,
-  doi:10.5281/zenodo.18136284 . CC BY 4.0.
-- "2024年省会城市品牌国际传播影响力报告.pdf": 强省会城市品牌传播协同联动平台,
-  文化元宇宙专委会大数据智能传播实验室,
-  《2024年中国内地省会城市及计划单列市城市品牌全球媒体国际传播影响力（发布报告）》
-  (2025-11-08). https://zenodo.org/records/18136359 ,
-  doi:10.5281/zenodo.18136359 . CC BY 4.0.
+  第五条　本法不适用于：
+  （一）法律、法规，国家机关的决议、决定、命令和其他具有立法、行政、
+  司法性质的文件，及其官方正式译文；
+  （二）单纯事实消息；
+  （三）历法、通用数表、通用表格和公式。
+
+  Source: https://zscqj.beijing.gov.cn/zscqj/zwgk/flfg18/436481084/index.html
+  (the law as published by a government body; the amending decision of the
+  Standing Committee of the National People's Congress, 2020-11-11, is at
+  https://www.ncac.gov.cn/xxfb/ywxx/202011/t20201112_47358.html ).
+
+The Work Report is a report to the Congress that the Congress approves by
+resolution, and sets out the
+administrative plan of the State Council. We rely on that Article. The Chinese
+government's site statement (https://www.gov.cn/home/2014-02/23/content_5046258.htm)
+asks that its content not be distorted or altered; the words here are
+unchanged.
+
+Retrieved on 2026-10-10 from the State Council's website (www.gov.cn):
+
+- "2024年政府工作报告.pdf": 《政府工作报告》, delivered 2024-03-05 at the
+  second session of the 14th National People's Congress, 国务院总理 李强.
+  https://www.gov.cn/yaowen/liebiao/202403/content_6939153.htm
+- "2025年政府工作报告.pdf": 《政府工作报告》, delivered 2025-03-05 at the
+  third session of the 14th National People's Congress, 国务院总理 李强.
+  https://www.gov.cn/yaowen/liebiao/202503/content_7013163.htm
+- "2026年政府工作报告.pdf": 《政府工作报告》, delivered 2026-03-05 at the
+  fourth session of the 14th National People's Congress, 国务院总理 李强.
+  https://www.gov.cn/yaowen/liebiao/202603/content_7062625.htm
+
+The gov.cn pages offer no PDF, so we made the PDFs from the official text on
+those pages. The words are unchanged, word for word and paragraph for
+paragraph. The layout is ours (type, spacing, page breaks). Left out are the
+page's wire-service dateline (新华社北京…电) and the photograph caption, which
+are not part of the report.
 
 
 === Contracts and legal work, English (contracts/en/) ===
