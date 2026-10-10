@@ -5,7 +5,7 @@ import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from 
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
-import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
+import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
 import { useComposer } from "../composer";
 import { core } from "../core";
@@ -33,6 +33,7 @@ import { useT } from "../i18n";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
 const ASK = "\uE000";
@@ -40,31 +41,47 @@ const ASK = "\uE000";
 /** Marks changes that came from the core, so they aren't sent back to it. */
 const FROM_CORE = Symbol("from the core");
 
+interface OpenedDocument {
+  access: MindAccess;
+  /** Null when the Mind isn't shown in the editor ("update-required"). */
+  doc: Y.Doc | null;
+}
+
 /**
  * A local copy of the Mind's Yjs document, kept in step with the core's: it
  * starts from the core's full state, sends every local change to the core, and
  * applies the changes the core pushes. Null until the state has arrived.
+ *
+ * A Mind the core opens read-only (a newer version wrote it) is only a copy to
+ * look at: the editor's binding deletes what its schema doesn't know from the
+ * copy, and nothing is ever sent from it.
  */
-function useMindDocument(mindId: string): Y.Doc | null {
-  const [doc, setDoc] = useState<Y.Doc | null>(null);
+function useMindDocument(mindId: string): OpenedDocument | null {
+  const [opened, setOpened] = useState<OpenedDocument | null>(null);
   const reportError = useAppStore((state) => state.reportError);
 
   useEffect(() => {
     const local = new Y.Doc();
     let active = true;
+    let editable = false;
     // Listen before opening, so nothing pushed in between is missed. Yjs merges in any order.
     const stopListening = core.on("mind.update", ({ mindId: changed, update }) => {
       if (changed === mindId) Y.applyUpdate(local, update, FROM_CORE);
     });
     const send = (update: Uint8Array, origin: unknown) => {
-      if (origin !== FROM_CORE) core.applyMindUpdate(mindId, update).catch(reportError);
+      if (origin !== FROM_CORE && editable) core.applyMindUpdate(mindId, update).catch(reportError);
     };
     local.on("update", send);
     core.openMind(mindId).then(
-      ({ state }) => {
+      ({ state, access }) => {
         if (!active) return;
+        if (access === "update-required") {
+          setOpened({ access, doc: null });
+          return;
+        }
+        editable = access === "edit";
         Y.applyUpdate(local, state, FROM_CORE);
-        setDoc(local);
+        setOpened({ access, doc: local });
       },
       (error: unknown) => {
         if (active) reportError(error);
@@ -75,18 +92,22 @@ function useMindDocument(mindId: string): Y.Doc | null {
       active = false;
       stopListening();
       local.off("update", send);
-      setDoc(null);
+      setOpened(null);
       core.closeMind(mindId).catch(() => undefined);
     };
   }, [mindId, reportError]);
 
-  return doc;
+  return opened;
 }
 
 /** The open Mind's Blocks, edited with Tiptap and saved through the core as they change. */
 export function MindEditor({ mindId }: { mindId: string }) {
-  const doc = useMindDocument(mindId);
-  return doc ? <MindEditorView mindId={mindId} doc={doc} /> : null;
+  const opened = useMindDocument(mindId);
+  if (!opened) return null;
+  if (!opened.doc) return <MindNotice kind="update" />;
+  return (
+    <MindEditorView mindId={mindId} doc={opened.doc} readOnly={opened.access === "read-only"} />
+  );
 }
 
 const editorPropsFor = (label: string, emptyFormula: string) => ({
@@ -123,7 +144,16 @@ const citationView = ReactNodeViewRenderer(CitationView, {
  * a left margin for the controls (the block handle, a Question's spark and
  * fold chevron) and a right margin for the checks.
  */
-function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
+function MindEditorView({
+  mindId,
+  doc,
+  readOnly,
+}: {
+  mindId: string;
+  doc: Y.Doc;
+  /** A newer version wrote the Mind: shown, never written to, and no composer. */
+  readOnly: boolean;
+}) {
   const t = useT();
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
@@ -154,6 +184,7 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
 
   const editor = useEditor(
     {
+      editable: !readOnly,
       editorProps: editorPropsFor(label, emptyFormula),
       shouldRerenderOnTransaction: false,
       extensions: [
@@ -201,7 +232,7 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
         QuestionFold.configure({ mindId }),
       ],
     },
-    [doc],
+    [doc, readOnly],
   );
 
   // When the language changes: relabel. Setting the props also redraws the placeholder.
@@ -246,16 +277,18 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
     editor,
     selector: ({ editor: current }) => isEmptyMind(current.state.doc),
   });
-  const guide = useGettingStarted() !== null && empty && !isExample;
+  const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
 
   return (
     <MindIdContext.Provider value={mindId}>
+      {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         <EditorContent editor={editor} />
-        <EndHint editor={editor} text={hintText} onAsk={askOnLine} />
+        {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
       </div>
       {dock &&
+        !readOnly &&
         createPortal(
           <Composer
             ref={composer}
@@ -267,8 +300,8 @@ function MindEditorView({ mindId, doc }: { mindId: string; doc: Y.Doc }) {
           dock,
         )}
       {guide && <StartGuide />}
-      <BlockHandle editor={editor} />
-      <FormatMenu editor={editor} />
+      {!readOnly && <BlockHandle editor={editor} />}
+      {!readOnly && <FormatMenu editor={editor} />}
       {editingMath !== null && (
         <MathEditor
           key={editingMath}
