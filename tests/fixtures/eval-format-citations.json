@@ -297,8 +297,44 @@
       "pageFrom": 3,
       "pageTo": 3,
       "quote": "Finance has asked to lower the contingency to 8 per cent once the roof tender is signed.",
+      "outcome": "found",
+      "case": "Word: a comment, read into the section its mark is in"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 6,
+      "pageTo": 6,
+      "quote": "Finance has asked to lower the contingency to 8 per cent once the roof tender is signed.",
+      "outcome": "wrong-page",
+      "case": "Word: a comment cited at another section than its mark's"
+    },
+    {
+      "kind": "section",
+      "document": "riverside-library",
+      "pageFrom": 6,
+      "pageTo": 6,
+      "quote": "The bat survey must be repeated in May, as the first was done in winter.",
       "outcome": "not-in-document",
-      "case": "Word: a comment, which isn't read (a known gap)"
+      "case": "Word: a comment reworded"
+    },
+    {
+      "kind": "section",
+      "document": "社区食堂",
+      "pageFrom": 3,
+      "pageTo": 3,
+      "quote": "配送中心的合同将于2026年12月到期，需提前续签。",
+      "outcome": "found",
+      "case": "Word: a comment"
+    },
+    {
+      "kind": "section",
+      "document": "社区食堂",
+      "pageFrom": 6,
+      "pageTo": 6,
+      "quote": "建议在下次评估中加入对低盐菜品满意度的统计。",
+      "outcome": "not-in-document",
+      "case": "Word: a comment with a word left out"
     },
     {
       "kind": "section",

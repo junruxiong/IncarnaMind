@@ -192,15 +192,35 @@ export function xlsxOf(sheets: readonly SheetInput[], options: PackageOptions = 
   ]);
 }
 
-/** A .docx of these paragraphs; a heading has its level. */
+/** A comment on a paragraph of a .docx: its text, and its author, if it names one. */
+export interface DocxCommentInput {
+  text: string;
+  author?: string;
+  /**
+   * Where Word marks it: a range over the paragraph's text and a reference
+   * mark after it ("reference", as Word writes it), or only the range's start.
+   */
+  mark?: "reference" | "start";
+}
+
+/** A .docx of these paragraphs; a heading has its level, and a paragraph may have a comment. */
 export function docxOf(
-  paragraphs: readonly { text: string; heading?: number }[],
+  paragraphs: readonly { text: string; heading?: number; comment?: DocxCommentInput }[],
   options: PackageOptions = {},
 ): Buffer {
+  const W = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`;
+  const comments: (DocxCommentInput & { id: number })[] = [];
   const body = paragraphs
-    .map(({ text, heading }) => {
+    .map(({ text, heading, comment }) => {
       const style = heading ? `<w:pPr><w:pStyle w:val="Heading${heading}"/></w:pPr>` : "";
-      return `<w:p>${style}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+      const run = text ? `<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>` : "";
+      if (!comment) return `<w:p>${style}${run}</w:p>`;
+      const id = comments.push({ ...comment, id: comments.length }) - 1;
+      const reference =
+        comment.mark === "start"
+          ? ""
+          : `<w:commentRangeEnd w:id="${id}"/><w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="${id}"/></w:r>`;
+      return `<w:p>${style}<w:commentRangeStart w:id="${id}"/>${run}${reference}</w:p>`;
     })
     .join("");
   const styles = [1, 2, 3]
@@ -209,16 +229,30 @@ export function docxOf(
         `<w:style w:type="paragraph" w:styleId="Heading${level}"><w:name w:val="heading ${level}"/></w:style>`,
     )
     .join("");
+  const commentsXml = comments
+    .map(
+      ({ id, text, author }) =>
+        `<w:comment w:id="${id}"${author === undefined ? "" : ` w:author="${escapeXml(author)}"`} w:date="2026-10-01T09:00:00Z"><w:p><w:r><w:annotationRef/></w:r><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p></w:comment>`,
+    )
+    .join("");
   return buildZip([
     { name: "[Content_Types].xml", data: CONTENT_TYPES("") },
     {
       name: "word/document.xml",
-      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${body}</w:body></w:document>`,
     },
     {
       name: "word/styles.xml",
-      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${styles}</w:styles>`,
+      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${W}>${styles}</w:styles>`,
     },
+    ...(comments.length > 0
+      ? [
+          {
+            name: "word/comments.xml",
+            data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:comments ${W}>${commentsXml}</w:comments>`,
+          },
+        ]
+      : []),
     ...coreEntries(options),
   ]);
 }
