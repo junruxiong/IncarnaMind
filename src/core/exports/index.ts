@@ -19,9 +19,9 @@ import type {
 import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
+import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
 import { renderDocx } from "./docx";
 import { renderMarkdown } from "./markdown";
-import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "./model";
 
 export interface ExportsDependencies {
   /** The Mind; throws if it doesn't exist or was deleted. */
@@ -59,7 +59,7 @@ export function createExports(deps: ExportsDependencies) {
       footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
 
     const { blocks, questions } = deps.read(mind.id, (fragment) => ({
-      blocks: readBlocks(fragment, { includeQuestions, footnote }),
+      blocks: readBlocks(fragment, { includeQuestions, footnote, trimBeforeCitation: true }),
       questions: countQuestions(fragment),
     }));
     const footnotes = footnotesIn(blocks);

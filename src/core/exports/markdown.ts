@@ -4,7 +4,7 @@
  * as `$…$` and `$$…$$`, highlights as `==…==` (as Obsidian, Typora and
  * markdown-it-mark read them), and each Citation as its own footnote.
  */
-import type { Block, Footnote, Inline, Marks } from "./model";
+import type { Block, Footnote, Inline, Marks } from "../mindText";
 
 export interface MarkdownLabels {
   /** Marks a Question, e.g. "Question:". */
