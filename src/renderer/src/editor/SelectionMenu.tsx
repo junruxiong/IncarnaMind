@@ -289,7 +289,11 @@ export function SelectionMenu({
     setLinking(false);
     const chain = editor.chain().focus();
     if (typed.trim() === "") chain.extendMarkRange("link").unsetLink().run();
-    else chain.setLink({ href: linkTarget(typed) }).run();
+    else {
+      // Editing a link changes all of it, not just the part selected.
+      if (editor.isActive("link")) chain.extendMarkRange("link");
+      chain.setLink({ href: linkTarget(typed) }).run();
+    }
   };
 
   const keepSelection = (event: { preventDefault(): void }) => event.preventDefault();
