@@ -4,9 +4,16 @@
  * as simplified ones.
  */
 import { describe, expect, test } from "vitest";
+import type { Core } from "../../src/core";
 import { keywordQuery, keywordTerms, keywordText } from "../../src/core/documents/keywords";
 import { SIMPLIFIED } from "../../src/shared/hanVariants";
-import { unfoldedKeywords } from "../helpers/documents";
+import { createTempDataFolder, startCore } from "../helpers/core";
+import {
+  addAndProcess,
+  createSourceFolder,
+  unfoldedKeywords,
+  writeSourceFile,
+} from "../helpers/documents";
 
 const TRADITIONAL = "可持續發展目標是聯合國制定的十七個全球發展目標。";
 const SIMPLIFIED_TEXT = "可持续发展目标是联合国制定的十七个全球发展目标。";
@@ -44,5 +51,64 @@ describe("Keyword search's words", () => {
     ]) {
       expect(keywordText(text)).toBe(unfoldedKeywords(text));
     }
+  });
+});
+
+describe("Keyword search's query terms", () => {
+  test("an English possessive is searched without its 's, straight or curly, and a plural's trailing ' is no term", () => {
+    expect(keywordTerms("Costco's revenue")).toEqual(["costco", "revenue"]);
+    expect(keywordTerms("Costco’s revenue")).toEqual(["costco", "revenue"]);
+    expect(keywordTerms("the dogs’ toys")).toEqual(["dogs", "toys"]);
+    // The index keeps the apostrophe, which its tokenizer splits on: nothing there changes.
+    expect(keywordText("Costco’s revenue")).toBe("costco's revenue");
+  });
+
+  test("a run of single Han characters is one phrase, and a stopword or other word ends it", () => {
+    expect(keywordTerms("五粮液")).toEqual(["五 粮 液"]);
+    expect(keywordQuery("五粮液")).toBe('"五 粮 液"');
+    expect(keywordTerms("茅台和五粮液")).toEqual(["茅台", "五 粮 液"]);
+    expect(keywordTerms("贵州茅台五粮液集团")).toEqual(["贵州", "茅台", "五 粮 液", "集团"]);
+    expect(keywordTerms("五粮液，五粮液")).toEqual(["五 粮 液"]);
+  });
+});
+
+describe("Searching with a possessive or a split Chinese name", { timeout: 30_000 }, () => {
+  async function libraryOf(files: { name: string; contents: string }[]) {
+    const core = startCore(await createTempDataFolder());
+    const sources = await createSourceFolder();
+    const paths = await Promise.all(
+      files.map((file) => writeSourceFile(sources, file.name, file.contents)),
+    );
+    await addAndProcess(core, paths);
+    return core;
+  }
+  const namesFor = async (core: Core, query: string) =>
+    (await core.searchPassages(query, { mode: "keyword" })).map((passage) => passage.documentName);
+
+  test("Costco's finds a Passage that says Costco, with either apostrophe, and one that says Costco's", async () => {
+    const core = await libraryOf([
+      { name: "Plain.txt", contents: "Costco revenue grew in the fourth quarter.\n" },
+      { name: "Possessive.txt", contents: "Costco’s membership fees rose again.\n" },
+      { name: "Other.txt", contents: "Walmart sells groceries at low prices.\n" },
+    ]);
+
+    expect(await namesFor(core, "Costco's revenue")).toContain("Plain");
+    expect(await namesFor(core, "Costco’s revenue")).toContain("Plain");
+    expect(await namesFor(core, "Costco's membership")).toContain("Possessive");
+    expect(await namesFor(core, "Costco's revenue")).not.toContain("Other");
+  });
+
+  test("a name the segmenter splits into single characters still matches as a whole", async () => {
+    const core = await libraryOf([
+      { name: "Liquor.txt", contents: "五粮液是中国著名的白酒品牌。\n" },
+      { name: "Scattered.txt", contents: "五个人买了粮食，喝了液体。\n" },
+      { name: "Traditional.txt", contents: "五糧液是中國著名的白酒品牌。\n" },
+    ]);
+
+    const found = await namesFor(core, "五粮液");
+    expect(found).toContain("Liquor");
+    expect(found).toContain("Traditional");
+    expect(found).not.toContain("Scattered");
+    expect(await namesFor(core, "茅台和五粮液")).toContain("Liquor");
   });
 });
