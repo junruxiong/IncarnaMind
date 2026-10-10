@@ -1,9 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import {
   createDataFolder,
   dismissChatSetup,
   dragBlock,
   launchApp,
+  mindWrittenBefore,
+  pointAndClick,
   removeDataFolder,
   slideToHandle,
   useLocalChatModel,
@@ -17,7 +19,21 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
 
-test("a Question asked in a new Mind gets an Answer that streams in, and it is still there after reopening the app", async () => {
+/** Each top-level Block of the note: "question", "answer", or a Note's text. */
+const order = (editor: Locator) =>
+  editor
+    .locator(":scope > *")
+    .evaluateAll((all) =>
+      all.map((block) =>
+        block.matches(".node-question")
+          ? "question"
+          : block.matches(".node-answer")
+            ? "answer"
+            : (block.textContent ?? "").trim(),
+      ),
+    );
+
+test("a Question asked in a new Mind gets an Answer that streams into its thread, and it is still there after reopening the app", async () => {
   const first = await launchApp(dataDir, { fakeChat: true });
   const { window } = first;
   await dismissChatSetup(window);
@@ -27,16 +43,16 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // Cmd/Ctrl+J focuses the composer; Enter asks, and the Question goes on the empty line.
+  // Cmd/Ctrl+J focuses the composer; Enter asks, and the Question goes into the thread (#201).
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("What is IncarnaMind?");
   await window.keyboard.press("Enter");
-  const question = editor.getByTestId("question");
-  await expect(question).toBeVisible();
+  const thread = window.getByTestId("thread");
+  await expect(thread.getByTestId("thread-question")).toBeVisible();
 
   // The Answer streams in below the Question: part of it shows while the rest is still coming.
-  const answer = editor.getByTestId("answer");
+  const answer = thread.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer.getByTestId("answer-stop")).toBeVisible();
   await expect(answer).toContainText("scripted");
@@ -52,12 +68,18 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
   await expect(answer.locator("li")).toHaveCount(2);
   await expect(answer.locator('[data-type="inline-math"] .katex')).toBeVisible();
   await expect(answer.locator("pre code")).toContainText('console.log("IncarnaMind");');
+  // The note has neither.
+  await expect(editor.getByTestId("question")).toHaveCount(0);
+  await expect(editor.getByTestId("answer")).toHaveCount(0);
   await first.app.close();
 
+  // Reopened: the thread is folded to its header, naming the chat; unfolded, it is all there.
   const second = await launchApp(dataDir, { fakeChat: true });
   await second.window.getByTestId("mind-list-item").click();
-  const reopened = second.window.getByTestId("mind-editor");
-  await expect(reopened.getByTestId("question")).toContainText("What is IncarnaMind?");
+  const reopened = second.window.getByTestId("thread");
+  await expect(reopened.getByTestId("thread-subtitle")).toHaveText("What is IncarnaMind?");
+  await pointAndClick(second.window, reopened.getByTestId("thread-fold"));
+  await expect(reopened.getByTestId("thread-question")).toContainText("What is IncarnaMind?");
   const restored = reopened.getByTestId("answer");
   await expect(restored).toHaveAttribute("data-status", "done");
   await expect(restored).toContainText("That is all.");
@@ -82,7 +104,7 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await expect(sideNote).toHaveClass(/context-off/);
 
   // Asking from the composer without a chat model explains, in its row, what to set up; the
-  // Question isn't left in the note, and its words stay in the composer.
+  // Question isn't left in the note or the thread, and its words stay in the composer.
   await sideNote.click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Is anyone there?");
@@ -93,58 +115,47 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await expect(window.getByTestId("composer-input")).toHaveValue("Is anyone there?");
   await expect(editor.getByTestId("question")).toHaveCount(0);
   await expect(editor.getByTestId("answer")).toHaveCount(0);
+  await expect(window.getByTestId("thread")).toHaveCount(0);
   await app.close();
 });
 
-test("after asking, the Mind's cursor goes below the Answer; a Question and its Answer are dragged and deleted together", async () => {
+test("a Question and its Answer written in the note before (#201) are dragged and deleted together, and asking now leaves them as they are", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await window.getByTestId("new-mind").click();
+  await mindWrittenBefore(window, "From before", [
+    { note: "Intro" },
+    { question: "What is IncarnaMind?", answer: "A notebook." },
+    { heading: "Later" },
+  ]);
+  await pointAndClick(
+    window,
+    window.getByTestId("mind-list-item").filter({ hasText: "From before" }),
+  );
   const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.type("Intro");
-  await window.keyboard.press("Enter");
-  await window.keyboard.type("## Later");
-  // Clicking right of "Intro" puts the cursor at its end, once the editor has seen it.
-  const intro = editor.locator(":scope > p").first();
-  await intro.click();
-  await expect(intro).toHaveClass(/has-focus/);
-  await window.keyboard.press("Enter");
+  await expect.poll(() => order(editor)).toEqual(["Intro", "question", "answer", "Later"]);
 
-  // A Question between a Note and a heading: its Answer isn't the last Block.
+  // A new Question goes to the thread; the Question and Answer in the note stay where they are.
   await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("What is IncarnaMind?");
+  await window.keyboard.type("And now?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-
-  // Esc goes back from the composer to the note: what is typed next goes on a new line under
-  // the Answer, not into the Question.
+  await expect(window.getByTestId("thread").getByTestId("answer")).toHaveAttribute(
+    "data-status",
+    "done",
+    { timeout: 15_000 },
+  );
+  await expect.poll(() => order(editor)).toEqual(["Intro", "question", "answer", "Later"]);
   await window.keyboard.press("Escape");
-  await window.keyboard.type("Next thought");
-  const question = editor.getByTestId("question");
-  await expect(question.locator(".question-text")).toHaveText("What is IncarnaMind?");
-  const blocks = editor.locator(":scope > *");
-  const order = () =>
-    blocks.evaluateAll((all) =>
-      all.map((block) =>
-        block.matches(".node-question")
-          ? "question"
-          : block.matches(".node-answer")
-            ? "answer"
-            : (block.textContent ?? "").trim(),
-      ),
-    );
-  await expect.poll(order).toEqual(["Intro", "question", "answer", "Next thought", "Later"]);
 
-  // Dragging the Question to the top takes its Answer along.
+  // Dragging the note's Question to the top takes its Answer along.
+  const question = editor.getByTestId("question");
+  const intro = editor.locator(":scope > p").first();
   await dragBlock(window, question, intro);
-  await expect.poll(order).toEqual(["question", "answer", "Intro", "Next thought", "Later"]);
+  await expect.poll(() => order(editor)).toEqual(["question", "answer", "Intro", "Later"]);
 
   // Deleting the Question from its menu deletes its Answer too.
   await (await slideToHandle(window, question)).click();
   await window.getByTestId("block-menu-delete").click();
-  await expect.poll(order).toEqual(["Intro", "Next thought", "Later"]);
+  await expect.poll(() => order(editor)).toEqual(["Intro", "Later"]);
   await app.close();
 });

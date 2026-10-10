@@ -234,6 +234,7 @@ export function AnswerView({ node, editor }: ReactNodeViewProps) {
         // In the thread: Copy · Add to note ▾ · Regenerate, under its text.
         <ThreadAnswerActions
           answerId={answerId}
+          canKeep={status !== "failed"}
           canRegenerate={questionId !== null}
           streaming={streaming}
           meta={meta}

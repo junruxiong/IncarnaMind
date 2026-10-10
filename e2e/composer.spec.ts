@@ -3,7 +3,6 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
-import type { Editor } from "@tiptap/core";
 import * as Y from "yjs";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -12,15 +11,18 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  pointAndClick,
+  pointAt,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
 
 /**
  * The composer at the foot of the Mind (DESIGN.md, Composer): asking puts the
- * Question into the note as one grey line and streams its Answer below it,
- * with checked Citations; Stop keeps what streamed; ⌘J, Enter, Shift+Enter
- * and Esc; the model chip, remembered per Mind; Minds written before. Driven
+ * Question into the thread above it (#201) and streams its Answer there, with
+ * checked Citations, the note left as it was; Stop keeps what streamed; ⌘J,
+ * Enter, Shift+Enter and Esc; the model chip, remembered per Mind; Minds
+ * written before, their Questions and Answers still in the note. Driven
  * as a person would, with the mouse slid onto what it clicks and the keys
  * typed. Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
@@ -46,26 +48,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
-
-/** Slides the mouse onto an element, in steps, as a person does, and clicks it. */
-async function pointAndClick(window: Page, target: Locator): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await window.mouse.move(x, y, { steps: 8 });
-  await window.mouse.click(x, y);
-}
-
-/** Slides the mouse onto an element and leaves it there. */
-async function pointAt(window: Page, target: Locator): Promise<void> {
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  await window.mouse.move(box.x + Math.min(box.width / 2, 40), box.y + box.height / 2, {
-    steps: 8,
-  });
-}
 
 /** The size the approved mockups were drawn at. */
 async function atMockupSize(app: ElectronApplication, window: Page) {
@@ -102,7 +84,7 @@ const bridge = (window: Page) => ({
     ),
 });
 
-test("typing in the composer and pressing Enter puts the Question into the note as one grey line, and its Answer streams in below it with checked Citations", async () => {
+test("typing in the composer and pressing Enter asks in the thread above it: the Question in a bubble, its Answer streaming in with checked Citations, and the note as it was", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -141,13 +123,15 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   await screenshot(window, "composer-typed-en");
   await window.keyboard.press("Enter");
 
-  // One grey line at the end of the Mind (the cursor wasn't in it), its Answer under it.
-  const question = editor.getByTestId("question");
+  // The thread rises from the composer (#201): the Question in a bubble, its Answer under it.
+  const thread = window.getByTestId("thread");
+  await expect(thread).toHaveAttribute("data-open", "true");
+  const question = thread.getByTestId("thread-question");
   await expect(question).toHaveCount(1);
-  await expect(question.locator(".question-text")).toHaveText("When do spring tides happen?");
-  await expect(question.locator(".question-text")).toHaveCSS("font-size", "14px");
-  await expect(question.locator(".question-text")).toHaveCSS("color", "rgb(101, 107, 116)");
-  const answer = editor.getByTestId("answer");
+  const words = question.locator(".thread-question-text");
+  await expect(words).toHaveText("When do spring tides happen?");
+  await expect(question.locator(".thread-question-bubble")).toHaveCSS("font-size", "16px");
+  const answer = thread.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "streaming");
   // While it is written: the pulsing dot and Stop show; it is read out in a polite live region.
   await expect(answer.getByTestId("answer-writing")).toBeVisible();
@@ -157,9 +141,8 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   await expect(live).toHaveText(/Writing the Answer…|Your Documents answer this/);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(live).toHaveText("Your Documents answer this. That is all. The Answer is done.");
-  await expect
-    .poll(() => order(editor))
-    .toEqual(["Spring tides come twice a month.", "question", "answer", ""]);
+  // The note is as it was: no Question, no Answer.
+  await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
 
   // The Citation is checked: found on page 2.
   const citation = answer.getByTestId("citation");
@@ -171,34 +154,30 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   // The composer is empty and keeps the focus, for a follow-up.
   await expect(input).toHaveValue("");
   await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute("placeholder", "Ask a follow-up…");
   await expect(ask).toBeDisabled();
 
-  // At rest, no label and no meta line; on hover, the model, the search and Regenerate.
+  // The newest Answer's line stays, at rest too: Copy, Add to note, Regenerate, the model and the search.
   await window.mouse.move(10, 10);
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(0);
-  await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(0);
-  await screenshot(window, "composer-answered-en");
-  await pointAt(window, answer.locator(".answer-content p").first());
   await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
+  await expect(answer.getByTestId("answer-copy")).toBeVisible();
+  await expect(answer.getByTestId("answer-add")).toBeVisible();
   await expect(answer.getByTestId("answer-model")).toHaveText("fake-model");
   await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
   await expect(answer.getByTestId("answer-regenerate")).toBeVisible();
-  await screenshot(window, "answer-hover-en");
-  await pointAt(window, question.locator(".question-text"));
-  await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(1);
-  await expect(question.getByTestId("question-model")).toHaveText("fake-model");
-  await screenshot(window, "question-hover-en");
+  await screenshot(window, "composer-answered-en");
 
-  // Its fold chevron, in the left margin, hides the Answer and shows it again.
-  const fold = question.getByTestId("question-fold");
+  // The thread folds to its header, and comes up again; folded, its checks go with it.
+  const fold = thread.getByTestId("thread-fold");
   await expect(fold).toHaveAttribute("aria-expanded", "true");
   await pointAndClick(window, fold);
   await expect(fold).toHaveAttribute("aria-expanded", "false");
   await expect(answer).toBeHidden();
-  await expect(window.getByTestId("margin-check")).toHaveCount(0);
+  await expect(thread.getByTestId("margin-check")).toHaveCount(0);
+  await expect(input).toHaveAttribute("placeholder", "Ask, or say what to change…");
   await pointAndClick(window, fold);
   await expect(answer).toBeVisible();
-  await expect(window.getByTestId("margin-check")).toHaveCount(1);
+  await expect(thread.getByTestId("margin-check")).toHaveCount(1);
   await app.close();
 });
 
@@ -212,8 +191,8 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await window.keyboard.type("What is IncarnaMind?");
   await window.keyboard.press("Enter");
 
-  const editor = window.getByTestId("mind-editor");
-  const answer = editor.getByTestId("answer");
+  const thread = window.getByTestId("thread");
+  const answer = thread.getByTestId("answer");
   await expect(answer).toContainText("scripted");
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await pointAndClick(window, answer.getByTestId("answer-stop"));
@@ -231,15 +210,16 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await expect(answer.locator(".answer-content")).toHaveText(kept ?? "");
   await screenshot(window, "answer-stopped-en");
 
-  // Regenerate, from its meta line, writes it again in full.
+  // Regenerate, from its line, writes it again in full, in place.
   await pointAndClick(window, answer.getByTestId("answer-regenerate"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("That is all.");
-  await expect(editor.getByTestId("answer")).toHaveCount(1);
+  await expect(thread.getByTestId("answer")).toHaveCount(1);
+  await expect(window.getByTestId("mind-editor").getByTestId("answer")).toHaveCount(0);
   await app.close();
 });
 
-test("⌘J focuses the composer from the note; the Question goes at the cursor; Shift+Enter breaks its line; Esc goes back to the note under the Answer", async () => {
+test("⌘J focuses the composer from the note and the title; Shift+Enter breaks the Question's line; Esc folds the thread, then goes back to the note where the cursor was", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -265,45 +245,37 @@ test("⌘J focuses the composer from the note; the Question goes at the cursor; 
   await expect(input).toHaveValue("Which thought\ncomes first?");
   await window.keyboard.press("Enter");
 
-  const question = editor.getByTestId("question");
-  await expect(question.locator(".question-text br")).toHaveCount(1);
-  await expect(question.locator(".question-text")).toHaveText("Which thoughtcomes first?");
-  const answer = editor.getByTestId("answer");
+  const thread = window.getByTestId("thread");
+  const question = thread.getByTestId("thread-question");
+  await expect(question.locator(".thread-question-text br")).toHaveCount(1);
+  await expect(question.locator(".thread-question-text")).toHaveText("Which thoughtcomes first?");
+  const answer = thread.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect
-    .poll(() => order(editor))
-    .toEqual(["First thought", "question", "answer", "", "Second thought"]);
+  await expect.poll(() => order(editor)).toEqual(["First thought", "Second thought"]);
 
-  // Esc: back in the note, on the line under the Answer, to write there.
+  // Esc folds the thread first, the focus staying in the composer; Esc again goes back to the
+  // note, where the cursor was, to write there.
+  await expect(input).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(thread).not.toHaveAttribute("data-open");
   await expect(input).toBeFocused();
   await window.keyboard.press("Escape");
   await expect(editor).toBeFocused();
-  await window.keyboard.type("Noted.");
-  await expect
-    .poll(() => order(editor))
-    .toEqual(["First thought", "question", "answer", "Noted.", "Second thought"]);
+  await window.keyboard.type(", noted.");
+  await expect.poll(() => order(editor)).toEqual(["First thought, noted.", "Second thought"]);
 
-  // From the title, ⌘J too; a Question asked then goes at the end.
+  // From the title, ⌘J too; the next Question goes into the same chat, which comes up again.
   await pointAndClick(window, window.getByTestId("mind-title"));
   await window.keyboard.press("ControlOrMeta+j");
   await expect(input).toBeFocused();
   await window.keyboard.type("And the last?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+  await expect(thread).toHaveAttribute("data-open", "true");
+  await expect(thread.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  await expect
-    .poll(() => order(editor))
-    .toEqual([
-      "First thought",
-      "question",
-      "answer",
-      "Noted.",
-      "Second thought",
-      "question",
-      "answer",
-      "",
-    ]);
+  await expect(question).toHaveCount(2);
+  await expect.poll(() => order(editor)).toEqual(["First thought, noted.", "Second thought"]);
   await app.close();
 });
 
@@ -363,7 +335,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(window.getByTestId("composer-input")).toBeFocused();
     await window.keyboard.type("Which model answers?");
     await window.keyboard.press("Enter");
-    const answer = window.getByTestId("mind-editor").getByTestId("answer");
+    const answer = window.getByTestId("thread").getByTestId("answer");
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer.getByTestId("answer-model")).toHaveText("other-model");
 
@@ -394,16 +366,13 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await pointAndClick(window, window.getByTestId("composer-input"));
     await window.keyboard.type("And this one?");
     await window.keyboard.press("Enter");
-    const other = window.getByTestId("mind-editor").getByTestId("answer");
+    const other = window.getByTestId("thread").getByTestId("answer");
     await expect(other).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(other.getByTestId("answer-model")).toHaveText("fake-model");
 
-    // In Chinese.
+    // In Chinese (the thread is up, so the composer asks for a follow-up).
     await bridge(window).language("zh-CN");
-    await expect(window.getByTestId("composer-input")).toHaveAttribute(
-      "placeholder",
-      "提问，或说说要改什么…",
-    );
+    await expect(window.getByTestId("composer-input")).toHaveAttribute("placeholder", "继续追问…");
     await pointAndClick(window, window.getByTestId("composer-model"));
     const menuZh = window.getByTestId("composer-model-menu");
     await expect(menuZh.getByRole("group", { name: "在本机运行" })).toBeVisible();
@@ -493,7 +462,7 @@ test("a Mind written before opens with its Questions and Answers in the new styl
   await app.close();
 });
 
-test("asking from the composer moves the Mind's cursor below the Answer, without taking the focus from the composer", async () => {
+test("asking from the composer keeps the focus there for a follow-up, in the same chat, and leaves the note's cursor where it was", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -502,25 +471,19 @@ test("asking from the composer moves the Mind's cursor below the Answer, without
   await pointAndClick(window, input);
   await window.keyboard.type("A first Question?");
   await window.keyboard.press("Enter");
-  const editor = window.getByTestId("mind-editor");
-  await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+  const thread = window.getByTestId("thread");
+  await expect(thread.getByTestId("answer")).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  // A follow-up straight away goes after the first Answer.
+  // A follow-up straight away goes after the first Answer, in the thread.
   await window.keyboard.type("A follow-up?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+  await expect(thread.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  await expect.poll(() => order(editor)).toEqual(["question", "answer", "question", "answer", ""]);
-  const selection = await editor.evaluate((dom) => {
-    const { state } = (dom as unknown as { editor: Editor }).editor;
-    return {
-      parent: state.selection.$from.parent.type.name,
-      index: state.selection.$from.index(0),
-    };
-  });
-  expect(selection).toEqual({ parent: "paragraph", index: 4 });
+  await expect(thread.getByTestId("thread-question")).toHaveCount(2);
+  const editor = window.getByTestId("mind-editor");
+  await expect.poll(() => order(editor)).toEqual([""]);
   await expect(input).toBeFocused();
   await app.close();
 });
@@ -564,19 +527,23 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await window.keyboard.type("大潮什么时候出现？");
   await screenshot(window, "composer-chips-zh");
 
-  // Asked: the Question carries both; the Answer's meta line on hover, in Chinese.
+  // Asked, in the thread: the Question carries both; the Answer's line, in Chinese.
   await window.keyboard.press("Enter");
   const editor = window.getByTestId("mind-editor");
-  const answer = editor.getByTestId("answer");
+  const thread = window.getByTestId("thread");
+  const answer = thread.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(composer.getByTestId("composer-live")).toContainText("回答写完了。");
-  const question = editor.getByTestId("question");
+  const question = thread.getByTestId("thread-question");
   await expect(question.getByTestId("scope-chip")).toHaveText("Tides");
   await expect(question.getByTestId("question-skill")).toHaveText("literature-review");
   await pointAt(window, answer.locator(".answer-content p").first());
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");
+  await expect(answer.getByTestId("answer-add")).toHaveText("加入笔记");
   await screenshot(window, "answer-hover-zh");
-  await pointAt(window, question.locator(".question-text"));
+  // The thread keeps its newest at the foot: the Question is scrolled up into view first.
+  await question.scrollIntoViewIfNeeded();
+  await pointAt(window, question.locator(".thread-question-text"));
   await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(1);
   await screenshot(window, "question-hover-zh");
 

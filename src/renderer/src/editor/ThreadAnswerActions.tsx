@@ -115,6 +115,7 @@ const TickIcon = () => (
  */
 export function ThreadAnswerActions({
   answerId,
+  canKeep,
   canRegenerate,
   streaming,
   meta,
@@ -123,6 +124,8 @@ export function ThreadAnswerActions({
   onRegenerate,
 }: {
   answerId: string | null;
+  /** It has something to keep: Copy and Add to note. Not a failed Answer. */
+  canKeep: boolean;
   canRegenerate: boolean;
   streaming: boolean;
   /** The model, the Search scope and what it searched. */
@@ -197,56 +200,60 @@ export function ThreadAnswerActions({
       data-testid="answer-meta"
       className="thread-answer-actions"
     >
-      <button
-        type="button"
-        data-testid="answer-copy"
-        aria-label={t(copied ? "thread.answer.copied" : "thread.answer.copyLabel", {
-          shortcut: COPY_SHORTCUT,
-        })}
-        title={t("thread.answer.copyTitle", { shortcut: COPY_SHORTCUT })}
-        // A selection in the Answer stays as it is.
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
-          void thread.copy(answerId).then((done) => {
-            if (!done) return;
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          });
-        }}
-        className="thread-answer-action"
-      >
-        <CopyIcon />
-        {copied ? t("thread.answer.copied") : t("thread.answer.copy")}
-      </button>
-      <span className="thread-add">
-        <button
-          type="button"
-          data-testid="answer-add"
-          aria-label={t("thread.answer.addLabel", { shortcut: ADD_SHORTCUT })}
-          title={t("thread.answer.addTitle", { shortcut: ADD_SHORTCUT })}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => thread.add(answerId)}
-          className="thread-answer-action thread-add-main"
-        >
-          <PlusIcon />
-          {t("thread.answer.add")}
-        </button>
-        <button
-          ref={pickButton}
-          type="button"
-          data-testid="answer-add-to"
-          aria-haspopup="dialog"
-          aria-label={t("thread.answer.addTo")}
-          title={t("thread.answer.addToTitle")}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            if (pickButton.current) thread.pick(answerId, pickButton.current);
-          }}
-          className="thread-answer-action thread-add-more"
-        >
-          <ChevronIcon />
-        </button>
-      </span>
+      {canKeep && (
+        <>
+          <button
+            type="button"
+            data-testid="answer-copy"
+            aria-label={t(copied ? "thread.answer.copied" : "thread.answer.copyLabel", {
+              shortcut: COPY_SHORTCUT,
+            })}
+            title={t("thread.answer.copyTitle", { shortcut: COPY_SHORTCUT })}
+            // A selection in the Answer stays as it is.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              void thread.copy(answerId).then((done) => {
+                if (!done) return;
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              });
+            }}
+            className="thread-answer-action"
+          >
+            <CopyIcon />
+            {copied ? t("thread.answer.copied") : t("thread.answer.copy")}
+          </button>
+          <span className="thread-add">
+            <button
+              type="button"
+              data-testid="answer-add"
+              aria-label={t("thread.answer.addLabel", { shortcut: ADD_SHORTCUT })}
+              title={t("thread.answer.addTitle", { shortcut: ADD_SHORTCUT })}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => thread.add(answerId)}
+              className="thread-answer-action thread-add-main"
+            >
+              <PlusIcon />
+              {t("thread.answer.add")}
+            </button>
+            <button
+              ref={pickButton}
+              type="button"
+              data-testid="answer-add-to"
+              aria-haspopup="dialog"
+              aria-label={t("thread.answer.addTo")}
+              title={t("thread.answer.addToTitle")}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                if (pickButton.current) thread.pick(answerId, pickButton.current);
+              }}
+              className="thread-answer-action thread-add-more"
+            >
+              <ChevronIcon />
+            </button>
+          </span>
+        </>
+      )}
       {canRegenerate && (
         <button
           type="button"

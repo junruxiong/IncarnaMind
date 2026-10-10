@@ -90,13 +90,15 @@ test("typing @ in the composer limits the search to a Folder: the Answer cites o
   // Asked, the Question carries the scope, on its line; the composer keeps it for the next.
   await window.keyboard.type("When do spring tides happen?");
   await window.keyboard.press("Enter");
-  const question = editor.getByTestId("question");
-  await expect(question.locator(".question-text")).toHaveText("When do spring tides happen?");
+  const question = window.getByTestId("thread").getByTestId("thread-question");
+  await expect(question.locator(".thread-question-text")).toHaveText(
+    "When do spring tides happen?",
+  );
   const chip = question.getByTestId("scope-chip");
   await expect(chip).toHaveText("Ocean");
   await expect(chip).toHaveAttribute("data-id", oceanId);
   await expect(composerChip).toHaveText("Ocean");
-  const answer = editor.getByTestId("answer");
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
   // It searched only the Ocean Folder, and cites its Document.
@@ -182,9 +184,12 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
     await expect(composerChip).toHaveText("Ocean research");
     await window.keyboard.type("When do spring tides happen?");
     await window.keyboard.press("Enter");
-    const chip = editor.getByTestId("question").getByTestId("scope-chip");
+    const chip = window
+      .getByTestId("thread")
+      .getByTestId("thread-question")
+      .getByTestId("scope-chip");
     await expect(chip).toHaveText("Ocean research");
-    const answer = editor.getByTestId("answer");
+    const answer = window.getByTestId("thread").getByTestId("answer");
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer.getByTestId("citation")).toHaveCount(1);
     await expect(answer.getByTestId("citation-chip")).toHaveAttribute(

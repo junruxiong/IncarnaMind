@@ -12,6 +12,7 @@ import {
 import {
   type KeyboardEvent,
   memo,
+  type ReactNode,
   type RefObject,
   useEffect,
   useId,
@@ -32,6 +33,14 @@ import {
   observeChats,
 } from "../../../shared/mindChats";
 import { withoutIds } from "../../../shared/noteBlocks";
+import {
+  hasSearchScope,
+  SCOPE_ATTRIBUTES,
+  type ScopeKind,
+  scopeIds,
+  searchScopeOf,
+} from "../../../shared/searchScope";
+import { useAnswers } from "../answers";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -48,7 +57,9 @@ import { MarginChecks } from "./MarginChecks";
 import { MindIdContext } from "./mindContext";
 import { noteExtensions } from "./noteSchema";
 import { Popover } from "./Popover";
-import { type ThreadActions, ThreadContext } from "./ThreadAnswerActions";
+import { QuestionProblem, SkillChip } from "./QuestionView";
+import { ScopeChips } from "./ScopeChips";
+import { type ThreadActions, ThreadContext, useThread } from "./ThreadAnswerActions";
 
 const CLOSED: ThreadView = { chatId: null, open: false, fresh: false, focusAnswer: null };
 
@@ -122,33 +133,70 @@ const FoldIcon = ({ open }: { open: boolean }) => (
   </svg>
 );
 
-/** A Question in the thread: the User's words in a bubble at the right (board Chat-B1). */
-function ThreadQuestionView({ node }: ReactNodeViewProps) {
+/**
+ * A Question in the thread: the User's words in a bubble at the right (board
+ * Chat-B1), with the Skill chosen for it; under it, why it couldn't be asked
+ * again, with the one thing that fixes it.
+ */
+function ThreadQuestionView({ node, updateAttributes }: ReactNodeViewProps) {
   const t = useT();
+  const thread = useThread();
   const questionId =
-    typeof node.attrs[BLOCK_ID_ATTRIBUTE] === "string" ? node.attrs[BLOCK_ID_ATTRIBUTE] : undefined;
-  const skill = typeof node.attrs.forcedSkill === "string" ? node.attrs.forcedSkill : null;
+    typeof node.attrs[BLOCK_ID_ATTRIBUTE] === "string" ? node.attrs[BLOCK_ID_ATTRIBUTE] : null;
+  const forcedSkill = typeof node.attrs.forcedSkill === "string" ? node.attrs.forcedSkill : null;
+  const skill = useAppStore((state) =>
+    forcedSkill ? state.skills.find((each) => each.name === forcedSkill) : undefined,
+  );
+  const dropSkill = () => {
+    updateAttributes({ forcedSkill: null });
+    if (questionId) useAnswers.getState().dismiss(questionId);
+  };
+  const scope = searchScopeOf(node.attrs);
+  const removeFromScope = (kind: ScopeKind, id: string) => {
+    const left = scopeIds(scope, kind).filter((each) => each !== id);
+    updateAttributes({ [SCOPE_ATTRIBUTES[kind]]: left.length > 0 ? left : null });
+  };
   return (
     <NodeViewWrapper
       className="thread-question"
       data-testid="thread-question"
-      data-question-id={questionId}
+      data-question-id={questionId ?? undefined}
     >
       <div className="thread-question-bubble">
         <span contentEditable={false} className="sr-only">
           {t("thread.youAsked")}
         </span>
-        {skill && (
-          <span
-            contentEditable={false}
-            data-testid="question-skill"
-            className="thread-question-skill"
-          >
-            {skill}
-          </span>
+        {forcedSkill && (
+          <SkillChip
+            name={forcedSkill}
+            state={!skill ? "removed" : skill.enabled ? "enabled" : "disabled"}
+            onRemove={dropSkill}
+          />
         )}
+        {forcedSkill && " "}
         <NodeViewContent<"span"> as="span" className="thread-question-text" />
       </div>
+      {hasSearchScope(scope) && (
+        // Its Search scope, on hover or focus, as a note's Question shows it: × takes one out.
+        <div contentEditable={false} data-testid="question-meta" className="thread-question-meta">
+          <ScopeChips
+            scope={scope}
+            onRemove={removeFromScope}
+            shown={8}
+            className="question-scope"
+            testId="question-scope"
+          />
+        </div>
+      )}
+      <QuestionProblem
+        questionId={questionId}
+        onAskWithoutSkill={() => {
+          dropSkill();
+          if (thread && questionId) {
+            void useAnswers.getState().ask(thread.mindId, questionId, false, thread.chatId);
+          }
+        }}
+      />
     </NodeViewWrapper>
   );
 }
@@ -187,18 +235,20 @@ export const ThreadLog = memo(function ThreadLog({
       editorProps: {
         attributes: {
           "data-testid": "thread-editor",
+          role: "log",
           "aria-label": label,
           class: "mind-editor thread-editor",
         },
       },
       extensions: [
-        // The thread never writes: no Block ids to give.
+        // The thread never writes: it reads Block ids, and gives none.
         ...noteExtensions({
           codeBlockView: ReactNodeViewRenderer(CodeBlockView),
           questionView: ReactNodeViewRenderer(ThreadQuestionView),
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
-        }).filter((extension) => extension.name !== "uniqueID"),
+          readOnly: true,
+        }),
         CitationNumbers,
         Collaboration.configure({ fragment }),
       ],
@@ -265,6 +315,9 @@ export function ThreadPanel({
   note,
   cursorInMind,
   focusComposer,
+  dock = "bottom",
+  headerActions,
+  children,
 }: {
   mindId: string;
   doc: Y.Doc;
@@ -273,6 +326,16 @@ export function ThreadPanel({
   /** Whether the note's cursor is where it goes; otherwise it goes at the end. */
   cursorInMind: RefObject<boolean>;
   focusComposer(): void;
+  /**
+   * Where the parent layout docks it: joined to the top of the composer at the
+   * foot of the Mind ("bottom", the only one so far). Its placement is the
+   * dock's CSS (`.thread-dock--bottom`), never this component's.
+   */
+  dock?: "bottom";
+  /** More buttons for the header, before history and fold: e.g. a ⋯ menu. */
+  headerActions?: ReactNode;
+  /** The composer, under the thread, as one card with it. */
+  children: ReactNode;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -299,25 +362,35 @@ export function ThreadPanel({
   const open = view.open && visible;
   const update = (change: Partial<ThreadView>) => useThreads.getState().update(mindId, change);
 
-  // Room under the note for the thread, so the note's end can scroll above it.
+  // As the thread's height changes: the card's one shadow, under it and the composer; room
+  // under the note, so its end can scroll above the thread; and the note's cursor kept clear
+  // of it, so typing near the foot of the note scrolls what is typed up above the thread.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the panel comes and goes with `visible`.
   useLayoutEffect(() => {
     const element = panel.current;
-    const scroller = element?.closest(".composer-dock")?.previousElementSibling;
-    if (!(scroller instanceof HTMLElement)) return;
-    if (!element) {
-      scroller.style.removeProperty("--thread-room");
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      scroller.style.setProperty("--thread-room", `${Math.round(element.offsetHeight)}px`);
-    });
+    const dock = element?.closest<HTMLElement>(".composer-dock");
+    const scroller = dock?.previousElementSibling;
+    if (!element || !dock || !(scroller instanceof HTMLElement)) return;
+    const fit = () => {
+      const height = Math.round(element.offsetHeight);
+      dock.style.setProperty("--thread-height", `${height}px`);
+      scroller.style.setProperty("--thread-room", `${height}px`);
+      if (note.isDestroyed) return;
+      note.view.setProps({
+        scrollMargin: { top: 5, left: 5, right: 5, bottom: height + 16 },
+        scrollThreshold: { top: 0, left: 0, right: 0, bottom: height + 16 },
+      });
+    };
+    const observer = new ResizeObserver(fit);
     observer.observe(element);
     return () => {
       observer.disconnect();
+      dock.style.removeProperty("--thread-height");
       scroller.style.removeProperty("--thread-room");
+      // ProseMirror's own defaults.
+      if (!note.isDestroyed) note.view.setProps({ scrollMargin: 5, scrollThreshold: 0 });
     };
-  }, [visible]);
+  }, [visible, note]);
 
   // A link back from a Note: the chat with that Answer, up, the Answer in view and focused.
   const focusAnswer = view.focusAnswer;
@@ -334,20 +407,29 @@ export function ThreadPanel({
       return;
     }
     if (!log || log.isDestroyed) return;
-    const found = findBlock(log.state.doc, focusAnswer);
-    if (!found) return;
-    const element = log.view.nodeDOM(found.pos);
-    const answer =
-      element instanceof HTMLElement
-        ? (element.querySelector<HTMLElement>("[data-answer-id]") ?? element)
-        : null;
-    if (!answer) return;
-    answer.tabIndex = -1;
-    answer.scrollIntoView({ block: "nearest" });
-    answer.focus({ preventScroll: true });
-    answer.classList.add("thread-answer--sought");
-    setTimeout(() => answer.classList.remove("thread-answer--sought"), 1600);
-    update({ focusAnswer: null });
+    // The Answer's view is drawn a moment after the editor has it: look for it each frame.
+    let frame = 0;
+    let tries = 0;
+    const seek = () => {
+      const found = log.isDestroyed ? null : findBlock(log.state.doc, focusAnswer);
+      const element = found ? log.view.nodeDOM(found.pos) : null;
+      const answer =
+        element instanceof HTMLElement
+          ? element.querySelector<HTMLElement>("[data-answer-id]")
+          : null;
+      if (!answer) {
+        if (++tries < 60) frame = requestAnimationFrame(seek);
+        return;
+      }
+      answer.tabIndex = -1;
+      answer.scrollIntoView({ block: "nearest" });
+      answer.focus({ preventScroll: true });
+      answer.classList.add("thread-answer--sought");
+      setTimeout(() => answer.classList.remove("thread-answer--sought"), 1600);
+      update({ focusAnswer: null });
+    };
+    seek();
+    return () => cancelAnimationFrame(frame);
   }, [focusAnswer, doc, shownId, view.open, log, mindId]);
 
   /** The chat's first Question, which names it in a Note's link back and a new Mind's title. */
@@ -363,16 +445,18 @@ export function ThreadPanel({
   /** Into this Mind, at its cursor (or end), through its editor: ⌘Z in the note undoes it too. */
   const addHere = async (answerId: string, blocks: ReturnType<typeof answerBlocks>) => {
     if (!blocks || note.isDestroyed) return;
-    const checked = await checkedBlocks(blocks);
+    const checked = await checkedBlocks(blocks, (input) => core.recheckCitation(input));
     if (note.isDestroyed) return;
-    const ids = addAtPlace(note, checked, placeInNote(note, cursorInMind.current === true));
-    if (!ids) return;
+    const added = addAtPlace(note, checked, placeInNote(note, cursorInMind.current === true));
+    if (!added) return;
+    const ids = added.blockIds;
     setOrigins(doc, ids, origin(answerId));
     setAdded({
       mindId,
       answerId,
       target: { mindId, title: mindTitle, here: true },
       blockIds: ids,
+      emptyLine: added.emptyLine,
     });
     flashBlocks(note, ids);
     const first = ids[0] ? findBlock(note.state.doc, ids[0]) : null;
@@ -443,7 +527,8 @@ export function ThreadPanel({
       if (!last) return;
       setAdded(null);
       if (last.target.here) {
-        removeFromNote(note, last.blockIds);
+        if (note.isDestroyed) return;
+        removeFromNote(note, { blockIds: last.blockIds, emptyLine: last.emptyLine ?? null });
         removeOrigins(doc, last.blockIds);
         return;
       }
@@ -481,6 +566,8 @@ export function ThreadPanel({
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
+      // A Document opened from a Citation here is the innermost thing: Esc closes it first.
+      if (useAppStore.getState().viewerOpen) return;
       event.preventDefault();
       fold();
       return;
@@ -500,114 +587,120 @@ export function ThreadPanel({
     else actions.add(answerId);
   };
 
-  if (!visible) return null;
-
   const historyLabel = t("thread.history");
   return (
-    <ThreadContext.Provider value={actions}>
-      <section
-        ref={panel}
-        aria-labelledby={titleId}
-        data-testid="thread"
-        data-open={open || undefined}
-        onKeyDown={onKeyDown}
-        className={open ? "thread-panel thread-panel--open" : "thread-panel"}
-      >
-        <header className="thread-head">
-          <SparkIcon />
-          <h2 id={titleId} className="thread-title">
-            {t("thread.title")}
-          </h2>
-          <button
-            type="button"
-            data-testid="thread-subtitle"
-            tabIndex={-1}
-            onClick={() => (open ? undefined : update({ open: true }))}
-            className="thread-subtitle"
+    <div data-dock={dock} className={`thread-dock thread-dock--${dock}`}>
+      {visible && (
+        <ThreadContext.Provider value={actions}>
+          {/* The card's popover depth, drawn once under the thread and the composer together. */}
+          <div aria-hidden="true" className="thread-shadow" />
+          <section
+            ref={panel}
+            aria-labelledby={titleId}
+            data-testid="thread"
+            data-open={open || undefined}
+            onKeyDown={onKeyDown}
+            className={open ? "thread-panel thread-panel--open" : "thread-panel"}
           >
-            {open || !shown ? t("thread.subtitle") : shown.title}
-          </button>
-          <button
-            ref={historyButton}
-            type="button"
-            data-testid="thread-history"
-            aria-label={historyLabel}
-            title={historyLabel}
-            aria-haspopup="menu"
-            aria-expanded={historyOpen}
-            onClick={() => setHistoryOpen((was) => !was)}
-            className="thread-head-button"
-          >
-            <HistoryIcon />
-          </button>
-          <button
-            type="button"
-            data-testid="thread-fold"
-            aria-expanded={open}
-            aria-controls={bodyId}
-            aria-label={open ? t("thread.fold") : t("thread.unfold")}
-            title={open ? t("thread.foldTitle") : t("thread.unfold")}
-            onClick={() => (open ? fold() : update({ open: true }))}
-            className="thread-head-button"
-          >
-            <FoldIcon open={open} />
-          </button>
-        </header>
-        <div id={bodyId} hidden={!open} className="thread-body">
-          {open && fragment && (
-            <div className="thread-scroller" data-testid="thread-scroller">
-              <ThreadLog
-                key={shownId}
-                mindId={mindId}
-                fragment={fragment}
-                label={t("thread.log", { title: mindTitle || t("mind.untitled") })}
-                onEditor={setLog}
-              />
+            <header className="thread-head">
+              <SparkIcon />
+              <h2 id={titleId} className="thread-title">
+                {t("thread.title")}
+              </h2>
+              <button
+                type="button"
+                data-testid="thread-subtitle"
+                tabIndex={-1}
+                onClick={() => (open ? undefined : update({ open: true }))}
+                className="thread-subtitle"
+              >
+                {open || !shown ? t("thread.subtitle") : shown.title}
+              </button>
+              {headerActions}
+              <button
+                ref={historyButton}
+                type="button"
+                data-testid="thread-history"
+                aria-label={historyLabel}
+                title={historyLabel}
+                aria-haspopup="menu"
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen((was) => !was)}
+                className="thread-head-button"
+              >
+                <HistoryIcon />
+              </button>
+              <button
+                type="button"
+                data-testid="thread-fold"
+                aria-expanded={open}
+                aria-controls={bodyId}
+                aria-label={open ? t("thread.fold") : t("thread.unfold")}
+                title={open ? t("thread.foldTitle") : t("thread.unfold")}
+                onClick={() => (open ? fold() : update({ open: true }))}
+                className="thread-head-button"
+              >
+                <FoldIcon open={open} />
+              </button>
+            </header>
+            <div id={bodyId} hidden={!open} className="thread-body">
+              {open && fragment && (
+                <div className="thread-scroller" data-testid="thread-scroller">
+                  <ThreadLog
+                    key={shownId}
+                    mindId={mindId}
+                    fragment={fragment}
+                    label={t("thread.log", { title: mindTitle || t("mind.untitled") })}
+                    onEditor={setLog}
+                  />
+                </div>
+              )}
+              {open && !fragment && (
+                <p data-testid="thread-empty" className="thread-empty">
+                  {t("thread.empty")}
+                </p>
+              )}
             </div>
+          </section>
+          {historyOpen && historyButton.current && (
+            <ChatHistory
+              anchor={historyButton.current}
+              chats={chats}
+              shownId={shownId}
+              language={language}
+              onNew={() => {
+                setHistoryOpen(false);
+                useThreads.getState().startNew(mindId);
+                focusComposer();
+              }}
+              onChoose={(chatId) => {
+                setHistoryOpen(false);
+                useThreads.getState().open(mindId, chatId);
+              }}
+              onClose={() => {
+                setHistoryOpen(false);
+                historyButton.current?.focus();
+              }}
+            />
           )}
-          {open && !fragment && (
-            <p data-testid="thread-empty" className="thread-empty">
-              {t("thread.empty")}
-            </p>
+          {picking && (
+            <AddToMindPicker
+              anchor={picking.anchor}
+              mindId={mindId}
+              newTitle={chatTitle}
+              hereAt={cursorInMind.current ? "cursor" : "end"}
+              onChoose={choose}
+              onClose={() => {
+                const anchor = picking.anchor;
+                setPicking(null);
+                anchor.focus();
+              }}
+            />
           )}
-        </div>
-      </section>
-      {historyOpen && historyButton.current && (
-        <ChatHistory
-          anchor={historyButton.current}
-          chats={chats}
-          shownId={shownId}
-          language={language}
-          onNew={() => {
-            setHistoryOpen(false);
-            useThreads.getState().startNew(mindId);
-            focusComposer();
-          }}
-          onChoose={(chatId) => {
-            setHistoryOpen(false);
-            useThreads.getState().open(mindId, chatId);
-          }}
-          onClose={() => {
-            setHistoryOpen(false);
-            historyButton.current?.focus();
-          }}
-        />
+        </ThreadContext.Provider>
       )}
-      {picking && (
-        <AddToMindPicker
-          anchor={picking.anchor}
-          mindId={mindId}
-          newTitle={chatTitle}
-          hereAt={cursorInMind.current ? "cursor" : "end"}
-          onChoose={choose}
-          onClose={() => {
-            const anchor = picking.anchor;
-            setPicking(null);
-            anchor.focus();
-          }}
-        />
-      )}
-    </ThreadContext.Provider>
+      {children}
+    </div>
   );
 }
 

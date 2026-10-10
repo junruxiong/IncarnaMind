@@ -140,12 +140,12 @@ async function chooseFakeModel(window: Page) {
   });
 }
 
-/** Writes a Question in the composer (⌘J), asks it with Enter (it goes on the current line), and waits for the Answer. */
+/** Writes a Question in the composer (⌘J), asks it with Enter (it goes into the thread, #201), and waits for the Answer. */
 async function ask(window: Page, question: string, index: number) {
   await window.keyboard.press("ControlOrMeta+j");
   await typeLike(window, question, 45);
   await window.keyboard.press("Enter");
-  const answer = window.getByTestId("mind-editor").getByTestId("answer").nth(index);
+  const answer = window.getByTestId("thread").getByTestId("answer").nth(index);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
   return answer;
 }
@@ -388,7 +388,7 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       await window.keyboard.press("ControlOrMeta+j");
       await typeLike(window, "When do spring tides happen?", 50);
       await window.keyboard.press("Enter");
-      const first = window.getByTestId("mind-editor").getByTestId("answer").first();
+      const first = window.getByTestId("thread").getByTestId("answer").first();
       await expect(first).toHaveAttribute("data-status", "streaming", { timeout: 15_000 });
       const stop = await startFrames(window);
       await window.waitForTimeout(500);

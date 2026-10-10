@@ -37,8 +37,6 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
   const t = useT();
   const mindId = useMindId();
   const questionId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
-  const blocked = useAnswers((state) => (questionId ? state.blocked[questionId] : undefined));
-  const openSettings = useAppStore((state) => state.openSettings);
   const forcedSkill = text(node.attrs.forcedSkill);
   const skill = useAppStore((state) =>
     forcedSkill ? state.skills.find((each) => each.name === forcedSkill) : undefined,
@@ -118,6 +116,34 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
           )}
         </span>
       </div>
+      <QuestionProblem
+        questionId={questionId}
+        onAskWithoutSkill={() => {
+          dropSkill();
+          if (canAsk) void askInEditor(editor, mindId, questionId);
+        }}
+      />
+    </NodeViewWrapper>
+  );
+}
+
+/**
+ * Why a Question couldn't be asked (again), under it, with the one thing that
+ * fixes it: in a note, and in the thread (#201).
+ */
+export function QuestionProblem({
+  questionId,
+  onAskWithoutSkill,
+}: {
+  questionId: string | null;
+  /** Takes the Skill off the Question and asks it again. */
+  onAskWithoutSkill(): void;
+}) {
+  const t = useT();
+  const blocked = useAnswers((state) => (questionId ? state.blocked[questionId] : undefined));
+  const openSettings = useAppStore((state) => state.openSettings);
+  return (
+    <>
       {blocked?.kind === "not-ready" && (
         <div contentEditable={false} className="question-problem">
           <ProblemLine
@@ -136,13 +162,7 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
         <div contentEditable={false} className="question-problem">
           <ProblemLine
             testId="question-skill-unavailable"
-            action={{
-              label: t("skills.unavailable.drop"),
-              onClick: () => {
-                dropSkill();
-                if (canAsk) void askInEditor(editor, mindId, questionId);
-              },
-            }}
+            action={{ label: t("skills.unavailable.drop"), onClick: onAskWithoutSkill }}
           >
             {t(`skills.unavailable.${blocked.state}`, { name: blocked.skill })}
           </ProblemLine>
@@ -155,7 +175,7 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
           </ProblemLine>
         </div>
       )}
-    </NodeViewWrapper>
+    </>
   );
 }
 

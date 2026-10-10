@@ -20,7 +20,7 @@
   <!-- After the first release, add: <a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="Nine screens in turn: pointing at a Citation shows its quote; opening it shows the PDF page with the quote highlighted; all your Documents in every format, with Folders and Tags; asking about selected cells in an Excel sheet; a comparison table across ten contracts; a Word contract with tracked changes and comments; notes beside a live meeting transcript; background Tasks, running and scheduled; and Settings with Claude, GPT, DeepSeek and a local model through Ollama."></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="Eleven screens in turn: a Question asked in a Mind, answered in a thread above the composer while the note stays as it was; Add to note putting that Answer into the note with its Citations; pointing at a Citation shows its quote; opening it shows the PDF page with the quote highlighted; all your Documents in every format, with Folders and Tags; asking about selected cells in an Excel sheet; a comparison table across ten contracts; a Word contract with tracked changes and comments; notes beside a live meeting transcript; background Tasks, running and scheduled; and Settings with Claude, GPT, DeepSeek and a local model through Ollama."></p>
 
 <p align="center"><sub>Asking about a selection, comparison tables, Word tracked changes and comments, meetings and background Tasks are <a href="#coming-next">coming next</a>; the rest is in the app today.</sub></p>
 
@@ -44,7 +44,7 @@ npm install && npm run dev
 
 ## What you can do
 
-**Write and ask in one place.** A Mind is a notebook for one topic: ask a Question from the box at the foot of the Mind, and the Answer lands in your draft, at your cursor, as text you can edit.
+**Write and ask in one place.** A Mind is a notebook for one topic: ask a Question from the box at the foot of the Mind, and the Answer appears in a thread just above it, leaving your draft as it is. **Add to note** puts the Answer, or the part of it you select, at your cursor with its citations, checked again there; its ▾ adds it to another Mind instead. Each Mind keeps its own chats.
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted.
 

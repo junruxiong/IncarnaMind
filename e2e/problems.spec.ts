@@ -167,6 +167,8 @@ test("asking without a chat model says what to set up, in the composer's row and
   await expect(notReady).toHaveCSS("color", "rgb(101, 107, 116)");
   await expect(composer.getByTestId("composer-input")).toHaveValue("Is anyone there?");
   await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
+  // Nor in a thread: none rises for a Question that wasn't asked (#201).
+  await expect(window.getByTestId("thread")).toHaveCount(0);
   await expect(window.locator("dialog[open]")).toHaveCount(0);
   await screenshot(window, "needs-chat-model-composer-en");
 

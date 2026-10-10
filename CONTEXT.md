@@ -26,8 +26,12 @@ _Avoid_: query, prompt
 A Block generated in response to exactly one Question.
 _Avoid_: output, response, reply
 
+**Chat**:
+A conversation with the AI about a Mind: Questions and their Answers, in order, kept with the Mind and shown in the thread above its composer. Its Answers stay out of the Mind's Notes until the User adds one to a note (Add to note), which keeps a link back to it. A Mind keeps every chat about it; a chat on its own, with no note, is a Mind of kind `chat`.
+_Avoid_: session, conversation, thread (the thread is where a chat is shown)
+
 **Question context**:
-What an Answer is generated from: every Block above its Question in the Mind, except Notes the User has excluded, plus Passages from the Documents in the Question's Search scope.
+What an Answer is generated from: every Block above its Question in the Mind, except Notes the User has excluded, plus Passages from the Documents in the Question's Search scope. For a Question in a chat, that is the whole note, then the chat's earlier Questions and Answers.
 _Avoid_: prompt, history
 
 **Search scope**:

@@ -5,6 +5,7 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type * as Y from "yjs";
 import type { BlockOrigin } from "../../../core/api";
 import { allOrigins, observeOrigins } from "../../../shared/blockOrigins";
+import { textBlockEdited } from "./citationNumbers";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 
 /**
@@ -92,14 +93,15 @@ export const BlockOrigins = Extension.create<BlockOriginsOptions>({
               };
             }
             if (!tr.docChanged) return value;
-            // A Block came or went (an undo may bring one back): look again. Typing just moves them.
-            if (tr.doc.childCount !== tr.before.childCount) {
-              return {
-                ...value,
-                decorations: decorate(tr.doc, value.origins, value.flashing, describe),
-              };
+            // Typing in one text block just moves them. Anything else may have replaced a
+            // Block (which drops its decoration) or brought one back, as an undo does: look again.
+            if (textBlockEdited(tr) !== null) {
+              return { ...value, decorations: value.decorations.map(tr.mapping, tr.doc) };
             }
-            return { ...value, decorations: value.decorations.map(tr.mapping, tr.doc) };
+            return {
+              ...value,
+              decorations: decorate(tr.doc, value.origins, value.flashing, describe),
+            };
           },
         },
         props: {

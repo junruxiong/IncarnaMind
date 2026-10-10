@@ -264,22 +264,19 @@ async function typeFor(window: Page, count: number, delay = 80) {
 
 /**
  * In the open, focused Mind: asks Questions (answered with Citations by the
- * fake model), then pastes their cited sentences and Notes through the
- * editor's own clipboard HTML until it has ~300 top-level blocks.
+ * fake model, in the thread, #201), adds each Answer to the note, then pastes
+ * their cited sentences and Notes through the editor's own clipboard HTML
+ * until it has ~300 top-level blocks.
  */
 async function buildLongMind(window: Page, questions: string[]) {
   for (const [i, question] of questions.entries()) {
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type(question, { delay: 20 });
     await window.keyboard.press("Enter");
-    await expect(window.getByTestId("answer").nth(i)).toHaveAttribute("data-status", "done", {
-      timeout: 60_000,
-    });
-    await window
-      .getByTestId("mind-editor")
-      .locator(":scope > p")
-      .last()
-      .click({ position: { x: 4, y: 14 } });
+    const answer = window.getByTestId("thread").getByTestId("answer").nth(i);
+    await expect(answer).toHaveAttribute("data-status", "done", { timeout: 60_000 });
+    await click(window, answer.getByTestId("answer-add"));
+    await expect(answer.getByTestId("thread-added")).toBeVisible();
   }
   await window.getByTestId("mind-editor").evaluate((dom) => {
     const { view, commands } = (dom as unknown as { editor: Editor }).editor;
@@ -436,9 +433,11 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
     await first.window.keyboard.press("ControlOrMeta+j");
     await first.window.keyboard.type("When do spring tides happen?", { delay: 30 });
     await first.window.keyboard.press("Enter");
-    await expect(first.window.getByTestId("answer")).toHaveAttribute("data-status", "done", {
-      timeout: 30_000,
-    });
+    await expect(first.window.getByTestId("thread").getByTestId("answer")).toHaveAttribute(
+      "data-status",
+      "done",
+      { timeout: 30_000 },
+    );
     await first.window.waitForTimeout(1500);
   } finally {
     if (first) await close(first);
@@ -446,8 +445,8 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
   const warm: unknown[] = [];
   for (let i = 0; i < RUNS; i++) {
     const { launched, result } = await timedLaunch(dataDir, "mind-editor", true);
-    // The open Mind's Answer is back on screen.
-    await expect(launched.window.getByTestId("answer")).toBeVisible();
+    // The open Mind's thread is back on screen, folded to its header (#201).
+    await expect(launched.window.getByTestId("thread")).toBeVisible();
     warm.push({ ...result, answerShownMs: Date.now() - launched.timing.launchMs });
     if (i === 0) await shot(launched.window, "B01-warm-start");
     await close(launched);
@@ -506,8 +505,9 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
       mainThread: busy(m0, await cdpMetrics(session)),
     });
 
-    // A long Mind: Questions answered with Citations, then their cited sentences
-    // and Notes pasted (through the editor's own clipboard HTML) until ~300 blocks.
+    // A long Mind: Questions answered with Citations in the thread above the composer
+    // (#201), each added to the note, then their cited sentences and Notes pasted
+    // (through the editor's own clipboard HTML) until ~300 blocks. The thread stays up.
     await window.keyboard.press("Enter");
     for (const [i, question] of [
       "When do spring tides happen?",
@@ -517,14 +517,10 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
       await window.keyboard.press("ControlOrMeta+j");
       await window.keyboard.type(question, { delay: 20 });
       await window.keyboard.press("Enter");
-      await expect(window.getByTestId("answer").nth(i)).toHaveAttribute("data-status", "done", {
-        timeout: 30_000,
-      });
-      await window
-        .getByTestId("mind-editor")
-        .locator(":scope > p")
-        .last()
-        .click({ position: { x: 4, y: 14 } });
+      const answer = window.getByTestId("thread").getByTestId("answer").nth(i);
+      await expect(answer).toHaveAttribute("data-status", "done", { timeout: 30_000 });
+      await click(window, answer.getByTestId("answer-add"));
+      await expect(answer.getByTestId("thread-added")).toBeVisible();
     }
     const blocks = await window.getByTestId("mind-editor").evaluate((dom) => {
       const { view, commands } = (dom as unknown as { editor: Editor }).editor;
@@ -564,12 +560,13 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
     record("speed.longMind.shape", { ...blocks, ...counts });
     await shot(window, "B10-long-mind");
 
-    // Type at the end of the long Mind.
-    await window
-      .getByTestId("mind-editor")
-      .locator(":scope > p")
-      .last()
-      .click({ position: { x: 4, y: 14 } });
+    // Type at the end of the long Mind, the thread up over its foot: the cursor goes there as
+    // ⌘↓ would put it (the thread covers the last lines until the note scrolls them above it).
+    await expect(window.getByTestId("thread")).toHaveAttribute("data-open", "true");
+    record("speed.longMind.threadOpen", true);
+    await window.getByTestId("mind-editor").evaluate((dom) => {
+      (dom as unknown as { editor: Editor }).editor.commands.focus("end", { scrollIntoView: true });
+    });
     await window.keyboard.press("End");
     await window.keyboard.press("Enter");
     await takeKeyLatency(window);

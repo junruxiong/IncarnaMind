@@ -27,6 +27,8 @@ export interface AddedToNote {
   target: { mindId: string; title: string; here: boolean; created?: boolean };
   /** The top-level Blocks it added, in order. */
   blockIds: string[];
+  /** Added here: the empty line they took the place of, which Undo puts back. */
+  emptyLine?: string | null;
 }
 
 interface ThreadsState {

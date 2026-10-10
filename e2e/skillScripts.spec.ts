@@ -81,7 +81,7 @@ test("a Skill script asks first with an approval card: Allow once runs it, and t
   await ask(window, "Run greeter scripts/hello.js for Dover");
 
   // The fake model calls run_skill_script: the Answer waits, showing the Skill, the script and its argument.
-  const answer = editor.getByTestId("answer").first();
+  const answer = window.getByTestId("thread").getByTestId("answer").first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveAttribute("data-kind", "skill-script");
@@ -132,7 +132,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await ask(window, "Run greeter scripts/hello.js for Calais");
 
   // "Always run" warns first; Cancel goes back to the three choices.
-  const first = editor.getByTestId("answer").first();
+  const first = window.getByTestId("thread").getByTestId("answer").first();
   const card = first.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await card.getByTestId("approval-always-run").click();
@@ -155,7 +155,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   // The next run doesn't ask.
   await clickEmptyLine(editor.locator(":scope > p").last());
   await ask(window, "Run greeter scripts/hello.js for Dover");
-  const second = editor.getByTestId("answer").nth(1);
+  const second = window.getByTestId("thread").getByTestId("answer").nth(1);
   await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(second).toContainText("scripts/hello.js said: Hello, Dover!");
   await expect(second.getByTestId("approval-card")).toHaveCount(0);
@@ -184,7 +184,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   // Off: the script isn't offered, so the Answer is written without running it.
   await clickEmptyLine(editor.locator(":scope > p").last());
   await ask(window, "Run greeter scripts/hello.js for Brest");
-  const third = editor.getByTestId("answer").nth(2);
+  const third = window.getByTestId("thread").getByTestId("answer").nth(2);
   await expect(third).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(third).not.toContainText("said:");
   await expect(third.getByTestId("answer-script-call")).toHaveCount(0);
