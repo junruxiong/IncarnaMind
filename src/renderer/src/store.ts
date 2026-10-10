@@ -22,13 +22,17 @@ import type {
   Skill,
   Tag,
 } from "../../core/api";
+import { resolveLanguage } from "../../core/language";
 import type { UiUsageEvent } from "../../core/usageEvents";
 import type { DocumentLocation } from "../../shared/documentViewer";
+import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { core, files } from "./core";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
+import { itemsOf, type MoveItems, movedLocally, moveMessage, undoMoves } from "./moves";
 import { isSettingsPage, type SettingsPage } from "./settingsPages";
+import { useUndo } from "./undo";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -139,14 +143,26 @@ interface AppState {
 
   load(): Promise<void>;
   /**
-   * Creates a Mind and opens it in a new tab, at the end, with its title
-   * focused, or with a Question started in it (with a Search scope, if given).
+   * Creates a Mind, in a Folder if given, and opens it in a new tab, at the
+   * end, with its title focused, or with a Question started in it (with a
+   * Search scope, if given).
    */
   createMind(options?: {
     startQuestion?: boolean;
     title?: string;
     scope?: SearchScope | null;
+    folderId?: string | null;
   }): Promise<void>;
+  /**
+   * Moves Minds and Documents into a Folder, or out of every Folder (null):
+   * shown at once, then as the core has it, with "Moved … · Undo" (and ⌘Z).
+   * The sidebar's drag and drop and "Move to…" share it.
+   */
+  moveToFolder(items: MoveItems, folderId: string | null): Promise<void>;
+  /** Renames a Folder, keeping its description. */
+  renameFolder(folderId: string, name: string): Promise<void>;
+  /** Deletes a Folder: its Documents and Minds go to Not in a Folder. */
+  deleteFolder(folderId: string): Promise<void>;
   /** Called once the new Mind's title has the focus. */
   titleFocused(): void;
   /** Starts a Question at the end of the open Mind, or of a new Mind if none is open. */
@@ -370,6 +386,29 @@ const documentUpdates = createDocumentUpdates((changes) =>
 
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
+  /** The interface's words, outside React: for the lines the store writes (Undo's). */
+  const t = (key: MessageKey, params?: MessageParams) =>
+    translate(
+      get().settings?.language ?? resolveLanguage("system", navigator.languages),
+      key,
+      params,
+    );
+
+  /**
+   * Moves, shown at once and then sent to the core; if the core refuses, the
+   * Minds and the Library are read again, as it has them. Returns what it did.
+   */
+  const move = async (items: MoveItems, folderId: string | null) => {
+    documentUpdates.flush();
+    set((state) => movedLocally(state, items, folderId));
+    try {
+      return await core.moveToFolder({ ...itemsOf(items), folderId });
+    } catch (error) {
+      set({ minds: await core.listMinds() });
+      await get().refreshLibrary();
+      throw error;
+    }
+  };
   /** Runs an action, reporting a failure instead of throwing. */
   const attempt = async (action: () => Promise<void>) => {
     try {
@@ -628,7 +667,10 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     createMind: (options) =>
       attempt(async () => {
-        const mind = await core.createMind(options?.title ? { title: options.title } : undefined);
+        const mind = await core.createMind({
+          ...(options?.title && { title: options.title }),
+          ...(options?.folderId && { folderId: options.folderId }),
+        });
         leaveLibrary();
         // The "minds.changed" event may have listed it already.
         set((state) => ({
@@ -662,7 +704,59 @@ export const useAppStore = create<AppState>()((set, get) => {
       set({ questionToStart: { mindId, scope } });
     },
 
-    startMindFrom: ({ scope, title }) => get().createMind({ startQuestion: true, title, scope }),
+    // From a Folder as it is, the new Mind is the Folder's.
+    startMindFrom: ({ kind, scope, title }) =>
+      get().createMind({
+        startQuestion: true,
+        title,
+        scope,
+        folderId: kind === "folder" ? (scope.folderIds[0] ?? null) : null,
+      }),
+
+    moveToFolder: (items, folderId) =>
+      attempt(async () => {
+        const { minds, documents, library } = get();
+        // Only what isn't there already: dropping a Mind back on its own Folder moves nothing.
+        const folderOf = new Map(
+          library?.assignments.map((each) => [each.documentId, each.groupId]),
+        );
+        const mindIds = itemsOf(items).mindIds.filter(
+          (id) => minds.find((mind) => mind.id === id)?.folderId !== folderId,
+        );
+        const documentIds = itemsOf(items).documentIds.filter(
+          (id) => (folderOf.get(id) ?? null) !== folderId,
+        );
+        if (mindIds.length + documentIds.length === 0) return;
+        const moving = { mindIds, documentIds };
+        const folderName =
+          folderId === null
+            ? t("library.unsorted")
+            : (library?.groups.find((group) => group.id === folderId)?.name ?? "");
+        const message = moveMessage(t, moving, folderName, { minds, documents });
+        const done = await move(moving, folderId);
+        useUndo.getState().offer({
+          message,
+          undo: async () => {
+            for (const back of undoMoves(done)) await move(back.items, back.folderId);
+          },
+        });
+      }),
+
+    renameFolder: (folderId, name) =>
+      attempt(async () => {
+        const folder = get().library?.groups.find((group) => group.id === folderId);
+        const trimmed = name.trim();
+        if (!folder || !trimmed || trimmed === folder.name) return;
+        await core.updateLibraryGroup(folderId, { name: trimmed, description: folder.description });
+        await get().refreshLibrary();
+      }),
+
+    // Its Minds' list follows the core's "minds.changed" event, the Library its "library.changed".
+    deleteFolder: (folderId) =>
+      attempt(async () => {
+        await core.deleteLibraryGroup(folderId);
+        await get().refreshLibrary();
+      }),
 
     openExamples: () =>
       attempt(async () => {
