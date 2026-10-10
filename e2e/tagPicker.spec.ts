@@ -328,7 +328,9 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     // The viewer's header shows the open Document's Tags too.
     await slideAndClick(window, march.getByRole("button", { name: "March invoice", exact: true }));
     const viewer = window.getByTestId("viewer");
-    await expect(viewer).toBeVisible();
+    // Its text, once its view has loaded: until then a stand-in header shows, which the view's
+    // own header then replaces.
+    await expect(viewer.getByTestId("viewer-text")).toContainText("Invoice 2026-03");
     const headerTags = viewer.getByTestId("viewer-header").getByTestId("document-tags");
     await expect(headerTags.getByTestId("tag-chip")).toHaveText(/Invoice/);
     await expect(headerTags.getByTestId("tag-chip")).toHaveAttribute("data-colour", "green");

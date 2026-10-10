@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { ComposerDockContext } from "../editor/mindContext";
 import { useT } from "../i18n";
@@ -26,6 +26,8 @@ export function MindPane() {
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const gutter = useScrollbarWidth(scroller);
 
   return (
     <main
@@ -53,7 +55,7 @@ export function MindPane() {
         >
           {mind ? (
             <>
-              <div className="min-h-0 flex-grow overflow-auto">
+              <div ref={setScroller} className="mind-scroller min-h-0 flex-grow overflow-auto">
                 {/* Keyed, so switching Minds starts a fresh title field and editor. Every text
                   in it starts at one edge (styles.css, `.mind-column`). */}
                 <article
@@ -73,8 +75,14 @@ export function MindPane() {
                   </div>
                 </article>
               </div>
-              {/* The composer, pinned at the column's foot: the Mind's editor draws it here. */}
-              <div ref={setDock} data-testid="composer-dock" className="composer-dock" />
+              {/* The composer, pinned at the column's foot: the Mind's editor draws it here. It
+                  keeps clear of the scrollbar's gutter above it, so it is centred as the column is. */}
+              <div
+                ref={setDock}
+                data-testid="composer-dock"
+                className="composer-dock"
+                style={{ paddingRight: gutter }}
+              />
             </>
           ) : (
             <div
@@ -102,6 +110,24 @@ export function MindPane() {
 }
 
 /**
+ * How wide the element's scrollbar is: 0 where scrollbars show only while
+ * scrolling (macOS with a trackpad), about 15px where they always show
+ * (Windows, Linux, macOS with a mouse). Measured again as the element resizes.
+ */
+function useScrollbarWidth(element: HTMLElement | null): number {
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (!element) return;
+    const measure = () => setWidth(element.offsetWidth - element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element]);
+  return width;
+}
+
+/**
  * The Mind's title, edited in place. Every change is saved as it is typed; while
  * the field has focus it shows what was typed, not the saved (trimmed) title.
  */
@@ -122,7 +148,24 @@ function MindTitle({ mind }: { mind: Mind }) {
   const moveIntoContent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    event.currentTarget.closest("article")?.querySelector<HTMLElement>(".mind-editor")?.focus();
+    const title = event.currentTarget;
+    const article = title.closest("article");
+    const content = () => article?.querySelector<HTMLElement>(".mind-editor");
+    const now = content();
+    if (now || !article) {
+      now?.focus();
+      return;
+    }
+    // A new Mind's text comes a moment after its title (its document is still opening):
+    // the cursor goes there once it does, unless it has left the title by then.
+    const observer = new MutationObserver(() => {
+      const editor = content();
+      if (!editor) return;
+      observer.disconnect();
+      if (document.activeElement === title) editor.focus();
+    });
+    observer.observe(article, { childList: true, subtree: true });
+    title.addEventListener("blur", () => observer.disconnect(), { once: true });
   };
 
   return (
