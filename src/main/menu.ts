@@ -89,13 +89,13 @@ function buildMenu(): void {
         { role: "redo", label: t("menu.redo") },
         { type: "separator" },
         { role: "cut", label: t("menu.cut") },
-        { role: "copy", label: t("menu.copy") },
+        { role: "copy", label: t(isMac ? "menu.copy" : "menu.copy.other") },
         { role: "paste", label: t("menu.paste") },
         { role: "selectAll", label: t("menu.selectAll") },
       ],
     },
     {
-      label: t("menu.view"),
+      label: t(isMac ? "menu.view" : "menu.view.other"),
       submenu: [
         ...(developer
           ? ([
