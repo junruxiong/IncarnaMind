@@ -13,7 +13,6 @@ export type ObjectKind =
   | "block"
   | "tab";
 
-/** One thing the User works with: a Mind, a Document, a Block in a note… */
 export interface ObjectRef {
   kind: ObjectKind;
   id: string;
@@ -34,7 +33,6 @@ export interface DropEffect {
   label: string;
 }
 
-/** How one kind of thing is named and shown, and what it can do on its own. */
 export interface ObjectType {
   label(ref: ObjectRef, t: Translate): string;
   icon(ref: ObjectRef): ReactNode;

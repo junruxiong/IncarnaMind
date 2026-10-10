@@ -5,10 +5,8 @@ import type { ObjectRef } from "../objects";
 import { findBlock } from "./blockCommands";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 
-/** The notes open in the window. */
 const openNotes = new Set<Editor>();
 
-/** The open note that holds this Block. */
 export function noteHolding(blockId: string): Editor | null {
   for (const editor of openNotes) {
     if (!editor.isDestroyed && findBlock(editor.state.doc, blockId)) return editor;

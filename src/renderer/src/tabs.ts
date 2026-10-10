@@ -13,7 +13,6 @@ export function tabStrip(state: AppState = useAppStore.getState()) {
   return { order, shown };
 }
 
-/** Shows a tab of the strip: a Mind's, or the Library's. */
 export function showTab(id: string): void {
   const { showLibrary, openMind } = useAppStore.getState();
   if (id === LIBRARY_TAB) showLibrary();

@@ -28,7 +28,6 @@ export interface CommandContext {
   surface: Surface;
 }
 
-/** One thing the User can do, wherever it is offered: the menus, ⌘K and the keyboard. */
 export interface Command {
   id: CommandId;
   label: MessageKey | ((ctx: CommandContext, t: Translate) => string);
@@ -74,7 +73,6 @@ export const labelOf = (command: Command, ctx: CommandContext, t: Translate): st
 
 const registered = new Map<CommandId, Command>();
 
-/** Every command the app has, behind the menus, ⌘K and the keymap. */
 export const commands = {
   register(command: Command): () => void {
     if (registered.has(command.id)) throw new Error(`Two commands are called ${command.id}.`);
