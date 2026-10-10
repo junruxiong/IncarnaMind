@@ -62,7 +62,7 @@ npm install && npm run dev
 
 ## Your files stay yours
 
-There's no account and no IncarnaMind server. Your Minds and the search index stay in one data folder on your computer, and your files stay where you keep them, unchanged. A question and the passages found for it go only to the AI model you picked, or nowhere with a local model. API keys are encrypted in your system's secure storage. Usage data isn't collected. Crash reports are off unless you turn them on, and are stripped of your content.
+There's no account and no IncarnaMind server. Your Minds and the search index stay in one data folder on your computer, and your files stay where you keep them, unchanged. A question and the passages found for it go only to the AI model you picked, or nowhere with a local model. API keys are encrypted in your system's secure storage. Usage data is collected only if you agree, as [anonymous events](docs/privacy.md#usage-data), never your files or questions, and you can turn it off any time in **Settings → Privacy**. Crash reports are off unless you turn them on, and are stripped of your content.
 
 - **You're asked before anything leaves.** The first time IncarnaMind would send anything to an outside service, it shows what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back.
 - **Providers are asked not to keep it.** Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI says so.

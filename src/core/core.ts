@@ -73,6 +73,8 @@ import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import { createUsageData } from "./usageData";
+import { addedCounts, trackUsage } from "./usageTracking";
 
 export const DATABASE_FILE = "incarnamind.db";
 
@@ -180,7 +182,6 @@ export function createCore(adapters: CoreAdapters): Core {
   let libraryDocumentChanged = (_documentId: string) => {};
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
-  const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter });
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
   const lifetime = new AbortController();
   const embeddingModel = createEmbeddingModel({
@@ -204,6 +205,14 @@ export function createCore(adapters: CoreAdapters): Core {
     signal: lifetime.signal,
     onChange: () => embeddingChanged(),
   });
+  // Usage data: only from a copy built to send it, only while the User agrees, never in local mode.
+  const usageData = createUsageData({
+    settings,
+    sender: adapters.usageData,
+    localOnly: () => embedding.localOnly(),
+  });
+  const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter, usageData });
+  const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
   let documents: ReturnType<typeof createDocuments>;
   /** Set once created, so a failure after it can close it. */
@@ -373,12 +382,19 @@ export function createCore(adapters: CoreAdapters): Core {
   // Documents to search from an earlier run: the built-in reranking model downloads now, or
   // carries on from where the app quit, if it reranks them.
   if (documents.searchableCount() > 0) rerank.prepare();
-  /** Local mode on or off: embeddings may switch back to the built-in model, and rerank pauses. */
+  /**
+   * Local mode on or off: embeddings may switch back to the built-in model,
+   * rerank pauses, and usage data stops.
+   */
   const setLocalOnly = async (enabled: unknown) => {
     const wasLocal = embedding.localOnly();
     await embedding.setLocalOnly(enabled);
     library.resume();
-    if (wasLocal !== embedding.localOnly()) await rerankChanged();
+    if (wasLocal !== embedding.localOnly()) {
+      usageData.localModeChanged();
+      privacyChanged();
+      await rerankChanged();
+    }
     return embeddingSettings();
   };
 
@@ -772,9 +788,28 @@ export function createCore(adapters: CoreAdapters): Core {
     id: "remote-connectors",
     services: () => connectors.remoteTraffic(),
   });
+  const usageSender = adapters.usageData;
+  if (usageSender) {
+    privacy.traffic.register({
+      id: "usage-data",
+      service: usageSender.service,
+      enabled: () => usageData.status().enabled,
+    });
+  }
   // Crash reports start now if the User opted in before; otherwise not at all.
   privacy.start();
-  const privacyChanged = () => events.emit("privacy.changed", privacy.status());
+  // So does usage data: if the User agreed before, or, in a test build, hasn't said no.
+  usageData.start();
+  const stopTrackingUsage = trackUsage(events, (event) => usageData.record(event), {
+    chatProvider: (providerId) => chat.describe(providerId),
+    connectorIsRemote: (connectorId) => {
+      const connector = connectors.list().find((each) => each.id === connectorId);
+      return connector ? connector.transport === "http" : null;
+    },
+    skillIsBuiltIn: (name) => skills.list().some((skill) => skill.name === name && skill.builtIn),
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+  });
+  usageData.record({ event: "app_opened", fields: { language: settings.get().language } });
   /** After the User allows or revokes a flow: the flows as they are now, and what that changes. */
   const dataFlowsChanged = async () => {
     const flows = await consent.listRegistered();
@@ -833,6 +868,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createMind: async (input) => {
       const mind = minds.create(input);
       mindsChanged();
+      usageData.record({ event: "mind_created", fields: {} });
       return mind;
     },
     listMinds: async () => minds.list(),
@@ -879,7 +915,12 @@ export function createCore(adapters: CoreAdapters): Core {
       if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
-    addDocuments: (paths) => documents.add(paths),
+    addDocuments: async (paths) => {
+      const since = now();
+      const result = await documents.add(paths);
+      usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
+      return result;
+    },
     listDocuments: async (options) => {
       const { folderId, includeSubfolders, tagId, linkedFolderId } = parseListOptions(options);
       const folder = folderId === undefined ? undefined : folders.get(folderId);
@@ -897,7 +938,11 @@ export function createCore(adapters: CoreAdapters): Core {
     retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
-    addLinkedFolder: (path) => documents.linkedFolders.add(path),
+    addLinkedFolder: async (path) => {
+      const linked = await documents.linkedFolders.add(path);
+      usageData.record({ event: "folder_linked", fields: {} });
+      return linked;
+    },
     listLinkedFolders: async () => documents.linkedFolders.list(),
     removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
@@ -1043,6 +1088,8 @@ export function createCore(adapters: CoreAdapters): Core {
       if (changed) privacyChanged();
       return updated;
     },
+    recordUsage: async (event) => usageData.recordFromUi(event),
+    resetUsageInstallId: async () => usageData.resetInstallId(),
 
     listFolders: async () => folders.list(),
 
@@ -1052,7 +1099,20 @@ export function createCore(adapters: CoreAdapters): Core {
     deleteLibraryGroup: async (id) => library.delete(id),
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => library.saveSettings(input),
-    classifyDocuments: async (ids) => library.classify(ids),
+    classifyDocuments: async (ids) => {
+      library.classify(ids);
+      const classifier = library.settings().classifier;
+      if (classifier) {
+        usageData.record({
+          event: "organize_run",
+          fields: {
+            documents: Array.isArray(ids) ? new Set(ids).size : documents.list().length,
+            all: ids === undefined,
+            model: classifier.kind,
+          },
+        });
+      }
+    },
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
 
     listTags: async () => tags.list(),
@@ -1175,7 +1235,21 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
-    exportMind: async (mindId, options) => mindExports.export(mindId, options),
+    exportMind: async (mindId, options) => {
+      const exported = await mindExports.export(mindId, options);
+      usageData.record({
+        event: "mind_exported",
+        fields: {
+          format: options.format,
+          // Questions are in a Markdown export unless left out, and in a .docx only if asked for.
+          questions:
+            typeof options.includeQuestions === "boolean"
+              ? options.includeQuestions
+              : options.format === "markdown",
+        },
+      });
+      return exported;
+    },
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
@@ -1211,6 +1285,7 @@ export function createCore(adapters: CoreAdapters): Core {
       tagger.close();
       library.close();
       skills.close();
+      stopTrackingUsage();
       consent.close();
       documents.close();
       embeddingModel.close();
