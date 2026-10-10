@@ -97,8 +97,14 @@ export function isNonChatModel(providerId: string | null | undefined, modelId: s
 }
 
 /**
- * The catalog provider whose models a provider kind uses: the kind's own,
- * and OpenAI's for the ChatGPT plan, which serves OpenAI's models.
+ * The model set a provider kind uses on an endpoint: the kind's own, and
+ * OpenAI's for the ChatGPT plan, which serves OpenAI's models. A provider whose
+ * regions differ in their models has a set for each region after the first
+ * ("qwen/intl"); an endpoint without a set of its own, or none given, uses the
+ * provider's.
  */
-export const modelsProviderOfKind = (kind: ChatProviderKind): string =>
-  kind === "chatgpt" ? "openai" : kind;
+export function modelsProviderOfKind(kind: ChatProviderKind, endpoint?: string | null): string {
+  if (kind === "chatgpt") return "openai";
+  const regional = endpoint ? `${kind}/${endpoint}` : undefined;
+  return regional && MODELS.has(regional) ? regional : kind;
+}

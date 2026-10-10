@@ -52,7 +52,7 @@ npm install && npm run dev
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind can sort Documents into your Folders, and the choices you make yourself are kept.
 
-**Choose your AI.** Use your own OpenAI, Anthropic or Google key, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
+**Choose your AI.** Use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
 
 **Hand it in.** Export a Mind to Word with its citations as footnotes, or to Markdown. A citation that didn't pass the check is marked "[unverified]".
 
@@ -65,14 +65,14 @@ npm install && npm run dev
 There's no account and no IncarnaMind server. Your Minds and the search index stay in one data folder on your computer, and your files stay where you keep them, unchanged. A question and the passages found for it go only to the AI model you picked, or nowhere with a local model. API keys are encrypted in your system's secure storage. Usage data is collected only if you agree, as [anonymous events](docs/privacy.md#usage-data), never your files or questions, and you can turn it off any time in **Settings → Privacy**. Crash reports are off unless you turn them on, and are stripped of your content.
 
 - **You're asked before anything leaves.** The first time IncarnaMind would send anything to an outside service, it shows what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back.
-- **Providers are asked not to keep it.** Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI says so.
+- **Providers are asked not to keep it.** Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI and xAI says so, and requests to OpenRouter ask it to use only providers that keep and train on nothing.
 - **Nothing runs without you.** Before a Connector's tool that could change something, or a Skill's script, runs, IncarnaMind asks you: allow it once, always allow it, or deny it. **Settings → Tools** lists every rule you've set, and you can revoke any of them.
 
 <details>
 <summary><b>Questions</b></summary>
 
 - **Is it free?** Yes: it's open source under the Apache 2.0 licence. With a cloud AI model, you pay its provider for what you use; a local model costs nothing.
-- **Do I need an API key?** No. If [Ollama](https://ollama.com) is running, IncarnaMind can download a local model in one click. Or paste a key from OpenAI, Anthropic or Google, or connect any OpenAI-compatible server.
+- **Do I need an API key?** No. If [Ollama](https://ollama.com) is running, IncarnaMind can download a local model in one click. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, or connect any OpenAI-compatible server.
 - **Does it work offline?** Searching your files does: it works on the words in them, and meaning-based search (embeddings) is optional and off by default. Answers need an AI model, so with a local model everything works offline.
 - **Will it change my files?** No. It reads them where they are, and writes only to its own data folder and the files you export.
 - **What does "Quote found" mean?** That the quoted words are in the place the citation names, not that they prove your sentence, which is why the page is one click away. "Can't check" means there's no text to compare against, as on a scanned page.
