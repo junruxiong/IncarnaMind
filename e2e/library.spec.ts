@@ -206,7 +206,7 @@ test("onboarding offers starter folders and Chinese organization settings", asyn
         user: { language: "zh-CN" },
       }),
     );
-    await window.getByTestId("library").getByRole("button", { name: "添加选中的文件夹" }).click();
+    await window.getByTestId("library").getByRole("button", { name: "添加所选文件夹" }).click();
     await expect(sidebarFolder(window, "研究论文").getByTestId("folder-row")).toBeVisible();
     await window
       .getByTestId("library")

@@ -219,7 +219,7 @@ test("the + menu and the shell speak Chinese too", async () => {
     /新建 Mind/,
     /新建文件夹…/,
     /添加文档…/,
-    /关联文件夹…/,
+    /添加同步文件夹…/,
   ]);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-zh-menu.png") });
   await window.keyboard.press("Escape");
