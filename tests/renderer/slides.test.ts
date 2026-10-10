@@ -72,6 +72,18 @@ describe("a quote in a drawn slide", () => {
     expect(findInDrawing(slide, "Qualified 42")?.size).toBe(2);
     expect(findInDrawing(slide, "Confidential")).toBeNull();
   });
+
+  test("finds a table row quoted with pipes, its figure however its thousands are written, as the check does (#76)", async () => {
+    const cell = (text: string) =>
+      `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/>${para(text)}</a:txBody><a:tcPr/></a:tc>`;
+    const table = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="9" name="Table"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="952500" cy="952500"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid><a:gridCol w="317500"/><a:gridCol w="317500"/><a:gridCol w="317500"/></a:tblGrid><a:tr h="0">${cell("Qualified")}${cell("42")}${cell("1260")}</a:tr><a:tr h="0">${cell("9路")}${cell("28")}${cell("11,300")}</a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+    const slide = await slideOf(table);
+
+    expect(findInDrawing(slide, "Qualified | 42 | 1,260")?.size).toBe(3);
+    expect(findInDrawing(slide, "| 9路 | 28 | 11300 |")?.size).toBe(3);
+    expect(findInDrawing(slide, "Qualified | 42 | 1,620")).toBeNull();
+    expect(findInDrawing(slide, "9路 | 29 | 11,300")).toBeNull();
+  });
 });
 
 describe("geometry", () => {

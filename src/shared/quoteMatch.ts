@@ -21,6 +21,12 @@
  *   reads it so: the markers in an Answer's text are never touched;
  * - a soft hyphen that ends a line is read as a hyphen, so the word split
  *   there is joined like any other ("inter\u00ad\nnational");
+ * - a pipe that breaks a table's cells, a lone "|" with whitespace or a
+ *   line's start or end beside it, reads as a space: a Markdown table's row
+ *   ("| Water filter | 0.4 kg |") is found without its pipes, and a row of a
+ *   slide's or a Word file's table, whose cells are stored separated by tabs,
+ *   with pipes between them, as models write rows (#76). A pipe inside a word
+ *   ("a|b") or doubled ("||") stays a pipe;
  * - traditional Chinese characters are read as simplified ones, character by
  *   character, by OpenCC's table (./hanVariants): a page in traditional
  *   characters is quoted in simplified ones when the Answer is written in
@@ -69,6 +75,12 @@
  * - an accounting negative "(4,812)" reads "-4812";
  * - a number is matched whole: "4812" isn't found in "14812", "48125",
  *   "4812.5" or "-4812".
+ *
+ * Slides are matched with `numbers: "if-needed"`: as they are first, then,
+ * if the quote isn't found, with number formatting normalised. A chart's
+ * figures are stored as the values the file caches ("Jun: 1560") but drawn,
+ * and so quoted, in its number format ("Jun: 1,560") (#76). A quote found as
+ * it is stays found, so a slide's other text is matched as before.
  */
 import { SIMPLIFIED } from "./hanVariants";
 import { type NormalisedUnit, normaliseWithOffsets } from "./text";
@@ -127,10 +139,28 @@ function fold(char: string): string {
   return FOLDED[one] ?? SIMPLIFIED.get(one) ?? one;
 }
 
+/**
+ * A pipe that breaks a table's cells, read as a space (see the module
+ * comment). Same length, so offsets hold.
+ */
+function cellBreaksAsSpaces(text: string): string {
+  const edge = (char: string | undefined) => char === undefined || /\s/u.test(char);
+  return text.replace(/\|/g, (pipe, at: number) => {
+    const before = text[at - 1];
+    const after = text[at + 1];
+    if (before === "|" || after === "|") return pipe;
+    return edge(before) || edge(after) ? " " : pipe;
+  });
+}
+
 /** How matching treats numbers (see the module comment). */
 export interface MatchOptions {
-  /** Normalise number formatting in the quote and the text: for spreadsheets. */
-  numbers?: boolean;
+  /**
+   * Normalise number formatting in the quote and the text: always for
+   * spreadsheets (true); for slides, only when the quote isn't found as it
+   * is ("if-needed").
+   */
+  numbers?: boolean | "if-needed";
   /**
    * The Document's text lost its f-ligatures (see `lostLigatures`): a quote
    * not found as it is is looked for with each ligature's letters read as
@@ -280,7 +310,9 @@ function normaliseNumbers(units: NormalisedUnit[], text: string, spaces: GroupSp
  */
 function matchUnits(text: string, numbers?: GroupSpaces): NormalisedUnit[] {
   // Same length, so the offsets of the units still point into `text`.
-  const { units } = normaliseWithOffsets(text.replace(SOFT_HYPHEN_AT_LINE_END, "-"));
+  const { units } = normaliseWithOffsets(
+    cellBreaksAsSpaces(text.replace(SOFT_HYPHEN_AT_LINE_END, "-")),
+  );
   const folded = units.map((unit) => ({ ...unit, char: fold(unit.char) }));
   for (let at = 0; at + 3 < folded.length; at++) {
     if (folded[at]?.char !== "[" || folded[at + 1]?.char !== "^") continue;
@@ -432,28 +464,37 @@ function findNeedle(
 /**
  * Where `quote` is in `text` after both are normalised, or null if it isn't:
  * one range, or one for each part of a quote with an ellipsis (see the module
- * comment), in order. With `numbers`, number formatting is normalised too.
+ * comment), in order. With `numbers`, number formatting is normalised too
+ * (with "if-needed", only when the quote isn't found as it is).
  */
 export function findQuote(
   text: string,
   quote: string,
   options: MatchOptions = {},
 ): TextRange[] | null {
-  const found = findRead(text, quote, options, false);
-  if (found || !options.lostLigatures) return found;
-  return findRead(text, quote, options, true);
+  const readings = options.numbers === "if-needed" ? [false, true] : [options.numbers === true];
+  for (const numbers of readings) {
+    const found =
+      findRead(text, quote, numbers, false) ??
+      (options.lostLigatures ? findRead(text, quote, numbers, true) : null);
+    if (found) return found;
+  }
+  return null;
 }
 
-/** `findQuote`, with the quote and the text both read without f-ligatures' letters when asked. */
+/**
+ * `findQuote` in one reading: with number formatting normalised or not, and
+ * with the quote and the text both read without f-ligatures' letters or not.
+ */
 function findRead(
   text: string,
   quote: string,
-  options: MatchOptions,
+  numbers: boolean,
   withoutLigatureLetters: boolean,
 ): TextRange[] | null {
   const shape = withoutLigatureLetters ? withoutLigatures : (needle: string) => needle;
   const read = withoutLigatureLetters ? unitsWithoutLigatures : (units: NormalisedUnit[]) => units;
-  if (!options.numbers) return findNeedle(read(matchUnits(text)), shape(needleOf(quote)));
+  if (!numbers) return findNeedle(read(matchUnits(text)), shape(needleOf(quote)));
   const units = read(matchUnits(text, "text"));
   const accept = wholeNumbers(units);
   const grouped = shape(needleOf(quote, "all"));

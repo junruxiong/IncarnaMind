@@ -143,8 +143,8 @@
       "pageFrom": 4,
       "pageTo": 4,
       "quote": "Regular | 2 | £22.00 | 3,960",
-      "outcome": "false-not-found",
-      "case": "a table row written with pipes between its cells: the check doesn't read the pipes as cell breaks"
+      "outcome": "found",
+      "case": "a table row written with pipes between its cells, read as cell breaks"
     },
     {
       "kind": "slide",
@@ -161,8 +161,8 @@
       "pageFrom": 6,
       "pageTo": 6,
       "quote": "Jun: 1,560",
-      "outcome": "false-not-found",
-      "case": "a chart's value written with a thousands separator: numbers are matched however they are written in sheets' rows only"
+      "outcome": "found",
+      "case": "a chart's value written with a thousands separator, for the cached 1560"
     },
     {
       "kind": "slide",
@@ -342,8 +342,8 @@
       "pageFrom": 2,
       "pageTo": 2,
       "quote": "Water filter 0.4 kg Bag B",
-      "outcome": "false-not-found",
-      "case": "Markdown: a table row without its pipes: the check matches the file's text, pipes included"
+      "outcome": "found",
+      "case": "Markdown: a table row without its pipes"
     },
     {
       "kind": "section",
