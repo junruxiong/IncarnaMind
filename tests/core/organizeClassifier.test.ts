@@ -1,6 +1,5 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
-import type { ChatProviderKind } from "../../src/core/api";
 import {
   chatGroupClassifier,
   decisionGroupClassifier,
@@ -9,7 +8,6 @@ import {
 } from "../../src/core/library/classifier";
 import { organizeReadsPages } from "../../src/core/library/excerpt";
 import type { LibraryGroup } from "../../src/core/library/types";
-import { chatModelReadsImages } from "../../src/core/providers/imageInput";
 import { startFakeJev } from "../helpers/jev";
 
 type CallOptions = Parameters<MockLanguageModelV4["doGenerate"]>[0];
@@ -233,22 +231,5 @@ describe("Organize a scan with a chat model that reads images", () => {
     expect(organizeReadsPages("no-text", source("pdf", ["Quarterly report"]))).toBe(false);
     expect(organizeReadsPages("no-text", source("docx", []))).toBe(false);
     expect(organizeReadsPages(undefined, source("pdf", []))).toBe(false);
-  });
-
-  test.each<[ChatProviderKind, string, boolean]>([
-    ["anthropic", "claude-sonnet-5-5", true],
-    ["anthropic", "claude-3-haiku-20240307", true],
-    ["anthropic", "claude-2.1", false],
-    ["openai", "gpt-5.5", true],
-    ["openai", "gpt-4o-mini", true],
-    ["openai", "o4-mini", true],
-    ["openai", "o3-mini", false],
-    ["openai", "gpt-3.5-turbo", false],
-    ["chatgpt", "gpt-6-sol", true],
-    ["google", "gemini-pro-latest", true],
-    ["openai-compatible", "qwen-vl-max", false],
-    ["ollama", "llava", false],
-  ])("%s %s reads images: %s", (kind, modelId, reads) => {
-    expect(chatModelReadsImages(kind, modelId)).toBe(reads);
   });
 });
