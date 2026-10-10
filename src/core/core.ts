@@ -981,10 +981,10 @@ export function createCore(adapters: CoreAdapters): Core {
     listLinkedFolders: async () => documents.linkedFolders.list(),
     removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
-    getExamples: async () => examples.status(),
+    getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
-    createExamples: async () => examples.create(),
-    removeExamples: async () => examples.remove(),
+    createExamples: async (group) => examples.create(group),
+    removeExamples: async (group) => examples.remove(group),
     setLinkedFolderLayout: async (linkedFolderId, layout) =>
       documents.linkedFolders.setLayout(linkedFolderId, layout),
     setLinkedFolderPaused: async (linkedFolderId, paused) =>

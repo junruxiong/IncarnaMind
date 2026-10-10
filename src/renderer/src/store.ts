@@ -1098,7 +1098,10 @@ core.on("document.status", (changed) => {
 });
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
-core.on("examples.changed", (examples) => useAppStore.setState({ examples }));
+// The screen shows the tea example; the groups' examples open from the first run's picks.
+core.on("examples.changed", (examples) => {
+  if (examples.group === "tea") useAppStore.setState({ examples });
+});
 
 // Privacy choices change on the Privacy page, at the first run's question, or with local mode.
 core.on("privacy.changed", (privacy) => useAppStore.setState({ privacy }));
