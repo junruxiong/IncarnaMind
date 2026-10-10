@@ -7,7 +7,9 @@
  *
  * A Location is worked out from the Units a Citation names and where in
  * them its quote was found: for blocks of rows or lines, the rows or lines
- * the quote covers; for sections, the heading the quote sits under.
+ * the quote covers; for sections, the heading the quote sits under, and for
+ * a quote of a Word comment, the comment's author too ("§ 2 Costs, comment
+ * by Reviewer", #76).
  */
 import type { CitationAttributes, CitationLocation } from "../core/api";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
@@ -45,12 +47,21 @@ export function parseLocation(value: unknown): CitationLocation | null {
         from,
         to,
       };
-    case "section":
+    case "section": {
+      const comment = location.comment;
+      const author =
+        typeof comment === "object" && comment !== null
+          ? (comment as Record<string, unknown>).author
+          : undefined;
       return {
         kind,
         heading: typeof location.heading === "string" ? location.heading : null,
         ...(location.notes === true ? { notes: true } : {}),
+        ...(author !== undefined
+          ? { comment: { author: typeof author === "string" && author ? author : null } }
+          : {}),
       };
+    }
     default:
       return null;
   }
@@ -100,11 +111,17 @@ export function formatLocation(location: CitationLocation, t: Translate): string
       return t(location.to !== location.from ? "location.lines.other" : "location.lines.one", {
         range: span(location.from, location.to),
       });
-    case "section":
-      if (location.notes) return t("location.section.notes");
-      return location.heading
-        ? t("location.section", { heading: location.heading })
-        : t("location.section.start");
+    case "section": {
+      const section = location.notes
+        ? t("location.section.notes")
+        : location.heading
+          ? t("location.section", { heading: location.heading })
+          : t("location.section.start");
+      if (!location.comment) return section;
+      return location.comment.author
+        ? t("location.section.comment", { section, author: location.comment.author })
+        : t("location.section.comment.anonymous", { section });
+    }
   }
 }
 
@@ -227,6 +244,21 @@ function partsByUnit(
   return parts;
 }
 
+/**
+ * The Word comment a section's text has at `offset`, by its author (see
+ * `UnitLabel.comments`); null when the offset is in the section's own text.
+ */
+function commentAt(unit: UnitText, offset: number): { author: string | null } | null {
+  for (const anchor of anchorsOf(unit)) {
+    if (anchor.start > offset || offset >= anchor.end || !anchor.target.startsWith("comment")) {
+      continue;
+    }
+    const comment = unit.label?.comments?.find((each) => each.target === anchor.target);
+    return { author: comment?.author ?? null };
+  }
+  return null;
+}
+
 /** A request for a narrower range than the Units cited: rows or lines the model named. */
 export interface RowsOrLines {
   from: number;
@@ -266,7 +298,9 @@ export function locationOf(
       return null;
     case "section": {
       const where = units[parts[0]?.unit ?? 0] ?? first;
-      return unitLocation(where);
+      const section = unitLocation(where);
+      const comment = parts[0] ? commentAt(where, parts[0].start) : null;
+      return section?.kind === "section" && comment ? { ...section, comment } : section;
     }
     case "rows": {
       const whole = { from: first.label?.from ?? 1, to: last.label?.to ?? first.label?.to ?? 1 };
@@ -309,6 +343,13 @@ export type RequestedLocation =
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "section"; heading: string };
 
+/**
+ * What a comment's Location adds after its section, as its label words it in
+ * English or Chinese (", comment by Reviewer", "，王丽华 的批注"): the
+ * section alone names the Unit (#76).
+ */
+const A_COMMENT = /\s*(?:[,，;(]\s*(?:a\s+)?comment(?:\s+by\b.*)?|[,，]\s*[^,，]*批注)\)?$/iu;
+
 const RANGE = String.raw`(\d{1,7})(?:\s*(?:-|–|—|to|and)\s*(\d{1,7}))?`;
 const range = (from: string | undefined, to: string | undefined) => {
   const a = Number(from);
@@ -341,7 +382,8 @@ export function parseRequestedLocation(input: string): RequestedLocation | null 
   match = /^(?:'?(.+?)'?!)?\$?[A-Z]{1,3}\$?(\d{1,7})(?::\$?[A-Z]{1,3}\$?(\d{1,7}))?$/i.exec(text);
   if (match) return { kind: "rows", sheet: match[1]?.trim() || null, ...range(match[2], match[3]) };
   match = /^(?:§+|sections?\b|heading\b)\s*(.+)$/i.exec(text);
-  if (match?.[1]?.trim()) return { kind: "section", heading: match[1].trim() };
+  const heading = match?.[1]?.replace(A_COMMENT, "").trim();
+  if (heading) return { kind: "section", heading };
   return null;
 }
 

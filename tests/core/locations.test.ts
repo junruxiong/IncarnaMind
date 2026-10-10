@@ -25,6 +25,7 @@ import {
   type ShownPassage,
   setUpWithDocuments,
 } from "../helpers/citations";
+import { docxOf } from "../helpers/office";
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`../fixtures/formats/${name}`, import.meta.url)));
@@ -32,6 +33,27 @@ const fixture = (name: string) =>
 const WORKBOOK = await extractUnits("xlsx", fixture("Regional Revenue.xlsx"));
 const DECK = await extractUnits("pptx", fixture("Quarterly Research Update.pptx"));
 const REVIEW = await extractUnits("docx", fixture("Coastal Flood Risk Review.docx"));
+/** A Word file with comments, in English and Chinese (#76). */
+const COMMENTED = await extractUnits(
+  "docx",
+  docxOf([
+    { text: "Report", heading: 1 },
+    { text: "The survey ran in spring." },
+    { text: "Costs", heading: 1 },
+    {
+      text: "A contingency of 10 per cent is held.",
+      comment: {
+        text: "Finance has asked to lower the contingency to 8 per cent.",
+        author: "Reviewer",
+      },
+    },
+    { text: "运营数据", heading: 1 },
+    {
+      text: "食材采购统一由区农产品配送中心负责。",
+      comment: { text: "配送中心的合同将于2026年12月到期，需提前续签。", author: "王丽华" },
+    },
+  ]),
+);
 
 const units = (all: readonly TextUnit[], from: number, to = from) =>
   all.filter((unit) => unit.page >= from && unit.page <= to);
@@ -131,6 +153,58 @@ describe("The check of a quote in a Word file's sections", () => {
   test("doesn't find it in another section, or paraphrased", () => {
     expect(check(REVIEW, 4, 4, SENSITIVITY)).toEqual(NOT_FOUND);
     expect(check(REVIEW, 5, 5, "Raising the crest by 40 cm halves the damage")).toEqual(NOT_FOUND);
+  });
+});
+
+describe("The check of a quote of a Word comment (#76)", () => {
+  const FINANCE = "Finance has asked to lower the contingency to 8 per cent.";
+  const CONTRACT = "配送中心的合同将于2026年12月到期，需提前续签。";
+  const locationIn = (from: number, quote: string) => {
+    const cited = units(COMMENTED, from);
+    return locationOf(cited, quoteInUnits(cited, quote));
+  };
+
+  test("finds it in the section its mark is in, and names the section and the comment's author", () => {
+    expect(check(COMMENTED, 2, 2, FINANCE)).toEqual(FOUND);
+    expect(locationIn(2, FINANCE)).toEqual({
+      kind: "section",
+      heading: "Costs",
+      comment: { author: "Reviewer" },
+    });
+    expect(englishLocation(locationIn(2, FINANCE) as never)).toBe("§ Costs, comment by Reviewer");
+    expect(check(COMMENTED, 3, 3, CONTRACT)).toEqual(FOUND);
+    expect(locationIn(3, CONTRACT)).toEqual({
+      kind: "section",
+      heading: "运营数据",
+      comment: { author: "王丽华" },
+    });
+    // The section's own text is no comment.
+    expect(locationIn(2, "A contingency of 10 per cent")).toEqual({
+      kind: "section",
+      heading: "Costs",
+    });
+  });
+
+  test("doesn't find it in another section, reworded, or with a word left out", () => {
+    expect(check(COMMENTED, 1, 1, FINANCE)).toEqual(NOT_FOUND);
+    expect(check(COMMENTED, 2, 2, "Finance wants the contingency lowered to 8 per cent.")).toEqual(
+      NOT_FOUND,
+    );
+    expect(check(COMMENTED, 3, 3, "配送中心的合同将于2026年12月到期。")).toEqual(NOT_FOUND);
+    expect(check(COMMENTED, 2, 2, CONTRACT)).toEqual(NOT_FOUND);
+  });
+
+  test("a model's Location for it, with the comment's words, names its section", () => {
+    const resolve = (text: string) =>
+      resolveRequested(parseRequestedLocation(text) as never, COMMENTED);
+    expect(parseRequestedLocation("§ Costs, comment by Reviewer")).toEqual({
+      kind: "section",
+      heading: "Costs",
+    });
+    expect(resolve("§ Costs, comment by Reviewer")).toEqual({ from: 2, to: 2 });
+    expect(resolve("§ Costs (comment by Reviewer)")).toEqual({ from: 2, to: 2 });
+    expect(resolve("§ Costs, comment")).toEqual({ from: 2, to: 2 });
+    expect(resolve("§ 运营数据，王丽华 的批注")).toEqual({ from: 3, to: 3 });
   });
 });
 
