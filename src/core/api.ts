@@ -581,6 +581,12 @@ export interface Settings {
    * a setting. The approval card and Settings say what a script can reach by it.
    */
   scriptSandbox: SandboxLevel;
+  /**
+   * What this copy can record for a Meeting, found out when the app starts:
+   * not a setting. "both": the microphone and the computer's sound; "microphone":
+   * the microphone only (Linux, for now); "none": nothing (no capture).
+   */
+  meetingAudio: "both" | "microphone" | "none";
 }
 
 export interface SettingsPatch {

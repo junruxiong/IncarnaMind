@@ -185,7 +185,14 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
-  const settings = createSettings(db, now, adapters.systemLanguages, scriptSandbox);
+  const capture = adapters.audioCapture;
+  const settings = createSettings(
+    db,
+    now,
+    adapters.systemLanguages,
+    scriptSandbox,
+    !capture ? "none" : capture.systemAudio ? "both" : "microphone",
+  );
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
   const tags = createTags(db, now);
