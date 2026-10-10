@@ -31,7 +31,7 @@ What an Answer is generated from: every Block above its Question in the Mind, ex
 _Avoid_: prompt, history
 
 **Search scope**:
-The Folders, Tags and individual Documents that a Question's Document search is limited to. A Question with no Search scope searches all Documents.
+The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope, which the User can remove; a Question with no Search scope searches all Documents.
 _Avoid_: filter, context
 
 ### Documents
@@ -69,11 +69,15 @@ Where in a Document a Citation points, in the unit the Document's own readers us
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
-A named place for Documents inside IncarnaMind, with a description of what belongs there. Each Document belongs to one Folder or is Unsorted; this does not change where its original file is stored.
-_Avoid_: group, collection, category
+A project inside IncarnaMind: a named place for Documents and Minds, with a description of what belongs there. Each Document and each Mind belongs to one Folder or is Not in a Folder; this does not change where a Document's original file is stored. A Mind in a Folder searches the Folder by default; deleting a Folder moves its Documents and Minds to Not in a Folder.
+_Avoid_: project (in the interface), group, collection, category
+
+**Not in a Folder**:
+The one place for every Document and Mind in no Folder. A Mind there searches all Documents.
+_Avoid_: Unsorted, Uncategorised, Inbox
 
 **Suggested Folder**:
-A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Unsorted and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
+A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Not in a Folder and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
 _Avoid_: automatic Folder, proposed Folder
 
 **Source location**:

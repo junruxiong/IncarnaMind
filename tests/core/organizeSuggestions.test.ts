@@ -255,7 +255,7 @@ describe("Organize suggests a Folder and waits for the User", () => {
     });
   });
 
-  test("rejecting leaves the Document Unsorted, and Organize doesn't suggest that Folder for it again", async () => {
+  test("rejecting leaves the Document Not in a Folder, and Organize doesn't suggest that Folder for it again", async () => {
     const { core, fake, finance, thesis, sources } = await setUp();
     const [invoice] = await addAndSort(core, sources, ["Invoice 1"]);
     if (!invoice) throw new Error("Not added.");

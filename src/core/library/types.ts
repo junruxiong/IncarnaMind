@@ -77,6 +77,11 @@ export interface DocumentBatch {
 
 export interface LibrarySnapshot {
   groups: LibraryGroup[];
+  /**
+   * The Folders deleted since, by name order: a Search scope that names one
+   * still shows its name, struck through (the search leaves it out).
+   */
+  deletedGroups: LibraryGroup[];
   assignments: DocumentGroupAssignment[];
   settings: LibrarySettings;
 }
