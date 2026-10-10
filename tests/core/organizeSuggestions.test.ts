@@ -1,0 +1,506 @@
+import { join } from "node:path";
+import type { LanguageModelV4Prompt } from "@ai-sdk/provider";
+import { MockLanguageModelV4 } from "ai/test";
+import { describe, expect, test, vi } from "vitest";
+import {
+  type Core,
+  DATABASE_FILE,
+  type DocumentBatch,
+  type DocumentGroupAssignment,
+  InvalidInputError,
+  NotFoundError,
+} from "../../src/core";
+import { METADATA_VERSION, PROCESSING_VERSION } from "../../src/core/documents/processing";
+import { isRecord } from "../../src/core/errors";
+import { migrate, openDatabase } from "../../src/core/storage";
+import { migrations } from "../../src/core/storage/migrations";
+import { createTempDataFolder, startCore } from "../helpers/core";
+import { addAndProcess, createSourceFolder, sha256, writeSourceFile } from "../helpers/documents";
+
+type Rule = (name: string, choices: string[]) => { groupId: string; tags?: string[] };
+
+/** The name of the Document Organize was asked about. */
+const nameIn = (prompt: LanguageModelV4Prompt): string => {
+  const data = prompt
+    .flatMap((message) =>
+      message.role !== "user"
+        ? []
+        : message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+    )
+    .join("");
+  const parsed: unknown = JSON.parse(data);
+  const document = isRecord(parsed) && isRecord(parsed.document) ? parsed.document : {};
+  return typeof document.name === "string" ? document.name : "";
+};
+
+/** A classifier whose choice of Folder and Tags the test sets, recording what it was offered. */
+function sorter() {
+  const offered: string[][] = [];
+  let rule: Rule = (_name, choices) => ({ groupId: choices[0] ?? "__unsorted__" });
+  const model = new MockLanguageModelV4({
+    doGenerate: async (options) => {
+      const schema =
+        options.responseFormat?.type === "json" ? options.responseFormat.schema : undefined;
+      const choices =
+        (schema as { properties?: { groupId?: { enum: string[] } } } | undefined)?.properties
+          ?.groupId?.enum ?? [];
+      offered.push(choices);
+      const { groupId, tags = [] } = rule(nameIn(options.prompt), choices);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ groupId, tags }) }],
+        finishReason: { unified: "stop", raw: undefined },
+        warnings: [],
+        usage: {
+          inputTokens: { total: 5, noCache: 5, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 1, text: 1, reasoning: undefined },
+        },
+      };
+    },
+  });
+  return {
+    model,
+    offered,
+    sort: (next: Rule) => {
+      rule = next;
+    },
+  };
+}
+
+/** Finance and Thesis, and Organize set up as the User would, keeping its default. */
+async function setUp(dataDir?: string) {
+  const fake = sorter();
+  const folder = dataDir ?? (await createTempDataFolder());
+  const core = startCore(folder, { createChatModel: () => fake.model });
+  const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
+  const finance = await core.createLibraryGroup({
+    name: "Finance",
+    description: "Bills, budgets and statements",
+  });
+  const thesis = await core.createLibraryGroup({
+    name: "Thesis",
+    description: "Research for my thesis",
+  });
+  const classifier = {
+    kind: "chat" as const,
+    choice: { providerId: provider.id, modelId: "small-classifier" },
+  };
+  await core.saveLibrarySettings({
+    classifier,
+    automatic: (await core.getLibrary()).settings.automatic,
+  });
+  // Invoices in Finance, the rest in Thesis, among the Folders offered.
+  fake.sort((name, choices) => {
+    const wanted = name.startsWith("Invoice") ? finance.id : thesis.id;
+    return { groupId: choices.includes(wanted) ? wanted : (choices[0] ?? "__unsorted__") };
+  });
+  return {
+    core,
+    dataDir: folder,
+    fake,
+    finance,
+    thesis,
+    classifier,
+    sources: await createSourceFolder(),
+  };
+}
+
+/** Every "documents.batch" event from now on. */
+function batchesOf(core: Core) {
+  const seen: DocumentBatch[] = [];
+  core.on("documents.batch", (batch) => seen.push(batch));
+  return {
+    of: (id: string) => seen.filter((each) => each.id === id),
+    /** Resolves with the batch once it is as wanted. */
+    until: (id: string, wanted: (batch: DocumentBatch) => boolean) =>
+      vi.waitFor(
+        () => {
+          const latest = seen.filter((each) => each.id === id).at(-1);
+          if (!latest || !wanted(latest)) throw new Error(`Batch now: ${JSON.stringify(latest)}`);
+          return latest;
+        },
+        { timeout: 15_000 },
+      ),
+  };
+}
+
+const assignmentOf = async (core: Core, documentId: string) =>
+  (await core.getLibrary()).assignments.find((each) => each.documentId === documentId);
+
+/** Adds files named as given, and waits until Organize has sorted them. */
+async function addAndSort(core: Core, sources: string, names: string[]) {
+  const batches = batchesOf(core);
+  const { batchId, documents } = await core.addDocuments(
+    await Promise.all(
+      names.map((name) => writeSourceFile(sources, `${name}.txt`, `${name}: a few words.`)),
+    ),
+  );
+  await batches.until(batchId, (batch) => !batch.adding && batch.sorted === names.length);
+  return documents;
+}
+
+describe("Organize suggests a Folder and waits for the User", () => {
+  test("adding 12 Documents reports the batch as each is read and sorted, with counts per Suggested Folder", async () => {
+    const { core, finance, thesis, sources } = await setUp();
+    const paths = await Promise.all([
+      ...Array.from({ length: 8 }, (_, at) =>
+        writeSourceFile(sources, `Invoice ${at + 1}.txt`, `Invoice ${at + 1}: GBP ${at + 1}00.`),
+      ),
+      ...Array.from({ length: 4 }, (_, at) =>
+        writeSourceFile(sources, `Chapter ${at + 1}.txt`, `Chapter ${at + 1}: urban heat.`),
+      ),
+    ]);
+    const batches = batchesOf(core);
+
+    const { batchId, documents } = await core.addDocuments(paths);
+    const last = await batches.until(
+      batchId,
+      (batch) => !batch.adding && batch.read === 12 && batch.sorted === 12,
+    );
+
+    expect(last).toEqual({
+      id: batchId,
+      groupId: null,
+      documentIds: documents.map((each) => each.id),
+      adding: false,
+      read: 12,
+      sorted: 12,
+      suggested: [
+        { groupId: finance.id, count: 8 },
+        { groupId: thesis.id, count: 4 },
+      ],
+    });
+    const reports = batches.of(batchId);
+    expect(reports[0]).toMatchObject({ adding: true, read: 0, sorted: 0 });
+    for (const [at, report] of reports.entries()) {
+      const before = reports[at - 1];
+      if (!before) continue;
+      expect(report.documentIds.length).toBeGreaterThanOrEqual(before.documentIds.length);
+      expect(report.read).toBeGreaterThanOrEqual(before.read);
+      expect(report.sorted).toBeGreaterThanOrEqual(before.sorted);
+    }
+    // Listed in their Suggested Folders, marked as suggestions.
+    const { assignments } = await core.getLibrary();
+    expect(assignments).toHaveLength(12);
+    for (const assignment of assignments) {
+      expect(assignment).toMatchObject({ source: "automatic", suggested: true });
+    }
+  });
+
+  test("accepting makes Suggested Folders the User's choices, which a later Organize leaves alone", async () => {
+    const { core, fake, finance, thesis, sources } = await setUp();
+    const [invoice, other, chapter] = await addAndSort(core, sources, [
+      "Invoice 1",
+      "Invoice 2",
+      "Chapter 1",
+    ]);
+    if (!invoice || !other || !chapter) throw new Error("Not added.");
+    const assigned: DocumentGroupAssignment[][] = [];
+    core.on("library.assignments", (list) => assigned.push(list));
+
+    const changes = await core.acceptAssignments([invoice.id, chapter.id, invoice.id]);
+
+    expect(changes).toEqual([
+      {
+        before: expect.objectContaining({
+          documentId: invoice.id,
+          groupId: finance.id,
+          source: "automatic",
+          suggested: true,
+        }),
+        after: expect.objectContaining({
+          documentId: invoice.id,
+          groupId: finance.id,
+          source: "user",
+          suggested: false,
+        }),
+      },
+      {
+        before: expect.objectContaining({ documentId: chapter.id, suggested: true }),
+        after: expect.objectContaining({
+          documentId: chapter.id,
+          groupId: thesis.id,
+          source: "user",
+          suggested: false,
+        }),
+      },
+    ]);
+    expect(assigned).toHaveLength(1);
+    expect(assigned[0]).toHaveLength(2);
+    expect(assigned[0]).toEqual(expect.arrayContaining(changes.map((each) => each.after)));
+    expect(await core.acceptAssignments([invoice.id])).toEqual([]);
+
+    // Organize now finds no Folder for anything: only the suggestion left waiting changes.
+    fake.sort(() => ({ groupId: "__unsorted__" }));
+    await core.classifyDocuments([invoice.id, other.id, chapter.id]);
+    await vi.waitFor(async () => {
+      const { assignments } = await core.getLibrary();
+      expect(assignments.map((each) => each.status)).toEqual([
+        "classified",
+        "classified",
+        "classified",
+      ]);
+    });
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({
+      groupId: finance.id,
+      source: "user",
+    });
+    expect(await assignmentOf(core, chapter.id)).toMatchObject({
+      groupId: thesis.id,
+      source: "user",
+    });
+    expect(await assignmentOf(core, other.id)).toMatchObject({
+      groupId: null,
+      source: "automatic",
+      suggested: false,
+    });
+  });
+
+  test("rejecting leaves the Document Unsorted, and Organize doesn't suggest that Folder for it again", async () => {
+    const { core, fake, finance, thesis, sources } = await setUp();
+    const [invoice] = await addAndSort(core, sources, ["Invoice 1"]);
+    if (!invoice) throw new Error("Not added.");
+
+    const changes = await core.rejectAssignments([invoice.id]);
+
+    expect(changes).toEqual([
+      {
+        before: expect.objectContaining({ groupId: finance.id, suggested: true }),
+        after: expect.objectContaining({ groupId: null, source: "automatic", suggested: false }),
+      },
+    ]);
+    expect(await assignmentOf(core, invoice.id)).toEqual(changes[0]?.after);
+    expect(await core.rejectAssignments([invoice.id])).toEqual([]);
+
+    await core.classifyDocuments([invoice.id]);
+    await vi.waitFor(async () =>
+      expect(await assignmentOf(core, invoice.id)).toMatchObject({ status: "classified" }),
+    );
+    expect(fake.offered.at(-1)).not.toContain(finance.id);
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({
+      groupId: thesis.id,
+      suggested: true,
+    });
+    // Only for that Document: another invoice is still suggested Finance.
+    const [next] = await addAndSort(core, sources, ["Invoice 2"]);
+    expect(await assignmentOf(core, next?.id ?? "")).toMatchObject({
+      groupId: finance.id,
+      suggested: true,
+    });
+  });
+
+  test("accepting or rejecting changes nothing if any Document is unknown", async () => {
+    const { core, finance, sources } = await setUp();
+    const [invoice] = await addAndSort(core, sources, ["Invoice 1"]);
+    if (!invoice) throw new Error("Not added.");
+    const waiting = await assignmentOf(core, invoice.id);
+
+    await expect(core.acceptAssignments([invoice.id, "no-such-document"])).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(core.rejectAssignments([invoice.id, "no-such-document"])).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(core.acceptAssignments(invoice.id as unknown as string[])).rejects.toThrow(
+      InvalidInputError,
+    );
+    expect(await assignmentOf(core, invoice.id)).toEqual(waiting);
+    expect(waiting).toMatchObject({ groupId: finance.id, suggested: true });
+  });
+
+  test("Documents added to a Folder are filed there as the User's choice, with only their Tags suggested", async () => {
+    const { core, fake, finance, thesis, sources } = await setUp();
+    const urgent = await core.createTag({ name: "Urgent", description: "Needs doing soon" });
+    fake.sort(() => ({ groupId: finance.id, tags: [urgent.id] }));
+    const paths = await Promise.all([
+      writeSourceFile(sources, "Invoice 1.txt", "Invoice 1: GBP 100."),
+      writeSourceFile(sources, "Chapter 1.txt", "Chapter 1: urban heat."),
+      writeSourceFile(sources, "Blank.txt", "  \n"),
+    ]);
+    const assigned: DocumentGroupAssignment[] = [];
+    core.on("library.assignments", (list) => assigned.push(...list));
+    const batches = batchesOf(core);
+
+    const { batchId, documents } = await core.addDocuments(paths, { groupId: thesis.id });
+
+    const filed = documents.map((each) =>
+      expect.objectContaining({
+        documentId: each.id,
+        groupId: thesis.id,
+        source: "user",
+        suggested: false,
+      }),
+    );
+    expect((await core.getLibrary()).assignments).toEqual(filed);
+    const last = await batches.until(batchId, (batch) => !batch.adding && batch.sorted === 3);
+    expect(last).toMatchObject({ groupId: thesis.id, read: 3, suggested: [] });
+    expect((await core.getLibrary()).assignments).toEqual(filed);
+    expect(assigned.every((each) => each.groupId === thesis.id && !each.suggested)).toBe(true);
+    const tagsOf = Object.fromEntries(
+      (await core.listDocuments()).map((each) => [each.name, each.tags.map((tag) => tag.tagId)]),
+    );
+    expect(tagsOf).toEqual({
+      "Invoice 1": [urgent.id],
+      "Chapter 1": [urgent.id],
+      Blank: [],
+    });
+  });
+
+  test("a folder linked onto a Folder files the Documents its first scan adds there", async () => {
+    const { core, thesis, sources } = await setUp();
+    await writeSourceFile(sources, "Notes/Chapter 1.txt", "Chapter 1: urban heat.");
+    await writeSourceFile(sources, "Notes/Chapter 2.txt", "Chapter 2: field data.");
+    const batches = batchesOf(core);
+
+    const linked = await core.addLinkedFolder(join(sources, "Notes"), { groupId: thesis.id });
+
+    const last = await batches.until(
+      linked.batchId,
+      (batch) => !batch.adding && batch.sorted === 2,
+    );
+    expect(last).toMatchObject({ groupId: thesis.id, read: 2, suggested: [] });
+    expect((await core.getLibrary()).assignments).toEqual(
+      last.documentIds.map((documentId) =>
+        expect.objectContaining({ documentId, groupId: thesis.id, source: "user" }),
+      ),
+    );
+  });
+
+  test("adding to a Folder that doesn't exist adds nothing", async () => {
+    const { core, sources } = await setUp();
+    const path = await writeSourceFile(sources, "Invoice 1.txt", "Invoice 1: GBP 100.");
+
+    await expect(core.addDocuments([path], { groupId: "no-such-folder" })).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(core.addLinkedFolder(sources, { groupId: "no-such-folder" })).rejects.toThrow(
+      NotFoundError,
+    );
+    expect(await core.listDocuments()).toEqual([]);
+    expect(await core.listLinkedFolders()).toEqual([]);
+  });
+
+  test("automatic Organize is on once a model is set up, and a User who turned it off keeps it off", async () => {
+    const fake = sorter();
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const core = startCore(dataDir, { createChatModel: () => fake.model });
+    expect((await core.getLibrary()).settings).toEqual({ classifier: null, automatic: true });
+    const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
+    await core.createLibraryGroup({ name: "Thesis", description: "Research for my thesis" });
+    const add = async (on: Core, name: string) => {
+      const [document] = await addAndProcess(on, [
+        await writeSourceFile(sources, `${name}.txt`, `${name}: urban heat.`),
+      ]);
+      if (!document) throw new Error("Not added.");
+      return document;
+    };
+
+    // No model for Organize yet: nothing waits for one.
+    const early = await add(core, "Chapter 1");
+    expect(await assignmentOf(core, early.id)).toBeUndefined();
+
+    const classifier = {
+      kind: "chat" as const,
+      choice: { providerId: provider.id, modelId: "small-classifier" },
+    };
+    await core.saveLibrarySettings({
+      classifier,
+      automatic: (await core.getLibrary()).settings.automatic,
+    });
+    const later = await add(core, "Chapter 2");
+    await vi.waitFor(async () =>
+      expect(await assignmentOf(core, later.id)).toMatchObject({
+        status: "classified",
+        suggested: true,
+      }),
+    );
+    expect(await assignmentOf(core, early.id)).toBeUndefined();
+
+    await core.saveLibrarySettings({ classifier, automatic: false });
+    core.close();
+    const reopened = startCore(dataDir, { createChatModel: () => fake.model });
+    // Manual only, then the model again, each saved as the settings show it.
+    for (const next of [null, classifier]) {
+      const { automatic } = (await reopened.getLibrary()).settings;
+      await reopened.saveLibrarySettings({ classifier: next, automatic });
+    }
+    expect((await reopened.getLibrary()).settings).toEqual({ classifier, automatic: false });
+    const third = await add(reopened, "Chapter 3");
+    expect(await assignmentOf(reopened, third.id)).toBeUndefined();
+  });
+});
+
+describe("Migration 36", () => {
+  test("keeps every assignment made before it as it was, none of them a suggestion", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const at = "2026-10-01T09:00:00.000Z";
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      migrate(
+        db,
+        migrations.filter((migration) => migration.version < 36),
+      );
+      db.run(
+        "INSERT INTO library_groups (id, name, description, created_at, updated_at) VALUES ('finance', 'Finance', 'Bills', ?, ?)",
+        [at, at],
+      );
+      for (const [id, groupId, source] of [
+        ["automatic", "finance", "automatic"],
+        ["chosen", "finance", "user"],
+        ["unsorted", null, "user"],
+      ] as const) {
+        const text = `The ${id} Document.`;
+        const path = await writeSourceFile(sources, `${id}.txt`, text);
+        db.run(
+          `INSERT INTO documents (id, content_hash, name, kind, size, status, path, file_status,
+             processing_version, metadata_version, created_at, updated_at)
+           VALUES (?, ?, ?, 'text', ?, 'ready', ?, 'available', ?, ?, ?, ?)`,
+          [
+            id,
+            sha256(text),
+            id,
+            Buffer.byteLength(text),
+            path,
+            BigInt(PROCESSING_VERSION),
+            BigInt(METADATA_VERSION),
+            at,
+            at,
+          ],
+        );
+        db.run(
+          `INSERT INTO document_groups (id, document_id, group_id, source, status, content_hash,
+             request_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'classified', ?, ?, ?, ?)`,
+          [`assignment-${id}`, id, groupId, source, sha256(text), `request-${id}`, at, at],
+        );
+      }
+    } finally {
+      db.close();
+    }
+
+    const core = startCore(dataDir);
+
+    expect((await core.getLibrary()).assignments).toEqual([
+      expect.objectContaining({
+        documentId: "automatic",
+        groupId: "finance",
+        source: "automatic",
+        suggested: false,
+      }),
+      expect.objectContaining({
+        documentId: "chosen",
+        groupId: "finance",
+        source: "user",
+        suggested: false,
+      }),
+      expect.objectContaining({
+        documentId: "unsorted",
+        groupId: null,
+        source: "user",
+        suggested: false,
+      }),
+    ]);
+    expect(await core.acceptAssignments(["automatic", "chosen", "unsorted"])).toEqual([]);
+  });
+});

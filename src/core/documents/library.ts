@@ -145,6 +145,8 @@ export interface LibraryHooks {
   process(documentId: string): void;
   /** Push a Document's current state. */
   announce(documentId: string): void;
+  /** A new Document was stored and announced; its processing isn't queued yet. */
+  added(documentId: string): void;
   /** These Documents moved to another Folder, or into or out of a Linked folder. */
   moved(documentIds: string[]): void;
   /** A Document's name followed its file's: its keyword index needs the new name. */
@@ -517,6 +519,8 @@ export function createLibrary(options: LibraryOptions) {
     announced: Set<string>;
     moved: Set<string>;
     folders: Set<string>;
+    /** Hears of each new Document instead of `hooks.added`. */
+    added?: (documentId: string) => void;
   }
 
   function setFileStatus(row: FileRow, status: string, changes: Changes): void {
@@ -728,6 +732,7 @@ export function createLibrary(options: LibraryOptions) {
       ],
     );
     hooks.announce(id);
+    (changes.added ?? hooks.added)(id);
     hooks.process(id);
     if (place.linkedFolderId) changes.folders.add(place.linkedFolderId);
     return id;
@@ -1287,12 +1292,21 @@ export function createLibrary(options: LibraryOptions) {
     /**
      * Adds files on their own (see `CoreApi.addDocuments`), in order: the
      * Document of each, or why it was skipped. Not held up by a pass under
-     * way: every write checks what is there just before it.
+     * way: every write checks what is there just before it. `added` hears of
+     * each new Document.
      */
-    addFiles(paths: readonly string[]): Promise<(string | SkippedFile["reason"])[]> {
+    addFiles(
+      paths: readonly string[],
+      added?: (documentId: string) => void,
+    ): Promise<(string | SkippedFile["reason"])[]> {
       begin();
       return (async () => {
-        const changes: Changes = { announced: new Set(), moved: new Set(), folders: new Set() };
+        const changes: Changes = {
+          announced: new Set(),
+          moved: new Set(),
+          folders: new Set(),
+          added,
+        };
         const results: (string | SkippedFile["reason"])[] = [];
         const linked = liveFolders();
         for (const path of paths) {
