@@ -61,14 +61,15 @@ export interface LaunchOptions {
 }
 
 /**
- * The window size the specs are written for: the app's default. The app opens
- * no bigger than the screen, and a test machine's can be smaller (GitHub's
- * macOS runners have a 1024 × 768 one), where the Mind is narrow enough to fold
- * its margins away; so every launch makes the window this size. macOS can keep
- * a window no taller than the screen (wider is allowed), so on a short screen
- * the height is what the screen allows: only the width is waited for.
+ * The window every spec runs in, the same on every machine: the app's default
+ * width, and a height that fits the smallest screen the specs run on. The app
+ * opens no bigger than the screen, and GitHub's macOS runners have a
+ * 1024 × 768 one (677px high once the menu bar and the Dock are off it), where
+ * a window opened 1024 wide folds the Mind's margins away. macOS lets a window
+ * be wider than its screen, but not taller, so each launch sets this size and
+ * checks the page got it, and says so if a screen is too short for it.
  */
-export const WINDOW_SIZE = { width: 1280, height: 800 };
+export const WINDOW_SIZE = { width: 1280, height: 660 };
 
 /**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
@@ -119,7 +120,11 @@ export async function launchApp(
     await app.evaluate(({ BrowserWindow }, size) => {
       BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
     }, WINDOW_SIZE);
-    await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(WINDOW_SIZE.width);
+    await expect
+      .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]), {
+        message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
+      })
+      .toEqual([WINDOW_SIZE.width, WINDOW_SIZE.height]);
   }
   return { app, window };
 }
