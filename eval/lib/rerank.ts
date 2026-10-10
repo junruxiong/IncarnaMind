@@ -1,14 +1,15 @@
 /**
- * The reranked modes: keyword search's top 20 (keyword + rerank), what the
+ * The reranked modes: keyword search's top 60 (keyword + rerank), what the
  * search Tool hands a reranker by default, or keyword search's top 10 and
  * vector search's top 10, each Passage once (see `rerankCandidates` in
  * ./retrieval), as it does with embeddings on, or the other searches'
  * candidates (./searches), reranked by a built-in reranking candidate
- * (src/core/reranking/model.ts), as the search Tool reranks them. It uses the core's own reranking code (download
- * and check, what the model reads, its scores) with the model on a worker
- * thread, outside the evaluation's core: one run compares every candidate
- * given in INCARNAMIND_EVAL_RERANK over the same searches, one model and one
- * mode at a time, so each mode's timings are its own.
+ * (src/core/reranking/model.ts), as the search Tool reranks them. It uses
+ * the core's own reranking code (download and check, what the model reads,
+ * its scores) with the model on a worker thread, outside the evaluation's
+ * core: one run compares every candidate given in INCARNAMIND_EVAL_RERANK
+ * over the same searches, one model and one mode at a time, so each mode's
+ * timings are its own.
  */
 import type { CrossEncoder, PassageSearchResult, RerankingModelDefinition } from "../../src/core";
 import {

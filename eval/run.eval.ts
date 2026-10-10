@@ -5,7 +5,7 @@
  * would: a new temporary data folder, embeddings turned on (they are off by
  * default) so the evaluation set's Documents are also processed with the real
  * built-in embedding model (on a worker thread), then searches for each
- * Question: keyword search's top 20 reranked by the real built-in reranking
+ * Question: keyword search's top 60 reranked by the real built-in reranking
  * model, as the search Tool does by default (the gate), hybrid search's
  * candidates reranked as with embeddings on, other ways to find the
  * candidates with embeddings off (./lib/searches), and the plain search
@@ -102,7 +102,7 @@ async function retrieve(
   line(HYBRID, HYBRID);
 
   // Reranked modes, one model at a time: each is downloaded once into the model cache. Each
-  // model reranks keyword search's top 20 (keyword + rerank, the gate's mode), then hybrid
+  // model reranks keyword search's top 60 (keyword + rerank, the gate's mode), then hybrid
   // search's candidates, opened afresh for each so the timings are the mode's own. The
   // built-in model then reranks the other searches' candidates, the Questions' own only.
   const rerankers: RerankerInfo[] = [];
