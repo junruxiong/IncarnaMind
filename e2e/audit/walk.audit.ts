@@ -248,7 +248,8 @@ test("A2 first run without examples: chat setup, the empty Mind, Settings", asyn
       await scan(window, "A11-no-mind-open");
     });
     await step(T, "empty Mind with three steps", async () => {
-      await click(window, window.getByTestId("new-mind"));
+      await click(window, window.getByTestId("plus-menu"));
+      await click(window, window.getByTestId("plus-new-mind"));
       await expect(window.getByTestId("mind-editor")).toBeVisible();
       await window.waitForTimeout(500);
       await shot(window, "A12-empty-mind-three-steps");
@@ -345,7 +346,8 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
 
     await step(T, "link a folder", async () => {
       await answerOpenDialog((app as Launched).app, fixtures.formats);
-      await click(window, window.getByTestId("add-linked-folder"));
+      await click(window, window.getByTestId("plus-menu"));
+      await click(window, window.getByTestId("plus-link-folder"));
       const dialog = window.getByTestId("link-folder-dialog");
       await expect(dialog.getByTestId("link-folder-files")).toBeVisible({ timeout: 20_000 });
       await window.waitForTimeout(300);
@@ -373,7 +375,8 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     });
 
     await step(T, "a Mind: title, a Note, Questions", async () => {
-      await click(window, window.getByTestId("new-mind"));
+      await click(window, window.getByTestId("plus-menu"));
+      await click(window, window.getByTestId("plus-new-mind"));
       const title = window.getByTestId("mind-title");
       await click(window, title);
       await typeLike(window, "Harbour survey: what the documents say", 50);
@@ -735,7 +738,8 @@ test("A4 approvals and consent", async () => {
       },
     );
     await step(T, "approval card", async () => {
-      await click(window, window.getByTestId("new-mind"));
+      await click(window, window.getByTestId("plus-menu"));
+      await click(window, window.getByTestId("plus-new-mind"));
       await click(window, window.getByTestId("mind-editor"));
       await window.keyboard.press("ControlOrMeta+j");
       await typeLike(window, "Please book_boat from Dover", 45);
@@ -956,7 +960,8 @@ test("A5 offline: the chat model can't be reached", async () => {
       } as never);
     });
     await step(T, "an Answer that errors", async () => {
-      await click(window, window.getByTestId("new-mind"));
+      await click(window, window.getByTestId("plus-menu"));
+      await click(window, window.getByTestId("plus-new-mind"));
       await click(window, window.getByTestId("mind-editor"));
       await window.waitForTimeout(500);
       await shot(window, "A70-model-unreachable-notice");
