@@ -166,8 +166,9 @@ describe("Migration 22: Units", { timeout: 30_000 }, () => {
       { document_id: "d3", page: 1, kind: "page", label: null },
       { document_id: "d3", page: 2, kind: "page", label: null },
     ]);
-    // The PDF wasn't touched: its Passages and their vectors are the ones it had.
-    expect(statuses.filter(([id]) => id === IDS.pdf)).toEqual([]);
+    // The PDF wasn't processed: its Passages and their vectors are the ones it had. Its title,
+    // read in the background (#213), is pushed as a Document that is ready, as before.
+    expect(statuses.filter(([id, status]) => id === IDS.pdf && status !== "ready")).toEqual([]);
     expect(
       queryDatabase(
         dataDir,

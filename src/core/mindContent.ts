@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import { MIND_CONTENT_FIELD } from "./api";
-import { InvalidInputError } from "./errors";
+import {
+  CONTENT_SCHEMA_VERSION,
+  CONTENT_SCHEMA_VERSION_KEY,
+  MIND_CONTENT_FIELD,
+  MIND_SETTINGS_FIELD,
+} from "./api";
+import { InvalidInputError, MindReadOnlyError } from "./errors";
+import { readContentVersion } from "./mindAccess";
 import type { Database } from "./storage";
 
 /** The origin of the core's own changes to a Mind's document. */
@@ -15,6 +21,23 @@ export type MindContent = ReturnType<typeof createMindContent>;
  * shouldn't run every few keystrokes. Loading or closing a Mind also compacts it.
  */
 export const COMPACT_AFTER_UPDATES = 500;
+
+/** The content schema version recorded in a Mind's document; a Mind that records none is version 1. */
+export const contentVersionOf = (doc: Y.Doc): number =>
+  readContentVersion(doc.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY));
+
+/** Records that this version wrote the document. Call it inside the transaction that changes it. */
+function stampContentVersion(doc: Y.Doc): void {
+  const settings = doc.getMap(MIND_SETTINGS_FIELD);
+  const recorded = settings.get(CONTENT_SCHEMA_VERSION_KEY);
+  // Never lowered: a document that records a newer version keeps it. Absent or malformed reads as 1.
+  if (
+    recorded !== readContentVersion(recorded) ||
+    readContentVersion(recorded) < CONTENT_SCHEMA_VERSION
+  ) {
+    settings.set(CONTENT_SCHEMA_VERSION_KEY, CONTENT_SCHEMA_VERSION);
+  }
+}
 
 interface LoadedMind {
   doc: Y.Doc;
@@ -86,7 +109,8 @@ export function createMindContent(
       mind.outbox.push(update);
     });
     loaded.set(mindId, mind);
-    compact(mindId, mind);
+    // A Mind a newer version wrote is left exactly as stored.
+    if (contentVersionOf(doc) <= CONTENT_SCHEMA_VERSION) compact(mindId, mind);
     return mind;
   };
 
@@ -109,10 +133,49 @@ export function createMindContent(
     if (mind.storedRows >= COMPACT_AFTER_UPDATES) compact(mindId, mind);
   };
 
+  /** Refuses a write to a Mind a newer version wrote: the editor's schema would delete what it doesn't know. */
+  const requireWritable = (mind: LoadedMind) => {
+    if (contentVersionOf(mind.doc) > CONTENT_SCHEMA_VERSION) {
+      throw new MindReadOnlyError(
+        "A newer version of IncarnaMind wrote this Mind. Update IncarnaMind to edit it.",
+      );
+    }
+  };
+
   return {
     /** The Mind's whole document, encoded as one update. */
     state(mindId: string): Uint8Array {
       return Y.encodeStateAsUpdate(load(mindId).doc);
+    },
+
+    /**
+     * The content schema version the Mind was last written with. A Mind that
+     * isn't loaded is read from what is stored and left unloaded, writing nothing.
+     */
+    contentVersion(mindId: string): number {
+      const mind = loaded.get(mindId);
+      if (mind) return contentVersionOf(mind.doc);
+      const { doc } = fromStorage(mindId);
+      try {
+        return contentVersionOf(doc);
+      } finally {
+        doc.destroy();
+      }
+    },
+
+    /**
+     * The Mind's whole document as stored, for showing a Mind that may not be
+     * written to: it is not kept in memory and nothing is rewritten.
+     */
+    storedState(mindId: string): Uint8Array {
+      const mind = loaded.get(mindId);
+      if (mind) return Y.encodeStateAsUpdate(mind.doc);
+      const { doc } = fromStorage(mindId);
+      try {
+        return Y.encodeStateAsUpdate(doc);
+      } finally {
+        doc.destroy();
+      }
     },
 
     apply(mindId: string, update: unknown): void {
@@ -120,9 +183,14 @@ export function createMindContent(
         throw new InvalidInputError("A Mind update must be a non-empty Uint8Array.");
       }
       const mind = load(mindId);
+      requireWritable(mind);
       let failure: unknown;
       try {
-        Y.applyUpdate(mind.doc, update);
+        // One transaction, so recording the version rides in the same stored update.
+        mind.doc.transact(() => {
+          Y.applyUpdate(mind.doc, update);
+          stampContentVersion(mind.doc);
+        }, CORE_ORIGIN);
       } catch (error) {
         failure = error;
       }
@@ -163,10 +231,12 @@ export function createMindContent(
      */
     edit<T>(mindId: string, change: (blocks: Y.XmlFragment) => T): T {
       const mind = load(mindId);
+      requireWritable(mind);
       let result: T | undefined;
       try {
         mind.doc.transact(() => {
           result = change(mind.doc.getXmlFragment(MIND_CONTENT_FIELD));
+          stampContentVersion(mind.doc);
         }, CORE_ORIGIN);
       } finally {
         flush(mindId, mind);
@@ -178,7 +248,8 @@ export function createMindContent(
     close(mindId: string): void {
       const mind = loaded.get(mindId);
       if (!mind) return;
-      compact(mindId, mind);
+      // A Mind a newer version wrote is left exactly as stored.
+      if (contentVersionOf(mind.doc) <= CONTENT_SCHEMA_VERSION) compact(mindId, mind);
       unload(mindId);
     },
 

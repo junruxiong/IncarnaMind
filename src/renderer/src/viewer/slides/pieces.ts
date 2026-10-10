@@ -84,13 +84,17 @@ export function findInDrawing(slide: SlideDrawing, quote: string): Map<string, T
   return rangesByKey(slidePieces(slide), quote);
 }
 
-/** Where a quote is in pieces with keys: its parts, by key; null if it isn't there. */
+/**
+ * Where a quote is in pieces with keys: its parts, by key; null if it isn't
+ * there. Its figures are matched as the check matches a slide's, however
+ * their thousands are written when the quote isn't found as it is.
+ */
 export function rangesByKey(
   pieces: readonly KeyedPiece[],
   quote: string,
 ): Map<string, TextRange[]> | null {
   if (pieces.length === 0) return null;
-  const found = findQuoteInPieces(pieces, quote);
+  const found = findQuoteInPieces(pieces, quote, { numbers: "if-needed" });
   if (!found || found.length === 0) return null;
   const byKey = new Map<string, TextRange[]>();
   for (const part of found) {

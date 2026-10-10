@@ -14,6 +14,7 @@ import type {
   LinkedFolderLayout,
   LinkedFolderPreview,
   Mind,
+  PrivacySettings,
   RerankSettings,
   SearchScope,
   Settings,
@@ -21,8 +22,10 @@ import type {
   Skill,
   Tag,
 } from "../../core/api";
+import type { UiUsageEvent } from "../../core/usageEvents";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
+import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
 import { isSettingsPage, type SettingsPage } from "./settingsPages";
@@ -108,16 +111,26 @@ interface AppState {
   /** The Library's Documents the User selected, e.g. to tag them at once. */
   selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
+  /** The Library has a tab beside the Mind tabs (#119). */
+  libraryTab: boolean;
+  /** The Library's tab is the one shown, in place of the open Mind. */
   libraryOpen: boolean;
   library: LibrarySnapshot | null;
   libraryFilter: string;
   refreshLibrary(): Promise<void>;
   openLibrary(filter?: string): void;
   closeLibrary(): void;
+  /** Brings the Library's tab, if open, in front of the Mind. */
+  showLibrary(): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The example Mind and its Documents (onboarding). Null until loaded. */
   examples: Examples | null;
+  /**
+   * The privacy choices on this device: the first run asks about usage data
+   * from them. Set once loaded, then follows the core's event.
+   */
+  privacy: PrivacySettings | null;
   /**
    * The Mind whose editor should start a Question at its end once it shows,
    * e.g. a new one, with the Search scope it starts with (from the Library), if any.
@@ -310,15 +323,50 @@ function saveTabs(tabs: readonly string[], openMindId: string | null): void {
     .catch(() => undefined);
 }
 
-/** The Documents the sidebar lists: all of them, or those with a Tag it filters by. */
-export const selectVisibleDocuments = (state: AppState): Document[] =>
-  state.tagFilter.length === 0
-    ? state.documents
-    : state.documents.filter((item) => matchesTags(item, state.tagFilter));
+/** Saves how the Library's tab stands, for this device. A failure only loses that. */
+function saveLibrary(library: "closed" | "open" | "shown"): void {
+  core.updateSettings({ device: { libraryTab: library } }).catch(() => undefined);
+}
+
+/** The last list `selectVisibleDocuments` filtered, and what from. */
+let visible: { documents: Document[]; tagFilter: readonly string[]; shown: Document[] } | null =
+  null;
+
+/**
+ * The Documents the sidebar lists: all of them, or those with a Tag it
+ * filters by. The same array until the Documents or the filter change, so it
+ * needn't be compared item by item at each change to the store (#156).
+ */
+export const selectVisibleDocuments = (state: AppState): Document[] => {
+  const { documents, tagFilter } = state;
+  if (tagFilter.length === 0) return documents;
+  if (visible?.documents !== documents || visible.tagFilter !== tagFilter) {
+    visible = {
+      documents,
+      tagFilter,
+      shown: documents.filter((item) => matchesTags(item, tagFilter)),
+    };
+  }
+  return visible.shown;
+};
 
 /** What the Tag filter is, as a key: folds made while filtering belong to it. Null without one. */
 export const selectTagFilterKey = (state: AppState): string | null =>
   state.tagFilter.length === 0 ? null : [...state.tagFilter].sort().join(" ");
+
+/**
+ * The core's per-Document events (status, Tags, moves, removals, Library
+ * assignments), applied to the store together at most every 100ms (see
+ * `createDocumentUpdates`). A store action that sets the Documents or the
+ * Library itself flushes them first, so nothing older lands on top of it.
+ */
+const documentUpdates = createDocumentUpdates((changes) =>
+  useAppStore.setState((state) => ({
+    documents: applyDocumentChanges(state.documents, changes.upserted, changes.removed),
+    // Before the Library is loaded there is nothing to change: loading reads it whole.
+    ...(state.library && { library: applyAssignments(state.library, changes.assignments) }),
+  })),
+);
 
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
@@ -329,6 +377,13 @@ export const useAppStore = create<AppState>()((set, get) => {
     } catch (error) {
       set({ actionError: messageOf(error) });
     }
+  };
+
+  /** Brings a Mind in front of the Library's tab, which stays open beside it. */
+  const leaveLibrary = () => {
+    if (!get().libraryOpen) return;
+    saveLibrary("open");
+    set({ libraryOpen: false });
   };
 
   /** Changes the tabs, and saves them if they changed. */
@@ -382,6 +437,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     notOnDisk: readonly string[],
   ) => {
     // Before adding: what status events bring meanwhile is new, not something added before.
+    documentUpdates.flush();
     const known = new Set(get().documents.map((each) => each.id));
     const result =
       paths.length > 0 ? await core.addDocuments([...paths]) : { documents: [], skipped: [] };
@@ -393,6 +449,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (preview) linkable.push({ path, preview, error: null });
       else skipped.push(fileName(path));
     }
+    documentUpdates.flush();
     set((state) => {
       // Status events may already have brought newer copies of these; keep those.
       const listed = new Set(state.documents.map((each) => each.id));
@@ -454,33 +511,48 @@ export const useAppStore = create<AppState>()((set, get) => {
     tagFilter: [],
     selectedDocuments: new Set(),
     tagsDialogOpen: false,
+    libraryTab: false,
     libraryOpen: false,
     library: null,
     libraryFilter: "all",
     refreshLibrary: async () => {
       const ticket = ++libraryRequest;
       const library = await core.getLibrary();
-      if (ticket === libraryRequest)
-        set({
-          library,
-          ...(get().libraryFilter !== "all" &&
-          get().libraryFilter !== "unsorted" &&
-          get().libraryFilter !== "new" &&
-          !library.groups.some((g) => g.id === get().libraryFilter)
-            ? { libraryFilter: "all" }
-            : {}),
-        });
+      if (ticket !== libraryRequest) return;
+      // The assignments that came before the snapshot are in it already: it replaces them.
+      documentUpdates.flush();
+      set({
+        library,
+        ...(get().libraryFilter !== "all" &&
+        get().libraryFilter !== "unsorted" &&
+        get().libraryFilter !== "new" &&
+        !library.groups.some((g) => g.id === get().libraryFilter)
+          ? { libraryFilter: "all" }
+          : {}),
+      });
     },
-    openLibrary: (filter = "all") =>
+    openLibrary: (filter = "all") => {
+      saveLibrary("shown");
       set((state) => ({
+        libraryTab: true,
         libraryOpen: true,
         libraryFilter: filter,
         // Another Folder: what was selected in this one isn't in view any more.
         ...(filter !== state.libraryFilter && { selectedDocuments: new Set<string>() }),
-      })),
-    closeLibrary: () => set({ libraryOpen: false }),
+      }));
+    },
+    closeLibrary() {
+      saveLibrary("closed");
+      set({ libraryTab: false, libraryOpen: false });
+    },
+    showLibrary() {
+      if (!get().libraryTab) return;
+      saveLibrary("shown");
+      set({ libraryOpen: true });
+    },
     skills: [],
     examples: null,
+    privacy: null,
     questionToStart: null,
 
     async load() {
@@ -503,6 +575,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           examples,
           connectors,
           rerank,
+          privacy,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -518,15 +591,20 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.getExamples(),
           core.listConnectors(),
           core.getRerankSettings(),
+          core.getPrivacySettings(),
         ]);
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
         const active = settings.device.activeMind;
+        // What the core's events brought before this is in the lists just read.
+        documentUpdates.flush();
         set({
           linkedFolders,
           minds,
           tabs,
           openMindId: active !== null && tabs.includes(active) ? active : (tabs[0] ?? null),
+          libraryTab: settings.device.libraryTab !== "closed",
+          libraryOpen: settings.device.libraryTab === "shown",
           settings,
           documents,
           keptCitationTexts,
@@ -538,6 +616,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           embedding,
           rerank,
           examples,
+          privacy,
           status: { kind: "ready" },
         });
         await get().refreshLibrary();
@@ -550,7 +629,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     createMind: (options) =>
       attempt(async () => {
         const mind = await core.createMind(options?.title ? { title: options.title } : undefined);
-        set({ libraryOpen: false });
+        leaveLibrary();
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
@@ -617,7 +696,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     openMind(id, options) {
-      set({ libraryOpen: false });
+      leaveLibrary();
       const { tabs, openMindId } = get();
       if (tabs.includes(id)) {
         setTabs({ tabs: [...tabs], openMindId: id });
@@ -749,6 +828,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       const paths = await files.pickDocuments();
       if (paths.length === 0) return "cancelled";
       const result = await core.addDocuments(paths);
+      documentUpdates.flush();
       set((state) => ({
         documents: result.documents.reduce(upsert, state.documents),
       }));
@@ -760,12 +840,14 @@ export const useAppStore = create<AppState>()((set, get) => {
     renameDocument: (id, name) =>
       attempt(async () => {
         const renamed = await core.renameDocument(id, name);
+        documentUpdates.flush();
         set((state) => ({ documents: upsert(state.documents, renamed) }));
       }),
 
     deleteDocument: (id) =>
       attempt(async () => {
         await core.deleteDocument(id);
+        documentUpdates.flush();
         set((state) => ({ documents: state.documents.filter((each) => each.id !== id) }));
       }),
 
@@ -773,6 +855,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     retryDocument: (id) =>
       attempt(async () => {
         const retried = await core.retryDocument(id);
+        documentUpdates.flush();
         set((state) => ({ documents: upsert(state.documents, retried) }));
       }),
 
@@ -1009,13 +1092,32 @@ core.on("minds.changed", (minds) => {
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {
-  useAppStore.setState((state) => ({ documents: upsert(state.documents, changed) }));
+  documentUpdates.upsert([changed]);
   const { examples, updateGettingStarted } = useAppStore.getState();
   if (isOwnDocument(changed, examples)) updateGettingStarted({ indexed: true });
 });
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
 core.on("examples.changed", (examples) => useAppStore.setState({ examples }));
+
+// Privacy choices change on the Privacy page, at the first run's question, or with local mode.
+core.on("privacy.changed", (privacy) => useAppStore.setState({ privacy }));
+
+/**
+ * Whether the first run's question about usage data (in a test build, its
+ * notice) is waiting: this copy can send usage data, the User hasn't
+ * answered, and local mode isn't keeping it off.
+ */
+export const usageDataQuestionWaiting = (privacy: PrivacySettings | null): boolean =>
+  privacy?.usageData.available === true && !privacy.usageData.asked && !privacy.usageData.localMode;
+
+/**
+ * Usage data from the interface (see src/core/usageEvents.ts): the core
+ * sends it only while the User agrees, and drops it otherwise.
+ */
+export function recordUsage(event: UiUsageEvent): void {
+  core.recordUsage(event).catch((error: unknown) => console.error(error));
+}
 
 // A Connector is one way to "Index your Documents or connect apps".
 core.on("connectors.changed", (connectors) => tickIndexed(connectors.length));
@@ -1049,19 +1151,10 @@ core.on("keptCitationTexts.changed", (keptCitationTexts) =>
 );
 
 // Documents removed from the index, e.g. with their Linked folder.
-core.on("documents.removed", (removed) => {
-  const gone = new Set(removed);
-  useAppStore.setState((state) => ({
-    documents: state.documents.filter((each) => !gone.has(each.id)),
-  }));
-});
+core.on("documents.removed", (removed) => documentUpdates.remove(removed));
 
 // Documents whose files moved to another Folder on disk.
-core.on("documents.moved", (moved) => {
-  useAppStore.setState((state) => ({
-    documents: moved.reduce((documents, item) => upsert(documents, item), state.documents),
-  }));
-});
+core.on("documents.moved", (moved) => documentUpdates.upsert(moved));
 
 // Tags change through this window or another: follow the list, and drop a deleted Tag from the filter.
 core.on("tags.changed", (tags) => {
@@ -1076,12 +1169,12 @@ core.on("tags.changed", (tags) => {
 core.on("skills.changed", (skills) => useAppStore.setState({ skills }));
 
 // Documents' Tags, or their tagging, changed: by the User, by automatic tagging, or with a deleted Tag.
-core.on("documents.tagged", (tagged) => {
-  useAppStore.setState((state) => ({
-    documents: tagged.reduce((documents, item) => upsert(documents, item), state.documents),
-  }));
-});
+core.on("documents.tagged", (tagged) => documentUpdates.upsert(tagged));
 
+// Organize queued, started, finished or failed on Documents, or the User put one in a Folder.
+core.on("library.assignments", (assignments) => documentUpdates.assign(assignments));
+
+// The Folders or the settings changed: read the Library again.
 core.on("library.changed", () => {
   void useAppStore
     .getState()

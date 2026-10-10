@@ -17,6 +17,7 @@ import {
 } from "./lineIcons";
 import { NEW_MIND_SHORTCUT } from "./MindTabs";
 import { SidebarStatus } from "./SidebarStatus";
+import { SidebarToggle } from "./SidebarToggle";
 import {
   rowActionButtonClass,
   rowActionsClass,
@@ -46,6 +47,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
   return (
     <aside
       aria-label={t("sidebar.label")}
+      id="sidebar"
       data-testid="sidebar"
       className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
@@ -129,6 +131,7 @@ export function SidebarHeader({ children }: { children?: ReactNode }) {
       className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
     >
       <AppMark />
+      <SidebarToggle place="header" />
       <span className="flex-1" />
       {children}
     </header>

@@ -140,7 +140,7 @@ async function chooseFakeModel(window: Page) {
   });
 }
 
-/** Writes a Question on the current line (⌘J), asks it with Enter, and waits for the Answer. */
+/** Writes a Question in the composer (⌘J), asks it with Enter (it goes on the current line), and waits for the Answer. */
 async function ask(window: Page, question: string, index: number) {
   await window.keyboard.press("ControlOrMeta+j");
   await typeLike(window, question, 45);
@@ -819,7 +819,9 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
       await window.keyboard.press("Escape");
     });
     await step(T, "hover states: tabs, Ask, rows", async () => {
-      const ask = window.getByTestId("question-ask").first();
+      // The composer's Ask button, with something written to ask.
+      await window.getByTestId("composer-input").fill("When do spring tides happen?");
+      const ask = window.getByTestId("composer-ask");
       record("walk.states.ask", await states(window, ask));
       const tab = window.getByTestId("mind-tab").first();
       record("walk.states.tab", await states(window, tab));

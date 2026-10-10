@@ -33,12 +33,22 @@ const BLOCKS = new Set([
 ]);
 const SKIPPED = new Set(["STYLE", "SCRIPT", "NOSCRIPT", "TEMPLATE"]);
 
-/** The text nodes under `root`, in order; only those `within` touches, if given. */
+/**
+ * The text nodes under `root`, in order; only those `within` touches, if
+ * given. Text under an element marked `data-quote-skip` inside `root` is
+ * left out; `root` may itself be inside one, as a Word comment's note in the
+ * margin is, to look in it alone.
+ */
 export function textNodes(root: Node, within?: Range): Text[] {
   const walker = root.ownerDocument?.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       const parent = node.parentElement;
-      if (!parent || SKIPPED.has(parent.tagName) || parent.closest("[data-quote-skip]")) {
+      const skipped = parent?.closest("[data-quote-skip]");
+      if (
+        !parent ||
+        SKIPPED.has(parent.tagName) ||
+        (skipped && skipped !== root && root.contains(skipped))
+      ) {
         return NodeFilter.FILTER_REJECT;
       }
       if (!node.textContent) return NodeFilter.FILTER_REJECT;

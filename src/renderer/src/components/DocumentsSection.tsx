@@ -1,6 +1,14 @@
-import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
+import {
+  type ChangeEvent,
+  memo,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
+import { displayName, fileNameOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
@@ -108,8 +116,8 @@ export function DocumentsSection() {
   const libraryOpen = useAppStore(
     (state) => state.libraryOpen && ["all", "new"].includes(state.libraryFilter),
   );
-  // Filtering makes a new array each time: compare it item by item, or React re-renders forever.
-  const documents = useAppStore(useShallow(selectVisibleDocuments));
+  // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
+  const documents = useAppStore(selectVisibleDocuments);
   const filtering = useAppStore((state) => state.tagFilter.length > 0);
   const hasFolders = useAppStore(
     (state) => state.folders.length > 0 || state.linkedFolders.length > 0,
@@ -132,15 +140,36 @@ export function DocumentsSection() {
     "sources",
   ];
   const view = views.includes(chosenView) ? chosenView : "sources";
-  const renderDocument = (item: Document, depth: number): ReactNode => (
-    <DocumentRow
-      key={item.id}
-      item={item}
-      depth={depth}
-      tagsById={tagsById}
-      onDelete={() => setDeleting(item)}
-    />
-  );
+  /**
+   * Each Document's row as last made, by depth, while the Tags stay the same
+   * (#156). A list of thousands drawn again because one Document changed
+   * hands React the same rows for the rest, which it passes over without
+   * comparing them; only the row whose Document changed is made and drawn again.
+   */
+  const renderDocument = useMemo(() => {
+    const made = new WeakMap<Document, Map<number, ReactNode>>();
+    return (item: Document, depth: number): ReactNode => {
+      let atDepth = made.get(item);
+      if (!atDepth) {
+        atDepth = new Map();
+        made.set(item, atDepth);
+      }
+      let row = atDepth.get(depth);
+      if (row === undefined) {
+        row = (
+          <DocumentRow
+            key={item.id}
+            item={item}
+            depth={depth}
+            tagsById={tagsById}
+            onDelete={setDeleting}
+          />
+        );
+        atDepth.set(depth, row);
+      }
+      return row;
+    };
+  }, [tagsById]);
 
   const addPicked = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
@@ -300,9 +329,10 @@ export function DocumentsSection() {
  * be reached (then muted too; clicking still opens what IncarnaMind kept of
  * it). The name gives way first; the row stays one 28px line. Pointed at, it
  * offers its Tags and a menu for the rest. It is in the Folder its file is
- * in, so there is no moving it here.
+ * in, so there is no moving it here. Memoised: a sidebar of thousands of
+ * Documents draws again only the rows whose Document changed.
  */
-function DocumentRow({
+const DocumentRow = memo(function DocumentRow({
   item,
   depth,
   tagsById,
@@ -311,10 +341,13 @@ function DocumentRow({
   item: Document;
   depth: number;
   tagsById: ReadonlyMap<string, Tag>;
-  onDelete(): void;
+  /** Asks before deleting this Document. */
+  onDelete(item: Document): void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
+  const shownName = displayName(item);
+  const fileName = fileNameOf(item.path);
   const chips = chipsOf(item.tags, tagsById);
   const tagNames =
     chips.length > 0
@@ -353,7 +386,9 @@ function DocumentRow({
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}
-          title={tagNames ? `${item.name}\n${tagNames}` : item.name}
+          title={[shownName === fileName ? shownName : `${shownName}\n${fileName}`, tagNames]
+            .filter(Boolean)
+            .join("\n")}
           onClick={() => openDocument({ documentId: item.id })}
           className={rowButtonClass}
           style={rowPadding(depth)}
@@ -362,7 +397,7 @@ function DocumentRow({
           {/* Takes what the status leaves; in it, the name gives way before the colours. */}
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span data-testid="row-text" className="min-w-0 truncate">
-              {item.name}
+              {shownName}
             </span>
             <TagMarks chips={chips} />
           </span>
@@ -376,13 +411,13 @@ function DocumentRow({
             item={item}
             buttonClassName={rowActionButtonClass}
             onRename={() => setRenaming(true)}
-            onDelete={onDelete}
+            onDelete={() => onDelete(item)}
           />
         </div>
       )}
     </li>
   );
-}
+});
 
 /**
  * The status at a row's end: "Missing" or "Unavailable" when its file isn't

@@ -30,7 +30,7 @@ import {
   type RawEntry,
   writeZip,
 } from "../../src/core/documents/formats/zip";
-import { anchorsOf } from "../../src/shared/units";
+import { anchorsOf, type TextUnit } from "../../src/shared/units";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { docxOf, encryptedOfficeFile, legacyOfficeFile, xlsxOf } from "../helpers/office";
@@ -121,6 +121,85 @@ describe("Word", () => {
     ]);
     expect(units.every((unit) => unit.text.length <= MAX_SECTION_CHARS)).toBe(true);
     expect(units[1]?.text.startsWith(paragraph)).toBe(true);
+  });
+
+  test("reads each comment into the section its mark is in, after the section's text, anchored and named with its author (#76)", async () => {
+    const units = await extractUnits(
+      "docx",
+      docxOf([
+        { text: "Methods", heading: 1 },
+        {
+          text: "Gauges were read at high water.",
+          comment: { text: "Confirm the datum first.", author: "J. Moreau" },
+        },
+        { text: "Each gauge was calibrated." },
+        { text: "Results", heading: 1 },
+        { text: "The barrier held.", comment: { text: "Which year was this?" } },
+        { text: "结论", heading: 1 },
+        { text: "堤坝经受住了风暴。", comment: { text: "请补充2025年的数据。", author: "王丽华" } },
+      ]),
+    );
+
+    expect(units.map((unit) => unit.text)).toEqual([
+      "Methods\nGauges were read at high water.\nEach gauge was calibrated.\n\nConfirm the datum first.",
+      "Results\nThe barrier held.\n\nWhich year was this?",
+      "结论\n堤坝经受住了风暴。\n\n请补充2025年的数据。",
+    ]);
+    expect(units.map((unit) => unit.label)).toEqual([
+      { path: ["Methods"], comments: [{ target: "comment0", author: "J. Moreau" }] },
+      { path: ["Results"], comments: [{ target: "comment1", author: null }] },
+      { path: ["结论"], comments: [{ target: "comment2", author: "王丽华" }] },
+    ]);
+    // The comment is anchored, for the viewer and the Citation's label; the paragraphs are as before.
+    const [methods] = units as [TextUnit];
+    expect(
+      anchorsOf(methods).map((anchor) => [
+        anchor.target,
+        methods.text.slice(anchor.start, anchor.end),
+      ]),
+    ).toEqual([
+      ["p1", "Methods"],
+      ["p2", "Gauges were read at high water."],
+      ["p3", "Each gauge was calibrated."],
+      ["comment0", "Confirm the datum first."],
+    ]);
+  });
+
+  test("reads a comment with only its range's start, or on a paragraph with no text, and leaves out one anchored nowhere it reads", async () => {
+    const units = await extractUnits(
+      "docx",
+      docxOf([
+        { text: "Methods", heading: 1 },
+        { text: "Gauges were read.", comment: { text: "Started here.", mark: "start" } },
+        { text: "", comment: { text: "On a picture.", author: "J. Moreau" } },
+        { text: "Each gauge was calibrated." },
+      ]),
+    );
+
+    expect(units.map((unit) => unit.text)).toEqual([
+      "Methods\nGauges were read.\nEach gauge was calibrated.\n\nStarted here.\n\nOn a picture.",
+    ]);
+    expect(anchorsOf(units[0] as TextUnit).map((anchor) => anchor.target)).toEqual([
+      "p1",
+      "p2",
+      "p3",
+      "comment0",
+      "comment1",
+    ]);
+  });
+
+  test("reads the comment of a real Word file into its first section", async () => {
+    const { units } = await extractDocx(fixture("Field Report.docx"));
+
+    expect(units[0]?.label).toEqual({
+      path: [],
+      comments: [{ target: "comment0", author: "J. Moreau" }],
+    });
+    expect(
+      units[0]?.text.endsWith("open questions.\n\nConfirm with the hydrology team before release."),
+    ).toBe(true);
+    // Its other sections have none.
+    expect(units.slice(1).some((unit) => unit.label?.comments)).toBe(false);
   });
 });
 
