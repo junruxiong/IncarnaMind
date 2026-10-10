@@ -31,13 +31,6 @@ export function numberAttr(
   return Number.isFinite(number) ? number : fallback;
 }
 
-/** A boolean attribute ("1", "true", "on"), or undefined when absent. */
-export function boolAttr(element: XmlElement | undefined, name: string): boolean | undefined {
-  const value = element?.attrs[name];
-  if (value === undefined) return undefined;
-  return value === "1" || value === "true" || value === "on";
-}
-
 export interface ThemeFonts {
   latin: string;
   ea: string;
