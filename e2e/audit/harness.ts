@@ -358,12 +358,34 @@ export async function focusWalk(
       if (!el || el === document.body) {
         return { step: n, what: "(body)", visibleFocus: false, indicator: "none", box: null };
       }
+      // The accent colour as the browser computes it, to recognise a rule that turns accent.
+      const probe = document.createElement("span");
+      probe.style.color = "var(--color-accent)";
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      // The ring may be drawn on the element, on its ::before or ::after, or on a child
+      // (a tab draws it on its inner shape); a divider turns accent instead.
       const style = getComputedStyle(el);
-      const outline =
-        style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0
-          ? `outline ${style.outlineWidth} ${style.outlineColor}`
-          : "";
+      const styles = [
+        style,
+        getComputedStyle(el, "::before"),
+        getComputedStyle(el, "::after"),
+        ...[...el.children].slice(0, 4).map((child) => getComputedStyle(child)),
+      ];
+      const ringed = styles.find(
+        (s) => s.outlineStyle !== "none" && Number.parseFloat(s.outlineWidth) > 0,
+      );
+      const outline = ringed ? `outline ${ringed.outlineWidth} ${ringed.outlineColor}` : "";
+      // A shadow counts on the element only: a pseudo-element or child may carry one at rest.
       const shadow = style.boxShadow !== "none" ? `shadow ${style.boxShadow.slice(0, 50)}` : "";
+      const filled = style.backgroundColor === accent ? `fill ${accent}` : "";
+      // A text field shows its caret (and, by DESIGN.md, an accent edge).
+      const textField =
+        el.isContentEditable ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLInputElement &&
+          !["button", "checkbox", "radio", "submit", "reset", "range", "file"].includes(el.type));
       const rect = el.getBoundingClientRect();
       const label =
         el.getAttribute("aria-label") ||
@@ -378,8 +400,14 @@ export async function focusWalk(
       return {
         step: n,
         what: `${el.tagName.toLowerCase()}${el.getAttribute("role") ? `[role=${el.getAttribute("role")}]` : ""} ${testid ? `[${testid}]` : ""} "${label}"`,
-        visibleFocus: Boolean(outline || shadow) || el.isContentEditable,
-        indicator: outline || shadow || (el.isContentEditable ? "caret" : "none"),
+        visibleFocus: Boolean(outline || shadow || filled) || textField,
+        indicator:
+          outline ||
+          shadow ||
+          filled ||
+          (textField
+            ? `caret, edge ${style.borderColor === accent ? "accent" : "unchanged"}`
+            : "none"),
         box: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
