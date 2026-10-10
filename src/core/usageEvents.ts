@@ -72,7 +72,6 @@ export const SETTINGS_PAGES = [
   "general",
   "models",
   "search",
-  "tools",
   "connectors",
   "skills",
   "privacy",

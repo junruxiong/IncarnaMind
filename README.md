@@ -66,7 +66,7 @@ There's no account and no IncarnaMind server. Your Minds and the search index st
 
 - **You're asked before anything leaves.** The first time IncarnaMind would send anything to an outside service, it shows what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back.
 - **Providers are asked not to keep it.** Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI says so.
-- **Nothing runs without you.** Before a Connector's tool that could change something, or a Skill's script, runs, IncarnaMind asks you: allow it once, always allow it, or deny it. **Settings → Tools** lists every rule you've set, and you can revoke any of them.
+- **Nothing runs without you.** Before a Connector's tool that could change something, or a Skill's script, runs, IncarnaMind asks you: allow it once, always allow it, or deny it. **Settings → Privacy** lists every rule you've set, and you can revoke any of them.
 
 <details>
 <summary><b>Questions</b></summary>

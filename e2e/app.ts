@@ -162,14 +162,7 @@ export async function turnOnEmbeddings(window: Page): Promise<void> {
 }
 
 /** The pages in Settings' list. */
-export type SettingsPage =
-  | "general"
-  | "models"
-  | "search"
-  | "tools"
-  | "connectors"
-  | "skills"
-  | "privacy";
+export type SettingsPage = "general" | "models" | "search" | "connectors" | "skills" | "privacy";
 
 /** Opens Settings from the sidebar, then one of the pages in its list. Returns the dialog. */
 export async function openSettings(window: Page, page: SettingsPage): Promise<Locator> {

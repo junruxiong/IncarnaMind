@@ -682,7 +682,6 @@ export const en = {
   "settings.title": "Settings",
   "settings.pages.models": "Models",
   "settings.pages.search": "Search",
-  "settings.pages.tools": "Tools",
   "settings.language": "Interface language",
   "settings.language.system": "Same as system",
   "settings.language.en": "English",
