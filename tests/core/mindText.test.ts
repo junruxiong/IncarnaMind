@@ -8,6 +8,7 @@ import {
   toMarkdown,
 } from "../../src/core/answers/blocks";
 import { buildQuestionContext } from "../../src/core/answers/context";
+import { type ReadOptions, readBlock, readBlocks } from "../../src/core/mindText";
 
 const text = (value: string, ...marks: string[]): NodeJSON => ({
   type: "text",
@@ -194,5 +195,71 @@ describe("Question context", () => {
         { role: "user", content: "Failed one?\n\nAnd neap tides?" },
       ],
     });
+  });
+});
+
+describe("the one reader", () => {
+  const options = (overrides: Partial<ReadOptions> = {}): ReadOptions => ({
+    includeQuestions: true,
+    footnote: (attributes) => ({ source: String(attributes.documentName), unverified: false }),
+    trimBeforeCitation: false,
+    ...overrides,
+  });
+  const cited = paragraph(text("Claim "), citation({ documentName: "Tides" }), text("."));
+
+  test("a mark it doesn't know is dropped and the text under it kept, for every writer", () => {
+    const odd = paragraph(text("keep", "somethingNew", "bold"));
+    expect(readBlock(elementOf(odd), options())).toEqual([
+      {
+        kind: "paragraph",
+        content: [
+          {
+            kind: "text",
+            text: "keep",
+            marks: {
+              bold: true,
+              italic: false,
+              strike: false,
+              underline: false,
+              highlight: false,
+              code: false,
+              link: null,
+            },
+          },
+        ],
+      },
+    ]);
+    expect(markdownOf(odd)).toBe("**keep**");
+  });
+
+  test("a node type it doesn't know reads as the Blocks in it, or as a paragraph of its text", () => {
+    const kinds = (block: NodeJSON) => readBlock(elementOf(block), options()).map((b) => b.kind);
+    expect(
+      kinds({ type: "callout", content: [paragraph(text("a")), paragraph(text("b"))] }),
+    ).toEqual(["paragraph", "paragraph"]);
+    expect(kinds({ type: "callout", content: [text("a")] })).toEqual(["paragraph"]);
+  });
+
+  test("the space before a Citation goes only when asked", () => {
+    const texts = (trimBeforeCitation: boolean) =>
+      readBlocks(fragmentOf(cited), options({ trimBeforeCitation }))
+        .flatMap((block) => (block.kind === "paragraph" ? block.content : []))
+        .flatMap((inline) => (inline.kind === "text" ? [inline.text] : []));
+    expect(texts(false)).toEqual(["Claim ", "."]);
+    expect(texts(true)).toEqual(["Claim", "."]);
+  });
+
+  test("Questions are read when asked for and left out when not; an Answer reads as its Blocks", () => {
+    const fragment = fragmentOf(
+      { type: "question", content: [text("Why?")] },
+      { type: "answer", content: [paragraph(text("Because."))] },
+    );
+    expect(readBlocks(fragment, options()).map((b) => b.kind)).toEqual(["question", "paragraph"]);
+    expect(readBlocks(fragment, options({ includeQuestions: false })).map((b) => b.kind)).toEqual([
+      "paragraph",
+    ]);
+    expect(readBlock(fragment.get(1) as Y.XmlElement, options()).map((b) => b.kind)).toEqual([
+      "paragraph",
+    ]);
   });
 });
