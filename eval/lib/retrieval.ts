@@ -24,6 +24,14 @@
  *   so this is the most the approach can bring.
  * - Paraphrase Questions: asked in words that avoid their passage's own, as a
  *   group of their own, out of the gating counts.
+ * - Other ways to find what the reranker sees, with embeddings off (more of
+ *   keyword search's Passages, feedback terms, a chat model's rewrites,
+ *   small-to-big, document first; see ./searches), each reranked by the
+ *   built-in model: never gating, to choose what the search Tool does next.
+ * - For each Question, where plain keyword search ranks its expected Passage,
+ *   up to 200: whether more of keyword search's candidates could reach it.
+ * - For each reranked mode, whether its candidates held the expected Passage
+ *   at all: what any reranker could have found.
  */
 import {
   BUILT_IN_RERANKING_MODEL,
@@ -40,12 +48,24 @@ import {
   type ExpectedPassage,
   isGating,
 } from "./evaluationSet";
-import type { OpenReranker, RerankerInfo } from "./rerank";
+import { type Latency, latencyOf, type OpenReranker, type RerankerInfo } from "./rerank";
+import { MOST_QUERIES, type QueryModelCost } from "./rewrites";
+import { CANDIDATES, type Candidates, DOCUMENT_FIRST, FEEDBACK, keywordTop } from "./searches";
+import {
+  AGGREGATIONS,
+  type Aggregation,
+  SUB_CHUNK_TOKENS,
+  type SubChunkIndex,
+  type SubChunkStats,
+} from "./subChunks";
 
 export const TOP_K = 5;
 
 /** Ranks are looked for this deep, to show near misses; only the top 5 count as hits. */
 export const RANK_DEPTH = 20;
+
+/** Plain keyword search's rank of the expected Passage is looked for this deep: the most `searchPassages` returns. */
+export const KEYWORD_RANK_DEPTH = 200;
 
 /** A reranker sees this many of keyword search's best Passages, and of vector search's: the search Tool's. */
 export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
@@ -62,36 +82,96 @@ export const HYBRID: SearchMode = "hybrid";
  * What a reranked mode reranks: keyword search's top 20 alone ("keyword"),
  * what the search Tool hands a reranker by default, or keyword search's top
  * 10 and vector search's top 10 ("hybrid"), as it does with embeddings on.
+ * The others are other ways to find candidates with embeddings off (see
+ * ./searches), reported only.
  */
-export type RerankedSearch = "hybrid" | "keyword";
+export type RerankedSearch =
+  | "hybrid"
+  | "keyword"
+  | "keyword-40"
+  | "keyword-60"
+  | "feedback"
+  | "rewrites"
+  | "sub-questions"
+  | "small-to-big"
+  | "document-first";
 
-/** The reranked searches, in the order the report lists them for each reranking model: the gate's first. */
+/** The reranked searches each reranking model runs, in the order the report lists them: the gate's first. */
 export const RERANKED_SEARCHES: readonly RerankedSearch[] = ["keyword", "hybrid"];
 
 /**
- * A mode of the report: one of the core's search modes, or a reranked mode:
- * hybrid search's candidates ("rerank:") or keyword search's alone
- * ("keyword-rerank:") reranked by a candidate.
+ * The other ways to find candidates, run with the built-in reranking model on
+ * the gating set only, after its two (see ./searches). Never gating.
  */
-export type RetrievalMode = SearchMode | `rerank:${string}` | `keyword-rerank:${string}`;
+export const OTHER_SEARCHES: readonly RerankedSearch[] = [
+  "keyword-40",
+  "keyword-60",
+  "feedback",
+  "rewrites",
+  "sub-questions",
+  "small-to-big",
+  "document-first",
+];
 
-/** The reranked mode of a reranking model, over hybrid search's candidates unless keyword search's are named. */
+/** How deep keyword search's candidates go in the modes that take more of them. */
+export const KEYWORD_DEPTHS: Partial<Record<RerankedSearch, number>> = {
+  "keyword-40": 40,
+  "keyword-60": 60,
+};
+
+/** Each reranked search, as its mode's label starts. */
+export const SEARCH_LABELS: Record<RerankedSearch, string> = {
+  keyword: "keyword",
+  hybrid: "hybrid",
+  "keyword-40": "keyword top 40",
+  "keyword-60": "keyword top 60",
+  feedback: "keyword + feedback terms",
+  rewrites: "keyword + rewrites",
+  "sub-questions": "keyword + sub-questions",
+  "small-to-big": "small-to-big",
+  "document-first": "document first",
+};
+
+/** What each reranked search hands a reranker, for the report and the log. */
+export const SEARCH_DESCRIPTIONS: Record<RerankedSearch, string> = {
+  keyword: `keyword search's top ${KEYWORD_RERANK_DEPTH}, no vector search`,
+  hybrid: `keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once`,
+  "keyword-40": "keyword search's top 40",
+  "keyword-60": "keyword search's top 60",
+  feedback: `keyword search's top ${CANDIDATES}, fused with a second search for the Question's words and ${FEEDBACK.terms} feedback terms from its top ${FEEDBACK.passages}, the best ${CANDIDATES}`,
+  rewrites: `keyword search's top ${CANDIDATES} for the Question and for each of a chat model's ${MOST_QUERIES.rewrites} rephrasings, fused, the best ${CANDIDATES}`,
+  "sub-questions": `keyword search's top ${CANDIDATES} for the Question and for each one-hop question a chat model broke it into, if any, fused, the best ${CANDIDATES}`,
+  "small-to-big": `Passages by their best sub-chunk (at most ${SUB_CHUNK_TOKENS} tokens) in BM25 over sub-chunks, the best ${CANDIDATES}`,
+  "document-first": `the ${DOCUMENT_FIRST.documents} Documents that hold most of keyword search's top ${CANDIDATES}, each searched inside with its own term statistics, fused, the best ${CANDIDATES}`,
+};
+
+/**
+ * A mode of the report: one of the core's search modes, or a reranked mode:
+ * hybrid search's candidates ("rerank:") or another search's
+ * ("keyword-rerank:", "feedback-rerank:" and so on) reranked by a candidate.
+ */
+export type RetrievalMode = SearchMode | `rerank:${string}` | `${RerankedSearch}-rerank:${string}`;
+
+/** The reranked mode of a reranking model, over hybrid search's candidates unless another search is named. */
 export const rerankMode = (
   definition: Pick<RerankingModelDefinition, "id">,
   search: RerankedSearch = "hybrid",
 ): RetrievalMode =>
-  search === "hybrid" ? `rerank:${definition.id}` : `keyword-rerank:${definition.id}`;
+  search === "hybrid" ? `rerank:${definition.id}` : `${search}-rerank:${definition.id}`;
 
 /** What a mode reranks; null for the core's own search modes. */
 export function rerankedSearchOf(mode: string): RerankedSearch | null {
   if (mode.startsWith("rerank:")) return "hybrid";
-  if (mode.startsWith("keyword-rerank:")) return "keyword";
-  return null;
+  return (
+    (Object.keys(SEARCH_LABELS) as RerankedSearch[]).find(
+      (search) => search !== "hybrid" && mode.startsWith(`${search}-rerank:`),
+    ) ?? null
+  );
 }
 
-/** A reranked mode as people read it: "hybrid + <model>", or "keyword + <model>". */
+/** A reranked mode as people read it: "hybrid + <model>", "keyword + <model>", "small-to-big + <model>". */
 export const rerankedLabel = (search: RerankedSearch, modelName: string) =>
-  `${search} + ${modelName}`;
+  `${SEARCH_LABELS[search]} + ${modelName}`;
 
 /**
  * The gating mode: what the search Tool runs by default, keyword search's top
@@ -143,31 +223,45 @@ export interface QuestionResult {
   translatedQuery?: string;
   /** That second query's results: hybrid, and each reranked mode. */
   translated?: Partial<Record<RetrievalMode, ModeResult>>;
-  /** How many candidates a reranker saw for the Question, and for its translation, when hybrid's reranked modes ran. */
-  rerankCandidates?: { question: number; translated?: number };
-  /** The same for keyword + rerank: keyword search's top 20, or fewer when it found fewer. */
-  keywordRerankCandidates?: { question: number; translated?: number };
+  /**
+   * Plain keyword search's rank of the first Passage that meets the hit
+   * rule, within its top 200; null if none does.
+   */
+  keywordRank?: number | null;
+  /** What each reranked search handed a reranker for the Question (and its translation). */
+  candidates?: Partial<Record<RerankedSearch, CandidateRecord>>;
+  /** What a search looked for besides the Question: a model's queries, feedback terms, the Documents searched inside. */
+  queries?: Partial<Record<RerankedSearch, string[]>>;
 }
 
-/**
- * How many candidates a reranker saw per search: keyword search's top 10 and
- * vector search's, each Passage once, or keyword search's top 20 alone.
- */
-export interface CandidateCounts {
-  /** What was reranked. Hybrid's when left out, as in reports from before keyword + rerank. */
-  search?: RerankedSearch;
-  /** How many of each list's best: 10 of each for hybrid's, 20 of keyword search's alone. */
-  perList: number;
-  /** Searches reranked: the Questions, and the translated queries. */
-  searches: number;
-  mean: number;
-  min: number;
-  max: number;
+/** The candidates one reranked search handed a reranker for a Question. */
+export interface CandidateRecord {
+  /** How many, for the Question. */
+  question: number;
+  /** How many for its translated query, when that was searched too. */
+  translated?: number;
+  /** The rank among the Question's candidates, from 1, of the first Passage that meets the hit rule; null if none does. */
+  reached: number | null;
 }
 
 export interface Tally {
   hits: number;
   total: number;
+}
+
+/**
+ * How many candidates a reranker saw per search, from one reranked search,
+ * and how often they held the expected Passage at all.
+ */
+export interface CandidateCounts {
+  search: RerankedSearch;
+  /** Searches reranked: the Questions, and the translated queries. */
+  searches: number;
+  mean: number;
+  min: number;
+  max: number;
+  /** The Questions whose own candidates held a Passage that meets the hit rule: gating ones, and paraphrase ones. */
+  reached: { gating: Tally; paraphrase: Tally };
 }
 
 /** Hits in each language, and in both. */
@@ -207,10 +301,22 @@ export interface RetrievalRun {
   summary: Partial<Record<RetrievalMode, ModeSummary>>;
   /** The reranking candidates of the reranked modes, one per mode, if any were given. */
   rerankers?: RerankerInfo[];
-  /** How many Passages hybrid's reranked modes reranked per search, if any ran. */
-  rerankCandidates?: CandidateCounts;
-  /** How many Passages keyword + rerank reranked per search, if it ran. */
-  keywordRerankCandidates?: CandidateCounts;
+  /** How many Passages each reranked search handed a reranker, for those that ran: keyword + rerank's first. */
+  candidates?: CandidateCounts[];
+  /** The other ways to find candidates (`OTHER_SEARCHES`), when they ran. */
+  otherSearches?: OtherSearchesReport;
+}
+
+/** What the report says about the other searches beyond their hits. */
+export interface OtherSearchesReport {
+  /** Why a search didn't run, such as no chat model given. */
+  skipped: Partial<Record<RerankedSearch, string>>;
+  /** Small-to-big's index, and how often each way of scoring Passages by their sub-chunks reached the expected one. */
+  smallToBig?: SubChunkStats & {
+    aggregations: { aggregation: Aggregation; reached: { gating: Tally; paraphrase: Tally } }[];
+  };
+  /** The chat model's calls for rewrites and sub-questions. */
+  queryModel: QueryModelCost[];
 }
 
 export function checkPassage(
@@ -235,6 +341,18 @@ export function checkPassage(
 
 export const isHit = (passage: RetrievedPassage) =>
   passage.rightDocument && passage.coversPages && passage.hasQuote;
+
+/** The rank, from 1, of the first Passage in a list that meets the hit rule, however deep; null if none does. */
+export function firstHit(
+  found: readonly PassageSearchResult[],
+  expected: ExpectedPassage,
+  expectedDocumentId: string,
+): number | null {
+  const index = found.findIndex((passage) =>
+    isHit(checkPassage(passage, expected, expectedDocumentId)),
+  );
+  return index >= 0 ? index + 1 : null;
+}
 
 /** Scores a ranked list: a hit in the top 5, and the first hit's rank in the top 20. */
 export function scoreRanking(
@@ -282,54 +400,66 @@ export async function rerankCandidates(core: Core, query: string): Promise<Passa
 export const keywordRerankCandidates = (
   core: Core,
   query: string,
-): Promise<PassageSearchResult[]> =>
-  core.searchPassages(query, { mode: "keyword", limit: KEYWORD_RERANK_DEPTH });
+): Promise<PassageSearchResult[]> => keywordTop(core, query, KEYWORD_RERANK_DEPTH);
 
-/** Each reranked search's candidates, and where a Question's result records how many there were. */
-const RERANKED: Record<
-  RerankedSearch,
-  {
-    candidates: (core: Core, query: string) => Promise<PassageSearchResult[]>;
-    perList: number;
-    counted: "rerankCandidates" | "keywordRerankCandidates";
-  }
-> = {
-  hybrid: { candidates: rerankCandidates, perList: RERANK_PER_LIST, counted: "rerankCandidates" },
-  keyword: {
-    candidates: keywordRerankCandidates,
-    perList: KEYWORD_RERANK_DEPTH,
-    counted: "keywordRerankCandidates",
-  },
-};
+/** Builds a reranked search's candidates for a query of a Question: its own, or its translation. */
+export type CandidateSource = (query: string, question: EvalQuestion) => Promise<Candidates>;
 
 /**
- * How many candidates the reranked searches had (hybrid's, unless keyword
- * search's are named), from the counts `runReranked` recorded; null if none ran.
+ * The candidates of the reranked searches that need nothing but the core:
+ * keyword + rerank's, hybrid + rerank's, and keyword search's top 40 and 60.
+ * Null for the others, whose candidates `runReranked` is given.
+ */
+export function coreSource(core: Core, search: RerankedSearch): CandidateSource | null {
+  if (search === "hybrid") {
+    return async (query) => ({ candidates: await rerankCandidates(core, query) });
+  }
+  const depth = search === "keyword" ? KEYWORD_RERANK_DEPTH : KEYWORD_DEPTHS[search];
+  if (depth === undefined) return null;
+  return async (query) => ({ candidates: await keywordTop(core, query, depth) });
+}
+
+/**
+ * How many candidates a reranked search had (hybrid's, unless another is
+ * named), from the records `runReranked` kept, and how often they held the
+ * expected Passage; null if it didn't run.
  */
 export function candidateCounts(
   results: readonly QuestionResult[],
   search: RerankedSearch = "hybrid",
 ): CandidateCounts | null {
-  const { counted, perList } = RERANKED[search];
-  const counts = results.flatMap((result) => {
-    const recorded = result[counted];
-    if (!recorded) return [];
-    return [recorded.question, ...(recorded.translated === undefined ? [] : [recorded.translated])];
+  const recorded = results.flatMap((result) => {
+    const record = result.candidates?.[search];
+    return record ? [{ result, record }] : [];
   });
+  const counts = recorded.flatMap(({ record }) => [
+    record.question,
+    ...(record.translated === undefined ? [] : [record.translated]),
+  ]);
   if (counts.length === 0) return null;
+  const reached = (group: readonly { record: CandidateRecord }[]) => ({
+    hits: group.filter(({ record }) => record.reached !== null).length,
+    total: group.length,
+  });
   return {
     search,
-    perList,
     searches: counts.length,
     mean: counts.reduce((sum, count) => sum + count, 0) / counts.length,
     min: Math.min(...counts),
     max: Math.max(...counts),
+    reached: {
+      gating: reached(recorded.filter(({ result }) => isGating(result))),
+      paraphrase: reached(
+        recorded.filter(({ result }) => result.paraphrase && !result.crossLingual),
+      ),
+    },
   };
 }
 
 /**
  * Searches each Question in each mode and scores the top 5 (and finds the
  * first hit in the top 20); a translated query is searched in hybrid mode too.
+ * Keyword search's rank of the expected Passage is looked for in its top 200.
  */
 export async function runRetrieval(
   core: Core,
@@ -349,9 +479,15 @@ export async function runRetrieval(
       modes: {},
     };
     for (const mode of modes) {
-      // A deeper search returns the same top 5: each list's top 50 is fused before the limit.
-      const found = await core.searchPassages(question.question, { mode, limit: RANK_DEPTH });
+      // A deeper search returns the same top 5: each list's top 50 is fused before the limit,
+      // and keyword search's order doesn't depend on how many it returns.
+      const deep = mode === "keyword";
+      const found = await core.searchPassages(question.question, {
+        mode,
+        limit: deep ? KEYWORD_RANK_DEPTH : RANK_DEPTH,
+      });
       result.modes[mode] = scoreRanking(found, question.expected, expectedId);
+      if (deep) result.keywordRank = firstHit(found, question.expected, expectedId);
     }
     if (question.translatedQuery) {
       result.translatedQuery = question.translatedQuery;
@@ -370,11 +506,13 @@ export async function runRetrieval(
 
 /**
  * Adds the reranker's mode to `results`: each Question's candidates (and its
- * translated query's), reordered by the candidate model, scored like the
- * others. What is reranked follows from the mode (see `rerankedSearchOf`):
- * what the search Tool hands a reranker (`rerankCandidates`), or keyword
- * search's top 20 (`keywordRerankCandidates`). Records how many candidates
- * each search had.
+ * translated query's, unless `translated` is false), reordered by the
+ * candidate model, scored like the others. What is reranked follows from the
+ * mode (see `rerankedSearchOf`): what the search Tool hands a reranker
+ * (`rerankCandidates`), keyword search's top 20 (`keywordRerankCandidates`)
+ * or its top 40 or 60, or what `source` gives. Records how many candidates
+ * each search had and whether they held the expected Passage, and returns how
+ * long finding them took per search.
  */
 export async function runReranked(
   core: Core,
@@ -382,34 +520,80 @@ export async function runReranked(
   documentIds: ReadonlyMap<string, string>,
   reranker: OpenReranker,
   results: readonly QuestionResult[],
-): Promise<void> {
+  options: { source?: CandidateSource; translated?: boolean } = {},
+): Promise<Latency> {
   const mode = reranker.mode as RetrievalMode;
   const search = rerankedSearchOf(mode);
   if (!search) throw new Error(`${mode} isn't a reranked mode.`);
-  const { candidates: candidatesOf, counted } = RERANKED[search];
+  const source = options.source ?? coreSource(core, search);
+  if (!source) throw new Error(`${mode}: its candidates weren't given.`);
+  const timings: number[] = [];
   for (const question of questions) {
     const result = results.find((each) => each.id === question.id);
     if (!result) throw new Error(`${question.id}: no results to add the reranked mode to.`);
     const expectedId = expectedIdOf(question, documentIds);
     const reranked = async (query: string) => {
-      const candidates = await candidatesOf(core, query);
+      const started = performance.now();
+      const { candidates, queries } = await source(query, question);
+      timings.push(performance.now() - started);
       const ranking = scoreRanking(
         await reranker.rerank(query, candidates),
         question.expected,
         expectedId,
       );
-      return { ranking, count: candidates.length };
+      return {
+        ranking,
+        count: candidates.length,
+        reached: firstHit(candidates, question.expected, expectedId),
+        queries,
+      };
     };
     const own = await reranked(question.question);
     result.modes[mode] = own.ranking;
-    const counts: { question: number; translated?: number } = { question: own.count };
-    if (question.translatedQuery && result.translated) {
+    const record: CandidateRecord = { question: own.count, reached: own.reached };
+    if (own.queries) result.queries = { ...result.queries, [search]: own.queries };
+    if (options.translated !== false && question.translatedQuery && result.translated) {
       const translated = await reranked(question.translatedQuery);
       result.translated[mode] = translated.ranking;
-      counts.translated = translated.count;
+      record.translated = translated.count;
     }
-    result[counted] = counts;
+    result.candidates = { ...result.candidates, [search]: record };
   }
+  return latencyOf(timings);
+}
+
+/**
+ * How often each way of scoring Passages by their sub-chunks puts the
+ * expected Passage in small-to-big's 20 candidates, over the gating Questions
+ * and the paraphrase ones: before any reranking, which runs on "best" only.
+ */
+export function compareAggregations(
+  index: SubChunkIndex,
+  questions: readonly EvalQuestion[],
+  documentIds: ReadonlyMap<string, string>,
+): { aggregation: Aggregation; reached: { gating: Tally; paraphrase: Tally } }[] {
+  return AGGREGATIONS.map((aggregation) => {
+    const reached = (group: readonly EvalQuestion[]): Tally => ({
+      hits: group.filter(
+        (question) =>
+          firstHit(
+            index.search(question.question, CANDIDATES, aggregation),
+            question.expected,
+            expectedIdOf(question, documentIds),
+          ) !== null,
+      ).length,
+      total: group.length,
+    });
+    return {
+      aggregation,
+      reached: {
+        gating: reached(questions.filter(isGating)),
+        paraphrase: reached(
+          questions.filter((question) => question.paraphrase && !question.crossLingual),
+        ),
+      },
+    };
+  });
 }
 
 const tally = (results: readonly QuestionResult[], mode: RetrievalMode): Tally => ({
