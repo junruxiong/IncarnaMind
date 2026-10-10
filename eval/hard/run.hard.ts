@@ -2,7 +2,9 @@
  * `npm run eval:hard`: the hard tier (eval/hard/README.md), reported and never
  * gating. It fetches a library of public Documents across domains into the
  * evaluation's cache (checked against their SHA-256), adds them to a new
- * temporary data folder with embeddings on, and asks the hard tier's
+ * temporary data folder with embeddings off, as the app does by default,
+ * then turns embeddings on and waits until every Passage is embedded, timing
+ * the two apart (./lib/indexing), and asks the hard tier's
  * Questions in every retrieval mode, per domain and difficulty; with a chat
  * model, it asks them once each and scores the Citations per difficulty.
  * It runs under Vitest only for its TypeScript and worker threads
@@ -16,9 +18,7 @@ import { expect, test } from "vitest";
 import {
   BUILT_IN_EMBEDDING_MODEL,
   BUILT_IN_RERANKING_MODEL,
-  type Core,
   DATABASE_FILE,
-  type DocumentStatus,
   type Embedder,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
@@ -31,6 +31,7 @@ import { createWorkerCrossEncoder, openReranker, type RerankerInfo } from "../li
 import { KEYWORD_RERANK_DEPTH, rerankedLabel, rerankMode, TOP_K } from "../lib/retrieval";
 import { type HardCitations, runHardCitations } from "./lib/citations";
 import { fetchLibrary } from "./lib/fetch";
+import { embedEveryPassage } from "./lib/indexing";
 import { timeKeywordSearch } from "./lib/keywordTiming";
 import { downloadBytes, loadManifest, MANIFEST } from "./lib/manifest";
 import {
@@ -79,43 +80,6 @@ function timedEmbedder(embedder: Embedder) {
   };
 }
 
-/** Statuses after which a Document's Passages are in the keyword index. */
-const INDEXED: ReadonlySet<DocumentStatus> = new Set([
-  "waiting-for-model",
-  "embedding",
-  "ready",
-  "failed",
-  "no-text",
-]);
-
-/** When each Document was first seen, keyword-indexed and ready, from the core's events. */
-function watchIndexing(core: Core) {
-  const seen = new Map<string, { first: number; indexed?: number; ready?: number }>();
-  core.on("document.status", (document) => {
-    const now = Date.now();
-    const times = seen.get(document.id) ?? { first: now };
-    if (INDEXED.has(document.status)) times.indexed ??= now;
-    if (
-      document.status === "ready" ||
-      document.status === "no-text" ||
-      document.status === "failed"
-    ) {
-      times.ready ??= now;
-    }
-    seen.set(document.id, times);
-  });
-  return () => {
-    const all = [...seen.values()];
-    const start = Math.min(...all.map((times) => times.first));
-    const latest = (pick: (times: (typeof all)[number]) => number | undefined) =>
-      (Math.max(...all.map((times) => pick(times) ?? times.first)) - start) / 1000;
-    return {
-      keywordSeconds: latest((times) => times.indexed),
-      readySeconds: latest((times) => times.ready),
-    };
-  };
-}
-
 test("the hard tier", async () => {
   const started = new Date();
   const log = createLog(started.getTime());
@@ -127,7 +91,6 @@ test("the hard tier", async () => {
   );
 
   let peak = 0;
-  let peakIndexing = 0;
   const sampler = setInterval(() => {
     peak = Math.max(peak, process.memoryUsage().rss);
   }, 500);
@@ -141,10 +104,8 @@ test("the hard tier", async () => {
     );
 
     const timing = timedEmbedder(createWorkerEmbedder());
-    let indexingTimes: () => { keywordSeconds: number; readySeconds: number } = () => ({
-      keywordSeconds: 0,
-      readySeconds: 0,
-    });
+    // First pass: embeddings off, the app's default, so each Document is ready once its keyword
+    // index is: what a User with embeddings off waits for.
     const library = await openLibrary({
       name: "hard",
       embedder: timing.embedder,
@@ -157,18 +118,22 @@ test("the hard tier", async () => {
       keep: config.keepData,
       log,
       allowUnprocessed: true,
-      watch: (core) => {
-        indexingTimes = watchIndexing(core);
-      },
+      embeddings: false,
     });
-    timing.stop();
-    peakIndexing = Math.max(peak, process.memoryUsage().rss);
+    const keywordSeconds = library.processingSeconds;
+    const peakKeyword = Math.max(peak, process.memoryUsage().rss);
+    log(`Keyword search covers every Document after ${keywordSeconds.toFixed(0)} s`);
     const db = openDatabase(join(library.dataDir, DATABASE_FILE));
     try {
-      const count = (sql: string) => db.get<{ count: number }>(sql)?.count ?? 0;
-      const embeddedPassages = count(
-        "SELECT COUNT(*) AS count FROM passages WHERE deleted_at IS NULL AND embedding IS NOT NULL",
+      // Second pass: embeddings on, as a User turns them on in Settings, so the dense modes can
+      // be compared; the core embeds every Passage in the background.
+      const embedding = await embedEveryPassage(library.core, db, log);
+      timing.stop();
+      const peakIndexing = Math.max(peak, process.memoryUsage().rss);
+      log(
+        `${embedding.embedded} of ${embedding.passages} Passages embedded in ${embedding.seconds.toFixed(0)} s`,
       );
+      const embeddedPassages = embedding.embedded;
       if (embeddedPassages === 0) {
         throw new Error(
           "No Passage was embedded: the hard tier compares the dense modes, so embeddings must be on for this run (eval/hard/README.md).",
@@ -322,8 +287,10 @@ test("the hard tier", async () => {
         indexing: {
           passages: library.passageCount,
           embeddedPassages,
-          ...indexingTimes(),
-          embeddingSeconds: timing.seconds(),
+          keywordSeconds,
+          embeddingSeconds: embedding.seconds,
+          embeddingModelSeconds: timing.seconds(),
+          peakRssBytesKeyword: peakKeyword,
           peakRssBytes: peakIndexing,
           peakRssBytesRun: Math.max(peak, process.memoryUsage().rss),
         },
