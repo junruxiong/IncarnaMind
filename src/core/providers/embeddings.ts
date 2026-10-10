@@ -18,8 +18,8 @@ import {
 import { InvalidInputError, isRecord } from "../errors";
 import { normalizeBaseUrl, OLLAMA_DEFAULT_URL, serviceForUrl } from "./kinds";
 
-/** The providers reached through an API: every kind but the built-in model. */
-export type ApiEmbeddingProviderKind = Exclude<EmbeddingProviderKind, "built-in">;
+/** The providers reached through an API: every kind but "off" and the built-in model. */
+export type ApiEmbeddingProviderKind = Exclude<EmbeddingProviderKind, "off" | "built-in">;
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ApiEmbeddingModel = Exclude<EmbeddingModel, string>;
@@ -140,6 +140,7 @@ function parseApiKey(value: unknown, kind: ApiEmbeddingProviderKind): string | u
 }
 
 export type ParsedEmbeddingInput =
+  | { kind: "off" }
   | { kind: "built-in" }
   | { kind: ApiEmbeddingProviderKind; choice: ApiEmbeddingChoice; apiKey: string | undefined };
 
@@ -155,9 +156,13 @@ export function parseEmbeddingInput(input: unknown): ParsedEmbeddingInput {
   if (!isEmbeddingProviderKind(kind)) {
     throw new InvalidInputError(`Unknown embedding provider "${String(kind)}".`);
   }
-  if (kind === "built-in") {
+  if (kind === "off" || kind === "built-in") {
     if (input.baseUrl || input.apiKey || input.modelId) {
-      throw new InvalidInputError("The built-in model takes no server, key or model name.");
+      throw new InvalidInputError(
+        kind === "off"
+          ? "Turning embeddings off takes no server, key or model name."
+          : "The built-in model takes no server, key or model name.",
+      );
     }
     return { kind };
   }
@@ -176,7 +181,7 @@ export function parseEmbeddingInput(input: unknown): ParsedEmbeddingInput {
 export function parseStoredChoice(value: unknown): ApiEmbeddingChoice | null {
   if (!isRecord(value)) return null;
   const { kind, baseUrl, modelId } = value;
-  if (!isEmbeddingProviderKind(kind) || kind === "built-in") return null;
+  if (!isEmbeddingProviderKind(kind) || kind === "off" || kind === "built-in") return null;
   if (typeof modelId !== "string" || modelId === "") return null;
   if (baseUrl !== null && typeof baseUrl !== "string") return null;
   return { kind, baseUrl, modelId };

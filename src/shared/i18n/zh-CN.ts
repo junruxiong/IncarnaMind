@@ -418,20 +418,28 @@ export const zhCN = {
 
   "embeddingProviders.settings.title": "文档搜索",
   "embeddingProviders.settings.body":
-    "搜索文档时，既看字词，也看含义。含义来自嵌入模型：内置模型在这台电脑上运行。云端模型可能找得更准，但会收到每个文档的全文。",
+    "搜索文档时按字词查找，再对最佳结果重新排序。嵌入模型还能按含义搜索：它能找到措辞与你的问题不同的段落，但建索引会更慢，内置模型需下载 135 MB。云端模型可能找得更准，但会收到每个文档的全文。",
   "embeddingProviders.settings.current": "嵌入模型：",
+  "embeddingProviders.settings.off": "关闭",
+  "embeddingProviders.settings.offNote":
+    "按字词搜索文档，再对最佳结果重新排序。所有内容都留在这台电脑上。",
+  "embeddingProviders.settings.turnOn": "开启…",
   "embeddingProviders.settings.builtIn": "内置模型（{model}）",
   "embeddingProviders.settings.sendsTo": "你的文档全文和搜索内容会发送到 {service}。",
   "embeddingProviders.settings.local": "所有内容都留在这台电脑上。",
   "embeddingProviders.settings.change": "更换模型",
   "embeddingProviders.settings.error": "搜索暂时无法使用这个模型，文档会等待它恢复。{reason}",
   "embeddingProviders.settings.retry": "重试",
+  "embeddingProviders.kind.off": "关闭",
   "embeddingProviders.kind.built-in": "内置模型",
   "embeddingProviders.kind.openai": "OpenAI",
   "embeddingProviders.kind.google": "Google",
   "embeddingProviders.kind.openai-compatible": "OpenAI 兼容服务器",
   "embeddingProviders.kind.ollama": "Ollama",
   "embeddingProviders.form.label": "嵌入模型",
+  "embeddingProviders.form.tradeOff":
+    "嵌入模型还能找到措辞与你的问题不同的段落，代价是建索引更慢；内置模型需下载 135 MB。",
+  "embeddingProviders.form.offHint": "文档读取完即可按字词搜索，并重新排序。无需下载任何模型。",
   "embeddingProviders.form.localOnly": "本地模式已开启，只能选择在这台电脑上运行的模型。",
   "embeddingProviders.form.localOnlyServer":
     "本地模式已开启，而此服务器不在这台电脑上：请使用 localhost 或 127.0.0.1 上的服务器，或在上方关闭“所有内容都留在这台电脑上”。",
@@ -442,6 +450,8 @@ export const zhCN = {
     "使用本机的 Ollama 时留空即可。请先在 Ollama 中下载模型，例如 ollama pull bge-m3。",
   "embeddingProviders.form.model": "嵌入模型名称",
   "embeddingProviders.form.switch": "切换…",
+  "embeddingProviders.form.turnOn": "开启…",
+  "embeddingProviders.form.turnOff": "关闭…",
   "embeddingProviders.test.ok": "连接成功：模型生成了一个 {dimensions} 维的向量。",
   "embeddingProviders.confirm.title": "切换到 {provider}？",
   "embeddingProviders.confirm.reprocess":
@@ -450,12 +460,20 @@ export const zhCN = {
   "embeddingProviders.confirm.local": "所有内容都留在这台电脑上。",
   "embeddingProviders.confirm.cancel": "取消",
   "embeddingProviders.confirm.switch": "切换并重新处理",
+  "embeddingProviders.confirm.onTitle": "开启 {provider}？",
+  "embeddingProviders.confirm.embed":
+    "所有文档（共 {count} 个）会在后台嵌入，这可能需要一些时间。每个文档处理完之前，搜索只按字词查找它的段落。",
+  "embeddingProviders.confirm.turnOn": "开启",
+  "embeddingProviders.confirm.offTitle": "关闭嵌入？",
+  "embeddingProviders.confirm.off":
+    "搜索将按字词查找段落并重新排序，新文档读取完即可搜索。已生成的向量会保留，以便你日后重新开启。",
+  "embeddingProviders.confirm.turnOff": "关闭",
   "embeddingProviders.localOnly.label": "所有内容都留在这台电脑上",
   "embeddingProviders.localOnly.body":
-    "文档搜索使用内置模型或 Ollama，搜索结果也不会发送去重新排序。开启后，云端嵌入模型会切换回内置模型，并重新处理你的文档。",
+    "开启嵌入时只使用内置模型或 Ollama，搜索结果也不会发送去重新排序。开启后，云端嵌入模型会切换回内置模型，并重新处理你的文档。",
   "embeddingProviders.localOnly.cloudChat":
     "你的对话模型仍会把问题发送到 {service}。如果也想让问题留在本机，请在“对话模型”中选择本地模型。",
-  "embeddingProviders.rebuild.title": "正在为新模型重建搜索：{done} / {total} 个文档",
+  "embeddingProviders.rebuild.title": "正在为搜索嵌入文档：{done} / {total} 个",
   "embeddingProviders.rebuild.localMode": "为了让所有内容留在这台电脑上，搜索现在使用内置模型。",
   "embeddingProviders.rebuild.note": "每个文档处理完之前，搜索按字词查找它的段落。",
   "embeddingProviders.error.notice": "搜索暂时无法使用 {provider}。{reason}",

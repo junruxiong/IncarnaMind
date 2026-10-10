@@ -25,54 +25,61 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("switching the embedding provider warns that every Document is processed again, and cancelling changes nothing", async () => {
+test("embeddings are off by default; turning them on with a cloud provider warns that every Document is embedded and sent, and cancelling changes nothing", async () => {
   const path = join(sources, "Plant notes.txt");
   await writeFile(path, "Photosynthesis turns light into chemical energy.\n");
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [path]);
 
-  // Settings → Document search: the built-in model, on this computer.
+  // Settings → Document search: off, searching by words, on this computer.
   await openSettings(window, "search");
   const section = window.getByTestId("embedding-settings");
   const current = section.getByTestId("embedding-current");
-  await expect(current).toHaveText("Embedding model: Built-in (multilingual-e5-small)");
-  await expect(section).toContainText("Nothing leaves this computer.");
+  await expect(current).toHaveText("Embedding model: Off");
+  await expect(section).toContainText(
+    "Documents are searched by their words, and the best matches reranked. Nothing leaves this computer.",
+  );
 
-  // Choose OpenAI, with a key; its suggested model is filled in.
+  // "Turn on…": Off is chosen, and the line says what an embedding model adds and costs.
   await section.getByTestId("embedding-change").click();
   const form = section.getByTestId("embedding-form");
+  await expect(form.getByLabel("Off", { exact: true })).toBeChecked();
+  await expect(form.getByTestId("embedding-trade-off")).toHaveText(
+    "An embedding model also finds Passages worded differently from your Question, at the cost of slower indexing and, for the built-in model, a 135 MB download.",
+  );
+  // Choose OpenAI, with a key; its suggested model is filled in.
   await form.getByLabel("OpenAI", { exact: true }).check();
   await form.getByLabel("API key").fill("sk-smoke-test-key");
   await expect(form.getByLabel("Embedding model name")).toHaveValue("text-embedding-3-small");
   await form.getByTestId("embedding-switch").click();
 
-  // The warning: every Document is processed again, and OpenAI would receive all their text.
+  // The warning: every Document is embedded, and OpenAI would receive all their text.
   const confirm = window.getByTestId("embedding-confirm");
   await expect(confirm).toBeVisible();
-  await expect(confirm).toContainText("Switch to OpenAI · text-embedding-3-small?");
+  await expect(confirm).toContainText("Turn on OpenAI · text-embedding-3-small?");
   await expect(confirm).toContainText(
-    "Every Document (1 in all) will be processed again with the new model",
+    "Every Document (1 in all) will be embedded in the background",
   );
   await expect(confirm.getByTestId("embedding-confirm-cloud")).toHaveText(
     "OpenAI will receive the full text of all your Documents, and every search you make.",
   );
 
-  // Cancelling changes nothing: no consent is asked, nothing is saved, nothing is processed again.
+  // Cancelling changes nothing: no consent is asked, nothing is saved, nothing is embedded.
   await confirm.getByTestId("embedding-confirm-cancel").click();
   await expect(confirm).toBeHidden();
   await expect(window.getByTestId("consent-dialog")).toBeHidden();
-  await expect(current).toHaveText("Embedding model: Built-in (multilingual-e5-small)");
+  await expect(current).toHaveText("Embedding model: Off");
   const settings = await window.evaluate(
     (): Promise<EmbeddingSettings> => (globalThis as Page).incarnamind.getEmbeddingSettings(),
   );
   expect(settings).toEqual({
     provider: {
-      kind: "built-in",
+      kind: "off",
       baseUrl: null,
-      modelId: "multilingual-e5-small",
+      modelId: "",
       hasApiKey: false,
-      dimensions: 384,
+      dimensions: null,
       service: null,
     },
     localOnly: false,
@@ -82,6 +89,47 @@ test("switching the embedding provider warns that every Document is processed ag
   await closeSettings(window);
   await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready");
   await expect(window.getByTestId("embedding-rebuild-notice")).toHaveCount(0);
+  await app.close();
+});
+
+test("turned on with the built-in model, Documents are embedded; turned off again, search goes by words", async () => {
+  const path = join(sources, "Plant notes.txt");
+  await writeFile(path, "Photosynthesis turns light into chemical energy.\n");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await addDocuments(window, [path]);
+  await openSettings(window, "search");
+  const section = window.getByTestId("embedding-settings");
+  const current = section.getByTestId("embedding-current");
+  const confirm = window.getByTestId("embedding-confirm");
+
+  await section.getByTestId("embedding-change").click();
+  const form = section.getByTestId("embedding-form");
+  await form.getByLabel("Built-in model", { exact: true }).check();
+  await form.getByTestId("embedding-switch").click();
+  await expect(confirm).toContainText("Turn on Built-in model?");
+  await expect(confirm).toContainText("Everything stays on this computer.");
+  await confirm.getByTestId("embedding-confirm-switch").click();
+
+  await expect(current).toHaveText("Embedding model: Built-in (multilingual-e5-small)");
+  const vector = () =>
+    window.evaluate(() =>
+      (globalThis as Page).incarnamind.searchPassages("light into energy", { mode: "vector" }),
+    );
+  await expect.poll(async () => (await vector()).length).toBeGreaterThan(0);
+
+  await section.getByTestId("embedding-change").click();
+  await form.getByLabel("Off", { exact: true }).check();
+  await expect(form).toContainText(
+    "Documents are searched by their words, reranked, as soon as they are read. Nothing is downloaded.",
+  );
+  await form.getByTestId("embedding-switch").click();
+  await expect(confirm).toContainText("Turn embeddings off?");
+  await expect(confirm).toContainText("The vectors made so far are kept");
+  await confirm.getByTestId("embedding-confirm-switch").click();
+
+  await expect(current).toHaveText("Embedding model: Off");
+  await expect(vector()).rejects.toThrow(/embeddings, which are off/);
   await app.close();
 });
 

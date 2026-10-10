@@ -2,15 +2,18 @@
  * The document-search Tool (ADR-0007, ADR-0009): what an Answer gets when it
  * searches the User's Documents.
  *
- * 1. Hybrid search: keyword (FTS5) and vector search, fused by reciprocal rank
- *    fusion, over the Search scope.
+ * 1. Keyword search (FTS5) over the Search scope, and, while the User has
+ *    embeddings on, vector search, fused by reciprocal rank fusion (hybrid
+ *    search). Embeddings are off by default (ADR-0009, 2026-10-10).
  * 2. Rerank, unless the User turned reranking off: with the built-in reranking
  *    model by default, or a Cohere or Voyage key (see ../providers/rerank),
- *    which the retrieval evaluation gates on (#31). The reranker sees
- *    keyword search's top 10 and vector search's top 10, each Passage once,
- *    instead of the fused list: fusion can push a hit that only one of them
- *    found below others that both found middlingly (#31: en-03, en-12, en-14
- *    and zh-03). Those are then all the hits.
+ *    which the retrieval evaluation gates on (#31). With embeddings off, the
+ *    reranker sees keyword search's top 20. With them on, it sees keyword
+ *    search's top 10 and vector search's top 10, each Passage once, instead
+ *    of the fused list: fusion can push a hit that only one of them found
+ *    below others that both found middlingly (#31: en-03, en-12, en-14 and
+ *    zh-03); until vector search finds anything, keyword search's top 20
+ *    again. Those are then all the hits.
  * 3. Group the hits by Document.
  * 4. The old backend's sliding-window clustering (its `find_overlaps`), ported:
  *    each Passage belongs to the overlapping windows of 3 consecutive Passages
@@ -34,7 +37,8 @@ export interface SearchToolParameters {
   /**
    * With a reranker: how many of keyword search's best, and of vector
    * search's, it sees (each Passage once, so 10 to 20 with 10), and then
-   * the clustering. Each costs the built-in reranking model tens of
+   * the clustering; without vector search (embeddings off), twice as many of
+   * keyword search's (20). Each costs the built-in reranking model tens of
    * milliseconds.
    */
   rerankPerList: number;
@@ -212,7 +216,8 @@ export interface SearchToolSources {
   /**
    * For a reranker: keyword search's best `perList` live Passages and vector
    * search's, each once (see `topsOfEach`), with their fused scores, in
-   * fused order.
+   * fused order; keyword search's best twice `perList` while vector search
+   * has none (embeddings off, or no vectors yet).
    */
   rerankCandidates(
     query: string,

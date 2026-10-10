@@ -87,6 +87,17 @@ export async function useLocalChatModel(window: Page, modelId = "fake-model"): P
   }, modelId);
 }
 
+/**
+ * Turns embeddings on with the built-in model (the smoke tests' fake), through
+ * the core's bridge as Settings would: they are off by default.
+ */
+export async function turnOnEmbeddings(window: Page): Promise<void> {
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.saveEmbeddingProvider({ kind: "built-in" });
+  });
+}
+
 /** The pages in Settings' list. */
 export type SettingsPage =
   | "general"

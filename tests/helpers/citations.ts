@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import type { CitationAttributes, Core, CoreAdapters, CoreEvents, Document } from "../../src/core";
 import { createTempDataFolder, startCore } from "./core";
 import { addAndProcess, writeSourceFile } from "./documents";
+import { turnOnEmbeddings } from "./embedding";
 import { connectToMind, type MindClient } from "./mindClient";
 import { answerIn, question, writeMind } from "./minds";
 import { type ModelCall, type ScriptedReply, scriptedModel, scriptedModels } from "./models";
@@ -99,12 +100,15 @@ export async function setUpWithDocuments(
   model: MockLanguageModelV4,
   files: readonly SourceFile[],
   overrides: Partial<CoreAdapters> = {},
+  /** `embeddings`: turn them on (the built-in model) before the files are added; they are off by default. */
+  { embeddings = false }: { embeddings?: boolean } = {},
 ) {
   const folder = await createTempDataFolder();
   const sources = await createTempDataFolder();
   const models = scriptedModels(model);
   const core = startCore(folder, { createChatModel: models.createChatModel, ...overrides });
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+  if (embeddings) await turnOnEmbeddings(core);
   const paths = await Promise.all(
     files.map((file) => writeSourceFile(sources, file.name, file.contents)),
   );

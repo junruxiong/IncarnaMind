@@ -153,14 +153,19 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
       },
       answer: "The keeper lit it.",
     });
-    const { core, client, mind } = await setUpWithDocuments(model, [
-      { name: "Log 1.md", contents: logbook(30, 1) },
-      { name: "Log 2.md", contents: logbook(30, 2) },
-      {
-        name: "Keeper.md",
-        contents: "The lighthouse keeper lit the lamp at dusk, and kept it burning all night.",
-      },
-    ]);
+    const { core, client, mind } = await setUpWithDocuments(
+      model,
+      [
+        { name: "Log 1.md", contents: logbook(30, 1) },
+        { name: "Log 2.md", contents: logbook(30, 2) },
+        {
+          name: "Keeper.md",
+          contents: "The lighthouse keeper lit the lamp at dusk, and kept it burning all night.",
+        },
+      ],
+      {},
+      { embeddings: true },
+    );
     // This is about grouping by fused scores: no reranker (the default one is on).
     await core.removeRerankSettings();
     // The note's Passage is the best match, by keyword and by vector search alike.
@@ -208,6 +213,8 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
         { name: "Weather.md", contents: sections(6, 0, "") },
       ],
       { reranker },
+      // Vector search hands the reranker the weather notes, which have no "lighthouse".
+      { embeddings: true },
     );
 
     await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
@@ -260,22 +267,48 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
 });
 
 describe("The candidates a reranker sees, through the core", { timeout: 30_000 }, () => {
-  test("are keyword search's top 10 and vector search's top 10, as searchPassages gives them, in fused order", async () => {
+  /** Two Documents, and a reranker that records what it was handed, in the order given. */
+  async function setUp(query: string, options: { embeddings?: boolean } = {}) {
     const seen: { passageId: string; score: number }[][] = [];
     const reranker: Reranker = async (_query, candidates) => {
       seen.push(candidates.map(({ passageId, score }) => ({ passageId, score })));
       return [...candidates];
     };
-    const query = "ordinary coastal weather lighthouse";
     const model = citingModel({ query, records: () => [], answer: "There is a lighthouse." });
-    const { core, client, mind } = await setUpWithDocuments(
+    const setup = await setUpWithDocuments(
       model,
       [
         { name: "Coast.md", contents: sections(24, 12, "red") },
         { name: "Weather.md", contents: sections(6, 0, "") },
       ],
       { reranker },
+      options,
     );
+    return { ...setup, seen };
+  }
+
+  test("with embeddings off, the default, are keyword search's top 20, in its order", async () => {
+    const query = "ordinary coastal weather lighthouse";
+    const { core, client, mind, seen } = await setUp(query);
+
+    await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
+
+    const keyword = await core.searchPassages(query, { mode: "keyword", limit: 20 });
+    expect(keyword).toHaveLength(20);
+    expect(seen).toHaveLength(1);
+    expect((seen[0] ?? []).map((each) => each.passageId)).toEqual(
+      keyword.map((passage) => passage.passageId),
+    );
+    // Hybrid search is keyword search, and vector search is refused: nothing is embedded.
+    expect(await core.searchPassages(query, { limit: 20 })).toEqual(keyword);
+    await expect(core.searchPassages(query, { mode: "vector" })).rejects.toThrow(
+      /embeddings, which are off/,
+    );
+  });
+
+  test("with embeddings on, are keyword search's top 10 and vector search's top 10, as searchPassages gives them, in fused order", async () => {
+    const query = "ordinary coastal weather lighthouse";
+    const { core, client, mind, seen } = await setUp(query, { embeddings: true });
 
     await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
 

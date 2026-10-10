@@ -28,7 +28,11 @@ import type { Log } from "./log";
 export interface LibraryOptions {
   /** For the temporary folder's name and the log. */
   name: string;
-  /** Runs the built-in model; never started when `embeddingProvider` is given. */
+  /**
+   * Runs the built-in model; never started when `embeddingProvider` is given.
+   * Embeddings are off by default in the app: the library turns them on with
+   * one or the other before any Document is added.
+   */
   embedder: Embedder;
   /**
    * An embedding provider to use instead of the built-in model, chosen
@@ -244,6 +248,9 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       const saved = await core.saveEmbeddingProvider(provider);
       log(`Embedding with ${saved.provider.kind}/${saved.provider.modelId}`);
     } else {
+      // Embeddings are off by default: on, as a User turns them on in Settings, the vector
+      // and hybrid modes can be measured next to keyword search.
+      await core.saveEmbeddingProvider({ kind: "built-in" });
       await modelReady(core, log);
       log(`The embedding model is ready (${((Date.now() - started) / 1000).toFixed(1)} s)`);
     }

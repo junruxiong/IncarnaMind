@@ -7,8 +7,8 @@ import { createFakeEmbedder } from "../../src/core/embedding/fake";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
-import { sha256, storedFile, waitForProcessing } from "../helpers/documents";
-import { createControlledEmbedder } from "../helpers/embedding";
+import { sha256, storedFile, waitForDocuments, waitForProcessing } from "../helpers/documents";
+import { createControlledEmbedder, turnOnEmbeddings } from "../helpers/embedding";
 
 const NOTES = `# Transformers
 
@@ -60,15 +60,12 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     expect((await core.listDocuments())[0]).toMatchObject({ id: OLD_ID, status: "queued" });
     const [document] = await waitForProcessing(core, [OLD_ID]);
 
+    // An install from before had the built-in model on by default: embeddings are off now.
     expect(document).toMatchObject({ name: "Old notes", status: "ready", progress: null });
-    expect(statuses).toEqual(["extracting", "embedding", "ready"]);
-    // The new Passages are found by keyword and by vector; the old one is gone.
+    expect(statuses).toEqual(["extracting", "ready"]);
+    // The new Passages are found by their words; the old one is gone.
     const keyword = await core.searchPassages("self-attention", { mode: "keyword" });
-    const vector = await core.searchPassages("self-attention", { mode: "vector" });
     expect(keyword.map((result) => result.documentId)).toEqual([OLD_ID]);
-    expect(vector.map((result) => result.passageId)).toEqual(
-      keyword.map((result) => result.passageId),
-    );
     expect(keyword[0]?.passageId).not.toBe("old-passage");
     expect(keyword[0]?.text.startsWith("# Transformers")).toBe(true);
     const rows = queryDatabase<{ id: string; deleted: number; embedded: number }>(
@@ -78,8 +75,22 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     );
     expect(rows).toEqual([
       { id: "old-passage", deleted: 1, embedded: 0 },
-      { id: keyword[0]?.passageId, deleted: 0, embedded: 1 },
+      { id: keyword[0]?.passageId, deleted: 0, embedded: 0 },
     ]);
+    expect(
+      queryDatabase(dataDir, "SELECT processing_version, embedding_model FROM documents"),
+    ).toEqual([{ processing_version: PROCESSING_VERSION, embedding_model: null }]);
+
+    // Turned on, the new Passages are embedded, and vector search finds them too.
+    await core.saveEmbeddingProvider({ kind: "built-in" });
+    await waitForDocuments(core, (documents) => {
+      expect(documents[0]?.status).toBe("ready");
+      expect(statuses).toEqual(["extracting", "ready", "embedding", "ready"]);
+    });
+    const vector = await core.searchPassages("self-attention", { mode: "vector" });
+    expect(vector.map((result) => result.passageId)).toEqual(
+      keyword.map((result) => result.passageId),
+    );
     expect(
       queryDatabase(dataDir, "SELECT processing_version, embedding_model FROM documents"),
     ).toEqual([
@@ -133,6 +144,7 @@ describe("Re-processing", { timeout: 30_000 }, () => {
         close: () => fake.close(),
       },
     });
+    await turnOnEmbeddings(before);
     const [added] = (await before.addDocuments([path])).documents;
     if (!added) throw new Error("Nothing was added.");
     await hanging;
