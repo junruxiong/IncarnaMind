@@ -267,22 +267,22 @@ export function createOutputFiles(options: OutputFilesOptions) {
     return false;
   };
 
+  /** Allows or stops new files in a live Linked folder, from Settings or its question. */
+  const setLinkedFolderWriting = (linkedFolderId: unknown, allowed: unknown): OutputSettings => {
+    if (typeof linkedFolderId !== "string" || !liveFolder(linkedFolderId)) {
+      throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
+    }
+    if (typeof allowed !== "boolean") throw new InvalidInputError("allowed must be true or false.");
+    record(linkedFolderId, allowed);
+    changed();
+    finish(`linked-folder:${linkedFolderId}`);
+    return current();
+  };
+
   return {
     settings: current,
     setLocation,
-
-    /** Allows or stops new files in a live Linked folder, from Settings or its question. */
-    setLinkedFolderWriting(linkedFolderId: unknown, allowed: unknown): OutputSettings {
-      if (typeof linkedFolderId !== "string" || !liveFolder(linkedFolderId)) {
-        throw new NotFoundError("That Linked folder doesn't exist or has been removed.");
-      }
-      if (typeof allowed !== "boolean")
-        throw new InvalidInputError("allowed must be true or false.");
-      record(linkedFolderId, allowed);
-      changed();
-      finish(`linked-folder:${linkedFolderId}`);
-      return current();
-    },
+    setLinkedFolderWriting,
 
     requests: (): FileWriteRequest[] => [...pending.values()].map((entry) => entry.request),
 
@@ -293,7 +293,7 @@ export function createOutputFiles(options: OutputFilesOptions) {
       if (!entry) return; // Already answered, e.g. in another window.
       const { request } = entry;
       if (request.kind === "linked-folder") {
-        this.setLinkedFolderWriting(request.linkedFolderId, accept);
+        setLinkedFolderWriting(request.linkedFolderId, accept);
       } else if (accept) {
         await setLocation(request.suggested);
       } else {
