@@ -177,5 +177,3 @@ export function createWebPages(options: WebPagesOptions) {
     },
   };
 }
-
-export type WebPages = ReturnType<typeof createWebPages>;
