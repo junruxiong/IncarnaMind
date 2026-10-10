@@ -1,6 +1,6 @@
 # Releasing
 
-For maintainers: packaging, cutting a release, signing, and crash reports.
+For maintainers: packaging, cutting a release, signing, crash reports and usage data.
 
 [electron-builder](https://www.electron.build) packages the app (config: `electron-builder.yml`), and electron-updater updates installed apps from GitHub Releases (`src/main/updater.ts`). To package locally, into `dist/`:
 
@@ -40,3 +40,9 @@ An unsigned macOS build can't update itself: IncarnaMind tells the user a new ve
 ## Crash reports
 
 Users can opt in to crash reports in **Settings → Privacy**; they go to Sentry, scrubbed of file paths, Document text, Mind content, Questions and Answers (`src/main/crashScrubber.ts`). Only a build made with a Sentry DSN offers them: set `MAIN_VITE_SENTRY_DSN` when building (electron-vite reads it from the environment or a `.env.local` file). The release workflow passes the `SENTRY_DSN` repository secret; without it, releases don't offer crash reports. Never commit a DSN.
+
+## Usage data
+
+Users can agree to send anonymous usage data, listed event by event in [privacy.md](privacy.md#usage-data); it goes to PostHog. Only a build made with a PostHog project sends it, or asks: set `MAIN_VITE_POSTHOG_KEY` (the project's API key, `phc_…`) and `MAIN_VITE_POSTHOG_HOST` (its host over https, PostHog's EU cloud or a self-hosted server) when building. The release workflow passes the `POSTHOG_KEY` and `POSTHOG_HOST` repository variables; without them, releases send no usage data. In the PostHog project, turn on **Discard client IP data**.
+
+A release asks on its first run, and sends nothing unless the User agrees. A test build (the alpha) sends usage data until the User turns it off, and its first run says so: build it with `MAIN_VITE_TESTER_BUILD=1`. The release workflow does that for tags with `-alpha` in them (`v0.2.0-alpha.1`).

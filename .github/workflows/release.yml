@@ -72,6 +72,13 @@ jobs:
           # Where opt-in crash reports go. Without the secret it's empty, and the build
           # doesn't offer crash reports at all (src/main/crashReports.ts).
           MAIN_VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # The PostHog project usage data goes to, only with the User's consent. Without
+          # both variables the build sends no usage data and doesn't ask (src/main/usageData.ts).
+          MAIN_VITE_POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
+          MAIN_VITE_POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+          # An alpha tag (v0.2.0-alpha.1) makes a test build: usage data is on until the
+          # User turns it off, and the first run says so. Every other tag asks first.
+          MAIN_VITE_TESTER_BUILD: ${{ contains(github.ref_name, '-alpha') && '1' || '' }}
 
       # Signs with the Developer ID certificate and notarizes when the secrets exist.
       # Without the certificate, the app is ad-hoc signed instead: it still opens (see the
