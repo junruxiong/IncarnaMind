@@ -77,7 +77,12 @@ export interface EvalConfig {
   questionIds: string[] | null;
   /** Whether the every-format set runs too (INCARNAMIND_EVAL_FORMATS: on by default). */
   formats: boolean;
+  /** The sets `npm run eval:dump` dumps (INCARNAMIND_EVAL_DUMP_SETS: all three by default). */
+  dumpSets: DumpSet[];
 }
+
+export const DUMP_SETS = ["gating", "formats", "hard"] as const;
+export type DumpSet = (typeof DUMP_SETS)[number];
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -207,6 +212,25 @@ function formatsOn(env: Env): boolean {
   throw new Error(`${PREFIX}FORMATS must be "on" or "off", not "${raw}".`);
 }
 
+/** "gating", "formats" and "hard", some or all, separated by commas; all by default. */
+function dumpSets(env: Env): DumpSet[] {
+  const raw = value(env, "DUMP_SETS");
+  if (raw === null) return [...DUMP_SETS];
+  return [
+    ...new Set(
+      raw.split(",").map((each) => {
+        const found = DUMP_SETS.find((set) => set === each.trim());
+        if (!found) {
+          throw new Error(
+            `${PREFIX}DUMP_SETS takes some of ${DUMP_SETS.join(", ")}, not "${each.trim()}".`,
+          );
+        }
+        return found;
+      }),
+    ),
+  ];
+}
+
 export function readConfig(root: string, env: Env = process.env): EvalConfig {
   return {
     root,
@@ -221,5 +245,6 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,
     questionIds: questionIds(env),
     formats: formatsOn(env),
+    dumpSets: dumpSets(env),
   };
 }
