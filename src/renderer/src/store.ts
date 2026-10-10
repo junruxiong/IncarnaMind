@@ -786,6 +786,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       const paths = await files.pickDocuments();
       if (paths.length === 0) return "cancelled";
       const result = await core.addDocuments(paths);
+      documentUpdates.flush();
       set((state) => ({
         documents: result.documents.reduce(upsert, state.documents),
       }));
