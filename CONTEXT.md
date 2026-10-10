@@ -116,6 +116,84 @@ _Avoid_: tool script, code execution
 A Skill that ships with IncarnaMind and is updated with it: summarise a Document, a literature review across Documents, and a Mind to report. The User can turn one off, remove it and restore it, or duplicate it as their own, but not change it.
 _Avoid_: default Skill, system Skill
 
+### Changes
+
+**Proposal**:
+A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, and it is out of date once the text it changes has changed.
+_Avoid_: suggestion, edit, draft, diff
+
+**Checkpoint**:
+A saved copy of a Mind as it was just before an AI change, which the User can compare with another Checkpoint or restore from. Restoring one comes back as a Proposal, not as an overwrite.
+_Avoid_: snapshot, version, backup, undo
+
+### Checks
+
+**Citation check**:
+The test of whether a Citation's quote is found in the text at its Location. Its only failing result is quote not found.
+_Avoid_: validation, verification
+
+**Quote not found**:
+The result of a Citation check when the Citation's quote is not in the text at its Location. It says nothing about whether the claim is true. "Not found" is used only for this.
+_Avoid_: broken, invalid, failed
+
+**Unsupported**:
+The result for a sentence when Find support, Verify or note health finds nothing in the Documents that backs it up. It is not a finding that the sentence is wrong.
+_Avoid_: not found, unverified, false
+
+**Contradicted**:
+The result for a sentence when Verify or contradiction watch finds a Passage that says the opposite. It is not the same as unsupported, where nothing is found either way.
+_Avoid_: wrong, conflict, false
+
+**Needs re-check**:
+A check result whose sentence, evidence or scope has changed since it was made, so it is no longer known to hold.
+_Avoid_: stale, outdated, expired
+
+**Mark**:
+The small sign beside a sentence that shows its check result: found, quote not found, unsupported or contradicted. In a Meeting, a Mark is also a flag the User sets at a moment in the Transcript.
+_Avoid_: badge, flag, tick
+
+### Tasks
+
+**Run**:
+One go of the Tool-calling loop, with its instructions, Tools and model. An Answer is one kind of Run; a Task is another.
+_Avoid_: job, execution, session
+
+**Task**:
+A Run that goes on in the background, keeps its place if IncarnaMind is quit, and can be steered, paused or scheduled. Its results come back as Proposals or as new Documents.
+_Avoid_: job, agent, process, background Answer
+
+**Comparison table**:
+A table in a Mind with one Document in each row and one Question in each column, whose cells are cited Answers. The command that builds one is Compare Documents.
+_Avoid_: grid, spreadsheet
+
+**Memory**:
+What IncarnaMind has been asked to remember about the User, kept only when the User says so and open to read, change and delete.
+_Avoid_: history, profile, learned preferences
+
+### Meetings
+
+**Meeting**:
+A conversation the User records with the microphone and the computer's sound, which becomes a Transcript and the Notes written during it.
+_Avoid_: call, recording, session
+
+**Transcript**:
+The words of a Meeting, in order and with times, kept as a Document so that a Citation can point at it. Its Location is a range of time.
+_Avoid_: captions, subtitles, minutes
+
+**Speaker**:
+A person in a Transcript who is told apart from the others. A Speaker is named by the User, and a Citation to a Transcript names who said the quote.
+_Avoid_: voice, participant, user
+
+### Files
+
+**Granted folder**:
+A folder the User has allowed an Answer or a Task to read, once. It is not a Linked folder: its files do not become Documents unless the User keeps them.
+_Avoid_: shared folder, workspace, permission
+
+**Output location**:
+The folder the User picks for the files IncarnaMind creates, such as exports and Documents a Task saves. IncarnaMind writes nowhere else without asking.
+_Avoid_: export folder, downloads, save path
+
 ### People
 
 **User**:
