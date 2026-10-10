@@ -53,8 +53,8 @@ const isHidden = (window: Page) =>
 /** The View menu's item for the sidebar, as the app's menu has it. */
 function viewMenuLabels(app: ElectronApplication): Promise<string[]> {
   return app.evaluate(({ Menu }) => {
-    const view = Menu.getApplicationMenu()?.items.find(
-      (item) => item.label === "View" || item.label === "显示",
+    const view = Menu.getApplicationMenu()?.items.find((item) =>
+      ["View", "显示", "查看"].includes(item.label),
     );
     return view?.submenu?.items.map((item) => item.label) ?? [];
   });
@@ -62,8 +62,8 @@ function viewMenuLabels(app: ElectronApplication): Promise<string[]> {
 
 function clickViewMenu(app: ElectronApplication, label: string): Promise<void> {
   return app.evaluate(({ Menu }, wanted) => {
-    const view = Menu.getApplicationMenu()?.items.find(
-      (item) => item.label === "View" || item.label === "显示",
+    const view = Menu.getApplicationMenu()?.items.find((item) =>
+      ["View", "显示", "查看"].includes(item.label),
     );
     view?.submenu?.items.find((item) => item.label === wanted)?.click();
   }, label);
@@ -144,6 +144,10 @@ test("a hidden sidebar peeks at the left edge, and keyboard focus shows it", asy
   await window.keyboard.press(`${COMMAND}+Backslash`);
   await expect.poll(() => isHidden(window)).toBe(true);
   const panel = window.getByTestId("sidebar-panel");
+  // It slides away over 160ms: until it has, it covers the left edge the pointer goes to.
+  await panel.evaluate((element) =>
+    Promise.all(element.getAnimations().map((animation) => animation.finished)),
+  );
 
   // The pointer slides to the left edge: the sidebar comes out over the content.
   await window.mouse.move(600, 300);

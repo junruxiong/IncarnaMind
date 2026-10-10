@@ -295,12 +295,22 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     });
     const reviewHead = byName("Needs review").locator(":scope > div");
     await expect(reviewHead.getByTestId("tag-dot")).toHaveCount(0);
+    // Its edge is 1.5px, which a screen that isn't Retina (CI's) draws as 1px: borders are
+    // drawn in whole device pixels.
+    const edge = await window.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.style.border = "1.5px solid";
+      document.body.append(probe);
+      const width = Number.parseFloat(getComputedStyle(probe).borderTopWidth);
+      probe.remove();
+      return width;
+    });
     expect(await reviewHead.getByTestId("review-ring").locator("span").evaluate(dotShape)).toEqual({
       width: 9,
       height: 9,
       round: true,
       filled: false,
-      border: 1.5,
+      border: edge,
     });
     expect(
       await reviewHead
@@ -434,7 +444,7 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     // In Chinese.
     await setLanguage(window, "zh-CN");
     await expect(browse).toHaveAccessibleName("浏览文档");
-    await expect(views).toHaveText(["文件夹", "标签", "来源位置"]);
+    await expect(views).toHaveText(["文件夹", "标签", "文件位置"]);
     await expect(byName("待确认")).toHaveCount(1);
     await slideAndClick(window, tagList.getByRole("button", { name: "展开 Report" }));
     await expect(tagList.getByRole("button", { name: "收起 Report" })).toBeVisible();
