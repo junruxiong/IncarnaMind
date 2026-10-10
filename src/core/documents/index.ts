@@ -64,6 +64,7 @@ import {
   fuseRankingScores,
   fuseRankings,
   HYBRID_CANDIDATES,
+  keywordOnlyPassages,
   keywordSearch,
   passagesBySeq,
   passagesInWindow,
@@ -1162,19 +1163,22 @@ export function createDocuments(options: DocumentsOptions) {
 
   /**
    * Keyword search's and vector search's rankings of the live Passages, each
-   * `listed` long, copies of one file merged (see `distinctPassages`). Vector
-   * search's is empty while the embedding model can't embed the query.
+   * `listed` long, copies of one file merged (see `distinctPassages`), and
+   * the Passages in keyword search's that have no vector, for fusion (see
+   * `fuseRankingScores`). Vector search's is empty while the embedding model
+   * can't embed the query.
    */
   async function rankings(
     query: string,
     listed: number,
     documentIds: readonly string[] | undefined,
-  ): Promise<number[][]> {
+  ): Promise<{ lists: number[][]; keywordOnly: Set<number> }> {
     const scope = searchScope(documentIds);
     const vector = await queryVector(query, "hybrid");
     const keyword = keywordSearch(db, query, listed, scope);
     const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
-    return distinctPassages(db, [keyword, similar]);
+    const lists = distinctPassages(db, [keyword, similar]);
+    return { lists, keywordOnly: keywordOnlyPassages(db, lists[0] ?? []) };
   }
 
   /** The Passages of these fused hits, in their order, each with its fused score. */
@@ -1193,8 +1197,12 @@ export function createDocuments(options: DocumentsOptions) {
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
-    const lists = await rankings(query, Math.max(limit, HYBRID_CANDIDATES), documentIds);
-    return scored(fuseRankingScores(lists, limit));
+    const { lists, keywordOnly } = await rankings(
+      query,
+      Math.max(limit, HYBRID_CANDIDATES),
+      documentIds,
+    );
+    return scored(fuseRankingScores(lists, limit, keywordOnly));
   }
 
   /**
@@ -1208,10 +1216,16 @@ export function createDocuments(options: DocumentsOptions) {
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
-    const lists = await rankings(query, Math.max(perList, HYBRID_CANDIDATES), documentIds);
+    const { lists, keywordOnly } = await rankings(
+      query,
+      Math.max(perList, HYBRID_CANDIDATES),
+      documentIds,
+    );
     const chosen = new Set(topsOfEach(lists, perList));
     return scored(
-      fuseRankingScores(lists, Number.POSITIVE_INFINITY).filter((hit) => chosen.has(hit.seq)),
+      fuseRankingScores(lists, Number.POSITIVE_INFINITY, keywordOnly).filter((hit) =>
+        chosen.has(hit.seq),
+      ),
     );
   }
 
@@ -1578,7 +1592,8 @@ export function createDocuments(options: DocumentsOptions) {
       const similar = vector
         ? vectors.search(vector, HYBRID_CANDIDATES, scope).map((hit) => hit.seq)
         : [];
-      return passagesBySeq(db, fuseRankings(distinctPassages(db, [keyword, similar]), limit));
+      const lists = distinctPassages(db, [keyword, similar]);
+      return passagesBySeq(db, fuseRankings(lists, limit, keywordOnlyPassages(db, lists[0] ?? [])));
     },
 
     /** Linked folders (see ./library). */

@@ -25,10 +25,11 @@ import type { Database } from "../storage";
  * alone is measured for them (ADR-0009, 2026-10-10): Excel, CSV and
  * PowerPoint. Their Documents go through the usual statuses, and the
  * embedding queue makes each ready at its turn without embedding anything;
- * and vector search holds none of their vectors (any stored before stay
- * unused). The one place to widen it, up to every kind. To take a kind out
- * again, raise its `CURRENT_SINCE` too, so its Documents are processed, and
- * embedded, again.
+ * vector search holds none of their vectors (any stored before stay unused);
+ * and hybrid search fuses their Passages as if vector search had ranked them
+ * as keyword search did (`fuseRankingScores`). The one place to widen it, up
+ * to every kind. To take a kind out again, raise its `CURRENT_SINCE` too, so
+ * its Documents are processed, and embedded, again.
  */
 export const KEYWORD_ONLY_KINDS: ReadonlySet<DocumentKind> = new Set<DocumentKind>([
   "xlsx",

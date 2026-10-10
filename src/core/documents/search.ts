@@ -1,12 +1,14 @@
 /**
  * Searching Passages (ADR-0009). Keyword search runs FTS5 over each Passage's
  * segmented words (see ./keywords); vector search scans the in-memory vectors
- * (see ./vectors); hybrid search fuses the two by reciprocal rank fusion. The
- * search Tool (#30) and Search scopes (#36) build on these.
+ * (see ./vectors); hybrid search fuses the two by reciprocal rank fusion,
+ * counting a Passage with no vector by its keyword rank for both. The search
+ * Tool (#30) and Search scopes (#36) build on these.
  */
 import type { DocumentKind, PassageSearchResult } from "../api";
 import type { Database } from "../storage";
 import { keywordQuery } from "./keywords";
+import { KEYWORD_ONLY_KINDS, keywordOnlyKindsParam } from "./vectors";
 
 /** Reciprocal rank fusion's k: a Passage at rank r (from 1) in a list scores 1 / (k + r). */
 const RRF_K = 60;
@@ -94,19 +96,44 @@ export interface ScoredSeq {
 }
 
 /**
+ * Of these Passages, those that have no vector because of their Document's
+ * kind (`KEYWORD_ONLY_KINDS`): only keyword search can rank them.
+ */
+export function keywordOnlyPassages(db: Database, seqs: readonly number[]): Set<number> {
+  if (seqs.length === 0 || KEYWORD_ONLY_KINDS.size === 0) return new Set();
+  const rows = db.all<{ seq: number }>(
+    `SELECT p.seq FROM passages p JOIN documents d ON d.id = p.document_id
+     WHERE p.seq IN (SELECT value FROM json_each(?))
+       AND d.kind IN (SELECT value FROM json_each(?))`,
+    [JSON.stringify(seqs), keywordOnlyKindsParam()],
+  );
+  return new Set(rows.map((row) => row.seq));
+}
+
+/**
  * Fuses ranked lists of `seq`s by reciprocal rank fusion: the best `limit`,
  * best first, with their fused scores.
+ *
+ * `keywordOnly` are Passages that only the first list, keyword search's, can
+ * hold (see `keywordOnlyPassages`): their rank there counts once for each
+ * list that isn't empty, as if vector search had ranked them as keyword
+ * search did, so having no vector neither drops them nor ranks them below
+ * Passages both lists hold. While vector search returns nothing (the query
+ * couldn't be embedded), nothing changes.
  */
 export function fuseRankingScores(
   rankings: readonly (readonly number[])[],
   limit: number,
+  keywordOnly: ReadonlySet<number> = new Set(),
 ): ScoredSeq[] {
   const scores = new Map<number, number>();
-  for (const ranking of rankings) {
+  const lists = rankings.filter((ranking) => ranking.length > 0).length;
+  rankings.forEach((ranking, list) => {
     ranking.forEach((seq, index) => {
-      scores.set(seq, (scores.get(seq) ?? 0) + 1 / (RRF_K + index + 1));
+      const counted = list === 0 && keywordOnly.has(seq) ? lists : 1;
+      scores.set(seq, (scores.get(seq) ?? 0) + counted / (RRF_K + index + 1));
     });
-  }
+  });
   // Ties keep the order of first appearance: the keyword list's order comes first.
   return [...scores.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -115,8 +142,12 @@ export function fuseRankingScores(
 }
 
 /** Fuses ranked lists of `seq`s by reciprocal rank fusion: the best `limit`, best first. */
-export function fuseRankings(rankings: readonly (readonly number[])[], limit: number): number[] {
-  return fuseRankingScores(rankings, limit).map((hit) => hit.seq);
+export function fuseRankings(
+  rankings: readonly (readonly number[])[],
+  limit: number,
+  keywordOnly?: ReadonlySet<number>,
+): number[] {
+  return fuseRankingScores(rankings, limit, keywordOnly).map((hit) => hit.seq);
 }
 
 interface ResultRow {
