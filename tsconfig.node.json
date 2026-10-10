@@ -12,6 +12,7 @@
     "tests/**/*",
     "e2e/**/*",
     "eval/**/*.ts",
+    "scripts/**/*.ts",
     "electron.vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"

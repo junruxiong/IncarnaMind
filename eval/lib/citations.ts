@@ -31,6 +31,7 @@ import {
 } from "../../src/core";
 import { outputTokensFor } from "../../src/core/providers/ollamaModels";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
+import { SIMPLIFIED } from "../../src/shared/hanVariants";
 import { normaliseText } from "../../src/shared/text";
 import type { ChatSettings, EvalConfig } from "./config";
 import type { EvalLanguage, EvalQuestion } from "./evaluationSet";
@@ -244,11 +245,16 @@ const F_LIGATURE = /f(?:f[il]?|[il])/g;
  * and a quote of the page as it shows is still on it.
  */
 function looseText(text: string): string {
-  let loose = normaliseText(text)
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
+  let loose = [
+    ...normaliseText(text)
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]/gu, ""),
+  ]
+    // As the check reads them: traditional Chinese characters as simplified ones.
+    .map((char) => SIMPLIFIED.get(char) ?? char)
+    .join("");
   // Until nothing changes: "fifty" reads "ffty", then "fty", as a lost ligature's "ffty" does.
   for (let before = ""; before !== loose; ) {
     before = loose;
