@@ -5,17 +5,16 @@
  * the expected pages, and (c) contains the expected quote, matched as the
  * Citation check matches quotes (both normalised by the shared normaliser).
  *
- * Reranked modes: the candidates the search Tool hands a reranker (keyword
- * search's top 10 and vector search's top 10, each Passage once, built with
- * the Tool's own `topsOfEach`), reordered by a reranking model (see
- * ./rerank), as the search Tool does. The built-in reranking model's is the
- * gating mode, since the search Tool reranks with it by default; the other
- * candidates', and the plain search modes, are reported only.
+ * Keyword + rerank, the gating mode: keyword search's top 20, reordered by a
+ * reranking model (see ./rerank), as the search Tool does by default, with
+ * embeddings off (ADR-0009, 2026-10-10). The built-in reranking model's is
+ * the gate; the other candidates' are reported only.
  *
- * Keyword + rerank: the same reranking models over keyword search's top 20
- * alone, with no vector search, as many candidates as the most the search
- * Tool hands one. Reported next to the others, never gating: it measures
- * whether reranking needs vector search's candidates at all.
+ * Hybrid + rerank: what the search Tool hands a reranker while the User has
+ * embeddings on (keyword search's top 10 and vector search's top 10, each
+ * Passage once, built with the Tool's own `topsOfEach`), reordered by the
+ * same models. Reported next to the gate with the plain search modes, never
+ * gating: it measures what embeddings add.
  *
  * Also reported:
  * - A translated second query: a cross-lingual Question's own search, and a
@@ -51,23 +50,23 @@ export const RANK_DEPTH = 20;
 /** A reranker sees this many of keyword search's best Passages, and of vector search's: the search Tool's. */
 export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
 
-/** Keyword + rerank sees this many of keyword search's best: as many as the most the search Tool hands a reranker. */
+/** Keyword + rerank sees this many of keyword search's best: the search Tool's, with embeddings off. */
 export const KEYWORD_RERANK_DEPTH = 2 * RERANK_PER_LIST;
 
 export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
-/** Hybrid search: what the search Tool runs before it reranks, and the second query's search. */
+/** Hybrid search: what the search Tool runs with embeddings on before it reranks, and the second query's search. */
 export const HYBRID: SearchMode = "hybrid";
 
 /**
- * What a reranked mode reranks: what the search Tool hands a reranker
- * ("hybrid": keyword search's top 10 and vector search's top 10), or keyword
- * search's top 20 alone ("keyword").
+ * What a reranked mode reranks: keyword search's top 20 alone ("keyword"),
+ * what the search Tool hands a reranker by default, or keyword search's top
+ * 10 and vector search's top 10 ("hybrid"), as it does with embeddings on.
  */
 export type RerankedSearch = "hybrid" | "keyword";
 
-/** The reranked searches, in the order the report lists them for each reranking model. */
-export const RERANKED_SEARCHES: readonly RerankedSearch[] = ["hybrid", "keyword"];
+/** The reranked searches, in the order the report lists them for each reranking model: the gate's first. */
+export const RERANKED_SEARCHES: readonly RerankedSearch[] = ["keyword", "hybrid"];
 
 /**
  * A mode of the report: one of the core's search modes, or a reranked mode:
@@ -95,19 +94,20 @@ export const rerankedLabel = (search: RerankedSearch, modelName: string) =>
   `${search} + ${modelName}`;
 
 /**
- * The gating mode: what the search Tool runs by default, hybrid search
- * reranked by the built-in reranking model (#31).
+ * The gating mode: what the search Tool runs by default, keyword search's top
+ * 20 reranked by the built-in reranking model, with embeddings off (ADR-0009,
+ * 2026-10-10). Before, the gate was hybrid search reranked (#31).
  */
-export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
+export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL, "keyword");
 
 /** The gating mode, as people read it. */
-export const GATING_LABEL = rerankedLabel("hybrid", BUILT_IN_RERANKING_MODEL.name);
+export const GATING_LABEL = rerankedLabel("keyword", BUILT_IN_RERANKING_MODEL.name);
 
-/** Keyword + rerank with the built-in reranking model: reported next to the gating mode, never gating. */
-export const KEYWORD_RERANK_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL, "keyword");
+/** Hybrid + rerank with the built-in reranking model, as with embeddings on: reported next to the gate, never gating. */
+export const HYBRID_RERANK_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
 
-/** Keyword + rerank with the built-in reranking model, as people read it. */
-export const KEYWORD_RERANK_LABEL = rerankedLabel("keyword", BUILT_IN_RERANKING_MODEL.name);
+/** Hybrid + rerank with the built-in reranking model, as people read it. */
+export const HYBRID_RERANK_LABEL = rerankedLabel("hybrid", BUILT_IN_RERANKING_MODEL.name);
 
 /** The v1 design's bar: 80% of the gating Questions overall and in each language (32 of 40, and 16 of 20 per language, with today's set). */
 const RETRIEVAL_TARGET = { share: 0.8 } as const;
@@ -484,7 +484,7 @@ export function retrievalFailures(summary: ModeSummary | undefined): string[] {
   ] as const) {
     if (!meets(count)) {
       failures.push(
-        `Retrieval (${GATING_LABEL}, the built-in models), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
+        `Retrieval (${GATING_LABEL}, the built-in reranking model), ${label}: ${count.hits} of ${count.total}, needs ${need(count)}.`,
       );
     }
   }

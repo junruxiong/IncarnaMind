@@ -14,7 +14,7 @@ import { type EvalReport, terminalSummary, writeReports } from "../../eval/lib/r
 import {
   GATING_MODE,
   HYBRID,
-  KEYWORD_RERANK_MODE,
+  HYBRID_RERANK_MODE,
   type QuestionResult,
   type RetrievalRun,
   summarise,
@@ -53,7 +53,7 @@ const SET: EvaluationSet = {
   ],
 };
 
-/** Hits in the default mode (reranked), in plain hybrid search, and in keyword + rerank. */
+/** Hits in the default mode (keyword + rerank), in plain hybrid search, and in hybrid + rerank. */
 const HITS: Record<string, [boolean, boolean, boolean]> = {
   "ppt-en-01": [true, true, true],
   "ppt-zh-01": [false, true, false],
@@ -65,7 +65,7 @@ const HITS: Record<string, [boolean, boolean, boolean]> = {
 };
 
 const RESULTS: QuestionResult[] = SET.questions.map((each) => {
-  const [reranked, hybrid, keyword] = HITS[each.id] as [boolean, boolean, boolean];
+  const [reranked, hybrid, hybridReranked] = HITS[each.id] as [boolean, boolean, boolean];
   const result = (hit: boolean) => ({ hit, rank: hit ? 1 : null, top: [] });
   return {
     id: each.id,
@@ -75,7 +75,7 @@ const RESULTS: QuestionResult[] = SET.questions.map((each) => {
     modes: {
       [GATING_MODE]: result(reranked),
       [HYBRID]: result(hybrid),
-      [KEYWORD_RERANK_MODE]: result(keyword),
+      [HYBRID_RERANK_MODE]: result(hybridReranked),
     },
   };
 });
@@ -159,7 +159,7 @@ describe("The every-format set's report", () => {
         zh: { hits: 1, total: 1 },
         all: { hits: 2, total: 3 },
       },
-      [KEYWORD_RERANK_MODE]: {
+      [HYBRID_RERANK_MODE]: {
         en: { hits: 1, total: 2 },
         zh: { hits: 0, total: 1 },
         all: { hits: 1, total: 3 },
@@ -236,7 +236,7 @@ describe("The every-format set's report", () => {
     const lines = terminalSummary(report, "/repo/eval/results/x", "/repo").split("\n");
 
     expect(lines.find((line) => line.trim().startsWith("PowerPoint"))).toMatch(
-      /English 2\/2 +Chinese 0\/1 +known gaps 0\/0; keyword \+ .+ 1\/3$/,
+      /English 2\/2 +Chinese 0\/1 +known gaps 0\/0; hybrid \+ .+ 1\/3$/,
     );
     expect(lines.find((line) => line.trim().startsWith("PDF"))).toContain("known gaps 0/1");
     expect(lines.find((line) => line.trim().startsWith("Cross-lingual"))).toContain("1/1");
