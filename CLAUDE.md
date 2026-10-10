@@ -44,5 +44,6 @@ use and easy to pick up, not fewer features. Edit in place, drag with a non-drag
 alternative, never replace the Mind the User is in, Undo instead of confirmations,
 one right-click menu order, one selection model, keyboard and ⌘K for everything,
 feedback within 100 ms, layouts that hold at every width in English and Chinese. A UI
-pull request ticks the template's interaction checklist and shows before and after
-screenshots. When briefing another agent on UI work, pass these rules on.
+pull request ticks the template's interaction checklist, shows before and after
+screenshots, and sets the built screen beside the design board it implements, explaining
+every difference. When briefing another agent on UI work, pass these rules on.

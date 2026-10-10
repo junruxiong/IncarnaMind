@@ -19,10 +19,12 @@ Each rule can be checked. A UI change that breaks one says why in its pull reque
 9. **One way to do each thing.** One primary action per screen. Advanced choices live behind ⋯ or in Settings. A new setting needs a reason in the pull request; prefer a good default.
 10. **Say it plainly.** Use the words in `CONTEXT.md`. Say what happened and what the User can do next. A problem stays on screen until dismissed and offers one action (see #157).
 11. **Hold the layout.** Every screen works at every window size the app supports, with and without the viewer open, in English and in Chinese. Text wraps by word, never by letter, and long names truncate with the full name in a tooltip.
-12. **Use the shared building blocks.** Where the app has one (selection, drag and drop, undo, the right-click menu registry, in-place rename, the command list behind ⌘K), use it rather than building a one-off, so the same gesture does the same thing everywhere.
+12. **Match the design.** Every UI ticket names its design boards (the design canvas's main page, "IncarnaMind: all screens"). Build to them: layout, labels, chips, states. Where the built screen differs, say why in the pull request, or fix it.
+13. **Use the shared building blocks.** Where the app has one (selection, drag and drop, undo, the right-click menu registry, in-place rename, the command list behind ⌘K), use it rather than building a one-off, so the same gesture does the same thing everywhere.
 
 ## In a pull request that changes UI
 
 - Tick the interaction checklist in the pull request template.
 - Add before and after screenshots, at a narrow and a wide window, in English and Chinese where text changed.
+- Put a screenshot of the built screen beside the design board it implements, and list every difference with its reason.
 - Test it like a person: with the mouse and the keyboard, in the built app, not only in unit tests.
