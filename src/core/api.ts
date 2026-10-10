@@ -2450,6 +2450,13 @@ export interface CoreApi {
    */
   addDocuments(paths: string[]): Promise<AddDocumentsResult>;
   /**
+   * Keeps text the User pasted as a Markdown Document, so Answers can cite it.
+   * The file is written in the data folder ("Saved text"), never next to the
+   * User's files, and added on its own like any file (no Folder). A name taken
+   * already gets a number. Throws InvalidInputError for text with no words.
+   */
+  saveTextAsDocument(input: { name: string; text: string }): Promise<Document>;
+  /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its
    * sub-Folders if asked; with a Tag, only the Documents carrying it; with a
@@ -3091,6 +3098,7 @@ const methods: Record<CoreApiMethod, true> = {
   getSettings: true,
   updateSettings: true,
   addDocuments: true,
+  saveTextAsDocument: true,
   listDocuments: true,
   renameDocument: true,
   deleteDocument: true,
