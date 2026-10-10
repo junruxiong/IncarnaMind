@@ -7,12 +7,20 @@ import {
   expect,
   type Locator,
   type Page,
+  test,
 } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
 const appDir = resolve(__dirname, "..");
+
+/**
+ * The apps this test launched that are still open, by the data folder each
+ * runs on: `removeDataFolder` closes them, keeping a picture of the window if
+ * the test failed.
+ */
+const openApps = new Map<ElectronApplication, string>();
 
 export interface RunningApp {
   app: ElectronApplication;
@@ -78,6 +86,8 @@ export async function launchApp(
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
+  openApps.set(app, dataDir);
+  app.on("close", () => openApps.delete(app));
   const window = await app.firstWindow();
   await window.getByTestId("new-mind").waitFor();
   if (!keepWindow) {
@@ -493,5 +503,24 @@ export async function clickEmptyLine(line: Locator): Promise<void> {
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
-export const removeDataFolder = (dataDir: string) =>
-  rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
+/**
+ * Removes a data folder, after closing an app the test left open on it. If
+ * the test failed, a screenshot of that app's window as the test left it is
+ * kept first, as app-window.png with the test's results, which CI uploads
+ * (Playwright's own screenshots and traces leave an Electron app's window out).
+ */
+export async function removeDataFolder(dataDir: string): Promise<void> {
+  const info = test.info();
+  for (const [app, folder] of [...openApps]) {
+    if (folder !== dataDir) continue;
+    openApps.delete(app);
+    const window = app.windows()[0];
+    if (info.status !== info.expectedStatus && window) {
+      const path = info.outputPath("app-window.png");
+      const shot = await window.screenshot({ path }).catch(() => undefined);
+      if (shot) await info.attach("app-window", { path, contentType: "image/png" });
+    }
+    await app.close().catch(() => undefined);
+  }
+  await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
+}
