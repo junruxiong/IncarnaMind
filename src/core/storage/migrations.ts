@@ -665,6 +665,18 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 30,
+    description: "A provider is one per catalog provider, server and endpoint",
+    // Keys and model lists differ by region (Qwen's Beijing and Singapore, Kimi's .cn and .ai),
+    // so each endpoint of a hosted provider is its own row with its own key.
+    sql: `
+      DROP INDEX chat_providers_by_server;
+      CREATE UNIQUE INDEX chat_providers_by_server
+        ON chat_providers (coalesce(catalog_id, kind), coalesce(base_url, ''), coalesce(endpoint, ''))
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

@@ -30,6 +30,7 @@ import {
   startingSupport,
 } from "./capabilities";
 import { catalogFacts, catalogProviderOfKind, modelsProviderOfKind } from "./catalog";
+import { endpointOf } from "./catalog/providers";
 import { isChatGptPlanModel } from "./chatgpt/codexEndpoint";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import {
@@ -76,6 +77,8 @@ const ROW_COLUMNS = "id, kind, base_url, catalog_id, endpoint";
 interface ParsedServer {
   kind: ChatProviderKind;
   baseUrl: string | null;
+  /** A hosted provider's endpoint (its region) id; null for a server the User gives. */
+  endpoint: string | null;
   /** Its catalog provider's id, or null. */
   catalogId: string | null;
 }
@@ -124,11 +127,32 @@ function parseServer(input: Record<string, unknown>): ParsedServer {
   if (!isChatProviderKind(input.kind)) {
     throw new InvalidInputError(`Unknown chat provider "${String(input.kind)}".`);
   }
+  const provider = catalogProviderOfKind(input.kind);
   return {
     kind: input.kind,
     baseUrl: baseUrlFor(input.kind, input.baseUrl),
-    catalogId: catalogProviderOfKind(input.kind)?.id ?? null,
+    endpoint: parseEndpoint(input.kind, input.endpoint),
+    catalogId: provider?.id ?? null,
   };
+}
+
+/** A hosted provider's endpoint: the one given, which it must have, else its first. Null for a server the User gives. */
+function parseEndpoint(kind: ChatProviderKind, value: unknown): string | null {
+  const provider = catalogProviderOfKind(kind);
+  const given = typeof value === "string" && value !== "" ? value : undefined;
+  if (value !== undefined && value !== null && typeof value !== "string") {
+    throw new InvalidInputError("The endpoint must be text.");
+  }
+  if (!provider || provider.endpoints.length === 0) {
+    if (given) {
+      throw new InvalidInputError(`${provider?.name.en ?? kind} has no endpoints to choose.`);
+    }
+    return null;
+  }
+  if (given && !provider.endpoints.some((each) => each.id === given)) {
+    throw new InvalidInputError(`${provider.name.en} has no endpoint "${given}".`);
+  }
+  return endpointOf(provider, given)?.id ?? null;
 }
 
 /** What Ollama says of a model, as the server's word on it: whether it calls Tools, and how it cites. */
@@ -195,12 +219,13 @@ export function createChat(options: {
       ),
     );
 
-  const rowByServer = ({ kind, baseUrl, catalogId }: ParsedServer) =>
+  const rowByServer = ({ kind, baseUrl, endpoint, catalogId }: ParsedServer) =>
     usable(
       db.get<ProviderRow>(
         `SELECT ${ROW_COLUMNS} FROM chat_providers
-         WHERE coalesce(catalog_id, kind) = ? AND coalesce(base_url, '') = ? AND deleted_at IS NULL`,
-        [catalogId ?? kind, baseUrl ?? ""],
+         WHERE coalesce(catalog_id, kind) = ? AND coalesce(base_url, '') = ?
+           AND coalesce(endpoint, '') = ? AND deleted_at IS NULL`,
+        [catalogId ?? kind, baseUrl ?? "", endpoint ?? ""],
       ),
     );
 
@@ -229,7 +254,10 @@ export function createChat(options: {
   ): ModelCapabilities =>
     resolveCapabilities({
       server: server ?? modelLists.get(listKey(row))?.models.find((m) => m.id === modelId)?.facts,
-      catalog: catalogFacts(modelsProviderOfKind(row.kind as ChatProviderKind), modelId),
+      catalog: catalogFacts(
+        modelsProviderOfKind(row.kind as ChatProviderKind, row.endpoint),
+        modelId,
+      ),
     });
 
   /**
@@ -243,6 +271,7 @@ export function createChat(options: {
     apiKey: string | null,
     modelId: string,
     profile: OllamaModelProfile | null = null,
+    thinking?: "off",
   ): ChatModelSpec => {
     const { kind } = server;
     if (kind === "chatgpt") {
@@ -255,9 +284,27 @@ export function createChat(options: {
       };
     }
     const baseUrl = endpointUrl(kind, server.endpoint) ?? server.baseUrl;
-    return kind === "ollama"
-      ? { kind, baseUrl, apiKey, modelId, ollama: profile?.settings ?? DEFAULT_OLLAMA_SETTINGS }
-      : { kind, baseUrl, apiKey, modelId };
+    if (kind === "ollama") {
+      return {
+        kind,
+        baseUrl,
+        apiKey,
+        modelId,
+        ollama: profile?.settings ?? DEFAULT_OLLAMA_SETTINGS,
+      };
+    }
+    return {
+      kind,
+      baseUrl,
+      apiKey,
+      modelId,
+      // Only a provider's other regions say which they are; its first is the default.
+      ...(server.endpoint &&
+        server.endpoint !== catalogProviderOfKind(kind)?.endpoints[0]?.id && {
+          endpoint: server.endpoint,
+        }),
+      ...(thinking && { thinking }),
+    };
   };
 
   /** The ChatGPT plan takes only the models its endpoint accepts, and only while it's turned on. */
@@ -369,12 +416,10 @@ export function createChat(options: {
         if (existing) {
           db.run("UPDATE chat_providers SET updated_at = ? WHERE id = ?", [at, id]);
         } else {
-          // A hosted provider starts on its first endpoint.
-          const endpoint = catalogProviderOfKind(server.kind)?.endpoints[0]?.id ?? null;
           db.run(
             `INSERT INTO chat_providers (id, kind, base_url, catalog_id, endpoint, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [id, server.kind, server.baseUrl, server.catalogId, endpoint, at, at],
+            [id, server.kind, server.baseUrl, server.catalogId, server.endpoint, at, at],
           );
         }
         settings.update({ user: { chatModel: { providerId: id, modelId } } });
@@ -527,7 +572,7 @@ export function createChat(options: {
       }
 
       try {
-        const service = serviceFor(server.kind, server.baseUrl);
+        const service = serviceFor(server.kind, server.baseUrl, server.endpoint);
         if (service) await consent.ensure("chat", service);
         // A model in Ollama is tested with the settings Answers use, so it stays loaded for them.
         const profile = await profileFor(server.kind, server.baseUrl, modelId);
@@ -563,7 +608,10 @@ export function createChat(options: {
       const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
       const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
       checkCanChat(profile, modelId);
-      const model = createModel(specFor(provider, apiKey, modelId, profile));
+      // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
+      const model = createModel(
+        specFor(provider, apiKey, modelId, profile, flow === "chat" ? undefined : "off"),
+      );
       const row: ProviderRow = {
         id: provider.id,
         kind: provider.kind,

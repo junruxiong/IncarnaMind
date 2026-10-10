@@ -40,7 +40,7 @@ For anyone who writes from documents: papers, reports, contracts, notes.
 - **A notebook, not a chat.** You write in a *Mind*, a notebook for one topic or project. Ask a question anywhere in it, and the answer lands right there in your draft, as text you can edit.
 - **Your files stay where they are.** Point IncarnaMind at the folders you already use, like a folder of papers or contracts, or Zotero's storage folder. It reads your files in place, never moves, renames or changes them, and keeps up as they change.
 - **The files you actually use.** PDF, Word, PowerPoint, Excel, CSV, Markdown and plain text.
-- **Your choice of AI.** Use your own OpenAI, Anthropic or Google key, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
+- **Your choice of AI.** Use your own key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, any OpenAI-compatible server, or a free local model through Ollama, so nothing leaves your computer.
 - **Ready to hand in.** Export to Word with your citations as footnotes, or to Markdown. Citations that didn't pass the check are marked "[unverified]".
 
 ## How it works
@@ -76,7 +76,7 @@ There's no account and no IncarnaMind server.
 | Usage data | Not collected |
 | Crash reports | Off unless you turn them on, and stripped of your content |
 
-The first time IncarnaMind would send anything to an outside service, it shows you what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back. Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI says so.
+The first time IncarnaMind would send anything to an outside service, it shows you what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back. Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI and xAI says so, and requests to OpenRouter ask it to use only providers that keep and train on nothing.
 
 **You stay in control of what runs.** Before a Connector's tool that could change something, or a Skill's script, runs, IncarnaMind asks you first: allow it once, always allow it, or deny it. **Settings → Tools** lists every rule you've set, and you can revoke any of them.
 
@@ -144,7 +144,7 @@ Make it executable: `chmod +x IncarnaMind-*.AppImage`. On Ubuntu 22.04 or later,
 Yes. IncarnaMind is open source under the Apache 2.0 licence. If you use a cloud AI model, you pay that provider for what you use. A local model costs nothing.
 
 **Do I need an API key?**
-No. If [Ollama](https://ollama.com) is running, IncarnaMind can download a local model in one click. Or paste a key from OpenAI, Anthropic or Google, or connect any OpenAI-compatible server.
+No. If [Ollama](https://ollama.com) is running, IncarnaMind can download a local model in one click. Or paste a key from OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, SiliconFlow or OpenRouter, or connect any OpenAI-compatible server.
 
 **Does it work offline?**
 Searching your files does: search works on the words in your files, and the optional meaning-based search (embeddings) is off by default. Answers need an AI model, so with a local model everything works offline.
