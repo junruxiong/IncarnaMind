@@ -2,15 +2,16 @@
  * Word, PowerPoint, Excel and CSV Documents (ADR-0011), end to end: linked,
  * processed, cited by slide, rows and section, opened at each Citation with
  * the quote highlighted and its mark beside it, and exported with each
- * Citation's Location in its footnote.
+ * Citation's Location in its footnote; and a file too large to open, refused.
  *
  * The files are tests/fixtures/formats/ (see tests/core/formats.test.ts). Set
  * INCARNAMIND_SCREENSHOTS to a folder to keep a screenshot of each preview.
  */
-import { copyFile, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, realpath, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import type { TestHooks } from "../src/shared/testHooks";
 import { footnotesOf, part, unzip } from "../tests/helpers/docx";
 import {
   addDocuments,
@@ -529,4 +530,77 @@ test("previews look like the files: a workbook's own styles and panes, a Word fi
   await expect(text).toHaveAttribute("data-view", "formatted");
   await screenshot(window, "markdown-formatted");
   await app.close();
+});
+
+test("a Word file over 500 MB fails as too large to open, in English and Chinese, and a Word file beside it opens as before", async () => {
+  const home = await createDataFolder();
+  const library = join(await realpath(sources), "Library");
+  await mkdir(library, { recursive: true });
+  // Sparse: 500 MB and a byte, with nothing written on disk.
+  const huge = join(library, "Huge.docx");
+  await writeFile(huge, "");
+  await truncate(huge, 500 * 1024 * 1024 + 1);
+  const normal = join(library, FILES[0] as string);
+  await copyFile(join(FIXTURES, FILES[0] as string), normal);
+
+  try {
+    const { app, window } = await launchApp(dataDir, { home });
+    await dismissChatSetup(window);
+    // Dropped on the window (a test can't drop files), as Other Documents.
+    await window.evaluate(
+      async (paths) => {
+        const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
+        if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
+        await hooks.addPaths(paths);
+      },
+      [huge, normal],
+    );
+
+    const items = window.getByTestId("document-list-item");
+    const refused = items.filter({ hasText: "Huge" });
+    const review = items.filter({ hasText: "Coastal Flood Risk Review" });
+    await expect(refused).toHaveAttribute("data-status", "failed", { timeout: 30_000 });
+    await expect(review).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
+    // "Failed" at the row's end; the reason for screen readers, and the limit in its tooltip.
+    const status = refused.getByTestId("document-status");
+    await expect(status.locator("[aria-hidden]")).toHaveText("Failed");
+    await expect(status.locator(".sr-only")).toHaveText("Failed: the file is too large to open");
+    await expect(status).toHaveAttribute(
+      "title",
+      "Failed: the file is too large to open\nToo large to open (limit 500 MB).",
+    );
+    await screenshot(window, "too-large");
+
+    await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: "zh-CN" },
+      }),
+    );
+    await expect(status.locator(".sr-only")).toHaveText("失败：文件太大，无法打开");
+    await expect(status).toHaveAttribute(
+      "title",
+      "失败：文件太大，无法打开\nToo large to open (limit 500 MB).",
+    );
+    await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: "en" },
+      }),
+    );
+
+    // Opened, the viewer says why it can't show it.
+    const viewer = window.getByTestId("viewer");
+    await refused.getByTestId("open-document").click();
+    await expect(viewer.getByRole("alert")).toHaveText(
+      "This Document couldn't be shown: Too large to open (limit 500 MB).",
+      { timeout: 30_000 },
+    );
+    // The Word file beside it is drawn as before.
+    await review.getByTestId("open-document").click();
+    await expect(window.getByTestId("viewer-title")).toHaveText("Coastal Flood Risk Review");
+    await expect(viewer.getByTestId("viewer-docx")).toHaveAttribute("data-rendered", "yes");
+    await expect(viewer.getByTestId("viewer-docx")).toContainText("Coastal Flood Risk Review");
+    await app.close();
+  } finally {
+    await removeDataFolder(home);
+  }
 });

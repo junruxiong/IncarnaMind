@@ -525,6 +525,11 @@ export type DocumentFailureReason =
   | "unreadable"
   | "password-protected"
   /**
+   * A Word, PowerPoint or Excel file too large to open: over 500 MB, or with
+   * parts that inflate past 1 GB together. The message names the limit.
+   */
+  | "too-large"
+  /**
    * No longer given: a file that has gone is a "missing" Document (see
    * `DocumentFileStatus`), not a failed one. Kept so older data still reads.
    */

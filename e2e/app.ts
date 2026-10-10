@@ -36,6 +36,8 @@ export interface LaunchOptions {
    * on the example Mind with "Get started". Without, a test build ships none.
    */
   examples?: boolean;
+  /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
+  home?: string;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface LaunchOptions {
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false, sentryDsn, examples = false }: LaunchOptions = {},
+  { fakeChat = false, sentryDsn, examples = false, home }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -55,6 +57,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_EXAMPLES;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
+  if (home) env.HOME = home;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";

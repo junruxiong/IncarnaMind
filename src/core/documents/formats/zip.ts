@@ -9,9 +9,11 @@
  * and in the renderer alike, with no dependency. Ported from the
  * office-formats spike (ADR-0011).
  *
- * Untrusted input: an entry is inflated against a size limit, so a ZIP bomb
- * fails instead of filling memory, and large parts (a sheet) can be read as
- * a stream of text and dropped part-way.
+ * Untrusted input: a file over 500 MB isn't opened at all, an entry is
+ * inflated against a size limit, and a package stops being read once its
+ * parts have inflated past 1 GB together, so a ZIP bomb fails instead of
+ * filling memory; large parts (a sheet) can be read as a stream of text and
+ * dropped part-way.
  *
  * Password-protected Office files and the legacy binary formats (.doc, .xls,
  * .ppt) aren't ZIP files but OLE compound files: `openPackage` tells which,
@@ -46,10 +48,29 @@ export interface RawEntry {
   data: Uint8Array;
 }
 
+const MB = 1024 * 1024;
+
 /** The most entries a package may have. */
 const MAX_ENTRIES = 20_000;
 /** The largest a part read whole may inflate to: an XML part parsed into a tree. */
-export const MAX_PART_BYTES = 64 * 1024 * 1024;
+export const MAX_PART_BYTES = 64 * MB;
+/** The largest Office file opened: a larger one is refused before it is read (#77; see `packageSizeError`). */
+export const MAX_PACKAGE_BYTES = 500 * MB;
+/** The most all the parts read from a package may inflate to, together (#77). */
+export const MAX_INFLATED_BYTES = 1024 * MB;
+
+/** Why a file over one of the limits isn't opened, with the limit. */
+const tooLargeToOpen = (limit: string) =>
+  new ExtractionError("too-large", `Too large to open (limit ${limit}).`);
+
+/**
+ * Why an Office file of `size` bytes isn't opened at all, or null if it can
+ * be: processing asks before it reads a file, and `openPackage` before it
+ * reads a package.
+ */
+export function packageSizeError(size: number): ExtractionError | null {
+  return size > MAX_PACKAGE_BYTES ? tooLargeToOpen("500 MB") : null;
+}
 
 const EOCD = 0x06054b50;
 const ZIP64_EOCD_LOCATOR = 0x07064b50;
@@ -87,6 +108,8 @@ function contains(bytes: Uint8Array, needle: Uint8Array): boolean {
 export class ZipArchive {
   private readonly entries = new Map<string, DirectoryEntry>();
   private readonly view: DataView;
+  /** How much the parts read so far have inflated to, together. */
+  private inflated = 0;
 
   constructor(private readonly bytes: Uint8Array) {
     this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -168,12 +191,22 @@ export class ZipArchive {
     };
   }
 
+  /**
+   * Counts bytes inflated (or read stored) towards the package's limit,
+   * `MAX_INFLATED_BYTES`: past it, reading stops.
+   */
+  private spend(bytes: number): void {
+    this.inflated += bytes;
+    if (this.inflated > MAX_INFLATED_BYTES) throw tooLargeToOpen("1 GB");
+  }
+
   /** An entry's bytes, inflated, up to `limit` bytes; undefined if there's no such entry. */
   async read(name: string, limit = MAX_PART_BYTES): Promise<Uint8Array | undefined> {
     const raw = this.raw(name);
     if (!raw) return undefined;
     if (raw.method === STORED) {
       if (raw.data.length > limit) throw tooLarge(name);
+      this.spend(raw.data.length);
       return raw.data;
     }
     const chunks: Uint8Array[] = [];
@@ -181,6 +214,7 @@ export class ZipArchive {
     for await (const chunk of inflate(raw.data)) {
       total += chunk.length;
       if (total > limit) throw tooLarge(name);
+      this.spend(chunk.length);
       chunks.push(chunk);
     }
     const out = new Uint8Array(total);
@@ -207,6 +241,7 @@ export class ZipArchive {
     const decoder = new TextDecoder();
     if (raw.method === STORED) {
       if (raw.data.length > limit) throw tooLarge(name);
+      this.spend(raw.data.length);
       yield decoder.decode(raw.data);
       return;
     }
@@ -214,6 +249,7 @@ export class ZipArchive {
     for await (const chunk of inflate(raw.data)) {
       total += chunk.length;
       if (total > limit) throw tooLarge(name);
+      this.spend(chunk.length);
       yield decoder.decode(chunk, { stream: true });
     }
     const rest = decoder.decode();
@@ -249,11 +285,14 @@ async function* inflate(data: Uint8Array): AsyncGenerator<Uint8Array> {
 }
 
 /**
- * Opens an Office package. An OLE compound file instead of a ZIP is either
+ * Opens an Office package. A file over `MAX_PACKAGE_BYTES` is refused before
+ * anything in it is read. An OLE compound file instead of a ZIP is either
  * encrypted (it holds an "EncryptedPackage" stream: the file needs a
  * password) or a legacy binary file renamed; both are refused with a reason.
  */
 export function openPackage(bytes: Uint8Array): ZipArchive {
+  const refused = packageSizeError(bytes.byteLength);
+  if (refused) throw refused;
   if (startsWith(bytes, CFB_SIGNATURE)) {
     if (contains(bytes, ENCRYPTED_PACKAGE)) {
       throw new ExtractionError("password-protected", "The file is encrypted with a password.");
