@@ -9,6 +9,8 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
+  openFolderInLibrary,
   removeDataFolder,
   setWindowSize,
 } from "./app";
@@ -71,7 +73,7 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
   try {
     let { window } = session;
     await dismissChatSetup(window);
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.keyboard.type("Tide notes");
     await expect(window.getByTestId("mind-tab")).toHaveCount(1);
 
@@ -177,10 +179,7 @@ test("a Folder's header holds at the narrowest width with the viewer open: its n
     await setWindowSize(app, window, 900, 700);
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    await window
-      .getByTestId("library-folders")
-      .getByRole("button", { name: /^Reports & presentations/ })
-      .click();
+    await openFolderInLibrary(window, "Reports & presentations");
     // Put a Document in the Folder, and open it in the viewer beside the Library.
     const row = library.getByTestId("library-document").first();
     await window.evaluate(async () => {
