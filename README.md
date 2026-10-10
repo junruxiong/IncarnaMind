@@ -27,6 +27,8 @@
   <img src="docs/images/hero.png" width="880" alt="A notebook with two questions and their answers, beside a PDF. The first answer has a numbered citation with a green check mark, and the quote it cites is highlighted on the PDF page. The second answer's citation is marked amber, and its open card says the quote was not found on page 1.">
 </p>
 
+<p align="center"><sub>The second quote was edited to show what happens when a quote isn't on the cited page.</sub></p>
+
 > [!NOTE]
 > **IncarnaMind isn't released yet.** The desktop app is in development. To hear when the first release is out, click **Watch → Custom → Releases** at the top of this page. Looking for the 2023 command-line tool? It's at the [`v1-python-cli`](https://github.com/junruxiong/IncarnaMind/tree/v1-python-cli) tag.
 
