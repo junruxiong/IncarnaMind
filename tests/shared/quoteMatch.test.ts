@@ -103,6 +103,61 @@ describe("finding a quote", () => {
   });
 });
 
+describe("a table's row, with or without the pipes between its cells (#76)", () => {
+  const MARKDOWN = [
+    "| Item | Weight | Bag | Note |",
+    "|------|--------|-----|------|",
+    "| Water filter | 0.4 kg | Bag B | Replace the cartridge after 1,000 litres |",
+  ].join("\n");
+  /** A slide's or a Word file's table row, as stored: its cells separated by tabs. */
+  const STORED =
+    "Plans by tier\nTier\tBags per month\tPrice\nRegular\t2\t£22.00\nOffice\t6\t£58.00";
+
+  test("a Markdown table's row is found without its pipes, and as written", () => {
+    expect(covered(MARKDOWN, "Water filter 0.4 kg Bag B")).toBe("Water filter | 0.4 kg | Bag B");
+    expect(covered(MARKDOWN, "| Water filter | 0.4 kg | Bag B |")).toBe(
+      "Water filter | 0.4 kg | Bag B",
+    );
+    expect(covered(MARKDOWN, "Bag B Replace the cartridge")).toBe("Bag B | Replace the cartridge");
+  });
+
+  test("a stored row is found with pipes between its cells, as models write rows", () => {
+    expect(covered(STORED, "Regular | 2 | £22.00")).toBe("Regular\t2\t£22.00");
+    expect(covered(STORED, "| Regular | 2 | £22.00 |")).toBe("Regular\t2\t£22.00");
+    expect(covered(STORED, "Regular|2|£22.00")).toBeNull();
+  });
+
+  test("a row whose words aren't on the page isn't found, with pipes or without", () => {
+    expect(findQuote(MARKDOWN, "Water filter 0.5 kg Bag B")).toBeNull();
+    expect(findQuote(MARKDOWN, "Water filter Bag B")).toBeNull();
+    expect(findQuote(MARKDOWN, "Water filter | Bag A")).toBeNull();
+    expect(findQuote(STORED, "Regular | 3 | £22.00")).toBeNull();
+    expect(findQuote(STORED, "Regular | £22.00")).toBeNull();
+    expect(findQuote(STORED, "Regular | 2 | £58.00")).toBeNull();
+  });
+
+  test("Chinese rows too, whose cells have no spaces around them once read", () => {
+    const markdown =
+      "| 数据类型 | 存放位置 | 保存期限 | 负责人 |\n|---|---|---|---|\n| 显微图像 | 影像服务器 | 5年 | 王丽华 |";
+    expect(covered(markdown, "显微图像 影像服务器 5年 王丽华")).toBe(
+      "显微图像 | 影像服务器 | 5年 | 王丽华",
+    );
+    expect(covered(markdown, "显微图像影像服务器5年")).toBe("显微图像 | 影像服务器 | 5年");
+    expect(findQuote(markdown, "显微图像 影像服务器 6年")).toBeNull();
+    expect(findQuote(markdown, "显微图像 5年 王丽华")).toBeNull();
+    const slide = "线路运营情况\n线路\t车辆数\t日均客流\n9路\t28\t11,300\n26路\t19\t7,450";
+    expect(covered(slide, "9路 | 28 | 11,300")).toBe("9路\t28\t11,300");
+    expect(findQuote(slide, "9路 | 19 | 11,300")).toBeNull();
+  });
+
+  test("a pipe inside a word, or doubled, stays a pipe", () => {
+    expect(findQuote("if a|b holds", "if a b holds")).toBeNull();
+    expect(covered("if a|b holds", "if a|b holds")).toBe("if a|b holds");
+    expect(findQuote("x || y", "x y")).toBeNull();
+    expect(covered("x || y", "x || y")).toBe("x || y");
+  });
+});
+
 describe("a quote with an ellipsis", () => {
   const text = [
     "Where the use of a medicine requires specific testing prior to",

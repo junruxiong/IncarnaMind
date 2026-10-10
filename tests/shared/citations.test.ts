@@ -9,6 +9,7 @@ import {
   citedTextKept,
 } from "../../src/shared/citations";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
+import { parseLocation } from "../../src/shared/locations";
 import { findQuoteInPages } from "../../src/shared/quoteMatch";
 
 /** A Citation from before Locations: its pages say where it points. */
@@ -226,6 +227,21 @@ describe("A Citation's Location label (ADR-0011)", () => {
       [{ kind: "section", heading: "2.1 Sensitivity" }, "§ 2.1 Sensitivity", "§ 2.1 Sensitivity"],
       [{ kind: "section", heading: null }, "§ Start", "§ 开头"],
       [{ kind: "section", heading: null, notes: true }, "§ Notes", "§ 注释"],
+      [
+        { kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } },
+        "§ 2 Costs, comment by Reviewer",
+        "§ 2 Costs，Reviewer 的批注",
+      ],
+      [
+        { kind: "section", heading: "二、运营数据", comment: { author: "王丽华" } },
+        "§ 二、运营数据, comment by 王丽华",
+        "§ 二、运营数据，王丽华 的批注",
+      ],
+      [
+        { kind: "section", heading: null, comment: { author: null } },
+        "§ Start, comment",
+        "§ 开头，批注",
+      ],
       [{ kind: "lines", from: 120, to: 134 }, "lines 120–134", "第 120–134 行"],
     ];
     for (const [location, en, zh] of cases) {
@@ -255,6 +271,34 @@ describe("A Citation's Location label (ADR-0011)", () => {
     expect(words(at({ kind: "lines", from: 120, to: 134 })).en).toBe(
       "Quote found on lines 120–134",
     );
+    expect(
+      words(at({ kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } })),
+    ).toEqual({
+      en: "Quote found in § 2 Costs, comment by Reviewer",
+      zh: "已在 § 2 Costs，Reviewer 的批注 中找到引文",
+    });
+  });
+
+  test("a comment's stored Location keeps its author, or none, and copies as text with it (#76)", () => {
+    expect(
+      citationReference(
+        at({ kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } }, "Library"),
+      ),
+    ).toBe("[Library, § 2 Costs, comment by Reviewer]");
+    expect(
+      parseLocation(
+        JSON.stringify({ kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } }),
+      ),
+    ).toEqual({ kind: "section", heading: "2 Costs", comment: { author: "Reviewer" } });
+    expect(parseLocation({ kind: "section", heading: null, comment: { author: 3 } })).toEqual({
+      kind: "section",
+      heading: null,
+      comment: { author: null },
+    });
+    expect(parseLocation({ kind: "section", heading: null, comment: true })).toEqual({
+      kind: "section",
+      heading: null,
+    });
   });
 
   test("copies as text with its label, and a stored Location that isn't one falls back to the pages", () => {

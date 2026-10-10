@@ -486,12 +486,17 @@ function shownStrings(slide: SlideOutline): Shown[] {
   return shown;
 }
 
-/** Where a quote is in an outline sheet: its highlighted parts, by the id of the string they are in. */
+/**
+ * Where a quote is in an outline sheet: its highlighted parts, by the id of
+ * the string they are in. A chart's figures are matched as the check matches
+ * a slide's, however their thousands are written when the quote isn't found as it is.
+ */
 function findInOutline(slide: SlideOutline, quote: string): Map<string, TextRange[]> | null {
   const shown = shownStrings(slide).filter((each) => each.text);
   const found = findQuoteInPieces(
     shown.map((each) => ({ text: each.text, breakAfter: true })),
     quote,
+    { numbers: "if-needed" },
   );
   if (!found) return null;
   const byId = new Map<string, TextRange[]>();

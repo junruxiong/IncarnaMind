@@ -130,8 +130,8 @@ function passagesIn(result: string): ShownPassage[] {
 
 /** A mark where a new Unit starts in a Passage: "[p. 4] ", "[slide 4] ", "[§ 2.1 Sensitivity] "… */
 const UNIT_MARK = /^\[(p\. \d+|slides? [^\]]+|§[^\]]*|[^\]]*rows? [\d–-]+|lines? [\d–-]+)\] /;
-/** Where a slide's speaker notes start in a Passage. */
-const NOTES_MARK = /^\[speaker notes\] /;
+/** Where a slide's speaker notes, or a Word comment, start in a Passage. */
+const NOTES_MARK = /^\[(?:speaker notes|comment(?: by [^\]]+)?)\] /;
 
 /**
  * The record for a Passage: its line that shares the most words with the
