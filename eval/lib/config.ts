@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   type ChatProviderKind,
+  type CitationSupport,
   chatProviderKinds,
   RERANKING_MODEL_CANDIDATES,
   type RerankingModelDefinition,
@@ -19,7 +20,20 @@ export interface ChatSettings {
   modelId: string;
   apiKey: string | null;
   baseUrl: string | null;
+  /**
+   * "ollama" only: the context window, `num_ctx`, every request carries
+   * instead of the one chosen from this computer's memory, so local runs are
+   * comparable (INCARNAMIND_EVAL_CHAT_NUM_CTX). Null: the app's choice.
+   */
+  numCtx: number | null;
+  /**
+   * "ollama" only: how the model cites instead of the app's rule, to compare
+   * citing modes (INCARNAMIND_EVAL_CHAT_CITING). Null: the app's rule.
+   */
+  citing: CitationSupport | null;
 }
+
+const citingModes: readonly CitationSupport[] = ["tools", "structured-output", "none"];
 
 const cloudEmbeddingKinds = ["openai", "google"] as const;
 export type CloudEmbeddingKind = (typeof cloudEmbeddingKinds)[number];
@@ -55,6 +69,14 @@ export interface EvalConfig {
   maxRounds: number;
   /** An Answer that takes longer is stopped and counted as failed. */
   answerTimeoutMs: number;
+  /**
+   * Only these Questions are asked, by id, each once: a short check
+   * (INCARNAMIND_EVAL_QUESTIONS). Retrieval still scores every Question, and
+   * a run that asks only some never gates on Citations. Null: all of them.
+   */
+  questionIds: string[] | null;
+  /** Whether the every-format set runs too (INCARNAMIND_EVAL_FORMATS: on by default). */
+  formats: boolean;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -100,7 +122,19 @@ function chatSettings(env: Env): ChatSettings | null {
   if (found === "openai-compatible" && !baseUrl) {
     throw new Error(`Set ${PREFIX}CHAT_BASE_URL to the server's URL.`);
   }
-  return { kind: found, modelId, apiKey, baseUrl };
+  const numCtx =
+    value(env, "CHAT_NUM_CTX") === null ? null : positiveInteger(env, "CHAT_NUM_CTX", 1);
+  const citingValue = value(env, "CHAT_CITING");
+  const citing = citingModes.find((each) => each === citingValue) ?? null;
+  if (citingValue !== null && !citing) {
+    throw new Error(
+      `${PREFIX}CHAT_CITING must be one of ${citingModes.join(", ")}, not "${citingValue}".`,
+    );
+  }
+  if ((numCtx !== null || citing !== null) && found !== "ollama") {
+    throw new Error(`${PREFIX}CHAT_NUM_CTX and ${PREFIX}CHAT_CITING only apply to "ollama".`);
+  }
+  return { kind: found, modelId, apiKey, baseUrl, numCtx, citing };
 }
 
 function cloudEmbeddingSettings(env: Env): CloudEmbeddingSettings | null {
@@ -145,6 +179,34 @@ function rerankCandidates(env: Env): RerankingModelDefinition[] {
   });
 }
 
+/** Question ids separated by commas, e.g. "en-07,zh-02", each once; null when not set. */
+function questionIds(env: Env): string[] | null {
+  const raw = value(env, "QUESTIONS");
+  if (raw === null) return null;
+  const ids = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((each) => each.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) {
+    throw new Error(
+      `${PREFIX}QUESTIONS takes Question ids separated by commas, e.g. "en-07,zh-02".`,
+    );
+  }
+  return ids;
+}
+
+/** "on" (the default) or "off". */
+function formatsOn(env: Env): boolean {
+  const raw = value(env, "FORMATS");
+  if (raw === null || raw === "on") return true;
+  if (raw === "off") return false;
+  throw new Error(`${PREFIX}FORMATS must be "on" or "off", not "${raw}".`);
+}
+
 export function readConfig(root: string, env: Env = process.env): EvalConfig {
   return {
     root,
@@ -157,5 +219,7 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     minCitations: positiveInteger(env, "MIN_CITATIONS", 30),
     maxRounds: positiveInteger(env, "MAX_ROUNDS", 3),
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,
+    questionIds: questionIds(env),
+    formats: formatsOn(env),
   };
 }

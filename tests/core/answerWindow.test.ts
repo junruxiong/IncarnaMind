@@ -102,6 +102,23 @@ describe("A window's budget", () => {
     expect(loop.canCallTools()).toBe(false);
   });
 
+  test("Passages that don't all fit keep the most relevant, by the search's ranks, in the order given", () => {
+    const budget = createWindowBudget(window);
+    const passages = [passage("P1", 2_000), passage("P2", 2_000), passage("P3", 2_000)].join(
+      "\n\n",
+    );
+    const ids = (text: string) => [...text.matchAll(/id="(P\d)"/g)].map((match) => match[1]);
+
+    // Room for two: P1 is the least relevant, though it comes first in reading order.
+    expect(ids(budget.fitPassages(passages, "Answer well.", "Why?", [2, 0, 1]))).toEqual([
+      "P2",
+      "P3",
+    ]);
+    expect(ids(budget.loop(100).passages(passages, 3, [2, 0, 1]).text)).toEqual(["P2", "P3"]);
+    // Without ranks, their order is their relevance.
+    expect(ids(budget.fitPassages(passages, "Answer well.", "Why?"))).toEqual(["P1", "P2"]);
+  });
+
   test("Ollama's own count of the first request replaces the estimate", () => {
     const budget = createWindowBudget(window);
     const loop = budget.loop(1_000);

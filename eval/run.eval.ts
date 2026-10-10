@@ -21,10 +21,17 @@ import {
   BUILT_IN_RERANKING_MODEL,
   type RerankingModelDefinition,
 } from "../src/core";
-import { type CitationRun, runCitations, summariseGroup } from "./lib/citations";
+import {
+  type CitationRun,
+  checkQuestionIds,
+  evalOllamaModels,
+  questionsToAsk,
+  runCitations,
+  summariseGroup,
+} from "./lib/citations";
 import { type EvalConfig, readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
-import { FORMATS_SET, loadEvaluationSet } from "./lib/evaluationSet";
+import { type EvalQuestion, FORMATS_SET, loadEvaluationSet } from "./lib/evaluationSet";
 import { type FormatsReport, formatOf, summariseFormats } from "./lib/formats";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
@@ -124,6 +131,20 @@ async function retrieve(
 }
 
 /**
+ * Why a set's Questions aren't asked: no chat model, or none of them among
+ * INCARNAMIND_EVAL_QUESTIONS. Null when some are asked.
+ */
+function notAsked(config: EvalConfig, questions: readonly EvalQuestion[]): string | null {
+  if (!config.chat) {
+    return "no chat model was given. Set INCARNAMIND_EVAL_CHAT_KIND, INCARNAMIND_EVAL_CHAT_MODEL and INCARNAMIND_EVAL_CHAT_KEY (eval/README.md).";
+  }
+  if (questionsToAsk(questions, config.questionIds).length === 0) {
+    return "none of the Questions INCARNAMIND_EVAL_QUESTIONS names is in this set.";
+  }
+  return null;
+}
+
+/**
  * The every-format set (#70): its own library of Word, PowerPoint, Excel,
  * CSV, Markdown, text and PDF Documents, searched as the gating set is and,
  * with a chat model, each Question asked once. Reported per format; it never
@@ -162,18 +183,21 @@ async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> 
       log,
       { candidates: [BUILT_IN_RERANKING_MODEL], cacheDir: config.cacheDir },
     );
-    const citations: CitationRun | { skipped: string } = config.chat
-      ? {
-          ...(await runCitations(
-            library,
-            set.questions,
-            config.chat,
-            { ...config, maxRounds: 1 },
-            log,
-          )),
-          failures: [],
-        }
-      : { skipped: "no chat model was given." };
+    const skipped = notAsked(config, set.questions);
+    const citations: CitationRun | { skipped: string } =
+      config.chat && !skipped
+        ? {
+            ...(await runCitations(
+              library,
+              set.questions,
+              config.chat,
+              { ...config, maxRounds: 1 },
+              log,
+              "Unit",
+            )),
+            failures: [],
+          }
+        : { skipped: skipped ?? "" };
     return {
       source: set.source,
       documents: set.documents.map(({ key, path }) => {
@@ -204,15 +228,23 @@ test("retrieval and Citation evaluation", async () => {
   const config = readConfig(root);
   const set = loadEvaluationSet(root);
   log(`${set.questions.length} Questions over ${set.documents.length} Documents`);
+  if (config.questionIds) {
+    checkQuestionIds(config.questionIds, [
+      set.questions,
+      ...(config.formats ? [loadEvaluationSet(root, FORMATS_SET).questions] : []),
+    ]);
+  }
   log(`Embedding model cache: ${config.cacheDir}`);
 
   // The core reranks Answers' searches with the built-in reranking model, as the app does by default.
+  const ollamaModels = evalOllamaModels(config.chat);
   const builtIn = await openLibrary({
     name: "built-in",
     embedder: createWorkerEmbedder(),
     modelCache: join(config.cacheDir, "models"),
     reranker: createWorkerCrossEncoder(),
     documents: set.documents,
+    ...(ollamaModels && { ollamaModels }),
     keep: config.keepData,
     log,
   });
@@ -253,12 +285,11 @@ test("retrieval and Citation evaluation", async () => {
       }
     }
 
-    const citations: CitationRun | { skipped: string } = config.chat
-      ? await runCitations(builtIn, set.questions, config.chat, config, log)
-      : {
-          skipped:
-            "no chat model was given. Set INCARNAMIND_EVAL_CHAT_KIND, INCARNAMIND_EVAL_CHAT_MODEL and INCARNAMIND_EVAL_CHAT_KEY (eval/README.md).",
-        };
+    const skipped = notAsked(config, set.questions);
+    const citations: CitationRun | { skipped: string } =
+      config.chat && !skipped
+        ? await runCitations(builtIn, set.questions, config.chat, config, log)
+        : { skipped: skipped ?? "" };
 
     const failures = [
       ...retrievalFailures(runs[0]?.summary[GATING_MODE]),
@@ -298,7 +329,9 @@ test("retrieval and Citation evaluation", async () => {
   } finally {
     await builtIn.close();
   }
-  report.formats = await runFormats(config, log);
+  report.formats = config.formats
+    ? await runFormats(config, log)
+    : { skipped: "INCARNAMIND_EVAL_FORMATS is off." };
   report.run.seconds = (Date.now() - started.getTime()) / 1000;
 
   const dir = await writeReports(report, config.resultsDir, root);

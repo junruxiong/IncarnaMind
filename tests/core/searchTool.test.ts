@@ -259,6 +259,46 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
   });
 });
 
+describe("The search Tool's ranks", () => {
+  test("rank the Passages it returns, in reading order, by window, best first, and in a window its hits first", async () => {
+    /** Passage `position` of one Document, in the windows of 3 ending at it. */
+    const passage = (position: number, score = 0) => ({
+      seq: position,
+      passageId: `p${position}`,
+      documentId: "logbook",
+      documentName: "Logbook",
+      documentKind: "pdf" as const,
+      contentHash: "hash",
+      pageFrom: position + 1,
+      pageTo: position + 1,
+      position,
+      windowFrom: Math.max(0, position - 2),
+      windowTo: position,
+      text: `Passage ${position}`,
+      score,
+    });
+    const sources: SearchToolSources = {
+      // The best match is late in the Document, a weaker one early.
+      candidates: async () => [passage(7, 0.9), passage(2, 0.5)],
+      rerankCandidates: async () => [],
+      window: (_documentId, window) =>
+        [window, window + 1, window + 2].map((each) => passage(each)),
+    };
+
+    const found = await searchDocumentsTool(sources, "the keeper");
+
+    // In reading order, the weaker window first; ranked by relevance, the best match first.
+    expect(found.map((each) => [each.position, each.rank])).toEqual([
+      [1, 4],
+      [2, 3],
+      [3, 5],
+      [6, 1],
+      [7, 0],
+      [8, 2],
+    ]);
+  });
+});
+
 describe("The candidates a reranker sees, through the core", { timeout: 30_000 }, () => {
   test("are keyword search's top 10 and vector search's top 10, as searchPassages gives them, in fused order", async () => {
     const seen: { passageId: string; score: number }[][] = [];

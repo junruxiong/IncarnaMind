@@ -141,7 +141,8 @@ export function documentInstructions(
         "Passages found in the User's Documents for this Question:",
         passages,
         "",
-        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "p. 3", "quote": "…"}]}.',
+        // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
+        'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}]}.',
         "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
@@ -172,6 +173,23 @@ export const SEARCH_QUERY_INSTRUCTIONS = [
   "- Keep the Question's own key words, in its language. If the Question already stands on its own, give it back unchanged.",
   "- Reply with the query alone, on one line. Don't answer the Question or explain.",
 ].join("\n");
+
+/**
+ * For a model that can't call Tools (or a small local one), before its second
+ * search: the query translated into a language some of the Documents are in,
+ * as the search Tool tells a model in the loop to search (see
+ * `searchLanguage` in ./engine).
+ */
+export const TRANSLATE_QUERY_INSTRUCTIONS = [
+  "You translate a query for searching the User's Documents into the language some of them are written in: search finds Passages best in their own language.",
+  "- Keep names, numbers and technical terms as Documents in that language would write them.",
+  "- Reply with the translated query alone, on one line. Don't answer it or explain.",
+].join("\n");
+
+/** The request to translate a search query into `language`. */
+export function translateQueryPrompt(query: string, language: string): string {
+  return `Translate this query into ${language}:\n${query}`;
+}
 
 /** The request to rewrite `question` into a search query, with the notebook text above it. */
 export function searchQueryPrompt(earlier: string, question: string): string {

@@ -12,10 +12,15 @@
  *   Citation markers with `cite`. The Answer keeps what is its own on top of
  *   the engine's events: the search phase, preambles taken back, the records
  *   and the markers they place.
- * - "structured-output": for a model that can't call Tools, one search, its
- *   Passages in the instructions, and the Answer and its records returned as
- *   one JSON object. A follow-up Question is first rewritten by the model into
- *   a search query that stands on its own (see `searchQuery`).
+ * - "structured-output": for a model that can't call Tools, or a small local
+ *   model, which doesn't cite in the loop (see `citingMode` in
+ *   ../providers/ollamaModels): one search, its Passages in the instructions,
+ *   and the Answer and its records returned as one JSON object. A follow-up
+ *   Question is first rewritten by the model into a search query that stands
+ *   on its own (see `searchQuery`). When some of the Documents are in another
+ *   language than the Question, the query is also translated into theirs and
+ *   searched again, as the search Tool tells a model in the loop to do (see
+ *   `searchLanguage`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output. A model may give records but
@@ -49,6 +54,7 @@
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
 import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
+import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import {
   classifyProviderError,
@@ -60,7 +66,12 @@ import type { GateDecision, RunEngine, RunMessage, RunToolCall, RunWindow } from
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
 import { earlierContext } from "./context";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
-import { SEARCH_QUERY_INSTRUCTIONS, searchQueryPrompt } from "./prompt";
+import {
+  SEARCH_QUERY_INSTRUCTIONS,
+  searchQueryPrompt,
+  TRANSLATE_QUERY_INSTRUCTIONS,
+  translateQueryPrompt,
+} from "./prompt";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
@@ -88,11 +99,32 @@ export interface CitationRecordInput {
   quote: string;
 }
 
+/** How records came, for `AnswerTools.cite`. */
+export interface CiteOptions {
+  /**
+   * In structured output, which gets no word back to fix its records with
+   * (see `structured`): a Passage named by its number alone ("1"), or with
+   * more ("P1 (p. 9)"), is "P1"; a record naming none it was given (a
+   * Document's name, say) cites the first Passage it was given whose pages
+   * hold its quote word for word; and a quote that isn't on the pages its
+   * record names, but is word for word on a page of the Passage it names, or
+   * on two consecutive ones, is cited there, as `cite`'s feedback lets a
+   * model in the Tool loop do.
+   */
+  structured?: boolean;
+}
+
 /** What a search gives the model. */
 export interface SearchResultForModel {
   /** The Passages, formatted for the model, or a sentence saying there are none. */
   text: string;
   passageCount: number;
+  /**
+   * Each Passage's relevance, in the order `text` has them (reading order):
+   * 0 the most relevant. A window too small for all of them keeps the most
+   * relevant (see ./window). Absent: their order is their relevance.
+   */
+  ranks?: number[];
 }
 
 /** A language the Documents to search are in, and how many of them are. */
@@ -118,7 +150,7 @@ export interface AnswerTools {
   /** The document-search Tool. */
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
-  cite(records: readonly CitationRecordInput[]): string;
+  cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
   hasRecord?(marker: number): boolean;
 }
@@ -379,8 +411,11 @@ function parseRecords(value: unknown): CitationRecordInput[] {
   return value.flatMap((item): CitationRecordInput[] => {
     if (typeof item !== "object" || item === null) return [];
     const { marker, passage, location, pageFrom, pageTo, quote } = item as Record<string, unknown>;
-    const number = typeof marker === "string" ? Number.parseInt(marker, 10) : marker;
-    if (typeof number !== "number" || typeof passage !== "string" || typeof quote !== "string") {
+    // A marker as the Answer writes it ("[^1]"), or a Passage by its number alone (1), as small models give them.
+    const number =
+      typeof marker === "string" ? Number(/\d{1,4}/.exec(marker)?.[0] ?? Number.NaN) : marker;
+    const named = typeof passage === "number" ? String(passage) : passage;
+    if (typeof number !== "number" || typeof named !== "string" || typeof quote !== "string") {
       return [];
     }
     const page = (value: unknown) =>
@@ -388,7 +423,7 @@ function parseRecords(value: unknown): CitationRecordInput[] {
     return [
       {
         marker: number,
-        passage,
+        passage: named,
         ...(typeof location === "string" && location.trim() ? { location } : {}),
         pageFrom: page(pageFrom),
         pageTo: page(pageTo),
@@ -456,6 +491,90 @@ async function searchQuery(
       console.error(`The Question couldn't be rewritten for search: ${messageOf(error)}`);
     }
     return question;
+  }
+}
+
+/** Languages told by their scripts: a Question with none of those scripts isn't in them. */
+const SCRIPT_LANGUAGES: ReadonlySet<string> = new Set(["Chinese", "Japanese", "Korean"]);
+const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/**
+ * The language a model without Tools searches in a second time: the most
+ * common language of the Documents that the Question isn't written in, as
+ * the search Tool tells a model in the loop to search (`searchToolDescription`,
+ * ADR-0009: search finds Passages best in their own language). Null when the
+ * Documents are all in the Question's language, or that can't be told. A
+ * Question whose language can't be told (a short one, in English, say) is
+ * known not to be in a language written in CJK scripts if it has none.
+ */
+export function searchLanguage(
+  question: string,
+  languages: readonly DocumentLanguage[],
+): string | null {
+  const asked = detectLanguage(question);
+  const other = languages.find(({ language }) =>
+    asked ? language !== asked : SCRIPT_LANGUAGES.has(language) && !CJK_SCRIPT.test(question),
+  );
+  return other?.language ?? null;
+}
+
+/** A Passage in a search's result, as the model reads it, with its id. */
+const PASSAGE_BLOCK = /<passage id="([^"]+)"[^>]*>[\s\S]*?<\/passage>/g;
+
+/**
+ * Searches' results as one: each Passage once, the first search's first, in
+ * the order each gave them, ranked alternately (the first's best, the
+ * second's best, then each one's next), so a window too small for all keeps
+ * the best of each. With no Passages in any, the first's text.
+ */
+export function mergeSearches(results: readonly SearchResultForModel[]): SearchResultForModel {
+  const passages: { id: string; text: string; rank: number }[] = [];
+  results.forEach((result, which) => {
+    [...result.text.matchAll(PASSAGE_BLOCK)].forEach((match, index) => {
+      const rank = (result.ranks?.[index] ?? index) * results.length + which;
+      const seen = passages.find((passage) => passage.id === match[1]);
+      if (seen) seen.rank = Math.min(seen.rank, rank);
+      else passages.push({ id: match[1] as string, text: match[0], rank });
+    });
+  });
+  const [first] = results;
+  if (passages.length === 0 || !first) return first ?? { text: "", passageCount: 0 };
+  if (results.length === 1) return first;
+  return {
+    text: passages.map((passage) => passage.text).join("\n\n"),
+    passageCount: passages.length,
+    ranks: passages.map((passage) => passage.rank),
+  };
+}
+
+/**
+ * The query translated into `language` by the model, for a second search; null
+ * when the translation fails, comes back empty or is the query itself.
+ */
+async function translatedQuery(
+  request: AnswerRequest,
+  query: string,
+  language: string,
+  temperature: number | undefined,
+): Promise<string | null> {
+  try {
+    const { text } = await generateText({
+      model: request.model,
+      instructions: TRANSLATE_QUERY_INSTRUCTIONS,
+      prompt: translateQueryPrompt(query, language),
+      temperature,
+      // A short query; a cut-off reply means no second search.
+      maxOutputTokens: 256,
+      maxRetries: 0,
+      abortSignal: request.signal,
+    });
+    const translated = queryIn(text);
+    return translated && translated !== query ? translated : null;
+  } catch (error) {
+    if (!request.signal.aborted) {
+      console.error(`The search query couldn't be translated: ${messageOf(error)}`);
+    }
+    return null;
   }
 }
 
@@ -541,10 +660,10 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
        * structured output, or a plain Answer. Within a window, the Passages
        * that fit beside the Question, then the Question context that fits beside them.
        */
-      const onePass = (mode: CitationSupport | "no-documents", passages?: string) =>
+      const onePass = (mode: CitationSupport | "no-documents", found?: SearchResultForModel) =>
         fitted(async function* () {
           if (!budget) {
-            const instructions = request.instructions(mode, { passages });
+            const instructions = request.instructions(mode, { passages: found?.text });
             yield* tempered((sent) =>
               mode === "structured-output"
                 ? structured(request, instructions, sent)
@@ -553,12 +672,13 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
             return;
           }
           const kept =
-            passages === undefined
+            found === undefined
               ? undefined
               : budget.fitPassages(
-                  passages,
+                  found.text,
                   request.instructions(mode, { passages: "" }),
                   request.question,
+                  found.ranks,
                 );
           const instructions = request.instructions(mode, { passages: kept });
           const fit = budget.fit({
@@ -605,32 +725,50 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         return;
       }
 
-      // A model without Tools searches once, for the Question rewritten to stand on its own;
-      // the result is kept for the next way of answering if the provider refuses this one.
-      let searched: string | undefined;
-      async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, string> {
+      // A model without Tools searches once, for the Question rewritten to stand on its own, and
+      // again in the Documents' language if the Question is in another (see `searchLanguage`); the
+      // result is kept for the next way of answering if the provider refuses this one.
+      let searched: SearchResultForModel | undefined;
+      async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, SearchResultForModel> {
         if (searched !== undefined) return searched;
         const query = await searchQuery(request, temperature());
         signal.throwIfAborted();
-        const id = "question-search";
+        const language = searchLanguage(
+          request.question,
+          request.documents.documentLanguages ?? [],
+        );
+        const translated = language
+          ? await translatedQuery(request, query, language, temperature())
+          : null;
+        signal.throwIfAborted();
+        const searches: [string, string][] = [
+          ["question-search", query],
+          ...(translated ? [["question-search-translated", translated] as [string, string]] : []),
+        ];
         yield { type: "phase", phase: "searching" };
-        yield {
-          type: "tool-call-started",
-          id,
-          provider: DOCUMENTS_PROVIDER,
-          tool: DOCUMENT_TOOLS.search,
-          input: { query },
-        };
-        try {
-          const result = await request.documents.searchDocuments(query, signal);
-          yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
-          searched = result.text;
-        } catch (error) {
-          if (signal.aborted) throw error;
-          console.error(error);
-          yield { type: "tool-call-finished", id, ok: false, resultCount: null };
-          searched = "The search of the User's Documents failed.";
+        const results: SearchResultForModel[] = [];
+        for (const [id, each] of searches) {
+          yield {
+            type: "tool-call-started",
+            id,
+            provider: DOCUMENTS_PROVIDER,
+            tool: DOCUMENT_TOOLS.search,
+            input: { query: each },
+          };
+          try {
+            const result = await request.documents.searchDocuments(each, signal);
+            yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
+            results.push(result);
+          } catch (error) {
+            if (signal.aborted) throw error;
+            console.error(error);
+            yield { type: "tool-call-finished", id, ok: false, resultCount: null };
+          }
         }
+        searched =
+          results.length > 0
+            ? mergeSearches(results)
+            : { text: "The search of the User's Documents failed.", passageCount: 0 };
         yield { type: "phase", phase: "writing" };
         return searched;
       }
@@ -645,9 +783,9 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
               tempered((sent) => toolLoop(request, engine, maxSteps, "tools", sent, budget)),
             );
           } else {
-            const passages: string = yield* searchOnce();
+            const found: SearchResultForModel = yield* searchOnce();
             if (signal.aborted) return;
-            attempt = onePass(support, passages);
+            attempt = onePass(support, found);
           }
         } catch (error) {
           if (signal.aborted) return;
@@ -797,7 +935,8 @@ async function* toolLoop(
   const documents =
     mode === "tools"
       ? documentTools(request.documents, {
-          fit: (found) => (loop ? loop.passages(found.text, found.passageCount) : found),
+          fit: (found) =>
+            loop ? loop.passages(found.text, found.passageCount, found.ranks) : found,
           searched: (toolCallId, count) => results.set(toolCallId, count),
           cited: (records) => cited.push(...records),
         })
@@ -1051,7 +1190,8 @@ async function* structured(
   }
   const records = parseRecords((value as { citations?: unknown } | undefined)?.citations);
   try {
-    request.documents.cite(records);
+    // The answer is written: what `cite` would tell the model can't reach it. It places the records instead.
+    request.documents.cite(records, { structured: true });
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }

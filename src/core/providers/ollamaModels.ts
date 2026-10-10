@@ -4,9 +4,10 @@
  *
  * - Whether it can chat, call Tools and think: its `capabilities`, from
  *   `/api/show` (Ollama 0.6.4 and later).
- * - How it cites, chosen from those before the first request (see
- *   `citingMode`): "tools" with the `tools` capability, else structured output.
- *   Ollama holds any completion model to a JSON schema with `format`.
+ * - How it cites, chosen from those and its size before the first request
+ *   (see `citingMode`): "tools" with the `tools` capability, unless the model
+ *   is small; else structured output. Ollama holds any completion model to a
+ *   JSON schema with `format`.
  * - Its context window, `num_ctx` (see `chooseNumCtx`), and the output cap.
  * - `think`: off, so a model answers at once, unless it can only think.
  *
@@ -39,7 +40,9 @@ export interface OllamaModelProfile {
   capabilities: string[] | null;
   /** The longest context the model was trained for, in tokens; null when unknown. */
   contextLength: number | null;
-  /** How it gives Citations, chosen from its capabilities; null when they are unknown. */
+  /** How many parameters it has; null when Ollama doesn't say. */
+  parameters: number | null;
+  /** How it gives Citations, chosen from its capabilities and size; null when they are unknown. */
   support: CitationSupport | null;
   /** False for a model that can't answer Questions, such as an embedding model. */
   chat: boolean;
@@ -187,15 +190,48 @@ export function chooseNumCtx(input: {
 }
 
 /**
- * How a model gives Citations, from its capabilities: in the Tool-calling loop
- * when it can call Tools; else with structured output, which Ollama gives any
- * completion model; else not at all. Null when the server doesn't say.
+ * Below this many parameters, a model that can call Tools still cites with
+ * structured output (ADR-0007, #67). Small models search in the Tool-calling
+ * loop but don't call `cite`: qwen3.5:4b (4.5 billion parameters) and
+ * Llama 3.2 (3.2 billion) gave no Citations there, while qwen3.5:4b gave
+ * Citation records with nearly every Answer in structured output. Models
+ * from 7 billion up weren't measured, so they keep the loop.
  */
-export function citingMode(capabilities: readonly string[] | null): CitationSupport | null {
+export const SMALL_MODEL_PARAMETERS = 7_000_000_000;
+
+/**
+ * How a model gives Citations, from its capabilities and size: in the
+ * Tool-calling loop when it can call Tools and isn't small (see
+ * `SMALL_MODEL_PARAMETERS`; a model of unknown size counts as not small);
+ * else with structured output, which Ollama gives any completion model; else
+ * not at all. Null when the server doesn't say what the model can do.
+ */
+export function citingMode(
+  capabilities: readonly string[] | null,
+  parameters: number | null = null,
+): CitationSupport | null {
   if (!capabilities) return null;
-  if (capabilities.includes("tools")) return "tools";
+  const small = parameters !== null && parameters < SMALL_MODEL_PARAMETERS;
+  if (capabilities.includes("tools") && !small) return "tools";
   if (capabilities.includes("completion")) return "structured-output";
   return "none";
+}
+
+const SIZE_UNITS: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 };
+
+/**
+ * How many parameters a model has: `/api/show`'s `general.parameter_count`,
+ * else its `parameter_size` ("4.5B", "751.63M"). Null when neither says.
+ */
+export function parameterCount(
+  modelInfo: Record<string, unknown>,
+  details: Record<string, unknown>,
+): number | null {
+  const counted = numberOf(modelInfo["general.parameter_count"]);
+  if (counted) return counted;
+  const size = /^\s*(\d+(?:\.\d+)?)\s*([KMBT])\s*$/i.exec(String(details.parameter_size ?? ""));
+  if (!size) return null;
+  return Number(size[1]) * (SIZE_UNITS[(size[2] as string).toUpperCase()] as number);
 }
 
 /**
@@ -253,11 +289,16 @@ export function profileOf(
     ...(memory.freeBytes !== undefined && { freeBytes: memory.freeBytes }),
   });
   const think = thinkFor(show);
+  const parameters = parameterCount(
+    modelInfo,
+    isRecord(show.details) ? show.details : isRecord(tag.details) ? tag.details : {},
+  );
   return {
     digest: typeof tag.digest === "string" ? tag.digest : null,
     capabilities,
     contextLength,
-    support: citingMode(capabilities),
+    parameters,
+    support: citingMode(capabilities, parameters),
     chat: capabilities ? capabilities.includes("completion") : true,
     settings: {
       numCtx,

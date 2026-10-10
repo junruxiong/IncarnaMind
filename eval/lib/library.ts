@@ -17,6 +17,7 @@ import {
   type Embedder,
   type EmbeddingModelStatus,
   type Keychain,
+  type OllamaModels,
   type RerankSettings,
   type SaveEmbeddingProviderInput,
 } from "../../src/core";
@@ -50,6 +51,8 @@ export interface LibraryOptions {
    */
   reranker?: CrossEncoder;
   documents: readonly EvalDocument[];
+  /** Looks up models in Ollama instead of the app's own lookup (see `evalOllamaModels`). */
+  ollamaModels?: OllamaModels;
   /** Keep the data folder afterwards, also when opening fails. */
   keep: boolean;
   log: Log;
@@ -72,6 +75,8 @@ export interface Library {
   passageCount: number;
   /** The stored text of a Document's pages, as the Citation check reads them. */
   pageTexts(documentId: string): { page: number | null; text: string }[];
+  /** The pages (Units) a Passage covers; null when it has none or is unknown. */
+  passagePages(passageId: string): [number, number] | null;
   /** Closes the core, and deletes the data folder unless it is kept. */
   close(): Promise<void>;
 }
@@ -212,6 +217,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       },
     },
     embedder: options.embedder,
+    ...(options.ollamaModels && { ollamaModels: options.ollamaModels }),
     // The core reranks by default: with the real built-in model when asked for, as in the app
     // (Answers' searches); otherwise a fake, with nothing to download.
     ...(options.reranker
@@ -309,6 +315,14 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
           pages.set(documentId, found);
         }
         return found;
+      },
+      passagePages(passageId) {
+        const row = db.get<{ page_from: number | null; page_to: number | null }>(
+          "SELECT page_from, page_to FROM passages WHERE id = ?",
+          [passageId],
+        );
+        if (!row || row.page_from === null || row.page_to === null) return null;
+        return [row.page_from, row.page_to];
       },
       async close() {
         db.close();
