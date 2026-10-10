@@ -53,8 +53,8 @@ const isHidden = (window: Page) =>
 /** The View menu's item for the sidebar, as the app's menu has it. */
 function viewMenuLabels(app: ElectronApplication): Promise<string[]> {
   return app.evaluate(({ Menu }) => {
-    const view = Menu.getApplicationMenu()?.items.find(
-      (item) => item.label === "View" || item.label === "显示",
+    const view = Menu.getApplicationMenu()?.items.find((item) =>
+      ["View", "显示", "查看"].includes(item.label),
     );
     return view?.submenu?.items.map((item) => item.label) ?? [];
   });
@@ -62,8 +62,8 @@ function viewMenuLabels(app: ElectronApplication): Promise<string[]> {
 
 function clickViewMenu(app: ElectronApplication, label: string): Promise<void> {
   return app.evaluate(({ Menu }, wanted) => {
-    const view = Menu.getApplicationMenu()?.items.find(
-      (item) => item.label === "View" || item.label === "显示",
+    const view = Menu.getApplicationMenu()?.items.find((item) =>
+      ["View", "显示", "查看"].includes(item.label),
     );
     view?.submenu?.items.find((item) => item.label === wanted)?.click();
   }, label);
