@@ -36,6 +36,14 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
     - Check: the pull request shows the built screen beside each board, with every difference listed.
 13. **Use the shared building blocks.** Selection, drag and drop, undo, the right-click menus, rename in place, the command list behind ⌘K and the menus, and optimistic updates each have one shared implementation, so the same gesture does the same thing everywhere. Where a block doesn't exist yet, don't build a one-off: say so in the pull request and keep the current behaviour, or build the block in its own issue.
     - Check: code review; no `onContextMenu`, `draggable` or undo handling outside the shared blocks.
+14. **Teach in context, not in onboarding.** First run and onboarding cover one thing: getting the User to their first checked Answer. Every other feature is found where it lives:
+    - something that looks usable (a grip, a cursor, a chip);
+    - its place in the right-click and ⋯ menus;
+    - its ⌘K entry;
+    - at most one tip, at the moment the feature would help. The tip is one line where the feature is, closed by ✕ or by using the feature, shown at most twice and never again on this device.
+
+    No tours, no coach marks, and no "what's new" pop-ups over the User's work. Tips use the app's one shared tip, not a one-off.
+    - Check: the change adds no step to first run or onboarding; any tip names the moment it appears and how it goes away.
 
 ## Conventions already chosen
 
@@ -54,6 +62,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 | Files dropped on the composer | They become Documents and that Question's scope | Claude, ChatGPT |
 | Insert | "/" in the note, matching pinyin for Chinese | Notion, Feishu, Yuque |
 | Changes the AI proposes | Shown as changes in the note; one key accepts all, one rejects all | Cursor, Notion AI |
+| Learning a feature | Seen where it lives, in its menu and in ⌘K, with at most one tip when it helps; nothing in onboarding beyond the first checked Answer | Claude, ChatGPT, Linear |
 
 ## In an issue that changes UI
 
