@@ -12,6 +12,7 @@ import type { ChatProviderKind } from "../api";
 import { type ChatGptCredentials, createCodexChatModel } from "./chatgpt/codexEndpoint";
 import { createOllamaChatModel } from "./ollamaChat";
 import { DEFAULT_OLLAMA_SETTINGS, type OllamaModelSettings } from "./ollamaModels";
+import { withoutStorage } from "./responsesStore";
 
 /** A model object, never a model id string (which the AI SDK would send to its gateway). */
 export type ChatLanguageModel = Exclude<LanguageModel, string>;
@@ -57,7 +58,8 @@ function requireBaseUrl(spec: ChatModelSpec): string {
 export const createAiSdkChatModel: ChatModelFactory = (spec) => {
   switch (spec.kind) {
     case "openai":
-      return createOpenAI({ apiKey: requireKey(spec) })(spec.modelId);
+      // The Responses API, which stores requests at OpenAI unless every one says not to.
+      return withoutStorage(createOpenAI({ apiKey: requireKey(spec) }).responses(spec.modelId));
     case "anthropic":
       return createAnthropic({ apiKey: requireKey(spec) })(spec.modelId);
     case "google":

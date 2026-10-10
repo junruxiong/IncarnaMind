@@ -20,6 +20,9 @@ import { CloseLineIcon, ExportLineIcon, MindLineIcon, PlusLineIcon } from "./lin
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
+/** The new-tab shortcut as this system writes it, for tooltips and menus. */
+export const NEW_MIND_SHORTCUT = isMac ? "⌘T" : "Ctrl+T";
+
 /** Drag type for a tab, so file drops and sidebar drags ignore it. */
 const TAB_DRAG_TYPE = "application/x-incarnamind-tab";
 
@@ -30,7 +33,7 @@ const sideOf = (event: DragEvent<HTMLDivElement>): "before" | "after" => {
 };
 
 /**
- * The Mind pane's header: a strip of open Minds as tabs, then "+" for a new
+ * The card's band: a strip of open Minds as tabs, then "+" for a new
  * Mind, then Export at the right end. Clicking a tab shows its Mind; its ✕ or
  * a middle click closes it; dragging moves it. The arrow keys move between
  * tabs, and the window's shortcuts work too (see `useTabShortcuts`).
@@ -141,8 +144,8 @@ export function MindTabs({ onExport }: { onExport(): void }) {
       <button
         type="button"
         data-testid="new-tab"
-        aria-label={t("tabs.new", { shortcut: isMac ? "⌘T" : "Ctrl+T" })}
-        title={t("tabs.new", { shortcut: isMac ? "⌘T" : "Ctrl+T" })}
+        aria-label={t("tabs.new", { shortcut: NEW_MIND_SHORTCUT })}
+        title={t("tabs.new", { shortcut: NEW_MIND_SHORTCUT })}
         onClick={() => void createMind()}
         className="mind-tabs-new"
       >

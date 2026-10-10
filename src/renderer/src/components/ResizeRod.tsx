@@ -15,6 +15,8 @@ interface ResizeRodProps {
   onCommit(width: number): void;
   /** Starts below the 44px band the panes' headers share (`.pane-divider--below-band`). */
   belowBand?: boolean;
+  /** The 8px gap between the sidebar and the card: no rule, only a grip while pointed at. */
+  gap?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function ResizeRod({
   onPreview,
   onCommit,
   belowBand = false,
+  gap = false,
 }: ResizeRodProps) {
   const drag = useRef<{ startX: number; startWidth: number; latest: number } | null>(null);
   const clamp = (value: number) => Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
@@ -82,7 +85,13 @@ export function ResizeRod({
       onPointerUp={endDrag}
       onPointerCancel={cancelDrag}
       onKeyDown={resizeWithKeys}
-      className={belowBand ? "pane-divider pane-divider--below-band" : "pane-divider"}
+      className={
+        gap
+          ? "pane-divider pane-divider--gap"
+          : belowBand
+            ? "pane-divider pane-divider--below-band"
+            : "pane-divider"
+      }
     />
   );
 }

@@ -1,4 +1,5 @@
-import { crc32, deflateRawSync } from "node:zlib";
+import { createHash } from "node:crypto";
+import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 
 /** One entry of a zip to build. */
 export interface ZipInput {
@@ -64,4 +65,87 @@ export function buildZip(entries: readonly ZipInput[]): Buffer {
   end.writeUInt32LE(directory.length, 12);
   end.writeUInt32LE(offset, 16);
   return Buffer.concat([...locals, directory, end]);
+}
+
+const LOCAL_HEADER = 0x04034b50;
+const CENTRAL_HEADER = 0x02014b50;
+const END_OF_DIRECTORY = 0x06054b50;
+
+/**
+ * A fingerprint of a ZIP archive as its writer made it: the SHA-256 of all its
+ * bytes but the compressed ones, which depend on the build of zlib. Node's own
+ * zlib (in CI, and in the app's Electron) and the system's (which some Node
+ * installs use instead) deflate the same text to different bytes. Each
+ * deflated entry must be what this Node's `deflateRawSync` makes of its
+ * content, so with the fingerprint every byte is pinned all the same.
+ *
+ * It throws unless the archive is consistent: each central record matches its
+ * local header and points at it, the entries follow one another, and the end
+ * record points at the directory that follows them. What is hashed is the
+ * archive with each entry's content in place of its compressed bytes, and the
+ * sizes and offsets that follow from that.
+ */
+export function zipFingerprint(data: Uint8Array): string {
+  const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  const end = bytes.length - 22;
+  if (end < 0 || bytes.readUInt32LE(end) !== END_OF_DIRECTORY) {
+    throw new Error("No end record where an archive without a comment has it.");
+  }
+  const count = bytes.readUInt16LE(end + 10);
+  const directoryStart = bytes.readUInt32LE(end + 16);
+  if (bytes.readUInt16LE(end + 8) !== count) throw new Error("The entry counts differ.");
+
+  const hash = createHash("sha256");
+  const centrals: Buffer[] = [];
+  let local = 0;
+  let central = directoryStart;
+  let canonical = 0;
+  for (let index = 0; index < count; index++) {
+    if (bytes.readUInt32LE(central) !== CENTRAL_HEADER) throw new Error("Bad central record.");
+    if (bytes.readUInt32LE(local) !== LOCAL_HEADER) throw new Error("Bad local header.");
+    if (bytes.readUInt32LE(central + 42) !== local) throw new Error("A record points elsewhere.");
+    const nameLength = bytes.readUInt16LE(central + 28);
+    const centralLength =
+      46 + nameLength + bytes.readUInt16LE(central + 30) + bytes.readUInt16LE(central + 32);
+    const localLength = 30 + nameLength + bytes.readUInt16LE(local + 28);
+    // Version needed, flags, method, time, date, CRC-32, sizes and name length agree.
+    if (!bytes.subarray(local + 4, local + 28).equals(bytes.subarray(central + 6, central + 30))) {
+      throw new Error("A local header and its central record differ.");
+    }
+    const name = bytes.subarray(central + 46, central + 46 + nameLength);
+    if (!name.equals(bytes.subarray(local + 30, local + 30 + nameLength))) {
+      throw new Error("A local header and its central record name different entries.");
+    }
+    const method = bytes.readUInt16LE(local + 8);
+    const compressed = bytes.subarray(
+      local + localLength,
+      local + localLength + bytes.readUInt32LE(local + 18),
+    );
+    const content = method === 8 ? inflateRawSync(compressed) : compressed;
+    if (content.length !== bytes.readUInt32LE(local + 22)) throw new Error("A size is wrong.");
+    if (crc32(content) >>> 0 !== bytes.readUInt32LE(local + 14)) throw new Error("A CRC is wrong.");
+    if (method === 8 && !compressed.equals(deflateRawSync(content))) {
+      throw new Error(`${name.toString("utf8")} isn't deflated as this Node deflates it.`);
+    }
+
+    const header = Buffer.from(bytes.subarray(local, local + localLength));
+    header.writeUInt32LE(content.length, 18);
+    hash.update(header).update(content);
+    const record = Buffer.from(bytes.subarray(central, central + centralLength));
+    record.writeUInt32LE(content.length, 20);
+    record.writeUInt32LE(canonical, 42);
+    centrals.push(record);
+    canonical += localLength + content.length;
+    local += localLength + compressed.length;
+    central += centralLength;
+  }
+  if (local !== directoryStart)
+    throw new Error("Something lies between the entries and the directory.");
+  if (central !== end || bytes.readUInt32LE(end + 12) !== end - directoryStart) {
+    throw new Error("The end record doesn't match the directory.");
+  }
+  const record = Buffer.from(bytes.subarray(end));
+  record.writeUInt32LE(canonical, 16);
+  for (const each of centrals) hash.update(each);
+  return hash.update(record).digest("hex");
 }

@@ -15,6 +15,7 @@ import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { checkWellFormed, footnotesOf, paragraphsOf, part, textOf, unzip } from "../helpers/docx";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, question, writeMind } from "../helpers/minds";
+import { zipFingerprint } from "../helpers/zip";
 
 /** A core with one Document ("Tides") and a Mind titled "Tides", with a client. */
 async function setUp(title = "Tides") {
@@ -117,6 +118,61 @@ function writeSample(client: MindClient, tides: Document): void {
   ]);
 }
 
+/**
+ * What the sample leaves out that the .docx writer knows: a quote, a rule, web
+ * links (one on code), struck and underlined text, a line break, Citations of
+ * slides, rows and sections, maths Word's equations can't hold, a table with a
+ * cell over two columns, and an image.
+ */
+function writeEverythingElse(client: MindClient, tides: Document): void {
+  const at = (location: object, name: string): JSONContent => {
+    const node = citation(tides, [1, 1], "found");
+    return { ...node, attrs: { ...node.attrs, documentName: name, location } };
+  };
+  const linked = (value: string, href: string, ...marks: string[]): JSONContent => ({
+    type: "text",
+    text: value,
+    marks: [...marks.map((type) => ({ type })), { type: "link", attrs: { href } }],
+  });
+  writeMind(client, [
+    { type: "blockquote", content: [paragraph(text("Time and tide wait for no one."))] },
+    { type: "horizontalRule" },
+    paragraph(
+      linked("Tide tables", "https://tides.example/tables"),
+      text(" and "),
+      linked("tide.js", "https://tides.example/code", "code"),
+      text(": "),
+      text("old", "strike"),
+      text(" "),
+      text("new", "underline"),
+      { type: "hardBreak" },
+      text("Growth"),
+      at({ kind: "slide", from: 3, to: 3 }, "Deck"),
+      text(", revenue"),
+      at({ kind: "rows", sheet: "Revenue", from: 12, to: 14 }, "Model"),
+      text(", the crest"),
+      at({ kind: "section", heading: "2.1 Sensitivity" }, "Review"),
+      text("."),
+    ),
+    { type: "blockMath", attrs: { latex: "\\undefinedmacro{x}" } },
+  ]);
+  // The editor has no tables or images yet; they are written as Tiptap's would be.
+  client.doc.transact(() => {
+    client.blocks.push([
+      element("table", {}, [
+        element("tableRow", {}, [
+          element("tableHeader", { colspan: "2" }, [element("paragraph", {}, ["Tides"])]),
+        ]),
+        element("tableRow", {}, [
+          element("tableCell", {}, [element("paragraph", {}, ["Spring"])]),
+          element("tableCell", {}, [element("paragraph", {}, ["4 m"])]),
+        ]),
+      ]),
+      element("image", { src: PIXEL, alt: "A chart" }, []),
+    ]);
+  });
+}
+
 const decode = (exported: MindExport) => new TextDecoder().decode(exported.data);
 
 /** The text of an equation's runs, joined. */
@@ -144,18 +200,58 @@ describe("exporting a Mind", () => {
     writeSample(client, tides);
     await client.settled();
 
-    const fingerprint = async (format: "markdown" | "docx") =>
-      createHash("sha256")
-        .update((await core.exportMind(mind.id, { format })).data)
-        .digest("hex");
+    const exported = async (format: "markdown" | "docx") =>
+      (await core.exportMind(mind.id, { format })).data;
 
-    expect(await fingerprint("markdown")).toBe(
-      "a4c7d2f0c6856d0ed5a4df3984ab53e8b1bd89057a4cef980a14629bb86685fa",
-    );
-    expect(await fingerprint("docx")).toBe(
-      "2146294793761d83d8fac0f0ad1133cd81246793fa08ad26def36d00ca128e72",
+    expect(
+      createHash("sha256")
+        .update(await exported("markdown"))
+        .digest("hex"),
+    ).toBe("a4c7d2f0c6856d0ed5a4df3984ab53e8b1bd89057a4cef980a14629bb86685fa");
+    // The .docx's compressed bytes depend on zlib's build, so they are checked against this
+    // Node's deflate, and the rest is pinned (see `zipFingerprint`).
+    expect(zipFingerprint(await exported("docx"))).toBe(
+      "657f2cf0604e8470b9bcc513f41111ce89230884050fc75f4c900bb92ecb3b1b",
     );
   });
+
+  test.each([
+    [
+      "the sample, with its Question",
+      "sample",
+      { includeQuestions: true },
+      "4d550b58862572e9cfacb754c17da2186f0962f2d4b26579c442e48e8dcbf0f5",
+    ],
+    [
+      "the sample, in Chinese, on A4",
+      "sample",
+      { language: "zh-CN" },
+      "64ab43cb53ab415dfe722a7983f1416a75c7b2fc0a32e8886c2b10c648498624",
+    ],
+    [
+      "quotes, rules, links, marks, breaks, tables, images and Locations",
+      "rest",
+      {},
+      "96c56a2c299134fa9209614c25a085974a7306317ebc41a09b5302bacef54ac8",
+    ],
+  ] as const)(
+    "the bytes of a .docx export don't change either: %s",
+    async (_, content, options, expected) => {
+      const { core, mind, client, tides } = await setUp();
+      if (content === "sample") writeSample(client, tides);
+      else writeEverythingElse(client, tides);
+      await client.settled();
+      if ("language" in options)
+        await core.updateSettings({ user: { language: options.language } });
+
+      const exported = await core.exportMind(mind.id, {
+        format: "docx",
+        includeQuestions: "includeQuestions" in options,
+      });
+
+      expect(zipFingerprint(exported.data)).toBe(expected);
+    },
+  );
 
   test("to Markdown: Notes and Answers as Markdown, the Question marked, math kept, and a footnote per Citation", async () => {
     const { core, mind, client, tides } = await setUp();

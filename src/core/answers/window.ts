@@ -203,6 +203,16 @@ export function createWindowBudget(
       return fitResult(passages, room, ranks).text;
     },
 
+    /**
+     * Tokens left in a request of these messages (the first its instructions)
+     * whose output is capped at `outputTokens`: for a request of the engine's
+     * own, such as the one for exact quotes (see ./quoteRetry).
+     */
+    roomBeside(messages: readonly string[], outputTokens: number): number {
+      const held = messages.reduce((sum, text) => sum + tokens(text) + MESSAGE_TOKENS, 0);
+      return window.tokens - Math.min(outputTokens, window.outputTokens) - MARGIN_TOKENS - held;
+    },
+
     /** Error for a request Ollama refused as too long, after the retry. */
     tooLong(promptTokens: number | null): ProviderError {
       return tooLong((promptTokens ?? window.tokens) + window.outputTokens);
