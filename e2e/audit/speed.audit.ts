@@ -451,8 +451,14 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
     await close(launched);
   }
   record("speed.startup.warm", warm);
-  const pick = (runs: unknown[], key: string) =>
-    median(runs.map((r) => (r as Record<string, number>)[key] as number));
+  // The median of the runs that have the timing, or null: a first run, behind its modal
+  // chat setup, may record no contentful paint.
+  const pick = (runs: unknown[], key: string) => {
+    const values = runs
+      .map((r) => (r as Record<string, number | null>)[key])
+      .filter((v): v is number => typeof v === "number");
+    return values.length ? median(values) : null;
+  };
   record("speed.startup.summary", {
     coldFcpMedian: pick(cold, "toFirstContentfulPaintMs"),
     coldInteractiveMedian: pick(cold, "toInteractiveMs"),
@@ -787,18 +793,20 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
       record("speed.scale.sidebarHover", await stopHover());
     }
 
-    // Switch the sidebar between Folders and Source locations (re-renders every row).
-    const folders = window.getByRole("button", { name: "Folders", exact: true });
+    // Switch the sidebar between Folders and Source locations (re-renders every row). With
+    // Folders in the Library the sidebar opens on Folders: start from Source locations.
+    const views = window.getByTestId("browse-views");
+    const folders = views.getByRole("button", { name: "Folders", exact: true });
+    const sources = views.getByRole("button", { name: "Source locations", exact: true });
+    const sourcesShown = '[data-testid="folder-item"][data-root="true"]';
     if (await folders.count()) {
+      if ((await sources.getAttribute("aria-pressed")) !== "true") await click(window, sources);
+      await expect(window.locator(sourcesShown).first()).toBeVisible();
       const done = await armUntil(window, "selectorShown", '[data-testid="library-folders"]');
       await click(window, folders);
       record("speed.scale.toggleFoldersMs", await done());
-      const back = await armUntil(
-        window,
-        "selectorShown",
-        '[data-testid="folder-item"][data-root="true"]',
-      );
-      await click(window, window.getByRole("button", { name: "Source locations", exact: true }));
+      const back = await armUntil(window, "selectorShown", sourcesShown);
+      await click(window, sources);
       record("speed.scale.toggleSourcesMs", await back());
     }
 

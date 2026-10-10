@@ -497,17 +497,13 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
       await window.waitForTimeout(250);
       await shot(window, "A34-document-tags-popover");
       await scan(window, "A34-document-tags-popover");
-      const manage = window.getByTestId("manage-tags");
-      if (await manage.isVisible()) {
-        await click(window, manage);
-        await expect(window.getByTestId("tags-dialog")).toBeVisible();
-        await window.waitForTimeout(300);
-        await shot(window, "A35-tags-dialog");
-        await scan(window, "A35-tags-dialog");
-        await window.keyboard.press("Escape");
-      } else {
-        await window.keyboard.press("Escape");
-      }
+      // "Manage Tags…" at the foot of the Document's Tags popover.
+      await click(window, window.getByTestId("open-tags-dialog"));
+      await expect(window.getByTestId("tags-dialog")).toBeVisible();
+      await window.waitForTimeout(300);
+      await shot(window, "A35-tags-dialog");
+      await scan(window, "A35-tags-dialog");
+      await window.keyboard.press("Escape");
     });
 
     await step(T, "the Library (document sheet)", async () => {
