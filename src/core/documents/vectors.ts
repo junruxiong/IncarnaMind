@@ -13,6 +13,9 @@
  *
  * The same vectors give each Document's mean, the vector Documents are
  * grouped into Topics by (R2 in docs/designs/library-structure-view.md).
+ *
+ * While embeddings are off (the default), search never runs a vector search,
+ * so nothing is loaded; vectors stored from before stay unused.
  */
 import type { Database } from "../storage";
 

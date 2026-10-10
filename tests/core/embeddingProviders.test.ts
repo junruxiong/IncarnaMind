@@ -19,7 +19,7 @@ import {
   startCore,
 } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
-import { createControlledEmbedder } from "../helpers/embedding";
+import { createControlledEmbedder, turnOnEmbeddings } from "../helpers/embedding";
 import { mockEmbeddingModels, startEmbeddingsServer } from "../helpers/embeddingProviders";
 import { startOllamaStub } from "../helpers/ollama";
 
@@ -37,7 +37,10 @@ const OPENAI_KEY = "sk-test-embeddings-key";
 /** A server on this computer: nothing is sent elsewhere, so no consent is asked. */
 const LOCAL_SERVER = "http://127.0.0.1:9/v1";
 
-/** A core with the built-in (fake) model, mock API embedding models, and two Documents processed. */
+/**
+ * A core with embeddings on with the built-in (fake) model, mock API
+ * embedding models, and two Documents processed.
+ */
 async function setUp(options: { dimensions?: number; overrides?: Partial<CoreAdapters> } = {}) {
   const dataDir = await createTempDataFolder();
   const sources = await createTempDataFolder();
@@ -52,6 +55,7 @@ async function setUp(options: { dimensions?: number; overrides?: Partial<CoreAda
       ...options.overrides,
     });
   const core = start();
+  await turnOnEmbeddings(core);
   const [plants, markets] = await addAndProcess(core, [
     await writeSourceFile(sources, "Plants.md", PLANTS),
     await writeSourceFile(sources, "Markets.md", MARKETS),
@@ -117,7 +121,7 @@ const documentNamesOf = (results: { documentName: string }[]) =>
   [...new Set(results.map((result) => result.documentName))].sort();
 
 describe("Switching the embedding provider", { timeout: 30_000 }, () => {
-  test("the built-in model is the default, and its vectors are recorded with its id and size", async () => {
+  test("turned on, embeddings use the built-in model unless another is chosen, and its vectors are recorded with its id and size", async () => {
     const { core, dataDir, embeddings } = await setUp();
 
     expect(await core.getEmbeddingSettings()).toEqual({

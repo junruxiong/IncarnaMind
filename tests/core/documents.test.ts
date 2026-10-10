@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { type Document, InvalidInputError, NotFoundError } from "../../src/core";
-import { createTempDataFolder, startCore, tickingClock } from "../helpers/core";
+import { createTempDataFolder, queryDatabase, startCore, tickingClock } from "../helpers/core";
 import {
   addAndProcess,
   createSourceFolder,
@@ -27,6 +27,16 @@ const CHINESE_NOTES = `第一章 深度学习
 卷积神经网络擅长处理图像。循环神经网络擅长处理序列数据。
 
 注意力机制让模型能够关注输入中最重要的部分。`;
+
+/** In traditional characters. */
+const TRADITIONAL_NOTES = `# 永續發展
+
+可持續發展目標是聯合國制定的十七個全球發展目標，以綜合方式解決社會和環境的發展問題。`;
+
+/** In simplified characters. */
+const SIMPLIFIED_NOTES = `第三章 增长
+
+经济增长依赖于劳动生产率的提高与技术进步。`;
 
 /** About 300 approximate tokens: 20 sentences, with `marker` in the middle one. */
 const pageOfText = (page: number, marker: string): PdfPage => ({
@@ -104,7 +114,7 @@ describe("Documents", { timeout: 30_000 }, () => {
     );
   });
 
-  test("processing reports queued, extracting, embedding, then ready", async () => {
+  test("processing reports queued, extracting, then ready: embeddings are off by default", async () => {
     const sources = await createTempDataFolder();
     const core = startCore(await createTempDataFolder());
     const seen: Document[] = [];
@@ -119,10 +129,8 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(seen.filter((each) => each.id === added.id).map((each) => each.status)).toEqual([
       "queued",
       "extracting",
-      "embedding",
       "ready",
     ]);
-    expect(seen.find((each) => each.status === "embedding")?.progress).toBe(0);
     expect(ready).toMatchObject({
       status: "ready",
       progress: null,
@@ -267,6 +275,55 @@ describe("Documents", { timeout: 30_000 }, () => {
 
     expect(await core.searchPassages("convolution", { mode: "keyword" })).toEqual([]);
     expect(await core.searchPassages("   ")).toEqual([]);
+  });
+
+  test("keyword search reads traditional and simplified Chinese alike, and a Passage keeps the characters it was written in", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const [goals, growth, report] = await addAndProcess(core, [
+      await writeSourceFile(sources, "目標.md", TRADITIONAL_NOTES),
+      await writeSourceFile(sources, "经济.txt", SIMPLIFIED_NOTES),
+      await writeSourceFile(sources, "季度報告.md", "Quarterly figures rose by four per cent."),
+    ]);
+
+    // A simplified query finds the traditional Passage, as it was written; with
+    // embeddings off, the default search is keyword search too.
+    for (const mode of ["keyword", undefined] as const) {
+      const found = await core.searchPassages("可持续发展目标", mode ? { mode } : {});
+      expect(found.map((result) => result.documentId)).toEqual([goals?.id]);
+      expect(found[0]?.text).toContain("可持續發展目標是聯合國制定的");
+    }
+    // A traditional query finds the simplified Passage.
+    const traditionalQuery = await core.searchPassages("經濟增長", { mode: "keyword" });
+    expect(traditionalQuery.map((result) => result.documentId)).toEqual([growth?.id]);
+    expect(traditionalQuery[0]?.text).toContain("经济增长依赖于");
+    // A Document's name is folded too, where it is indexed with each of its Passages.
+    const byName = await core.searchPassages("季度报告", { mode: "keyword" });
+    expect(byName.map((result) => result.documentName)).toEqual(["季度報告"]);
+    expect(byName[0]?.documentId).toBe(report?.id);
+
+    // Only the index is folded: the Passages and Units stored, which Citations
+    // quote and the viewer shows, keep the traditional characters.
+    const stored = (table: string) =>
+      queryDatabase<{ text: string }>(
+        dataDir,
+        `SELECT text FROM ${table} WHERE document_id = ? AND deleted_at IS NULL`,
+        [goals?.id as string],
+      )
+        .map((row) => row.text)
+        .join("\n");
+    for (const table of ["passages", "document_pages"]) {
+      expect(stored(table)).toContain("可持續發展目標是聯合國制定的");
+      expect(stored(table)).not.toContain("可持续发展");
+    }
+    // The index has the simplified words, and not the traditional ones.
+    const matching = (word: string) =>
+      queryDatabase(dataDir, "SELECT rowid FROM passages_fts WHERE passages_fts MATCH ?", [
+        `"${word}"`,
+      ]).length;
+    expect(matching("目标")).toBeGreaterThan(0);
+    expect(matching("目標")).toBe(0);
   });
 
   test("search returns the best matches first, up to the limit", async () => {

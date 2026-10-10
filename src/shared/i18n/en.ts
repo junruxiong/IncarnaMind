@@ -439,8 +439,12 @@ export const en = {
 
   "embeddingProviders.settings.title": "Document search",
   "embeddingProviders.settings.body":
-    "Documents are searched by their words and by their meaning. Meaning comes from an embedding model: the built-in one runs on this computer. A cloud model may find more, but it receives the text of every Document.",
+    "Documents are searched by their words, and the best matches are reranked. An embedding model also searches by meaning: it finds Passages worded differently from your Question, but indexing is slower, and the built-in model is a 135 MB download. A cloud model may find more, but it receives the text of every Document.",
   "embeddingProviders.settings.current": "Embedding model: ",
+  "embeddingProviders.settings.off": "Off",
+  "embeddingProviders.settings.offNote":
+    "Documents are searched by their words, and the best matches reranked. Nothing leaves this computer.",
+  "embeddingProviders.settings.turnOn": "Turn on…",
   "embeddingProviders.settings.builtIn": "Built-in ({model})",
   "embeddingProviders.settings.sendsTo":
     "The text of your Documents, and your searches, are sent to {service}.",
@@ -449,12 +453,17 @@ export const en = {
   "embeddingProviders.settings.error":
     "Search can't use this model, so Documents wait for it. {reason}",
   "embeddingProviders.settings.retry": "Try again",
+  "embeddingProviders.kind.off": "Off",
   "embeddingProviders.kind.built-in": "Built-in model",
   "embeddingProviders.kind.openai": "OpenAI",
   "embeddingProviders.kind.google": "Google",
   "embeddingProviders.kind.openai-compatible": "OpenAI-compatible server",
   "embeddingProviders.kind.ollama": "Ollama",
   "embeddingProviders.form.label": "Embedding model",
+  "embeddingProviders.form.tradeOff":
+    "An embedding model also finds Passages worded differently from your Question, at the cost of slower indexing and, for the built-in model, a 135 MB download.",
+  "embeddingProviders.form.offHint":
+    "Documents are searched by their words, reranked, as soon as they are read. Nothing is downloaded.",
   "embeddingProviders.form.localOnly":
     "Local mode is on, so only models on this computer can be chosen.",
   "embeddingProviders.form.localOnlyServer":
@@ -466,6 +475,8 @@ export const en = {
     "Leave it empty for Ollama on this computer. Pull the model in Ollama first, e.g. ollama pull bge-m3.",
   "embeddingProviders.form.model": "Embedding model name",
   "embeddingProviders.form.switch": "Switch…",
+  "embeddingProviders.form.turnOn": "Turn on…",
+  "embeddingProviders.form.turnOff": "Turn off…",
   "embeddingProviders.test.ok": "Connected: the model made a vector of {dimensions} numbers.",
   "embeddingProviders.confirm.title": "Switch to {provider}?",
   "embeddingProviders.confirm.reprocess":
@@ -475,13 +486,20 @@ export const en = {
   "embeddingProviders.confirm.local": "Everything stays on this computer.",
   "embeddingProviders.confirm.cancel": "Cancel",
   "embeddingProviders.confirm.switch": "Switch and process again",
+  "embeddingProviders.confirm.onTitle": "Turn on {provider}?",
+  "embeddingProviders.confirm.embed":
+    "Every Document ({count} in all) will be embedded in the background, which can take a while. Until each one is done, search finds its Passages by their words.",
+  "embeddingProviders.confirm.turnOn": "Turn on",
+  "embeddingProviders.confirm.offTitle": "Turn embeddings off?",
+  "embeddingProviders.confirm.off":
+    "Search will find Passages by their words, reranked, and new Documents are ready as soon as they are read. The vectors made so far are kept, should you turn embeddings on again.",
+  "embeddingProviders.confirm.turnOff": "Turn off",
   "embeddingProviders.localOnly.label": "Keep everything on this computer",
   "embeddingProviders.localOnly.body":
-    "Document search uses the built-in model or Ollama, and search results aren't sent for reranking. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+    "Embeddings, when on, use the built-in model or Ollama, and search results aren't sent for reranking. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
   "embeddingProviders.localOnly.cloudChat":
     "Your chat model still sends Questions to {service}: choose a local model under Chat model to keep them here too.",
-  "embeddingProviders.rebuild.title":
-    "Rebuilding search for the new model: {done} of {total} Documents",
+  "embeddingProviders.rebuild.title": "Embedding Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
     "To keep everything on this computer, search now uses the built-in model.",
   "embeddingProviders.rebuild.note":

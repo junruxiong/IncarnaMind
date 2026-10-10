@@ -52,6 +52,7 @@ import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
+  HAN_CURRENT_SINCE,
   METADATA_VERSION,
   PROCESSING_VERSION,
   type ProcessedPassage,
@@ -64,6 +65,7 @@ import {
   fuseRankingScores,
   fuseRankings,
   HYBRID_CANDIDATES,
+  keywordOnlyPassages,
   keywordSearch,
   passagesBySeq,
   passagesInWindow,
@@ -88,6 +90,13 @@ const LANGUAGE_SAMPLE_PASSAGES = 4;
 const LANGUAGE_SAMPLE_CHARACTERS = 1000;
 const MAX_NAME_LENGTH = 500;
 const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
+
+/**
+ * A GLOB for text with a Han character in it: CJK Unified Ideographs and
+ * Extension A, where every traditional character the keyword index folds is,
+ * and the radicals and compatibility ideographs normalisation turns into them.
+ */
+const HAS_HAN = "*[\u2e80-\u2fdf\u3400-\u9fff\uf900-\ufaff]*";
 
 interface DocumentRow {
   id: string;
@@ -538,8 +547,8 @@ export function createDocuments(options: DocumentsOptions) {
    * The status of a Document whose new version couldn't be indexed (its file
    * couldn't be read, or what was read couldn't be processed): the version
    * indexed before stays, so it is ready again if all of it is embedded with
-   * the current model, otherwise it goes back to embedding. Null if no
-   * version has Passages indexed.
+   * the current model, or embeddings are off, otherwise it goes back to
+   * embedding. Null if no version has Passages indexed.
    */
   function indexedStatus(row: DocumentRow): DocumentStatus | null {
     const counts = db.get<{ total: number; embedded: number }>(
@@ -548,6 +557,7 @@ export function createDocuments(options: DocumentsOptions) {
       [row.id],
     );
     if (!counts || counts.total === 0) return null;
+    if (!model.enabled()) return "ready";
     if (counts.embedded === counts.total && row.embedding_model === model.id) return "ready";
     return model.isReady() ? "embedding" : "waiting-for-model";
   }
@@ -627,7 +637,8 @@ export function createDocuments(options: DocumentsOptions) {
       if (result.outcome === "ready") {
         insertPassages(job.documentId, result.contentHash, row.name, result.passages);
         insertPages(job.documentId, result.contentHash, result.pages);
-        status = model.isReady() ? "embedding" : "waiting-for-model";
+        // Searchable now, by its words: while embeddings are off, that is all there is to do.
+        status = !model.enabled() ? "ready" : model.isReady() ? "embedding" : "waiting-for-model";
       } else {
         status = result.outcome;
       }
@@ -973,14 +984,34 @@ export function createDocuments(options: DocumentsOptions) {
   };
 
   // Documents processed by an older pipeline are processed again, through the usual
-  // statuses: those whose kind it changed for (see `CURRENT_SINCE`).
-  db.run(
-    `UPDATE documents SET status = 'queued', updated_at = ?
-     WHERE deleted_at IS NULL
-       AND processing_version < coalesce(json_extract(?, '$.' || kind), ?)
-       AND status IN ('ready', 'embedding', 'waiting-for-model')`,
-    [now(), JSON.stringify(CURRENT_SINCE), BigInt(PROCESSING_VERSION)],
-  );
+  // statuses: those whose kind it changed for (see `CURRENT_SINCE`), and those with Han
+  // characters in their text or name, whose keyword index now folds them (see
+  // `HAN_CURRENT_SINCE`). The others are already what this pipeline builds: their version
+  // says so, so their text isn't looked through again at the next start.
+  db.transaction(() => {
+    db.run(
+      `UPDATE documents SET status = 'queued', updated_at = ?
+       WHERE deleted_at IS NULL
+         AND processing_version < coalesce(json_extract(?, '$.' || kind), ?)
+         AND status IN ('ready', 'embedding', 'waiting-for-model')`,
+      [now(), JSON.stringify(CURRENT_SINCE), BigInt(PROCESSING_VERSION)],
+    );
+    db.run(
+      `UPDATE documents SET status = 'queued', updated_at = ?
+       WHERE deleted_at IS NULL AND processing_version < ?
+         AND status IN ('ready', 'embedding', 'waiting-for-model')
+         AND (name GLOB ? OR EXISTS (SELECT 1 FROM passages p
+                                     WHERE p.document_id = documents.id
+                                       AND p.deleted_at IS NULL AND p.text GLOB ?))`,
+      [now(), BigInt(HAN_CURRENT_SINCE), HAS_HAN, HAS_HAN],
+    );
+    db.run(
+      `UPDATE documents SET processing_version = ?
+       WHERE deleted_at IS NULL AND processing_version < ?
+         AND status IN ('ready', 'embedding', 'waiting-for-model')`,
+      [BigInt(HAN_CURRENT_SINCE), BigInt(HAN_CURRENT_SINCE)],
+    );
+  });
   // Pick up work a quit interrupted, in the order it was queued (newest files first).
   const unfinished = db.all<DocumentRow>(
     `SELECT ${COLUMNS} FROM documents
@@ -995,16 +1026,49 @@ export function createDocuments(options: DocumentsOptions) {
   /**
    * Puts every Document with Passages to search whose vectors aren't all from
    * the current model through embedding (again), or has it wait for the model.
-   * Documents already embedded with it stay ready. Returns those whose status changed.
+   * Documents already embedded with it stay ready. `thorough` also finds ready
+   * Documents with a Passage that has no vector yet, as one can after a time
+   * with embeddings off: their vectors from the model are kept, and only the
+   * missing ones made.
+   *
+   * While embeddings are off, the other way round: a Document being embedded,
+   * or waiting for the model, is ready, since its keyword index is; any
+   * vectors it has stay stored, unused.
+   *
+   * Returns the Documents whose status changed.
    */
-  function embedWithCurrentModel(): string[] {
+  function embedWithCurrentModel(thorough = false): string[] {
+    if (!model.enabled()) {
+      const readied = db.transaction(() => {
+        const rows = db.all<{ id: string }>(
+          `SELECT id FROM documents
+           WHERE deleted_at IS NULL AND status IN ('embedding', 'waiting-for-model')
+           ORDER BY created_at, rowid`,
+        );
+        for (const { id } of rows) setStatus(id, "ready");
+        return rows.map((row) => row.id);
+      });
+      for (const id of readied) {
+        try {
+          options.onReady?.(id);
+        } catch (error) {
+          reportError(error); // the Document is ready all the same
+        }
+      }
+      return readied;
+    }
     const ready = model.isReady();
     const changed = db.transaction(() => {
       const rows = db.all<{ id: string; status: string }>(
-        `SELECT id, status FROM documents
-         WHERE deleted_at IS NULL AND status IN ('ready', 'embedding', 'waiting-for-model')
-           AND (status <> 'ready' OR embedding_model IS NOT ?)
-         ORDER BY created_at, rowid`,
+        `SELECT d.id, d.status FROM documents d
+         WHERE d.deleted_at IS NULL AND d.status IN ('ready', 'embedding', 'waiting-for-model')
+           AND (d.status <> 'ready' OR d.embedding_model IS NOT ?${
+             thorough
+               ? ` OR EXISTS (SELECT 1 FROM passages p WHERE p.document_id = d.id
+                     AND p.deleted_at IS NULL AND p.embedding IS NULL)`
+               : ""
+           })
+         ORDER BY d.created_at, d.rowid`,
         [model.id],
       );
       const target = ready ? "embedding" : "waiting-for-model";
@@ -1030,14 +1094,18 @@ export function createDocuments(options: DocumentsOptions) {
 
   // Embedding carries on where it stopped, or waits for the model; Documents
   // embedded with a model other than the current one are embedded again.
+  // With embeddings off, what was waiting is ready (an install that had the
+  // built-in model on by default, say).
   embedWithCurrentModel();
   model.onReady(() => embedding.resumeWaiting());
-  // The User switched model: what is under way stops, and every Document is embedded again.
+  // The User switched model, or turned embeddings on or off: what is under way
+  // stops, and every Document without the model's vectors is embedded, or,
+  // turned off, is ready.
   model.onSwitch(() => {
     embedding.restart();
     vectors.reset();
     // Queued, but for one whose turn came at once, which the queue announced.
-    for (const id of embedWithCurrentModel()) if (!embedding.isEmbedding(id)) announce(id);
+    for (const id of embedWithCurrentModel(true)) if (!embedding.isEmbedding(id)) announce(id);
   });
 
   /** The live Documents a filter keeps, as SQL conditions on `documents`, with their parameters. */
@@ -1105,13 +1173,22 @@ export function createDocuments(options: DocumentsOptions) {
 
   /**
    * The query's vector, or null when a hybrid search has to do without:
-   * the model isn't ready, or fails. A vector search throws instead.
+   * embeddings are off (nothing is loaded), or the model isn't ready, or
+   * fails. A vector search throws instead.
    */
   async function queryVector(query: string, mode: SearchMode): Promise<Float32Array | null> {
     const unavailable = () => {
       if (mode === "vector") throw model.notReadyError();
       return null;
     };
+    if (!model.enabled()) {
+      if (mode === "vector") {
+        throw new InvalidInputError(
+          "Vector search needs embeddings, which are off: turn them on in Settings → Document search.",
+        );
+      }
+      return null;
+    }
     if (!(await model.load())) return unavailable();
     try {
       return await model.embedQuery(query);
@@ -1162,19 +1239,27 @@ export function createDocuments(options: DocumentsOptions) {
 
   /**
    * Keyword search's and vector search's rankings of the live Passages, each
-   * `listed` long, copies of one file merged (see `distinctPassages`). Vector
-   * search's is empty while the embedding model can't embed the query.
+   * `listed` long, copies of one file merged (see `distinctPassages`), and
+   * the Passages in keyword search's that have no vector, for fusion (see
+   * `fuseRankingScores`). Vector search's is empty while embeddings are off,
+   * while the embedding model can't embed the query, and until any Passage
+   * in the Search scope has a vector. Keyword search's is `keywordListed`
+   * long, when given.
    */
   async function rankings(
     query: string,
     listed: number,
     documentIds: readonly string[] | undefined,
-  ): Promise<number[][]> {
+    keywordListed = listed,
+  ): Promise<{ lists: number[][]; keywordOnly: Set<number> }> {
     const scope = searchScope(documentIds);
     const vector = await queryVector(query, "hybrid");
-    const keyword = keywordSearch(db, query, listed, scope);
+    const keyword = keywordSearch(db, query, keywordListed, scope);
     const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
-    return distinctPassages(db, [keyword, similar]);
+    const lists = distinctPassages(db, [keyword, similar]);
+    const keywordOnly =
+      similar.length > 0 ? keywordOnlyPassages(db, lists[0] ?? [], model.id) : new Set<number>();
+    return { lists, keywordOnly };
   }
 
   /** The Passages of these fused hits, in their order, each with its fused score. */
@@ -1193,25 +1278,45 @@ export function createDocuments(options: DocumentsOptions) {
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
-    const lists = await rankings(query, Math.max(limit, HYBRID_CANDIDATES), documentIds);
-    return scored(fuseRankingScores(lists, limit));
+    const { lists, keywordOnly } = await rankings(
+      query,
+      Math.max(limit, HYBRID_CANDIDATES),
+      documentIds,
+    );
+    return scored(fuseRankingScores(lists, limit, keywordOnly));
   }
 
   /**
    * For the search Tool's reranker: keyword search's best `perList` and
    * vector search's, each Passage once, in fused order with fused scores, so
-   * a reranker that fails leaves search's own order.
+   * a reranker that fails leaves search's own order. Without vector search's
+   * (embeddings off, the default, or no vectors yet), keyword search's best
+   * `keywordAlone`, in its order.
    */
   async function rerankCandidates(
     query: string,
-    perList: number,
+    counts: { perList: number; keywordAlone: number },
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
-    const lists = await rankings(query, Math.max(perList, HYBRID_CANDIDATES), documentIds);
-    const chosen = new Set(topsOfEach(lists, perList));
+    const listed = Math.max(2 * counts.perList, HYBRID_CANDIDATES);
+    const { lists, keywordOnly } = await rankings(
+      query,
+      listed,
+      documentIds,
+      Math.max(listed, counts.keywordAlone),
+    );
+    const [keyword = [], similar = []] = lists;
+    if (similar.length === 0) {
+      return scored(fuseRankingScores([keyword], counts.keywordAlone));
+    }
+    // With vector search, keyword search's list is fused as long as vector search's.
+    const fused = [keyword.slice(0, listed), similar];
+    const chosen = new Set(topsOfEach(fused, counts.perList));
     return scored(
-      fuseRankingScores(lists, Number.POSITIVE_INFINITY).filter((hit) => chosen.has(hit.seq)),
+      fuseRankingScores(fused, Number.POSITIVE_INFINITY, keywordOnly).filter((hit) =>
+        chosen.has(hit.seq),
+      ),
     );
   }
 
@@ -1578,7 +1683,10 @@ export function createDocuments(options: DocumentsOptions) {
       const similar = vector
         ? vectors.search(vector, HYBRID_CANDIDATES, scope).map((hit) => hit.seq)
         : [];
-      return passagesBySeq(db, fuseRankings(distinctPassages(db, [keyword, similar]), limit));
+      const lists = distinctPassages(db, [keyword, similar]);
+      const keywordOnly =
+        similar.length > 0 ? keywordOnlyPassages(db, lists[0] ?? [], model.id) : undefined;
+      return passagesBySeq(db, fuseRankings(lists, limit, keywordOnly));
     },
 
     /** Linked folders (see ./library). */

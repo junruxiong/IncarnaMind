@@ -27,6 +27,13 @@ export interface EvalQuestion {
   language: EvalLanguage;
   /** Asked in one language about a Document in the other: reported apart, never gating. */
   crossLingual: boolean;
+  /**
+   * Asks for a fact on one page in words that avoid its passage's own
+   * (synonyms, descriptions), as a person asks without the text in front of
+   * them: reported apart, never gating, so the gating counts stay comparable.
+   * Only true is written; left out, a Question isn't one.
+   */
+  paraphrase?: boolean;
   question: string;
   /**
    * Cross-lingual Questions only: the search query an Answer would add, the
@@ -44,6 +51,13 @@ export interface EvalQuestion {
   knownGap?: string;
   expected: ExpectedPassage;
 }
+
+/**
+ * A gating Question: neither cross-lingual nor a paraphrase. Only these count
+ * towards the gating bar and its per-language counts.
+ */
+export const isGating = (question: Pick<EvalQuestion, "crossLingual" | "paraphrase">) =>
+  !question.crossLingual && !question.paraphrase;
 
 export interface EvalDocument {
   key: string;
@@ -92,7 +106,13 @@ function readQuestion(
   }
   if (typeof expected.quote !== "string" || !expected.quote.trim()) fail(`${id}: no quote.`);
   const crossLingual = question.crossLingual === true;
-  const { translatedQuery, place, knownGap } = question as Record<string, unknown>;
+  const { translatedQuery, place, knownGap, paraphrase } = question as Record<string, unknown>;
+  if (paraphrase !== undefined && typeof paraphrase !== "boolean") {
+    fail(`${id}: paraphrase must be true or false.`);
+  }
+  if (paraphrase === true && crossLingual) {
+    fail(`${id}: a paraphrase question isn't cross-lingual: it is reported in its own language.`);
+  }
   if (translatedQuery !== undefined) {
     if (!crossLingual) fail(`${id}: only a cross-lingual question has a translatedQuery.`);
     if (typeof translatedQuery !== "string" || !translatedQuery.trim()) {
@@ -111,6 +131,7 @@ function readQuestion(
     id,
     language: language as EvalLanguage,
     crossLingual,
+    ...(paraphrase === true && { paraphrase: true }),
     question: question.question,
     ...(typeof translatedQuery === "string" && { translatedQuery }),
     ...(typeof place === "string" && { place }),
