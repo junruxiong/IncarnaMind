@@ -107,10 +107,8 @@ describe("Asking in a Mind's chat (#201)", () => {
     );
     expect(chatAnswer(client, chatId, answerId).attrs.questionId).toBe(questionId);
 
-    // The note's stored content is unchanged.
     expect(outline(client)).toEqual(["paragraph", "paragraph"]);
     expect(await storedNote(core, mind.id)).toEqual(before);
-    // The thread's history lists the chat, titled by its first Question.
     expect(listChats(client.doc)).toEqual([
       {
         id: chatId,
@@ -292,9 +290,7 @@ describe("Add to note, into a Mind that isn't open (#201)", () => {
         pageTo: 2,
       }),
     ]);
-    // Its link back names the Answer in the chat.
     expect(allOrigins(target.doc)).toEqual(new Map([[added.blockIds[0] as string, origin]]));
-    // The Mind it came from is unchanged.
     expect(outline(client)).toEqual([]);
 
     await core.undoAddToNote({ mindId: other.id, blockIds: added.blockIds });
@@ -319,7 +315,6 @@ describe("Add to note, into a Mind that isn't open (#201)", () => {
     await expect(
       core.addToNote({ mindId: chat.id, blocks: [paragraph], origin: null }),
     ).rejects.toThrow("Answers are added to a Mind's note, not to a chat.");
-    // Added with no origin: no link back.
     const added = await core.addToNote({ mindId: mind.id, blocks: [paragraph], origin: null });
     const client = await connectToMind(core, mind.id);
     expect(outline(client)).toEqual(["paragraph"]);

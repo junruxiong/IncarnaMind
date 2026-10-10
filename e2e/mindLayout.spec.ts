@@ -187,13 +187,11 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("When do spring tides happen, and what makes them stronger?");
   await window.keyboard.press("Enter");
-  // Answered in the thread (#201); Add to note keeps it on the empty line, Citation and all.
   const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await answer.getByTestId("answer-add").click();
   await expect(editor.getByTestId("citation-chip")).toHaveCount(1);
   await citeMore(editor);
-  // A Question and its Answer from before the thread, still in the note.
   await questionFromBefore(editor);
   // The thread folds away, so the whole note shows.
   await window.getByTestId("thread-fold").click();
@@ -456,7 +454,6 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await window.keyboard.type("Please book_boat from Dover");
   await window.keyboard.press("Enter");
 
-  // Answered in the thread (#201), where the card waits.
   const answer = window.getByTestId("thread").getByTestId("answer").first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });

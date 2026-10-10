@@ -83,6 +83,7 @@ export interface QuestionToAsk {
   scope: SearchScope;
   /** The Skill chosen for it with "/", if any. */
   skill: string | null;
+  askedFrom: string | null;
 }
 
 /** The Question's stored attributes (`QuestionAttributes`). */
@@ -93,6 +94,7 @@ export function questionAttributes(question: QuestionToAsk): QuestionAttributes 
     modelId: question.model?.modelId ?? null,
     ...scopeAttributesOf(question.scope),
     forcedSkill: question.skill,
+    askedFrom: question.askedFrom,
   };
 }
 

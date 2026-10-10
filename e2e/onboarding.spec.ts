@@ -212,7 +212,6 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("When are the tide tables published?");
   await window.keyboard.press("Enter");
-  // It is answered in the thread (#201); the note, still empty, keeps the steps.
   const thread = window.getByTestId("thread");
   await expect(thread.getByTestId("thread-question")).toHaveCount(1);
   await expect(thread.getByTestId("answer")).toHaveAttribute("data-status", "done", {

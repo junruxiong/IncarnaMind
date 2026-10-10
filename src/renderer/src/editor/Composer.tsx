@@ -109,7 +109,6 @@ export function Composer({
   mindId: string;
   /** Whether the note's cursor is where Esc goes back to: false goes to its end. */
   cursorInMind: RefObject<boolean>;
-  /** In place of "Ask, or say what to change…": "Ask a follow-up…" while the thread is up. */
   placeholder?: string;
   ref?: Ref<ComposerHandle>;
 }) {
@@ -366,6 +365,7 @@ export function Composer({
       model: mindModelOf(doc),
       scope: current.scope,
       skill: current.skill,
+      askedFrom: mindId,
     };
     // Into the thread, never the note (#201): the chat it shows, or a new one.
     const threads = useThreads.getState();

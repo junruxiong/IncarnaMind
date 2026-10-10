@@ -441,7 +441,6 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
   await window.keyboard.type("Please book_boat from Dover");
   await window.keyboard.press("Enter");
 
-  // Asked in the thread (#201), where the card waits.
   const card = window.getByTestId("thread").getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   const dot = trip.getByRole("img", { name: "Waiting for your approval" });

@@ -10,7 +10,6 @@ import { QUESTION_BLOCK } from "../../../core/api";
 import { chatBlocks, chatsOf, createChat } from "../../../shared/mindChats";
 import { type QuestionToAsk, questionAttributes } from "./composerAsk";
 
-/** A Question put in a chat, and whether asking it started the chat. */
 export interface PlacedInThread {
   chatId: string;
   questionId: string;

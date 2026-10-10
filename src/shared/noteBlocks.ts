@@ -13,14 +13,11 @@ import {
   type RecheckCitationInput,
 } from "../core/api";
 
-/** A node as ProseMirror (and Tiptap) write it in JSON. */
 export interface BlockJSON {
   type: string;
   attrs?: Record<string, unknown>;
   content?: BlockJSON[];
-  /** Text nodes only. */
   text?: string;
-  /** Text nodes only. */
   marks?: { type: string; attrs?: Record<string, unknown> }[];
 }
 
@@ -139,7 +136,6 @@ async function recheckOne(node: BlockJSON, recheck: Recheck): Promise<BlockJSON>
   }
 }
 
-/** How many Citations the Blocks hold, at any depth. */
 export function countCitations(blocks: readonly BlockJSON[]): number {
   let count = 0;
   const visit = (node: BlockJSON) => {

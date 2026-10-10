@@ -23,7 +23,6 @@ export interface NoteAddingOptions {
   content: MindContent;
   /** Throws unless the Mind exists and its note can be written to; returns its id. */
   requireNote(mindId: unknown): string;
-  /** Checks a Citation again against its Document's current version. */
   recheck(input: RecheckCitationInput): CitationRecheck;
 }
 

@@ -72,7 +72,6 @@ function handleAnchor(
   };
 }
 
-/** A speech bubble: the chat a Note came from. */
 const ChatIcon = () => (
   <svg
     viewBox="0 0 24 24"
@@ -99,7 +98,6 @@ interface MenuTarget {
   pos: number;
   /** Null for Blocks that aren't Notes (Questions, Answers), which have no context flag. */
   included: boolean | null;
-  /** Where it came from, when it was added from a chat (#201): the menu opens the chat. */
   origin: BlockOrigin | null;
 }
 
@@ -262,7 +260,6 @@ function BlockMenu({
   anchor: Element;
   /** The Note's context flag, or null when the Block isn't a Note. */
   included: boolean | null;
-  /** Where it was added from, if from a chat. */
   origin: BlockOrigin | null;
   onOpenChat(): void;
   onDelete(): void;

@@ -27,6 +27,7 @@ const ask = (doc: Y.Doc, chatId: string | null, text: string) =>
     model: null,
     scope: NO_SCOPE,
     skill: null,
+    askedFrom: "mind-1",
   });
 
 describe("A Mind's chats", () => {
@@ -44,9 +45,12 @@ describe("A Mind's chats", () => {
         questions: 2,
       },
     ]);
-    // Its Blocks are Questions in the stored shape: a line break between the lines.
+    // Its Blocks are Questions in the stored shape: a line break between the lines, and the
+    // Mind each was asked from.
     const blocks = chatBlocks(doc, first.chatId);
     expect(blocks?.toString()).toMatch(/<hardbreak/i);
+    const question = blocks?.get(0);
+    expect(question instanceof Y.XmlElement && question.getAttribute("askedFrom")).toBe("mind-1");
     expect(chatContaining(doc, second.questionId)).toBe(first.chatId);
     expect(chatContaining(doc, "nowhere")).toBeNull();
   });

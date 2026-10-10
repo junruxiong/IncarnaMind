@@ -56,6 +56,7 @@ export const Question = Node.create<QuestionOptions>({
       scopeDocumentIds: stored(),
       // The name of the Skill chosen in the slash menu.
       forcedSkill: stored(),
+      askedFrom: stored(),
     };
     return attributes;
   },

@@ -122,7 +122,6 @@ export function buildChatQuestionContext(
   return contextOf(chat, index, above(), budget);
 }
 
-/** What the top-level Blocks before `end` contribute, newest first, read only as far as asked. */
 function* piecesBefore(blocks: Y.XmlFragment, end: number): Generator<Piece> {
   const children = blocks.toArray();
   for (let at = Math.min(end, children.length) - 1; at >= 0; at--) {
@@ -132,7 +131,6 @@ function* piecesBefore(blocks: Y.XmlFragment, end: number): Generator<Piece> {
   }
 }
 
-/** The context of the Question at `index` among `blocks`, from what is `above` it, newest first. */
 function contextOf(
   blocks: Y.XmlFragment,
   index: number,

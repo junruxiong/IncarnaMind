@@ -10,7 +10,6 @@ import { chatBlocks, listChats } from "../../shared/mindChats";
 export interface ThreadView {
   /** The chat shown; null for the newest (none yet: the next Question starts one). */
   chatId: string | null;
-  /** Up over the lower part of the Mind; otherwise folded to its header. */
   open: boolean;
   /** "New chat" was chosen: the next Question starts a chat, and none is shown till then. */
   fresh: boolean;
@@ -18,14 +17,10 @@ export interface ThreadView {
   focusAnswer: string | null;
 }
 
-/** What one "Add to note" did, so the Answer can say so and offer Undo. */
 export interface AddedToNote {
-  /** The Mind whose chat holds the Answer. */
   mindId: string;
   answerId: string;
-  /** Where it went: this Mind's note (through its editor), or another Mind's (through the core). */
   target: { mindId: string; title: string; here: boolean; created?: boolean };
-  /** The top-level Blocks it added, in order. */
   blockIds: string[];
   /** Added here: the empty line they took the place of, which Undo puts back. */
   emptyLine?: string | null;
@@ -39,7 +34,6 @@ interface ThreadsState {
   update(mindId: string, change: Partial<ThreadView>): void;
   /** Brings the thread up, on a chat if given (null: the newest). */
   open(mindId: string, chatId?: string | null): void;
-  /** Folds it to its header (Esc). */
   fold(mindId: string): void;
   /** "New chat": the next Question starts one; the thread waits up, empty. */
   startNew(mindId: string): void;
@@ -58,13 +52,11 @@ export function chatToAskIn(view: ThreadView, doc: Y.Doc): string | null {
   return listChats(doc)[0]?.id ?? null;
 }
 
-/** Whether the Mind's thread is up over it, so Esc folds it. */
 export function threadUp(mindId: string, doc: Y.Doc): boolean {
   const view = useThreads.getState().view(mindId);
   return view.open && (view.fresh || listChats(doc).length > 0);
 }
 
-/** The thread of each Mind, in this window. */
 export const useThreads = create<ThreadsState>()((set, get) => ({
   views: {},
   added: {},

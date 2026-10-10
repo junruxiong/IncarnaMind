@@ -12,7 +12,6 @@ import { parseReference } from "../core/references";
 
 const originsOf = (doc: Y.Doc): Y.Map<unknown> => doc.getMap(MIND_ORIGINS_FIELD);
 
-/** Reads an origin from stored data, or null when it isn't one. */
 export function parseOrigin(value: unknown): BlockOrigin | null {
   if (typeof value !== "object" || value === null) return null;
   const { from, label } = value as Record<string, unknown>;
@@ -21,12 +20,10 @@ export function parseOrigin(value: unknown): BlockOrigin | null {
   return { from: reference, label: typeof label === "string" ? label : "" };
 }
 
-/** Where the Block with this id came from, if it is known. */
 export function originOf(doc: Y.Doc, blockId: string): BlockOrigin | null {
   return parseOrigin(originsOf(doc).get(blockId));
 }
 
-/** Every Block's origin that is known, by Block id. */
 export function allOrigins(doc: Y.Doc): Map<string, BlockOrigin> {
   const origins = new Map<string, BlockOrigin>();
   originsOf(doc).forEach((value, blockId) => {
@@ -36,7 +33,6 @@ export function allOrigins(doc: Y.Doc): Map<string, BlockOrigin> {
   return origins;
 }
 
-/** Records that these Blocks came from `origin`. */
 export function setOrigins(doc: Y.Doc, blockIds: readonly string[], origin: BlockOrigin): void {
   const origins = originsOf(doc);
   const stored = { from: origin.from, label: origin.label };
@@ -45,7 +41,6 @@ export function setOrigins(doc: Y.Doc, blockIds: readonly string[], origin: Bloc
   });
 }
 
-/** Forgets where these Blocks came from. */
 export function removeOrigins(doc: Y.Doc, blockIds: readonly string[]): void {
   const origins = originsOf(doc);
   doc.transact(() => {
@@ -53,7 +48,6 @@ export function removeOrigins(doc: Y.Doc, blockIds: readonly string[]): void {
   });
 }
 
-/** Calls `listener` whenever the origins may have changed, here or from elsewhere. Returns how to stop. */
 export function observeOrigins(doc: Y.Doc, listener: () => void): () => void {
   const origins = originsOf(doc);
   const onChange = () => listener();

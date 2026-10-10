@@ -15,7 +15,6 @@ import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
  * a moment (`flashBlocks`), so the eye finds them.
  */
 export interface BlockOriginsOptions {
-  /** The Mind's Yjs document, which holds the origins. */
   doc: Y.Doc | null;
   /** The tooltip of a Block with this origin: "From the chat “…”". */
   describe(origin: BlockOrigin): string;
@@ -23,7 +22,6 @@ export interface BlockOriginsOptions {
 
 interface Origins {
   origins: ReadonlyMap<string, BlockOrigin>;
-  /** Blocks just added, washed for a moment. */
   flashing: ReadonlySet<string>;
   decorations: DecorationSet;
 }
@@ -123,13 +121,11 @@ export const BlockOrigins = Extension.create<BlockOriginsOptions>({
   },
 });
 
-/** Where the Block with this id came from, if it was added from a chat. */
 export function originOf(state: EditorState, blockId: unknown): BlockOrigin | null {
   if (typeof blockId !== "string") return null;
   return originsKey.getState(state)?.origins.get(blockId) ?? null;
 }
 
-/** Washes the Blocks with these ids for a moment: just added. */
 export function flashBlocks(editor: Editor, blockIds: readonly string[]): void {
   if (editor.isDestroyed) return;
   editor.view.dispatch(

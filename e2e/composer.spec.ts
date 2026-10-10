@@ -124,7 +124,6 @@ test("typing in the composer and pressing Enter asks in the thread above it: the
   await screenshot(window, "composer-typed-en");
   await window.keyboard.press("Enter");
 
-  // The thread rises from the composer (#201): the Question in a bubble, its Answer under it.
   const thread = window.getByTestId("thread");
   await expect(thread).toHaveAttribute("data-open", "true");
   const question = thread.getByTestId("thread-question");
@@ -142,7 +141,6 @@ test("typing in the composer and pressing Enter asks in the thread above it: the
   await expect(live).toHaveText(/Writing the Answer…|Your Documents answer this/);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(live).toHaveText("Your Documents answer this. That is all. The Answer is done.");
-  // The note is as it was: no Question, no Answer.
   await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
 
   // The Citation is checked: found on page 2.
@@ -168,7 +166,6 @@ test("typing in the composer and pressing Enter asks in the thread above it: the
   await expect(answer.getByTestId("answer-regenerate")).toBeVisible();
   await screenshot(window, "composer-answered-en");
 
-  // The thread folds to its header, and comes up again; folded, its checks go with it.
   const fold = thread.getByTestId("thread-fold");
   await expect(fold).toHaveAttribute("aria-expanded", "true");
   await pointAndClick(window, fold);
@@ -265,7 +262,6 @@ test("⌘J focuses the composer from the note and the title; Shift+Enter breaks 
   await window.keyboard.type(", noted.");
   await expect.poll(() => order(editor)).toEqual(["First thought, noted.", "Second thought"]);
 
-  // From the title, ⌘J too; the next Question goes into the same chat, which comes up again.
   await pointAndClick(window, window.getByTestId("mind-title"));
   await window.keyboard.press("ControlOrMeta+j");
   await expect(input).toBeFocused();
@@ -483,7 +479,6 @@ test("asking from the composer keeps the focus there for a follow-up, in the sam
   await expect(thread.getByTestId("answer")).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  // A follow-up straight away goes after the first Answer, in the thread.
   await window.keyboard.type("A follow-up?");
   await window.keyboard.press("Enter");
   await expect(thread.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
@@ -535,7 +530,6 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await window.keyboard.type("大潮什么时候出现？");
   await screenshot(window, "composer-chips-zh");
 
-  // Asked, in the thread: the Question carries both; the Answer's line, in Chinese.
   await window.keyboard.press("Enter");
   const editor = window.getByTestId("mind-editor");
   const thread = window.getByTestId("thread");

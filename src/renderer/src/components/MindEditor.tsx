@@ -239,7 +239,6 @@ function MindEditorView({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),
         QuestionFold.configure({ mindId }),
-        // Notes added from a chat: their link back, and a wash just after (#201).
         BlockOrigins.configure({
           doc,
           describe: (origin) =>
@@ -258,13 +257,19 @@ function MindEditorView({
   }, [editor, label, emptyFormula]);
 
   // The cursor is where the next Question goes while the focus is in the editor, or has gone
-  // from it only to the composer; anywhere else, Questions go at the end of the Mind.
+  // from it only to the composer; anywhere else, Questions go at the end of the Mind. A dialog
+  // that asks something on the way (consent to send, say) gives the focus back: it doesn't count.
   useEffect(() => {
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (editor.view.dom.contains(target)) cursorInMind.current = true;
-      else if (!dock?.contains(target)) cursorInMind.current = false;
+      else if (
+        !dock?.contains(target) &&
+        !(target instanceof Element && target.closest("dialog"))
+      ) {
+        cursorInMind.current = false;
+      }
     };
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
@@ -331,10 +336,6 @@ function MindEditorView({
   );
 }
 
-/**
- * What the dock at the foot of the Mind holds (#201): the thread, joined to
- * the top of the composer once something has been asked, and the composer.
- */
 function AskArea({
   mindId,
   doc,

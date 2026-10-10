@@ -6,11 +6,9 @@ import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
 import { Popover } from "./Popover";
 
-/** Where "Add to note ▾" puts an Answer. */
 export type AddTarget =
   | { kind: "here" }
   | { kind: "mind"; mind: Mind }
-  /** A new Mind, with this title. */
   | { kind: "new"; title: string };
 
 /** Under "Recent", this many Minds; a search shows up to this many more. */
@@ -40,11 +38,9 @@ export function AddToMindPicker({
   onClose,
 }: {
   anchor: HTMLElement;
-  /** The Mind the thread is in. */
   mindId: string;
   /** What a new Mind is called when nothing is typed: the chat's first Question. */
   newTitle: string;
-  /** Where in this Mind it goes: at the cursor, or at the end when the cursor isn't in it. */
   hereAt: "cursor" | "end";
   onChoose(target: AddTarget): void;
   onClose(): void;

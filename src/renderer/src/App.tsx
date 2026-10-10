@@ -285,7 +285,7 @@ function Workspace() {
         ) : (
           <ResizeRod
             label={t("sidebar.resize")}
-            width={sidebarWidth}
+            size={sidebarWidth}
             min={SIDEBAR.min}
             max={Math.min(SIDEBAR.max, room - shownViewerWidth)}
             direction={1}
@@ -308,7 +308,7 @@ function Workspace() {
                 testId="viewer-resize"
                 belowBand
                 label={t("viewer.resize")}
-                width={viewerWidth}
+                size={viewerWidth}
                 min={VIEWER.min}
                 max={Math.min(VIEWER.max, room - ROD_WIDTH - shownSidebarWidth)}
                 direction={-1}

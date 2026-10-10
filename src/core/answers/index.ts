@@ -252,7 +252,6 @@ function parseId(value: unknown, what: string): string {
   return value;
 }
 
-/** A chat's id, or null for the Mind's own Blocks (`AskQuestionInput.chatId`). */
 function parseChatId(value: unknown): string | null {
   return value === undefined || value === null ? null : parseId(value, "A chat id");
 }
@@ -335,7 +334,6 @@ export function createAnswers(options: AnswersOptions) {
   /** Answers being written, by id. */
   const active = new Map<string, Generation>();
 
-  /** Answers left "streaming" by an earlier run of the app, in the note and in every chat. */
   const orphansIn = (doc: Y.Doc): Y.XmlElement[] =>
     citingFragments(doc).flatMap((blocks) =>
       topLevelBlocks(blocks).filter(

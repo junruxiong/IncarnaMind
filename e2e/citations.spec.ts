@@ -39,7 +39,6 @@ async function ask(window: Page, text: string) {
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type(text);
   await window.keyboard.press("Enter");
-  // Answered in the thread above the composer (#201).
   const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   return answer;
@@ -74,7 +73,6 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   await expect(answer).toContainText("Your Documents answer this");
   await expect(answer).not.toContainText("[^1]");
 
-  // Added to the note, it keeps its Citation, checked again there: found (#201).
   const editor = window.getByTestId("mind-editor");
   await pointAndClick(window, answer.getByTestId("answer-add"));
   const note = editor.locator(":scope > p").first();

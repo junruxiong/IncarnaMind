@@ -43,7 +43,6 @@ test("a Question asked in a new Mind gets an Answer that streams into its thread
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // Cmd/Ctrl+J focuses the composer; Enter asks, and the Question goes into the thread (#201).
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("What is IncarnaMind?");
@@ -68,12 +67,10 @@ test("a Question asked in a new Mind gets an Answer that streams into its thread
   await expect(answer.locator("li")).toHaveCount(2);
   await expect(answer.locator('[data-type="inline-math"] .katex')).toBeVisible();
   await expect(answer.locator("pre code")).toContainText('console.log("IncarnaMind");');
-  // The note has neither.
   await expect(editor.getByTestId("question")).toHaveCount(0);
   await expect(editor.getByTestId("answer")).toHaveCount(0);
   await first.app.close();
 
-  // Reopened: the thread is folded to its header, naming the chat; unfolded, it is all there.
   const second = await launchApp(dataDir, { fakeChat: true });
   await second.window.getByTestId("mind-list-item").click();
   const reopened = second.window.getByTestId("thread");
@@ -135,7 +132,6 @@ test("a Question and its Answer written in the note before (#201) are dragged an
   const editor = window.getByTestId("mind-editor");
   await expect.poll(() => order(editor)).toEqual(["Intro", "question", "answer", "Later"]);
 
-  // A new Question goes to the thread; the Question and Answer in the note stay where they are.
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("And now?");
   await window.keyboard.press("Enter");

@@ -122,7 +122,6 @@ export function AnswerView({ node, editor }: ReactNodeViewProps) {
       void regenerate(mindId, answerId, questionId, discardEdits, thread?.chatId ?? null);
     }
   };
-  // In the thread, the Search scope its Question searched shows in its meta too.
   const scope = useQuestionScope(thread ? editor : null, questionId);
 
   const meta: ReactNode[] = [];
@@ -231,7 +230,6 @@ export function AnswerView({ node, editor }: ReactNodeViewProps) {
       )}
 
       {thread ? (
-        // In the thread: Copy · Add to note ▾ · Regenerate, under its text.
         <ThreadAnswerActions
           answerId={answerId}
           canKeep={status !== "failed"}
