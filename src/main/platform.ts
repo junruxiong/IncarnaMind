@@ -168,6 +168,15 @@ function examplesFolder(): string | undefined {
 }
 
 /**
+ * The User's Documents folder, where the first save offers to put the Output
+ * location. A test build uses one in its data folder, so the smoke tests never
+ * write into the User's.
+ */
+function documentsFolder(dataDir: string): string {
+  return import.meta.env.MODE === "test" ? join(dataDir, "Documents") : app.getPath("documents");
+}
+
+/**
  * Where crash reports go: the Sentry DSN this copy was built with
  * (`MAIN_VITE_SENTRY_DSN`), if any. A test build ignores it, so the smoke
  * tests never reach Sentry; they may point it at a local server instead.
@@ -249,7 +258,12 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     log,
-    paths: { dataDir, builtInSkills: builtInSkillsFolder(), examples: examplesFolder() },
+    paths: {
+      dataDir,
+      builtInSkills: builtInSkillsFolder(),
+      examples: examplesFolder(),
+      documents: documentsFolder(dataDir),
+    },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,
