@@ -27,6 +27,7 @@ Delete this section if the change has no UI. Otherwise check each line against [
 - [ ] Problems show in place as one line with one action; words from `CONTEXT.md`, in English and Chinese
 - [ ] Layout holds at a narrow and a wide window, with and without the viewer; text never breaks by letter
 - [ ] Uses the shared building blocks where they exist, and no one-off where they don't
+- [ ] Adds nothing to first run or onboarding; a tip, if any, appears once at the moment it helps and goes away for good
 - [ ] Tested like a person in the built app, with the mouse and the keyboard
 - [ ] Before and after screenshots attached (narrow and wide)
 - [ ] A screenshot of the built screen beside its design board, with every difference listed and explained
