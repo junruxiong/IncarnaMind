@@ -6,7 +6,10 @@ import {
   useRef,
   useState,
 } from "react";
+import type { Meeting } from "../../../core/api";
 import { useT } from "../i18n";
+import { isLive, useMeetingOf, useMeetingTime } from "../meetings";
+import { clockTime } from "../meetingTime";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import {
@@ -287,7 +290,11 @@ interface MindTabProps {
   onDragEnd(): void;
 }
 
-/** One tab: the Mind's icon (or what it's busy with), its title, and ✕. */
+/**
+ * One tab: the Mind's icon (or what it's busy with), its title, and ✕. While
+ * its Meeting records, a small red dot and the meeting's time (the owner's
+ * direction of 2026-10-11), grey while it is paused.
+ */
 function MindTab(props: MindTabProps) {
   const { mindId, selected, divider, dragging, dropSide } = props;
   const t = useT();
@@ -297,6 +304,8 @@ function MindTab(props: MindTabProps) {
   const openMind = useAppStore((state) => state.openMind);
   const closeTab = useAppStore((state) => state.closeTab);
   const status = useMindStatus(mindId);
+  const meeting = useMeetingOf(mindId);
+  const live = isLive(meeting) ? meeting : undefined;
 
   return (
     <div
@@ -338,7 +347,17 @@ function MindTab(props: MindTabProps) {
       <span aria-hidden="true" data-side="left" className="mind-tab-foot" />
       <span className="mind-tab-inner">
         <span className="mind-tab-icon">
-          {status === null ? (
+          {live ? (
+            <span
+              role="img"
+              data-testid="mind-tab-recording"
+              data-status={live.status}
+              aria-label={t(
+                live.status === "recording" ? "meetings.bar.recording" : "meetings.bar.paused",
+              )}
+              className="mind-tab-recording"
+            />
+          ) : status === null ? (
             <MindLineIcon />
           ) : (
             <span
@@ -353,6 +372,7 @@ function MindTab(props: MindTabProps) {
         <span data-testid="mind-tab-title" className="mind-tab-title">
           {title}
         </span>
+        {live && <TabMeetingTime meeting={live} />}
         <button
           type="button"
           // The tab is the keyboard stop; ⌘W or Delete closes it from there.
@@ -371,6 +391,15 @@ function MindTab(props: MindTabProps) {
       </span>
       <span aria-hidden="true" data-side="right" className="mind-tab-foot" />
     </div>
+  );
+}
+
+/** The meeting's time on its tab, ticking while it records. */
+function TabMeetingTime({ meeting }: { meeting: Meeting }) {
+  return (
+    <span role="timer" data-testid="mind-tab-time" className="mind-tab-time">
+      {clockTime(useMeetingTime(meeting))}
+    </span>
   );
 }
 

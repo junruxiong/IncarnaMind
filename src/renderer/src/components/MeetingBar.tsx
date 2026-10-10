@@ -1,17 +1,12 @@
 import { isMacOS } from "@tiptap/core";
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import type { AudioSource, Meeting, MeetingSourceState } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import {
-  PauseLineIcon,
-  RecordingLineIcon,
-  ResumeLineIcon,
-  StopLineIcon,
-} from "../components/lineIcons";
-import { type ProblemAction, ProblemLine } from "../components/ProblemLine";
 import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
+import { PauseLineIcon, RecordingLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
+import { type ProblemAction, ProblemLine } from "./ProblemLine";
 
 /** Pause and Resume (DESIGN.md, Names and shortcuts). */
 export const PAUSE_SHORTCUT = isMacOS() ? "⌘⇧P" : "Ctrl+Shift+P";
@@ -23,11 +18,33 @@ const isPauseKey = (event: KeyboardEvent) =>
   (isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
 /**
- * The meeting bar's controls (DESIGN.md, While recording), on the composer's
- * second row while the Mind's Meeting is live: the ring-and-dot icon,
- * "Recording 24:16" (or "Paused"), Pause or Resume (⌘⇧P) and Stop.
+ * The meeting bar, while the Mind's Meeting records or is paused: at the top
+ * of the Mind, under its title, and kept in view as the notes scroll (the
+ * owner's direction of 2026-10-11, in place of DESIGN.md's bar in the
+ * composer). Its controls, then a line for each thing about the recording
+ * the User should know, then whatever the Mind adds (its audio, once paused).
  */
-export function MeetingControls({ meeting }: { meeting: Meeting }) {
+export function MeetingBar({ meeting, children }: { meeting: Meeting; children?: ReactNode }) {
+  const t = useT();
+  return (
+    <section
+      data-testid="meeting-bar"
+      data-status={meeting.status}
+      aria-label={t("meetings.bar.label")}
+      className="meeting-bar"
+    >
+      <MeetingControls meeting={meeting} />
+      <MeetingLines meeting={meeting} />
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The ring-and-dot icon (in ink, never red), "Recording 24:16" (or
+ * "Paused"), Pause or Resume (⌘⇧P) and Stop.
+ */
+function MeetingControls({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const time = clockTime(useMeetingTime(meeting));
   const { pause, resume, stop } = useMeetings.getState();
@@ -47,7 +64,7 @@ export function MeetingControls({ meeting }: { meeting: Meeting }) {
   });
 
   return (
-    <div data-testid="meeting-bar" data-status={meeting.status} className="meeting-controls">
+    <div data-testid="meeting-controls" className="meeting-controls">
       <span className="meeting-state">
         <RecordingLineIcon
           live={recording}
@@ -93,8 +110,8 @@ export function MeetingControls({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/** What the User should know about the recording: one line each, over the bar's rows. */
-export function MeetingLines({ meeting }: { meeting: Meeting }) {
+/** What the User should know about the recording, a line each: its health, a cut, a gap. */
+function MeetingLines({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const problem = useMeetings((state) => state.problems[meeting.id]);
   const gapsSeen = useMeetings((state) => state.gapsSeen[meeting.id] ?? 0);
@@ -155,7 +172,7 @@ export function MeetingLines({ meeting }: { meeting: Meeting }) {
           key={line.key}
           testId={`meeting-line-${line.key}`}
           role={line.key === "gap" || line.key === "interrupted" ? "status" : "alert"}
-          className="composer-problem"
+          className="meeting-line"
           action={line.action}
         >
           {line.text}

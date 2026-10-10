@@ -136,14 +136,32 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await expect(start).toBeHidden();
   await expect(bar).toContainText("Recording");
   await expect(window.getByTestId("meeting-time")).toHaveText(/^0:0[2-9]$/);
-  // The bar is the composer's second row: its controls sit under the text, left of Ask.
-  const input = await window.getByTestId("composer-input").boundingBox();
+  // The bar sits at the top of the Mind, under its title and above the notes; the composer
+  // stays for asking.
+  const title = await window.getByTestId("mind-title").boundingBox();
   const controls = await bar.boundingBox();
-  const ask = await window.getByTestId("composer-ask").boundingBox();
-  if (!input || !controls || !ask) throw new Error("The meeting bar isn't drawn.");
-  expect(controls.y).toBeGreaterThanOrEqual(input.y + input.height - 1);
-  expect(controls.x + controls.width).toBeLessThan(ask.x);
+  const editor = await window.getByTestId("mind-editor").boundingBox();
+  if (!title || !controls || !editor) throw new Error("The meeting bar isn't drawn.");
+  expect(controls.y).toBeGreaterThanOrEqual(title.y + title.height - 1);
+  expect(controls.y + controls.height).toBeLessThanOrEqual(editor.y + 1);
+  await expect(window.getByTestId("composer")).not.toContainText("Recording");
+  // The tab shows the recording: a red dot and the meeting's time.
+  const tab = window.getByTestId("mind-tab").filter({ hasText: "Meeting" });
+  await expect(tab.getByTestId("mind-tab-recording")).toHaveAttribute("data-status", "recording");
+  await expect(tab.getByTestId("mind-tab-recording")).toHaveCSS(
+    "background-color",
+    "rgb(180, 35, 24)",
+  );
+  await expect(tab.getByTestId("mind-tab-time")).toHaveText(/^0:\d\d$/);
   await shot(window, "meeting-bar-en");
+
+  // Notes written below scroll under the bar, which stays in view at the top.
+  await window.getByTestId("mind-editor").click();
+  for (let line = 0; line < 30; line++) await window.keyboard.press("Enter");
+  await window.keyboard.type("Rebates stay as they are until January.");
+  await expect(window.getByTestId("mind-title")).not.toBeInViewport();
+  await expect(bar).toBeInViewport();
+  await shot(window, "meeting-bar-scrolled-en");
 
   // While it records, Documents wait to be read.
   const file = join(sources, "Agenda.md");
@@ -227,10 +245,10 @@ test("with the computer's sound denied, a line says so and opens System Settings
     await expect(window.getByTestId("settings")).toBeHidden();
   }
 
-  // At the narrowest window, the bar keeps its controls on one row under the text.
+  // At the narrowest window, the bar keeps its controls on one row.
   await setWindowSize(app, window, 900, 660);
   await expect(bar).toBeVisible();
-  const box = await bar.boundingBox();
+  const box = await bar.getByTestId("meeting-controls").boundingBox();
   expect(box?.height).toBeLessThanOrEqual(28);
   await shot(window, "meeting-bar-narrow-zh");
 });

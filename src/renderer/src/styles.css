@@ -666,6 +666,24 @@
       background: var(--color-attention);
     }
   }
+  /* A Meeting recording: a small red dot (the owner's choice), grey while paused. */
+  .mind-tab-recording {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: var(--color-danger);
+
+    &[data-status="paused"] {
+      background: var(--color-ink-meta);
+    }
+  }
+  .mind-tab-time {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-meta);
+  }
   .mind-tab-title {
     flex: 1 1 auto;
     min-width: 0;
@@ -1107,10 +1125,28 @@
     color: var(--color-ink-secondary);
   }
   /*
-   * The meeting bar (DESIGN.md, While recording): on the composer's second row,
-   * at its left, the recording's state, Pause or Resume, and Stop; the model,
-   * the scope and Ask stay at the right.
+   * The meeting bar: at the top of a recording Mind, under its title, reaching
+   * 16px into the margins like the start block, and kept in view as the notes
+   * scroll: the recording's state, Pause or Resume, Stop, and a line for each
+   * thing about the recording to know.
    */
+  .meeting-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0 -16px 24px;
+    padding: 6px 12px;
+    border: 1px solid var(--color-rule);
+    border-radius: 8px;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+  }
+  .meeting-line {
+    padding: 0 4px 2px;
+  }
   .meeting-controls {
     display: flex;
     flex-shrink: 0;
