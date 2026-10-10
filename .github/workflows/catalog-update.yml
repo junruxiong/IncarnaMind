@@ -1,0 +1,81 @@
+name: Catalog update
+
+# Every week (and on request), regenerate the model catalog's facts from models.dev and
+# LiteLLM, and open one pull request with what changed. A person reviews and merges it;
+# nothing changes in the app without that.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  # One fixed branch, so the next run updates the same pull request instead of opening another.
+  BRANCH: automation/catalog-update
+
+concurrency:
+  group: catalog-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Regenerate the catalog and open or update the pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Regenerate models.json
+        run: npm run catalog:update -- --diff-file "$RUNNER_TEMP/diff.md"
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+
+          if [ -z "$(git status --porcelain -- src/core/providers/catalog/models.json resources/notices/model-catalog.txt)" ]; then
+            echo "The catalog is up to date."
+            if [ -n "$existing" ]; then
+              gh pr close "$existing" --delete-branch \
+                --comment "The sources now match the catalog again, so there is nothing left to change."
+            fi
+            exit 0
+          fi
+
+          {
+            echo "The weekly catalog update: \`npm run catalog:update\` regenerated \`src/core/providers/catalog/models.json\` from models.dev and checked it against LiteLLM ([run]($RUN_URL))."
+            echo
+            echo "Overrides in \`overrides.ts\` and the providers in \`providers.ts\` are untouched. Nothing changes in the app until this is merged."
+            echo
+            echo "**A changed default needs the citing evaluation before merging.** If a section below says a default changed, run the evaluation for it and cite the result in this pull request first."
+            echo
+            echo "## Changes"
+            echo
+            cat "$RUNNER_TEMP/diff.md"
+          } > "$RUNNER_TEMP/body.md"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add src/core/providers/catalog/models.json resources/notices/model-catalog.txt
+          git commit -s -m "Update the model catalog from models.dev"
+          # The branch is rebuilt from the default branch each week, so one force-push keeps the
+          # same pull request current.
+          git push --force origin "$BRANCH"
+
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --body-file "$RUNNER_TEMP/body.md"
+            echo "Updated pull request #$existing."
+          else
+            gh pr create --head "$BRANCH" --base "${{ github.event.repository.default_branch }}" \
+              --title "Update the model catalog" --body-file "$RUNNER_TEMP/body.md"
+          fi

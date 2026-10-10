@@ -49,6 +49,9 @@ describe("Chat providers", () => {
     expect(provider).toEqual({
       id: expect.any(String),
       kind: "openai",
+      // OpenAI in the catalog, on its one endpoint.
+      catalogId: "openai",
+      endpoint: "global",
       baseUrl: null,
       hasApiKey: true,
       service: { id: "https://api.openai.com", name: "OpenAI" },
@@ -306,7 +309,12 @@ describe("Test connection", () => {
 
     expect(result).toEqual({ ok: true });
     expect(models.specs).toEqual([
-      { kind: "openai", baseUrl: null, apiKey: OPENAI_KEY, modelId: "gpt-5.4-mini" },
+      {
+        kind: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: OPENAI_KEY,
+        modelId: "gpt-5.4-mini",
+      },
     ]);
     expect(models.model.doGenerateCalls).toHaveLength(1);
   });

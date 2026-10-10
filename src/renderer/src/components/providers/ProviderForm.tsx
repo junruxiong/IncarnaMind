@@ -6,6 +6,7 @@ import type {
   SecretStorageStatus,
   TestChatConnectionInput,
 } from "../../../../core/api";
+import { catalogProviderOfKind } from "../../../../core/providers/catalog/providers";
 import { features } from "../../../../shared/features";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
@@ -35,15 +36,13 @@ const formKinds = [
 
 type FormKind = (typeof formKinds)[number];
 
-/** Prefilled when a provider is picked; the User can type any model their account has. */
-const suggestedModels: Record<FormKind, string> = {
-  openai: "gpt-5.5",
-  anthropic: "claude-opus-5-5",
-  google: "gemini-pro-latest",
-  "openai-compatible": "",
-};
+/**
+ * Prefilled when a provider is picked: its Answers model in the catalog, none
+ * for a server. The User can type any model their account has.
+ */
+const suggestedModel = (kind: FormKind): string => catalogProviderOfKind(kind)?.roles.answers ?? "";
 
-const isSuggestion = (model: string) => Object.values(suggestedModels).includes(model);
+const isSuggestion = (model: string) => formKinds.some((kind) => suggestedModel(kind) === model);
 
 const sameServer = (provider: ChatProvider, kind: FormKind, baseUrl: string) =>
   provider.kind === kind &&
@@ -92,7 +91,7 @@ export function ProviderForm({
     if (next !== kind) key.clear();
     setKind(next);
     setModelId((current) =>
-      current === "" || isSuggestion(current) ? suggestedModels[next] : current,
+      current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
     setTest(null);
     setError(null);
