@@ -135,7 +135,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
 
     // The same line in Chinese.
     await bridge(window).settings("zh-CN");
-    await expect(error).toContainText("服务商出现了问题");
+    await expect(error).toContainText("提供商出错");
     await expect(error.getByTestId("answer-error-action")).toHaveText("重试");
     await screenshot(window, "answer-provider-problem-zh");
     await app.close();
@@ -256,7 +256,7 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
   await expect(item).toHaveAttribute("data-file-status", "missing", { timeout: 15_000 });
   await item.getByTestId("open-document").click();
   const line = window.getByTestId("viewer-removed").getByTestId("viewer-problem");
-  await expect(line).toContainText("Lease 的文件已不在原来的文件夹中");
+  await expect(line).toContainText("“Lease”的文件已不在原文件夹中");
   await expect(line.getByRole("button")).toHaveText("定位文件…");
   await screenshot(window, "viewer-file-moved-zh");
 
@@ -332,7 +332,7 @@ test("an export that can't be saved says why under the format, and Choose anothe
   await screenshot(dialog, "export-cant-save-zh");
   await interceptSaveDialog(app, join(sources, "Tides 2.docx"));
   await dialog.getByTestId("export-choose-another").click();
-  await expect(dialog.getByTestId("export-done")).toContainText("已保存 Tides 2.docx");
+  await expect(dialog.getByTestId("export-done")).toContainText("已保存“Tides 2.docx”");
   await screenshot(dialog, "export-saved-zh");
   await app.close();
 });
