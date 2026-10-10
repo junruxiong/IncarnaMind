@@ -500,6 +500,16 @@ export async function clickEmptyLine(line: Locator): Promise<void> {
     .toBe(true);
 }
 
+/**
+ * Enter in a Mind's title, which takes the cursor into the Mind's text, and
+ * waits until it is there: a new Mind's text comes a moment after its title,
+ * and until then what is typed still goes into the title.
+ */
+export async function enterContent(window: Page): Promise<void> {
+  await window.getByTestId("mind-title").press("Enter");
+  await expect(window.getByTestId("mind-editor")).toBeFocused();
+}
+
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 

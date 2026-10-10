@@ -141,7 +141,24 @@ function MindTitle({ mind }: { mind: Mind }) {
   const moveIntoContent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    event.currentTarget.closest("article")?.querySelector<HTMLElement>(".mind-editor")?.focus();
+    const title = event.currentTarget;
+    const article = title.closest("article");
+    const content = () => article?.querySelector<HTMLElement>(".mind-editor");
+    const now = content();
+    if (now || !article) {
+      now?.focus();
+      return;
+    }
+    // A new Mind's text comes a moment after its title (its document is still opening):
+    // the cursor goes there once it does, unless it has left the title by then.
+    const observer = new MutationObserver(() => {
+      const editor = content();
+      if (!editor) return;
+      observer.disconnect();
+      if (document.activeElement === title) editor.focus();
+    });
+    observer.observe(article, { childList: true, subtree: true });
+    title.addEventListener("blur", () => observer.disconnect(), { once: true });
   };
 
   return (

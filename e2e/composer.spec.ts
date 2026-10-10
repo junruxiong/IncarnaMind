@@ -11,6 +11,7 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   launchApp,
   removeDataFolder,
   useLocalChatModel,
@@ -113,7 +114,7 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   await pointAndClick(window, window.getByTestId("new-mind"));
   const title = window.getByTestId("mind-title");
   await title.fill("Reading notes: tides");
-  await title.press("Enter");
+  await enterContent(window);
   await window.keyboard.type("Spring tides come twice a month.");
   const editor = window.getByTestId("mind-editor");
 
@@ -244,7 +245,7 @@ test("⌘J focuses the composer from the note; the Question goes at the cursor; 
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await pointAndClick(window, window.getByTestId("new-mind"));
-  await window.getByTestId("mind-title").press("Enter");
+  await enterContent(window);
   await window.keyboard.type("First thought");
   await window.keyboard.press("Enter");
   await window.keyboard.type("Second thought");
@@ -543,7 +544,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
 
   await pointAndClick(window, window.getByTestId("new-mind"));
   await window.getByTestId("mind-title").fill("潮汐笔记");
-  await window.getByTestId("mind-title").press("Enter");
+  await enterContent(window);
   await window.keyboard.type("大潮每月出现两次。");
   const composer = window.getByTestId("composer");
   const input = composer.getByTestId("composer-input");

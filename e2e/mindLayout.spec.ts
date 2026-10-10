@@ -10,6 +10,7 @@ import {
   clickEmptyLine,
   createDataFolder,
   dismissChatSetup,
+  enterContent,
   launchApp,
   removeDataFolder,
   useLocalChatModel,
@@ -144,7 +145,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await window.getByTestId("new-mind").click();
   const title = window.getByTestId("mind-title");
   await title.fill("Reading notes: tides");
-  await title.press("Enter");
+  await enterContent(window);
   const editor = window.getByTestId("mind-editor");
   await window.keyboard.type(
     "Goal for this week: find out what drives spring tides, and when they come. Start with the tide tables, then the notes on the Moon.",
@@ -305,7 +306,7 @@ test("a quote, a highlight, a code block and a formula keep the text edge too; t
   await window.getByTestId("new-mind").click();
   const title = window.getByTestId("mind-title");
   await title.fill("Tide tables");
-  await title.press("Enter");
+  await enterContent(window);
   const editor = window.getByTestId("mind-editor");
 
   await window.keyboard.type("> High water comes about 50 minutes later each day.");
@@ -405,7 +406,7 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await window.getByTestId("new-mind").click();
   const title = window.getByTestId("mind-title");
   await title.fill("Boat trips");
-  await title.press("Enter");
+  await enterContent(window);
   const editor = window.getByTestId("mind-editor");
   await window.keyboard.type("Book the morning boat from Dover, and greet the harbour master.");
   await window.keyboard.press("Enter");
