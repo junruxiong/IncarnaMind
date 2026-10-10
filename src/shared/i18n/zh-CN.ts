@@ -177,6 +177,7 @@ export const zhCN = {
   "tabs.menu.pin": "固定",
   "tabs.menu.unpin": "取消固定",
   "tabs.menu.split": "向右拆分",
+  "tabs.menu.side": "在侧边打开",
   "tabs.menu.moveLeft": "移到左侧一栏",
   "tabs.menu.moveRight": "移到右侧一栏",
   "tabs.menu.moveNew": "移到右侧新的一栏",

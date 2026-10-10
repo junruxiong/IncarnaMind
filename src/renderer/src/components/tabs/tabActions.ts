@@ -10,8 +10,8 @@ import { useAppStore } from "../../store";
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
-/** ⌘\ as this system writes it. */
-export const SPLIT_SHORTCUT = isMac ? "⌘\\" : "Ctrl+\\";
+/** ⌥⌘\ as this system writes it: ⌘\ shows and hides the sidebar. */
+export const SPLIT_SHORTCUT = isMac ? "⌥⌘\\" : "Ctrl+Alt+\\";
 /** ⌘W, ⇧⌘T and ⌘T as this system writes them. */
 export const CLOSE_SHORTCUT = isMac ? "⌘W" : "Ctrl+W";
 export const REOPEN_SHORTCUT = isMac ? "⇧⌘T" : "Ctrl+Shift+T";
@@ -24,7 +24,7 @@ export function focusTab(tabId: string | null | undefined): void {
   );
 }
 
-/** ⌘\: a copy of a tab (the shown one by default) in a new group on the right. */
+/** ⌥⌘\: a copy of a tab (the shown one by default) in a new group on the right. */
 export async function splitToTheRight(tabId?: string): Promise<void> {
   const store = useAppStore.getState();
   const { layout } = store;

@@ -90,7 +90,7 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `shell-${width}.png`) });
 
     // Split into two groups, both inside the card, the second's strip continuing the band.
-    await window.keyboard.press("ControlOrMeta+Backslash");
+    await window.keyboard.press("ControlOrMeta+Alt+Backslash");
     const groups = window.getByTestId("tab-group");
     await expect(groups).toHaveCount(2);
     const right = await boxOf(groups.nth(1));

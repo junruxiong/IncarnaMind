@@ -213,7 +213,7 @@ test("a Citation opens its Document as a preview in the group to the right, the 
   await expect(paperTab).not.toHaveAttribute("data-preview");
 });
 
-test("tabs split off and move by dragging with the mouse, by the tab's menu and by ⌘\\, three groups at most; a group goes with its last tab", async () => {
+test("tabs split off and move by dragging with the mouse, by the tab's menu and by ⌥⌘\\, three groups at most; a group goes with its last tab", async () => {
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const title of ["Alpha", "Beta", "Gamma", "Delta"]) await newMind(window, title);
@@ -255,12 +255,12 @@ test("tabs split off and move by dragging with the mouse, by the tab's menu and 
   await expect(titlesIn(groupAt(window, 1))).toHaveText(["Delta", "Gamma"]);
   await expect(groupAt(window, 1)).toHaveAttribute("data-focused", "true");
 
-  // ⌘\ copies the shown tab into a new group on the right; a fourth is refused with a line.
-  await window.keyboard.press("ControlOrMeta+Backslash");
+  // ⌥⌘\ copies the shown tab into a new group on the right; a fourth is refused with a line.
+  await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   await expect(groupsOf(window)).toHaveCount(3);
   await expect(titlesIn(groupAt(window, 2))).toHaveText(["Gamma"]);
   await expect(groupAt(window, 2).getByRole("tab")).toBeFocused();
-  await window.keyboard.press("ControlOrMeta+Backslash");
+  await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   await expect(window.getByTestId("tab-notice")).toHaveText(
     /Three groups fit side by side at most/,
   );
@@ -303,7 +303,7 @@ test("one divider runs the full height through the strips and the pages; it resi
   const { window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window, "Alpha");
-  await window.keyboard.press("ControlOrMeta+Backslash");
+  await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   await expect(groupsOf(window)).toHaveCount(2);
 
   // Where the strips meet is where the pages meet: the one divider, the card's full height.
@@ -462,7 +462,7 @@ test("the groups, their buttons and the tab's menu are in Chinese too", async ()
     await bridge.updateSettings({ user: { language: "zh-CN" } });
   });
   await newMind(window, "潮汐笔记");
-  await window.keyboard.press("ControlOrMeta+Backslash");
+  await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   await expect(window.getByRole("tablist", { name: "第 1 栏" })).toBeVisible();
   await expect(window.getByRole("tablist", { name: "第 2 栏" })).toBeVisible();
   await expect(window.getByTestId("split-group").first()).toHaveAttribute("title", /^向右拆分/);

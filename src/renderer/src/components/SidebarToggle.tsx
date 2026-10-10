@@ -6,19 +6,15 @@ import { iconButtonClass } from "./ui";
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
-/**
- * The shortcut as this system writes it: ⌃⌘S, as in Finder, on macOS; ⌘\
- * (Ctrl+\) splits a tab to the right, as in VS Code, so elsewhere it is Ctrl+Shift+\.
- */
-export const SIDEBAR_SHORTCUT = isMac ? "⌃⌘S" : "Ctrl+Shift+\\";
+/** The shortcut as this system writes it. */
+export const SIDEBAR_SHORTCUT = isMac ? "⌘\\" : "Ctrl+\\";
 
-/** Whether a key press is the sidebar's shortcut. */
+/** Whether a key press is the sidebar's shortcut: ⌘\ (Ctrl+\), as in Notion. */
 export const isSidebarShortcut = (event: KeyboardEvent): boolean =>
   !event.altKey &&
-  event.ctrlKey &&
-  (isMac
-    ? event.metaKey && !event.shiftKey && event.code === "KeyS"
-    : !event.metaKey && event.shiftKey && event.code === "Backslash");
+  !event.shiftKey &&
+  event.code === "Backslash" &&
+  (isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
 /** What the window tells the sidebar's toggle buttons (see `Workspace` in App.tsx). */
 export interface SidebarControl {

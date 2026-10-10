@@ -202,7 +202,7 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   await screenshot(window, "title-bar-narrow-sidebar");
 
   // A second group's strip carries the band on: its empty part drags, its tabs and buttons click.
-  await window.keyboard.press("ControlOrMeta+Backslash");
+  await window.keyboard.press("ControlOrMeta+Alt+Backslash");
   const second = window.getByTestId("tab-strip").nth(1);
   const secondBox = await boxOf(second);
   expect(secondBox).toMatchObject({ y: 8, height: 36 });

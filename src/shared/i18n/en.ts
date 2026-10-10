@@ -189,6 +189,7 @@ export const en = {
   "tabs.menu.pin": "Pin",
   "tabs.menu.unpin": "Unpin",
   "tabs.menu.split": "Split to the right",
+  "tabs.menu.side": "Open to the side",
   "tabs.menu.moveLeft": "Move to the left group",
   "tabs.menu.moveRight": "Move to the right group",
   "tabs.menu.moveNew": "Move to a new group on the right",

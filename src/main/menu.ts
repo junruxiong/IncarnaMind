@@ -10,12 +10,6 @@ function send(command: MenuCommand): void {
 }
 
 /**
- * Hides and shows the sidebar: ⌃⌘S on macOS, as in Finder; ⌘\ splits the tab
- * to the right, as in VS Code, so elsewhere it is Ctrl+Shift+\.
- */
-const SIDEBAR_ACCELERATOR = process.platform === "darwin" ? "Ctrl+Cmd+S" : "Ctrl+Shift+\\";
-
-/**
  * The application menu, in the interface language: New Mind (⌘N), Close Tab
  * (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
  * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
@@ -118,12 +112,13 @@ function buildMenu(): void {
           : []),
         {
           label: t(sidebarHidden ? "menu.showSidebar" : "menu.hideSidebar"),
-          accelerator: SIDEBAR_ACCELERATOR,
+          accelerator: "CmdOrCtrl+\\",
           click: () => send("toggle-sidebar"),
         },
         {
           label: t("menu.splitRight"),
-          accelerator: "CmdOrCtrl+\\",
+          // ⌘\ shows and hides the sidebar, as in Notion.
+          accelerator: "Alt+CmdOrCtrl+\\",
           click: () => send("split-right"),
         },
         { type: "separator" },
