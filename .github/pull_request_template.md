@@ -23,6 +23,7 @@ Delete this section if the change has no UI. Otherwise check each line against [
 - [ ] Layout holds at a narrow and a wide window, with and without the viewer; text never breaks by letter
 - [ ] Uses the shared building blocks where they exist
 - [ ] Before and after screenshots attached (narrow and wide)
+- [ ] A screenshot of the built screen beside its design board, with every difference listed and explained
 
 ## Sign-off
 
