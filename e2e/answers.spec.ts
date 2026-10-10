@@ -27,12 +27,13 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // Cmd/Ctrl+J turns the empty line into a Question; Enter asks it.
+  // Cmd/Ctrl+J focuses the composer; Enter asks, and the Question goes on the empty line.
   await window.keyboard.press("ControlOrMeta+j");
-  const question = editor.getByTestId("question");
-  await expect(question).toBeVisible();
+  await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("What is IncarnaMind?");
   await window.keyboard.press("Enter");
+  const question = editor.getByTestId("question");
+  await expect(question).toBeVisible();
 
   // The Answer streams in below the Question: part of it shows while the rest is still coming.
   const answer = editor.getByTestId("answer");
@@ -80,23 +81,22 @@ test("a Note switched out of Question context looks muted, and asking without a 
   await toggle.click();
   await expect(sideNote).toHaveClass(/context-off/);
 
-  // A Question from the slash menu; asking it without a chat model explains what to set up.
+  // Asking from the composer without a chat model explains, in its row, what to set up; the
+  // Question isn't left in the note, and its words stay in the composer.
   await sideNote.click();
-  await window.keyboard.press("End");
-  await window.keyboard.press("Enter");
-  await window.keyboard.type("/question");
-  await expect(window.getByTestId("slash-item-question")).toHaveAttribute("aria-selected", "true");
-  await window.keyboard.press("Enter");
+  await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Is anyone there?");
   await window.keyboard.press("Enter");
-  const notReady = editor.getByTestId("question-not-ready");
+  const notReady = window.getByTestId("composer").getByTestId("composer-not-ready");
   await expect(notReady).toBeVisible();
   await expect(notReady).toContainText("needs a chat model");
+  await expect(window.getByTestId("composer-input")).toHaveValue("Is anyone there?");
+  await expect(editor.getByTestId("question")).toHaveCount(0);
   await expect(editor.getByTestId("answer")).toHaveCount(0);
   await app.close();
 });
 
-test("after asking, the cursor goes below the Answer; a Question and its Answer are dragged and deleted together", async () => {
+test("after asking, the Mind's cursor goes below the Answer; a Question and its Answer are dragged and deleted together", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -119,7 +119,9 @@ test("after asking, the cursor goes below the Answer; a Question and its Answer 
   const answer = editor.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
-  // What is typed next goes on a new line under the Answer, not into the Question.
+  // Esc goes back from the composer to the note: what is typed next goes on a new line under
+  // the Answer, not into the Question.
+  await window.keyboard.press("Escape");
   await window.keyboard.type("Next thought");
   const question = editor.getByTestId("question");
   await expect(question.locator(".question-text")).toHaveText("What is IncarnaMind?");

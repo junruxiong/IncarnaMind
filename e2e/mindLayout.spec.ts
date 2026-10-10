@@ -184,7 +184,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   // The measure is 680px, with its margins inside the pane.
   expectNear((await textColumn(editor)).width, MEASURE, 1, "the measure");
 
-  // The Ask button, the "Answer" label and the block handle sit in the left margin.
+  // A Question's spark and fold chevron and the block handle sit in the left margin.
   const inLeftMargin = async (locator: Locator, name: string) => {
     const rect = await box(locator);
     expect
@@ -192,11 +192,15 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
       .toBeGreaterThanOrEqual(edge - LEFT_MARGIN - 1);
     expect.soft(rect.x + rect.width, `${name} is left of the text`).toBeLessThanOrEqual(edge + 1);
   };
-  await inLeftMargin(editor.getByTestId("question-ask"), "the Ask button");
-  await inLeftMargin(answer.locator(".answer-label"), "the Answer label");
-  // The Ask button is level with the Question's first 28px line.
-  const askMiddle = middle(await box(editor.getByTestId("question-ask")));
-  expectNear(askMiddle, (await box(texts.question)).y + 14, 1, "the Ask button's middle");
+  await inLeftMargin(editor.getByTestId("question-fold"), "the Question's fold chevron");
+  // It is level with the Question's one 20px line; the Answer has no label.
+  const foldMiddle = middle(await box(editor.getByTestId("question-fold")));
+  expectNear(foldMiddle, (await box(texts.question)).y + 10, 1, "the fold chevron's middle");
+  await expect(answer.locator(".answer-label")).toHaveCount(0);
+  // The composer, pinned under the Mind, is the measure wide at the text edge.
+  const composer = await box(window.getByTestId("composer"));
+  expectNear(composer.x, edge, 1, "the composer's edge");
+  expectNear(composer.width, MEASURE, 1, "the composer's width");
   await texts.note.hover();
   const handle = window.getByTestId("block-handle");
   await expect(handle).toBeVisible();
@@ -252,8 +256,13 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await setViewer(window, true);
   await expect(window.getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
-  await expect(answer.locator(".answer-label")).toBeVisible();
   expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
+  expectNear(
+    (await box(window.getByTestId("composer"))).x,
+    (await textColumn(editor)).x,
+    1,
+    "narrow: the composer's edge",
+  );
   expectNear(
     (await box(texts.answer)).x,
     (await textColumn(editor)).x,
