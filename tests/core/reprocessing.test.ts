@@ -18,6 +18,7 @@ import {
   writeSourceFile,
 } from "../helpers/documents";
 import { createControlledEmbedder, turnOnEmbeddings } from "../helpers/embedding";
+import { docxOf } from "../helpers/office";
 
 const NOTES = `# Transformers
 
@@ -50,6 +51,39 @@ function asVersion5(dataDir: string): void {
         db.run("INSERT INTO passages_fts (rowid, text) VALUES (?, ?)", [
           BigInt(seq),
           `${unfoldedKeywords(name)} ${unfoldedKeywords(text)}`,
+        ]);
+      }
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/** A Word comment, which processing version 6 didn't read. */
+const FINANCE = "Finance has asked to lower the contingency to 8 per cent.";
+
+/**
+ * Takes a data folder back to what processing version 6 left: every Document
+ * marked as of version 6, and the Word Document's Passages and keyword index
+ * without the comment it didn't read.
+ */
+function asVersion6(dataDir: string, wordId: string): void {
+  const db = openDatabase(join(dataDir, DATABASE_FILE));
+  try {
+    db.transaction(() => {
+      db.run("UPDATE documents SET processing_version = 6");
+      const passages = db.all<{ seq: number; text: string; name: string }>(
+        `SELECT p.seq, p.text, d.name FROM passages p JOIN documents d ON d.id = p.document_id
+         WHERE p.deleted_at IS NULL AND p.document_id = ?`,
+        [wordId],
+      );
+      for (const { seq, text, name } of passages) {
+        const read = text.replace(`\n\n${FINANCE}`, "");
+        db.run("UPDATE passages SET text = ? WHERE seq = ?", [read, BigInt(seq)]);
+        db.run("DELETE FROM passages_fts WHERE rowid = ?", [BigInt(seq)]);
+        db.run("INSERT INTO passages_fts (rowid, text) VALUES (?, ?)", [
+          BigInt(seq),
+          `${unfoldedKeywords(name)} ${unfoldedKeywords(read)}`,
         ]);
       }
     });
@@ -232,6 +266,63 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(later).toEqual([]);
     third.close();
+  });
+
+  test("Word Documents are processed once more, so their comments are searched; Documents of other kinds are left as they are (#76)", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const first = startCore(dataDir);
+    const [word, notes] = (await addAndProcess(first, [
+      await writeSourceFile(
+        sources,
+        "Library.docx",
+        docxOf([
+          { text: "Costs", heading: 1 },
+          {
+            text: "A contingency of 10 per cent is held.",
+            comment: { text: FINANCE, author: "Reviewer" },
+          },
+        ]),
+      ),
+      await writeSourceFile(sources, "Transformers.md", NOTES),
+    ])) as [Document, Document];
+    first.close();
+    asVersion6(dataDir, word.id);
+    const passages = (documentId: string) =>
+      queryDatabase(
+        dataDir,
+        "SELECT id, text FROM passages WHERE document_id = ? AND deleted_at IS NULL",
+        [documentId],
+      );
+    const before = passages(notes.id);
+    // As version 6 left it, the comment isn't in the keyword index.
+    const matching = (word: string) =>
+      queryDatabase(dataDir, "SELECT rowid FROM passages_fts WHERE passages_fts MATCH ?", [
+        `"${word}"`,
+      ]).length;
+    expect(matching("finance")).toBe(0);
+
+    const second = startCore(dataDir);
+    const statuses: [string, Document["status"]][] = [];
+    second.on("document.status", (document) => statuses.push([document.id, document.status]));
+    // Queued at startup: the Word Document only.
+    expect(
+      Object.fromEntries(
+        (await second.listDocuments()).map((document) => [document.id, document.status]),
+      ),
+    ).toEqual({ [word.id]: "queued", [notes.id]: "ready" });
+    await waitForProcessing(second, [word.id]);
+
+    const found = await second.searchPassages("finance lower", { mode: "keyword" });
+    expect(found.map((result) => result.documentId)).toEqual([word.id]);
+    expect(found[0]?.text).toContain(`is held.\n\n${FINANCE}`);
+    // The other was left as it was, and both are as of this version.
+    expect(statuses.filter(([id]) => id === notes.id)).toEqual([]);
+    expect(passages(notes.id)).toEqual(before);
+    expect(queryDatabase(dataDir, "SELECT processing_version FROM documents")).toEqual(
+      Array(2).fill({ processing_version: PROCESSING_VERSION }),
+    );
+    second.close();
   });
 
   test("embedding interrupted by quitting carries on after a restart, keeping the vectors it made", async () => {
