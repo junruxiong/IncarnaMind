@@ -508,6 +508,8 @@ export interface GettingStarted {
 export interface DeviceSettings {
   /** Width of the left sidebar, in CSS pixels. */
   sidebarWidth: number;
+  /** The User hid the sidebar (⌘\, the button, View menu, or dragging it shut). Its width is kept. */
+  sidebarHidden: boolean;
   /**
    * Width of the right Document viewer pane, in CSS pixels, once the User
    * has resized it. Null until then: it opens at about half the room beside the sidebar.

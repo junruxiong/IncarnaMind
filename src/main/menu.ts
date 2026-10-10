@@ -18,6 +18,24 @@ function send(command: MenuCommand): void {
  * for ⌘ on Windows and Linux.
  */
 export function installAppMenu(language: Language, { developer }: { developer: boolean }): void {
+  installed = { language, developer };
+  buildMenu();
+}
+
+/** What the menu was last built from, to build it again when the sidebar is hidden or shown. */
+let installed: { language: Language; developer: boolean } | null = null;
+let sidebarHidden = false;
+
+/** Makes View say "Show Sidebar" while the sidebar is hidden, "Hide Sidebar" otherwise. */
+export function setMenuSidebarHidden(hidden: boolean): void {
+  if (hidden === sidebarHidden) return;
+  sidebarHidden = hidden;
+  if (installed) buildMenu();
+}
+
+function buildMenu(): void {
+  if (!installed) return;
+  const { language, developer } = installed;
   const isMac = process.platform === "darwin";
   const t = (key: Parameters<typeof translate>[1]) => translate(language, key);
   const settings: MenuItemConstructorOptions = {
@@ -87,6 +105,12 @@ export function installAppMenu(language: Language, { developer }: { developer: b
               { type: "separator" },
             ] satisfies MenuItemConstructorOptions[])
           : []),
+        {
+          label: t(sidebarHidden ? "menu.showSidebar" : "menu.hideSidebar"),
+          accelerator: "CmdOrCtrl+\\",
+          click: () => send("toggle-sidebar"),
+        },
+        { type: "separator" },
         { role: "resetZoom", label: t("menu.actualSize") },
         { role: "zoomIn", label: t("menu.zoomIn") },
         { role: "zoomOut", label: t("menu.zoomOut") },
