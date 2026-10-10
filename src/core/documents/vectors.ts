@@ -47,6 +47,8 @@ export interface VectorIndex {
   add(documentId: string, seq: number, vector: Float32Array): void;
   /** A Document was deleted, or its Passages replaced, or its vectors are being replaced. */
   removeDocument(documentId: string): void;
+  /** A deleted Document was restored: its stored vectors are held again. */
+  restoreDocument(documentId: string): void;
   /** The embedding model changed: the vectors held are dropped, and the next search loads the new model's. */
   reset(): void;
   /**
@@ -85,15 +87,18 @@ export function createVectorIndex(db: Database, model: { readonly id: string }):
     entry.count++;
   }
 
-  function load(): Map<string, DocumentVectors> {
-    const map = new Map<string, DocumentVectors>();
+  /** Reads the current model's vectors of every live Document, or of one. */
+  function load(
+    map = new Map<string, DocumentVectors>(),
+    documentId?: string,
+  ): Map<string, DocumentVectors> {
     const rows = db.all<{ seq: number; document_id: string; embedding: Uint8Array }>(
       `SELECT p.seq, p.document_id, p.embedding
        FROM passages p JOIN documents d ON d.id = p.document_id
        WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL AND p.embedding IS NOT NULL
-         AND d.embedding_model = ?
+         AND d.embedding_model = ? ${documentId === undefined ? "" : "AND d.id = ?"}
        ORDER BY p.document_id, p.position`,
-      [model.id],
+      documentId === undefined ? [model.id] : [model.id, documentId],
     );
     for (const row of rows) append(map, row.document_id, row.seq, decodeVector(row.embedding));
     return map;
@@ -106,6 +111,12 @@ export function createVectorIndex(db: Database, model: { readonly id: string }):
 
     removeDocument(documentId) {
       documents?.delete(documentId);
+    },
+
+    restoreDocument(documentId) {
+      if (!documents) return;
+      documents.delete(documentId);
+      load(documents, documentId);
     },
 
     reset() {

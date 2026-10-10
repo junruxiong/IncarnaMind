@@ -126,6 +126,10 @@ _Avoid_: suggestion, edit, draft, diff
 A saved copy of a Mind as it was just before an AI change, which the User can compare with another Checkpoint or restore from. Restoring one comes back as a Proposal, not as an overwrite.
 _Avoid_: snapshot, version, backup, undo
 
+**Recently deleted**:
+Where a deleted Mind, Chat, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
+_Avoid_: trash, bin, archive
+
 ### Checks
 
 **Citation check**:

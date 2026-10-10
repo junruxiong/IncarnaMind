@@ -109,6 +109,11 @@ export function createMinds(db: Database, now: () => string) {
       return mind;
     },
 
+    /** Brings back a deleted Mind (the caller checks it may). Its content rows are the caller's. */
+    restore(mindId: string): void {
+      db.run("UPDATE minds SET deleted_at = NULL, updated_at = ? WHERE id = ?", [now(), mindId]);
+    },
+
     /**
      * Records that the Mind's content was edited: moves its `updatedAt` unless
      * that happened less than EDIT_TOUCH_INTERVAL_MS ago with no other Mind
