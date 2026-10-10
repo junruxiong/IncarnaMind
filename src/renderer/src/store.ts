@@ -14,6 +14,7 @@ import type {
   LinkedFolderLayout,
   LinkedFolderPreview,
   Mind,
+  PrivacySettings,
   RerankSettings,
   SearchScope,
   Settings,
@@ -21,6 +22,7 @@ import type {
   Skill,
   Tag,
 } from "../../core/api";
+import type { UiUsageEvent } from "../../core/usageEvents";
 import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
@@ -118,6 +120,11 @@ interface AppState {
   skills: Skill[];
   /** The example Mind and its Documents (onboarding). Null until loaded. */
   examples: Examples | null;
+  /**
+   * The privacy choices on this device: the first run asks about usage data
+   * from them. Set once loaded, then follows the core's event.
+   */
+  privacy: PrivacySettings | null;
   /**
    * The Mind whose editor should start a Question at its end once it shows,
    * e.g. a new one, with the Search scope it starts with (from the Library), if any.
@@ -481,6 +488,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     closeLibrary: () => set({ libraryOpen: false }),
     skills: [],
     examples: null,
+    privacy: null,
     questionToStart: null,
 
     async load() {
@@ -503,6 +511,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           examples,
           connectors,
           rerank,
+          privacy,
         ] = await Promise.all([
           core.listMinds(),
           core.getSettings(),
@@ -518,6 +527,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           core.getExamples(),
           core.listConnectors(),
           core.getRerankSettings(),
+          core.getPrivacySettings(),
         ]);
         // The tabs open at the last quit come back, without Minds deleted since.
         const tabs = settings.device.openMinds.filter((id) => minds.some((mind) => mind.id === id));
@@ -538,6 +548,7 @@ export const useAppStore = create<AppState>()((set, get) => {
           embedding,
           rerank,
           examples,
+          privacy,
           status: { kind: "ready" },
         });
         await get().refreshLibrary();
@@ -1016,6 +1027,25 @@ core.on("document.status", (changed) => {
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
 core.on("examples.changed", (examples) => useAppStore.setState({ examples }));
+
+// Privacy choices change on the Privacy page, at the first run's question, or with local mode.
+core.on("privacy.changed", (privacy) => useAppStore.setState({ privacy }));
+
+/**
+ * Whether the first run's question about usage data (in a test build, its
+ * notice) is waiting: this copy can send usage data, the User hasn't
+ * answered, and local mode isn't keeping it off.
+ */
+export const usageDataQuestionWaiting = (privacy: PrivacySettings | null): boolean =>
+  privacy?.usageData.available === true && !privacy.usageData.asked && !privacy.usageData.localMode;
+
+/**
+ * Usage data from the interface (see src/core/usageEvents.ts): the core
+ * sends it only while the User agrees, and drops it otherwise.
+ */
+export function recordUsage(event: UiUsageEvent): void {
+  core.recordUsage(event).catch((error: unknown) => console.error(error));
+}
 
 // A Connector is one way to "Index your Documents or connect apps".
 core.on("connectors.changed", (connectors) => tickIndexed(connectors.length));

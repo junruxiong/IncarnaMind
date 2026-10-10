@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { useT } from "../../i18n";
-import { useAppStore } from "../../store";
+import { usageDataQuestionWaiting, useAppStore } from "../../store";
 import { buttonStyle, dialogClass } from "../ui";
 import { useModal } from "../useModal";
 import { type ChatProviderChoice, ChatProviderChoices, OllamaAction } from "./ChatProviderChoices";
@@ -22,12 +22,15 @@ export function ChatSetupDialog() {
   const onExample = useAppStore(
     (state) => state.openMindId !== null && state.openMindId === state.examples?.mindId,
   );
+  // The first run's question about usage data comes first.
+  const usageQuestion = useAppStore((state) => usageDataQuestionWaiting(state.privacy));
   const open =
     readiness?.ready === false &&
     readiness.reason === "no-provider" &&
     dismissed === false &&
     !onExample &&
-    !libraryOpen;
+    !libraryOpen &&
+    !usageQuestion;
   // The dialog itself takes focus, so no choice looks picked: none is preselected.
   const dialog = useModal(open, { focusDialog: true });
 

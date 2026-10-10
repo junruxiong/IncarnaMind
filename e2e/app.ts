@@ -32,6 +32,13 @@ export interface LaunchOptions {
    */
   sentryDsn?: string;
   /**
+   * Where usage data goes: a test build sends it only with this, to a local
+   * server standing in for PostHog, and ignores the project a real build is
+   * made with. `testerBuild`: as a test build (the alpha) would, on until the
+   * User turns it off.
+   */
+  usageData?: { host: string; testerBuild?: boolean };
+  /**
    * The app ships its examples (`resources/examples`), so a first run opens
    * on the example Mind with "Get started". Without, a test build ships none.
    */
@@ -46,7 +53,7 @@ export interface LaunchOptions {
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false, sentryDsn, examples = false, home }: LaunchOptions = {},
+  { fakeChat = false, sentryDsn, usageData, examples = false, home }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -55,8 +62,17 @@ export async function launchApp(
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
+  delete env.INCARNAMIND_TEST_POSTHOG_KEY;
+  delete env.INCARNAMIND_TEST_POSTHOG_HOST;
+  delete env.INCARNAMIND_TEST_TESTER_BUILD;
+  delete env.POSTHOG_CAPTURE_MODE;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
+  if (usageData) {
+    env.INCARNAMIND_TEST_POSTHOG_KEY = "test-project-key";
+    env.INCARNAMIND_TEST_POSTHOG_HOST = usageData.host;
+    if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
+  }
   if (home) env.HOME = home;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
