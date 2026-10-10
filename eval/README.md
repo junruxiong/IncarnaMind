@@ -347,6 +347,10 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
   - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.
 
+## The hard tier
+
+`npm run eval:hard` asks harder Questions of a library at scale: public Documents across domains, fetched at evaluation time and never committed, in every retrieval mode with embeddings on, reported per domain and difficulty and never gating. `npm run eval` doesn't run it. See `hard/README.md`.
+
 ## The grouping check
 
 `npm run eval:grouping` is the check before building the Library's grouping (#51): how Documents are grouped into Topics, on its own fixture set, with the same data folder setup and model. `npm run eval` doesn't run it. See `grouping/README.md`.
