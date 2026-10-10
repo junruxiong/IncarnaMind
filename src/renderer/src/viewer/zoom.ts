@@ -111,5 +111,3 @@ export function createWheelZoom({ mac }: { mac: boolean }) {
     },
   };
 }
-
-export type WheelZoom = ReturnType<typeof createWheelZoom>;

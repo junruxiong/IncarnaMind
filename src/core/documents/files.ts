@@ -240,10 +240,6 @@ export async function hashFile(path: string): Promise<HashedFile> {
   return { contentHash: hash.digest("hex"), size };
 }
 
-/** The SHA-256 of some bytes, hex. */
-export const hashBytes = (bytes: Uint8Array): string =>
-  createHash("sha256").update(bytes).digest("hex");
-
 /**
  * Opens a file for reading, as a Web stream of its bytes, with its size now.
  * Rejects (e.g. with ENOENT) if it can't be opened, before any byte is read.

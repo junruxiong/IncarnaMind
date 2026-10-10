@@ -10,7 +10,7 @@
  * a block or two. Every block after a sheet's first repeats its header row
  * at the top, so each Passage knows its columns. Pure.
  */
-import { columnName, type TextUnit } from "../../../shared/units";
+import type { TextUnit } from "../../../shared/units";
 import type { SheetLayout, WorkbookLayout } from "./sheetLayout";
 
 /** The most rows a block holds. */
@@ -132,9 +132,4 @@ export function gridUnits(sheets: readonly Sheet[], named: boolean, firstUnit = 
     }
   }
   return units;
-}
-
-/** The cells of a sheet by reference ("B12"), for the grid. */
-export function cellsByRef(sheet: Sheet): Map<string, Cell> {
-  return new Map(sheet.cells.map((cell) => [`${columnName(cell.column)}${cell.row}`, cell]));
 }
