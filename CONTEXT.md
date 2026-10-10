@@ -194,6 +194,12 @@ _Avoid_: shared folder, workspace, permission
 The folder the User picks for the files IncarnaMind creates, such as exports and Documents a Task saves. IncarnaMind writes nowhere else without asking.
 _Avoid_: export folder, downloads, save path
 
+### Privacy
+
+**Usage data**:
+Anonymous events about using IncarnaMind, such as "a Question was asked with a local model", sent only while the User agrees, under a random install ID. It never holds a Document's content or name, a Question, an Answer or anything the User typed.
+_Avoid_: telemetry, tracking
+
 ### People
 
 **User**:

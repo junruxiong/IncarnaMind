@@ -73,7 +73,7 @@ There's no account and no IncarnaMind server.
 | Your files | Nowhere. They stay where you keep them, unchanged |
 | A question and the passages found for it | To the AI model you picked, or nowhere if it's a local model |
 | API keys | Your system's secure storage, encrypted |
-| Usage data | Not collected |
+| Usage data | Collected only if you agree, as [anonymous events](docs/privacy.md#usage-data), never your files or questions; turn it off any time in **Settings → Privacy** |
 | Crash reports | Off unless you turn them on, and stripped of your content |
 
 The first time IncarnaMind would send anything to an outside service, it shows you what would be sent and to whom, and waits for your OK. **Settings → Privacy** lists each one and lets you take it back. Where a provider offers the choice, IncarnaMind asks it not to store your requests; every request to OpenAI says so.
