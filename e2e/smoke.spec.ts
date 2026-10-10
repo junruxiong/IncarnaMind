@@ -258,10 +258,10 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await expect(setup).toBeVisible();
   await expect(setup.getByTestId("chat-provider-choices").getByRole("radio")).toHaveCount(3);
   await expect(setup.getByRole("radio", { checked: true })).toHaveCount(0);
-  // Choosing an API key offers the four kinds of provider, none chosen yet.
+  // Choosing an API key offers the eleven providers and an OpenAI-compatible server, none chosen yet.
   await setup.getByTestId("chat-choice-api-key").check();
   const providerChoices = setup.getByTestId("provider-form").getByRole("radio");
-  await expect(providerChoices).toHaveCount(4);
+  await expect(providerChoices).toHaveCount(12);
   await expect(
     setup.getByTestId("provider-form").getByRole("radio", { checked: true }),
   ).toHaveCount(0);
