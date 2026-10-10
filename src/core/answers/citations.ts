@@ -34,6 +34,7 @@ import {
   unitLocation,
 } from "../../shared/locations";
 import { findQuote } from "../../shared/quoteMatch";
+import { foldRadicals } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
   CITATION_NODE,
@@ -685,15 +686,17 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
                 passage.pageTo,
               )
             : [];
+        const marked =
+          units.length > 1 || units[0]?.kind === "slide"
+            ? withUnitMarks(passage.text, units)
+            : passage.text;
         return {
           id: handleFor(passage.passageId),
           documentName: passage.documentName,
           range,
           location: passageLocation(units),
-          text:
-            units.length > 1 || units[0]?.kind === "slide"
-              ? withUnitMarks(passage.text, units)
-              : passage.text,
+          // A browser-made PDF's "⼤" for "大": every other reader of the text folds it (ADR-0009).
+          text: foldRadicals(marked),
         };
       });
       return { text: formatPassages(formatted), passageCount: found.length };
