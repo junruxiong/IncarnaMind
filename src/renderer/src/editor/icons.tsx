@@ -25,6 +25,26 @@ function Stroke({ weight, children, ...props }: IconProps & { weight: number }) 
   );
 }
 
+/** Two arrows pointing apart: Expand the composer into a tall editor. */
+export const ExpandIcon = (props: IconProps) => (
+  <Stroke weight={1.75} {...props}>
+    <path d="M14 4h6v6" />
+    <path d="M20 4l-7 7" />
+    <path d="M10 20H4v-6" />
+    <path d="M4 20l7-7" />
+  </Stroke>
+);
+
+/** Two arrows pointing together: bring the tall editor back. */
+export const CollapseIcon = (props: IconProps) => (
+  <Stroke weight={1.75} {...props}>
+    <path d="M20 10h-6V4" />
+    <path d="M14 10l7-7" />
+    <path d="M4 14h6v6" />
+    <path d="M10 14l-7 7" />
+  </Stroke>
+);
+
 /** An up arrow: ask, at the composer's right end. */
 export const AskArrowIcon = (props: IconProps) => (
   <Stroke weight={1.75} {...props}>

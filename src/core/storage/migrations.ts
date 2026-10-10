@@ -644,6 +644,22 @@ export const migrations: readonly Migration[] = [
         ELSE colour END;
     `,
   },
+  {
+    version: 29,
+    description: "A Document's own title, for names that are machine-made",
+    // Read with the metadata (METADATA_VERSION 2 in src/core/documents/processing.ts):
+    // Documents from before are read again in the background, once.
+    sql: `ALTER TABLE documents ADD COLUMN title TEXT;`,
+  },
+  {
+    version: 30,
+    description: "Minds have a kind",
+    // Checked in code, not here, so a Mind of a kind a newer version wrote still loads
+    // (it is listed, and opens as "update to open"). Every Mind so far is a plain one.
+    sql: `
+      ALTER TABLE minds ADD COLUMN kind TEXT NOT NULL DEFAULT 'mind';
+    `,
+  },
 ];
 
 /**

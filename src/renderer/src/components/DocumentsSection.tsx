@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
+import { displayName, fileNameOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
@@ -345,6 +346,8 @@ const DocumentRow = memo(function DocumentRow({
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
+  const shownName = displayName(item);
+  const fileName = fileNameOf(item.path);
   const chips = chipsOf(item.tags, tagsById);
   const tagNames =
     chips.length > 0
@@ -383,7 +386,9 @@ const DocumentRow = memo(function DocumentRow({
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}
-          title={tagNames ? `${item.name}\n${tagNames}` : item.name}
+          title={[shownName === fileName ? shownName : `${shownName}\n${fileName}`, tagNames]
+            .filter(Boolean)
+            .join("\n")}
           onClick={() => openDocument({ documentId: item.id })}
           className={rowButtonClass}
           style={rowPadding(depth)}
@@ -392,7 +397,7 @@ const DocumentRow = memo(function DocumentRow({
           {/* Takes what the status leaves; in it, the name gives way before the colours. */}
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span data-testid="row-text" className="min-w-0 truncate">
-              {item.name}
+              {shownName}
             </span>
             <TagMarks chips={chips} />
           </span>
