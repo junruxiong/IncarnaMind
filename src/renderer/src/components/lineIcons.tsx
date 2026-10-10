@@ -71,13 +71,24 @@ export function LooseDocumentsLineIcon(props: IconProps) {
   );
 }
 
-/** A Document: a page with a folded corner; text and Markdown ones have lines on it. */
+/** What each kind of Document has drawn on its page (#119): a mark of its own, 16px legible. Excel and CSV share one. */
+const KIND_MARK: Record<DocumentKind, string> = {
+  pdf: "M9 18v-6h2.2a1.9 1.9 0 0 1 0 3.8H9",
+  docx: "M8 11.5l1.6 6 2.4-5 2.4 5 1.6-6",
+  xlsx: "M8 11.5h8M8 14.5h8M8 17.5h8M12 11.5v6",
+  csv: "M8 11.5h8M8 14.5h8M8 17.5h8M12 11.5v6",
+  pptx: "M8 11.5h8v4.5H8zM12 16v2.5M9.5 18.5h5",
+  markdown: "M8 17.5v-5.5l2 2.5 2-2.5v5.5M16 12v5.5M14.5 16l1.5 1.5 1.5-1.5",
+  text: "M9 13h6M9 17h4",
+};
+
+/** A Document: a page with a folded corner, and on it the mark of its kind (PDF, Word, sheet, slides, Markdown, text). */
 export function DocumentLineIcon({ kind, ...props }: IconProps & { kind: DocumentKind }) {
   return (
-    <LineIcon {...props}>
+    <LineIcon {...props} data-kind={kind}>
       <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
       <path d="M14 3v5h5" />
-      {kind !== "pdf" && <path d="M9 13h6M9 17h4" />}
+      <path d={KIND_MARK[kind]} />
     </LineIcon>
   );
 }
@@ -213,5 +224,15 @@ export function AppMark() {
     >
       I
     </span>
+  );
+}
+
+/** The sidebar button's icon: a window with its left pane marked, as in Notion and Finder. */
+export function SidebarLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M9.5 4.5v15" />
+    </LineIcon>
   );
 }

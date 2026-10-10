@@ -9,4 +9,22 @@ interface ImportMetaEnv {
    * Settings doesn't offer them. Never written in the code.
    */
   readonly MAIN_VITE_SENTRY_DSN?: string;
+  /**
+   * The PostHog project usage data goes to: its project API key ("phc_…"),
+   * set by the release workflow. Unset or empty, or without
+   * `MAIN_VITE_POSTHOG_HOST`, the build sends no usage data, doesn't load the
+   * SDK and doesn't ask. Never written in the code.
+   */
+  readonly MAIN_VITE_POSTHOG_KEY?: string;
+  /**
+   * The PostHog host for that project, over https: PostHog's EU cloud or a
+   * self-hosted one (see docs/privacy.md).
+   */
+  readonly MAIN_VITE_POSTHOG_HOST?: string;
+  /**
+   * "1" for a test build (the alpha): usage data is on until the User turns
+   * it off, as testers agree to when they join, and the first run says so.
+   * Otherwise the first run asks, and it is off unless the User agrees.
+   */
+  readonly MAIN_VITE_TESTER_BUILD?: string;
 }

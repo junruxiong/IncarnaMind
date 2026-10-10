@@ -295,12 +295,22 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     });
     const reviewHead = byName("Needs review").locator(":scope > div");
     await expect(reviewHead.getByTestId("tag-dot")).toHaveCount(0);
+    // Its edge is 1.5px, which a screen that isn't Retina (CI's) draws as 1px: borders are
+    // drawn in whole device pixels.
+    const edge = await window.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.style.border = "1.5px solid";
+      document.body.append(probe);
+      const width = Number.parseFloat(getComputedStyle(probe).borderTopWidth);
+      probe.remove();
+      return width;
+    });
     expect(await reviewHead.getByTestId("review-ring").locator("span").evaluate(dotShape)).toEqual({
       width: 9,
       height: 9,
       round: true,
       filled: false,
-      border: 1.5,
+      border: edge,
     });
     expect(
       await reviewHead
@@ -531,9 +541,10 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     // Pointed at, the row's tooltip names its Tags; its description says them to a screen reader.
     const attention = row("Attention").getByTestId("open-document");
     await slideTo(window, row("Attention").getByTestId("row-text"));
+    // The tooltip carries the file's name, with its extension, then the Tags.
     await expect(attention).toHaveAttribute(
       "title",
-      "Attention\nTags: Book, Contract, Paper, Report",
+      /^Attention\nAttention\.\w+\nTags: Book, Contract, Paper, Report$/,
     );
     await expect(attention).toHaveAccessibleDescription("Tags: Book, Contract, Paper, Report");
     expect(await row("Attention").boundingBox()).toEqual(before[await indexOf(items, "Attention")]);
@@ -604,7 +615,7 @@ test("a Document row shows up to three Tag colours and +N after its name, names 
     await setLanguage(window, "zh-CN");
     await expect(attention).toHaveAttribute(
       "title",
-      "Attention\n标签：Book, Contract, Paper, Report",
+      "Attention\nAttention.txt\n标签：Book, Contract, Paper, Report",
     );
     await expect(attention).toHaveAccessibleDescription("标签：Book, Contract, Paper, Report");
     await tabTo(window, attention);

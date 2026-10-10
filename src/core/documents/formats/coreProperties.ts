@@ -25,6 +25,13 @@ const MAX_BYTES = 1024 * 1024;
  * whose core properties can't be read.
  */
 export async function officeCreated(bytes: Uint8Array): Promise<string | null> {
+  return (await officeProperties(bytes)).created;
+}
+
+/** The package's creation date (dcterms:created) and title (dc:title) as written, each null if absent. */
+export async function officeProperties(
+  bytes: Uint8Array,
+): Promise<{ created: string | null; title: string | null }> {
   const zip = openPackage(bytes);
   const relsXml = await zip.readText("_rels/.rels", MAX_BYTES);
   const target = relsXml
@@ -32,7 +39,12 @@ export async function officeCreated(bytes: Uint8Array): Promise<string | null> {
         .Target
     : undefined;
   const xml = await zip.readText(target ? resolvePart("", target) : DEFAULT_PART, MAX_BYTES);
-  if (xml === undefined) return null;
-  const created = child(parseXml(xml), "created");
-  return created ? textOf(created).trim() : null;
+  if (xml === undefined) return { created: null, title: null };
+  const root = parseXml(xml);
+  const created = child(root, "created");
+  const title = child(root, "title");
+  return {
+    created: created ? textOf(created).trim() : null,
+    title: title ? textOf(title).trim() : null,
+  };
 }

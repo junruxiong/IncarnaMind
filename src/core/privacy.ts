@@ -1,13 +1,14 @@
 /**
- * Privacy: the User's choices about crash reports and update checks on this
- * device, and the registry of network traffic that carries no User content.
+ * Privacy: the User's choices about crash reports, update checks and usage
+ * data on this device, and the registry of network traffic that carries no
+ * User content.
  *
- * IncarnaMind collects no usage data. Data that does carry User content goes
- * through a data flow and needs consent (see ./consent). Everything else that
- * reaches the network, such as update checks and model downloads, is
- * registered here by the feature that makes it, so the Privacy page can list
- * it. Crash reports are off until the User opts in; the host's
- * `CrashReporter` is turned on only then.
+ * Data that carries User content goes through a data flow and needs consent
+ * (see ./consent). Everything else that reaches the network, such as update
+ * checks and model downloads, is registered here by the feature that makes
+ * it, so the Privacy page can list it. Crash reports are off until the User
+ * opts in; the host's `CrashReporter` is turned on only then. Usage data is
+ * sent only while the User agrees (see ./usageData).
  */
 import type { CrashReporter } from "./adapters";
 import {
@@ -19,6 +20,7 @@ import {
 } from "./api";
 import { InvalidInputError, isRecord } from "./errors";
 import type { SettingsStore } from "./settings";
+import type { UsageData } from "./usageData";
 
 export interface NetworkTrafficDefinition {
   id: NetworkTrafficId;
@@ -50,14 +52,15 @@ export interface NetworkTrafficRegistry {
 const CRASH_REPORTS = "privacy.crashReports";
 const AUTOMATIC_UPDATE_CHECKS = "privacy.automaticUpdateChecks";
 
-const PATCH_KEYS = new Set(["crashReports", "automaticUpdateChecks"]);
+const PATCH_KEYS = new Set(["crashReports", "automaticUpdateChecks", "usageData"]);
 
 export function createPrivacy(options: {
   settings: SettingsStore;
   /** Absent when this copy can't send crash reports. */
   crashReporter: CrashReporter | undefined;
+  usageData: UsageData;
 }) {
-  const { settings, crashReporter } = options;
+  const { settings, crashReporter, usageData } = options;
   const definitions = new Map<NetworkTrafficId, NetworkTrafficDefinition>();
 
   const registry: NetworkTrafficRegistry = {
@@ -80,6 +83,7 @@ export function createPrivacy(options: {
   const status = (): PrivacySettings => ({
     crashReports: { available: crashReporter !== undefined, enabled: crashReportsOn() },
     automaticUpdateChecks: updateChecksOn(),
+    usageData: usageData.status(),
   });
 
   return {
@@ -100,15 +104,30 @@ export function createPrivacy(options: {
           throw new InvalidInputError(`The privacy setting "${key}" must be true or false.`);
         }
       }
-      const { crashReports, automaticUpdateChecks } = patch as {
+      const {
+        crashReports,
+        automaticUpdateChecks,
+        usageData: shareUsage,
+      } = patch as {
         crashReports?: boolean;
         automaticUpdateChecks?: boolean;
+        usageData?: boolean;
       };
       if (crashReports === true && !crashReporter) {
         throw new InvalidInputError("This copy of IncarnaMind can't send crash reports.");
       }
-
       const before = status();
+      // Checked before anything changes, so a refused patch changes nothing.
+      if (shareUsage !== undefined && !before.usageData.available) {
+        throw new InvalidInputError("This copy of IncarnaMind can't send usage data.");
+      }
+      if (shareUsage === true && before.usageData.localMode) {
+        throw new InvalidInputError(
+          'Usage data stays off while "Keep everything on this computer" is on.',
+        );
+      }
+
+      if (shareUsage !== undefined) usageData.setEnabled(shareUsage);
       if (crashReports !== undefined && crashReports !== before.crashReports.enabled) {
         if (crashReports) {
           settings.writeDeviceValue(CRASH_REPORTS, true);
@@ -128,7 +147,9 @@ export function createPrivacy(options: {
       const after = status();
       const changed =
         after.crashReports.enabled !== before.crashReports.enabled ||
-        after.automaticUpdateChecks !== before.automaticUpdateChecks;
+        after.automaticUpdateChecks !== before.automaticUpdateChecks ||
+        after.usageData.enabled !== before.usageData.enabled ||
+        after.usageData.asked !== before.usageData.asked;
       return { changed, settings: after };
     },
 

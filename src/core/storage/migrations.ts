@@ -646,6 +646,22 @@ export const migrations: readonly Migration[] = [
   },
   {
     version: 29,
+    description: "A Document's own title, for names that are machine-made",
+    // Read with the metadata (METADATA_VERSION 2 in src/core/documents/processing.ts):
+    // Documents from before are read again in the background, once.
+    sql: `ALTER TABLE documents ADD COLUMN title TEXT;`,
+  },
+  {
+    version: 30,
+    description: "Minds have a kind",
+    // Checked in code, not here, so a Mind of a kind a newer version wrote still loads
+    // (it is listed, and opens as "update to open"). Every Mind so far is a plain one.
+    sql: `
+      ALTER TABLE minds ADD COLUMN kind TEXT NOT NULL DEFAULT 'mind';
+    `,
+  },
+  {
+    version: 31,
     description: "Chat providers name their provider in the catalog, and its endpoint",
     // The catalog is src/core/providers/catalog/providers.ts: each kind saved so far is one
     // of its providers, except the ChatGPT plan, which has none. A hosted provider is on its
@@ -666,7 +682,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 30,
+    version: 33,
     description: "A provider is one per catalog provider, server and endpoint",
     // Keys and model lists differ by region (Qwen's Beijing and Singapore, Kimi's .cn and .ai),
     // so each endpoint of a hosted provider is its own row with its own key.

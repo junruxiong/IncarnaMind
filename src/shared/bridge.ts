@@ -69,6 +69,8 @@ export interface FilesBridge {
   logError(report: RendererErrorReport): void;
   /** Calls `listener` with each command chosen in the application menu. Returns how to stop. */
   onMenuCommand(listener: (command: MenuCommand) => void): () => void;
+  /** Tells the application menu whether the sidebar is hidden, so View says "Hide Sidebar" or "Show Sidebar". */
+  setSidebarHidden(hidden: boolean): void;
   /** The window's title bar (./titleBar.ts), for the page to keep room for the window's buttons. */
   readonly titleBar: TitleBar;
   /**
@@ -79,7 +81,7 @@ export interface FilesBridge {
 }
 
 /** What the application menu asks the window to do (see src/main/menu.ts). */
-export type MenuCommand = "new-mind" | "close-tab" | "open-settings";
+export type MenuCommand = "new-mind" | "close-tab" | "open-settings" | "toggle-sidebar";
 
 export type SkillPickKind = "folder" | "zip";
 
@@ -104,6 +106,8 @@ export const FILES_CHANNELS = {
   pickDocuments: "files:pickDocuments",
   showLinkedFolder: "files:showLinkedFolder",
   logError: "files:logError",
+  /** From the page: the sidebar is hidden (true) or shown (false), for the View menu's label. */
+  sidebarHidden: "app:sidebarHidden",
   /** From the main process: a command chosen in the application menu. */
   menuCommand: "app:menuCommand",
   /** From the main process: the window entered (true) or left (false) full screen. */

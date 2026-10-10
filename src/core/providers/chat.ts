@@ -473,6 +473,13 @@ export function createChat(options: {
 
     exists: (id: string) => rowById(id) !== undefined,
 
+    /** A provider's kind, and whether its model runs on this computer (it sends to no service); null when it's gone. */
+    describe(id: string): { kind: ChatProviderKind; local: boolean } | null {
+      const row = rowById(id);
+      if (!row || !isChatProviderKind(row.kind)) return null;
+      return { kind: row.kind, local: rowService(row) === null };
+    },
+
     /**
      * Whether `choice`'s model reads images, as known now (see ./capabilities):
      * false when nothing says so, or its provider is gone.

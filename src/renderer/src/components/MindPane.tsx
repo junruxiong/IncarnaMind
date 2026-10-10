@@ -1,9 +1,11 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
+import { ComposerDockContext } from "../editor/mindContext";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
 import { ExampleBanner, useIsExample } from "./GettingStarted";
+import { LibraryPane } from "./LibraryPane";
 import { PlusLineIcon } from "./lineIcons";
 import { MindEditor } from "./MindEditor";
 import { MindTabs } from "./MindTabs";
@@ -12,16 +14,20 @@ import { buttonStyle } from "./ui";
 
 /**
  * The card's centre: a 36px strip of the open Minds as tabs (with "+" and Export),
- * then the shown Mind, its title and its Blocks. With no tab open, a way to
- * start a Mind.
+ * then the shown Mind, its title and its Blocks, and the composer pinned at
+ * its foot. With no tab open, a way to start a Mind.
  */
 export function MindPane() {
   const t = useT();
   const mind = useAppStore((state) => state.minds.find((each) => each.id === state.openMindId));
+  const libraryOpen = useAppStore((state) => state.libraryOpen);
   const createMind = useAppStore((state) => state.createMind);
   const isExample = useIsExample(mind?.id);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const gutter = useScrollbarWidth(scroller);
 
   return (
     <main
@@ -35,53 +41,90 @@ export function MindPane() {
         onClose={() => setExportingId(null)}
       />
 
-      <div
-        className="min-h-0 flex-grow overflow-auto"
-        {...(mind && {
-          role: "tabpanel",
-          id: "mind-tabpanel",
-          "aria-labelledby": `mind-tab-${mind.id}`,
-        })}
-      >
-        {mind ? (
-          // Keyed, so switching Minds starts a fresh title field and editor. Every text
-          // in it starts at one edge (styles.css, `.mind-column`).
-          <article
-            key={mind.id}
-            data-testid="mind-pane"
-            data-mind-id={mind.id}
-            className="mind-column"
-          >
-            <div className="mind-measure">
-              {isExample && <ExampleBanner />}
-              <MindTitle mind={mind} />
-              {/* The example works without a chat model: it says so in its Answer instead. */}
-              {!isExample && <ChatReadinessNotice />}
-              <MindEditor mindId={mind.id} />
-            </div>
-          </article>
-        ) : (
-          <div
-            data-testid="mind-none-open"
-            className="flex h-full flex-col items-center justify-center gap-2 px-10 pb-11 text-center"
-          >
-            <h1 className="font-serif text-heading font-semibold text-ink">
-              {t("mind.noneOpen.title")}
-            </h1>
-            <p className="max-w-sm text-ui text-ink-secondary">{t("mind.noneOpen.body")}</p>
-            <button
-              type="button"
-              onClick={() => void createMind()}
-              className={`mt-3 ${buttonStyle("primary")}`}
+      {libraryOpen ? (
+        // The Library is a tab beside the Minds'; the Mind stays in its own.
+        <LibraryPane />
+      ) : (
+        <div
+          className="flex min-h-0 flex-grow flex-col"
+          {...(mind && {
+            role: "tabpanel",
+            id: "mind-tabpanel",
+            "aria-labelledby": `mind-tab-${mind.id}`,
+          })}
+        >
+          {mind ? (
+            <>
+              <div ref={setScroller} className="mind-scroller min-h-0 flex-grow overflow-auto">
+                {/* Keyed, so switching Minds starts a fresh title field and editor. Every text
+                  in it starts at one edge (styles.css, `.mind-column`). */}
+                <article
+                  key={mind.id}
+                  data-testid="mind-pane"
+                  data-mind-id={mind.id}
+                  className="mind-column"
+                >
+                  <div className="mind-measure">
+                    {isExample && <ExampleBanner />}
+                    <MindTitle mind={mind} />
+                    {/* The example works without a chat model: it says so in its Answer instead. */}
+                    {!isExample && <ChatReadinessNotice />}
+                    <ComposerDockContext.Provider value={dock}>
+                      <MindEditor mindId={mind.id} />
+                    </ComposerDockContext.Provider>
+                  </div>
+                </article>
+              </div>
+              {/* The composer, pinned at the column's foot: the Mind's editor draws it here. It
+                  keeps clear of the scrollbar's gutter above it, so it is centred as the column is. */}
+              <div
+                ref={setDock}
+                data-testid="composer-dock"
+                className="composer-dock"
+                style={{ paddingRight: gutter }}
+              />
+            </>
+          ) : (
+            <div
+              data-testid="mind-none-open"
+              className="flex h-full flex-col items-center justify-center gap-2 px-10 pb-11 text-center"
             >
-              <PlusLineIcon className="size-4" />
-              {t("sidebar.newMind")}
-            </button>
-          </div>
-        )}
-      </div>
+              <h1 className="font-serif text-heading font-semibold text-ink">
+                {t("mind.noneOpen.title")}
+              </h1>
+              <p className="max-w-sm text-ui text-ink-secondary">{t("mind.noneOpen.body")}</p>
+              <button
+                type="button"
+                onClick={() => void createMind()}
+                className={`mt-3 ${buttonStyle("primary")}`}
+              >
+                <PlusLineIcon className="size-4" />
+                {t("sidebar.newMind")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </main>
   );
+}
+
+/**
+ * How wide the element's scrollbar is: 0 where scrollbars show only while
+ * scrolling (macOS with a trackpad), about 15px where they always show
+ * (Windows, Linux, macOS with a mouse). Measured again as the element resizes.
+ */
+function useScrollbarWidth(element: HTMLElement | null): number {
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (!element) return;
+    const measure = () => setWidth(element.offsetWidth - element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element]);
+  return width;
 }
 
 /**
@@ -105,7 +148,24 @@ function MindTitle({ mind }: { mind: Mind }) {
   const moveIntoContent = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    event.currentTarget.closest("article")?.querySelector<HTMLElement>(".mind-editor")?.focus();
+    const title = event.currentTarget;
+    const article = title.closest("article");
+    const content = () => article?.querySelector<HTMLElement>(".mind-editor");
+    const now = content();
+    if (now || !article) {
+      now?.focus();
+      return;
+    }
+    // A new Mind's text comes a moment after its title (its document is still opening):
+    // the cursor goes there once it does, unless it has left the title by then.
+    const observer = new MutationObserver(() => {
+      const editor = content();
+      if (!editor) return;
+      observer.disconnect();
+      if (document.activeElement === title) editor.focus();
+    });
+    observer.observe(article, { childList: true, subtree: true });
+    title.addEventListener("blur", () => observer.disconnect(), { once: true });
   };
 
   return (

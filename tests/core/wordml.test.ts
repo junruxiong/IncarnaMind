@@ -236,10 +236,11 @@ describe("Together", () => {
       "Spring tides are strongest at new moon.[1]Neap tides are weaker.",
     );
 
-    // The Word reader takes insertions and leaves deletions and comments out, as accepting all would.
+    // The Word reader takes insertions and leaves deletions out, as accepting all would, and
+    // reads a comment after its section's text (ADR-0011's amendment, #76).
     const { units } = await extractDocx(docx);
     expect(units.map((unit) => unit.text)).toEqual([
-      "Spring tides are strongest at new moon.\nNeap tides are weaker.",
+      "Spring tides are strongest at new moon.\nNeap tides are weaker.\n\nWritten by IncarnaMind",
       "Tides, p. 2",
     ]);
   });

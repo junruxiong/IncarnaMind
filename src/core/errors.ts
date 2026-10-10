@@ -16,6 +16,14 @@ export class NotFoundError extends Error {
   override name = "NotFoundError";
 }
 
+/**
+ * Thrown when something would write to a Mind this version may only read: a
+ * newer version wrote its content, or it is of a kind this version doesn't know.
+ */
+export class MindReadOnlyError extends Error {
+  override name = "MindReadOnlyError";
+}
+
 /** Thrown when a secret can't be stored safely on this device (see `getSecretStorage`). */
 export class SecretStorageError extends Error {
   override name = "SecretStorageError";
