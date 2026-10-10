@@ -16,6 +16,7 @@ import {
 } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
 import { SkillIcon } from "../components/icons";
+import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
 import { providerLabel } from "../components/providers/shared";
 import { useT } from "../i18n";
@@ -109,49 +110,41 @@ export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewPr
       </div>
       {hasSearchScope(scope) && <ScopeChips scope={scope} onRemove={removeFromScope} />}
       {blocked?.kind === "not-ready" && (
-        <p contentEditable={false} data-testid="question-not-ready" className="question-notice">
-          <span className="question-notice-text">
-            <ReadinessExplanation readiness={blocked.readiness} />
-          </span>
-          <button
-            type="button"
-            onClick={() => openSettings(settingsPageFor(blocked.readiness))}
-            className="question-notice-action"
+        <div contentEditable={false} className="mt-1.5 select-none">
+          <ProblemLine
+            role="status"
+            testId="question-not-ready"
+            action={{
+              label: t("question.setUp"),
+              onClick: () => openSettings(settingsPageFor(blocked.readiness)),
+            }}
           >
-            {t("question.setUp")}
-          </button>
-        </p>
+            <ReadinessExplanation readiness={blocked.readiness} inLine />
+          </ProblemLine>
+        </div>
       )}
       {blocked?.kind === "skill-unavailable" && (
-        <p
-          contentEditable={false}
-          data-testid="question-skill-unavailable"
-          className="question-notice"
-        >
-          <span className="question-notice-text">
-            {t(`skills.unavailable.${blocked.state}`, { name: blocked.skill })}
-          </span>
-          <button type="button" onClick={() => openSettings()} className="question-notice-action">
-            {t("skills.unavailable.settings")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              dropSkill();
-              if (canAsk) void askInEditor(editor, mindId, questionId);
+        <div contentEditable={false} className="mt-1.5 select-none">
+          <ProblemLine
+            testId="question-skill-unavailable"
+            action={{
+              label: t("skills.unavailable.drop"),
+              onClick: () => {
+                dropSkill();
+                if (canAsk) void askInEditor(editor, mindId, questionId);
+              },
             }}
-            className="question-notice-action"
           >
-            {t("skills.unavailable.drop")}
-          </button>
-        </p>
+            {t(`skills.unavailable.${blocked.state}`, { name: blocked.skill })}
+          </ProblemLine>
+        </div>
       )}
       {blocked?.kind === "error" && (
-        <p contentEditable={false} role="alert" className="question-notice question-notice--error">
-          <span className="question-notice-text">
+        <div contentEditable={false} className="mt-1.5 select-none">
+          <ProblemLine testId="question-error">
             {t("error.action", { message: blocked.message })}
-          </span>
-        </p>
+          </ProblemLine>
+        </div>
       )}
     </NodeViewWrapper>
   );

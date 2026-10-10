@@ -14,7 +14,9 @@ import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
+import { ProblemLine } from "../components/ProblemLine";
 import { useT } from "../i18n";
+import { ANSWER_PROBLEMS } from "../problems";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
@@ -22,24 +24,8 @@ import { useMindId } from "./mindContext";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
-const errorKinds: Record<ProviderErrorKind, { fixInSettings: boolean }> = {
-  auth: { fixInSettings: true },
-  model: { fixInSettings: true },
-  "consent-declined": { fixInSettings: true },
-  "rate-limit": { fixInSettings: false },
-  network: { fixInSettings: false },
-  provider: { fixInSettings: false },
-  // A local model's context window.
-  "too-long": { fixInSettings: false },
-  unknown: { fixInSettings: false },
-  // The experimental ChatGPT plan provider.
-  "not-signed-in": { fixInSettings: true },
-  "plan-limit": { fixInSettings: false },
-  blocked: { fixInSettings: true },
-};
-
 const isErrorKind = (value: unknown): value is ProviderErrorKind =>
-  typeof value === "string" && Object.hasOwn(errorKinds, value);
+  typeof value === "string" && Object.hasOwn(ANSWER_PROBLEMS, value);
 
 /** The Tool calls the core stored on the Answer (a JSON array), or none if unreadable. */
 function toolCallsOf(value: unknown): AnswerToolCall[] {
@@ -206,16 +192,17 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         </div>
       )}
 
+      <NodeViewContent className="answer-content" />
+
       {!streaming && status === "failed" && (
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
+          modelId={modelId}
           details={text(node.attrs.errorMessage)}
           onRetry={questionId ? () => writeAgain() : undefined}
           onOpenSettings={openSettings}
         />
       )}
-
-      <NodeViewContent className="answer-content" />
 
       {approvals.length > 0 && (
         <div contentEditable={false} className="answer-approvals">
@@ -229,50 +216,38 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   );
 }
 
+/** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
 function AnswerError({
   kind,
+  modelId,
   details,
   onRetry,
   onOpenSettings,
 }: {
   kind: ProviderErrorKind;
+  modelId: string | null;
   details: string | null;
-  onRetry?: () => void;
+  onRetry?: (() => void) | undefined;
   onOpenSettings(page: SettingsPage): void;
 }) {
   const t = useT();
+  const { line, fix } = ANSWER_PROBLEMS[kind];
+  const action =
+    fix.kind === "settings"
+      ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
+      : fix.kind === "retry" && onRetry
+        ? { label: t(fix.label), onClick: onRetry }
+        : undefined;
   return (
-    <div
-      contentEditable={false}
-      role="alert"
-      data-testid="answer-error"
-      data-error-kind={kind}
-      className="answer-error"
-    >
-      <p className="answer-error-text">{t(`answer.error.${kind}`)}</p>
-      <div className="answer-error-actions">
-        {errorKinds[kind].fixInSettings && (
-          <button
-            type="button"
-            // A declined data flow is allowed again on the Privacy page.
-            onClick={() => onOpenSettings(kind === "consent-declined" ? "privacy" : "general")}
-            className="answer-notice-action"
-          >
-            {t("answer.error.openSettings")}
-          </button>
-        )}
-        {onRetry && (
-          <button type="button" onClick={onRetry} className="answer-notice-action">
-            {t("answer.error.retry")}
-          </button>
-        )}
-        {details && (
-          <details className="answer-error-details">
-            <summary>{t("answer.error.details")}</summary>
-            <p>{details}</p>
-          </details>
-        )}
-      </div>
+    <div contentEditable={false} data-testid="answer-error" data-error-kind={kind}>
+      <ProblemLine
+        action={action && { ...action, testId: "answer-error-action" }}
+        // The provider's own words, for whoever wants them.
+        title={details ?? undefined}
+        className="mt-1 select-none"
+      >
+        {t(line, { model: modelId ?? t("answer.error.thisModel") })}
+      </ProblemLine>
     </div>
   );
 }
