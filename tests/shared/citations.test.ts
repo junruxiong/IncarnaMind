@@ -55,7 +55,7 @@ describe("A Citation's badge", () => {
     // Documents without pages (TXT, Markdown) are named instead.
     expect(words({ ...found, pageFrom: null, pageTo: null })).toEqual({
       en: "Quote found in Tides",
-      zh: "已在《Tides》中找到引文",
+      zh: "已在“Tides”中找到引文",
     });
     expect(words({ ...found, check: "checking" }).en).toBe("checking…");
     expect(words({ ...found, check: "cant-check", checkReason: "no-text" }).en).toBe("Can't check");
