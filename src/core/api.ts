@@ -49,6 +49,14 @@ export interface CreateMindInput {
  */
 export const MIND_CONTENT_FIELD = "blocks";
 
+/**
+ * The name of the Y.Map that holds a Mind's own choices in its Yjs document,
+ * beside its Blocks, so they go wherever the Mind goes: the model its next
+ * Questions are asked with (see `src/shared/mindModel.ts`). A Mind written
+ * before has none, and uses the defaults.
+ */
+export const MIND_SETTINGS_FIELD = "settings";
+
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
 
