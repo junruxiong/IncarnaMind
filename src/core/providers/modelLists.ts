@@ -91,6 +91,66 @@ export function anthropicModelFacts(model: Record<string, unknown>): ModelFactsL
   return facts;
 }
 
+/** What Mistral's model list says of a model: its capabilities and context window. */
+export function mistralModelFacts(model: Record<string, unknown>): ModelFactsLayer {
+  const facts: ModelFactsLayer = {};
+  const capabilities = isRecord(model.capabilities) ? model.capabilities : null;
+  if (capabilities) {
+    if (typeof capabilities.function_calling === "boolean") {
+      facts.tools = capabilities.function_calling;
+    }
+    if (typeof capabilities.vision === "boolean") {
+      facts.input = capabilities.vision ? ["text", "image"] : ["text"];
+    }
+  }
+  const context = positive(model.max_context_length);
+  if (context) facts.context = context;
+  return facts;
+}
+
+/** What OpenRouter's model list says of a model: its inputs, context window, longest reply, and Tools. */
+export function openRouterModelFacts(model: Record<string, unknown>): ModelFactsLayer {
+  const facts: ModelFactsLayer = {};
+  const architecture = isRecord(model.architecture) ? model.architecture : null;
+  const modalities =
+    architecture && Array.isArray(architecture.input_modalities)
+      ? architecture.input_modalities
+      : null;
+  if (modalities) {
+    const input: ModelInput[] = ["text"];
+    if (modalities.includes("image")) input.push("image");
+    if (modalities.includes("file")) input.push("pdf");
+    facts.input = input;
+  }
+  const context = positive(model.context_length);
+  if (context) facts.context = context;
+  const top = isRecord(model.top_provider) ? model.top_provider : null;
+  const maxOutput = top ? positive(top.max_completion_tokens) : undefined;
+  if (maxOutput) facts.maxOutput = maxOutput;
+  if (Array.isArray(model.supported_parameters)) {
+    facts.tools = model.supported_parameters.includes("tools");
+  }
+  return facts;
+}
+
+/** Whether a Mistral list entry chats: an embedding or moderation model says it doesn't. */
+const mistralChats = (model: Record<string, unknown>) =>
+  !isRecord(model.capabilities) || model.capabilities.completion_chat !== false;
+
+/** The models of an OpenAI-shaped list, with facts read from each entry when the provider gives them. */
+const listed = (
+  body: unknown,
+  facts?: (model: Record<string, unknown>) => ModelFactsLayer,
+  keep: (model: Record<string, unknown>) => boolean = () => true,
+): ListedModel[] =>
+  dataOf(body).flatMap((model): ListedModel[] => {
+    if (typeof model.id !== "string" || !keep(model)) return [];
+    const found = facts?.(model);
+    return found && Object.keys(found).length > 0
+      ? [{ id: model.id, facts: found }]
+      : [{ id: model.id }];
+  });
+
 async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
   const bearer: Record<string, string> = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
   const hosted = endpointUrl(kind, endpoint);
@@ -123,6 +183,22 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
     }
     case "openai-compatible":
       return idsOf(await getJson(`${baseUrl}/models`, bearer));
+    case "deepseek":
+    case "qwen":
+    case "kimi":
+    case "glm":
+    case "xai":
+      if (!apiKey) return [];
+      return idsOf(await getJson(`${hosted}/models`, bearer));
+    case "siliconflow":
+      if (!apiKey) return [];
+      return idsOf(await getJson(`${hosted}/models?type=text&sub_type=chat`, bearer));
+    case "mistral":
+      if (!apiKey) return [];
+      return listed(await getJson(`${hosted}/models`, bearer), mistralModelFacts, mistralChats);
+    case "openrouter":
+      // OpenRouter's list is public and says much about each model.
+      return listed(await getJson(`${hosted}/models`, bearer), openRouterModelFacts);
     case "openai":
       if (!apiKey) return [];
       return idsOf(await getJson(`${hosted}/models`, bearer));
@@ -157,7 +233,7 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
 /** The chat models a provider lists, sorted; empty if it can't be reached. */
 export async function listProviderModels(spec: ModelListSpec): Promise<ListedModel[]> {
   try {
-    const catalogId = modelsProviderOfKind(spec.kind);
+    const catalogId = modelsProviderOfKind(spec.kind, spec.endpoint);
     const byId = new Map<string, ListedModel>();
     for (const model of await fetchModels(spec)) {
       if (!byId.has(model.id) && !isNonChatModel(catalogId, model.id)) byId.set(model.id, model);
