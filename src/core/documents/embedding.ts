@@ -16,10 +16,13 @@
  * keeps its old vectors until its turn comes: then they are dropped and the
  * new model's written. Switching back before that costs nothing for the
  * Documents not yet reached. Vectors from two models are never left in one Document.
+ *
+ * A Document of a kind that gets no vectors (`KEYWORD_ONLY_KINDS`) is ready
+ * at its turn as it is, recorded with the current model, which isn't loaded.
  */
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import type { Database } from "../storage";
-import { encodeVector, type VectorIndex } from "./vectors";
+import { embedsPassages, encodeVector, type VectorIndex } from "./vectors";
 
 /** Progress reaches the UI at most this often per Document. */
 const PROGRESS_INTERVAL_MS = 500;
@@ -68,6 +71,7 @@ type Outcome = "done" | "skipped" | "model-unavailable";
 interface DocumentState {
   status: string;
   name: string;
+  kind: string;
   embedding_model: string | null;
   embedding_dimensions: number | null;
 }
@@ -85,7 +89,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
 
   const stateOf = (id: string) =>
     db.get<DocumentState>(
-      `SELECT status, name, embedding_model, embedding_dimensions FROM documents
+      `SELECT status, name, kind, embedding_model, embedding_dimensions FROM documents
        WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
@@ -164,7 +168,26 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
     }
   }
 
+  /** The Document has every vector it needs from the current model: ready, then tagged, then announced. */
+  function becomeReady(id: string): Outcome {
+    setStatus(id, "ready", "embedding");
+    if (stateOf(id)?.status === "ready") {
+      try {
+        options.onReady?.(id);
+      } catch (error) {
+        reportError(error); // the Document is ready all the same
+      }
+    }
+    announce(id);
+    return "done";
+  }
+
   async function embedPassages(id: string, document: DocumentState): Promise<Outcome> {
+    // Its kind gets no vectors: any it has from another model go, and it is ready for this one.
+    if (!embedsPassages(document.kind)) {
+      if (document.embedding_model !== model.id) startOver(id);
+      return becomeReady(id);
+    }
     const started = generation;
     const stopped = () => closed || generation !== started;
     if (!(await model.load())) return stopped() ? "skipped" : "model-unavailable";
@@ -235,16 +258,7 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
       if (!queue.includes(id)) queue.push(id);
       return "skipped";
     }
-    setStatus(id, "ready", "embedding");
-    if (stateOf(id)?.status === "ready") {
-      try {
-        options.onReady?.(id);
-      } catch (error) {
-        reportError(error); // the Document is ready all the same
-      }
-    }
-    announce(id);
-    return "done";
+    return becomeReady(id);
   }
 
   async function pump(): Promise<void> {
