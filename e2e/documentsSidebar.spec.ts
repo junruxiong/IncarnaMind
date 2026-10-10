@@ -59,12 +59,6 @@ const drop = (window: Page, paths: string[]) =>
     await hooks.addPaths(dropped);
   }, paths);
 
-/** Long enough that processing it takes a moment. */
-const LONG_TEXT = Array.from(
-  { length: 4000 },
-  (_, index) => `Line ${index}: test loss falls as a power law in model size and data.`,
-).join("\n");
-
 test("dropping folders offers each for linking in turn; what's there already is said once", async () => {
   const papers = join(sources, "Papers");
   const notes = join(sources, "Notes");
@@ -171,7 +165,7 @@ test("folding while filtering by a Tag folds the filtered view, and leaves the r
 });
 
 test("the footer shows the most pressing status, keeps the others a click away, and stays 28px", async () => {
-  await writeFile(join(sources, "Long paper.txt"), LONG_TEXT);
+  await writeFile(join(sources, "Paper.txt"), "Test loss falls as a power law in model size.\n");
   await writeFile(join(sources, "Picture.png"), "not a document");
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
@@ -180,16 +174,18 @@ test("the footer shows the most pressing status, keeps the others a click away, 
 
   await window
     .getByTestId("add-documents-input")
-    .setInputFiles([join(sources, "Long paper.txt"), join(sources, "Picture.png")]);
-  // Skipped files first; processing (and tagging waiting for a model) behind "+N".
+    .setInputFiles([join(sources, "Paper.txt"), join(sources, "Picture.png")]);
+  // Once the paper is read, two things to say, whatever the machine's speed: the skipped
+  // file first, and tagging, which waits for a model, behind "+1".
+  await expect(window.getByTestId("document-list-item")).toHaveAttribute("data-status", "ready");
   await expect(status.getByTestId("skipped-files")).toBeVisible();
   const more = status.getByTestId("status-more");
-  await expect(more).toHaveText(/^\+[1-9]$/);
+  await expect(more).toHaveText("+1");
   expect(await status.boundingBox()).toEqual(before);
   await more.click();
   const others = status.getByTestId("status-others");
   await expect(others).toBeVisible();
-  await expect(others.getByTestId("processing-status")).toBeVisible();
+  await expect(others.getByTestId("tagging-waiting")).toBeVisible();
   await screenshot(window.getByTestId("sidebar"), "footer-more");
   await window.keyboard.press("Escape");
   await expect(others).toBeHidden();
