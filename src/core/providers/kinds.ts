@@ -1,6 +1,8 @@
 /** What each kind of chat provider needs, and where its data goes. */
 import { type ChatProviderKind, chatProviderKinds, type ExternalService } from "../api";
 import { InvalidInputError } from "../errors";
+import { catalogProviderOfKind, endpointOf } from "./catalog/providers";
+import type { CatalogProvider, Endpoint } from "./catalog/types";
 import { CHATGPT_SERVICE } from "./chatgpt/codexEndpoint";
 
 /** Ollama's default local address. 127.0.0.1 rather than localhost, which may resolve to IPv6 first. */
@@ -47,41 +49,51 @@ export function ollamaHostUrl(value: string | undefined): string | null {
 export const defaultOllamaUrl = (env: NodeJS.ProcessEnv = process.env): string =>
   ollamaHostUrl(env.OLLAMA_HOST) ?? OLLAMA_DEFAULT_URL;
 
+/**
+ * What a provider kind needs: a key, a server URL. A kind the catalog has
+ * takes its rules from there (see ./catalog); the ChatGPT plan signs in
+ * instead of taking a key (see ./chatgpt).
+ */
 interface KindInfo {
-  /** The hosted API, for kinds that don't take a base URL. */
+  /** The hosted API, for a provider whose endpoints the catalog names. */
   hosted?: ExternalService;
   baseUrl: "none" | "required" | "optional";
   apiKey: "required" | "optional" | "none";
 }
 
-const kinds: Record<ChatProviderKind, KindInfo> = {
-  openai: {
-    hosted: { id: "https://api.openai.com", name: "OpenAI" },
-    baseUrl: "none",
-    apiKey: "required",
-  },
-  anthropic: {
-    hosted: { id: "https://api.anthropic.com", name: "Anthropic" },
-    baseUrl: "none",
-    apiKey: "required",
-  },
-  google: {
-    hosted: { id: "https://generativelanguage.googleapis.com", name: "Google" },
-    baseUrl: "none",
-    apiKey: "required",
-  },
-  "openai-compatible": { baseUrl: "required", apiKey: "optional" },
-  ollama: { baseUrl: "optional", apiKey: "none" },
-  // Signs in instead of taking a key (see ./chatgpt).
-  chatgpt: { hosted: CHATGPT_SERVICE, baseUrl: "none", apiKey: "none" },
-};
+/** The service an endpoint sends data to: its origin, named after its provider. */
+const endpointService = (provider: CatalogProvider, endpoint: Endpoint): ExternalService => ({
+  id: new URL(endpoint.baseUrl).origin,
+  name: provider.name.en,
+});
+
+function kindInfo(kind: ChatProviderKind, endpointId?: string | null): KindInfo {
+  if (kind === "chatgpt") return { hosted: CHATGPT_SERVICE, baseUrl: "none", apiKey: "none" };
+  const provider = catalogProviderOfKind(kind);
+  if (!provider) throw new Error(`The catalog has no provider for ${kind}.`);
+  const endpoint = endpointOf(provider, endpointId);
+  return {
+    ...(endpoint && { hosted: endpointService(provider, endpoint) }),
+    baseUrl: endpoint ? "none" : (provider.serverUrl ?? "required"),
+    apiKey: provider.apiKey,
+  };
+}
 
 export function isChatProviderKind(value: unknown): value is ChatProviderKind {
   return chatProviderKinds.some((kind) => kind === value);
 }
 
-export const requiresApiKey = (kind: ChatProviderKind) => kinds[kind].apiKey === "required";
-export const acceptsApiKey = (kind: ChatProviderKind) => kinds[kind].apiKey !== "none";
+/**
+ * The base URL of a hosted provider's API, as its AI SDK provider takes it:
+ * its endpoint with this id, else its first. Null for a server the User gives.
+ */
+export function endpointUrl(kind: ChatProviderKind, endpointId?: string | null): string | null {
+  const provider = catalogProviderOfKind(kind);
+  return (provider && endpointOf(provider, endpointId)?.baseUrl) ?? null;
+}
+
+export const requiresApiKey = (kind: ChatProviderKind) => kindInfo(kind).apiKey === "required";
+export const acceptsApiKey = (kind: ChatProviderKind) => kindInfo(kind).apiKey !== "none";
 
 /**
  * Checks a server URL and returns it without a trailing slash. Credentials,
@@ -108,14 +120,13 @@ export function normalizeBaseUrl(raw: string): string {
 
 /** The base URL to store for a kind, from what the User entered. */
 export function baseUrlFor(kind: ChatProviderKind, raw: unknown): string | null {
-  const rule = kinds[kind].baseUrl;
+  const { baseUrl: rule, hosted } = kindInfo(kind);
   const given = typeof raw === "string" && raw.trim() !== "" ? raw : undefined;
   if (raw !== undefined && raw !== null && typeof raw !== "string") {
     throw new InvalidInputError("The server URL must be text.");
   }
   if (rule === "none") {
-    if (given)
-      throw new InvalidInputError(`${kinds[kind].hosted?.name} doesn't take a server URL.`);
+    if (given) throw new InvalidInputError(`${hosted?.name} doesn't take a server URL.`);
     return null;
   }
   if (!given) {
@@ -147,9 +158,16 @@ export function serviceForUrl(baseUrl: string): ExternalService | null {
   return isLoopbackHost(url.hostname) ? null : { id: url.origin, name: url.host };
 }
 
-/** Where a provider's requests go, or null when the server runs on this computer. */
-export function serviceFor(kind: ChatProviderKind, baseUrl: string | null): ExternalService | null {
-  const hosted = kinds[kind].hosted;
+/**
+ * Where a provider's requests go: its endpoint (the one with this id, else
+ * its first), or the server at `baseUrl`; null when that runs on this computer.
+ */
+export function serviceFor(
+  kind: ChatProviderKind,
+  baseUrl: string | null,
+  endpointId?: string | null,
+): ExternalService | null {
+  const { hosted } = kindInfo(kind, endpointId);
   if (hosted) return hosted;
   return baseUrl ? serviceForUrl(baseUrl) : null;
 }
