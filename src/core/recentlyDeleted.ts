@@ -261,11 +261,11 @@ export function createRecentlyDeleted(options: {
               restored.tags = true;
             }
           }
-          if (ref.links) {
-            checkLinks(ref.links);
-            for (const id of tags.revert(ref.links)) restored.tagged.add(id);
-          }
         }
+        // Once every ref is back, so a Document restored in the same call counts.
+        const links = refs.flatMap((ref) => ref.links ?? []);
+        checkLinks(links);
+        for (const id of tags.revert(links)) restored.tagged.add(id);
         return restored;
       });
       if (done.minds) options.mindsChanged();
