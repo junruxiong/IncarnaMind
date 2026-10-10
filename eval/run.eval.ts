@@ -5,13 +5,14 @@
  * would: a new temporary data folder, embeddings turned on (they are off by
  * default) so the evaluation set's Documents are also processed with the real
  * built-in embedding model (on a worker thread), then searches for each
- * Question: keyword search's top 20 reranked by the real built-in reranking
+ * Question: keyword search's top 60 reranked by the real built-in reranking
  * model, as the search Tool does by default (the gate), hybrid search's
- * candidates reranked as with embeddings on, and the plain search modes,
- * reported only. When a chat model is given, embeddings are turned off again,
- * as Users have them, and Answers and their Citations are scored. Then the
- * same for the every-format set (#70), on a library of its own, reported per
- * format and never gating.
+ * candidates reranked as with embeddings on, other ways to find the
+ * candidates with embeddings off (./lib/searches), and the plain search
+ * modes, reported only. When a chat model is given, embeddings are turned
+ * off again, as Users have them, and Answers and their Citations are scored.
+ * Then the same for the every-format set (#70), on a library of its own,
+ * reported per format and never gating.
  * It runs under Vitest only for its TypeScript and worker-thread handling
  * (eval/vitest.config.ts); `npm test` never runs it.
  */
@@ -32,15 +33,19 @@ import { FORMATS_SET, isGating, loadEvaluationSet } from "./lib/evaluationSet";
 import { type FormatsReport, formatOf, summariseFormats } from "./lib/formats";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
+import { type OtherSearches, openOtherSearches } from "./lib/otherSearches";
 import { type EvalReport, terminalSummary, writeReports } from "./lib/report";
 import { createWorkerCrossEncoder, openReranker, type RerankerInfo } from "./lib/rerank";
 import {
+  type CandidateSource,
   candidateCounts,
+  GATING_LABEL,
   GATING_MODE,
   HYBRID,
-  KEYWORD_RERANK_DEPTH,
-  RERANK_PER_LIST,
+  KEYWORD_RANK_DEPTH,
+  OTHER_SEARCHES,
   RERANKED_SEARCHES,
+  type RerankedSearch,
   type RetrievalMode,
   type RetrievalRun,
   rerankedLabel,
@@ -48,6 +53,8 @@ import {
   retrievalFailures,
   runReranked,
   runRetrieval,
+  SEARCH_DESCRIPTIONS,
+  SEARCH_LABELS,
   summarise,
   TOP_K,
 } from "./lib/retrieval";
@@ -73,7 +80,12 @@ async function retrieve(
   gating: boolean,
   questions: Parameters<typeof runRetrieval>[1],
   log: Log,
-  rerank: { candidates: readonly RerankingModelDefinition[]; cacheDir: string } | null = null,
+  rerank: {
+    candidates: readonly RerankingModelDefinition[];
+    cacheDir: string;
+    /** The other ways to find candidates, run with the built-in reranking model. */
+    others?: OtherSearches;
+  } | null = null,
 ): Promise<RetrievalRun> {
   const ids = new Map([...library.documents].map(([key, document]) => [key, document.id]));
   const results = await runRetrieval(library.core, questions, ids);
@@ -90,39 +102,64 @@ async function retrieve(
   line(HYBRID, HYBRID);
 
   // Reranked modes, one model at a time: each is downloaded once into the model cache. Each
-  // model reranks keyword search's top 20 (keyword + rerank, the gate's mode), then hybrid
-  // search's candidates, opened afresh for each so the timings are the mode's own.
+  // model reranks keyword search's top 60 (keyword + rerank, the gate's mode), then hybrid
+  // search's candidates, opened afresh for each so the timings are the mode's own. The
+  // built-in model then reranks the other searches' candidates, the Questions' own only.
   const rerankers: RerankerInfo[] = [];
-  for (const candidate of rerank?.candidates ?? []) {
-    for (const search of RERANKED_SEARCHES) {
-      const mode = rerankMode(candidate, search);
-      const label = rerankedLabel(search, candidate.name);
-      log(
-        search === "hybrid"
-          ? `Reranking keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST} with ${candidate.name}`
-          : `Reranking keyword search's top ${KEYWORD_RERANK_DEPTH} with ${candidate.name}`,
+  const rerankWith = async (
+    candidate: RerankingModelDefinition,
+    search: RerankedSearch,
+    source?: CandidateSource,
+  ) => {
+    const mode = rerankMode(candidate, search);
+    const label = rerankedLabel(search, candidate.name);
+    log(`Reranking ${SEARCH_DESCRIPTIONS[search]} with ${candidate.name}`);
+    const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log, mode);
+    try {
+      const found = await runReranked(
+        library.core,
+        questions,
+        ids,
+        reranker,
+        results,
+        source ? { source, translated: false } : {},
       );
-      const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log, mode);
-      try {
-        await runReranked(library.core, questions, ids, reranker, results);
-        const info = reranker.info();
-        rerankers.push(info);
-        line(mode, mode === GATING_MODE ? `${label} (gating)` : label);
-        log(
-          `${label}: ${info.latency.mean.toFixed(0)} ms a query on average (95th percentile ${info.latency.p95.toFixed(0)} ms), loaded in ${info.loadSeconds.toFixed(1)} s`,
-        );
-      } finally {
-        reranker.close();
-      }
+      const info = { ...reranker.info(), candidates: found };
+      rerankers.push(info);
+      line(mode, mode === GATING_MODE ? `${label} (gating)` : label);
+      log(
+        `${label}: per search, ${found.mean.toFixed(0)} ms to find the candidates and ${info.latency.mean.toFixed(0)} ms to rerank them on average (95th percentile ${found.p95.toFixed(0)} and ${info.latency.p95.toFixed(0)} ms); the model loaded in ${info.loadSeconds.toFixed(1)} s`,
+      );
+    } finally {
+      reranker.close();
+    }
+  };
+  for (const candidate of rerank?.candidates ?? []) {
+    for (const search of RERANKED_SEARCHES) await rerankWith(candidate, search);
+    const others = rerank?.others;
+    if (!others || candidate.id !== BUILT_IN_RERANKING_MODEL.id) continue;
+    for (const search of OTHER_SEARCHES) {
+      const source = others.sources[search];
+      if (source) await rerankWith(candidate, search, source);
+      else log(`${SEARCH_LABELS[search]}: skipped, ${others.report.skipped[search] ?? ""}`);
     }
   }
 
-  const candidates = candidateCounts(results);
-  const keywordCandidates = candidateCounts(results, "keyword");
-  for (const counts of [candidates, keywordCandidates]) {
-    if (!counts) continue;
+  const candidates = [...RERANKED_SEARCHES, ...OTHER_SEARCHES].flatMap(
+    (search) => candidateCounts(results, search) ?? [],
+  );
+  for (const counts of candidates) {
+    const { gating: reached, paraphrase } = counts.reached;
     log(
-      `${counts.search === "keyword" ? "Keyword + rerank searches" : "Reranked hybrid searches"} had ${counts.mean.toFixed(1)} candidates on average (${counts.min} to ${counts.max}, over ${counts.searches} searches)`,
+      `${SEARCH_LABELS[counts.search]} + rerank searches had ${counts.mean.toFixed(1)} candidates on average (${counts.min} to ${counts.max}, over ${counts.searches} searches); they held the expected Passage for ${reached.hits}/${reached.total} gating and ${paraphrase.hits}/${paraphrase.total} paraphrase Questions`,
+    );
+  }
+  // How deep the gate's misses are in plain keyword search: whether more candidates could reach them.
+  for (const result of results) {
+    const gate = result.modes[GATING_MODE];
+    if (!gate || gate.hit || result.keywordRank === undefined) continue;
+    log(
+      `${result.id}, missed by ${GATING_LABEL}: keyword search ranks its expected Passage ${result.keywordRank === null ? `below ${KEYWORD_RANK_DEPTH}` : `at ${result.keywordRank}`}`,
     );
   }
 
@@ -134,8 +171,8 @@ async function retrieve(
     questions: results,
     summary: summarise(results),
     ...(rerankers.length > 0 && { rerankers }),
-    ...(candidates && { rerankCandidates: candidates }),
-    ...(keywordCandidates && { keywordRerankCandidates: keywordCandidates }),
+    ...(candidates.length > 0 && { candidates }),
+    ...(rerank?.others && { otherSearches: rerank.others.report }),
   };
 }
 
@@ -245,12 +282,20 @@ test("retrieval and Citation evaluation", async () => {
     log,
   });
   let report: EvalReport;
+  let others: OtherSearches | null = null;
   try {
     // The built-in reranking model gates; the other candidates given are compared with it.
     const rerankWith = [
       BUILT_IN_RERANKING_MODEL,
       ...config.rerank.filter((candidate) => candidate.id !== BUILT_IN_RERANKING_MODEL.id),
     ];
+    // Other ways to find what the reranker sees, with embeddings off: reported, never gating.
+    others = await openOtherSearches(
+      builtIn,
+      set.questions,
+      { chat: config.chat, resultsDir: config.resultsDir },
+      log,
+    );
     const runs = [
       await retrieve(
         builtIn,
@@ -258,7 +303,7 @@ test("retrieval and Citation evaluation", async () => {
         true,
         set.questions,
         log,
-        { candidates: rerankWith, cacheDir: config.cacheDir },
+        { candidates: rerankWith, cacheDir: config.cacheDir, others },
       ),
     ];
 
@@ -326,6 +371,7 @@ test("retrieval and Citation evaluation", async () => {
       citations,
     };
   } finally {
+    others?.close();
     await builtIn.close();
   }
   report.formats = await runFormats(config, log);

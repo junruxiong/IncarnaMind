@@ -22,6 +22,7 @@ import {
 } from "../../src/core";
 import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase } from "../../src/core/storage";
+import type { CorpusPassage } from "./corpus";
 import type { EvalDocument } from "./evaluationSet";
 import type { Log } from "./log";
 
@@ -78,6 +79,8 @@ export interface Library {
   passageCount: number;
   /** The stored text of a Document's pages, as the Citation check reads them. */
   pageTexts(documentId: string): { page: number | null; text: string }[];
+  /** Every live Passage, with the `seq` it is indexed under, Document by Document in reading order. */
+  passages(): CorpusPassage[];
   /** Closes the core, and deletes the data folder unless it is kept. */
   close(): Promise<void>;
 }
@@ -319,6 +322,35 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
           pages.set(documentId, found);
         }
         return found;
+      },
+      passages() {
+        return db
+          .all<{
+            seq: number;
+            passage_id: string;
+            document_id: string;
+            document_name: string;
+            page_from: number | null;
+            page_to: number | null;
+            position: number;
+            text: string;
+          }>(
+            `SELECT p.seq, p.id AS passage_id, p.document_id, d.name AS document_name,
+               p.page_from, p.page_to, p.position, p.text
+             FROM passages p JOIN documents d ON d.id = p.document_id
+             WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL
+             ORDER BY d.created_at, d.rowid, p.position`,
+          )
+          .map((row) => ({
+            seq: row.seq,
+            passageId: row.passage_id,
+            documentId: row.document_id,
+            documentName: row.document_name,
+            pageFrom: row.page_from,
+            pageTo: row.page_to,
+            position: row.position,
+            text: row.text,
+          }));
       },
       async close() {
         db.close();
