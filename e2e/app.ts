@@ -38,15 +38,29 @@ export interface LaunchOptions {
   examples?: boolean;
   /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
   home?: string;
+  /**
+   * Leaves the window at the size and place it opened at, instead of making
+   * it `WINDOW_SIZE`: for a test of how the window opens.
+   */
+  keepWindow?: boolean;
 }
 
 /**
+ * The window size the specs are written for: the app's default. The app opens
+ * no bigger than the screen, and a test machine's can be smaller (GitHub's
+ * macOS runners have a 1024 × 768 one), where the Mind is narrow enough to fold
+ * its margins away; so every launch makes the window this size.
+ */
+export const WINDOW_SIZE = { width: 1280, height: 800 };
+
+/**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
- * and the fake embedding model, which needs no download.
+ * and the fake embedding model, which needs no download, in a window of
+ * `WINDOW_SIZE` whatever the screen's.
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false, sentryDsn, examples = false, home }: LaunchOptions = {},
+  { fakeChat = false, sentryDsn, examples = false, home, keepWindow = false }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -66,6 +80,14 @@ export async function launchApp(
   const app = await electron.launch({ args: [appDir], env });
   const window = await app.firstWindow();
   await window.getByTestId("new-mind").waitFor();
+  if (!keepWindow) {
+    await app.evaluate(({ BrowserWindow }, size) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
+    }, WINDOW_SIZE);
+    await expect
+      .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]))
+      .toEqual([WINDOW_SIZE.width, WINDOW_SIZE.height]);
+  }
   return { app, window };
 }
 
