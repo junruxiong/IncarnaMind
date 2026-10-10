@@ -6,6 +6,7 @@ import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
 import { useAppStore } from "../store";
+import { PathText } from "./PathText";
 import { ProblemLine } from "./ProblemLine";
 import {
   buttonClass,
@@ -169,15 +170,13 @@ export function FileWriteDialog() {
   );
 }
 
-/** A folder's path on one line, cut short with the whole of it on hover. */
-export function FolderPath({ path, testId }: { path: string; testId?: string }) {
+/** The folder a question is about, in a box on its own line. */
+function FolderPath({ path, testId }: { path: string; testId: string }) {
   return (
-    <p
-      data-testid={testId}
-      title={path}
-      className="truncate rounded-md border border-rule bg-frame px-3 py-2 font-mono text-[13px] leading-5 text-ink-secondary"
-    >
-      {path}
-    </p>
+    <PathText
+      path={path}
+      testId={testId}
+      className="rounded-md border border-rule bg-frame px-3 py-2 font-mono text-[13px] leading-5 text-ink-secondary"
+    />
   );
 }

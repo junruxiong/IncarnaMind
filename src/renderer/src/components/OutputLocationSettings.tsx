@@ -5,11 +5,11 @@ import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
+import { PathText } from "./PathText";
 import { ProblemLine } from "./ProblemLine";
 import {
   buttonClass,
   rowTextClass,
-  rowTitleClass,
   ruledListClass,
   ruledRow,
   sectionNoteClass,
@@ -59,43 +59,42 @@ export function OutputLocationSettings() {
 
   return (
     <section data-testid="output-location-settings" className="flex flex-col gap-7">
-      <div className={ruledListClass}>
-        <div className={ruledRow()}>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <h4 id={titleId} className={rowTitleClass}>
-              {t("outputLocation.title")}
-            </h4>
-            <p className={rowTextClass}>{t("outputLocation.body")}</p>
-          </div>
-          <div className="-my-1.5 flex min-w-0 items-center justify-end gap-3">
+      <div>
+        <h4 id={titleId} className={sectionTitleClass}>
+          {t("outputLocation.title")}
+        </h4>
+        <p className={sectionNoteClass}>{t("outputLocation.body")}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          {location ? (
+            <PathText
+              path={location}
+              testId="output-location-path"
+              className="flex-1 rounded-md border border-rule bg-frame px-3 py-1.5 font-mono text-[13px] leading-5 text-ink-secondary"
+            />
+          ) : (
             <span
               data-testid="output-location-path"
-              title={location ?? undefined}
-              className={
-                location
-                  ? "max-w-[16rem] min-w-0 truncate font-mono text-[13px] leading-5 text-ink-secondary"
-                  : "text-[13px] leading-5 text-ink-meta"
-              }
+              className="min-w-0 flex-1 text-[13px] leading-5 text-ink-meta"
             >
-              {location ?? t("outputLocation.notChosen")}
+              {t("outputLocation.notChosen")}
             </span>
-            <button
-              type="button"
-              data-testid="output-location-change"
-              aria-describedby={titleId}
-              onClick={() => void change(chooseOutputLocation)}
-              className={buttonClass}
-            >
-              {t(location ? "outputLocation.change" : "outputLocation.choose")}
-            </button>
-          </div>
+          )}
+          <button
+            type="button"
+            data-testid="output-location-change"
+            aria-describedby={titleId}
+            onClick={() => void change(chooseOutputLocation)}
+            className={buttonClass}
+          >
+            {t(location ? "outputLocation.change" : "outputLocation.choose")}
+          </button>
         </div>
+        {problem && (
+          <ProblemLine testId="output-location-problem" className="mt-2">
+            {t("outputLocation.failed", { reason: problem })}
+          </ProblemLine>
+        )}
       </div>
-      {problem && (
-        <ProblemLine testId="output-location-problem">
-          {t("outputLocation.failed", { reason: problem })}
-        </ProblemLine>
-      )}
       {linkedFolders.length > 0 && (
         <div data-testid="linked-folder-writing">
           <h4 className={sectionTitleClass}>{t("outputLocation.linked.title")}</h4>
@@ -110,9 +109,7 @@ export function OutputLocationSettings() {
               >
                 <div className="flex min-w-0 flex-col">
                   <span className="truncate text-ui text-ink">{folderName(each.path)}</span>
-                  <span title={each.path} className={`truncate ${rowTextClass}`}>
-                    {each.path}
-                  </span>
+                  <PathText path={each.path} className={rowTextClass} />
                 </div>
                 <input
                   type="checkbox"
