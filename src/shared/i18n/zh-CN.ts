@@ -250,6 +250,8 @@ export const zhCN = {
   "location.section": "§ {heading}",
   "location.section.start": "§ 开头",
   "location.section.notes": "§ 注释",
+  "location.section.comment": "{section}，{author} 的批注",
+  "location.section.comment.anonymous": "{section}，批注",
   "location.lines.one": "第 {range} 行",
   "location.lines.other": "第 {range} 行",
 
