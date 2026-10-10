@@ -104,6 +104,7 @@ test("selecting text with the mouse or the keyboard opens a menu: Turn into, for
   await shiftSelectBack(window, "closing line".length);
   await expect(menu).toBeVisible();
   await window.keyboard.press("ControlOrMeta+/");
+  await expect(turnInto).toBeFocused();
   for (let step = 0; step < 3; step++) await window.keyboard.press("ArrowDown");
   await expect(window.getByTestId("format-underline")).toBeFocused();
   await window.keyboard.press("Enter");
@@ -111,7 +112,9 @@ test("selecting text with the mouse or the keyboard opens a menu: Turn into, for
   await expect(window.getByTestId("format-underline")).toHaveAttribute("aria-checked", "true");
 
   // Esc closes the innermost thing: the Turn into list, then the menu, and the cursor is back in the text.
+  await expect(menu).toBeVisible();
   await window.keyboard.press("ControlOrMeta+/");
+  await expect(turnInto).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(turnMenu).toBeVisible();
   await window.keyboard.press("Escape");
