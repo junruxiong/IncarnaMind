@@ -15,7 +15,7 @@
 Delete this section if the change has no UI. Otherwise check each line against [the interaction rules](https://github.com/junruxiong/IncarnaMind/blob/main/docs/agents/interaction.md):
 
 - [ ] Each gesture follows a named app's convention (Claude, ChatGPT, Finder, Notion, Granola, or a Chinese app), or this says why none fits
-- [ ] Names shown rename in place (double-click, Enter or F2; Enter saves, Esc cancels; safe with a Chinese input method)
+- [ ] Names shown rename in place (double-click or F2; Enter saves, Esc cancels; safe with a Chinese input method); Enter on a focused item opens it
 - [ ] Every drag has a menu and a keyboard way to do the same thing; targets highlight only while they accept
 - [ ] Nothing replaces the Mind the User is in; no "Back to…" label
 - [ ] Reversible actions offer Undo (⌘Z and the undo line) instead of a confirmation; deleting goes to Recently deleted
