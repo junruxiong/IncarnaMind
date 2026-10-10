@@ -512,8 +512,8 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await window.keyboard.type("大潮每月出现两次。");
   const composer = window.getByTestId("composer");
   const input = composer.getByTestId("composer-input");
-  await expect(input).toHaveAttribute("placeholder", "提问，或说说要改什么…");
-  await expect(input).toHaveAccessibleName(/提问，或说说要改什么（(⌘J|Ctrl\+J)）/);
+  await expect(input).toHaveAttribute("placeholder", "提问，或说明要修改的内容…");
+  await expect(input).toHaveAccessibleName(/提问，或说明要修改的内容（(⌘J|Ctrl\+J)）/);
   await expect(composer.getByTestId("composer-ask")).toHaveAccessibleName("提问（Enter）");
   await expect(composer.getByTestId("composer-scope-all")).toHaveText("全部文档");
 
@@ -541,7 +541,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   const thread = window.getByTestId("thread");
   const answer = thread.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(composer.getByTestId("composer-live")).toContainText("回答写完了。");
+  await expect(composer.getByTestId("composer-live")).toContainText("回答已生成。");
   const question = thread.getByTestId("thread-question");
   await expect(question.getByTestId("scope-chip")).toHaveText("Tides");
   await expect(question.getByTestId("question-skill")).toHaveText("literature-review");

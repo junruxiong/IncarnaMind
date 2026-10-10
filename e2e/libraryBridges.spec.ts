@@ -245,7 +245,7 @@ test("starts a Mind named after the Folder with its scoped Question first in its
       }),
     );
     await expect(library.getByTestId("library-ask")).toHaveText("就此文件夹提问");
-    await expect(library.getByTestId("library-start-mind")).toHaveText("从此文件夹新建 Mind");
+    await expect(library.getByTestId("library-start-mind")).toHaveText("用此文件夹新建 Mind");
     await expect(library.locator('[data-testid="library-filter"][data-facet="status"]')).toHaveText(
       "状态",
     );
