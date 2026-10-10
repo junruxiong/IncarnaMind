@@ -484,8 +484,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
   });
 
-  // Background model work (automatic tagging; Topic naming later): one call at a time,
-  // giving way to Answers.
+  // Background model work (automatic tagging, and Organize's classification): one call at a
+  // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
   const answers = createAnswers({
