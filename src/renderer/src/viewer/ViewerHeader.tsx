@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 import type { Document } from "../../../core/api";
+import { displayName, fileNameOf } from "../../../shared/documentNames";
 import { ProblemLine } from "../components/ProblemLine";
 import { DocumentTagChips } from "../components/TagChips";
 import { files } from "../core";
@@ -65,10 +66,15 @@ export function ViewerHeader({
         {document ? (
           <span
             data-testid="viewer-title"
-            title={document.name}
+            title={
+              displayName(document) === fileNameOf(document.path)
+                ? displayName(document)
+                : `${displayName(document)}
+${fileNameOf(document.path)}`
+            }
             className={`viewer-title ${leading ? "ml-1" : "pl-2"}`}
           >
-            {document.name}
+            {displayName(document)}
           </span>
         ) : (
           <span className="flex-1" />

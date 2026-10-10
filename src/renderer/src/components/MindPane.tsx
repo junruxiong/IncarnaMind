@@ -5,6 +5,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
 import { ExampleBanner, useIsExample } from "./GettingStarted";
+import { LibraryPane } from "./LibraryPane";
 import { PlusLineIcon } from "./lineIcons";
 import { MindEditor } from "./MindEditor";
 import { MindTabs } from "./MindTabs";
@@ -19,6 +20,7 @@ import { buttonStyle } from "./ui";
 export function MindPane() {
   const t = useT();
   const mind = useAppStore((state) => state.minds.find((each) => each.id === state.openMindId));
+  const libraryOpen = useAppStore((state) => state.libraryOpen);
   const createMind = useAppStore((state) => state.createMind);
   const isExample = useIsExample(mind?.id);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
@@ -39,65 +41,70 @@ export function MindPane() {
         onClose={() => setExportingId(null)}
       />
 
-      <div
-        className="flex min-h-0 flex-grow flex-col"
-        {...(mind && {
-          role: "tabpanel",
-          id: "mind-tabpanel",
-          "aria-labelledby": `mind-tab-${mind.id}`,
-        })}
-      >
-        {mind ? (
-          <>
-            <div ref={setScroller} className="mind-scroller min-h-0 flex-grow overflow-auto">
-              {/* Keyed, so switching Minds starts a fresh title field and editor. Every text
+      {libraryOpen ? (
+        // The Library is a tab beside the Minds'; the Mind stays in its own.
+        <LibraryPane />
+      ) : (
+        <div
+          className="flex min-h-0 flex-grow flex-col"
+          {...(mind && {
+            role: "tabpanel",
+            id: "mind-tabpanel",
+            "aria-labelledby": `mind-tab-${mind.id}`,
+          })}
+        >
+          {mind ? (
+            <>
+              <div ref={setScroller} className="mind-scroller min-h-0 flex-grow overflow-auto">
+                {/* Keyed, so switching Minds starts a fresh title field and editor. Every text
                   in it starts at one edge (styles.css, `.mind-column`). */}
-              <article
-                key={mind.id}
-                data-testid="mind-pane"
-                data-mind-id={mind.id}
-                className="mind-column"
-              >
-                <div className="mind-measure">
-                  {isExample && <ExampleBanner />}
-                  <MindTitle mind={mind} />
-                  {/* The example works without a chat model: it says so in its Answer instead. */}
-                  {!isExample && <ChatReadinessNotice />}
-                  <ComposerDockContext.Provider value={dock}>
-                    <MindEditor mindId={mind.id} />
-                  </ComposerDockContext.Provider>
-                </div>
-              </article>
-            </div>
-            {/* The composer, pinned at the column's foot: the Mind's editor draws it here. It
-                keeps clear of the scrollbar's gutter above it, so it is centred as the column is. */}
+                <article
+                  key={mind.id}
+                  data-testid="mind-pane"
+                  data-mind-id={mind.id}
+                  className="mind-column"
+                >
+                  <div className="mind-measure">
+                    {isExample && <ExampleBanner />}
+                    <MindTitle mind={mind} />
+                    {/* The example works without a chat model: it says so in its Answer instead. */}
+                    {!isExample && <ChatReadinessNotice />}
+                    <ComposerDockContext.Provider value={dock}>
+                      <MindEditor mindId={mind.id} />
+                    </ComposerDockContext.Provider>
+                  </div>
+                </article>
+              </div>
+              {/* The composer, pinned at the column's foot: the Mind's editor draws it here. It
+                  keeps clear of the scrollbar's gutter above it, so it is centred as the column is. */}
+              <div
+                ref={setDock}
+                data-testid="composer-dock"
+                className="composer-dock"
+                style={{ paddingRight: gutter }}
+              />
+            </>
+          ) : (
             <div
-              ref={setDock}
-              data-testid="composer-dock"
-              className="composer-dock"
-              style={{ paddingRight: gutter }}
-            />
-          </>
-        ) : (
-          <div
-            data-testid="mind-none-open"
-            className="flex h-full flex-col items-center justify-center gap-2 px-10 pb-11 text-center"
-          >
-            <h1 className="font-serif text-heading font-semibold text-ink">
-              {t("mind.noneOpen.title")}
-            </h1>
-            <p className="max-w-sm text-ui text-ink-secondary">{t("mind.noneOpen.body")}</p>
-            <button
-              type="button"
-              onClick={() => void createMind()}
-              className={`mt-3 ${buttonStyle("primary")}`}
+              data-testid="mind-none-open"
+              className="flex h-full flex-col items-center justify-center gap-2 px-10 pb-11 text-center"
             >
-              <PlusLineIcon className="size-4" />
-              {t("sidebar.newMind")}
-            </button>
-          </div>
-        )}
-      </div>
+              <h1 className="font-serif text-heading font-semibold text-ink">
+                {t("mind.noneOpen.title")}
+              </h1>
+              <p className="max-w-sm text-ui text-ink-secondary">{t("mind.noneOpen.body")}</p>
+              <button
+                type="button"
+                onClick={() => void createMind()}
+                className={`mt-3 ${buttonStyle("primary")}`}
+              >
+                <PlusLineIcon className="size-4" />
+                {t("sidebar.newMind")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </main>
   );
 }

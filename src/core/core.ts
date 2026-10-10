@@ -1,6 +1,7 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Y from "yjs";
 import { translate } from "../shared/i18n";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
@@ -18,6 +19,7 @@ import type {
   CoreApi,
   CoreEventSource,
   EmbeddingSettings,
+  Mind,
   ProviderError,
   Unsubscribe,
 } from "./api";
@@ -34,16 +36,18 @@ import {
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
-import { InvalidInputError, isRecord, TaggingNotReadyError } from "./errors";
+import { InvalidInputError, isRecord, MindReadOnlyError, TaggingNotReadyError } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { safeFileName } from "./fileNames";
 import { createFolders } from "./folders";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
+import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
 import { createMinds, parseMindId } from "./minds";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
@@ -161,6 +165,14 @@ export function createCore(adapters: CoreAdapters): Core {
       return result;
     };
   const minds = createMinds(db, now);
+  /** The Mind, if this version may write to it: not one of a kind a newer version made. */
+  const writableMind = (mindId: unknown): Mind => {
+    const mind = minds.get(mindId);
+    if (!isKnownKind(mind.kind)) {
+      throw new MindReadOnlyError("A newer version of IncarnaMind made this. Update to open it.");
+    }
+    return mind;
+  };
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
@@ -508,7 +520,7 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     events,
     engine: adapters.answerEngine ?? createAiSdkAnswerEngine({ runEngine: adapters.runEngine }),
-    requireMind: (mindId) => minds.get(mindId).id,
+    requireMind: (mindId) => writableMind(mindId).id,
     mindExists: (mindId) => {
       try {
         minds.get(mindId);
@@ -887,11 +899,18 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
+      // A Mind this version may only read is shown from what is stored: nothing is
+      // settled, compacted or written, so its Yjs state stays exactly as it was.
+      if (!isKnownKind(mind.kind)) {
+        return { mind, access: "update-required", state: Y.encodeStateAsUpdate(new Y.Doc()) };
+      }
+      const access = accessFor(mind.kind, content.contentVersion(mind.id));
+      if (access === "read-only") return { mind, access, state: content.storedState(mind.id) };
       answers.settleOrphans(mind.id);
-      return { mind, state: content.state(mind.id) };
+      return { mind, access, state: content.state(mind.id) };
     },
     applyMindUpdate: async (mindId, update) => {
-      content.apply(minds.get(mindId).id, update);
+      content.apply(writableMind(mindId).id, update);
     },
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
@@ -920,6 +939,22 @@ export function createCore(adapters: CoreAdapters): Core {
       const result = await documents.add(paths);
       usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
       return result;
+    },
+    saveTextAsDocument: async (input) => {
+      if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
+        throw new InvalidInputError("There is no text to save.");
+      }
+      const title = typeof input.name === "string" ? input.name : "";
+      const folder = join(dataDir, "Saved text");
+      mkdirSync(folder, { recursive: true });
+      const base = safeFileName(title, "Pasted text");
+      let path = join(folder, `${base}.md`);
+      for (let n = 2; existsSync(path); n++) path = join(folder, `${base} ${n}.md`);
+      writeFileSync(path, input.text.endsWith("\n") ? input.text : `${input.text}\n`);
+      const { documents: added } = await documents.add([path]);
+      const saved = added[0];
+      if (!saved) throw new InvalidInputError("The text couldn't be saved.");
+      return saved;
     },
     listDocuments: async (options) => {
       const { folderId, includeSubfolders, tagId, linkedFolderId } = parseListOptions(options);

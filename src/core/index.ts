@@ -41,6 +41,7 @@ export {
   ConsentDeclinedError,
   EmbeddingModelNotReadyError,
   InvalidInputError,
+  MindReadOnlyError,
   NotFoundError,
   SecretStorageError,
 } from "./errors";
@@ -61,6 +62,7 @@ export {
   type OllamaModels,
 } from "./providers/ollamaModels";
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
+export { blockReference, parseReference } from "./references";
 export {
   BUILT_IN_RERANKING_MODEL,
   downloadSize,
