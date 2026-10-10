@@ -1,11 +1,11 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { LanguagePreference } from "../../../core/language";
 import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
-import { useAppStore } from "../store";
+import { recordUsage, useAppStore } from "../store";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
@@ -62,6 +62,11 @@ export function SettingsDialog() {
   const [visited, setVisited] = useState<readonly SettingsPage[]>([]);
   if (open && !visited.includes(page)) setVisited([...visited, page]);
   if (!open && visited.length > 0) setVisited([]);
+
+  // Usage data: which pages people open (sent only while the User agrees).
+  useEffect(() => {
+    if (open) recordUsage({ event: "settings_page_viewed", fields: { page } });
+  }, [open, page]);
 
   return (
     <dialog

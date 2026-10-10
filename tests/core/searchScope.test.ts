@@ -1,4 +1,4 @@
-import { rename, rm } from "node:fs/promises";
+import { rename, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
@@ -72,7 +72,12 @@ async function setUpLibrary(model: MockLanguageModelV4 = searchingModel()) {
   const setup = await setUpWithDocuments(model, SINGLES, { reranker });
   const { core } = setup;
   const library = await createSourceFolder();
-  for (const file of LINKED) await writeSourceFile(library, file.name, file.contents);
+  // Each file a minute newer than the one before, so which is newest doesn't depend on how
+  // finely the file system keeps modified times.
+  for (const [at, file] of LINKED.entries()) {
+    const modified = new Date(Date.UTC(2026, 0, 1, 9, at));
+    await utimes(await writeSourceFile(library, file.name, file.contents), modified, modified);
+  }
   const linked = await linkAndProcess(core, library);
   await rm(join(library, "Empty", "Gone.txt"));
   await core.reconcileDocuments();
@@ -451,7 +456,8 @@ describe("The Documents an Answer is told about", { timeout: 60_000 }, () => {
     const { core, client, mind, folders } = await setUpLibrary(model);
 
     const all = await askScoped(core, client, mind.id, {}, "Which documents do I have?");
-    // The Linked folder's were added last, newest file first; the missing one isn't named.
+    // The Linked folder's were added last. It indexes its newest file first, so Harbour,
+    // its oldest, was added most recently. The missing one isn't named.
     expect(answerText(client, all.answerId)).toBe(
       "You have Harbour, Estuary, Delta, Recipes, Almanac, Moon.",
     );
