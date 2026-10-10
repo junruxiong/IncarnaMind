@@ -44,11 +44,11 @@ npm install && npm run dev
 
 ## What you can do
 
-**Write and ask in one place.** A Mind is a notebook for one topic: ask a Question anywhere in it, and the Answer lands in your draft as text you can edit.
+**Write and ask in one place.** A Mind is a notebook for one topic: ask a Question from the box at the foot of the Mind, and the Answer lands in your draft, at your cursor, as text you can edit.
 
 **Check every answer.** Answers cite where each claim came from and carry the quote, which is checked against that place: a green check if it's there, an amber mark if it isn't, and a click opens the page with the quote highlighted.
 
-**Use the files you already have.** Link the folders you already use, even Zotero's storage folder: IncarnaMind reads the PDF, Word, PowerPoint, Excel, CSV, Markdown and plain-text files in them where they are, never moves or changes them, and keeps up as they change.
+**Use the files you already have.** Link the folders you already use, even Zotero's storage folder: IncarnaMind reads the PDF, Word (comments included), PowerPoint, Excel, CSV, Markdown and plain-text files in them where they are, never moves or changes them, and keeps up as they change.
 
 **Keep a big library tidy.** Tags are added for you, IncarnaMind can sort Documents into your Folders, and the choices you make yourself are kept.
 
