@@ -288,6 +288,26 @@ describe("Organize suggests a Folder and waits for the User", () => {
     });
   });
 
+  test("moving a Document out of its Suggested Folder makes the new place the User's choice", async () => {
+    const { core, thesis, sources } = await setUp();
+    const [invoice, other] = await addAndSort(core, sources, ["Invoice 1", "Invoice 2"]);
+    if (!invoice || !other) throw new Error("Not added.");
+
+    await core.moveToFolder({ documentIds: [invoice.id], folderId: thesis.id });
+    await core.moveToFolder({ documentIds: [other.id], folderId: null });
+
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({
+      groupId: thesis.id,
+      source: "user",
+      suggested: false,
+    });
+    expect(await assignmentOf(core, other.id)).toMatchObject({
+      groupId: null,
+      source: "user",
+      suggested: false,
+    });
+  });
+
   test("accepting or rejecting changes nothing if any Document is unknown", async () => {
     const { core, finance, sources } = await setUp();
     const [invoice] = await addAndSort(core, sources, ["Invoice 1"]);
