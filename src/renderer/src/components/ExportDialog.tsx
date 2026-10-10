@@ -4,7 +4,9 @@ import type { MessageKey } from "../../../shared/i18n";
 import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { saveFailureReason } from "../problems";
 import { QuoteNotFoundIcon } from "./icons";
+import { ProblemLine } from "./ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -16,7 +18,6 @@ import {
   dialogBodyClass,
   dialogClass,
   dialogTitleClass,
-  errorTextClass,
   fieldLabelClass,
   hintClass,
   primaryButtonClass,
@@ -60,7 +61,10 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const [format, setFormat] = useState<ExportFormat>("docx");
   const [questionsWanted, setQuestionsWanted] = useState(false);
   const [preview, setPreview] = useState<MindExportPreview | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /** What went wrong, where: counting the Citations, or writing the file. */
+  const [problem, setProblem] = useState<{ step: "preview" | "save"; message: string } | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
   /** Where the export was saved, once it is. */
   const [saved, setSaved] = useState<string | null>(null);
@@ -70,13 +74,13 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   useEffect(() => {
     let current = true;
     setPreview(null);
-    setError(null);
+    setProblem(null);
     core.previewMindExport(mind.id, { format, includeQuestions }).then(
       (next) => {
         if (current) setPreview(next);
       },
       (failure: unknown) => {
-        if (current) setError(errorMessage(failure));
+        if (current) setProblem({ step: "preview", message: errorMessage(failure) });
       },
     );
     return () => {
@@ -86,13 +90,13 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
 
   const save = async () => {
     setSaving(true);
-    setError(null);
+    setProblem(null);
     try {
       const path = await files.saveMindExport(mind.id, { format, includeQuestions });
       // Null: the User cancelled the save dialog, so this one stays open.
       if (path) setSaved(path);
     } catch (failure) {
-      setError(errorMessage(failure));
+      setProblem({ step: "save", message: errorMessage(failure) });
     } finally {
       setSaving(false);
     }
@@ -151,10 +155,25 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
 
       <CitationSummary preview={preview} />
 
-      {error && (
-        <p role="alert" className={errorTextClass}>
-          {t("export.failed", { message: error })}
-        </p>
+      {problem && (
+        <ProblemLine
+          testId="export-problem"
+          // A file that can't be written goes somewhere else; a count that failed has no other way.
+          action={
+            problem.step === "save"
+              ? {
+                  label: t("export.chooseAnother"),
+                  onClick: () => void save(),
+                  testId: "export-choose-another",
+                  disabled: saving,
+                }
+              : undefined
+          }
+        >
+          {problem.step === "save"
+            ? t("export.failed.save", { reason: reasonOf(problem.message, t) })
+            : t("export.failed.preview", { reason: problem.message })}
+        </ProblemLine>
       )}
 
       <div className={dialogActionsClass}>
@@ -184,6 +203,7 @@ function Exported({ path, onDone }: { path: string; onDone(): void }) {
   useEffect(() => done.current?.focus(), []);
   const name = path.split(/[\\/]/).at(-1) ?? path;
   const show = async () => {
+    setError(null);
     try {
       await files.showExportInFolder(path);
       onDone();
@@ -193,25 +213,26 @@ function Exported({ path, onDone }: { path: string; onDone(): void }) {
   };
   return (
     <div className="flex flex-col gap-4">
-      <p data-testid="export-done" className="text-ui text-ink" title={path}>
+      <ProblemLine
+        role="status"
+        testId="export-done"
+        title={path}
+        action={{
+          label: navigator.userAgent.includes("Mac")
+            ? t("export.showInFinder")
+            : t("export.showInFolder"),
+          onClick: () => void show(),
+          testId: "export-show",
+        }}
+      >
         {t("export.done", { name })}
-      </p>
+      </ProblemLine>
       {error && (
-        <p role="alert" className={errorTextClass}>
-          {t("export.failed", { message: error })}
-        </p>
+        <ProblemLine testId="export-problem">
+          {t("export.failed.show", { reason: error })}
+        </ProblemLine>
       )}
       <div className={dialogActionsClass}>
-        <button
-          type="button"
-          data-testid="export-show"
-          onClick={() => void show()}
-          className={buttonClass}
-        >
-          {navigator.userAgent.includes("Mac")
-            ? t("export.showInFinder")
-            : t("export.showInFolder")}
-        </button>
         <button
           type="button"
           ref={done}
@@ -224,6 +245,12 @@ function Exported({ path, onDone }: { path: string; onDone(): void }) {
       </div>
     </div>
   );
+}
+
+/** Why a file couldn't be written, in a few words: ours when we know, else the system's. */
+function reasonOf(message: string, t: ReturnType<typeof useT>): string {
+  const key = saveFailureReason(message);
+  return key ? t(key) : message;
 }
 
 /** How many of the exported Citations are unverified, with a warning when any are. */

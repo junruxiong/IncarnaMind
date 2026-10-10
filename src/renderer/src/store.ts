@@ -212,6 +212,13 @@ interface AppState {
   pickDocuments(): Promise<void>;
   /** While that dialog is open: the buttons that open it wait, so it isn't opened twice. */
   pickingDocuments: boolean;
+  /**
+   * "Locate file…" on a Document whose file moved: the system's open dialog,
+   * then the file picked is added, which points the Document at it if it has
+   * the Document's content. Says what happened: "cancelled", "located", or
+   * "other" when the file was a different one (and became a Document of its own).
+   */
+  locateDocumentFile(id: string): Promise<"cancelled" | "located" | "other">;
   renameDocument(id: string, name: string): Promise<void>;
   deleteDocument(id: string): Promise<void>;
   /** Processes a Document that failed again, from its file. */
@@ -737,6 +744,18 @@ export const useAppStore = create<AppState>()((set, get) => {
           set({ pickingDocuments: false });
         }
       }),
+
+    async locateDocumentFile(id) {
+      const paths = await files.pickDocuments();
+      if (paths.length === 0) return "cancelled";
+      const result = await core.addDocuments(paths);
+      set((state) => ({
+        documents: result.documents.reduce(upsert, state.documents),
+      }));
+      return result.documents.some((each) => each.id === id && each.fileStatus === "available")
+        ? "located"
+        : "other";
+    },
 
     renameDocument: (id, name) =>
       attempt(async () => {
