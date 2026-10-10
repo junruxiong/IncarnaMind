@@ -426,6 +426,9 @@ const CRC_TABLE = (() => {
 /** ZIP's checksum of an entry's content. */
 export function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
-  for (const byte of data) crc = (CRC_TABLE[(crc ^ byte) & 0xff] as number) ^ (crc >>> 8);
+  // By index: an iterator over a large picture is several times slower.
+  for (let index = 0; index < data.length; index++) {
+    crc = (CRC_TABLE[(crc ^ (data[index] as number)) & 0xff] as number) ^ (crc >>> 8);
+  }
   return (crc ^ 0xffffffff) >>> 0;
 }
