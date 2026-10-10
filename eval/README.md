@@ -64,6 +64,14 @@ npm run eval
 - **Local models:** an Ollama model, or an `openai-compatible` server on this computer, is reported but never gates. For example: `INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=llama3.2 npm run eval`. The `ollama` kind talks to Ollama's own `/api/chat`, as the app does, and cites as the app's rule says: a model under 7 billion parameters with structured output, a larger one that can call Tools in the Tool loop (ADR-0007, #67). `INCARNAMIND_EVAL_CHAT_NUM_CTX` fixes its window and `INCARNAMIND_EVAL_CHAT_CITING` its citing mode (see the table below), so the modes can be compared, e.g. `INCARNAMIND_EVAL_CHAT_NUM_CTX=8192 INCARNAMIND_EVAL_CHAT_CITING=tools INCARNAMIND_EVAL_MAX_ROUNDS=1`.
 - **Consent:** setting the variables is the consent to send Questions and Passages to the chat model. The run declines automatic tagging's consent request, so no Document excerpts are sent for tagging. A local model has no consent step, so it also tags the Documents while the run asks its Questions, which slows the run.
 - **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 50. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 50 and 130 Answers, each with up to 5 searches. The every-format set's 137 Questions are then asked once each: 137 Answers more.
+- **Short checks:** `INCARNAMIND_EVAL_QUESTIONS` names the Questions to ask, by id, and `INCARNAMIND_EVAL_FORMATS=off` skips the every-format set, so a local model can be tried on a few Questions in minutes. Retrieval still scores every Question. The Questions named are asked once each, with no further rounds, and the run never gates on Citations, whatever the model: the report and the summary say which Questions were asked. For example, ten gating Questions with a small model in Ollama:
+
+  ```sh
+  INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=qwen3.5:4b \
+  INCARNAMIND_EVAL_CHAT_NUM_CTX=8192 INCARNAMIND_EVAL_FORMATS=off \
+  INCARNAMIND_EVAL_QUESTIONS=en-02,en-07,en-17,en-18,en-19,zh-02,zh-04,zh-08,zh-14,zh-17 \
+  npm run eval
+  ```
 
 ### Cloud embeddings
 
@@ -100,6 +108,8 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_MIN_CITATIONS` | `30` | Citations each language needs for the Citation targets to count. |
 | `INCARNAMIND_EVAL_MAX_ROUNDS` | `3` | Rounds of Questions at most. |
 | `INCARNAMIND_EVAL_ANSWER_TIMEOUT_S` | `300` | An Answer that takes longer is stopped and counted as failed. |
+| `INCARNAMIND_EVAL_QUESTIONS` | all | Question ids separated by commas, e.g. `en-07,zh-02`, from either set: only these are asked, once each. Retrieval still scores every Question. A run that asks only some never gates on Citations, and its report says so. |
+| `INCARNAMIND_EVAL_FORMATS` | `on` | `off` skips the every-format set: its Documents, searches and Questions. |
 | `INCARNAMIND_EVAL_KEEP_DATA` | off | `1` keeps the temporary data folders, for looking into a run. |
 
 ### In GitHub Actions

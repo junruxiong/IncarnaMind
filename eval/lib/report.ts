@@ -57,8 +57,8 @@ export interface EvalReport {
     runs: RetrievalRun[];
   };
   citations: CitationRun | { skipped: string };
-  /** The every-format set (#70): reported per format, never gating. */
-  formats?: FormatsReport;
+  /** The every-format set (#70): reported per format, never gating; or why it didn't run. */
+  formats?: FormatsReport | { skipped: string };
 }
 
 const fraction = ({ hits, total }: Tally) => `${hits}/${total}`;
@@ -400,7 +400,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     lines.push(`Skipped: ${citations.skipped}`, "");
   } else {
     lines.push(
-      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.gating ? "It is the gating model." : "A local model: reported, not gating."}${citations.overrides.length > 0 ? ` Set by the run: ${citations.overrides.join(", ")}.` : ""}`,
+      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.subset ? `Only ${citations.subset.length} of the Questions were asked (INCARNAMIND_EVAL_QUESTIONS: ${citations.subset.join(", ")}), once each: a short check, reported, never gating.` : citations.gating ? "It is the gating model." : "A local model: reported, not gating."}${citations.overrides.length > 0 ? ` Set by the run: ${citations.overrides.join(", ")}.` : ""}`,
       `- Each Question asked in a Mind of its own; ${citations.rounds} round${citations.rounds === 1 ? "" : "s"} (more rounds ask a language's gating Questions again until it has ${citations.minCitations} Citations).`,
       `- False "not found": the check said "not found", but the quote is on the cited pages once both are compared by letters and digits only, ignoring case, accents and punctuation. The share is of all Citations.`,
       "- Coverage counts every sentence of an Answer (headings and code left out) as drawn from Documents, so it is a lower bound: sentences that only say what the Documents don't cover count as uncited.",
@@ -413,7 +413,16 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
       "",
     );
   }
-  if (report.formats) lines.push(...formatsSection(report.formats));
+  if (report.formats && "skipped" in report.formats) {
+    lines.push(
+      "## Every format (reported, not gating)",
+      "",
+      `Skipped: ${report.formats.skipped}`,
+      "",
+    );
+  } else if (report.formats) {
+    lines.push(...formatsSection(report.formats));
+  }
   lines.push(
     "## Citation-check cases",
     "",
@@ -478,7 +487,11 @@ export async function writeReports(
   if (!("skipped" in report.citations)) {
     await writeFile(join(dir, "reviewer-sheet.csv"), reviewerSheet(report.citations));
   }
-  if (report.formats && !("skipped" in report.formats.citations)) {
+  if (
+    report.formats &&
+    !("skipped" in report.formats) &&
+    !("skipped" in report.formats.citations)
+  ) {
     await writeFile(
       join(dir, "reviewer-sheet-formats.csv"),
       reviewerSheet(report.formats.citations),
@@ -517,7 +530,7 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
   } else {
     lines.push(
       "",
-      `Citation quality, ${citations.model}${citations.gating ? " (gating)" : " (local, not gating)"}`,
+      `Citation quality, ${citations.model}${citations.subset ? ` (${citations.subset.length} Questions only, not gating)` : citations.gating ? " (gating)" : " (local, not gating)"}`,
     );
     for (const [group, label] of GROUPS) {
       const summary = citations.summary[group];
@@ -526,7 +539,11 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
       );
     }
   }
-  if (report.formats) lines.push(...formatsSummary(report.formats));
+  if (report.formats && "skipped" in report.formats) {
+    lines.push("", `Every format: skipped. ${report.formats.skipped}`);
+  } else if (report.formats) {
+    lines.push(...formatsSummary(report.formats));
+  }
   lines.push("", `Result: ${report.result}`);
   for (const failure of report.failures) lines.push(`  - ${failure}`);
   lines.push(`Reports: ${relative(root, reportDir)}/`, "");
