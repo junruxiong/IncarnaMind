@@ -998,10 +998,13 @@ export function createCore(adapters: CoreAdapters): Core {
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
     addLinkedFolder: async (path, options) => {
       const groupId = library.target(options);
+      const known = new Set(documents.linkedFolders.list().map((each) => each.id));
       const linked = await documents.linkedFolders.add(path);
       // Its first scan only starts adding Documents once this has returned.
       const batchId = batches.begin(groupId);
-      batches.linking(batchId, linked);
+      // A folder inside one already linked adds nothing: its scans aren't this batch.
+      if (known.has(linked.id)) batches.done(batchId);
+      else batches.linking(batchId, linked);
       usageData.record({ event: "folder_linked", fields: {} });
       return { ...linked, batchId };
     },

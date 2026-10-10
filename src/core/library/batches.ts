@@ -149,12 +149,12 @@ export function createBatches(options: {
       const batch = batches.get(batchId);
       if (batch) done(batch);
     },
-    /** The batch is the first scan of this Linked folder. */
+    /** The batch is the first scan of this Linked folder, just linked. */
     linking(batchId: string, linkedFolder: LinkedFolder): void {
       const batch = batches.get(batchId);
       if (!batch) return;
       batch.linkedFolderId = linkedFolder.id;
-      if (linkedFolder.status !== "scanning") done(batch);
+      if (linkedFolder.status === "watching") done(batch);
     },
     /** A new Document a scan found: it joins its Linked folder's batch while the first scan runs. */
     found(documentId: string): void {
@@ -170,11 +170,12 @@ export function createBatches(options: {
       );
       if (batch) join(batch, documentId);
     },
+    // A first scan paused, or out of reach, finishes once it can go on.
     linkedFoldersChanged(list: readonly LinkedFolder[]): void {
       for (const batch of batches.values()) {
         if (!batch.adding || !batch.linkedFolderId) continue;
         const linked = list.find((each) => each.id === batch.linkedFolderId);
-        if (linked?.status !== "scanning") done(batch);
+        if (!linked || linked.status === "watching") done(batch);
       }
     },
     /** These Documents' status or assignment changed, or they were removed. */
