@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { translate } from "../../shared/i18n";
 import { supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
-import type { ChatModelChoice, DocumentKind, ProviderError } from "../api";
+import type { ChatModelChoice, DocumentKind, FolderDeletion, ProviderError } from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
@@ -70,6 +70,40 @@ const assignmentOf = (row: AssignmentRow): DocumentGroupAssignment => ({
     ? (JSON.parse(row.classification_model) as ClassificationModel)
     : null,
 });
+
+const CLASSIFICATION_STATUSES: readonly ClassificationStatus[] = [
+  "pending",
+  "classifying",
+  "classified",
+  "waiting",
+  "failed",
+];
+
+function parsePreviousAssignment(
+  input: unknown,
+): Omit<DocumentGroupAssignment, "documentId"> | null {
+  if (input === null) return null;
+  const invalid = new InvalidInputError("A previous assignment is an assignment, or null.");
+  if (!isRecord(input)) throw invalid;
+  const { groupId, source, status, error, model } = input;
+  if (groupId !== null && (typeof groupId !== "string" || groupId === "")) throw invalid;
+  if (source !== "automatic" && source !== "user") throw invalid;
+  const known = CLASSIFICATION_STATUSES.find((each) => each === status);
+  if (!known) throw invalid;
+  if (
+    error !== null &&
+    !(isRecord(error) && typeof error.kind === "string" && typeof error.message === "string")
+  )
+    throw invalid;
+  if (model !== null && !(isRecord(model) && typeof model.id === "string")) throw invalid;
+  return {
+    groupId,
+    source,
+    status: known,
+    error: error as ProviderError | null,
+    model: model as ClassificationModel | null,
+  };
+}
 
 /**
  * What Organize sends to a cloud model: the Folders and Tags, each
@@ -433,22 +467,76 @@ export function createLibrary(options: {
       changed();
       return group(existing.id);
     },
-    delete(id: unknown) {
+    /** Deletes a Folder: its Documents become Unsorted, recorded so that restoring it puts them back. */
+    delete(id: unknown): FolderDeletion {
       const existing = group(id);
-      db.transaction(() => {
+      const at = now();
+      const assignments = db.transaction(() => {
+        const rows = db.all<AssignmentRow & { live: number }>(
+          `SELECT g.*, d.deleted_at IS NULL AS live FROM document_groups g
+           JOIN documents d ON d.id = g.document_id
+           WHERE g.group_id = ? AND g.deleted_at IS NULL ORDER BY g.rowid`,
+          [existing.id],
+        );
         db.run("UPDATE library_groups SET deleted_at = ?, updated_at = ? WHERE id = ?", [
-          now(),
-          now(),
+          at,
+          at,
           existing.id,
         ]);
+        for (const row of rows) {
+          db.run(
+            `INSERT INTO deleted_folder_items (id, folder_id, item_kind, item_id, created_at, updated_at)
+             VALUES (?, ?, 'document', ?, ?, ?)`,
+            [randomUUID(), existing.id, row.document_id, at, at],
+          );
+        }
         db.run(
           "UPDATE document_groups SET group_id = NULL, updated_at = ? WHERE group_id = ? AND deleted_at IS NULL",
-          [now(), existing.id],
+          [at, existing.id],
         );
+        return rows.filter((row) => row.live).map(assignmentOf);
       });
       revision++;
       changed();
+      return { assignments };
     },
+    /**
+     * Brings back a deleted Folder (the caller checks it may), and the Documents its
+     * deletion took out that are in no Folder now. Throws if its name is taken or the
+     * Library is full. Run in the caller's transaction, then `restored`.
+     */
+    restore(id: string): void {
+      const row = db.get<{ name: string }>("SELECT name FROM library_groups WHERE id = ?", [id]);
+      if (!row) throw new NotFoundError("That Folder doesn't exist.");
+      const language = settings.get().language;
+      if (groups().some((item) => sameName(item.name, row.name)))
+        throw new InvalidInputError(
+          translate(language, "restore.error.folderNameTaken", { name: row.name }),
+        );
+      if (groups().length >= 100)
+        throw new InvalidInputError(translate(language, "restore.error.folderLimit"));
+      const at = now();
+      db.run("UPDATE library_groups SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
+      db.run(
+        `UPDATE document_groups SET group_id = ?, updated_at = ?
+         WHERE deleted_at IS NULL AND group_id IS NULL AND document_id IN (
+           SELECT item_id FROM deleted_folder_items
+           WHERE folder_id = ? AND item_kind = 'document' AND deleted_at IS NULL)`,
+        [id, at, id],
+      );
+      db.run(
+        "UPDATE deleted_folder_items SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
+        [at, at, id],
+      );
+    },
+    /** Folders came back (`restore`): the Library is read again, and Organize may go on. */
+    restored() {
+      revision++;
+      changed();
+      resume();
+    },
+    /** Says these Documents' assignments changed, e.g. once they are restored. */
+    announce,
     addStarters(input: unknown) {
       if (!Array.isArray(input) || !input.every((key) => libraryPresetKeys.includes(key)))
         throw new InvalidInputError("Choose valid starter groups.");
@@ -546,9 +634,10 @@ export function createLibrary(options: {
       announce(docs.map((doc) => doc.id));
       resume();
     },
-    assign(id: unknown, groupId: unknown) {
+    assign(id: unknown, groupId: unknown): DocumentGroupAssignment | null {
       const doc = document(id);
       if (groupId !== null) group(groupId);
+      const previous = assignment(doc.id);
       write(doc, groupId as string | null, "user", "classified");
       // A manual correction cancels an in-flight suggestion, including its busy indicator.
       db.run(
@@ -557,6 +646,52 @@ export function createLibrary(options: {
       );
       options.tagged([doc.id]);
       announce([doc.id]);
+      return previous ? assignmentOf(previous) : null;
+    },
+    /** See `CoreApi.restoreAssignment`. */
+    restoreAssignment(id: unknown, input: unknown) {
+      const previous = parsePreviousAssignment(input);
+      const language = settings.get().language;
+      let doc: DocumentRow;
+      try {
+        doc = document(id);
+      } catch (error) {
+        if (!(error instanceof NotFoundError)) throw error;
+        throw new NotFoundError(translate(language, "restore.error.documentGone"));
+      }
+      if (previous?.groupId) {
+        const name = db.get<{ name: string }>(
+          "SELECT name FROM library_groups WHERE id = ? AND deleted_at IS NOT NULL",
+          [previous.groupId],
+        )?.name;
+        if (name !== undefined)
+          throw new NotFoundError(translate(language, "restore.error.folderGone", { name }));
+        group(previous.groupId);
+      }
+      if (!previous) {
+        const at = now();
+        db.run(
+          "UPDATE document_groups SET deleted_at = ?, updated_at = ? WHERE document_id = ? AND deleted_at IS NULL",
+          [at, at, doc.id],
+        );
+        revision++;
+        changed();
+        return;
+      }
+      // One being classified goes back to waiting its turn.
+      const status = previous.status === "classifying" ? "pending" : previous.status;
+      db.transaction(() => {
+        write(doc, previous.groupId, previous.source, status, previous.model);
+        if (previous.error)
+          db.run(
+            "UPDATE document_groups SET error_kind = ?, error_message = ? WHERE document_id = ? AND deleted_at IS NULL",
+            [previous.error.kind, previous.error.message, doc.id],
+          );
+        if (status === "pending" || status === "waiting") tagState(doc.id, status);
+      });
+      options.tagged([doc.id]);
+      announce([doc.id]);
+      resume();
     },
     documentChanged(id: string) {
       if (lifetime.signal.aborted) return;

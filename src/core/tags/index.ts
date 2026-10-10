@@ -10,7 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { isTagColour, nextTagColour, type TagColour } from "../../shared/tagColours";
-import type { DocumentTag, Tag, TagSource } from "../api";
+import type { DocumentTag, Tag, TagLinkState, TagSource } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Language } from "../language";
 import type { Database } from "../storage";
@@ -86,6 +86,30 @@ function parseDescription(description: unknown): string {
     );
   }
   return trimmed;
+}
+
+export function parseTagLinkStates(input: unknown): TagLinkState[] {
+  if (!Array.isArray(input)) throw new InvalidInputError("Expected a list of Tag links.");
+  return input.map((each): TagLinkState => {
+    if (!isRecord(each) || typeof each.documentId !== "string" || typeof each.tagId !== "string")
+      throw new InvalidInputError("A Tag link names a Document and a Tag.");
+    const { documentId, tagId, link, removedByUser } = each;
+    if (removedByUser !== undefined && typeof removedByUser !== "boolean")
+      throw new InvalidInputError("removedByUser must be true or false.");
+    if (link === null)
+      return { documentId, tagId, link, ...(removedByUser !== undefined && { removedByUser }) };
+    const invalid = new InvalidInputError("A Tag link says who chose it, or is null.");
+    if (!isRecord(link)) throw invalid;
+    const { source, confidence, needsReview } = link;
+    if ((source !== "automatic" && source !== "user") || typeof needsReview !== "boolean")
+      throw invalid;
+    if (
+      confidence !== null &&
+      (typeof confidence !== "number" || !(confidence >= 0 && confidence <= 1))
+    )
+      throw invalid;
+    return { documentId, tagId, link: { source, confidence, needsReview } };
+  });
 }
 
 /**
@@ -321,9 +345,14 @@ export function createTags(db: Database, now: () => string) {
      * has both, and an automatic link keeps its confidence), and a removal the
      * User made carries over where they haven't decided on the other Tag. The
      * merged Tag is then deleted. Returns the ids of the Documents whose Tags
-     * changed: those that carried the merged Tag.
+     * changed (those that carried the merged Tag), and the other Tag's links
+     * as they were where it changed them.
      */
-    merge(fromInput: unknown, intoInput: unknown, at: string): string[] {
+    merge(
+      fromInput: unknown,
+      intoInput: unknown,
+      at: string,
+    ): { documentIds: string[]; links: TagLinkState[] } {
       return db.transaction(() => {
         const from = get(fromInput);
         const into = get(intoInput);
@@ -336,6 +365,11 @@ export function createTags(db: Database, now: () => string) {
           [from.id],
         );
         const changed: string[] = [];
+        const links = new Map<string, TagLinkState>();
+        const before = (documentId: string, state: Omit<TagLinkState, "documentId" | "tagId">) => {
+          if (!links.has(documentId))
+            links.set(documentId, { documentId, tagId: into.id, ...state });
+        };
         for (const row of rows) {
           const target = liveLink(row.document_id, into.id);
           const decided = !!db.get(
@@ -344,18 +378,30 @@ export function createTags(db: Database, now: () => string) {
           );
           if (row.deleted) {
             // The User's removal: the other Tag stays off too, unless they decided on it.
-            if (!target && !decided) insertLink(row.document_id, into.id, "user", at, at);
+            if (!target && !decided) {
+              before(row.document_id, { link: null, removedByUser: false });
+              insertLink(row.document_id, into.id, "user", at, at);
+            }
             continue;
           }
           changed.push(row.document_id);
           if (target) {
-            if (row.source === "user" && target.source !== "user")
+            if (row.source === "user" && target.source !== "user") {
+              before(row.document_id, {
+                link: {
+                  source: target.source,
+                  confidence: target.confidence,
+                  needsReview: target.needs_review !== 0,
+                },
+              });
               db.run(
                 `UPDATE document_tags SET source = 'user', confidence = NULL, needs_review = 0,
                    updated_at = ? WHERE id = ?`,
                 [at, target.id],
               );
+            }
           } else if (row.source === "user" || !decided) {
+            before(row.document_id, { link: null, removedByUser: decided });
             // An automatic link doesn't come back where the User took the other Tag off.
             insertLink(row.document_id, into.id, row.source, at, null, {
               confidence: row.confidence,
@@ -369,7 +415,85 @@ export function createTags(db: Database, now: () => string) {
            WHERE tag_id = ? AND deleted_at IS NULL`,
           [at, at, from.id],
         );
-        return [...new Set(changed)];
+        return { documentIds: [...new Set(changed)], links: [...links.values()] };
+      });
+    },
+
+    /**
+     * Brings back a deleted Tag (the caller checks it may) and the links deleted with it.
+     * Returns the Documents that carry it again.
+     */
+    restore(tagId: string, deletedAt: string): string[] {
+      return db.transaction(() => {
+        const at = now();
+        db.run("UPDATE tags SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, tagId]);
+        return db
+          .all<{ document_id: string }>(
+            `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
+             WHERE tag_id = ? AND deleted_at = ?
+               AND NOT EXISTS (SELECT 1 FROM document_tags live
+                               WHERE live.document_id = document_tags.document_id
+                                 AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)
+             RETURNING document_id`,
+            [at, tagId, deletedAt],
+          )
+          .map((row) => row.document_id);
+      });
+    },
+
+    /**
+     * Puts links back as they were (see `CoreApi.revertDocumentTags`); the caller checks
+     * the Documents and Tags. A link taken off is marked automatic, so it records no
+     * removal. Returns the Documents whose Tags changed.
+     */
+    revert(states: readonly TagLinkState[]): string[] {
+      return db.transaction(() => {
+        const at = now();
+        const changed = new Set<string>();
+        for (const { documentId, tagId, link, removedByUser } of states) {
+          const live = liveLink(documentId, tagId);
+          if (link) {
+            const needsReview = link.needsReview ? 1 : 0;
+            if (
+              live?.source === link.source &&
+              live.confidence === link.confidence &&
+              live.needs_review === needsReview
+            )
+              continue;
+            // The link a removal marked deleted comes back, so the removal goes with it.
+            const row =
+              live ??
+              db.get<{ id: string }>(
+                `SELECT id FROM document_tags WHERE document_id = ? AND tag_id = ?
+                 ORDER BY deleted_at DESC, rowid DESC LIMIT 1`,
+                [documentId, tagId],
+              );
+            if (row)
+              db.run(
+                `UPDATE document_tags SET source = ?, confidence = ?, needs_review = ?,
+                   deleted_at = NULL, updated_at = ? WHERE id = ?`,
+                [link.source, link.confidence, needsReview, at, row.id],
+              );
+            else insertLink(documentId, tagId, link.source, at, null, link);
+            changed.add(documentId);
+            continue;
+          }
+          if (live) {
+            db.run(
+              `UPDATE document_tags SET source = 'automatic', deleted_at = ?, updated_at = ?
+               WHERE id = ?`,
+              [at, at, live.id],
+            );
+            changed.add(documentId);
+          }
+          if (removedByUser === false)
+            db.run(
+              `UPDATE document_tags SET source = 'automatic', updated_at = ?
+               WHERE document_id = ? AND tag_id = ? AND source = 'user'`,
+              [at, documentId, tagId],
+            );
+        }
+        return [...changed];
       });
     },
 
