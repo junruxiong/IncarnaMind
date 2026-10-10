@@ -14,7 +14,19 @@ export interface Localized {
  * app's own adapter for Ollama (see ../models). Today each adapter is also a
  * provider kind; providers that share one differ in their endpoints and quirks.
  */
-export type Adapter = "openai" | "anthropic" | "google" | "openai-compatible" | "ollama";
+export type Adapter =
+  | "openai"
+  | "anthropic"
+  | "google"
+  | "deepseek"
+  | "alibaba"
+  | "moonshotai"
+  | "zai"
+  | "mistral"
+  | "xai"
+  | "openrouter"
+  | "openai-compatible"
+  | "ollama";
 
 /** Where a provider's API is, for one region. */
 export interface Endpoint {
@@ -23,6 +35,8 @@ export interface Endpoint {
   label: Localized;
   /** The API's base URL, as the AI SDK provider takes it (e.g. "https://api.openai.com/v1"). */
   baseUrl: string;
+  /** Where the User gets a key for this region, when it isn't the provider's `keyUrl` (keys are per region). */
+  keyUrl?: string;
 }
 
 /**
@@ -50,8 +64,22 @@ export interface DataUse {
 
 /** What every request to a provider carries, whatever the model. */
 export interface RequestQuirks {
-  /** Ask the provider not to keep requests (OpenAI's Responses API keeps them otherwise). */
+  /** Ask the provider not to keep requests (the Responses API of OpenAI and xAI keeps them otherwise). */
   store?: false;
+  /**
+   * For an OpenAI-compatible adapter: ask for token usage in streamed replies
+   * (`stream_options.include_usage`), so that costs can be counted, and send a
+   * JSON schema as a schema (`json_schema`) rather than as JSON mode.
+   */
+  openAiCompatible?: { includeUsage: boolean; supportsStructuredOutputs: boolean };
+  /** Fields added to the body of every request (OpenRouter: do not route to providers that keep or train on prompts). */
+  body?: Record<string, unknown>;
+  /**
+   * Provider options (by the AI SDK provider's key) that turn thinking off, for
+   * the small calls that don't write the Answer. A model whose id starts with
+   * one of `unless` can't turn it off.
+   */
+  thinkingOff?: { options: Record<string, Record<string, unknown>>; unless?: readonly string[] };
 }
 
 export interface CatalogProvider {

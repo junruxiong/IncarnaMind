@@ -682,7 +682,19 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 32 to 34 are reserved by work in progress (#111, #178).
+    version: 33,
+    description: "A provider is one per catalog provider, server and endpoint",
+    // Keys and model lists differ by region (Qwen's Beijing and Singapore, Kimi's .cn and .ai),
+    // so each endpoint of a hosted provider is its own row with its own key.
+    sql: `
+      DROP INDEX chat_providers_by_server;
+      CREATE UNIQUE INDEX chat_providers_by_server
+        ON chat_providers (coalesce(catalog_id, kind), coalesce(base_url, ''), coalesce(endpoint, ''))
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 32 is reserved by work in progress (#111); 34 was reserved by #178, which needed only 33.
     version: 35,
     description:
       "Recently deleted: what was deleted permanently, and what a Folder's deletion took out",
