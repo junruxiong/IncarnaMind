@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -13,9 +14,9 @@ import {
 /*
  * From the Library into writing (#59): filters by year, format and status,
  * with counts, and "Ask about this Folder" / "Start a Mind from this Folder",
- * which scope a Question to the Folder, or to exactly the Documents a filter
- * shows. No model is needed: nothing is asked. Set INCARNAMIND_SCREENSHOTS
- * to a folder to also save screenshots there.
+ * which scope the composer's next Question to the Folder, or to exactly the
+ * Documents a filter shows. Only one test asks, with the scripted model. Set
+ * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots there.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -92,22 +93,8 @@ const optionsOf = (menu: Locator) =>
       ]),
     );
 
-/** Whether the editor has the focus with the cursor in a Question's text: the `index`th one. */
-const cursorInQuestion = (window: Page, index: number) =>
-  window.evaluate((wanted) => {
-    const selection = globalThis.getSelection();
-    const anchor = selection?.anchorNode;
-    const element = anchor instanceof Element ? anchor : anchor?.parentElement;
-    const question = element?.closest('[data-testid="question"]');
-    const questions = [...document.querySelectorAll('[data-testid="question"]')];
-    return (
-      document.activeElement?.closest('[data-testid="mind-editor"]') !== null &&
-      selection?.isCollapsed === true &&
-      question !== null &&
-      question !== undefined &&
-      questions.indexOf(question) === wanted
-    );
-  }, index);
+/** The open Mind's composer, where the Question is written, its Search scope as chips. */
+const composerOf = (window: Page) => window.getByTestId("composer");
 
 test("filters by year, format and status with counts, and asks about the Documents shown or the Folder", async () => {
   const { app, window } = await launchApp(dataDir);
@@ -196,9 +183,10 @@ test("filters by year, format and status with counts, and asks about the Documen
     await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
     const editor = window.getByTestId("mind-editor");
     await expect(editor).toContainText("Notes on the tides.");
-    const questions = editor.getByTestId("question");
-    await expect(questions).toHaveCount(1);
-    const chips = questions.first().getByTestId("scope-chip");
+    // The composer takes the focus, its Search scope the Documents shown.
+    const composer = composerOf(window);
+    const input = composer.getByTestId("composer-input");
+    const chips = composer.getByTestId("scope-chip");
     await expect(chips).toHaveCount(2);
     expect(
       (
@@ -206,11 +194,9 @@ test("filters by year, format and status with counts, and asks about the Documen
       ).sort(),
     ).toEqual([...shownIds].sort());
     await expect(chips.first()).toHaveAttribute("data-kind", "document");
-    await expect.poll(() => cursorInQuestion(window, 0)).toBe(true);
+    await expect(input).toBeFocused();
     await window.keyboard.type("What was observed in 2023?");
-    await expect(questions.first().locator(".question-text")).toHaveText(
-      "What was observed in 2023?",
-    );
+    await expect(input).toHaveValue("What was observed in 2023?");
     await screenshot(window, "library-ask-documents");
 
     // Unfiltered, it searches the Folder itself, in the same Mind, after the first.
@@ -222,14 +208,13 @@ test("filters by year, format and status with counts, and asks about the Documen
     await expect(library.getByTestId("library-ask")).toHaveAttribute("data-scope", "folder");
     await library.getByRole("button", { name: "Ask about this Folder", exact: true }).click();
     await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
-    await expect(questions).toHaveCount(2);
-    const folderChip = questions.nth(1).getByTestId("scope-chip");
+    const folderChip = chips;
     await expect(folderChip).toHaveCount(1);
     await expect(folderChip).toHaveText(FOLDER);
     await expect(folderChip).toHaveAttribute("data-kind", "folder");
-    await expect.poll(() => cursorInQuestion(window, 1)).toBe(true);
-    await window.keyboard.type("Which harbour?");
-    await expect(questions.nth(1).locator(".question-text")).toHaveText("Which harbour?");
+    await expect(input).toBeFocused();
+    await window.keyboard.type(" Which harbour?");
+    await expect(input).toHaveValue("What was observed in 2023? Which harbour?");
     // Only the one Mind: nothing new was made.
     await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
   } finally {
@@ -238,7 +223,7 @@ test("filters by year, format and status with counts, and asks about the Documen
 });
 
 test("starts a Mind named after the Folder with its scoped Question first, in English and Chinese", async () => {
-  const { app, window } = await launchApp(dataDir);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
     const library = await libraryWithFolder(app, window);
@@ -277,7 +262,19 @@ test("starts a Mind named after the Folder with its scoped Question first, in En
       window.getByTestId("mind-list-item").getByTestId("row-text").getByText(FOLDER),
     ).toBeVisible();
     const editor = window.getByTestId("mind-editor");
-    // The Question is the Mind's first Block.
+    // The composer takes the focus, its Search scope the Folder.
+    const composer = composerOf(window);
+    const composerChip = composer.getByTestId("scope-chip");
+    await expect(composerChip).toHaveText(FOLDER);
+    await expect(composerChip).toHaveAttribute("data-kind", "folder");
+    await expect(composerChip).toHaveAttribute("data-id", folderId ?? "");
+    await expect(composer.getByTestId("composer-input")).toBeFocused();
+    await window.keyboard.type("What do these say about tides?");
+    await screenshot(window, "library-start-mind");
+
+    // Asked, the Question is the Mind's first Block, with the Folder as its Search scope.
+    await connectLocalChatModel(window);
+    await window.keyboard.press("Enter");
     await expect
       .poll(() =>
         editor.evaluate(
@@ -290,14 +287,13 @@ test("starts a Mind named after the Folder with its scoped Question first, in En
       .toBe(true);
     const chip = editor.getByTestId("question").getByTestId("scope-chip");
     await expect(chip).toHaveText(FOLDER);
-    await expect(chip).toHaveAttribute("data-kind", "folder");
     await expect(chip).toHaveAttribute("data-id", folderId ?? "");
-    await expect.poll(() => cursorInQuestion(window, 0)).toBe(true);
-    await window.keyboard.type("What do these say about tides?");
     await expect(editor.getByTestId("question").locator(".question-text")).toHaveText(
       "What do these say about tides?",
     );
-    await screenshot(window, "library-start-mind");
+    await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+      timeout: 15_000,
+    });
   } finally {
     await app.close();
   }
@@ -326,19 +322,21 @@ test("with no Mind yet, asking about many Documents shown makes one, and their c
 
     await expect(window.getByTestId("mind-list-item")).toHaveCount(1);
     await expect(window.getByTestId("mind-title")).toHaveValue("");
-    const question = window.getByTestId("mind-editor").getByTestId("question");
-    await expect(question).toHaveCount(1);
-    const chips = question.getByTestId("scope-chip");
-    const more = question.getByTestId("scope-chips-more");
-    await expect(chips).toHaveCount(7);
-    await expect(more).toHaveText("+3 more");
-    await expect.poll(() => cursorInQuestion(window, 0)).toBe(true);
+    // The composer's Search scope: its first chips, then "+N more".
+    const composer = composerOf(window);
+    const input = composer.getByTestId("composer-input");
+    const chips = composer.getByTestId("scope-chip");
+    const more = composer.getByTestId("scope-chips-more");
+    await expect(chips).toHaveCount(2);
+    await expect(more).toHaveText("+8 more");
+    await expect(input).toBeFocused();
     await more.click();
     await expect(chips).toHaveCount(10);
     await expect(more).toHaveText("Show fewer");
-    // Unfolding keeps the cursor in the Question.
+    // Unfolding keeps the focus where the Question is written.
+    await expect(input).toBeFocused();
     await window.keyboard.type("How high were the tides?");
-    await expect(question.locator(".question-text")).toHaveText("How high were the tides?");
+    await expect(input).toHaveValue("How high were the tides?");
   } finally {
     await app.close();
   }

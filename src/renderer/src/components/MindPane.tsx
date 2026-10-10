@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
+import { ComposerDockContext } from "../editor/mindContext";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
@@ -12,8 +13,8 @@ import { buttonStyle } from "./ui";
 
 /**
  * The card's centre: a 36px strip of the open Minds as tabs (with "+" and Export),
- * then the shown Mind, its title and its Blocks. With no tab open, a way to
- * start a Mind.
+ * then the shown Mind, its title and its Blocks, and the composer pinned at
+ * its foot. With no tab open, a way to start a Mind.
  */
 export function MindPane() {
   const t = useT();
@@ -22,6 +23,7 @@ export function MindPane() {
   const isExample = useIsExample(mind?.id);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
 
   return (
     <main
@@ -36,7 +38,7 @@ export function MindPane() {
       />
 
       <div
-        className="min-h-0 flex-grow overflow-auto"
+        className="flex min-h-0 flex-grow flex-col"
         {...(mind && {
           role: "tabpanel",
           id: "mind-tabpanel",
@@ -44,22 +46,30 @@ export function MindPane() {
         })}
       >
         {mind ? (
-          // Keyed, so switching Minds starts a fresh title field and editor. Every text
-          // in it starts at one edge (styles.css, `.mind-column`).
-          <article
-            key={mind.id}
-            data-testid="mind-pane"
-            data-mind-id={mind.id}
-            className="mind-column"
-          >
-            <div className="mind-measure">
-              {isExample && <ExampleBanner />}
-              <MindTitle mind={mind} />
-              {/* The example works without a chat model: it says so in its Answer instead. */}
-              {!isExample && <ChatReadinessNotice />}
-              <MindEditor mindId={mind.id} />
+          <>
+            <div className="min-h-0 flex-grow overflow-auto">
+              {/* Keyed, so switching Minds starts a fresh title field and editor. Every text
+                  in it starts at one edge (styles.css, `.mind-column`). */}
+              <article
+                key={mind.id}
+                data-testid="mind-pane"
+                data-mind-id={mind.id}
+                className="mind-column"
+              >
+                <div className="mind-measure">
+                  {isExample && <ExampleBanner />}
+                  <MindTitle mind={mind} />
+                  {/* The example works without a chat model: it says so in its Answer instead. */}
+                  {!isExample && <ChatReadinessNotice />}
+                  <ComposerDockContext.Provider value={dock}>
+                    <MindEditor mindId={mind.id} />
+                  </ComposerDockContext.Provider>
+                </div>
+              </article>
             </div>
-          </article>
+            {/* The composer, pinned at the column's foot: the Mind's editor draws it here. */}
+            <div ref={setDock} data-testid="composer-dock" className="composer-dock" />
+          </>
         ) : (
           <div
             data-testid="mind-none-open"

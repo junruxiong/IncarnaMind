@@ -58,13 +58,14 @@ function Dotted({ items }: { items: ReactNode[] }) {
 }
 
 /**
- * An Answer: no box, its text at the Mind's text edge with the "Answer" label
- * in the left margin. Its meta line says which model wrote it, whether it is
- * still being written (a pulsing dot, and a stop button) or was stopped, what
- * it searched (it opens to the list), and offers to write it again. Under it,
- * ruled rows for the Skills, Connector calls and Skill scripts it used; when
- * it failed, what went wrong and how to fix it; then its text, ordinary
- * editable Blocks; and the approval cards of calls waiting for the User.
+ * An Answer: grey text at the Mind's text edge, under its Question line, with
+ * no box, no label and no meta line at rest (DESIGN.md, Answer). Its meta line
+ * shows on hover or focus, just under its last line: which model wrote it,
+ * what it searched (it opens to the list) and Regenerate. While it is being
+ * written the line stays, with a pulsing dot, what it is doing and Stop; once
+ * stopped, it says so. Above its text, ruled rows for the Skills, Connector
+ * calls and Skill scripts it used; under it, what went wrong and how to fix
+ * it, and the approval cards of calls waiting for the User.
  */
 export function AnswerView({ node }: ReactNodeViewProps) {
   const t = useT();
@@ -95,6 +96,11 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   };
 
   const meta: ReactNode[] = [];
+  if (streaming) {
+    meta.push(<AnswerWriting answerId={answerId} waitingForApproval={approvals.length > 0} />);
+  } else if (status === "stopped") {
+    meta.push(<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>);
+  }
   // Written in advance, by no model, until it is written again with the User's.
   if (isExample && !modelId && !streaming) {
     meta.push(<span data-testid="answer-example">{t("examples.answer")}</span>);
@@ -105,11 +111,6 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         {modelId}
       </span>,
     );
-  }
-  if (streaming) {
-    meta.push(<AnswerWriting answerId={answerId} waitingForApproval={approvals.length > 0} />);
-  } else if (status === "stopped") {
-    meta.push(<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>);
   }
   if (searches.length > 0) {
     meta.push(
@@ -128,36 +129,9 @@ export function AnswerView({ node }: ReactNodeViewProps) {
       data-status={streaming ? "streaming" : status}
       data-answer-id={answerId ?? undefined}
     >
-      <div contentEditable={false} className="answer-head">
-        <div className="answer-meta">
-          <span className="answer-label">{t("answer.label")}</span>
-          <Dotted items={meta} />
-          {streaming && answerId && (
-            <button
-              type="button"
-              data-testid="answer-stop"
-              onClick={() => stop(mindId, answerId)}
-              className="answer-action"
-            >
-              <StopIcon className="size-3" />
-              {t("answer.stop")}
-            </button>
-          )}
-          {!streaming && questionId && (
-            <button
-              type="button"
-              data-testid="answer-regenerate"
-              onClick={() => writeAgain()}
-              className="answer-action"
-            >
-              <RegenerateSmallIcon className="size-3" />
-              {t("answer.regenerate")}
-            </button>
-          )}
-        </div>
-        {searchesOpen && <SearchList searches={searches} />}
-      </div>
-
+      <span contentEditable={false} className="sr-only">
+        {t("answer.label")}
+      </span>
       <CallRows calls={toolCalls} approvals={approvals} />
 
       {text(node.attrs.citationSupport) === "none" && (
@@ -194,6 +168,12 @@ export function AnswerView({ node }: ReactNodeViewProps) {
 
       <NodeViewContent className="answer-content" />
 
+      {searchesOpen && (
+        <div contentEditable={false} className="answer-searches-open">
+          <SearchList searches={searches} />
+        </div>
+      )}
+
       {!streaming && status === "failed" && (
         <AnswerError
           kind={isErrorKind(node.attrs.errorKind) ? node.attrs.errorKind : "unknown"}
@@ -212,6 +192,33 @@ export function AnswerView({ node }: ReactNodeViewProps) {
           ))}
         </div>
       )}
+
+      {/* Under its last line, in the room before the next Block: shown on hover or focus. */}
+      <div contentEditable={false} data-testid="answer-meta" className="answer-meta">
+        <Dotted items={meta} />
+        {streaming && answerId && (
+          <button
+            type="button"
+            data-testid="answer-stop"
+            onClick={() => stop(mindId, answerId)}
+            className="answer-action"
+          >
+            <StopIcon className="size-3" />
+            {t("answer.stop")}
+          </button>
+        )}
+        {!streaming && questionId && (
+          <button
+            type="button"
+            data-testid="answer-regenerate"
+            onClick={() => writeAgain()}
+            className="answer-action"
+          >
+            <RegenerateSmallIcon className="size-3" />
+            {t("answer.regenerate")}
+          </button>
+        )}
+      </div>
     </NodeViewWrapper>
   );
 }
