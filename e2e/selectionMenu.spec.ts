@@ -93,6 +93,7 @@ test("selecting text with the mouse or the keyboard opens a menu: Turn into, for
   await expect(window.getByTestId("turn-into-bullet-list")).toBeFocused();
   await window.keyboard.press("Enter");
   await expect(editor.locator("ul li")).toHaveText("Neap tides are the weakest");
+  await expect(editor).toBeFocused();
   await window.keyboard.press("ControlOrMeta+Z");
   await expect(editor.locator("ul")).toHaveCount(0);
 
