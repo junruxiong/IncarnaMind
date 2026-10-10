@@ -20,7 +20,7 @@ New issues are triaged with five labels:
 | `ready-for-human` | Needs a person to implement it |
 | `wontfix` | Won't be actioned |
 
-A person is welcome to take any issue that is fully specified, whichever of the two `ready-for-` labels it carries. `docs/agents/` holds the conventions for working on issues, for people and coding agents alike: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)) and how to use the domain docs ([`domain.md`](docs/agents/domain.md)).
+A person is welcome to take any issue that is fully specified, whichever of the two `ready-for-` labels it carries. `docs/agents/` holds the conventions for working on issues, for people and coding agents alike: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)) how to use the domain docs ([`domain.md`](docs/agents/domain.md)), and the rules every UI change follows ([`interaction.md`](docs/agents/interaction.md)).
 
 ## Setting up
 
@@ -28,6 +28,7 @@ You need Node.js 24 or newer. Clone the repository, then run `npm install` and `
 
 ## When you change code
 
+- Changing UI? Follow the [interaction rules](docs/agents/interaction.md): easy to use and easy to pick up is the bar. The pull request template has a checklist for it.
 - Use the words defined in [`CONTEXT.md`](CONTEXT.md) (a Passage, not a chunk; a Connector, not a plugin), and say so when a change goes against an ADR in [`docs/adr/`](docs/adr/).
 - Test through the core's public interface, as the UI uses it, and assert what a User would see. The core tests need no API keys and no network.
 - Keep `src/core` free of Electron imports; Biome enforces it.

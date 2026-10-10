@@ -21,6 +21,15 @@ const HUGGING_FACE_SOURCE = {
 
 const GITHUB_RELEASES = { id: "https://github.com", name: "GitHub Releases" };
 
+/** Usage data in a copy built without an analytics project (see usageData.test.ts). */
+const NO_USAGE_DATA = {
+  available: false,
+  enabled: false,
+  testerBuild: false,
+  asked: false,
+  localMode: false,
+};
+
 describe("Crash reports", () => {
   test("are off by default, and a copy without a reporter doesn't offer them", async () => {
     const core = startCore(await createTempDataFolder());
@@ -28,6 +37,7 @@ describe("Crash reports", () => {
     expect(await core.getPrivacySettings()).toEqual({
       crashReports: { available: false, enabled: false },
       automaticUpdateChecks: true,
+      usageData: NO_USAGE_DATA,
     });
     await expect(core.updatePrivacySettings({ crashReports: true })).rejects.toThrow(
       InvalidInputError,
@@ -131,6 +141,7 @@ describe("Privacy settings", () => {
     expect(await core.getPrivacySettings()).toEqual({
       crashReports: { available: true, enabled: false },
       automaticUpdateChecks: true,
+      usageData: NO_USAGE_DATA,
     });
   });
 });

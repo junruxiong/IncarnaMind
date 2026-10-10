@@ -502,7 +502,7 @@ export const en = {
   "embeddingProviders.confirm.turnOff": "Turn off",
   "embeddingProviders.localOnly.label": "Keep everything on this computer",
   "embeddingProviders.localOnly.body":
-    "Embeddings, when on, use the built-in model or Ollama, and search results aren't sent for reranking. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+    "Embeddings, when on, use the built-in model or Ollama, search results aren't sent for reranking, and no usage data is sent. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
   "embeddingProviders.localOnly.cloudChat":
     "Your chat model still sends Questions to {service}: choose a local model under Chat model to keep them here too.",
   "embeddingProviders.rebuild.title": "Embedding Documents for search: {done} of {total}",
@@ -888,6 +888,37 @@ export const en = {
   "privacy.crashReports.toggle": "Send crash reports",
   "privacy.crashReports.body":
     "Off unless you turn it on. When IncarnaMind crashes or hits an error, it sends a report to its developers through Sentry: the error, where in IncarnaMind's code it happened, the app version and your operating system. File paths, your Documents' text, your Minds, Questions and Answers are removed first, and no IP address is stored with it.",
+  "privacy.intro.usageData":
+    "IncarnaMind collects usage data only if you agree. This page lists everything it sends from this computer, and lets you change it.",
+  "privacy.traffic.usage-data": "Usage data",
+  "privacy.traffic.usage-data.description":
+    "Anonymous events, only while this is on: which features are used and where people get stuck, under a random ID for this install. Never your Documents or their names, your Questions, Answers or anything you type.",
+  "privacy.traffic.usage-data.toggle": "Send anonymous usage data",
+  "privacy.usageData.tester":
+    "On unless you turn it off in this test version, as agreed when you joined the alpha.",
+  "privacy.usageData.localMode":
+    "Off while “Keep everything on this computer” is on, in Settings → Search.",
+  "privacy.usageData.details": "Every event and field",
+  "privacy.usageData.resetId": "Reset install ID",
+  "privacy.usageData.resetDone": "Reset: events from now on carry a new ID.",
+
+  "usageData.dialog.title": "Help improve IncarnaMind?",
+  "usageData.dialog.body":
+    "IncarnaMind can send anonymous usage data, so we can see which features are used and where people get stuck. Nothing is sent unless you agree.",
+  "usageData.dialog.tester.title": "This test version sends usage data",
+  "usageData.dialog.tester.body":
+    "As agreed when you joined the alpha, this version sends anonymous usage data, so we can see which features are used and where people get stuck. You can turn it off here.",
+  "usageData.dialog.example": "For example:",
+  "usageData.example.question": "A Question was asked with a cloud model from Anthropic",
+  "usageData.example.answer": "An Answer took 6 seconds and has 3 Citations, each quote found",
+  "usageData.example.documents": "2 Documents were added: a PDF and a Word file",
+  "usageData.dialog.never":
+    "Never your Documents or their names, Folder or Tag names, Questions, Answers, quotes, keys or file paths. Events go to PostHog under a random ID for this install, with no account, e-mail or IP address.",
+  "usageData.dialog.change": "You can change this any time in Settings → Privacy.",
+  "usageData.dialog.details": "See every event",
+  "usageData.dialog.decline": "Don't send",
+  "usageData.dialog.accept": "Send usage data",
+  "usageData.dialog.done": "Done",
 
   "question.label": "Question: ",
   "question.placeholder": "Ask a Question… (type @ to choose what it searches)",
