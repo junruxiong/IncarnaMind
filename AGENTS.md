@@ -61,6 +61,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - wait for states rather than times;
   - keep wall-clock limits out of unit tests.
 - Test through the core's public interface, as the UI uses it, and assert what a User would see. Tests need no API keys and no network.
+- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with a real model: a cloud model on your own key, a small Ollama model, or an Ollama cloud model if your computer is busy. The pull request says which model you used.
 
 ## UI
 
@@ -75,6 +76,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - the keyboard and ⌘K reach everything;
   - feedback within 100 ms;
   - layouts that hold at every width, in English and Chinese.
+  - teach features where they live, not in onboarding, which only gets the User to a first checked Answer.
 - A UI pull request ticks the template's interaction checklist, shows before and after screenshots, and sets the built screen beside the design board it implements, explaining every difference.
 
 ## Commits and pull requests
