@@ -6,7 +6,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { SearchMode } from "../../src/core";
+import { BUILT_IN_RERANKING_MODEL, type SearchMode } from "../../src/core";
 import {
   CITATION_OUTCOMES,
   CITATION_TARGETS,
@@ -23,17 +23,31 @@ import {
   type CandidateCounts,
   GATING_LABEL,
   GATING_MODE,
+  GATING_SEARCH,
   HYBRID,
+  HYBRID_RERANK_LABEL,
+  HYBRID_RERANK_MODE,
+  KEYWORD_RANK_DEPTH,
+  KEYWORD_RERANK_DEPTH,
+  type LanguageTallies,
   type ModeResult,
   type ModeSummary,
+  OTHER_SEARCHES,
   type QuestionResult,
   RANK_DEPTH,
   RERANK_PER_LIST,
+  type RerankedSearch,
   type RetrievalMode,
   type RetrievalRun,
+  rerankedLabel,
+  rerankedSearchOf,
+  rerankMode,
+  SEARCH_DESCRIPTIONS,
+  SEARCH_LABELS,
   SEARCH_MODES,
   type Tally,
 } from "./retrieval";
+import type { Aggregation } from "./subChunks";
 
 export interface EvalReport {
   result: "pass" | "fail";
@@ -50,7 +64,7 @@ export interface EvalReport {
   evaluationSet: {
     source: string;
     hitRule: string;
-    questions: { gating: { en: number; zh: number }; crossLingual: number };
+    questions: { gating: { en: number; zh: number }; crossLingual: number; paraphrase: number };
   };
   documents: { key: string; name: string; pageCount: number | null }[];
   retrieval: {
@@ -73,6 +87,7 @@ const GROUPS: readonly [CitationGroup, string][] = [
   ["en", "English"],
   ["zh", "Chinese"],
   ["crossLingual", "Cross-lingual"],
+  ["paraphrase", "Paraphrase"],
 ];
 
 const OUTCOME_LABELS: Record<CitationOutcome, string> = {
@@ -92,17 +107,23 @@ const modesIn = (run: RetrievalRun): RetrievalMode[] =>
       (SEARCH_MODES.indexOf(b as SearchMode) + 1 || 99),
   );
 
-/** "hybrid", or "hybrid + <reranking model>" for a reranked mode. */
+/** "hybrid", or "hybrid + <reranking model>" or "keyword + <reranking model>" for a reranked mode. */
 function modeLabel(run: RetrievalRun, mode: RetrievalMode): string {
   const reranker = run.rerankers?.find((each) => each.mode === mode);
-  if (reranker) return `${HYBRID} + ${reranker.name}`;
-  return mode === GATING_MODE ? GATING_LABEL : mode;
+  const search = rerankedSearchOf(mode);
+  if (reranker && search) return rerankedLabel(search, reranker.name);
+  if (mode === GATING_MODE) return GATING_LABEL;
+  return mode === HYBRID_RERANK_MODE ? HYBRID_RERANK_LABEL : mode;
 }
+
+/** A group's hits in both languages, then each: "9/15 (5 + 4)"; "–" for a group with no Questions. */
+const bothLanguages = ({ all, en, zh }: LanguageTallies) =>
+  all.total === 0 ? "–" : `${fraction(all)} (${en.hits} + ${zh.hits})`;
 
 function retrievalTable(runs: readonly RetrievalRun[]): string[] {
   const lines = [
-    "| Embedding model | Mode | English | Chinese | Gating set | Cross-lingual | Cross-lingual, with a translated second query |",
-    "|---|---|---|---|---|---|---|",
+    "| Embedding model | Mode | English | Chinese | Gating set | Cross-lingual | Cross-lingual, with a translated second query | Paraphrase (English + Chinese) |",
+    "|---|---|---|---|---|---|---|---|",
   ];
   for (const run of runs) {
     for (const mode of modesIn(run)) {
@@ -113,29 +134,124 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
       const translated = summary.crossLingualTranslated;
       const cell = (tally: Tally) => (gating ? `**${fraction(tally)}**` : fraction(tally));
       lines.push(
-        `| ${run.embedding} | ${label} | ${cell(summary.en)} | ${cell(summary.zh)} | ${cell(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} |`,
+        `| ${run.embedding} | ${label} | ${cell(summary.en)} | ${cell(summary.zh)} | ${cell(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} | ${bothLanguages(summary.paraphrase)} |`,
       );
     }
   }
   return lines;
 }
 
-/** How many Passages a reranker saw per search. */
+/**
+ * How many Passages a reranked search handed a reranker per search, and how
+ * often they held the expected Passage at all.
+ */
 export const candidatesLine = (counts: CandidateCounts) =>
-  `Candidates per reranked search (keyword search's top ${counts.perList} and vector search's top ${counts.perList}, each Passage once): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches.`;
+  `Candidates per ${SEARCH_LABELS[counts.search]} + rerank search (${SEARCH_DESCRIPTIONS[counts.search]}): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches; the expected Passage among them for ${fraction(counts.reached.gating)} gating and ${fraction(counts.reached.paraphrase)} paraphrase Questions.`;
 
-/** What each reranking candidate costs: its download, and the time it adds to a search. */
+/** A run's candidate counts, the gate's (keyword + rerank) first. */
+const candidateCountsOf = (run: RetrievalRun): CandidateCounts[] => run.candidates ?? [];
+
+const ms = (value: number) => `${value.toFixed(0)} ms`;
+
+/**
+ * What each reranking candidate costs in each reranked mode: its download,
+ * the time to find a search's candidates, and the time it adds to rerank them.
+ */
 function rerankerTable(run: RetrievalRun): string[] {
   if (!run.rerankers?.length) return [];
-  const ms = (value: number) => `${value.toFixed(0)} ms`;
   return [
-    "| Reranking model | Licence | Download | Per search: mean | median | 95th percentile | slowest | Loading |",
-    "|---|---|---|---|---|---|---|---|",
+    "| Reranked mode | Licence | Download | Finding the candidates: mean | Reranking: mean | median | 95th percentile | slowest | Loading |",
+    "|---|---|---|---|---|---|---|---|---|",
     ...run.rerankers.map(
       (each) =>
-        `| ${each.name} | ${each.licence} | ${(each.downloadBytes / 1e6).toFixed(0)} MB | ${ms(each.latency.mean)} | ${ms(each.latency.median)} | ${ms(each.latency.p95)} | ${ms(each.latency.max)} | ${each.loadSeconds.toFixed(1)} s |`,
+        `| ${modeLabel(run, each.mode as RetrievalMode)} | ${each.licence} | ${(each.downloadBytes / 1e6).toFixed(0)} MB | ${each.candidates ? ms(each.candidates.mean) : "–"} | ${ms(each.latency.mean)} | ${ms(each.latency.median)} | ${ms(each.latency.p95)} | ${ms(each.latency.max)} | ${each.loadSeconds.toFixed(1)} s |`,
     ),
   ];
+}
+
+const AGGREGATION_LABELS: Record<Aggregation, string> = {
+  best: "their best sub-chunk's score (the mode's)",
+  sum: "the sum of their sub-chunks' scores",
+};
+
+/** What `QuestionResult.queries` holds for each search, as the report names it. */
+const QUERY_LABELS: Partial<Record<RerankedSearch, string>> = {
+  feedback: "feedback terms",
+  rewrites: "rewrites",
+  "sub-questions": "sub-questions",
+  "document-first": "Documents searched inside",
+};
+
+/**
+ * The other ways to find candidates, with embeddings off, each reranked by
+ * the built-in model: their hits next to the gate's, how often their
+ * candidates held the expected Passage, and what a search costs. Never gating.
+ */
+function otherSearchesSection(run: RetrievalRun): string[] {
+  const report = run.otherSearches;
+  if (!report) return [];
+  const model = BUILT_IN_RERANKING_MODEL;
+  const rows = [GATING_SEARCH, ...OTHER_SEARCHES].map((search) => {
+    const mode = rerankMode(model, search);
+    const summary = run.summary[mode];
+    const label =
+      search === GATING_SEARCH ? `${GATING_LABEL} (gating)` : rerankedLabel(search, model.name);
+    if (!summary) {
+      return `| ${label} | skipped: ${report.skipped[search] ?? "it didn't run."} ||||||||||`;
+    }
+    const counts = run.candidates?.find((each) => each.search === search);
+    const info = run.rerankers?.find((each) => each.mode === mode);
+    const call = report.queryModel.find((each) => each.search === search);
+    const finding = info?.candidates
+      ? `${ms(info.candidates.mean)}${call ? ` + ${ms(call.meanMs)} model call` : ""}`
+      : "–";
+    const inAll = info?.candidates
+      ? ms(info.candidates.mean + info.latency.mean + (call?.meanMs ?? 0))
+      : "–";
+    return `| ${label} | ${fraction(summary.en)} | ${fraction(summary.zh)} | ${fraction(summary.core)} | ${bothLanguages(summary.paraphrase)} | ${counts ? fraction(counts.reached.gating) : "–"} | ${counts ? fraction(counts.reached.paraphrase) : "–"} | ${counts ? counts.mean.toFixed(1) : "–"} | ${finding} | ${info ? ms(info.latency.mean) : "–"} | ${inAll} |`;
+  });
+  const lines = [
+    "### Other ways to find the candidates (reported, not gating)",
+    "",
+    `With embeddings off, each search's candidates reranked by ${model.name}, the Questions' own searches only (no translated second query). The gate's row comes first, for comparison. "Reached": the Questions whose candidates held a Passage that meets the hit rule, before reranking: what any reranker could have found. Per search, on average: the time to find the candidates (a chat model's call apart, as measured when it was made), to rerank them, and the two together.`,
+    "",
+    ...OTHER_SEARCHES.map(
+      (search) => `- **${SEARCH_LABELS[search]}**: ${SEARCH_DESCRIPTIONS[search]}.`,
+    ),
+    "",
+    "| Reranked mode | English | Chinese | Gating set | Paraphrase (English + Chinese) | Reached: gating | Reached: paraphrase | Candidates | Finding them | Reranking | Per search in all |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
+    ...rows,
+    "",
+  ];
+  const { smallToBig } = report;
+  if (smallToBig) {
+    lines.push(
+      `Small-to-big's index: ${smallToBig.subChunks} sub-chunks of ${smallToBig.meanTokens.toFixed(0)} tokens on average (at most ${smallToBig.maxTokens}), ${(smallToBig.indexBytes / 1e6).toFixed(1)} MB for the FTS5 table and the sub-chunk to Passage table, against ${(smallToBig.passageIndexBytes / 1e6).toFixed(1)} MB for the Passages' own keyword index built the same way; built in ${smallToBig.buildSeconds.toFixed(1)} s${smallToBig.unplaced ? `. ${smallToBig.unplaced} sub-chunks weren't found in a Passage and are left out` : ""}.`,
+      "",
+      "| Passages scored by | Reached: gating | Reached: paraphrase |",
+      "|---|---|---|",
+      ...smallToBig.aggregations.map(
+        ({ aggregation, reached }) =>
+          `| ${AGGREGATION_LABELS[aggregation]} | ${fraction(reached.gating)} | ${fraction(reached.paraphrase)} |`,
+      ),
+      "",
+    );
+  }
+  if (report.queryModel.length) {
+    lines.push(
+      "Chat model calls, one per Question for each mode, kept in `eval/results/query-rewrites.json` so later runs search the same queries:",
+      "",
+      "| Reranked mode | Model | Questions | Asked in this run | From the cache | Call: mean | 95th percentile | Input tokens per call | Output tokens per call | Queries per Question |",
+      "|---|---|---|---|---|---|---|---|---|---|",
+      ...report.queryModel.map(
+        (cost) =>
+          `| ${rerankedLabel(cost.search, model.name)} | \`${cost.model}\` | ${cost.questions} | ${cost.calls} | ${cost.cached} | ${ms(cost.meanMs)} | ${ms(cost.p95Ms)} | ${cost.meanInputTokens?.toFixed(0) ?? "–"} | ${cost.meanOutputTokens?.toFixed(0) ?? "–"} | ${cost.meanQueries.toFixed(1)} |`,
+      ),
+      "",
+    );
+  }
+  return lines;
 }
 
 function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
@@ -145,15 +261,17 @@ function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
       ? `${modeLabel(run, mode)} (${run.gating ? "built-in" : "cloud"})`
       : modeLabel(run, mode),
   );
+  const first = runs[0] as RetrievalRun;
+  // Keyword search doesn't use embeddings: its deep rank is the same in every run.
+  const deep = first.questions.some((question) => question.keywordRank !== undefined);
   const lines = [
-    `| Question | ${header.join(" | ")} | Text |`,
-    `|---|${columns.map(() => "---|").join("")}---|`,
+    `| Question | ${header.join(" | ")} |${deep ? ` keyword, to ${KEYWORD_RANK_DEPTH} |` : ""} Text |`,
+    `|---|${columns.map(() => "---|").join("")}${deep ? "---|" : ""}---|`,
   ];
   const rank = (result: ModeResult | undefined) => {
     if (!result?.rank) return "–";
     return result.hit ? String(result.rank) : `(${result.rank})`;
   };
-  const first = runs[0] as RetrievalRun;
   first.questions.forEach((question, index) => {
     const cells = columns.map(({ run, mode }) => {
       const result = run.questions[index];
@@ -162,7 +280,12 @@ function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
         ? `${rank(result?.modes[mode])} / ${rank(translated)}`
         : rank(result?.modes[mode]);
     });
-    const id = question.crossLingual ? `${question.id} (cross-lingual)` : question.id;
+    if (deep) cells.push(question.keywordRank ? String(question.keywordRank) : "–");
+    const id = question.crossLingual
+      ? `${question.id} (cross-lingual)`
+      : question.paraphrase
+        ? `${question.id} (paraphrase)`
+        : question.id;
     const text = question.translatedQuery
       ? `${question.question} / ${question.translatedQuery}`
       : question.question;
@@ -190,6 +313,19 @@ function misses(run: RetrievalRun, unit = "p."): string[] {
     if (question.modes[GATING_MODE]?.hit) continue;
     lines.push(`- **${question.id}** ${question.question}`);
     for (const line of describe(question)) lines.push(`  ${line}`);
+    if (question.keywordRank !== undefined) {
+      lines.push(
+        `  Plain keyword search ranks the expected Passage ${question.keywordRank === null ? `below ${KEYWORD_RANK_DEPTH}` : `at ${question.keywordRank}`}.`,
+      );
+    }
+    for (const [search, label] of Object.entries(QUERY_LABELS) as [RerankedSearch, string][]) {
+      const queries = question.queries?.[search];
+      if (queries) {
+        lines.push(
+          `  ${label[0]?.toUpperCase()}${label.slice(1)}: ${queries.length ? queries.map((query) => `"${query}"`).join(", ") : "none"}.`,
+        );
+      }
+    }
   }
   return lines;
 }
@@ -327,14 +463,15 @@ function formatsSection(formats: FormatsReport): string[] {
     "",
     `\`${formats.source}\`: ${retrieval.questions.length} Questions over ${formats.documents.length} Documents in Word, PowerPoint, Excel, CSV, Markdown, plain text and PDF, in English and Chinese, about the hard places in each (#70). They are searched in a library of their own, with the gating set's hit rule; the expected pages are the Units a Citation would cite. Known gaps, text the readers don't index today (Word comments, scanned pages), are counted apart. No bar is set yet: \`eval/README.md\` proposes one per format.`,
     "",
-    `| Format | Documents | Questions (English / Chinese), known gaps apart | ${GATING_LABEL}: English | Chinese | All | ${HYBRID}: All | Known gaps found |`,
-    "|---|---|---|---|---|---|---|---|",
+    `| Format | Documents | Questions (English / Chinese), known gaps apart | ${GATING_LABEL}: English | Chinese | All | ${HYBRID}: All | ${HYBRID_RERANK_LABEL}: All | Known gaps found |`,
+    "|---|---|---|---|---|---|---|---|---|",
     ...formats.formats.map((format) => {
       const reranked = format.retrieval[GATING_MODE];
       const hybrid = format.retrieval[HYBRID];
+      const hybridReranked = format.retrieval[HYBRID_RERANK_MODE];
       if (!reranked || !hybrid)
-        return `| ${format.label} | ${format.documents} | – | – | – | – | – | – |`;
-      return `| ${format.label} | ${format.documents} | ${reranked.en.total} / ${reranked.zh.total} | ${fraction(reranked.en)} | ${fraction(reranked.zh)} | **${fraction(reranked.all)}** | ${fraction(hybrid.all)} | ${fraction(format.knownGaps)} |`;
+        return `| ${format.label} | ${format.documents} | – | – | – | – | – | – | – |`;
+      return `| ${format.label} | ${format.documents} | ${reranked.en.total} / ${reranked.zh.total} | ${fraction(reranked.en)} | ${fraction(reranked.zh)} | **${fraction(reranked.all)}** | ${fraction(hybrid.all)} | ${hybridReranked ? fraction(hybridReranked.all) : "–"} | ${fraction(format.knownGaps)} |`;
     }),
     "",
     ...(top
@@ -411,15 +548,22 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     `- Run: ${run.startedAt}, ${run.seconds.toFixed(0)} s, commit ${run.commit}`,
     `- Machine: ${run.platform}, ${run.cpu}, Node ${run.node}`,
-    `- Evaluation set: \`${report.evaluationSet.source}\`, ${report.evaluationSet.questions.gating.en} English and ${report.evaluationSet.questions.gating.zh} Chinese gating Questions, ${report.evaluationSet.questions.crossLingual} cross-lingual`,
+    `- Evaluation set: \`${report.evaluationSet.source}\`, ${report.evaluationSet.questions.gating.en} English and ${report.evaluationSet.questions.gating.zh} Chinese gating Questions, ${report.evaluationSet.questions.crossLingual} cross-lingual, ${report.evaluationSet.questions.paraphrase} paraphrase`,
     `- Documents: ${report.documents.length} (${report.documents.map((document) => document.name).join(", ")})`,
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, ${GATING_LABEL}: hybrid search with the built-in embedding model, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, the other reranking candidates, cross-lingual Questions and cloud embedding models are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, with embeddings off, ${GATING_LABEL}: keyword search, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, hybrid + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models are reported only.`,
     "",
-    `- **Reranked modes** ("${HYBRID} + model"): what the search Tool hands a reranker, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a reranking model.`,
+    `- **Keyword + rerank** ("keyword top ${KEYWORD_RERANK_DEPTH} + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, reordered by a reranking model, as the search Tool hands its reranker by default.`,
+    `- **Hybrid + rerank** ("${HYBRID} + model"): what the search Tool hands a reranker with embeddings on, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by the same reranking models.`,
     "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
+    "- **Paraphrase:** Questions that ask for a fact on one page in words that avoid its passage's own, as a person asks without the text in front of them; hits in both languages, then in English + Chinese. They are out of the gating set's counts and bar.",
+    ...(builtIn.otherSearches
+      ? [
+          '- **Other ways to find the candidates** ("keyword top 20 + model", the gate before, and the like): with embeddings off, other candidates for the built-in reranking model, to compare with the gate; see below.',
+        ]
+      : []),
     "",
     ...retrievalTable(retrieval.runs),
     "",
@@ -432,16 +576,17 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
       ? [
           "### Reranking models",
           "",
-          ...(builtIn.rerankCandidates ? [candidatesLine(builtIn.rerankCandidates), ""] : []),
-          "Time to rerank one search's candidates on this machine, one Passage at a time on a worker thread, after the first search (which loads the model).",
+          ...candidateCountsOf(builtIn).flatMap((counts) => [candidatesLine(counts), ""]),
+          "Time on this machine to find one search's candidates, and to rerank them (one Passage at a time on a worker thread, after the first search, which loads the model; each mode opens it afresh).",
           "",
           ...rerankerTable(builtIn),
           "",
         ]
       : []),
+    ...otherSearchesSection(builtIn),
     "### Per Question",
     "",
-    `The rank of the first Passage that meets the hit rule. Only the top ${retrieval.topK} count as hits: a rank in brackets is a near miss, within the top ${RANK_DEPTH}, and "–" means none in the top ${RANK_DEPTH}. For a cross-lingual Question with a translated query, "a / b" is the rank for the Question, then for its translation.`,
+    `The rank of the first Passage that meets the hit rule. Only the top ${retrieval.topK} count as hits: a rank in brackets is a near miss, within the top ${RANK_DEPTH}, and "–" means none in the top ${RANK_DEPTH}. For a cross-lingual Question with a translated query, "a / b" is the rank for the Question, then for its translation. "keyword, to ${KEYWORD_RANK_DEPTH}" is plain keyword search's rank, looked for in its top ${KEYWORD_RANK_DEPTH}: how many candidates a reranker would need to see it.`,
     "",
     ...perQuestionTable(retrieval.runs),
     "",
@@ -458,6 +603,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     lines.push(
       `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.subset ? `Only ${citations.subset.length} of the Questions were asked (INCARNAMIND_EVAL_QUESTIONS: ${citations.subset.join(", ")}), once each: a short check, reported, never gating.` : citations.gating ? "It is the gating model." : "A local model: reported, not gating."}${citations.overrides.length > 0 ? ` Set by the run: ${citations.overrides.join(", ")}.` : ""}`,
       `- Each Question asked in a Mind of its own; ${citations.rounds} round${citations.rounds === 1 ? "" : "s"} (more rounds ask a language's gating Questions again until it has ${citations.minCitations} Citations).`,
+      "- The targets are for the gating Questions, English and Chinese; the cross-lingual and paraphrase Answers are columns of their own, reported only.",
       `- False "not found": the check said "not found", but the quote is on the cited pages once both are compared by letters and digits only, ignoring case, accents and punctuation, and reading an f-ligature's letters as one "f" (a PDF's text may read "fnance" where the page shows "finance"). The share is of all Citations.`,
       "- Coverage counts every sentence of an Answer (headings and code left out) as drawn from Documents, so it is a lower bound: sentences that only say what the Documents don't cover count as uncited.",
       `- Reviewer sheet: \`${sheet}\`. Mark each found quote "y" if it supports its sentence, "n" if not; the target is ${percent(CITATION_TARGETS.supports)} "y".`,
@@ -515,7 +661,11 @@ export function reviewerSheet(run: CitationRun): string {
       if (citation.outcome !== "found") continue;
       rows.push([
         answer.questionId,
-        answer.crossLingual ? `${answer.language} (cross-lingual)` : answer.language,
+        answer.crossLingual
+          ? `${answer.language} (cross-lingual)`
+          : answer.paraphrase
+            ? `${answer.language} (paraphrase)`
+            : answer.language,
         answer.round,
         answer.question,
         citation.sentence,
@@ -570,15 +720,31 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
           ? `${modeLabel(run, mode)} (gating)`
           : modeLabel(run, mode);
       const translated = summary.crossLingualTranslated;
+      const paraphrase = summary.paraphrase.all;
       lines.push(
-        `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}`,
+        `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}${paraphrase.total > 0 ? `; paraphrase ${fraction(paraphrase)}` : ""}`,
       );
     }
-    if (run.rerankCandidates) lines.push(`    ${candidatesLine(run.rerankCandidates)}`);
+    for (const counts of candidateCountsOf(run)) lines.push(`    ${candidatesLine(counts)}`);
     for (const each of run.rerankers ?? []) {
       lines.push(
-        `    ${each.name}: ${(each.downloadBytes / 1e6).toFixed(0)} MB, ${each.latency.mean.toFixed(0)} ms per search on average (95th percentile ${each.latency.p95.toFixed(0)} ms)`,
+        `    ${modeLabel(run, each.mode as RetrievalMode)}: ${(each.downloadBytes / 1e6).toFixed(0)} MB, ${each.candidates ? `${each.candidates.mean.toFixed(0)} ms to find the candidates and ` : ""}${each.latency.mean.toFixed(0)} ms to rerank them per search on average (95th percentile ${each.latency.p95.toFixed(0)} ms)`,
       );
+    }
+    const others = run.otherSearches;
+    if (others?.smallToBig) {
+      const index = others.smallToBig;
+      lines.push(
+        `    Small-to-big's index: ${index.subChunks} sub-chunks, ${(index.indexBytes / 1e6).toFixed(1)} MB (the Passages' own: ${(index.passageIndexBytes / 1e6).toFixed(1)} MB), built in ${index.buildSeconds.toFixed(1)} s; expected Passage among the 20 candidates by ${index.aggregations.map(({ aggregation, reached }) => `${aggregation} sub-chunk score ${fraction(reached.gating)} gating, ${fraction(reached.paraphrase)} paraphrase`).join("; by ")}`,
+      );
+    }
+    for (const cost of others?.queryModel ?? []) {
+      lines.push(
+        `    ${SEARCH_LABELS[cost.search]}: ${cost.model}, ${cost.calls} calls in this run and ${cost.cached} from the cache, ${cost.meanMs.toFixed(0)} ms and ${cost.meanInputTokens?.toFixed(0) ?? "?"} + ${cost.meanOutputTokens?.toFixed(0) ?? "?"} tokens per call on average`,
+      );
+    }
+    for (const [search, reason] of Object.entries(others?.skipped ?? {})) {
+      lines.push(`    ${SEARCH_LABELS[search as RerankedSearch]}: skipped, ${reason}`);
     }
   }
   const { citations } = report;
@@ -615,9 +781,10 @@ function formatsSummary(formats: FormatsReport): string[] {
   ];
   for (const format of formats.formats) {
     const reranked = format.retrieval[GATING_MODE];
+    const hybridReranked = format.retrieval[HYBRID_RERANK_MODE];
     const citations = format.citations;
     lines.push(
-      `  ${format.label.padEnd(24)} English ${fraction(reranked?.en ?? { hits: 0, total: 0 }).padEnd(6)} Chinese ${fraction(reranked?.zh ?? { hits: 0, total: 0 }).padEnd(6)} known gaps ${fraction(format.knownGaps)}${citations ? `; ${citations.citations} Citations, found ${percent(citations.foundShare)}, false "not found" ${percent(citations.falseNotFoundShare)}, coverage ${percent(citations.coverage)}` : ""}`,
+      `  ${format.label.padEnd(24)} English ${fraction(reranked?.en ?? { hits: 0, total: 0 }).padEnd(6)} Chinese ${fraction(reranked?.zh ?? { hits: 0, total: 0 }).padEnd(6)} known gaps ${fraction(format.knownGaps)}${hybridReranked ? `; ${HYBRID_RERANK_LABEL} ${fraction(hybridReranked.all)}` : ""}${citations ? `; ${citations.citations} Citations, found ${percent(citations.foundShare)}, false "not found" ${percent(citations.falseNotFoundShare)}, coverage ${percent(citations.coverage)}` : ""}`,
     );
   }
   const top = formats.retrieval.summary[GATING_MODE];

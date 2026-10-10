@@ -16,6 +16,9 @@
  * keeps its old vectors until its turn comes: then they are dropped and the
  * new model's written. Switching back before that costs nothing for the
  * Documents not yet reached. Vectors from two models are never left in one Document.
+ *
+ * While embeddings are off (the default), no Document is queued here: each is
+ * ready once its keyword index is (see ./index).
  */
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import type { Database } from "../storage";
@@ -165,6 +168,8 @@ export function createEmbeddingQueue(options: EmbeddingQueueOptions): EmbeddingQ
   }
 
   async function embedPassages(id: string, document: DocumentState): Promise<Outcome> {
+    // Embeddings are off: nothing is loaded, and turning them off made it ready.
+    if (!model.enabled()) return "skipped";
     const started = generation;
     const stopped = () => closed || generation !== started;
     if (!(await model.load())) return stopped() ? "skipped" : "model-unavailable";

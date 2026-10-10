@@ -493,14 +493,17 @@ export interface SettingsPatch {
 export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv";
 
 /**
- * Where a Document is in processing: "queued", then "extracting" its text, then
+ * Where a Document is in processing: "queued", then "extracting" its text,
+ * then "ready": its Passages are in the keyword index, and search finds them.
+ * Embeddings are off by default; while the User has them on, a Document is
  * "embedding" its Passages with the embedding model (the built-in one unless
- * the User chose another), then "ready". Documents are embedded one at a
- * time: one waiting its turn is "queued" again. Before the model has been
- * downloaded, or while the chosen provider can't be used, a Document waits
- * after extracting as "waiting-for-model", and carries on by itself once it
- * can; keyword search already finds its Passages. Switching the embedding
- * model takes every Document back through "embedding" (see `EmbeddingRebuild`).
+ * the User chose another) between "extracting" and "ready". Documents are
+ * embedded one at a time: one waiting its turn is "queued" again. Before the
+ * model has been downloaded, or while the chosen provider can't be used, a
+ * Document waits after extracting as "waiting-for-model", and carries on by
+ * itself once it can; keyword search already finds its Passages. Turning
+ * embeddings on, or switching the model, takes every Document without the
+ * model's vectors through "embedding" (see `EmbeddingRebuild`).
  * The other end states are "failed" (see `failure`) and "no-text": the file
  * has no text to extract, e.g. a scan without a text layer. When a new
  * version of a file fails (a sync client wrote it half-way, it is corrupt),
@@ -852,8 +855,11 @@ export interface AddDocumentsResult {
  * - "vector": the current embedding model's vectors (see `EmbeddingSettings`),
  *   by cosine similarity. Always ranks every Passage embedded with that model,
  *   however unrelated; Passages embedded with another model are never compared.
+ *   Refused while embeddings are off.
  * - "hybrid": both, each list's top 50 fused by reciprocal rank fusion
- *   (k = 60). Keyword only until the embedding model is ready.
+ *   (k = 60); a Passage with no vector yet counts its keyword rank for both
+ *   lists. Keyword only while embeddings are off (the default), and until the
+ *   embedding model is ready.
  */
 export type SearchMode = "hybrid" | "keyword" | "vector";
 
@@ -926,12 +932,16 @@ export interface EmbeddingModelStatus {
 // Embedding providers (ADR-0005)
 
 /**
- * Where Passages and search queries are embedded. "built-in" is the model
- * above, on this computer: the default. The others trade privacy for quality:
- * a cloud provider receives the text of every Document, and every search
- * query. "ollama" is Ollama's embeddings, normally on this computer too.
+ * Where Passages and search queries are embedded. "off", the default: nothing
+ * is embedded, and search finds Passages by their words, reranked (ADR-0009,
+ * 2026-10-10). "built-in" is the model above, on this computer. The others
+ * trade privacy for quality: a cloud provider receives the text of every
+ * Document, and every search query. "ollama" is Ollama's embeddings, normally
+ * on this computer too. An install from before embeddings could be off keeps
+ * them on only if the User had chosen a provider other than the built-in model.
  */
 export const embeddingProviderKinds = [
+  "off",
   "built-in",
   "openai",
   "google",
@@ -947,7 +957,7 @@ export type EmbeddingProviderKind = (typeof embeddingProviderKinds)[number];
  * ADR-0009's comparison); it must be pulled first.
  */
 export const SUGGESTED_EMBEDDING_MODELS: Readonly<
-  Record<Exclude<EmbeddingProviderKind, "built-in">, string>
+  Record<Exclude<EmbeddingProviderKind, "off" | "built-in">, string>
 > = {
   openai: "text-embedding-3-small",
   google: "gemini-embedding-001",
@@ -955,12 +965,12 @@ export const SUGGESTED_EMBEDDING_MODELS: Readonly<
   ollama: "bge-m3",
 };
 
-/** The embedding model search uses on this device. */
+/** The embedding model search uses on this device, or "off". */
 export interface EmbeddingProvider {
   kind: EmbeddingProviderKind;
   /** The server's URL for "openai-compatible" and "ollama"; null for the others. */
   baseUrl: string | null;
-  /** The model, e.g. "text-embedding-3-small"; for "built-in", the built-in model's name. */
+  /** The model, e.g. "text-embedding-3-small"; for "built-in", the built-in model's name; empty for "off". */
   modelId: string;
   /** Whether an API key is stored for it. Keys live in the keychain, never in the database. */
   hasApiKey: boolean;
@@ -976,7 +986,7 @@ export interface SaveEmbeddingProviderInput {
   baseUrl?: string;
   /** A new API key. Leave it out to keep the one stored for the same provider and server. */
   apiKey?: string;
-  /** The embedding model. Required, except for "built-in", which takes none. */
+  /** The embedding model. Required, except for "off" and "built-in", which take none. */
   modelId?: string;
 }
 
@@ -988,14 +998,15 @@ export type EmbeddingConnectionTestResult =
   { ok: true; dimensions: number } | { ok: false; error: ProviderError };
 
 /**
- * Documents being embedded again after the embedding model changed. Each one
- * goes through the usual statuses ("embedding", then "ready"); until it is
- * done, keyword search still finds its Passages, but vector search doesn't:
- * vectors from different models are never compared.
+ * Documents being embedded after embeddings were turned on, or again after
+ * the embedding model changed. Each one goes through the usual statuses
+ * ("embedding", then "ready"); until it is done, keyword search still finds
+ * its Passages, but vector search doesn't: vectors from different models are
+ * never compared. Turning embeddings off ends it: nothing is embedded.
  */
 export interface EmbeddingRebuild {
   /**
-   * "provider-changed": the User chose another embedding model.
+   * "provider-changed": the User turned embeddings on, or chose another embedding model.
    * "local-mode": local mode switched a cloud provider back to the built-in model.
    */
   reason: "provider-changed" | "local-mode";
@@ -2372,9 +2383,10 @@ export interface CoreApi {
   recheckCitation(input: RecheckCitationInput): Promise<CitationRecheck>;
   /**
    * Searches the Passages of live Documents, best match first: hybrid
-   * (keyword and vector) search by default, over every Document or only the
-   * given ones. A "vector" search throws EmbeddingModelNotReadyError while the
-   * embedding model isn't ready.
+   * (keyword and vector) search by default, which is keyword search while
+   * embeddings are off, over every Document or only the given ones. A
+   * "vector" search throws EmbeddingModelNotReadyError while the embedding
+   * model isn't ready, and InvalidInputError while embeddings are off.
    */
   searchPassages(query: string, options?: SearchPassagesOptions): Promise<PassageSearchResult[]>;
   /** The built-in embedding model and its download. */
@@ -2383,18 +2395,22 @@ export interface CoreApi {
    * Starts downloading the built-in embedding model, or tries again after a
    * failure, resuming what was already downloaded. Returns at once;
    * "embeddingModel.status" events report progress. The core also starts the
-   * download by itself as soon as a Document needs the model.
+   * download by itself as soon as a Document needs the model: only while the
+   * built-in model is on, never while embeddings are off.
    */
   downloadEmbeddingModel(): Promise<EmbeddingModelStatus>;
 
-  /** The embedding model document search uses, local mode, and any rebuild under way. */
+  /** The embedding model document search uses ("off" by default), local mode, and any rebuild under way. */
   getEmbeddingSettings(): Promise<EmbeddingSettings>;
   /**
-   * Switches document search to another embedding model (its key goes to the
-   * keychain, never the database). A cloud provider's "embeddings" flow needs
-   * consent first: if the User declines, nothing changes. A different model
-   * means every Document is embedded again: each goes back to "embedding",
-   * and "embedding.changed" events report the rebuild. Saving the same model
+   * Turns embeddings on with an embedding model, switches to another one (its
+   * key goes to the keychain, never the database), or turns them off ("off":
+   * any key is deleted, vectors already made stay stored, unused, and every
+   * Document is ready once its keyword index is). A cloud provider's
+   * "embeddings" flow needs consent first: if the User declines, nothing
+   * changes. Turning them on, or a different model, means every Document
+   * without its vectors is embedded: each goes back to "embedding", and
+   * "embedding.changed" events report the rebuild. Saving the same model
    * again (e.g. with a new key) re-embeds nothing. Refused for a cloud
    * provider while local mode is on.
    */

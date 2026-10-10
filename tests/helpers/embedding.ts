@@ -120,6 +120,14 @@ export async function startModelServer(files: Record<string, number>): Promise<M
   };
 }
 
+/**
+ * Turns embeddings on with the built-in model, as the User does in Settings:
+ * they are off by default (ADR-0009, 2026-10-10), and stay on after a restart.
+ */
+export async function turnOnEmbeddings(core: Core): Promise<void> {
+  await core.saveEmbeddingProvider({ kind: "built-in" });
+}
+
 /** The deterministic fake embedder, with switches to make it fail and records of how it was used. */
 export interface ControlledEmbedder extends Embedder {
   /** Every text embedded, in order. */

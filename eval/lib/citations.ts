@@ -35,7 +35,7 @@ import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { SIMPLIFIED } from "../../src/shared/hanVariants";
 import { normaliseText } from "../../src/shared/text";
 import type { ChatSettings, EvalConfig } from "./config";
-import type { EvalLanguage, EvalQuestion } from "./evaluationSet";
+import { type EvalLanguage, type EvalQuestion, isGating } from "./evaluationSet";
 import type { Library } from "./library";
 import type { Log } from "./log";
 
@@ -99,6 +99,8 @@ export interface AnswerRecord {
   questionId: string;
   language: EvalLanguage;
   crossLingual: boolean;
+  /** Answers a paraphrase Question: a group of its own, never gating. */
+  paraphrase?: boolean;
   round: number;
   question: string;
   status: "done" | "stopped" | "failed" | "timed-out";
@@ -116,8 +118,8 @@ export interface AnswerRecord {
   seconds: number;
 }
 
-/** "en" and "zh" are the gating Questions in each language; "crossLingual" the rest. */
-export type CitationGroup = "en" | "zh" | "crossLingual";
+/** "en" and "zh" are the gating Questions in each language; "crossLingual" and "paraphrase" the rest. */
+export type CitationGroup = "en" | "zh" | "crossLingual" | "paraphrase";
 
 export interface GroupSummary {
   answers: number;
@@ -526,6 +528,7 @@ async function askOne(
     questionId: question.id,
     language: question.language,
     crossLingual: question.crossLingual,
+    ...(question.paraphrase && { paraphrase: true }),
     round,
     question: question.question,
     status: timedOut ? "timed-out" : (finished?.status ?? "failed"),
@@ -544,8 +547,10 @@ async function askOne(
   };
 }
 
-const groupOf = (answer: Pick<AnswerRecord, "crossLingual" | "language">): CitationGroup =>
-  answer.crossLingual ? "crossLingual" : answer.language;
+const groupOf = (
+  answer: Pick<AnswerRecord, "crossLingual" | "paraphrase" | "language">,
+): CitationGroup =>
+  answer.crossLingual ? "crossLingual" : answer.paraphrase ? "paraphrase" : answer.language;
 
 const share = (part: number, whole: number) => (whole > 0 ? part / whole : null);
 
@@ -707,7 +712,7 @@ export async function runCitations(
           ? asked
           : asked.filter(
               (question) =>
-                !question.crossLingual && citationsIn(question.language) < config.minCitations,
+                isGating(question) && citationsIn(question.language) < config.minCitations,
             );
       if (asking.length === 0) break;
       rounds = round;
@@ -733,6 +738,7 @@ export async function runCitations(
       en: summariseGroup(answers.filter((answer) => groupOf(answer) === "en")),
       zh: summariseGroup(answers.filter((answer) => groupOf(answer) === "zh")),
       crossLingual: summariseGroup(answers.filter((answer) => groupOf(answer) === "crossLingual")),
+      paraphrase: summariseGroup(answers.filter((answer) => groupOf(answer) === "paraphrase")),
     };
     return {
       model,

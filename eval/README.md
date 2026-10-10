@@ -5,10 +5,10 @@
 It drives the core's public interface in Node, the way the desktop app's UI does:
 
 1. It creates a temporary data folder. It never touches the app's real data folder.
-2. It adds the seven sample PDFs in `data/` and the five Chinese Wikipedia articles in `retrieval/fixtures/` with `addDocuments`, and waits until each is processed: text extracted, Passages built and embedded with the real built-in model, multilingual-e5-small.
+2. It turns embeddings on with the built-in model, as a User can in Settings (they are off by default, ADR-0009), adds the seven sample PDFs in `data/` and the five Chinese Wikipedia articles in `retrieval/fixtures/` with `addDocuments`, and waits until each is processed: text extracted, Passages built and embedded with the real built-in model, multilingual-e5-small.
 3. It searches for each Question with `searchPassages` in hybrid, keyword and vector mode, and scores the top 5. A cross-lingual Question with a translated query is searched with that too.
-4. It reranks what the search Tool hands a reranker (keyword search's top 10 and vector search's top 10, each Passage once) with the built-in reranking model, mmarco-mMiniLMv2-L12-H384, as the search Tool does by default, and scores the top 5 again: this is the gate. Other reranking candidates, when given, are scored the same way.
-5. When a chat model is given, it asks each Question with `askQuestion` and scores the Citations of each Answer. The core reranks those Answers' searches with the real built-in reranking model, as the app does.
+4. It reranks keyword search's top 60 with the built-in reranking model, mmarco-mMiniLMv2-L12-H384, as the search Tool does by default, with embeddings off, and scores the top 5 again: this is the gate ("keyword top 60 + rerank"; see [Keyword + rerank](#keyword--rerank)). Then it reranks what the search Tool hands a reranker with embeddings on (keyword search's top 10 and vector search's top 10, each Passage once) with the same model ("hybrid + rerank", reported only). Other reranking candidates, when given, are scored both ways too. Then the built-in model reranks the candidates of seven other searches, with embeddings off, reported only (see [Other ways to find the candidates](#other-ways-to-find-the-candidates)).
+5. When a chat model is given, it turns embeddings off again, as Users have them by default (the vectors stay, unused), asks each Question with `askQuestion` and scores the Citations of each Answer. The core reranks those Answers' searches with the real built-in reranking model, as the app does.
 6. It does steps 1 to 5 again for the every-format set (see [Every format](#every-format)), in a temporary data folder of its own: Word, PowerPoint, Excel, CSV, Markdown, plain-text and PDF Documents, asked about the hard places in each. That set is reported per format and never gates.
 7. It writes a report under `eval/results/` and prints a summary.
 
@@ -26,7 +26,7 @@ The first run downloads the two built-in models from Hugging Face, the embedding
 
 The models run on Node worker threads (`lib/embedderWorker.ts`, `lib/rerankerWorker.ts`). They use the same code as the app's utility processes: `createOnnxEmbedder` and `createOnnxCrossEncoder`, served over the channels in `src/core/embedding/channel.ts` and `src/core/reranking/channel.ts`.
 
-A run takes about two minutes on an Apple M2 Max, most of it spent embedding about 1,200 Passages, then reranking 60 searches. The every-format set adds 22 small Documents and 145 searches.
+A run takes about two minutes on an Apple M2 Max, most of it spent embedding about 1,200 Passages for the hybrid and vector modes, then reranking 75 searches twice (keyword search's top 60, about 1.6 s a search, then hybrid search's candidates, about 0.6 s). The other ways to find the candidates add about seven minutes more, reranking 65 searches each: about a minute for each mode of 20 candidates and two for keyword search's top 40, as a reranker's time grows with its candidates. The every-format set adds 22 small Documents and 145 searches, reranked twice too.
 
 ### Reranking candidates
 
@@ -43,12 +43,41 @@ INCARNAMIND_EVAL_RERANK=mmarco-minilm,bge-m3 npm run eval
 | `gte-multilingual` | Alibaba-NLP/gte-multilingual-reranker-base | 358 MB |
 | `bge-m3` | BAAI/bge-reranker-v2-m3 | 588 MB |
 
-- **Candidates:** the search Tool doesn't hand its reranker the fused list: it hands it keyword search's top 10 and vector search's top 10, each Passage once, so a hit only one of them found isn't pushed out by fusion first (#31: en-03 and en-14 were keyword-only hits, en-12 and zh-03 vector-only, and all four fell out of the fused top 5). The evaluation builds the same set from `searchPassages` in keyword and vector mode, with the Tool's own `topsOfEach`; a unit test checks that the Tool's reranker gets exactly that set. The report gives how many candidates there were per search: between 10 and 20.
+- **Candidates:** with embeddings off, the default, the search Tool hands its reranker keyword search's top 60 (see [Keyword + rerank](#keyword--rerank)). With them on, it doesn't hand it the fused list: it hands it keyword search's top 10 and vector search's top 10, each Passage once, so a hit only one of them found isn't pushed out by fusion first (#31: en-03 and en-14 were keyword-only hits, en-12 and zh-03 vector-only, and all four fell out of the fused top 5). The evaluation builds the same sets from `searchPassages` in keyword and vector mode, the hybrid one with the Tool's own `topsOfEach`; unit tests check that the Tool's reranker gets exactly those sets. The report gives how many candidates there were per search: up to 60 for keyword + rerank, between 10 and 20 for hybrid + rerank.
 - **How:** after the searches, each model in turn, the built-in one first, reranks every Question's candidates (and each translated query's), with the core's own reranking code (`createRerankingModel`: what the model reads, its scores) and the model on a worker thread (`lib/rerankerWorker.ts`), as the app's reranking utility process runs it.
 - **Downloads:** the first run downloads each candidate into the model cache, next to the embedding model, checked against its pinned SHA-256 hashes; later runs reuse them. All three come to about 1.1 GB.
-- **Time:** reranking 50 searches, plus 10 translated ones, at 20 candidates each, takes about half a minute with `mmarco-minilm`, a minute and a half with `gte-multilingual` and four minutes with `bge-m3` on an Apple M2 Max; fewer candidates take less.
-- **Reported:** a row per reranking model, "hybrid + model", next to the search modes, the built-in one's marked as gating; how many candidates the reranked searches had (mean, fewest, most); and each model's download and time per search (mean, median, 95th percentile and slowest, after the first search, which loads the model). Only the built-in model's row gates.
+- **Time:** reranking 50 searches, plus 10 translated ones (before the 15 paraphrase Questions), at 20 candidates each, takes about half a minute with `mmarco-minilm`, a minute and a half with `gte-multilingual` and four minutes with `bge-m3` on an Apple M2 Max; fewer candidates take less. Keyword + rerank, with up to 60 candidates, takes two to three times as long: 1.6 s a search with `mmarco-minilm` on 2026-10-10.
+- **Reported:** two rows per reranking model, "keyword top 60 + model" and "hybrid + model", next to the search modes, the built-in one's keyword row marked as gating; how many candidates each kind of reranked search had (mean, fewest, most); and each model's download and time per search in each mode (mean, median, 95th percentile and slowest, after the first search, which loads the model; each mode opens the model afresh, so its timings are its own). Only the built-in model's keyword row gates.
 
+### Keyword + rerank
+
+What the search Tool does by default since embeddings are off (ADR-0009, 2026-10-10), and so the gate: keyword search's top 60, reranked by the built-in reranking model ("keyword top 60 + model").
+
+- **Candidates:** `searchPassages` in keyword mode, the top 60 (`keywordRerankCandidates` in `SEARCH_TOOL_PARAMETERS`, `src/core/documents/searchTool.ts`, which `KEYWORD_RERANK_DEPTH` in `lib/retrieval.ts` reads), as the search Tool hands its reranker with embeddings off. Fewer when keyword search finds fewer. A cross-lingual Question's translated query is reranked the same way.
+- **Why 60:** keyword search's top 20, as many as the most the Tool hands a reranker with embeddings on, found 34 of 40, and missed Questions whose expected Passage keyword search ranks 21st to 60th. Its top 60 found 36 of 40 and 11 of the 15 paraphrase Questions, as hybrid + rerank did, for about twice the reranking time (see the results of 2026-10-10).
+- **Hybrid + rerank** ("hybrid + model"), what the search Tool does while the User has embeddings on, is reported next to it, never gating, with the plain search modes: the gap between the two rows, on the gating set and on the paraphrase Questions, is what embeddings add. In the every-format set's table per format, "hybrid" and "hybrid + model: All" are the same comparison.
+- **Before:** until 2026-10-09 the gate was plain hybrid search; then hybrid + rerank; on 2026-10-10, with embeddings off by default, keyword search's top 20 reranked, and later that day its top 60. Keyword search's top 20 is still reported, with the other ways to find the candidates.
+
+### Other ways to find the candidates
+
+Keyword search's top 20 reranked, the gate until keyword search's top 60, missed a Question when keyword search ranks its expected Passage below 20: on 2026-10-10, en-12 at 71, zh-03 at 52 and para-en-05 at 58. With embeddings off, the run also hands the built-in reranking model the candidates of seven other searches (`lib/searches.ts`), each a reranked mode of its own, reported next to the gate and never gating. They were built to be compared with keyword search's top 20: each hands the model 20 Passages unless the mode is about more, and the model reorders them by the Question itself. They run on the gating set's library only, and search the Questions themselves, not the translated queries.
+
+| Mode | Candidates | Settings, and why |
+|---|---|---|
+| keyword top 20, keyword top 40 | Keyword search's top 20 (the gate before its top 60), or top 40. | What the gate's top 60 adds over fewer of keyword search's Passages, which take less time to rerank. |
+| keyword + feedback terms | Pseudo-relevance feedback, RM3-style, with no model. Words are drawn from keyword search's top 10 Passages: each word's share of each Passage, weighted by the Passage's share of their BM25 scores for the Question, summed, then times the word's inverse document frequency. Stopwords (the search's own and more function words, in English and Chinese), numbers, words of one character and the Question's own words are left out, so it works on segmented Chinese words as on English ones. The best 10 are added to the Question's words, which keep half the weight. That query is searched with BM25, and its ranking fused with keyword search's own top 20 by reciprocal rank fusion. | 10 Passages and 10 terms, with the Question's words at half the weight: RM3's usual settings (Anserini's defaults). With ~500-token Passages, 10 of them give about 5,000 words to draw from; more terms drift from the Question. The inverse document frequency keeps a library's common words, in a library of a few Documents on one subject, from taking the 10 places. |
+| keyword + rewrites | A chat model writes 2 other phrasings of the Question in the Documents' words. Keyword search's top 20 for the Question and for each phrasing, fused. | One short call per Question (`lib/rewrites.ts`). The prompt names the Documents and their languages, as the search Tool tells an Answer, and asks for the words the Documents would use where they answer. |
+| keyword + sub-questions | The same, with the Question broken down into at most 3 one-hop questions when it asks several things, compares things or needs several steps, as the old command-line app refined a Question before searching. A Question that needs no breaking down is searched as it is. | One short call per Question. |
+| small-to-big | Each Document cut again into sub-chunks of at most 128 approximate tokens, whole lines where they fit, with no overlap (`lib/subChunks.ts`), each mapped to the Passages that hold it (or, if none holds all of it, those it overlaps). BM25 ranks the sub-chunks, and the best 200 score their Passages, each Passage by its best sub-chunk. | The old command-line app searched ~100-token chunks first, then larger ones around them. The sub-chunks are indexed like Passages: the Document's name and then the words, segmented the same way, with the same tokenizer. |
+| document first | The 3 Documents that hold most of keyword search's top 20 (each Passage counting 1 / (60 + its rank), as in fusion), then BM25 inside each with that Document's own term statistics, so a word it uses everywhere weighs little there. The Documents' rankings fused, each weighing its score as a share of the best Document's. | The old command-line app's second retrieval searched only inside the Documents its first one picked. Ranking the Documents by their Passages needs no index of its own; one row per Document would weigh a long Document's words against a short one's. |
+
+- **Reached:** for every reranked mode, the gate's and hybrid + rerank's too, the report counts the Questions whose candidates held a Passage that meets the hit rule, before reranking: what any reranker could have found. It tells a search that never finds the Passage from a reranker that doesn't put it in the top 5.
+- **Keyword search's rank, to 200:** each Question's expected Passage's rank in plain keyword search, looked for in its top 200 (the most `searchPassages` returns), in the per-Question table and under each of the gate's misses: how many candidates it would take.
+- **Time:** per search, finding the candidates and reranking them, apart, in the reranking table and in the section's own. For rewrites and sub-questions, the chat model's call is given apart, as measured when it was made.
+- **Chat model calls:** only when a chat model is given with `INCARNAMIND_EVAL_CHAT_*`; without one, the two modes are skipped, and the report says so. Each Question takes one call per mode. The answers are kept in `eval/results/query-rewrites.json`, by model and prompt, so later runs search the same queries and their figures compare; delete the file to ask again. The report gives the calls' time and tokens, and how many were made in the run and how many read from the file. A call that fails skips its mode, saying why.
+- **Small-to-big's index:** built in memory, in a database of the evaluation's own, so the app's schema doesn't change. The report gives its size and build time, next to the Passages' own keyword index built the same way. It also counts how often scoring a Passage by its best sub-chunk, and by the sum of its sub-chunks' scores, put the expected Passage among the 20 candidates: only the best sub-chunk is reranked.
+- **BM25 in memory:** keyword + feedback terms and document first score with BM25 computed in memory (`lib/corpus.ts`), as FTS5's `bm25()` computes it (k1 1.2, b 0.75), since FTS5 can't weigh one query term more than another, or score Passages by one Document's own term statistics. A unit test checks that it ranks and scores as FTS5 does.
+- **Changing the default:** none of these changes the app's search. They were measured to choose what the search Tool does; keyword search's top 60, then one of them, was chosen (see the results of 2026-10-10).
 ### Citation quality
 
 Citation quality needs a chat model. Give one with environment variables:
@@ -63,7 +92,7 @@ npm run eval
 - **Gating:** a cloud model (`anthropic`, `openai`, `google`, or `openai-compatible` with a server elsewhere) is the gating model. Its name is recorded in the report. Use one named model for runs you compare, such as the current Claude Sonnet.
 - **Local models:** an Ollama model, or an `openai-compatible` server on this computer, is reported but never gates. For example: `INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=llama3.2 npm run eval`. The `ollama` kind talks to Ollama's own `/api/chat`, as the app does, and cites as the app's rule says: a model under 7 billion parameters with structured output, a larger one that can call Tools in the Tool loop (ADR-0007, #67). `INCARNAMIND_EVAL_CHAT_NUM_CTX` fixes its window and `INCARNAMIND_EVAL_CHAT_CITING` its citing mode (see the table below), so the modes can be compared, e.g. `INCARNAMIND_EVAL_CHAT_NUM_CTX=8192 INCARNAMIND_EVAL_CHAT_CITING=tools INCARNAMIND_EVAL_MAX_ROUNDS=1`.
 - **Consent:** setting the variables is the consent to send Questions and Passages to the chat model. The run declines automatic tagging's consent request, so no Document excerpts are sent for tagging. A local model has no consent step, so it also tags the Documents while the run asks its Questions, which slows the run.
-- **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 50. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 50 and 130 Answers, each with up to 5 searches. The every-format set's 137 Questions are then asked once each: 137 Answers more.
+- **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 65. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations; the cross-lingual and paraphrase Questions are asked once. That is between 65 and 145 Answers, each with up to 5 searches. The every-format set's 137 Questions are then asked once each: 137 Answers more.
 - **Short checks:** `INCARNAMIND_EVAL_QUESTIONS` names the Questions to ask, by id, and `INCARNAMIND_EVAL_FORMATS=off` skips the every-format set, so a local model can be tried on a few Questions in minutes. Retrieval still scores every Question. The Questions named are asked once each, with no further rounds, and the run never gates on Citations, whatever the model: the report and the summary say which Questions were asked. For example, ten gating Questions with a small model in Ollama:
 
   ```sh
@@ -95,7 +124,7 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 
 | Variable | Default | |
 |---|---|---|
-| `INCARNAMIND_EVAL_CHAT_KIND` | none | `anthropic`, `openai`, `google`, `openai-compatible` or `ollama`. Turns on the Citation part. |
+| `INCARNAMIND_EVAL_CHAT_KIND` | none | `anthropic`, `openai`, `google`, `openai-compatible` or `ollama`. Turns on the Citation part, and the keyword + rewrites and keyword + sub-questions modes. |
 | `INCARNAMIND_EVAL_CHAT_MODEL` | none | The model id. |
 | `INCARNAMIND_EVAL_CHAT_KEY` | none | Required for `anthropic`, `openai` and `google`. |
 | `INCARNAMIND_EVAL_CHAT_BASE_URL` | none | Required for `openai-compatible`; Ollama's address for `ollama`. |
@@ -133,9 +162,13 @@ The terminal summary at the end gives the same headline numbers.
 
 ### Retrieval
 
-The evaluation set is `retrieval/questions.json`: 40 gating Questions (20 English, 20 Chinese) and 10 cross-lingual ones (8 Chinese Questions about English Documents, 2 English Questions about Chinese Documents).
+The evaluation set is `retrieval/questions.json`: 40 gating Questions (20 English, 20 Chinese), 10 cross-lingual ones (8 Chinese Questions about English Documents, 2 English Questions about Chinese Documents) and 15 paraphrase ones (8 English, 7 Chinese).
 
 - **Kinds:** fact lookups, numbers, definitions, Questions worded unlike their Document, and answers in two parts. One English answer runs across a page break (en-17, pages 33–34).
+- **Paraphrase Questions (`"paraphrase": true`):** each asks for a fact on one page, in words that avoid the target passage's distinctive words: synonyms and descriptions, the kind of Question a person asks without the text in front of them ("How many free trial packs of the same drug may one doctor be given in a twelve-month period?" for "No more than four samples of a particular medicine may be provided to an individual health professional during the course of a year"). Most of the gating Questions reuse their Document's own words, which favours keyword search; these measure what vector search adds when they don't (2026-10-10).
+  - **The field:** optional, `true` or `false`; only `true` is kept, and a Question without it isn't one. A paraphrase Question is in its own language: it can't also be `crossLingual`, and has no `translatedQuery`. Their ids are `para-en-NN` and `para-zh-NN`.
+  - **Reported apart, never gating:** a column "Paraphrase (English + Chinese)" in the retrieval table (hits in both languages, then in each), "(paraphrase)" after their ids in the per-Question table, and a "Paraphrase" column in the Citation table. They are out of the gating set's counts, its bar and its per-language counts, so those stay comparable with earlier runs, and they aren't asked again in later Citation rounds.
+  - **Facts on one page:** each answer was chosen to be on one page only, and the Chinese ones from text in simplified characters, so keyword search misses them for their wording, not for their script (it can't match simplified and traditional characters, ADR-0009).
 - **Checked against the stored text:** each quote was checked with `findQuote` against the page text the core stores, and against the Passages it builds. Each is on its expected pages, inside at least one Passage that covers them, and on no other page of its Document.
 - **No Chinese quote crosses a page:** in the Chinese fixtures, pdf.js puts a page's section headings at the end of its text, so no sentence reads across a page break there.
 
@@ -145,14 +178,14 @@ The evaluation set is `retrieval/questions.json`: 40 gating Questions (20 Englis
   - contains the expected quote.
 
   The quote is matched as the Citation check matches quotes, with `findQuote`: both are normalised the same way and compared.
-- **Gate:** what the search Tool does by default, "hybrid + mmarco-mMiniLMv2-L12-H384": hybrid search with the built-in embedding model, its candidates reranked by the built-in reranking model. It must find at least 80% of the gating Questions overall and in each language: 32 of 40, and 16 of 20 per language, with today's set. Since 2026-10-09 (#31) this is the shipped default, so the bar holds for what Users get; before, the gate was plain hybrid search.
-- **Reported, not gating:** plain hybrid, keyword-only and vector-only search, the cross-lingual Questions, a cloud embedding model if one is given, and the reranked modes of other candidates given.
+- **Gate:** what the search Tool does by default, "keyword top 60 + mmarco-mMiniLMv2-L12-H384": keyword search's top 60, reranked by the built-in reranking model, with embeddings off. It must find at least 80% of the gating Questions overall and in each language: 32 of 40, and 16 of 20 per language, with today's set. The bar holds for what Users get: since 2026-10-10 (ADR-0009) embeddings are off by default, so this is the shipped default. Earlier that day the gate was keyword search's top 20 reranked; from 2026-10-09 (#31), hybrid search reranked; before that, plain hybrid search.
+- **Reported, not gating:** plain hybrid, keyword-only and vector-only search, hybrid + rerank, the other ways to find the candidates, the cross-lingual and paraphrase Questions, a cloud embedding model if one is given, and the reranked modes of other candidates given.
 - **A translated second query:** each cross-lingual Question has a `translatedQuery`, the Question translated by hand into its Document's language. An Answer is told to search again in the Documents' language when the Question is in another one (the search Tool names their languages), and the translation stands in for that second search, without a chat model. The column "with a translated second query" counts a hit when either search's top 5 has one, in hybrid mode and each reranked mode. The translations are written and checked by hand, so this is the most the approach can bring: a model's own translation may find less.
-- **Per Question:** the report gives the rank of the first hit in each mode. A rank in brackets is a near miss, between 6 and 20; for a cross-lingual Question, "a / b" is the rank for the Question, then for its translation. For each hybrid miss, it lists what the top 5 were and what each lacked.
+- **Per Question:** the report gives the rank of the first hit in each mode. A rank in brackets is a near miss, between 6 and 20; for a cross-lingual Question, "a / b" is the rank for the Question, then for its translation. A last column gives plain keyword search's rank, to 200. For each of the gate's misses, it lists what the top 5 were and what each lacked, where plain keyword search ranks the expected Passage, and what the other searches looked for: the feedback terms, the model's queries, the Documents searched inside.
 
 ### Citation quality
 
-Each Answer is read back from its Mind, as the editor shows it, and split into sentences. Headings and code are left out. The figures are per language: English, Chinese, and the cross-lingual Questions apart.
+Each Answer is read back from its Mind, as the editor shows it, and split into sentences. Headings and code are left out. The figures are per language: English, Chinese, and the cross-lingual and paraphrase Questions apart, each a column of its own that the targets don't apply to.
 
 | Figure | Definition | Target (per language) |
 |---|---|---|
@@ -196,7 +229,7 @@ The gating set asks only about text PDFs. The every-format set, `retrieval/forma
 - **Locations:** `expected.pages` are Unit numbers, as Citations count them (ADR-0011): a PDF's page, a deck's slide, a Word or Markdown section in reading order (a Word file's footnotes are its last Unit), a block of rows (later sheets continue the count), a block of lines.
 - **Known gaps:** 12 Questions ask about text the readers don't index today: Word comments (the Word reader leaves them out, though the preview shows them) and scanned pages (no text layer; ADR-0011 leaves text recognition out). They are asked and reported, by hard place, and counted apart from their format's figures.
 - **Checked against the stored text:** `tests/eval/formatSet.test.ts` processes each Document as the core does and checks each quote: on its expected Units and no others, citable together, and inside a Passage that covers them. A known gap's quote is on none of its Document's Units.
-- **Run:** in a temporary data folder of its own, so the gating set's Documents, Questions and bar are unchanged. Retrieval as for the gating set, with the search Tool's default (hybrid search reranked by the built-in model) and plain hybrid search reported per format and language. With a chat model, each Question is asked once, and its Citations scored with the same figures, per format.
+- **Run:** in a temporary data folder of its own, so the gating set's Documents, Questions and bar are unchanged. Retrieval as for the gating set, with the search Tool's default (keyword search reranked by the built-in model) reported per format and language, and plain hybrid search and hybrid + rerank per format. With a chat model, each Question is asked once, and its Citations scored with the same figures, per format.
 - **Not gating:** no bar is set yet. The proposed bars below are for the User to approve once the first run's numbers are in.
 
 #### Proposed bars per format
@@ -251,6 +284,20 @@ Three quotes a model may well write are on their cited Unit but "not found", fal
 
 The every-format set was built on 2026-10-09 (#70). Its first `npm run eval` hasn't run yet; its per-format table goes here once it has, with the bars it supports.
 
+### 2026-10-10: keyword search's top 60, which became the default
+
+Measured on 2026-10-10 with embeddings off by default and the other ways to find the candidates reported, on an Apple M2 Max; the rewrites and sub-questions by Claude Sonnet 5.5. Keyword search's top 20, the gate until then, is from the run earlier that day; it missed the bar in English (15 of 20).
+
+| Mode | English | Chinese | Gating set | Paraphrase | Per search |
+|---|---|---|---|---|---|
+| **keyword top 60 + mmarco-mMiniLMv2-L12-H384 (the gate from then)** | **16/20** | **20/20** | **36/40** | 11/15 | 1.6 s |
+| hybrid + mmarco-mMiniLMv2-L12-H384 (embeddings on) | 16/20 | 20/20 | 36/40 | 11/15 | 0.6 s |
+| keyword top 20 + mmarco-mMiniLMv2-L12-H384 (the gate before) | 15/20 | 19/20 | 34/40 | 10/15 | 0.8 s |
+| keyword + rewrites + mmarco-mMiniLMv2-L12-H384 | – | – | 38/40 | 12/15 | 0.8 s, and a 2.7 s chat model call |
+| keyword + feedback terms, keyword + sub-questions, small-to-big, document first | – | – | 34/40 each | – | about 0.8 s |
+
+Keyword search's top 60 found as many as hybrid + rerank, on the gating set and on the paraphrase Questions, with no embedding model: the cheapest that matched it, so it is what the search Tool hands its reranker with embeddings off (ADR-0009). Rewrites found the most, and 8 of the 10 cross-lingual Questions, but a chat model call before every search costs more than the reranking; in an Answer the model writes its own search queries, and may search again in other words. Feedback terms, sub-questions, small-to-big and document first found no more than keyword search's top 20.
+
 ### 2026-10-09: reranking, which became the default
 
 Measured at commit `672f4cf` with `INCARNAMIND_EVAL_RERANK=all`, on an Apple M2 Max (12 cores), Node v25.5.0, with other work running on the machine; the 40 + 10 Questions of today's set. The gate was still plain hybrid search then, and failed on English (13 of 20).
@@ -260,7 +307,7 @@ Measured at commit `672f4cf` with `INCARNAMIND_EVAL_RERANK=all`, on an Apple M2 
 | hybrid | 13/20 | 19/20 | 32/40 | 1/10 | 8/10 |
 | keyword | 14/20 | 18/20 | 32/40 | 2/10 | – |
 | vector | 11/20 | 20/20 | 31/40 | 1/10 | – |
-| **hybrid + mmarco-mMiniLMv2-L12-H384 (now the gate)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 |
+| **hybrid + mmarco-mMiniLMv2-L12-H384 (the gate from then until 2026-10-10)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 |
 | hybrid + gte-multilingual-reranker-base | 13/20 | 19/20 | 32/40 | 2/10 | 8/10 |
 | hybrid + bge-reranker-v2-m3 | 16/20 | 20/20 | 36/40 | 2/10 | 8/10 |
 
@@ -270,7 +317,7 @@ Measured at commit `672f4cf` with `INCARNAMIND_EVAL_RERANK=all`, on an Apple M2 
 | gte-multilingual-reranker-base | 358 MB | 3,371 ms | 3,150 ms | 5,968 ms |
 | bge-reranker-v2-m3 | 588 MB | 10,441 ms | 8,710 ms | 17,506 ms |
 
-The reranked searches had 16.1 candidates on average (12 to 20). mmarco-mMiniLMv2-L12-H384 reaches the bar in both languages, as bge-reranker-v2-m3 does at four times the download and twelve times the time, so it is the built-in reranking model, on by default (ADR-0005), and the gate is now its row. It finds en-05, en-12, en-14 and zh-03, which plain hybrid search missed, and loses none; en-03, en-07, en-13 and en-18 are still missed.
+The reranked searches had 16.1 candidates on average (12 to 20). mmarco-mMiniLMv2-L12-H384 reaches the bar in both languages, as bge-reranker-v2-m3 does at four times the download and twelve times the time, so it is the built-in reranking model, on by default (ADR-0005), and the gate was its row until embeddings went off by default (2026-10-10). It finds en-05, en-12, en-14 and zh-03, which plain hybrid search missed, and loses none; en-03, en-07, en-13 and en-18 are still missed.
 
 Searching again with the Question translated into its Document's language finds 7 or 8 of the 10 cross-lingual Questions, against 1 or 2 without: the search Tool now tells the model which languages the Documents are in, and to do so.
 
@@ -359,6 +406,10 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
   - `tests/eval/smallModelCitations.test.ts` shows, without a model, the ways a small model's Citations of the gating set's long PDFs aren't found (#67): records written by hand, through the core's citation session, over the stored text of their pages.
   - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.
+
+## The hard tier
+
+`npm run eval:hard` asks harder Questions of a library at scale: public Documents across domains, fetched at evaluation time and never committed, in every retrieval mode with embeddings on, reported per domain and difficulty and never gating. `npm run eval` doesn't run it. See `hard/README.md`.
 
 ## The grouping check
 

@@ -63,7 +63,8 @@ function weatherCrossEncoder() {
 
 /**
  * Two Documents, a local chat model that searches for "lighthouse" and shows
- * what it was given, and mock reranking models.
+ * what it was given, and mock reranking models. Embeddings are on, so vector
+ * search hands the reranker the Weather Document, which has no "lighthouse".
  */
 async function setUp(overrides: Partial<CoreAdapters> = {}) {
   let shown: ShownPassage[] = [];
@@ -84,6 +85,7 @@ async function setUp(overrides: Partial<CoreAdapters> = {}) {
       { name: "Weather.md", contents: sections(6, 0, "") },
     ],
     { createRerankingModel: rerankers.createRerankingModel, keychain, ...overrides },
+    { embeddings: true },
   );
   const ask = async (text = "Where is the lighthouse?") => {
     await askAndFinish(setup.core, setup.client, setup.mind.id, text);
