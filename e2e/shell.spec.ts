@@ -127,6 +127,9 @@ const treeRows = (window: Page) =>
  * Every Folder, group and Document row is 28px, puts its icon at x 16 and
  * its text at x 40 (24px deeper per level), and keeps its name, its status
  * at the end and a Linked folder's bar on its one line. Returns how many rows.
+ * Each row is read with its parts in one pass, as `rowEdges` reads its edges:
+ * while a folder is indexed, a status or bar found first could be gone by the
+ * time it was measured.
  */
 async function expectRowsAligned(window: Page): Promise<number> {
   const rows = treeRows(window);
@@ -134,22 +137,35 @@ async function expectRowsAligned(window: Page): Promise<number> {
     expect(icon).toBeCloseTo(16 + depth * 24, 0);
     expect(text).toBeCloseTo(40 + depth * 24, 0);
   }
-  const all = await rows.all();
-  for (const row of all) {
-    const box = await boxOf(row);
-    expect(box.height).toBeCloseTo(28, 0);
+  const measured = await rows.evaluateAll((elements) =>
+    elements.map((row) => {
+      const box = row.getBoundingClientRect();
+      const text = row.querySelector('[data-testid="row-text"]');
+      if (!text) throw new Error("A row has no text.");
+      const ends = row.querySelectorAll(
+        ':scope > button [data-testid$="-status"], :scope > div [data-testid$="-status"], [data-testid="folder-progress"]',
+      );
+      return {
+        top: box.top,
+        height: box.height,
+        textHeight: text.getBoundingClientRect().height,
+        ends: [...ends].map((end) => {
+          const part = end.getBoundingClientRect();
+          return { top: part.top, bottom: part.bottom };
+        }),
+      };
+    }),
+  );
+  for (const row of measured) {
+    expect(row.height).toBeCloseTo(28, 0);
     // One line of text, never wrapped.
-    expect((await boxOf(row.getByTestId("row-text"))).height).toBeLessThanOrEqual(20.5);
-    const ends = row.locator(
-      ':scope > button [data-testid$="-status"], :scope > div [data-testid$="-status"], [data-testid="folder-progress"]',
-    );
-    for (const end of await ends.all()) {
-      const part = await boxOf(end);
-      expect(part.y).toBeGreaterThanOrEqual(box.y - 0.5);
-      expect(part.y + part.height).toBeLessThanOrEqual(box.y + box.height + 0.5);
+    expect(row.textHeight).toBeLessThanOrEqual(20.5);
+    for (const part of row.ends) {
+      expect(part.top).toBeGreaterThanOrEqual(row.top - 0.5);
+      expect(part.bottom).toBeLessThanOrEqual(row.top + row.height + 0.5);
     }
   }
-  return all.length;
+  return measured.length;
 }
 
 test("sidebar rows share one text edge, in the Folders view and on disk, a folder's children are one step deeper, and pane headers are 44px", async () => {
