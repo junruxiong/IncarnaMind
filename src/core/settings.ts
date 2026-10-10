@@ -94,6 +94,9 @@ const deviceScope: Scope<DeviceSettings> = {
     },
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
+    meetingsEnabled: false,
+    meetingSystemAudio: true,
+    meetingNoticeAccepted: false,
   },
   validators: {
     sidebarWidth: isPaneWidth,
@@ -107,6 +110,9 @@ const deviceScope: Scope<DeviceSettings> = {
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
+    meetingsEnabled: isBoolean,
+    meetingSystemAudio: isBoolean,
+    meetingNoticeAccepted: isBoolean,
   },
 };
 

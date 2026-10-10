@@ -693,6 +693,34 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 34,
+    description: "Meetings: a recording's state, its stretches and how long its audio is kept (#135)",
+    // The audio itself is in the data folder, meetings/<id>/, one WAV file per 10 seconds per
+    // source (src/core/meetings/audioFiles.ts): the files are what survives a crash, so they
+    // aren't listed here. periods is JSON, the stretches recorded, in order: each
+    // { start, offsetMs, end, endedBy }, start and end ISO 8601 UTC wall-clock times (end null
+    // while it lasts), offsetMs the Meeting's time when it began, endedBy one of 'pause',
+    // 'stop', 'sleep' or 'interrupted' (IncarnaMind closed while recording).
+    sql: `
+      CREATE TABLE meetings (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL REFERENCES minds(id),
+        status TEXT NOT NULL CHECK (status IN ('ready', 'recording', 'paused', 'stopped')),
+        paused_by TEXT CHECK (paused_by IN ('user', 'interrupted')),
+        system_audio INTEGER NOT NULL DEFAULT 1,
+        periods TEXT NOT NULL DEFAULT '[]',
+        started_at TEXT,
+        stopped_at TEXT,
+        audio_expires_at TEXT,
+        audio_deleted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX meetings_by_mind ON meetings (mind_id) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**

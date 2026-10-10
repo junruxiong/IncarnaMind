@@ -1437,4 +1437,5 @@ export const zhCN = {
     "每个论断旁的页边都有一个标记：在你的文档中找到引文时显示 {mark}。点击它即可打开那一页。",
   "startGuide.example.lead": "想先看看效果？",
   "startGuide.example.open": "打开示例 Mind",
+  "meetings.mindTitle": "会议，{date}",
 } satisfies Dictionary;
