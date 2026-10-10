@@ -1293,6 +1293,15 @@ export const en = {
   "menu.zoom": "Zoom",
   "menu.front": "Bring All to Front",
 
+  // Commands (src/renderer/src/commands/app.ts); those in the application menu use its labels.
+  "command.tab.new": "New Tab",
+  "command.tab.next": "Next Tab",
+  "command.tab.previous": "Previous Tab",
+  "command.tab.show": "Show Tab {number}",
+  "command.tab.showLast": "Show Last Tab",
+  "command.composer.focus": "Ask a Question",
+  "command.viewer.toggle": "Show or Hide the Document Viewer",
+
   "update.available.message": "IncarnaMind {version} is available",
   "update.available.detail":
     "This copy of IncarnaMind can't update itself. Download the new version and use it to replace this one.",
