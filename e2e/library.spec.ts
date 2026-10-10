@@ -1,9 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { totalmem } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { AUTO_CLASSIFICATION } from "../src/core/library/automatic";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -308,7 +310,13 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     await expect(scan.locator("summary")).toHaveText("Needs attention");
     fail = false;
     await library.getByRole("button", { name: "Organize", exact: true }).click();
-    await expect(notes).toContainText("tev1:4b · Text");
+    // Auto takes tev1:4b now it's there, unless this computer has too little memory for it
+    // (the CI runner has 7 GB): then it keeps to the smaller model, and says why.
+    await expect(notes).toContainText(
+      totalmem() < AUTO_CLASSIFICATION.smallMemoryBytes
+        ? "tev1:0.8b · Text · Smaller model for memory limits"
+        : "tev1:4b · Text",
+    );
     await expect(scan.locator("summary")).toHaveText("Organized");
     // Explicit Clef override can include or omit PDF images; the choice persists.
     settings = await organizationSettings(window);
