@@ -269,6 +269,7 @@ export const zhCN = {
   "documents.statusShort.failed": "失败",
   "documents.failure.unreadable": "无法读取该文件",
   "documents.failure.passwordProtected": "该文件需要密码",
+  "documents.failure.tooLarge": "文件太大，无法打开",
   "documents.failure.fileMissing": "文件已丢失",
   "documents.file.missing":
     "文件已丢失：它已从所在文件夹中移除。它的文字和引用仍会保留，但新的搜索不再包含它。",

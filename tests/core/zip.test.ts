@@ -5,7 +5,7 @@
  * is tested with the formats (formats.test.ts).
  */
 import { readFileSync } from "node:fs";
-import { deflateRawSync } from "node:zlib";
+import { deflateRawSync, crc32 as zlibCrc32 } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import { extractDocx } from "../../src/core/documents/formats/docx";
 import {
@@ -113,5 +113,48 @@ describe("Copying", () => {
 
   test("no such entry: nothing to copy", () => {
     expect(openPackage(DOCX).raw("word/comments.xml")).toBeUndefined();
+  });
+});
+
+describe("Reading", () => {
+  test("parts read whole and parts read as streams count together towards the 1 GB a package's parts may inflate to", {
+    timeout: 60_000,
+  }, async () => {
+    // Five sheets of 250 MB, each within the limit of a part (256 MB, as sheets are read).
+    const MB = 1024 * 1024;
+    const sheet = Buffer.alloc(250 * MB, " ");
+    const body: RawEntry = {
+      method: 8,
+      crc32: zlibCrc32(sheet),
+      size: sheet.length,
+      data: deflateRawSync(sheet),
+    };
+    const names = [1, 2, 3, 4, 5].map((number) => `xl/worksheets/sheet${number}.xml`);
+    const archive = openPackage(
+      writeZip(
+        names.map((name) => ({ name, raw: body })),
+        deflateRawSync,
+      ),
+    );
+    for (const name of names.slice(0, 4)) {
+      expect((await archive.read(name, 256 * MB))?.length).toBe(250 * MB);
+    }
+
+    let streamed = 0;
+    const failure = await (async () => {
+      for await (const chunk of archive.textChunks(names[4] as string, 256 * MB)) {
+        streamed += chunk.length;
+      }
+    })().catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      reason: "too-large",
+      message: "Too large to open (limit 1 GB).",
+    });
+    // It stopped at the limit: 1,000 MB read whole, and 24 MB of the stream.
+    expect(streamed).toBeLessThanOrEqual(24 * MB);
+    // Another package starts its own count.
+    const another = openPackage(writeZip([{ name: "a.xml", data: "<a/>" }], deflateRawSync));
+    expect(await another.readText("a.xml")).toBe("<a/>");
   });
 });
