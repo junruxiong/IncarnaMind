@@ -20,7 +20,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { translate } from "../../shared/i18n";
-import type { AudioCapture, CaptureSession, CaptureState, Logger } from "../adapters";
+import {
+  type AudioCapture,
+  type CaptureSession,
+  type CaptureState,
+  type Logger,
+  MEETING_SAMPLE_RATE,
+} from "../adapters";
 import {
   type AudioSource,
   MEETING_AUDIO_KEPT_MS,
@@ -33,7 +39,6 @@ import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Language } from "../language";
 import type { Database } from "../storage";
 import {
-  type AudioPart,
   listParts,
   meetingFolder,
   msOf,
@@ -47,7 +52,7 @@ import {
 const DISCONTINUITY_MS = 1000;
 
 /** The computer's sound, all silence for this long, is said to be silent: macOS gives silence when it isn't allowed. */
-const SILENT_SAMPLES = 16_000 * 60;
+const SILENT_SAMPLES = MEETING_SAMPLE_RATE * 60;
 
 /** How often audio past its day is looked for. */
 const SWEEP_INTERVAL_MS = 60_000;
@@ -251,6 +256,7 @@ export function createMeetings(options: MeetingsOptions) {
     const offsetMs = run.startMs + msOf(run.saved);
     run.saved += samples.length;
     current.ends.set(source, offsetMs + msOf(samples.length));
+    const first = !hasAudio(current.meetingId);
     try {
       writePart(current.folder, source, offsetMs, samples);
     } catch (error) {
@@ -263,7 +269,6 @@ export function createMeetings(options: MeetingsOptions) {
       }
       return;
     }
-    const first = !hasAudio(current.meetingId);
     kept.set(current.meetingId, true);
     if (first || current.saveError !== null) {
       current.saveError = null;
@@ -688,11 +693,6 @@ export function createMeetings(options: MeetingsOptions) {
       begin(rowOf(row.id), period);
       log.info("meeting.awake", { meetingId: row.id });
       changed();
-    },
-
-    /** The saved parts of a Meeting's audio, in time order. */
-    audioParts(meetingId: string): AudioPart[] {
-      return listParts(folderOf(rowOf(meetingId).id));
     },
 
     sweep,
