@@ -4,7 +4,7 @@
  * ../documents), and which of their Units, for the text kept when a Linked
  * folder is unlinked. Citations live in Minds' Yjs documents, anywhere: in
  * Answers, or copied into Notes, at any depth. Exports read them the same
- * way (../exports/model).
+ * way (../mindText).
  */
 import * as Y from "yjs";
 import { CITATION_NODE } from "../api";

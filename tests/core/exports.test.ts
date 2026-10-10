@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
@@ -138,6 +139,24 @@ function docxParts(exported: MindExport) {
 }
 
 describe("exporting a Mind", () => {
+  test("the bytes of an export don't change: a fingerprint of the sample's Markdown and .docx", async () => {
+    const { core, mind, client, tides } = await setUp();
+    writeSample(client, tides);
+    await client.settled();
+
+    const fingerprint = async (format: "markdown" | "docx") =>
+      createHash("sha256")
+        .update((await core.exportMind(mind.id, { format })).data)
+        .digest("hex");
+
+    expect(await fingerprint("markdown")).toBe(
+      "a4c7d2f0c6856d0ed5a4df3984ab53e8b1bd89057a4cef980a14629bb86685fa",
+    );
+    expect(await fingerprint("docx")).toBe(
+      "2146294793761d83d8fac0f0ad1133cd81246793fa08ad26def36d00ca128e72",
+    );
+  });
+
   test("to Markdown: Notes and Answers as Markdown, the Question marked, math kept, and a footnote per Citation", async () => {
     const { core, mind, client, tides } = await setUp();
     writeSample(client, tides);

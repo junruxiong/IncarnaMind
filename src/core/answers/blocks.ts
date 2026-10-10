@@ -16,8 +16,8 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import { citationLocation, englishLocation } from "../../shared/locations";
-import { BLOCK_ID_ATTRIBUTE, CITATION_NODE, NOTE_BLOCK_TYPES } from "../api";
+import { BLOCK_ID_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../api";
+import { contentMarkdownOf, elementMarkdown } from "./contextText";
 
 /** A node as ProseMirror (and Tiptap) write it in JSON. */
 export interface NodeJSON {
@@ -270,150 +270,15 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Reading, as Markdown
+// Reading, as Markdown (the reading itself is ../mindText's)
 
 /** A Block (or any element) as Markdown, e.g. for Question context. */
-export function toMarkdown(element: Y.XmlElement): string {
-  return blockMarkdown(element).trim();
-}
+export const toMarkdown = elementMarkdown;
 
 /** An element's content as Markdown: its child Blocks separated by blank lines. */
-export function contentMarkdown(element: Y.XmlElement): string {
-  return blocksMarkdown(element.toArray()).trim();
-}
+export const contentMarkdown = contentMarkdownOf;
 
 /** A fingerprint of an element's content, to tell whether it changed since. */
 export function contentHash(element: Y.XmlElement): string {
   return createHash("sha256").update(contentMarkdown(element)).digest("base64url").slice(0, 22);
-}
-
-function blocksMarkdown(children: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[]): string {
-  return children
-    .map((child) => (child instanceof Y.XmlElement ? blockMarkdown(child) : textOf(child)))
-    .filter((text) => text.trim() !== "")
-    .join("\n\n");
-}
-
-function blockMarkdown(element: Y.XmlElement): string {
-  switch (element.nodeName) {
-    case "heading": {
-      const level = Number(element.getAttribute("level")) || 1;
-      return `${"#".repeat(Math.min(Math.max(level, 1), 6))} ${inlineMarkdown(element)}`;
-    }
-    case "codeBlock": {
-      const language = textAttribute(element, "language") ?? "";
-      const code = plainText(element);
-      const fence = code.includes("```") ? "````" : "```";
-      return `${fence}${language}\n${code}\n${fence}`;
-    }
-    case "blockMath":
-      return `$$\n${textAttribute(element, "latex") ?? ""}\n$$`;
-    case "horizontalRule":
-      return "---";
-    case "bulletList":
-    case "orderedList":
-      return listMarkdown(element);
-    case "blockquote":
-      return blocksMarkdown(element.toArray())
-        .split("\n")
-        .map((line) => (line ? `> ${line}` : ">"))
-        .join("\n");
-    case "listItem":
-    case "answer":
-      return blocksMarkdown(element.toArray());
-    default:
-      // Paragraphs, Questions, and node types this version doesn't know: their inline content.
-      if (element.toArray().some((child) => child instanceof Y.XmlElement && isBlock(child))) {
-        return blocksMarkdown(element.toArray());
-      }
-      return inlineMarkdown(element);
-  }
-}
-
-const INLINE_TYPES = new Set(["inlineMath", "hardBreak", CITATION_NODE]);
-const isBlock = (element: Y.XmlElement) => !INLINE_TYPES.has(element.nodeName);
-
-function listMarkdown(list: Y.XmlElement): string {
-  const ordered = list.nodeName === "orderedList";
-  let number = Number(list.getAttribute("start")) || 1;
-  const items: string[] = [];
-  for (const item of list.toArray()) {
-    if (!(item instanceof Y.XmlElement)) continue;
-    const marker = ordered ? `${number++}.` : "-";
-    const indent = " ".repeat(marker.length + 1);
-    const body = blocksMarkdown(item.toArray())
-      .split("\n")
-      .map((line, index) => (index === 0 ? `${marker} ${line}` : line ? `${indent}${line}` : ""))
-      .join("\n");
-    items.push(body);
-  }
-  return items.join("\n");
-}
-
-/**
- * Inline content with marks as Markdown: **bold**, *italic*, ~~strike~~,
- * `code`, [links](…), $math$, and Citations as "[Document, p. 3]".
- */
-function inlineMarkdown(element: Y.XmlElement): string {
-  let markdown = "";
-  for (const child of element.toArray()) {
-    if (child instanceof Y.XmlText) {
-      for (const run of child.toDelta() as Run[]) {
-        if (typeof run.insert === "string") markdown += markRun(run);
-      }
-    } else if (child instanceof Y.XmlElement) {
-      if (child.nodeName === "inlineMath") markdown += `$${textAttribute(child, "latex") ?? ""}$`;
-      else if (child.nodeName === "hardBreak") markdown += "\n";
-      else if (child.nodeName === CITATION_NODE) markdown += citationMarkdown(child);
-      else markdown += blockMarkdown(child);
-    }
-  }
-  return markdown;
-}
-
-/**
- * A Citation as a plain reference to its source, e.g. "[Attention Is All You
- * Need, p. 3]": how Question context shows the model Citations in Notes and
- * earlier Answers, without making them markers it could reuse.
- */
-function citationMarkdown(citation: Y.XmlElement): string {
-  const name = textAttribute(citation, "documentName");
-  if (!name) return "";
-  const from = citation.getAttribute("pageFrom");
-  const to = citation.getAttribute("pageTo");
-  const location = citationLocation({
-    location: citation.getAttribute("location"),
-    pageFrom: typeof from === "number" ? from : null,
-    pageTo: typeof to === "number" ? to : null,
-  });
-  return location ? `[${name}, ${englishLocation(location)}]` : `[${name}]`;
-}
-
-function markRun({ insert, attributes = {} }: Run): string {
-  if (Object.hasOwn(attributes, "code")) return `\`${insert}\``;
-  let text = insert;
-  if (Object.hasOwn(attributes, "bold")) text = `**${text}**`;
-  if (Object.hasOwn(attributes, "italic")) text = `*${text}*`;
-  if (Object.hasOwn(attributes, "strike")) text = `~~${text}~~`;
-  const link = attributes.link as { href?: unknown } | undefined;
-  if (link && typeof link.href === "string") text = `[${text}](${link.href})`;
-  return text;
-}
-
-/** All the text in an element, without marks or structure. */
-export function plainText(element: Y.XmlElement | Y.XmlText): string {
-  if (element instanceof Y.XmlText) return textOf(element);
-  return element
-    .toArray()
-    .map((child) =>
-      child instanceof Y.XmlElement || child instanceof Y.XmlText ? plainText(child) : "",
-    )
-    .join("");
-}
-
-function textOf(child: Y.XmlText | Y.XmlHook): string {
-  if (!(child instanceof Y.XmlText)) return "";
-  return (child.toDelta() as Run[])
-    .map((run) => (typeof run.insert === "string" ? run.insert : ""))
-    .join("");
 }
