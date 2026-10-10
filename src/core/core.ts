@@ -625,6 +625,7 @@ export function createCore(adapters: CoreAdapters): Core {
     settings,
     background,
     changed: () => events.emit("library.changed", null),
+    assigned: (assignments) => events.emit("library.assignments", assignments),
     providerExists: (id) => chat.exists(id),
     chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
