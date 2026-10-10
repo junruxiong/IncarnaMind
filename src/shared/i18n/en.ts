@@ -730,7 +730,7 @@ export const en = {
   "providers.region.cn": "China",
   "providers.region.intl": "International",
   "providers.form.getKey": "Get a key",
-  "providers.form.dataUse": "What it does with your data",
+  "providers.form.dataUse": "What it does with your data.",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":
     "For example https://api.deepseek.com/v1 or http://localhost:1234/v1",
@@ -1289,9 +1289,12 @@ export const en = {
   "menu.redo": "Redo",
   "menu.cut": "Cut",
   "menu.copy": "Copy",
+  // On Windows and Linux; macOS Chinese says 拷贝 and 显示 where they say 复制 and 查看.
+  "menu.copy.other": "Copy",
   "menu.paste": "Paste",
   "menu.selectAll": "Select All",
   "menu.view": "View",
+  "menu.view.other": "View",
   "menu.hideSidebar": "Hide Sidebar",
   "menu.showSidebar": "Show Sidebar",
   "menu.actualSize": "Actual Size",

@@ -106,7 +106,7 @@ const PROVIDERS = [
       training: "free-tier",
       summary: {
         en: "On the free tier, Google uses API data to improve its products, with human review; on a paid plan it doesn't.",
-        zh: "免费层级的 API 数据会被 Google 用于改进其产品，并可能经人工审阅；付费方案则不会。",
+        zh: "Google 会用免费层级的 API 数据改进其产品，并可能经人工审阅；付费方案则不会。",
       },
       url: "https://ai.google.dev/gemini-api/terms",
     },
@@ -143,7 +143,7 @@ const PROVIDERS = [
       training: "no",
       summary: {
         en: "One key for many models. IncarnaMind asks OpenRouter to use only providers that don't keep or train on your prompts; that leaves out some models.",
-        zh: "一个密钥可用多种模型。IncarnaMind 会要求 OpenRouter 只使用不保存、不用于训练的提供方，因此部分模型无法使用。",
+        zh: "一个密钥可用多种模型。IncarnaMind 会要求 OpenRouter 只使用不保存、不用于训练的提供商，因此部分模型无法使用。",
       },
       url: "https://openrouter.ai/docs/guides/privacy/logging",
     },
@@ -174,7 +174,7 @@ const PROVIDERS = [
       training: "opt-out",
       summary: {
         en: "In free mode Mistral may train on API data unless you turn that off in its privacy settings; on pay-as-you-go you can opt out too. Preview models may be trained on regardless.",
-        zh: "免费模式下，Mistral 可能用 API 数据训练模型，除非你在其隐私设置中关闭；按量付费同样可以选择退出。预览版模型无论如何都可能被用于训练。",
+        zh: "免费模式下，Mistral 可能用 API 数据训练模型，除非你在其隐私设置中关闭；按量付费同样可以选择退出。预览版模型的数据无论如何都可能用于训练。",
       },
       url: "https://help.mistral.ai/en/articles/347617-do-you-use-my-user-data-to-train-your-artificial-intelligence-models",
     },
@@ -457,7 +457,7 @@ const PROVIDERS = [
       training: "no",
       summary: {
         en: "Downloaded models run on this computer: what you ask stays on it.",
-        zh: "下载的模型在这台电脑上运行：你的提问不会离开这台电脑。",
+        zh: "下载的模型在本机运行，你的问题不会离开本机。",
       },
     },
     checked: "2026-10-10",
@@ -475,7 +475,7 @@ const PROVIDERS = [
       training: "unknown",
       summary: {
         en: "Depends on the server: check its terms. A server on this computer sends nothing out.",
-        zh: "取决于服务器，请查看其条款。在这台电脑上运行的服务器不会向外发送任何内容。",
+        zh: "取决于服务器，请查看其条款。在本机运行的服务器不会向外发送任何内容。",
       },
     },
     checked: "2026-10-10",

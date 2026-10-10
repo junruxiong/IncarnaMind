@@ -195,7 +195,7 @@ export function ProviderForm({
             <div className="flex flex-col gap-1" data-testid="provider-facts">
               {/* Where the data goes and what the provider does with it, before a key is pasted. */}
               <p className={hintClass}>
-                <span className="font-semibold text-ink">{t("providers.form.dataUse")}.</span>{" "}
+                <span className="font-semibold text-ink">{t("providers.form.dataUse")}</span>{" "}
                 {catalog.dataUse.summary[language === "zh-CN" ? "zh" : "en"]}
               </p>
             </div>
