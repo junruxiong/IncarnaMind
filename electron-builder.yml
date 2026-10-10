@@ -19,9 +19,13 @@ directories:
 # automatically; the rest of the repo (sources, tests, the sample PDFs in data/) stays out.
 # electron-builder arranges them itself, and a direct dependency's version wins the top
 # level: so zod is one (4.6.5, as the AI SDK uses it), and sandbox-runtime's zod 3 nests.
+#
+# A platform's own `files` list REPLACES this one rather than adding to it: with only
+# exclusions there, electron-builder falls back to "**/*" and packs the whole checkout
+# (sources, tests, data, untracked files) into app.asar. So every platform below restates
+# out/**/*, and scripts/check-package.mjs fails the release build if anything else gets in.
 files:
   - out/**/*
-  # Library classification renders PDF pages in Node with @napi-rs/canvas.
 
 # The built-in Skills (SKILL.md folders), next to app.asar in the app's resources folder,
 # where the main process finds them (src/main/platform.ts). The core installs them into
@@ -54,6 +58,7 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 mac:
   category: public.app-category.productivity
   files:
+    - out/**/*
     # The arm64 and x64 apps are built separately: each keeps its own architecture.
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/{linux,win32}{,/**}"
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/darwin/!(${arch}){,/**}"
@@ -71,6 +76,7 @@ dmg:
 
 win:
   files:
+    - out/**/*
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,linux}{,/**}"
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/win32/!(${arch}){,/**}"
   # TODO(signing): unsigned in v1. SignPath Foundation's free signing for open-source
@@ -86,6 +92,7 @@ nsis:
 linux:
   category: Office
   files:
+    - out/**/*
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/{darwin,win32}{,/**}"
     - "!**/node_modules/onnxruntime-node/bin/napi-v*/linux/!(${arch}){,/**}"
   target:

@@ -18,6 +18,10 @@ npm run eval         # the retrieval evaluation (see below)
 
 Keep development data apart from your real data folder by pointing the app at another one: `INCARNAMIND_DATA_DIR=/tmp/incarnamind-dev npm run dev`.
 
+## Installers
+
+Installers for testers come from CI only: pushing a version tag builds them on a clean checkout (see [releasing.md](releasing.md)). Don't hand out a local `npm run dist` build. `npm run dist:dir` is for checking your own packaging changes; follow it with `npm run check:package`, which fails when `app.asar` holds anything but `out/`, `node_modules/` and `package.json`, or when a size is over its budget.
+
 ## Embeddings
 
 Embeddings are off by default: document search is keyword search, reranked. Turned on in Settings, it runs a built-in embedding model, multilingual-e5-small (int8 ONNX, 135 MB), on your CPU in an Electron utility process. The app downloads it from Hugging Face into the data folder (`models/`) the first time a Document needs it, and checks each file's SHA-256; after that, indexing works offline. The tests use a deterministic fake instead. `INCARNAMIND_REAL_MODEL=1 npm test` also runs one test with the real model, downloading it unless `INCARNAMIND_MODEL_DIR` points at a folder holding its files. On Linux x64, set `ONNXRUNTIME_NODE_INSTALL=skip` when you run `npm install`, or onnxruntime-node also downloads its CUDA libraries, which the app doesn't use.
