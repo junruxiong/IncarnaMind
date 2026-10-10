@@ -16,6 +16,13 @@ import {
 } from "../helpers/localModels";
 import { question, writeMind } from "../helpers/minds";
 import { startOllamaServer } from "../helpers/ollama";
+import { buildPdf } from "../helpers/pdf";
+
+/** Two short pages: one Passage covers both. */
+const TIDES_PDF = buildPdf([
+  { lines: ["Tides and the Moon", "Most coasts see two high tides every day."] },
+  { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
+]);
 
 describe("Choosing how a local model cites, before the first request", () => {
   test("a model without Tools gets structured output from its first request, and is never offered Tools", async () => {
@@ -100,6 +107,43 @@ describe("Choosing how a local model cites, before the first request", () => {
     expect(ended.payload).toMatchObject({ citationSupport: "structured-output", placedMarkers: 1 });
     expect(ended.event === "finished" && ended.payload.citations).toMatchObject([
       { check: "found" },
+    ]);
+  });
+
+  test("a small model's record that names its Passage by number, and the wrong page of it, is cited where its quote is", async () => {
+    const ollama = await startOllamaServer({
+      models: [QWEN35],
+      reply: answering(() => ({
+        content: JSON.stringify({
+          answer: "Spring tides come at new and full moon [^1]. Neap tides are smaller [^2].",
+          citations: [
+            // "1" for P1, and p. 1 for a quote on p. 2.
+            {
+              marker: 1,
+              passage: "1",
+              location: "p. 1",
+              quote: "Spring tides happen at new moon and at full moon.",
+            },
+            // A quote that is on none of P1's pages stays "not found".
+            { marker: 2, passage: "P1", location: "p. 2", quote: "Neap tides are the smallest." },
+          ],
+        }),
+      })),
+    });
+    const { core, mind, client } = await setUpLocalModel(ollama, QWEN35.name, {
+      documents: [{ name: "Tides.pdf", contents: TIDES_PDF }],
+    });
+    const asked = question("When are spring tides?");
+    writeMind(client, [asked]);
+
+    const { ended } = await askAndEnd(core, client, mind.id, asked.attrs.id);
+
+    expect(ended.event).toBe("finished");
+    // One request: nothing goes back to the model to fix its records.
+    expect(answerChats(ollama)).toHaveLength(1);
+    expect(ended.event === "finished" && ended.payload.citations).toMatchObject([
+      { pageFrom: 2, pageTo: 2, location: { kind: "page", from: 2, to: 2 }, check: "found" },
+      { pageFrom: 2, pageTo: 2, check: "not-found", checkReason: "quote-not-on-pages" },
     ]);
   });
 });

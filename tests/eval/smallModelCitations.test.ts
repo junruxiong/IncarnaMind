@@ -3,7 +3,9 @@
  * found (#67), cause by cause, without a model: records written by hand as a
  * small model may write them, given to the core's own citation session over
  * the stored text of the evaluation's PDFs (cut short), and sorted as the
- * evaluation sorts them. qwen3.5:4b in structured output found 78% of its
+ * evaluation sorts them, as the Tool loop gives them and, where it differs,
+ * as structured output does (which places a record where its quote is in
+ * its Passage, `CiteOptions`). qwen3.5:4b in structured output found 78% of its
  * English quotes and 64% of its Chinese ones on the gating set; these are the
  * ways the code and the data let a record fail. A quote of JP Morgan's
  * report, whose stored text lost its f-ligatures ("fnance"), is in
@@ -13,7 +15,7 @@ import { describe, expect, test } from "vitest";
 import { type CitationOutcome, outcomeOf, quotePages } from "../../eval/lib/citations";
 import type { CitationAttributes } from "../../src/core";
 import { createCitationSession } from "../../src/core/answers/citations";
-import type { CitationRecordInput } from "../../src/core/answers/engine";
+import type { CitationRecordInput, CiteOptions } from "../../src/core/answers/engine";
 import { documentInstructions } from "../../src/core/answers/prompt";
 
 /** A Document's stored pages, cut short, and its Passages, by the pages they cover. */
@@ -81,8 +83,11 @@ function sessionOver({ name, pages, passages }: Excerpt) {
     /** The Passages as the model reads them, each with its id: P1, P2… */
     shown: async () => (await session.tools.searchDocuments("a query")).text,
     /** What `cite` tells the model, and what became of each record: null when it was dropped. */
-    cite(records: CitationRecordInput[]): { feedback: string; outcomes: (Outcome | null)[] } {
-      const feedback = session.tools.cite(records);
+    cite(
+      records: CitationRecordInput[],
+      options?: CiteOptions,
+    ): { feedback: string; outcomes: (Outcome | null)[] } {
+      const feedback = session.tools.cite(records, options);
       session.check();
       const outcomes = records.map((record): Outcome | null => {
         const node = session.finalNode(record.marker);
@@ -197,9 +202,25 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
         quoteOn: null,
       },
     ]);
+    // Structured output places a quote only where it is word for word: this one is nowhere.
+    const placed = sessionOver(GOALS);
+    await placed.shown();
+    expect(
+      placed.cite(
+        [
+          {
+            marker: 1,
+            passage: "P1",
+            location: "p. 3",
+            quote: "让全球因为交通事故而伤亡的人数减少一半",
+          },
+        ],
+        { structured: true },
+      ).outcomes,
+    ).toMatchObject([{ check: "not-found", pages: [3, 3], outcome: "not-in-document" }]);
   });
 
-  test("the Passage's first page, for a quote on its second, is a wrong page, and structured output has no second try (en-02)", async () => {
+  test("the Passage's first page, for a quote on its second, is a wrong page that cite's feedback lets the Tool loop fix; structured output's is placed (en-02)", async () => {
     const attention = sessionOver(ATTENTION);
     // The Passage covers pp. 7–8, and marks where p. 8 starts.
     expect(await attention.shown()).toContain('pages="7-8">');
@@ -217,8 +238,15 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
       { check: "found", pages: [7, 8] },
     ]);
     // In the Tool loop, `cite` tells the model, which may fix the record with another call.
-    // In structured output the engine sends one request and doesn't read this (engine.ts, `structured`).
     expect(feedback).toMatch(/\[\^1\]: the quote isn't word for word on p\. 7 in P1/);
+    // Structured output sends one request, so nothing can tell the model: its record is placed.
+    const placed = sessionOver(ATTENTION);
+    await placed.shown();
+    expect(
+      placed.cite([{ marker: 1, passage: "P1", location: "p. 7", quote: PERPLEXITY }], {
+        structured: true,
+      }).outcomes,
+    ).toMatchObject([{ check: "found", pages: [8, 8] }]);
   });
 
   test("the structured-output example names no page; its placeholder, copied, cites the Passage's own pages (en-02)", async () => {
@@ -241,6 +269,14 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
       { check: "found", pages: [7, 8] },
       { check: "not-found", checkReason: "pages-outside-passage", outcome: "page-range" },
     ]);
+    // In structured output, a page outside the Passage is placed inside it, where the quote is.
+    const placed = sessionOver(ATTENTION);
+    await placed.shown();
+    expect(
+      placed.cite([{ marker: 1, passage: "P1", location: "p. 3", quote: PERPLEXITY }], {
+        structured: true,
+      }).outcomes,
+    ).toMatchObject([{ check: "found", pages: [8, 8] }]);
   });
 
   test("a quote across a page break needs both pages, in a Passage that has both (en-17)", async () => {
@@ -265,6 +301,22 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
       { check: "found", pages: [33, 34] },
       { check: "not-found", checkReason: "pages-outside-passage", outcome: "page-range" },
     ]);
+    // Structured output places the first across both pages of its Passage, but never moves
+    // the third out of P1, which holds only the first page.
+    const placed = sessionOver(ABPI);
+    await placed.shown();
+    expect(
+      placed.cite(
+        [
+          { marker: 1, passage: "P2", location: "p. 33", quote: OBLIGATION },
+          { marker: 3, passage: "P1", location: "pp. 33-34", quote: OBLIGATION },
+        ],
+        { structured: true },
+      ).outcomes,
+    ).toMatchObject([
+      { check: "found", pages: [33, 34] },
+      { check: "not-found", checkReason: "pages-outside-passage", outcome: "page-range" },
+    ]);
   });
 
   test("a record that names no page, for a Passage over four pages, cites the quote's own page (zh-08, zh-14)", async () => {
@@ -285,7 +337,7 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
     ]);
   });
 
-  test("a record that names its Passage other than by its id is dropped, and its marker with it", async () => {
+  test("a record that names its Passage other than by its id is dropped, and its marker with it; structured output reads a number as the id", async () => {
     const attention = sessionOver(ATTENTION);
     await attention.shown();
 
@@ -297,5 +349,22 @@ describe("Why a small model's Citations of long PDFs aren't found", () => {
 
     expect(outcomes.map((outcome) => outcome?.check ?? null)).toEqual([null, null, "found"]);
     expect(feedback).toContain('there is no Passage "1" in your search results');
+
+    // "1" is P1 in structured output; a number with no Passage, or a name, is still dropped.
+    const numbered = sessionOver(ATTENTION);
+    await numbered.shown();
+    const structured = numbered.cite(
+      [
+        { marker: 1, passage: "1", location: "p. 8", quote: PERPLEXITY },
+        { marker: 2, passage: "Attention Is All You Need", location: "p. 8", quote: PERPLEXITY },
+        { marker: 3, passage: "7", location: "p. 8", quote: PERPLEXITY },
+      ],
+      { structured: true },
+    );
+    expect(structured.outcomes.map((outcome) => outcome?.check ?? null)).toEqual([
+      "found",
+      null,
+      null,
+    ]);
   });
 });
