@@ -695,6 +695,18 @@ export const migrations: readonly Migration[] = [
   },
   {
     version: 34,
+    description: "A Mind belongs to one Folder, or to none (#111)",
+    // The in-app Folder (library_groups) a Mind belongs to; NULL: Not in a
+    // Folder, where every Mind made before is. No foreign key: a later sync
+    // may deliver a Mind before its Folder. Deleting a Folder sets its Minds'
+    // folder_id back to NULL.
+    sql: `
+      ALTER TABLE minds ADD COLUMN folder_id TEXT;
+      CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 35,
     description: "Whether IncarnaMind may add new files inside a Linked folder (#124)",
     // Asked at the first save there, and changed in Settings; allowed is 1 or 0. It ends with
     // its Linked folder: linked again, the folder is asked about again (src/core/outputFiles.ts).
