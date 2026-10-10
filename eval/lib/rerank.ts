@@ -1,13 +1,14 @@
 /**
- * The reranked mode: the candidates the search Tool hands a reranker
+ * The reranked modes: the candidates the search Tool hands a reranker
  * (keyword search's top 10 and vector search's top 10, each Passage once;
- * see `rerankCandidates` in ./retrieval), reranked by a built-in reranking
- * candidate (src/core/reranking/model.ts), as the search Tool reranks them
- * when the User turns reranking on. It uses the core's own
- * reranking code (download and check, what the model reads, its scores)
- * with the model on a worker thread, outside the evaluation's core: one run
- * compares every candidate given in INCARNAMIND_EVAL_RERANK over the same
- * searches, one model at a time.
+ * see `rerankCandidates` in ./retrieval), or keyword search's top 20 alone
+ * (keyword + rerank), reranked by a built-in reranking candidate
+ * (src/core/reranking/model.ts), as the search Tool reranks them when the
+ * User turns reranking on. It uses the core's own reranking code (download
+ * and check, what the model reads, its scores) with the model on a worker
+ * thread, outside the evaluation's core: one run compares every candidate
+ * given in INCARNAMIND_EVAL_RERANK over the same searches, one model and one
+ * mode at a time, so each mode's timings are its own.
  */
 import type { CrossEncoder, PassageSearchResult, RerankingModelDefinition } from "../../src/core";
 import {
@@ -33,9 +34,9 @@ export function createWorkerCrossEncoder(): CrossEncoder {
   });
 }
 
-/** What the report says about a candidate. */
+/** What the report says about a candidate in one reranked mode. */
 export interface RerankerInfo {
-  /** The mode it adds, e.g. "rerank:mmarco-minilm". */
+  /** The mode it adds, e.g. "rerank:mmarco-minilm" or "keyword-rerank:mmarco-minilm". */
   mode: string;
   name: string;
   licence: string;
@@ -60,14 +61,16 @@ const quantile = (sorted: readonly number[], share: number) =>
 
 /**
  * Downloads (once, into the evaluation's model cache, checked against the
- * pinned hashes) and opens a candidate.
+ * pinned hashes) and opens a candidate, for one reranked mode: hybrid
+ * search's candidates unless another mode is named (see `rerankMode` in
+ * ./retrieval).
  */
 export async function openReranker(
   definition: RerankingModelDefinition,
   cacheDir: string,
   log: Log,
+  mode = `rerank:${definition.id}`,
 ): Promise<OpenReranker> {
-  const mode = `rerank:${definition.id}`;
   let lastLogged = 0;
   const ready = Promise.withResolvers<void>();
   const model = createRerankingModel({

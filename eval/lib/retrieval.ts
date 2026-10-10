@@ -12,6 +12,11 @@
  * gating mode, since the search Tool reranks with it by default; the other
  * candidates', and the plain search modes, are reported only.
  *
+ * Keyword + rerank: the same reranking models over keyword search's top 20
+ * alone, with no vector search, as many candidates as the most the search
+ * Tool hands one. Reported next to the others, never gating: it measures
+ * whether reranking needs vector search's candidates at all.
+ *
  * Also reported:
  * - A translated second query: a cross-lingual Question's own search, and a
  *   second one with the Question translated into its Document's language, as
@@ -39,17 +44,48 @@ export const RANK_DEPTH = 20;
 /** A reranker sees this many of keyword search's best Passages, and of vector search's: the search Tool's. */
 export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
 
+/** Keyword + rerank sees this many of keyword search's best: as many as the most the search Tool hands a reranker. */
+export const KEYWORD_RERANK_DEPTH = 2 * RERANK_PER_LIST;
+
 export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
 /** Hybrid search: what the search Tool runs before it reranks, and the second query's search. */
 export const HYBRID: SearchMode = "hybrid";
 
-/** A mode of the report: one of the core's search modes, or hybrid search reranked by a candidate. */
-export type RetrievalMode = SearchMode | `rerank:${string}`;
+/**
+ * What a reranked mode reranks: what the search Tool hands a reranker
+ * ("hybrid": keyword search's top 10 and vector search's top 10), or keyword
+ * search's top 20 alone ("keyword").
+ */
+export type RerankedSearch = "hybrid" | "keyword";
 
-/** The reranked mode of a reranking model. */
-export const rerankMode = (definition: RerankingModelDefinition): RetrievalMode =>
-  `rerank:${definition.id}`;
+/** The reranked searches, in the order the report lists them for each reranking model. */
+export const RERANKED_SEARCHES: readonly RerankedSearch[] = ["hybrid", "keyword"];
+
+/**
+ * A mode of the report: one of the core's search modes, or a reranked mode:
+ * hybrid search's candidates ("rerank:") or keyword search's alone
+ * ("keyword-rerank:") reranked by a candidate.
+ */
+export type RetrievalMode = SearchMode | `rerank:${string}` | `keyword-rerank:${string}`;
+
+/** The reranked mode of a reranking model, over hybrid search's candidates unless keyword search's are named. */
+export const rerankMode = (
+  definition: Pick<RerankingModelDefinition, "id">,
+  search: RerankedSearch = "hybrid",
+): RetrievalMode =>
+  search === "hybrid" ? `rerank:${definition.id}` : `keyword-rerank:${definition.id}`;
+
+/** What a mode reranks; null for the core's own search modes. */
+export function rerankedSearchOf(mode: string): RerankedSearch | null {
+  if (mode.startsWith("rerank:")) return "hybrid";
+  if (mode.startsWith("keyword-rerank:")) return "keyword";
+  return null;
+}
+
+/** A reranked mode as people read it: "hybrid + <model>", or "keyword + <model>". */
+export const rerankedLabel = (search: RerankedSearch, modelName: string) =>
+  `${search} + ${modelName}`;
 
 /**
  * The gating mode: what the search Tool runs by default, hybrid search
@@ -58,7 +94,13 @@ export const rerankMode = (definition: RerankingModelDefinition): RetrievalMode 
 export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
 
 /** The gating mode, as people read it. */
-export const GATING_LABEL = `${HYBRID} + ${BUILT_IN_RERANKING_MODEL.name}`;
+export const GATING_LABEL = rerankedLabel("hybrid", BUILT_IN_RERANKING_MODEL.name);
+
+/** Keyword + rerank with the built-in reranking model: reported next to the gating mode, never gating. */
+export const KEYWORD_RERANK_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL, "keyword");
+
+/** Keyword + rerank with the built-in reranking model, as people read it. */
+export const KEYWORD_RERANK_LABEL = rerankedLabel("keyword", BUILT_IN_RERANKING_MODEL.name);
 
 /** The v1 design's bar: 80% of the gating Questions overall and in each language (32 of 40, and 16 of 20 per language, with today's set). */
 const RETRIEVAL_TARGET = { share: 0.8 } as const;
@@ -92,13 +134,20 @@ export interface QuestionResult {
   translatedQuery?: string;
   /** That second query's results: hybrid, and each reranked mode. */
   translated?: Partial<Record<RetrievalMode, ModeResult>>;
-  /** How many candidates a reranker saw for the Question, and for its translation, when reranked modes ran. */
+  /** How many candidates a reranker saw for the Question, and for its translation, when hybrid's reranked modes ran. */
   rerankCandidates?: { question: number; translated?: number };
+  /** The same for keyword + rerank: keyword search's top 20, or fewer when it found fewer. */
+  keywordRerankCandidates?: { question: number; translated?: number };
 }
 
-/** How many candidates a reranker saw per search: keyword search's top 10 and vector search's, each Passage once. */
+/**
+ * How many candidates a reranker saw per search: keyword search's top 10 and
+ * vector search's, each Passage once, or keyword search's top 20 alone.
+ */
 export interface CandidateCounts {
-  /** How many of each list's best: 10. */
+  /** What was reranked. Hybrid's when left out, as in reports from before keyword + rerank. */
+  search?: RerankedSearch;
+  /** How many of each list's best: 10 of each for hybrid's, 20 of keyword search's alone. */
   perList: number;
   /** Searches reranked: the Questions, and the translated queries. */
   searches: number;
@@ -135,10 +184,12 @@ export interface RetrievalRun {
   processingSeconds: number;
   questions: QuestionResult[];
   summary: Partial<Record<RetrievalMode, ModeSummary>>;
-  /** The reranking candidates of the reranked modes, if any were given. */
+  /** The reranking candidates of the reranked modes, one per mode, if any were given. */
   rerankers?: RerankerInfo[];
-  /** How many Passages they reranked per search, if any were given. */
+  /** How many Passages hybrid's reranked modes reranked per search, if any ran. */
   rerankCandidates?: CandidateCounts;
+  /** How many Passages keyword + rerank reranked per search, if it ran. */
+  keywordRerankCandidates?: CandidateCounts;
 }
 
 export function checkPassage(
@@ -206,21 +257,48 @@ export async function rerankCandidates(core: Core, query: string): Promise<Passa
   return topsOfEach([keyword ?? [], vector ?? []], RERANK_PER_LIST, (passage) => passage.passageId);
 }
 
-/** How many candidates the reranked searches had, from the counts `runReranked` recorded; null if none ran. */
-export function candidateCounts(results: readonly QuestionResult[]): CandidateCounts | null {
-  const counts = results.flatMap((result) =>
-    result.rerankCandidates
-      ? [
-          result.rerankCandidates.question,
-          ...(result.rerankCandidates.translated === undefined
-            ? []
-            : [result.rerankCandidates.translated]),
-        ]
-      : [],
-  );
+/** What keyword + rerank hands a reranker for a query: keyword search's top 20, with no vector search. */
+export const keywordRerankCandidates = (
+  core: Core,
+  query: string,
+): Promise<PassageSearchResult[]> =>
+  core.searchPassages(query, { mode: "keyword", limit: KEYWORD_RERANK_DEPTH });
+
+/** Each reranked search's candidates, and where a Question's result records how many there were. */
+const RERANKED: Record<
+  RerankedSearch,
+  {
+    candidates: (core: Core, query: string) => Promise<PassageSearchResult[]>;
+    perList: number;
+    counted: "rerankCandidates" | "keywordRerankCandidates";
+  }
+> = {
+  hybrid: { candidates: rerankCandidates, perList: RERANK_PER_LIST, counted: "rerankCandidates" },
+  keyword: {
+    candidates: keywordRerankCandidates,
+    perList: KEYWORD_RERANK_DEPTH,
+    counted: "keywordRerankCandidates",
+  },
+};
+
+/**
+ * How many candidates the reranked searches had (hybrid's, unless keyword
+ * search's are named), from the counts `runReranked` recorded; null if none ran.
+ */
+export function candidateCounts(
+  results: readonly QuestionResult[],
+  search: RerankedSearch = "hybrid",
+): CandidateCounts | null {
+  const { counted, perList } = RERANKED[search];
+  const counts = results.flatMap((result) => {
+    const recorded = result[counted];
+    if (!recorded) return [];
+    return [recorded.question, ...(recorded.translated === undefined ? [] : [recorded.translated])];
+  });
   if (counts.length === 0) return null;
   return {
-    perList: RERANK_PER_LIST,
+    search,
+    perList,
     searches: counts.length,
     mean: counts.reduce((sum, count) => sum + count, 0) / counts.length,
     min: Math.min(...counts),
@@ -269,10 +347,12 @@ export async function runRetrieval(
 }
 
 /**
- * Adds a reranked mode to `results`: each Question's reranking candidates
- * (and its translated query's; see `rerankCandidates`), reordered by the
- * candidate model, scored like the others. Records how many candidates each
- * search had.
+ * Adds the reranker's mode to `results`: each Question's candidates (and its
+ * translated query's), reordered by the candidate model, scored like the
+ * others. What is reranked follows from the mode (see `rerankedSearchOf`):
+ * what the search Tool hands a reranker (`rerankCandidates`), or keyword
+ * search's top 20 (`keywordRerankCandidates`). Records how many candidates
+ * each search had.
  */
 export async function runReranked(
   core: Core,
@@ -282,12 +362,15 @@ export async function runReranked(
   results: readonly QuestionResult[],
 ): Promise<void> {
   const mode = reranker.mode as RetrievalMode;
+  const search = rerankedSearchOf(mode);
+  if (!search) throw new Error(`${mode} isn't a reranked mode.`);
+  const { candidates: candidatesOf, counted } = RERANKED[search];
   for (const question of questions) {
     const result = results.find((each) => each.id === question.id);
     if (!result) throw new Error(`${question.id}: no results to add the reranked mode to.`);
     const expectedId = expectedIdOf(question, documentIds);
     const reranked = async (query: string) => {
-      const candidates = await rerankCandidates(core, query);
+      const candidates = await candidatesOf(core, query);
       const ranking = scoreRanking(
         await reranker.rerank(query, candidates),
         question.expected,
@@ -297,12 +380,13 @@ export async function runReranked(
     };
     const own = await reranked(question.question);
     result.modes[mode] = own.ranking;
-    result.rerankCandidates = { question: own.count };
+    const counts: { question: number; translated?: number } = { question: own.count };
     if (question.translatedQuery && result.translated) {
       const translated = await reranked(question.translatedQuery);
       result.translated[mode] = translated.ranking;
-      result.rerankCandidates.translated = translated.count;
+      counts.translated = translated.count;
     }
+    result[counted] = counts;
   }
 }
 

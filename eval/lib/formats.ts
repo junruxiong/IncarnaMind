@@ -16,6 +16,7 @@ import type { EvalLanguage, EvaluationSet } from "./evaluationSet";
 import {
   GATING_MODE,
   HYBRID,
+  KEYWORD_RERANK_MODE,
   type RetrievalMode,
   type RetrievalRun,
   type Tally,
@@ -31,8 +32,11 @@ export const FORMATS = [
 
 export type FormatId = (typeof FORMATS)[number]["id"];
 
-/** The modes reported per format: the search Tool's default (reranked), and plain hybrid search. */
-export const FORMAT_MODES: readonly RetrievalMode[] = [GATING_MODE, HYBRID];
+/**
+ * The modes reported per format, those that ran: the search Tool's default
+ * (reranked), plain hybrid search, and keyword + rerank.
+ */
+export const FORMAT_MODES: readonly RetrievalMode[] = [GATING_MODE, HYBRID, KEYWORD_RERANK_MODE];
 
 /** The format of a Document's file, by its kind. */
 export function formatOf(path: string): FormatId {
@@ -135,7 +139,12 @@ export function summariseFormats(
       format,
       label,
       documents: [...formatByDocument.values()].filter((each) => each === format).length,
-      retrieval: Object.fromEntries(FORMAT_MODES.map((mode) => [mode, byLanguage(counted, mode)])),
+      retrieval: Object.fromEntries(
+        FORMAT_MODES.filter((mode) => retrieval.summary[mode]).map((mode) => [
+          mode,
+          byLanguage(counted, mode),
+        ]),
+      ),
       knownGaps: tally(
         asked
           .filter((question) => question.knownGap)
