@@ -104,11 +104,11 @@ export async function turnOnEmbeddings(window: Page): Promise<void> {
 /** The pages in Settings' list. */
 export type SettingsPage =
   | "general"
-  | "chat-model"
+  | "models"
   | "search"
+  | "tools"
   | "connectors"
   | "skills"
-  | "approvals"
   | "privacy";
 
 /** Opens Settings from the sidebar, then one of the pages in its list. Returns the dialog. */

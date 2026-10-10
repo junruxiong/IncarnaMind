@@ -119,7 +119,7 @@ export function LibraryPane() {
   });
   const organize = () => {
     if (!snapshot?.settings.classifier) {
-      useAppStore.getState().openSettings("organization");
+      useAppStore.getState().openSettings("models");
       return;
     }
     void act(() =>
@@ -137,7 +137,7 @@ export function LibraryPane() {
       data-testid="library"
       className="library-pane flex min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
     >
-      <header className="title-bar library-header flex h-11 shrink-0 items-center justify-between bg-tab-strip pl-4">
+      <header className="title-bar library-header flex h-9 shrink-0 items-center justify-between bg-tab-strip pl-4">
         <span className="font-semibold">{t("library.title")}</span>
         <button
           type="button"
@@ -214,7 +214,7 @@ export function LibraryPane() {
               className={`${buttonStyle("ghost", "sm")} ml-auto`}
               aria-label={t("library.settingsTitle")}
               title={t("library.settingsTitle")}
-              onClick={() => useAppStore.getState().openSettings("organization")}
+              onClick={() => useAppStore.getState().openSettings("models")}
             >
               <SettingsLineIcon className="size-4" />
             </button>
