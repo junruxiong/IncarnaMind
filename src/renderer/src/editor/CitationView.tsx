@@ -6,7 +6,7 @@ import { badgeMessage, type CitationState, citationState } from "../../../shared
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { useAnswers } from "../answers";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
+import { recordUsage, useAppStore } from "../store";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { useMindId } from "./mindContext";
@@ -94,6 +94,7 @@ export function CitationView({
     setOpen(true);
     // "Check a Citation in the example", in Get started.
     useAppStore.getState().updateGettingStarted({ citationChecked: true });
+    recordUsage({ event: "citation_opened", fields: { check: state.check } });
     if (state.check === "found") openCited(true);
     // A deleted Document: the viewer shows the stored quote with "Document removed".
     else if (state.reason === "document-removed") openCited(true);

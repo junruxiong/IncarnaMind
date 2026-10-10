@@ -78,28 +78,32 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(section.getByTestId("skill-preview")).toHaveCount(0);
   await closeSettings(window);
 
-  // In a Question, "/" offers the Skills only; choosing one shows it as a chip.
+  // In the composer, "/" offers the Skills only; choosing one shows it as a chip.
   await window.getByTestId("new-mind").click();
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("/tide");
-  const menu = window.getByTestId("slash-menu");
+  const menu = window.getByTestId("composer-skill-picker");
   await expect(menu.getByTestId("slash-item-skill-tide-tables")).toHaveAttribute(
     "aria-selected",
     "true",
   );
   await expect(menu.getByTestId("slash-item-heading-1")).toHaveCount(0);
   await window.keyboard.press("Enter");
+  const composer = window.getByTestId("composer");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("tide-tables");
+  await expect(composer.getByTestId("composer-skill")).toHaveAttribute("data-state", "enabled");
+  await expect(composer.getByTestId("composer-input")).toHaveValue("");
+
+  // Asked, the Question carries the Skill, and the Answer follows it, saying so on a Skill card.
+  await window.keyboard.type("When is high water in Brest?");
+  await window.keyboard.press("Enter");
   const question = editor.getByTestId("question");
   const chip = question.getByTestId("question-skill");
   await expect(chip).toHaveText("tide-tables");
   await expect(chip).toHaveAttribute("data-state", "enabled");
-  await expect(question.locator(".question-text")).toHaveText("");
-
-  // Asked, the Answer follows the Skill, and says so on a Skill card.
-  await window.keyboard.type("When is high water in Brest?");
-  await window.keyboard.press("Enter");
+  await expect(composer.getByTestId("composer-skill")).toHaveCount(0);
   const answer = editor.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const card = answer.getByTestId("answer-skill");
@@ -108,13 +112,20 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(card).toContainText("Used the Skill tide-tables · chosen for this Question");
   await expect(answer).toContainText("Following the Skill tide-tables.");
 
-  // Turned off, the Skill can't be used: asking says so, and can go ahead without it.
+  // A Skill chosen in the composer for the next Question, before it was turned off.
+  await composer.getByTestId("composer-input").click();
+  await window.keyboard.type("/tide");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("And in Calais?");
+
+  // Turned off, the Skill can't be used: asking again says so, and can go ahead without it.
   await openSettings(window, "skills");
   await item.getByTestId("skill-enabled").uncheck();
   await expect(item).toHaveAttribute("data-enabled", "false");
   await closeSettings(window);
   await expect(chip).toHaveAttribute("data-state", "disabled");
-  await question.getByTestId("question-ask").click();
+  await answer.hover();
+  await answer.getByTestId("answer-regenerate").click();
   const notice = question.getByTestId("question-skill-unavailable");
   await expect(notice).toContainText("which is turned off");
   await notice.getByRole("button", { name: "Ask without it" }).click();
@@ -124,6 +135,21 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("That is all.");
   await expect(answer.getByTestId("answer-skill")).toHaveCount(0);
+
+  // So does asking from the composer, in its row: the Question waits there until then.
+  await expect(composer.getByTestId("composer-skill")).toHaveAttribute("data-state", "disabled");
+  await composer.getByTestId("composer-input").click();
+  await window.keyboard.press("Enter");
+  const composerNotice = composer.getByTestId("composer-skill-unavailable");
+  await expect(composerNotice).toContainText("which is turned off");
+  await expect(editor.getByTestId("question")).toHaveCount(1);
+  await composerNotice.getByRole("button", { name: "Ask without it" }).click();
+  await expect(composerNotice).toHaveCount(0);
+  await expect(composer.getByTestId("composer-skill")).toHaveCount(0);
+  const second = editor.getByTestId("answer").nth(1);
+  await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(editor.getByTestId("question").nth(1)).toContainText("And in Calais?");
+  await expect(second).not.toContainText("Following the Skill");
   await app.close();
 });
 
@@ -156,15 +182,20 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   await window.keyboard.press("Enter");
   await window.keyboard.type("When is high water in Brest?");
 
+  const composer = window.getByTestId("composer");
+  await expect(composer.getByTestId("composer-skill")).toHaveText("tide-tables");
+  await expect(composer.getByTestId("scope-chip")).toContainText("Harbour");
+  await expect(composer.getByTestId("composer-input")).toHaveValue("When is high water in Brest?");
+
+  // Asked: the Question carries both; the Skill was loaded up front, and the search found
+  // only the Document in scope.
+  await window.keyboard.press("Enter");
   const question = editor.getByTestId("question");
   await expect(question.getByTestId("question-skill")).toHaveText("tide-tables");
   const scope = question.getByTestId("scope-chip");
   await expect(scope).toHaveCount(1);
   await expect(scope).toContainText("Harbour");
   await expect(question.locator(".question-text")).toHaveText("When is high water in Brest?");
-
-  // Asked: the Skill was loaded up front, and the search found only the Document in scope.
-  await window.keyboard.press("Enter");
   const answer = editor.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");

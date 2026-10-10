@@ -6,6 +6,7 @@ import type {
   ChatReadiness,
   SkillAvailability,
 } from "../../core/api";
+import { composerKey } from "./composer";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
@@ -21,7 +22,7 @@ type AskBlock =
   | { kind: "error"; message: string };
 
 interface AnswersState {
-  /** By Question Block ID. */
+  /** By Question Block ID, or by `composerKey` for a Question asked from a Mind's composer. */
   blocked: Readonly<Record<string, AskBlock>>;
   /** Answers being written, by Block ID, from the core's Answer events. */
   writing: ReadonlySet<string>;
@@ -32,6 +33,11 @@ interface AnswersState {
 
   /** Asks a Question; with `discardEdits`, replaces an Answer the User edited. */
   ask(mindId: string, questionId: string, discardEdits?: boolean): Promise<AskResult | null>;
+  /**
+   * Asks a Question just put into the Mind from its composer: why it couldn't
+   * be asked is kept for the composer (`composerKey`), not for the Question.
+   */
+  askFromComposer(mindId: string, questionId: string): Promise<AskResult | null>;
   /** Writes an Answer again; with `discardEdits`, even if the User edited it. */
   regenerate(
     mindId: string,
@@ -45,13 +51,14 @@ interface AnswersState {
   loadModels(): void;
 }
 
-function settle(questionId: string, result: AskResult | null, error?: unknown): void {
+/** Keeps why asking didn't go ahead, under `key` (a Question's Block ID, or `composerKey`), or clears it. */
+function settle(key: string, result: AskResult | null, error?: unknown): void {
   useAnswers.setState((state) => {
     const blocked = { ...state.blocked };
-    delete blocked[questionId];
-    if (error !== undefined) blocked[questionId] = { kind: "error", message: errorMessage(error) };
+    delete blocked[key];
+    if (error !== undefined) blocked[key] = { kind: "error", message: errorMessage(error) };
     else if (result && !result.asked) {
-      blocked[questionId] =
+      blocked[key] =
         result.reason === "not-ready"
           ? { kind: "not-ready", readiness: result.readiness }
           : result.reason === "edited"
@@ -80,6 +87,18 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
       return result;
     } catch (error) {
       settle(questionId, null, error);
+      return null;
+    }
+  },
+
+  async askFromComposer(mindId, questionId) {
+    const key = composerKey(mindId);
+    try {
+      const result = await core.askQuestion({ mindId, questionId });
+      settle(key, result);
+      return result;
+    } catch (error) {
+      settle(key, null, error);
       return null;
     }
   },

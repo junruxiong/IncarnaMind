@@ -21,15 +21,20 @@ interface Stop {
  * Presses Tab, as a person does, and reads where the focus went. It shows when
  * the control has DESIGN.md's focus ring (a solid accent outline, 2px; 1px
  * around a text field, whose edge turns blue too), or, in the Mind's text and
- * title, the caret. A pane divider turns blue instead.
+ * title, the caret. A pane divider turns blue instead, and the gap before the
+ * card shows the ring's line.
  */
 async function pressTab(window: Page): Promise<Stop | null> {
   await window.keyboard.press("Tab");
   return window.evaluate(async () => {
     const element = document.activeElement as HTMLElement | null;
     if (!element || element === document.body) return null;
-    // As it looks once its colours have faded in (a button's 80ms).
-    const fading = element.getAnimations({ subtree: true }).filter((each) => {
+    // As it looks once its colours have faded in (a button's 80ms; the composer's edge).
+    const composer = element.closest(".composer");
+    const fading = [
+      ...element.getAnimations({ subtree: true }),
+      ...(composer?.getAnimations() ?? []),
+    ].filter((each) => {
       return each instanceof CSSTransition;
     });
     await Promise.all(fading.map((each) => each.finished.catch(() => undefined)));
@@ -54,8 +59,17 @@ async function pressTab(window: Page): Promise<Stop | null> {
       ringOn(element, field ? 1 : 2) ||
       // A Mind tab draws its ring on its inner shape.
       (element.matches(".mind-tab") && ringOn(element.querySelector(".mind-tab-inner"), 2)) ||
-      // A pane's divider, a 1px rule, turns blue and shows its grip.
-      (element.matches(".pane-divider") && getComputedStyle(element).backgroundColor === accent);
+      // A pane's divider, a 1px rule, turns blue and shows its grip; the 8px gap before the
+      // card draws the ring's 2px line down its middle instead.
+      (element.matches(".pane-divider") &&
+        (getComputedStyle(element).backgroundColor === accent ||
+          (element.matches(".pane-divider--gap") &&
+            getComputedStyle(element).backgroundImage.includes(accent) &&
+            getComputedStyle(element).backgroundSize.startsWith("2px")))) ||
+      // The composer's text: the composer's edge turns blue, as a field's does.
+      (element.matches(".composer-input") &&
+        composer !== null &&
+        getComputedStyle(composer).borderTopColor === accent);
     const label =
       element.getAttribute("aria-label") ||
       element.getAttribute("title") ||
@@ -102,7 +116,7 @@ async function pointAndClick(window: Page, target: Locator): Promise<void> {
 test("every Tab stop in a Mind, the sidebar and Settings shows the blue focus ring", async () => {
   // The example Mind is a working one: a Question with a scope, an Answer with checked Citations.
   const { app, window } = await launchApp(dataDir, { examples: true });
-  // A chat model, so the Question shows its model picker: an Ollama on a closed port, never called.
+  // A chat model, so the composer shows its model chip: an Ollama on a closed port, never called.
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await core.saveChatProvider({
@@ -111,7 +125,7 @@ test("every Tab stop in a Mind, the sidebar and Settings shows the blue focus ri
       baseUrl: "http://127.0.0.1:9",
     });
   });
-  await expect(window.getByTestId("question-model")).toBeVisible();
+  await expect(window.getByTestId("composer-model")).toBeVisible();
   const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
 

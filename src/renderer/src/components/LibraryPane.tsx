@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Document, LibraryGroup } from "../../../core/api";
+import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../../core/api";
+import { displayName, fileNameOf } from "../../../shared/documentNames";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
@@ -24,6 +25,8 @@ import { DocumentTagChips } from "./TagChips";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
+
+const NO_GROUPS: readonly LibraryGroup[] = [];
 
 /** The sidebar chooses a folder; this sheet shows its documents and editable tags. */
 export function LibraryPane() {
@@ -61,7 +64,8 @@ export function LibraryPane() {
     setDeleting(false);
     setEditing(filter === "new" ? "new" : null);
   }, [filter]);
-  const act: Action = async (work) => {
+  // The same function from one drawing to the next, so the rows needn't be drawn again for it.
+  const act: Action = useCallback(async (work) => {
     setError(null);
     setBusy(true);
     try {
@@ -74,31 +78,45 @@ export function LibraryPane() {
     } finally {
       setBusy(false);
     }
-  };
-  const groups = snapshot?.groups ?? [];
-  const assignments = new Map(snapshot?.assignments.map((item) => [item.documentId, item]));
+  }, []);
+  const groups = snapshot?.groups ?? NO_GROUPS;
+  const assignments = useMemo(
+    () => new Map(snapshot?.assignments.map((item) => [item.documentId, item])),
+    [snapshot?.assignments],
+  );
   const selected = groups.find((group) => group.id === filter);
   // The sheet's Documents: its Folder's, found by the search; then those the filters keep.
   const inView = useMemo(() => {
-    const groupOf = new Map(snapshot?.assignments.map((item) => [item.documentId, item.groupId]));
     const tagNames = new Map(tags.map((tag) => [tag.id, tag.name]));
-    const folder = snapshot?.groups.find((group) => group.id === filter);
+    const folder = groups.find((group) => group.id === filter);
     const wanted = search.toLocaleLowerCase();
+    // Without a search, every Document's words match: they aren't put together then.
+    const found = (doc: Document) =>
+      wanted === "" ||
+      [doc.name, doc.title ?? "", ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(wanted);
     return documents.filter((doc) => {
-      const groupId = groupOf.get(doc.id) ?? null;
-      const terms = [doc.name, ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")].join(" ");
+      const groupId = assignments.get(doc.id)?.groupId ?? null;
       return (
         ((!folder && filter !== "unsorted") ||
           (filter === "unsorted" ? groupId === null : groupId === folder?.id)) &&
-        terms.toLocaleLowerCase().includes(wanted)
+        found(doc)
       );
     });
-  }, [documents, snapshot, tags, filter, search]);
+  }, [documents, assignments, groups, tags, filter, search]);
   const { shown, options } = useMemo(
     () => filterLibrary<Document>(inView, facets, selection),
     [inView, facets, selection],
   );
   const shownIds = useMemo(() => shown.map((doc) => doc.id), [shown]);
+  // A row's Shift-click reads the rows in view when clicked, so a change to them redraws no row.
+  const shownRef = useRef(shownIds);
+  useLayoutEffect(() => {
+    shownRef.current = shownIds;
+  });
+  const shownNow = useCallback(() => shownRef.current, []);
   const filtering = isFiltering(selection);
   const view: LibraryView = selected
     ? { kind: "folder", id: selected.id, name: selected.name }
@@ -107,12 +125,15 @@ export function LibraryPane() {
       : { kind: "all", name: t("library.all") };
   // With anything narrowing the list, a Question from here searches exactly what it shows.
   const bridge = bridgeFrom(view, shownIds, filtering || search.trim() !== "");
-  const pending =
-    snapshot?.assignments.filter(
-      (item) => item.status === "pending" || item.status === "classifying",
-    ).length ?? 0;
-  const waiting = snapshot?.assignments.filter((item) => item.status === "waiting").length ?? 0;
-  const failed = snapshot?.assignments.filter((item) => item.status === "failed").length ?? 0;
+  const { pending, waiting, failed } = useMemo(() => {
+    const counts = { pending: 0, waiting: 0, failed: 0 };
+    for (const item of snapshot?.assignments ?? []) {
+      if (item.status === "pending" || item.status === "classifying") counts.pending++;
+      else if (item.status === "waiting") counts.waiting++;
+      else if (item.status === "failed") counts.failed++;
+    }
+    return counts;
+  }, [snapshot?.assignments]);
   const needsOrganization = shown.filter((doc) => {
     const item = assignments.get(doc.id);
     return item?.status !== "classified" || doc.tagging !== "tagged";
@@ -128,37 +149,58 @@ export function LibraryPane() {
       ),
     );
   };
+  const heading = selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all");
   const closeForm = () => {
     setEditing(null);
     if (filter === "new") useAppStore.getState().openLibrary();
   };
   return (
-    <main
+    <section
       data-testid="library"
-      className="library-pane flex min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
+      role="tabpanel"
+      id="mind-tabpanel"
+      aria-labelledby="library-tab"
+      className="library-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
     >
-      <header className="title-bar library-header flex h-9 shrink-0 items-center justify-between bg-tab-strip pl-4">
-        <span className="font-semibold">{t("library.title")}</span>
-        <button
-          type="button"
-          className={buttonStyle("ghost", "sm")}
-          onClick={() => useAppStore.getState().closeLibrary()}
-        >
-          {t("library.back")}
-        </button>
-      </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="mx-auto max-w-[1040px]">
-          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="break-words font-serif text-heading font-semibold">
-                {selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all")}
-              </h1>
-              <p className="mt-1 text-[13px] text-ink-meta">
-                {selected?.description || t("library.intro")}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+          {/* The search comes first (#119). */}
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <input
+              aria-label={t("library.search")}
+              placeholder={t("library.search")}
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setLimit(100);
+              }}
+              className={`${inputClass} mt-0 min-w-32 flex-1`}
+            />
+            <button
+              type="button"
+              className={buttonStyle("secondary")}
+              onClick={() => void useAppStore.getState().pickDocuments()}
+            >
+              {t("documents.add")}
+            </button>
+          </div>
+          {/* The name takes the whole width and wraps by word, two lines at most (#213); the actions sit below it, never beside. */}
+          <div className="mb-2">
+            <h1
+              data-testid="library-heading"
+              title={heading}
+              className="line-clamp-2 font-serif text-heading font-semibold [overflow-wrap:break-word]"
+            >
+              {heading}
+            </h1>
+            <p
+              title={selected?.description || t("library.intro")}
+              className="mt-1 line-clamp-2 text-[13px] text-ink-meta"
+            >
+              {selected?.description || t("library.intro")}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {bridge && <WritingBridges bridge={bridge} />}
               <button
                 type="button"
@@ -263,26 +305,6 @@ export function LibraryPane() {
           {(starters || groups.length === 0) && !editing && snapshot && (
             <StarterGroups busy={busy} act={act} close={() => setStarters(false)} />
           )}
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <input
-              aria-label={t("library.search")}
-              placeholder={t("library.search")}
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setLimit(100);
-              }}
-              className={`${inputClass} mt-0 min-w-32 flex-1`}
-            />
-            <button
-              type="button"
-              className={buttonStyle("secondary")}
-              onClick={() => void useAppStore.getState().pickDocuments()}
-            >
-              {t("documents.add")}
-            </button>
-          </div>
           {(inView.length > 0 || filtering) && (
             <LibraryFilterBar
               facets={facets}
@@ -343,86 +365,17 @@ export function LibraryPane() {
                 <span>{t("tags.title")}</span>
               </div>
               <ul>
-                {shown.slice(0, limit).map((doc) => {
-                  const item = assignments.get(doc.id);
-                  const status =
-                    item?.status === "classifying" || item?.status === "pending"
-                      ? "library.working"
-                      : item?.status === "waiting" || item?.status === "failed"
-                        ? "library.needsAttention"
-                        : item?.source === "user"
-                          ? "library.manual"
-                          : item?.status === "classified"
-                            ? "library.saved"
-                            : "library.notClassified";
-                  return (
-                    <li
-                      key={doc.id}
-                      data-testid="library-document"
-                      data-document-id={doc.id}
-                      className="group/row library-columns relative border-b border-rule py-3"
-                    >
-                      <LibrarySelectBox document={doc} shownIds={shownIds} />
-                      <div className="library-document-name min-w-0">
-                        <button
-                          type="button"
-                          title={doc.name}
-                          className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-                          onClick={() =>
-                            useAppStore.getState().openDocument({ documentId: doc.id })
-                          }
-                        >
-                          <DocumentLineIcon
-                            kind={doc.kind}
-                            className="size-4 shrink-0 text-ink-meta"
-                          />
-                          <span className="truncate font-semibold">{doc.name}</span>
-                        </button>
-                        <details className="mt-1 text-[12px] text-ink-meta">
-                          <summary className="w-fit cursor-pointer">{t(status)}</summary>
-                          <p className="mt-1">
-                            {doc.kind.toUpperCase()} · {t("library.originalsStay")}
-                          </p>
-                          {item?.model && (
-                            <p>
-                              {item.model.id} ·{" "}
-                              {t(item.model.images ? "library.usedPages" : "library.usedText")}
-                              {item.model.reason === "slow"
-                                ? ` · ${t("library.route.slow")}`
-                                : item.model.reason === "memory"
-                                  ? ` · ${t("library.route.memory")}`
-                                  : item.model.reason === "unavailable"
-                                    ? ` · ${t("library.route.unavailable")}`
-                                    : ""}
-                            </p>
-                          )}
-                          {item?.error && (
-                            <p className={`${errorTextClass} mt-1`}>{item.error.message}</p>
-                          )}
-                        </details>
-                      </div>
-                      <select
-                        aria-label={t("library.groupFor", { name: doc.name })}
-                        disabled={busy}
-                        value={item?.groupId ?? ""}
-                        className={`${inputClass} mt-0 min-w-0`}
-                        onChange={(event) =>
-                          void act(() =>
-                            core.assignDocumentGroup(doc.id, event.target.value || null),
-                          )
-                        }
-                      >
-                        <option value="">{t("library.unsorted")}</option>
-                        {groups.map((group) => (
-                          <option key={group.id} value={group.id}>
-                            {group.name}
-                          </option>
-                        ))}
-                      </select>
-                      <DocumentTagChips document={doc} />
-                    </li>
-                  );
-                })}
+                {shown.slice(0, limit).map((doc) => (
+                  <LibraryRow
+                    key={doc.id}
+                    doc={doc}
+                    item={assignments.get(doc.id)}
+                    groups={groups}
+                    busy={busy}
+                    act={act}
+                    shownIds={shownNow}
+                  />
+                ))}
               </ul>
             </>
           )}
@@ -437,9 +390,105 @@ export function LibraryPane() {
           )}
         </div>
       </div>
-    </main>
+    </section>
   );
 }
+
+/**
+ * A Document's row in the Library: its checkbox, its name (which opens it in
+ * the viewer) and where Organize is with it, its Folder to choose, and its
+ * Tags. Memoised (#156): while Organize works through thousands of
+ * Documents, only the rows whose Document or assignment changed are drawn again.
+ */
+const LibraryRow = memo(function LibraryRow({
+  doc,
+  item,
+  groups,
+  busy,
+  act,
+  shownIds,
+}: {
+  doc: Document;
+  item: DocumentGroupAssignment | undefined;
+  groups: readonly LibraryGroup[];
+  busy: boolean;
+  act: Action;
+  /** The rows in view, in order, read when a Shift-click selects a range. */
+  shownIds(): readonly string[];
+}) {
+  const t = useT();
+  const name = displayName(doc);
+  const fileName = fileNameOf(doc.path);
+  const status =
+    item?.status === "classifying" || item?.status === "pending"
+      ? "library.working"
+      : item?.status === "waiting" || item?.status === "failed"
+        ? "library.needsAttention"
+        : item?.source === "user"
+          ? "library.manual"
+          : item?.status === "classified"
+            ? "library.saved"
+            : "library.notClassified";
+  return (
+    <li
+      data-testid="library-document"
+      data-document-id={doc.id}
+      className="group/row library-columns relative border-b border-rule py-3"
+    >
+      <LibrarySelectBox document={doc} shownIds={shownIds} />
+      <div className="library-document-name min-w-0">
+        <button
+          type="button"
+          title={name === fileName ? name : `${name}\n${fileName}`}
+          className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+          onClick={() => useAppStore.getState().openDocument({ documentId: doc.id })}
+        >
+          <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
+          <span data-testid="library-document-name" className="truncate font-semibold">
+            {name}
+          </span>
+        </button>
+        <details className="mt-1 text-[12px] text-ink-meta">
+          <summary className="w-fit cursor-pointer">{t(status)}</summary>
+          <p className="mt-1 break-words">
+            {t("library.file", { name: fileName })} · {doc.kind.toUpperCase()} ·{" "}
+            {t("library.originalsStay")}
+          </p>
+          {item?.model && (
+            <p>
+              {item.model.id} · {t(item.model.images ? "library.usedPages" : "library.usedText")}
+              {item.model.reason === "slow"
+                ? ` · ${t("library.route.slow")}`
+                : item.model.reason === "memory"
+                  ? ` · ${t("library.route.memory")}`
+                  : item.model.reason === "unavailable"
+                    ? ` · ${t("library.route.unavailable")}`
+                    : ""}
+            </p>
+          )}
+          {item?.error && <p className={`${errorTextClass} mt-1`}>{item.error.message}</p>}
+        </details>
+      </div>
+      <select
+        aria-label={t("library.groupFor", { name })}
+        disabled={busy}
+        value={item?.groupId ?? ""}
+        className={`${inputClass} mt-0 min-w-0`}
+        onChange={(event) =>
+          void act(() => core.assignDocumentGroup(doc.id, event.target.value || null))
+        }
+      >
+        <option value="">{t("library.unsorted")}</option>
+        {groups.map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.name}
+          </option>
+        ))}
+      </select>
+      <DocumentTagChips document={doc} />
+    </li>
+  );
+});
 
 /**
  * From the sheet into writing: "Ask about this Folder" adds a Question that

@@ -342,17 +342,26 @@ test("first run fits a small window; the not-ready notice and a long title keep 
 });
 
 test("the window opens at the size and place it was left at", async () => {
-  const first = await launchApp(dataDir);
-  await first.app.evaluate(({ BrowserWindow }) =>
-    BrowserWindow.getAllWindows()[0]?.setBounds({ x: 120, y: 90, width: 1100, height: 760 }),
-  );
+  const first = await launchApp(dataDir, { keepWindow: true });
+  // Not the default centred 1280 × 800, and wholly on the screen, however small it is.
+  const left = await first.app.evaluate(({ BrowserWindow, screen }) => {
+    const { workArea } = screen.getPrimaryDisplay();
+    const bounds = {
+      x: workArea.x + 40,
+      y: workArea.y + 30,
+      width: Math.min(1100, workArea.width - 80),
+      height: Math.min(760, workArea.height - 60),
+    };
+    BrowserWindow.getAllWindows()[0]?.setBounds(bounds);
+    return bounds;
+  });
   await first.app.close();
 
-  const second = await launchApp(dataDir);
+  const second = await launchApp(dataDir, { keepWindow: true });
   const bounds = await second.app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0]?.getBounds(),
   );
-  expect(bounds).toMatchObject({ x: 120, y: 90, width: 1100, height: 760 });
+  expect(bounds).toEqual(left);
   await second.app.close();
 });
 
