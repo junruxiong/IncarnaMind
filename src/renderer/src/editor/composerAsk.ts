@@ -148,6 +148,27 @@ export function takeBackQuestion(editor: Editor, placed: PlacedQuestion, text: s
 }
 
 /**
+ * Resolves once the Answer is in the editor's document (true), or after
+ * `timeoutMs` if it never comes (false). The core writes it as it asks, but
+ * its change can reach the editor a moment after the reply to the ask.
+ */
+export function whenAnswerShown(editor: Editor, answerId: string, timeoutMs = 3_000) {
+  if (findBlock(editor.state.doc, answerId)) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    const check = () => {
+      if (findBlock(editor.state.doc, answerId)) done(true);
+    };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    function done(found: boolean) {
+      clearTimeout(timer);
+      editor.off("update", check);
+      resolve(found);
+    }
+    editor.on("update", check);
+  });
+}
+
+/**
  * Puts the Mind's cursor on an empty line right after an Answer, adding the
  * line unless one is there already: the next Question asked goes there, and
  * Esc in the composer comes back to write there. The focus stays where it is.

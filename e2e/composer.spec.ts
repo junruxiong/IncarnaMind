@@ -254,6 +254,8 @@ test("⌘J focuses the composer from the note; the Question goes at the cursor; 
   // The cursor at the end of the first line: ⌘J, two lines, Enter.
   const first = editor.locator(":scope > p").first();
   await pointAndClick(window, first);
+  // The editor takes the click's place from the browser's selectionchange: wait, as a person would.
+  await expect(first).toHaveClass(/has-focus/);
   await window.keyboard.press("End");
   await window.keyboard.press("ControlOrMeta+j");
   await expect(input).toBeFocused();

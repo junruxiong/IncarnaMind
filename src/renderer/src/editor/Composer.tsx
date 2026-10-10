@@ -1,4 +1,5 @@
 import { type Editor, isMacOS } from "@tiptap/core";
+import { Selection } from "@tiptap/pm/state";
 import {
   type ChangeEvent,
   type KeyboardEvent,
@@ -31,6 +32,7 @@ import {
   type QuestionToAsk,
   questionPlace,
   takeBackQuestion,
+  whenAnswerShown,
 } from "./composerAsk";
 import { AskArrowIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
@@ -255,15 +257,17 @@ export function Composer({
     if (line instanceof HTMLElement) line.scrollIntoView({ block: "nearest" });
 
     const result = await useAnswers.getState().askFromComposer(mindId, question.id);
-    // Another Mind shown meanwhile: this one's editor is gone, with its cursor.
-    const shown = !editor.isDestroyed;
     if (result?.asked) {
-      // The next Question goes after this Answer; Esc comes back to write there.
-      if (shown && cursorBelowAnswer(editor, result.answerId)) cursorInMind.current = true;
+      // The next Question goes after this Answer; Esc comes back to write there. (Unless
+      // another Mind is shown by then: this one's editor is gone, with its cursor.)
+      const answered = await whenAnswerShown(editor, result.answerId);
+      if (answered && !editor.isDestroyed && cursorBelowAnswer(editor, result.answerId)) {
+        cursorInMind.current = true;
+      }
       return;
     }
     // Not asked: the Question leaves the note, and its words come back here.
-    if (shown) takeBackQuestion(editor, placed, text);
+    if (!editor.isDestroyed) takeBackQuestion(editor, placed, text);
     const now = useComposer.getState().draft(mindId);
     if (now.text === "") update({ text, skill: now.skill ?? question.skill });
   };
@@ -291,8 +295,16 @@ export function Composer({
     }
     if (event.key === "Escape") {
       event.preventDefault();
-      // Back to the note, where the cursor was (or at its end).
-      editor.commands.focus(cursorInMind.current ? null : "end", { scrollIntoView: true });
+      // Back to the note, where the cursor was (or at its end), at once: what is typed next
+      // goes there. (Tiptap's `focus` waits a frame, and the first keys would come here.)
+      if (!cursorInMind.current) {
+        editor.commands.command(({ tr }) => {
+          tr.setSelection(Selection.atEnd(tr.doc));
+          return true;
+        });
+      }
+      editor.view.focus();
+      editor.view.dispatch(editor.state.tr.scrollIntoView());
     }
   };
 
