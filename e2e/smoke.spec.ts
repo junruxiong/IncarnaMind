@@ -9,11 +9,13 @@ import {
   dragBy,
   launchApp,
   linkFolderFromSidebar,
+  newMind,
   openDocumentMenu,
   openSettings,
   openViewer,
   removeDataFolder,
   showSettingsPage,
+  showSourceLocations,
   widthOf,
 } from "./app";
 
@@ -29,7 +31,7 @@ test("a Mind created before quitting is still there after reopening the app", as
   // First run: create a Mind. It appears in the sidebar and opens in the centre.
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
-  await first.window.getByTestId("new-mind").click();
+  await newMind(first.window);
 
   const created = first.window.getByTestId("mind-list-item");
   await expect(created).toHaveCount(1);
@@ -55,7 +57,7 @@ test("what was typed in a Mind, and its title, are still there after reopening t
 
   const first = await launchApp(dataDir);
   await dismissChatSetup(first.window);
-  await first.window.getByTestId("new-mind").click();
+  await newMind(first.window);
   await first.window.getByTestId("mind-title").fill("Field notes");
   const editor = first.window.getByTestId("mind-editor");
   await editor.click();
@@ -81,7 +83,7 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   await dismissChatSetup(window);
   const items = window.getByTestId("mind-list-item");
   for (const title of ["Older", "Newer"]) {
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.getByTestId("mind-title").fill(title);
     await expect(items.first()).toHaveText(title);
   }
@@ -96,8 +98,9 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   // Deleting it asks first, then removes it from the sidebar and closes its tab: the
   // other open Mind shows instead.
   const olderId = await items.filter({ hasText: "Older" }).getAttribute("data-mind-id");
-  const older = window.getByRole("listitem").filter({ hasText: "Older" });
+  const older = window.getByTestId("mind-row").filter({ hasText: "Older" });
   await older.hover();
+  await older.getByTestId("mind-menu").click();
   await older.getByTestId("delete-mind").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
@@ -267,7 +270,7 @@ test("first-run chat setup appears on a fresh data folder and can be set up late
   await expect(setup).toBeHidden();
 
   // Notes and Documents work without a provider; Questions explain what to configure.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await expect(window.getByTestId("mind-pane")).toBeVisible();
   await expect(window.getByTestId("chat-readiness")).toBeVisible();
   await first.app.close();
@@ -322,7 +325,7 @@ test("first run fits a small window; the not-ready notice and a long title keep 
   await expect(setup.getByTestId("chat-setup-later")).toBeInViewport();
   await setup.getByTestId("chat-setup-later").click();
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const title = window.getByTestId("mind-title");
   await expect(title).toBeFocused();
   const long = "Reading notes on spring and neap tides, harbour tables and the Moon's pull";
@@ -404,9 +407,11 @@ test("a Linked folder shows its Folders as on disk, and files added on their own
     await addDocuments(window, [loose]);
     const looseItem = documents.filter({ hasText: "Loose notes" });
     await expect(looseItem).toHaveAttribute("data-depth", "0");
+    // As they are on disk: Source locations.
+    await showSourceLocations(window);
+    await expect(looseItem).toHaveAttribute("data-depth", "0");
     await expect(others).toHaveCount(0);
-    // Folders come from disk: there is no making one, or moving a Document into one.
-    await expect(window.getByTestId("new-folder")).toHaveCount(0);
+    // Folders on disk come from the disk: there is no moving a Document into one.
     await expect(window.getByTestId("move-document")).toHaveCount(0);
 
     // "Add folder…" links a folder, picked with the system's picker (answered by the test),

@@ -6,8 +6,11 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   launchApp,
   linkFolderFromSidebar,
+  newMind,
+  openFolderInLibrary,
   removeDataFolder,
 } from "./app";
 
@@ -57,9 +60,7 @@ async function screenshot(window: Page, name: string): Promise<void> {
  */
 async function libraryWithFolder(app: Parameters<typeof linkFolderFromSidebar>[0], window: Page) {
   await linkFolderFromSidebar(app, window, sources);
-  await expect(
-    window.locator('[data-testid="document-list-item"][data-status="ready"]'),
-  ).toHaveCount(5, { timeout: 20_000 });
+  await expectReadyDocuments(window, 5);
   await window.getByTestId("open-library").click();
   const library = window.getByTestId("library");
   await library.getByRole("button", { name: "New folder", exact: true }).click();
@@ -101,21 +102,29 @@ test("filters by year, format and status with counts, and asks about the Documen
   try {
     await dismissChatSetup(window);
     // A Mind written in already: the most recent one, where the Questions go.
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.keyboard.type("Tide notes");
     await window.keyboard.press("Enter");
     await window.keyboard.type("Notes on the tides.");
     const library = await libraryWithFolder(app, window);
     // A file removed from the folder: its Document is missing, and stays in its Folder.
     await rm(join(sources, "Undated memo.txt"));
-    await expect(
-      window.locator('[data-testid="document-list-item"][data-file-status="missing"]'),
-    ).toHaveCount(1, { timeout: 15_000 });
+    await expect
+      .poll(
+        () =>
+          window.evaluate(
+            async () =>
+              (
+                await (
+                  globalThis as unknown as { incarnamind: CoreBridge }
+                ).incarnamind.listDocuments()
+              ).filter((each) => each.fileStatus === "missing").length,
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(1);
 
-    await window
-      .getByTestId("library-folders")
-      .getByRole("button", { name: new RegExp(`^${FOLDER}`) })
-      .click();
+    await openFolderInLibrary(window, FOLDER);
     await expect(library.getByRole("heading", { name: FOLDER, exact: true })).toBeVisible();
     const rows = library.getByTestId("library-document");
     await expect(rows).toHaveCount(4);
@@ -200,10 +209,7 @@ test("filters by year, format and status with counts, and asks about the Documen
     await screenshot(window, "library-ask-documents");
 
     // Unfiltered, it searches the Folder itself, in the same Mind, after the first.
-    await window
-      .getByTestId("library-folders")
-      .getByRole("button", { name: new RegExp(`^${FOLDER}`) })
-      .click();
+    await openFolderInLibrary(window, FOLDER);
     await expect(library.getByTestId("library-filters-clear")).toHaveCount(0);
     await expect(library.getByTestId("library-ask")).toHaveAttribute("data-scope", "folder");
     await library.getByRole("button", { name: "Ask about this Folder", exact: true }).click();
@@ -234,10 +240,7 @@ test("starts a Mind named after the Folder with its scoped Question first, in En
         ).groups.find((group) => group.name === name)?.id,
       FOLDER,
     );
-    await window
-      .getByTestId("library-folders")
-      .getByRole("button", { name: new RegExp(`^${FOLDER}`) })
-      .click();
+    await openFolderInLibrary(window, FOLDER);
     // The bridges and filters read in Chinese too.
     await window.evaluate(() =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
@@ -307,9 +310,7 @@ test("with no Mind yet, asking about many Documents shown makes one, and their c
   try {
     await dismissChatSetup(window);
     await linkFolderFromSidebar(app, window, sources);
-    await expect(
-      window.locator('[data-testid="document-list-item"][data-status="ready"]'),
-    ).toHaveCount(15, { timeout: 20_000 });
+    await expectReadyDocuments(window, 15);
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
     // All Documents, unfiltered: every Question searches them already, so nothing is offered.

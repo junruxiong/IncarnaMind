@@ -11,6 +11,7 @@ import {
   interceptSaveDialog,
   interceptShowItemInFolder,
   launchApp,
+  newMind,
   pathsOpened,
   pathsShown,
   removeDataFolder,
@@ -43,7 +44,7 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first, 
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 
   // A Note, then a Question whose Answer misquotes its Document.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
@@ -95,7 +96,7 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first, 
 test("maths exports to .docx as Word equations, which a Word viewer shows as equations", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Gravity");
   const editor = window.getByTestId("mind-editor");
   await editor.click();

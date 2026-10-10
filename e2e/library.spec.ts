@@ -11,8 +11,11 @@ import {
   useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
+  expectReadyDocuments,
   launchApp,
+  openFolderInLibrary,
   removeDataFolder,
+  sidebarFolder,
 } from "./app";
 
 let dataDir: string;
@@ -55,7 +58,9 @@ test("folders, tags, search, edits and removal update the index while originals 
     await library.getByRole("checkbox", { name: /^Meeting notes/ }).uncheck();
     await library.getByRole("button", { name: "Add selected folders" }).click();
     const folders = window.getByTestId("library-folders");
-    await expect(folders.getByTestId("library-folder")).toHaveCount(5);
+    // Four starter Folders, then Not in a Folder.
+    await expect(folders.getByTestId("library-folder")).toHaveCount(4);
+    await expect(folders.getByTestId("not-in-a-folder")).toBeVisible();
     await library.getByRole("button", { name: "New folder", exact: true }).click();
     await library.getByLabel("Folder name", { exact: true }).fill("Client work");
     await library.getByLabel("Description", { exact: true }).fill("Reports for my clients");
@@ -76,7 +81,7 @@ test("folders, tags, search, edits and removal update the index while originals 
     await row.getByRole("option", { name: "Report", exact: true }).click();
     await window.keyboard.press("Escape");
     await expect(row.getByTestId("document-tags")).toContainText("Report");
-    await folders.getByRole("button", { name: /^Client work/ }).click();
+    await openFolderInLibrary(window, "Client work");
     await expect(library.getByRole("heading", { name: "Client work", exact: true })).toBeVisible();
     await library.getByRole("button", { name: "Edit folder" }).click();
     await library.getByLabel("Folder name", { exact: true }).fill("Client reports");
@@ -84,10 +89,15 @@ test("folders, tags, search, edits and removal update the index while originals 
     await expect(
       library.getByRole("heading", { name: "Client reports", exact: true }),
     ).toBeVisible();
-    await folders.getByRole("button", { name: "Collapse Client reports" }).click();
-    await expect(folders.getByTestId("document-list-item")).toHaveCount(0);
-    await folders.getByRole("button", { name: "Expand Client reports" }).click();
+    // The Folder opens and closes in place, in the sidebar; the Library stays as it is.
+    const clientRow = sidebarFolder(window, "Client reports").getByTestId("folder-row");
+    await clientRow.click();
     await expect(folders.getByTestId("document-list-item")).toHaveCount(1);
+    await clientRow.click();
+    await expect(folders.getByTestId("document-list-item")).toHaveCount(0);
+    await expect(
+      library.getByRole("heading", { name: "Client reports", exact: true }),
+    ).toBeVisible();
     await library.getByLabel("Find by name or tag").fill("nonsense");
     await expect(row).toHaveCount(0);
     await library.getByLabel("Find by name or tag").fill("Report");
@@ -195,9 +205,7 @@ test("onboarding offers starter folders and Chinese organization settings", asyn
       }),
     );
     await window.getByTestId("library").getByRole("button", { name: "添加选中的文件夹" }).click();
-    await expect(
-      window.getByTestId("library-folders").getByRole("button", { name: /^研究论文/ }),
-    ).toBeVisible();
+    await expect(sidebarFolder(window, "研究论文").getByTestId("folder-row")).toBeVisible();
     await window
       .getByTestId("library")
       .getByRole("button", { name: "文档整理", exact: true })
@@ -376,9 +384,7 @@ test("organized folders remain separate from source locations and follow changes
     const library = window.getByTestId("library");
     await expect(library.getByTestId("library-document")).toHaveCount(6);
     await expect(library.locator("summary").filter({ hasText: /^Organized$/ })).toHaveCount(6);
-    await expect(
-      window.locator('[data-testid="document-list-item"][data-status="ready"]'),
-    ).toHaveCount(6);
+    await expectReadyDocuments(window, 6);
     await window.setViewportSize({ width: 1280, height: 860 });
     await window.screenshot({ path: "/tmp/incarnamind-organize-overview.png" });
     const row = library
@@ -510,10 +516,23 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
       folders.getByTestId("library-folder").filter({
         has: window.locator(':scope > div [data-testid="row-text"]', { hasText: name }),
       });
-    for (const [name, total] of Object.entries(saved.folders))
-      await expect(folderRow(name).getByTestId("browse-count")).toHaveText(String(total));
-    // Each Folder lists its first 50 under it.
-    await expect(folders.getByTestId("document-list-item")).toHaveCount(50 + 3 * 40);
+    const notInAFolder = folders.getByTestId("not-in-a-folder");
+    for (const [name, total] of Object.entries(saved.folders)) {
+      if (name === "Unsorted")
+        await expect(notInAFolder).toHaveAttribute("data-count", String(total));
+      else await expect(folderRow(name).getByTestId("browse-count")).toHaveText(String(total));
+    }
+    // Closed, a Folder lists nothing; Not in a Folder lists its first few, then "Show N more".
+    await expect(folders.getByTestId("document-list-item")).toHaveCount(5);
+    await expect(notInAFolder.getByTestId("show-more-documents")).toHaveText(
+      "Show 35 more Documents",
+    );
+    // Opened, a Folder lists its first few too; "Show 50 more" lists more where they are.
+    const research = folderRow("Research");
+    await research.getByTestId("folder-row").click();
+    await expect(research.getByTestId("document-list-item")).toHaveCount(5);
+    await research.getByTestId("show-more-documents").click();
+    await expect(research.getByTestId("document-list-item")).toHaveCount(55);
     await expect(
       folders.locator('[data-testid="document-list-item"]:not([data-tagging="tagged"])'),
     ).toHaveCount(0);
@@ -522,10 +541,7 @@ test("a bulk Organize leaves the Library's counts, filters and sidebar as the co
     await expect(library.locator("summary").filter({ hasText: /^Organized$/ })).toHaveCount(100);
 
     // A Folder: its count, its rows in it, and its Tags filter counting them.
-    await folderRow("Research")
-      .locator(":scope > div")
-      .getByRole("button", { name: /^Research/ })
-      .click();
+    await openFolderInLibrary(window, "Research");
     await expect(library.getByRole("heading", { name: "Research", exact: true })).toBeVisible();
     await expect(status).toHaveText("80 Documents");
     await expect(library.getByTestId("library-document")).toHaveCount(80);
