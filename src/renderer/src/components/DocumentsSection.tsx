@@ -14,12 +14,13 @@ import { useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
+import { moveThroughRows, TREE_ROW } from "../treeKeys";
 import { DocumentFileMenu } from "./DocumentFileMenu";
 import { ActiveTagFilter, DocumentTagMenu, TagFilterMenu } from "./DocumentTags";
 import { FolderTree } from "./FolderTree";
 import { LibraryFolders } from "./LibraryFolders";
 import { LinkFolderDialog } from "./LinkFolderDialog";
-import { DocumentLineIcon, FolderPlusLineIcon, PlusLineIcon } from "./lineIcons";
+import { DocumentLineIcon } from "./lineIcons";
 import { SidebarTags } from "./SidebarTags";
 import {
   openRowMenu,
@@ -92,24 +93,24 @@ const isProcessing = (status: DocumentStatus) =>
   status === "embedding";
 
 /**
- * The sidebar's Documents: under the "Documents" label (with the Tag filter,
- * "Add folder…" to link a folder and adding files), each Linked folder with
- * its Folders as on disk, then "Other Documents", the files added on their
- * own (see `FolderTree`). Once there are Library Folders, or Tags and
- * something to browse, a switcher offers "Folders | Tags | Source
- * locations": the Library's Folders (see `LibraryFolders`), the Tags (see
- * `SidebarTags`), or that tree. Each Document is one row: its name, its Tags' colours (see
+ * The sidebar's tree: "All Documents", then a switcher, "Folders | Tags |
+ * Source locations" (with the Tag filter and "+" for a new Folder), over one
+ * of three views. Folders, the first, is the User's projects: each Folder
+ * with its Minds and Documents, then Not in a Folder (see `LibraryFolders`).
+ * Tags lists the Tags (see `SidebarTags`); Source locations, each Linked
+ * folder with its folders as on disk, then "Other Documents", the files
+ * added on their own (see `FolderTree`). With nothing to browse but Minds,
+ * there is no switcher. Each Document is one row: its name, its Tags' colours (see
  * `TagMarks`) and, while it's processed, if it failed, or if its file is
  * missing or can't be reached, its status at the end. Its Tags are in its
  * Tags menu, and the Tags dialog; its "More" menu renames it, opens its file
- * or shows it in its folder, and deletes it. Dropping files anywhere on the
- * window adds them too (see `FileDrop`). Clicking a Document opens it in the
- * viewer. With nothing linked or added yet, the section says how to start:
- * "Add folder…" (which asks first, see `LinkFolderDialog`) or "Add Documents".
+ * or shows it in its folder, and deletes it. Clicking a Document opens it in
+ * the viewer. Documents and Linked folders are added from the header's "+"
+ * menu, or dropped anywhere on the window (see `FileDrop`); with none yet,
+ * the tree says so.
  */
 export function DocumentsSection() {
   const t = useT();
-  const hasLibraryFolders = useAppStore((state) => (state.library?.groups.length ?? 0) > 0);
   const hasTags = useAppStore((state) => state.tags.length > 0);
   const hasAnyDocuments = useAppStore((state) => state.documents.length > 0);
   const [chosenView, setView] = useState<BrowseView>("folders");
@@ -123,23 +124,21 @@ export function DocumentsSection() {
     (state) => state.folders.length > 0 || state.linkedFolders.length > 0,
   );
   const addDocuments = useAppStore((state) => state.addDocuments);
-  const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
-  const pickDocuments = useAppStore((state) => state.pickDocuments);
-  const picking = useAppStore((state) => state.pickingDocuments);
   const picker = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState<Document | null>(null);
   const tags = useAppStore((state) => state.tags);
   // Built once per change to the Tags, so each row only looks its own up.
   const tagsById = useMemo(() => tagIndex(tags), [tags]);
 
-  // Folders while there are any, Tags once there is something to browse (a Document or a
-  // Linked folder, so the first Document moves nothing), and always the tree on disk.
+  // Folders always: the Minds are there. Tags and the tree on disk once there is something to
+  // browse (a Document or a Linked folder, so the first Document moves nothing).
+  const somethingToBrowse = hasAnyDocuments || hasFolders;
   const views: BrowseView[] = [
-    ...(hasLibraryFolders ? (["folders"] as const) : []),
-    ...(hasTags && (hasAnyDocuments || hasFolders) ? (["tags"] as const) : []),
-    "sources",
+    "folders",
+    ...(hasTags && somethingToBrowse ? (["tags"] as const) : []),
+    ...(somethingToBrowse ? (["sources"] as const) : []),
   ];
-  const view = views.includes(chosenView) ? chosenView : "sources";
+  const view = views.includes(chosenView) ? chosenView : "folders";
   /**
    * Each Document's row as last made, by depth, while the Tags stay the same
    * (#156). A list of thousands drawn again because one Document changed
@@ -181,52 +180,26 @@ export function DocumentsSection() {
   const empty = documents.length === 0 && (filtering || !hasFolders);
 
   return (
-    <section aria-labelledby="documents-heading" {...tagNamesTipListProps}>
-      <div
-        data-testid="documents-heading-row"
-        className="mt-3 flex h-7 shrink-0 items-end justify-between rounded-md pr-1 pb-0.5 pl-2"
-      >
-        <h2 id="documents-heading" className="pb-0.5 text-label font-semibold text-ink-meta">
-          {t("documents.title")}
-        </h2>
-        <div className="flex items-center">
-          <TagFilterMenu />
-          <button
-            type="button"
-            data-testid="add-linked-folder"
-            aria-label={t("linkedFolders.add")}
-            title={t("linkedFolders.add")}
-            onClick={() => void addLinkedFolder()}
-            className={rowActionButtonClass}
-          >
-            <FolderPlusLineIcon className="size-4" />
-          </button>
-          <button
-            type="button"
-            data-testid="add-documents"
-            aria-label={t("documents.add")}
-            title={t("documents.add")}
-            disabled={picking}
-            onClick={() => void pickDocuments()}
-            className={rowActionButtonClass}
-          >
-            <PlusLineIcon className="size-4" />
-          </button>
-        </div>
-        {/* Files given straight to the page arrive here, as from the dialog: the smoke tests add them so. */}
-        <input
-          ref={picker}
-          type="file"
-          multiple
-          accept={ACCEPTED_FILES}
-          data-testid="add-documents-input"
-          className="hidden"
-          onChange={addPicked}
-        />
-      </div>
+    // biome-ignore lint/a11y/noStaticElementInteractions: ↑ and ↓ move between the rows' buttons inside it.
+    <div
+      data-testid="documents-section"
+      {...tagNamesTipListProps}
+      onKeyDown={(event) => moveThroughRows(event)}
+    >
+      {/* Files given straight to the page arrive here, as from the dialog: the smoke tests add them so. */}
+      <input
+        ref={picker}
+        type="file"
+        multiple
+        accept={ACCEPTED_FILES}
+        data-testid="add-documents-input"
+        className="hidden"
+        onChange={addPicked}
+      />
       <div className={rowClass(libraryOpen)}>
         <button
           type="button"
+          {...TREE_ROW}
           data-testid="open-library"
           onClick={() => useAppStore.getState().openLibrary()}
           className={rowButtonClass}
@@ -236,35 +209,29 @@ export function DocumentsSection() {
         </button>
       </div>
       {views.length > 1 && (
-        <fieldset
-          className="mx-2 my-2 flex items-center gap-3 border-b border-rule pb-1 text-[12px] text-ink-meta"
-          data-testid="browse-views"
-          aria-label={t("library.browse")}
-        >
-          {views.map((each) => (
-            <button
-              key={each}
-              type="button"
-              aria-pressed={view === each}
-              title={t(browseLabels[each])}
-              className={`min-w-0 truncate ${view === each ? "font-semibold text-ink" : "hover:text-ink"}`}
-              onClick={() => setView(each)}
-            >
-              {t(browseLabels[each])}
-            </button>
-          ))}
-          {hasLibraryFolders && (
-            <button
-              type="button"
-              aria-label={t("library.newGroup")}
-              title={t("library.newGroup")}
-              className={`${rowActionButtonClass} ml-auto`}
-              onClick={() => useAppStore.getState().openLibrary("new")}
-            >
-              <PlusLineIcon className="size-4" />
-            </button>
-          )}
-        </fieldset>
+        <div className="mx-2 my-2 flex items-center gap-2 border-b border-rule pb-1">
+          <fieldset
+            className="flex min-w-0 items-center gap-3 text-[12px] text-ink-meta"
+            data-testid="browse-views"
+            aria-label={t("library.browse")}
+          >
+            {views.map((each) => (
+              <button
+                key={each}
+                type="button"
+                aria-pressed={view === each}
+                title={t(browseLabels[each])}
+                className={`min-w-0 truncate ${view === each ? "font-semibold text-ink" : "hover:text-ink"}`}
+                onClick={() => setView(each)}
+              >
+                {t(browseLabels[each])}
+              </button>
+            ))}
+          </fieldset>
+          <span className="ml-auto flex shrink-0 items-center">
+            <TagFilterMenu />
+          </span>
+        </div>
       )}
       {/* Under the switcher, so it never moves; in the Tags view, the chosen Tags say it. */}
       {view !== "tags" && <ActiveTagFilter />}
@@ -281,44 +248,18 @@ export function DocumentsSection() {
         (filtering ? (
           <p className="px-2 py-1 text-[13px] leading-5 text-ink-meta">{t("tags.filter.empty")}</p>
         ) : (
-          <div data-testid="documents-empty">
-            <p className="px-2 pt-1 pb-1.5 text-[13px] leading-5 text-ink-meta">
-              {t("documents.none")}
-            </p>
-            {/* Two actions, as rows like "New Mind": not a list of items. */}
-            <div className={rowClass(false)}>
-              <button
-                type="button"
-                data-testid="empty-add-linked-folder"
-                onClick={() => void addLinkedFolder()}
-                className={rowButtonClass}
-              >
-                <FolderPlusLineIcon className={rowIconClass(false)} />
-                <span data-testid="row-text" className="truncate">
-                  {t("linkedFolders.add")}
-                </span>
-              </button>
-            </div>
-            <div className={rowClass(false)}>
-              <button
-                type="button"
-                data-testid="empty-add-documents"
-                disabled={picking}
-                onClick={() => void pickDocuments()}
-                className={rowButtonClass}
-              >
-                <PlusLineIcon className={rowIconClass(false)} />
-                <span data-testid="row-text" className="truncate">
-                  {t("documents.add")}
-                </span>
-              </button>
-            </div>
-          </div>
+          // Adding is the header's "+" menu's: this only says where.
+          <p
+            data-testid="documents-empty"
+            className="px-2 pt-2 pb-1 text-[13px] leading-5 text-ink-meta"
+          >
+            {t("documents.none")}
+          </p>
         ))}
       <DeleteDocumentDialog target={deleting} onClose={() => setDeleting(null)} />
       <LinkFolderDialog />
       <TagNamesTip />
-    </section>
+    </div>
   );
 }
 
@@ -383,6 +324,7 @@ const DocumentRow = memo(function DocumentRow({
         // Opens the Document in the viewer, replacing whatever it showed.
         <button
           type="button"
+          {...TREE_ROW}
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}

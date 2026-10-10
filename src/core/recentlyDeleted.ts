@@ -156,21 +156,28 @@ export function createRecentlyDeleted(options: {
       const since = earliestRestorable(now());
       const item = (
         kind: DeletedKind,
-        row: { id: string; name: string; deleted_at: string },
-        document?: { kind: DocumentKind; groupId: string | null; linkedFolderId: string | null },
+        row: { id: string; name: string; deleted_at: string; group_id?: string | null },
+        document?: { kind: DocumentKind; linkedFolderId: string | null },
       ): DeletedItem => ({
         kind,
         id: row.id,
         name: row.name,
         deletedAt: row.deleted_at,
         documentKind: document?.kind ?? null,
-        groupId: document?.groupId ?? null,
+        groupId: row.group_id ?? null,
         linkedFolderId: document?.linkedFolderId ?? null,
       });
       const items = [
         ...db
-          .all<{ id: string; name: string; kind: string; deleted_at: string }>(
-            "SELECT id, title AS name, kind, deleted_at FROM minds WHERE deleted_at >= ? AND purged_at IS NULL",
+          .all<{
+            id: string;
+            name: string;
+            kind: string;
+            deleted_at: string;
+            group_id: string | null;
+          }>(
+            `SELECT id, title AS name, kind, deleted_at, folder_id AS group_id FROM minds
+             WHERE deleted_at >= ? AND purged_at IS NULL`,
             [since],
           )
           .map((row) => item(row.kind === "chat" ? "chat" : "mind", row)),
@@ -194,11 +201,7 @@ export function createRecentlyDeleted(options: {
             [since],
           )
           .map((row) =>
-            item("document", row, {
-              kind: row.kind,
-              groupId: row.group_id,
-              linkedFolderId: row.linked_folder_id,
-            }),
+            item("document", row, { kind: row.kind, linkedFolderId: row.linked_folder_id }),
           ),
         ...db
           .all<{ id: string; name: string; deleted_at: string }>(
@@ -249,7 +252,7 @@ export function createRecentlyDeleted(options: {
               documents.restore([ref.id]);
               restored.documents.push(ref.id);
             } else if (kind === "folder") {
-              library.restore(ref.id);
+              if (minds.returnToFolder(library.restore(ref.id), ref.id)) restored.minds = true;
               restored.folders = true;
             } else {
               if (tags.list().some((tag) => sameName(tag.name, row.name)))

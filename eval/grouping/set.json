@@ -1,5 +1,5 @@
 {
-  "about": "The grouping check's fixture set (eval/grouping/README.md, #51). Every Document is grouped together, as one library; the pass bars are scored on the held-out cases only, and the vector variant is chosen on the choosing cases (O8a). Paths are relative to the repository root; sources and licences of eval/grouping/fixtures/ are in its ATTRIBUTION.md.",
+  "about": "The grouping fixture set (eval/grouping/README.md, #51): each Document's path, language and subject, read by the local classification comparison (eval/classification/). Paths are relative to the repository root; sources and licences of eval/grouping/fixtures/ are in its ATTRIBUTION.md.",
   "subjects": {
     "attention": "Attention and the Transformer",
     "gradient-descent": "Gradient descent",
@@ -62,37 +62,5 @@
     "inflation-zh": {"path": "eval/grouping/fixtures/维基百科-通货膨胀.md", "language": "zh", "subject": "inflation", "form": "prose"},
     "inflation-sheet": {"path": "eval/grouping/fixtures/CPI-U 2015-2024.xlsx", "language": "en", "subject": "inflation", "form": "spreadsheet"},
     "inflation-cpi": {"path": "eval/grouping/fixtures/Consumer price index · Wikipedia.md", "language": "en", "subject": "inflation", "form": "prose"}
-  },
-  "choosing": {
-    "pairs": [
-      ["attention-paper", "attention-zh"],
-      ["lm-gpt3", "lm-zh"],
-      ["esg-report", "esg-zh"],
-      ["tea-en", "tea-zh"],
-      ["quake-en", "quake-zh"],
-      ["inflation-en", "inflation-zh"]
-    ],
-    "decks": ["attention-deck", "tea-deck", "esg-deck", "quake-sheet", "inflation-sheet"]
-  },
-  "heldOut": {
-    "pairs": [
-      ["gd-paper", "gd-zh"],
-      ["sdg-report", "sdg-zh"],
-      ["climate-en", "climate-zh"],
-      ["mars-en", "mars-zh"],
-      ["photo-en", "photo-zh"]
-    ],
-    "decks": ["gd-deck", "sdg-deck", "climate-sheet", "mars-sheet", "photo-deck"]
-  },
-  "sharedNames": [{"label": "\"维基百科-\" prefix", "pattern": "^维基百科-"}, {"label": "\" · Wikipedia\" suffix", "pattern": " · Wikipedia$"}],
-  "lateArrivals": ["lm-gpt2", "quake-zh", "mars-sheet", "tea-deck", "climate-en", "pharma-code", "pharma-marketing", "pharma-zh"],
-  "corrections": {
-    "rename": "tea-en",
-    "moves": 2,
-    "lastResortMove": ["pharma-code", "sdg-report"],
-    "create": {
-      "name": "My data tables",
-      "documents": ["quake-sheet", "inflation-sheet"]
-    }
   }
 }

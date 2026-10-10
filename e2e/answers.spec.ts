@@ -4,6 +4,7 @@ import {
   dismissChatSetup,
   dragBlock,
   launchApp,
+  newMind,
   removeDataFolder,
   slideToHandle,
   useLocalChatModel,
@@ -23,7 +24,7 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await expect(window.getByTestId("chat-readiness")).toBeHidden();
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
@@ -68,7 +69,7 @@ test("a Question asked in a new Mind gets an Answer that streams in, and it is s
 test("a Note switched out of Question context looks muted, and asking without a chat model says why", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("A side note the Answer shouldn't see.");
@@ -100,7 +101,7 @@ test("after asking, the Mind's cursor goes below the Answer; a Question and its 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Intro");

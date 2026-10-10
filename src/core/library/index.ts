@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { translate } from "../../shared/i18n";
 import { supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
-import type { ChatModelChoice, DocumentKind, FolderDeletion, ProviderError } from "../api";
+import type {
+  ChatModelChoice,
+  DocumentKind,
+  FolderDeletion,
+  MovedDocument,
+  ProviderError,
+} from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
 import {
   ChatNotReadyError,
@@ -451,7 +457,44 @@ export function createLibrary(options: {
           "SELECT g.* FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL",
         )
         .map(assignmentOf);
-      return { groups: groups(), assignments, settings: getSettings() };
+      const deletedGroups = db.all<LibraryGroup>(
+        `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NOT NULL ORDER BY name COLLATE NOCASE, id`,
+      );
+      return { groups: groups(), deletedGroups, assignments, settings: getSettings() };
+    },
+    /** A live Folder, or NotFoundError. */
+    folder: group,
+    /**
+     * Puts these Documents in a Folder (or in none) as the User's choice, as
+     * `assign` does for one, all or none, and returns where each was. It says
+     * nothing yet: the caller calls `moved` once what it is part of is saved.
+     */
+    move(ids: readonly string[], groupId: string | null): MovedDocument[] {
+      if (groupId !== null) group(groupId);
+      const docs = ids.map(document);
+      const moved = db.transaction(() =>
+        docs.map((doc) => {
+          const before = assignment(doc.id);
+          write(doc, groupId, "user", "classified");
+          // A manual choice cancels an in-flight suggestion, including its busy indicator.
+          db.run(
+            "UPDATE documents SET tagging_status = 'waiting-for-provider' WHERE id = ? AND tagging_status IN ('pending', 'tagging')",
+            [doc.id],
+          );
+          return {
+            id: doc.id,
+            from: before?.group_id ?? null,
+            previous: before ? assignmentOf(before) : null,
+          };
+        }),
+      );
+      return moved;
+    },
+    /** Says that these Documents moved (`move`): one "library.assignments", and their tagging. */
+    moved(ids: readonly string[]) {
+      if (ids.length === 0) return;
+      options.tagged([...ids]);
+      announce(ids);
     },
     create,
     update(id: unknown, input: unknown) {
@@ -467,10 +510,19 @@ export function createLibrary(options: {
       changed();
       return group(existing.id);
     },
-    /** Deletes a Folder: its Documents become Unsorted, recorded so that restoring it puts them back. */
-    delete(id: unknown): FolderDeletion {
+    /**
+     * Deletes a Folder: its Documents go to Not in a Folder, as the Minds the caller took out
+     * of it did, and both are recorded so that restoring it puts them back.
+     */
+    delete(id: unknown, mindIds: readonly string[] = []): Pick<FolderDeletion, "assignments"> {
       const existing = group(id);
       const at = now();
+      const record = (kind: "document" | "mind", itemId: string) =>
+        db.run(
+          `INSERT INTO deleted_folder_items (id, folder_id, item_kind, item_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [randomUUID(), existing.id, kind, itemId, at, at],
+        );
       const assignments = db.transaction(() => {
         const rows = db.all<AssignmentRow & { live: number }>(
           `SELECT g.*, d.deleted_at IS NULL AS live FROM document_groups g
@@ -483,13 +535,8 @@ export function createLibrary(options: {
           at,
           existing.id,
         ]);
-        for (const row of rows) {
-          db.run(
-            `INSERT INTO deleted_folder_items (id, folder_id, item_kind, item_id, created_at, updated_at)
-             VALUES (?, ?, 'document', ?, ?, ?)`,
-            [randomUUID(), existing.id, row.document_id, at, at],
-          );
-        }
+        for (const row of rows) record("document", row.document_id);
+        for (const mindId of mindIds) record("mind", mindId);
         db.run(
           "UPDATE document_groups SET group_id = NULL, updated_at = ? WHERE group_id = ? AND deleted_at IS NULL",
           [at, existing.id],
@@ -502,10 +549,11 @@ export function createLibrary(options: {
     },
     /**
      * Brings back a deleted Folder (the caller checks it may), and the Documents its
-     * deletion took out that are in no Folder now. Throws if its name is taken or the
-     * Library is full. Run in the caller's transaction, then `restored`.
+     * deletion took out that are in no Folder now. Returns the Minds it took out, for the
+     * caller to put back. Throws if its name is taken or the Library is full. Run in the
+     * caller's transaction, then `restored`.
      */
-    restore(id: string): void {
+    restore(id: string): string[] {
       const row = db.get<{ name: string }>("SELECT name FROM library_groups WHERE id = ?", [id]);
       if (!row) throw new NotFoundError("That Folder doesn't exist.");
       const language = settings.get().language;
@@ -524,10 +572,17 @@ export function createLibrary(options: {
            WHERE folder_id = ? AND item_kind = 'document' AND deleted_at IS NULL)`,
         [id, at, id],
       );
+      const mindIds = db
+        .all<{ item_id: string }>(
+          "SELECT item_id FROM deleted_folder_items WHERE folder_id = ? AND item_kind = 'mind' AND deleted_at IS NULL",
+          [id],
+        )
+        .map((each) => each.item_id);
       db.run(
         "UPDATE deleted_folder_items SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
         [at, at, id],
       );
+      return mindIds;
     },
     /** Folders came back (`restore`): the Library is read again, and Organize may go on. */
     restored() {
