@@ -19,12 +19,14 @@ import { useT } from "../i18n";
 import { type ScopeChoice, scopeChoices } from "../scope";
 import { useAppStore } from "../store";
 
-interface ScopePickerHandle {
-  onKeyDown(event: KeyboardEvent): boolean;
+/** Moves through a list of choices from the keyboard of the field it opened from. */
+export interface ChoiceListHandle {
+  /** Arrows move, Enter or Tab chooses. True if the key was used. */
+  onKeyDown(event: Pick<KeyboardEvent, "key" | "isComposing">): boolean;
 }
 
 type ScopePickerListProps = SuggestionProps<ScopeChoice, ScopeChoice> & {
-  ref?: Ref<ScopePickerHandle>;
+  ref?: Ref<ChoiceListHandle>;
 };
 
 const GROUP_LABELS: Record<ScopeKind, MessageKey> = {
@@ -89,7 +91,7 @@ export const ScopePicker = Extension.create({
         command: ({ editor, range, props: choice }) => addToScope(editor, range, choice),
         floatingUi: { strategy: "fixed", middleware: [shift({ padding: 8 })] },
         render: () => {
-          let renderer: ReactRenderer<ScopePickerHandle, ScopePickerListProps> | null = null;
+          let renderer: ReactRenderer<ChoiceListHandle, ScopePickerListProps> | null = null;
           let unmount: (() => void) | null = null;
           return {
             onStart(props) {
@@ -124,22 +126,58 @@ function ChoiceIcon({ choice }: { choice: ScopeChoice }) {
 }
 
 function ScopePickerList({ editor, range, query, command, ref }: ScopePickerListProps) {
+  return (
+    <ScopeChoiceList
+      scope={scopeAt(editor.state, range.from)}
+      query={query}
+      onChoose={command}
+      ref={ref}
+    />
+  );
+}
+
+/**
+ * The Folders, Tags and Documents a Search scope can add, under their labels,
+ * filtered by `query`, leaving out those `scope` has already. The first is
+ * chosen; arrows move and Enter or Tab chooses (see `ChoiceListHandle`). The
+ * "@" picker of a Question, and of the composer.
+ */
+export function ScopeChoiceList({
+  scope,
+  query,
+  onChoose,
+  id,
+  onSelect,
+  ref,
+}: {
+  scope: SearchScope;
+  query: string;
+  onChoose(choice: ScopeChoice): void;
+  /** The listbox's id, and its options' (`${id}-${index}`), for a field's `aria-activedescendant`. */
+  id?: string;
+  /** Hears which option is chosen, by its index (-1: none), for `aria-activedescendant`. */
+  onSelect?(index: number): void;
+  ref?: Ref<ChoiceListHandle>;
+}) {
   const t = useT();
   const folders = useAppStore((state) => state.folders);
   const groups = useAppStore((state) => state.library?.groups);
   const tags = useAppStore((state) => state.tags);
   const documents = useAppStore((state) => state.documents);
   const library = { folders, groups, tags, documents };
-  const shown = scopeChoices(library, scopeAt(editor.state, range.from), query);
+  const shown = scopeChoices(library, scope, query);
   const nothing = folders.length + (groups?.length ?? 0) + tags.length + documents.length === 0;
   // The choice belongs to a query: typing more starts again from the top.
   const [choice, setChoice] = useState({ query, index: 0 });
   const selected = choice.query === query ? Math.min(choice.index, shown.length - 1) : 0;
   const setSelected = (index: number) => setChoice({ query, index });
   const options = useRef<(HTMLButtonElement | null)[]>([]);
+  const reportSelected = useRef(onSelect);
+  reportSelected.current = onSelect;
 
   useEffect(() => {
     options.current[selected]?.scrollIntoView({ block: "nearest" });
+    reportSelected.current?.(selected);
   }, [selected]);
 
   useImperativeHandle(ref, () => ({
@@ -153,7 +191,7 @@ function ScopePickerList({ editor, range, query, command, ref }: ScopePickerList
       }
       if (event.key === "Enter" || event.key === "Tab") {
         const item = shown[selected];
-        if (item) command(item);
+        if (item) onChoose(item);
         return true;
       }
       return false;
@@ -162,6 +200,7 @@ function ScopePickerList({ editor, range, query, command, ref }: ScopePickerList
 
   return (
     <div
+      id={id}
       role="listbox"
       data-testid="scope-picker"
       aria-label={t("scope.picker.label")}
@@ -189,16 +228,17 @@ function ScopePickerList({ editor, range, query, command, ref }: ScopePickerList
                   ref={(element) => {
                     options.current[index] = element;
                   }}
+                  id={id && `${id}-${index}`}
                   type="button"
                   role="option"
                   aria-selected={index === selected}
                   data-testid="scope-choice"
                   data-kind={item.kind}
                   data-id={item.id}
-                  // Keep the cursor in the editor.
+                  // Keep the cursor where it is typed in.
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setSelected(index)}
-                  onClick={() => command(item)}
+                  onClick={() => onChoose(item)}
                   className="editor-menu-item"
                 >
                   <span className="scope-picker-icon">

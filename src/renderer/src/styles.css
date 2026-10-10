@@ -684,12 +684,12 @@
 
   /*
    * The Mind's column (DESIGN.md, Layout): a 56px left margin for controls
-   * (the block handle, the Ask button, the "Answer" label), a 680px measure in
-   * which every text starts at one edge, and a 48px right margin for the
+   * (the block handle, a Question's spark and fold chevron), a 680px measure
+   * in which every text starts at one edge, and a 48px right margin for the
    * Citation checks; centred. Nothing in a Block may move its text off that
-   * edge: boxes that need padding (the Question band, code blocks, quotes)
-   * reach into the margin instead. Under 900px both margins fold away (see the
-   * container query at the end).
+   * edge: boxes that need padding (code blocks, quotes) reach into the margin
+   * instead. The composer, pinned under it, is the measure wide. Under 900px
+   * both margins fold away (see the container query at the end).
    */
   .mind-column {
     container: mind / inline-size;
@@ -774,12 +774,248 @@
     }
   }
 
+  /*
+   * The composer (DESIGN.md, Composer), pinned at the foot of the Mind's
+   * column, outside what scrolls: the measure wide, under the text's edge, on
+   * the sheet with a 1px edge and radius 10, which turns accent while its
+   * text has the focus. One row: a Skill chip, the text (it grows a line at a
+   * time up to 8), then the model chip, the Search scope and the Ask button,
+   * which move under the text when the row has no room for them.
+   */
+  .composer-dock {
+    container: mind / inline-size;
+    flex-shrink: 0;
+    padding: 8px 0 16px;
+    background: var(--color-sheet);
+  }
+  .composer {
+    position: relative;
+    width: 680px;
+    margin-left: calc((100% - 784px) / 2 + 56px);
+    border: 1px solid var(--color-rule);
+    border-radius: 10px;
+    background: var(--color-sheet);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+    transition: border-color 80ms ease-out;
+
+    &:has(> .composer-row > .composer-input:focus) {
+      border-color: var(--color-accent);
+    }
+  }
+  .composer-problem {
+    padding: 8px 12px 0 16px;
+    user-select: none;
+  }
+  .composer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 4px 8px;
+    min-height: 44px;
+    padding: 8px 8px 8px 12px;
+  }
+  .composer-input {
+    flex: 1 1 14rem;
+    min-width: 8rem;
+    min-height: 28px;
+    /* Eight lines, then it scrolls. */
+    max-height: 168px;
+    padding: 4px 0 4px 4px;
+    border: 0;
+    outline: none;
+    resize: none;
+    field-sizing: content;
+    background: transparent;
+    font: inherit;
+    color: var(--color-ink);
+  }
+  .composer-row > .composer-input::placeholder {
+    color: var(--color-ink-placeholder);
+  }
+  .composer-controls {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    height: 28px;
+    margin-left: auto;
+  }
+  /* A quiet 22px chip: no fill until pointed at (the model, "All Documents"). */
+  .composer-chip {
+    display: inline-flex;
+    flex-shrink: 1;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: 14rem;
+    height: 22px;
+    padding: 0 4px 0 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+    transition:
+      background-color 80ms ease-out,
+      color 80ms ease-out;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .composer-chip-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+  .composer-model-anchor {
+    display: flex;
+    min-width: 0;
+  }
+  .composer-model-chevron {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+  }
+  /* Quiet while empty, the primary ink with a white arrow once there is text. */
+  .composer-ask {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--color-ink);
+    color: #fff;
+    transition: background-color 80ms ease-out;
+
+    &:hover {
+      background: var(--color-ink-strong);
+    }
+    &:disabled {
+      background: var(--color-frame);
+      color: var(--color-ink-placeholder);
+      cursor: default;
+    }
+  }
+  /* The "@" and "/" pickers: above the composer, at its left edge. */
+  .composer-picker {
+    position: absolute;
+    z-index: 20;
+    bottom: calc(100% + 8px);
+    left: 0;
+  }
+
+  /* The model menu: over the composer, 336px, grouped by where models run. */
+  .model-menu {
+    position: fixed;
+    inset: auto;
+    width: 336px;
+    max-height: 60vh;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    border: 0;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+  }
+  .model-menu-list {
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+  }
+  .model-menu-intro {
+    padding: 6px 8px 2px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .model-menu-heading {
+    padding: 8px 8px 2px;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--color-ink-meta);
+  }
+  .model-menu-heading-note {
+    font-weight: 400;
+  }
+  .model-menu-item {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: 6px;
+    text-align: left;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+    }
+  }
+  .model-menu-check {
+    width: 14px;
+    height: 14px;
+    margin-top: 3px;
+    color: var(--color-ink);
+  }
+  .model-menu-name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-ink);
+  }
+  .model-menu-hint {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .model-menu-provider {
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .model-menu-foot {
+    padding: 8px 12px;
+    border-top: 1px solid var(--color-rule);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .model-menu-link {
+    border-radius: 2px;
+    font-weight: 600;
+    color: var(--color-accent);
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */
   .mind-editor {
     /* How far left of the text edge the block handle sits (see BlockHandle). */
     --handle-gap: 28px;
-    /* Clear of the Question band, which takes 52px of the margin. */
-    --handle-gap-question: 56px;
+    /* Clear of a Question's spark and fold chevron, which take 46px of the margin. */
+    --handle-gap-question: 48px;
     /*
      * The editor's box reaches over the left margin, past the block handle,
      * while its text keeps the edge: Tiptap hides the handle once the pointer
@@ -808,11 +1044,15 @@
       margin-top: 32px;
     }
     > * + :where(.node-question) {
-      margin-top: 20px;
+      margin-top: 24px;
     }
     > * + :where(.node-answer),
     > :where(.node-answer) + * {
       margin-top: 24px;
+    }
+    /* A Question is one line right above its Answer. */
+    > :where(.node-question) + :where(.node-answer) {
+      margin-top: 6px;
     }
 
     /*
@@ -1057,108 +1297,104 @@
   }
 
   /*
-   * A Question: a frame band that reaches 52px into the left margin, where the
-   * Ask button (a 24px rounded square with a play triangle) sits centred on
-   * the first line, and 12px to the right. Its text keeps the Mind's edge, in
-   * Source Sans 3 16/28 (the same line as the writing).
+   * A Question (DESIGN.md, Question): one quiet line in Source Sans 3 14/20,
+   * ink-meta, at the Mind's text edge. No band and no box: its spark and fold
+   * chevron sit in the left margin, and its meta (model, Search scope, a
+   * Skill) fills the rest of the line, shown on hover or focus. The meta never
+   * makes the line taller: it is cut where the line ends.
    */
   .question-block {
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    margin: 0 -12px 0 -52px;
-    padding: 10px 12px 10px 52px;
-    border-radius: 8px;
-    background: var(--color-frame);
+    gap: 4px;
     font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink-meta);
   }
-  .question-ask {
+  .question-fold {
     position: absolute;
-    /* Centred on the first 28px line, which starts 10px down. */
-    top: 12px;
-    left: 14px;
+    top: 0;
+    left: -46px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
+    gap: 2px;
+    height: 20px;
+    padding: 0 4px;
     border-radius: 6px;
-    background: var(--color-ink);
-    color: #fff;
+    color: var(--color-ink-meta);
+    user-select: none;
 
     &:hover {
-      background: #2e3238;
+      background: var(--color-hover);
+      color: var(--color-ink);
     }
-    /* After hover, so a disabled button doesn't darken. */
-    &:disabled {
-      background: #c9cdd3;
-      cursor: default;
+  }
+  .question-fold-chevron {
+    width: 10px;
+    height: 10px;
+    transition: transform 120ms ease-in-out;
+
+    [aria-expanded="false"] > & {
+      transform: rotate(-90deg);
     }
-    &:focus-visible {
-      outline: 2px solid var(--color-accent);
-      outline-offset: 2px;
-    }
+  }
+  .question-spark {
+    width: 14px;
+    height: 14px;
   }
   .question-row {
     position: relative;
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: 8px;
+    min-height: 20px;
   }
   .question-text {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: var(--text-question);
-    line-height: var(--text-question--line-height);
-    font-weight: 500;
-    color: var(--color-ink);
+    flex: 0 1 auto;
+    min-width: 2px;
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink-meta);
   }
   .question-placeholder {
     position: absolute;
     top: 0;
     left: 0;
-    font-size: var(--text-question);
-    line-height: var(--text-question--line-height);
     color: var(--color-ink-placeholder);
     pointer-events: none;
     user-select: none;
   }
-  /* Its model, on the right in ink-meta. */
-  .question-model-picker {
-    position: relative;
+  .question-meta {
     display: flex;
-    flex-shrink: 0;
+    flex: 1 1 0;
     align-items: center;
-    height: 28px;
+    gap: 8px;
+    min-width: 0;
+    height: 20px;
+    overflow: hidden;
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    white-space: nowrap;
     color: var(--color-ink-meta);
+    user-select: none;
+    opacity: 0;
+    transition: opacity 80ms ease-out;
   }
-  .question-model {
-    max-width: 220px;
-    height: 24px;
-    padding: 0 18px 0 6px;
-    margin-right: -6px;
-    border-radius: 4px;
-    appearance: none;
-    background: transparent;
-    font-size: 13px;
-    line-height: 20px;
-    color: inherit;
+  .question-block:hover .question-meta,
+  .question-block:focus-within .question-meta,
+  .has-focus > .question-block .question-meta {
+    opacity: 1;
+  }
+  .question-meta-model {
+    flex-shrink: 0;
+    max-width: 14rem;
+    overflow: hidden;
     text-overflow: ellipsis;
-    cursor: pointer;
-
-    &:hover,
-    &:focus-visible {
-      background: var(--color-hover);
-      color: var(--color-ink);
-    }
   }
-  .question-model-chevron {
-    position: absolute;
-    right: 0;
-    width: 12px;
-    height: 12px;
-    pointer-events: none;
+  .question-problem {
+    user-select: none;
   }
   /* The Skill forced on a Question: a chip like the Search scope's, that takes it off again. */
   .question-skill {
@@ -1167,15 +1403,14 @@
     align-items: center;
     gap: 6px;
     max-width: 180px;
-    height: 22px;
-    margin-top: 3px;
+    height: 20px;
     padding: 0 4px 0 6px;
     border-radius: 4px;
     background: var(--color-sheet);
     box-shadow: inset 0 0 0 1px var(--color-rule);
-    font-size: 13px;
-    line-height: 20px;
-    color: #2e3238;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-secondary);
     user-select: none;
   }
   .question-skill-icon {
@@ -1188,30 +1423,67 @@
     color: var(--color-ink-placeholder);
     text-decoration: line-through;
   }
-  /* Its Search scope: chips under its text, for what "@" chose. */
-  .question-scope {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    line-height: 20px;
-    user-select: none;
+  /* In the composer, level with the middle of its text's first line. */
+  .composer-row > .question-skill {
+    align-self: flex-start;
+    margin-top: 4px;
   }
-  .question-scope-label {
-    color: var(--color-ink-meta);
+  /*
+   * A Search scope as chips, 12/16 in ink-secondary, a 1px rule inside: on a
+   * Question's line (20px, in its meta) and in the composer (22px, each with
+   * its kind's icon and a name that opens the "@" picker).
+   */
+  .question-scope,
+  .composer-scope {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+    line-height: 16px;
+    user-select: none;
   }
   .scope-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    max-width: 22rem;
-    height: 22px;
-    padding: 0 4px 0 8px;
+    gap: 4px;
+    max-width: 14rem;
+    height: 20px;
+    padding: 0 2px 0 6px;
     border-radius: 4px;
     background: var(--color-sheet);
     box-shadow: inset 0 0 0 1px var(--color-rule);
-    color: #2e3238;
+    white-space: nowrap;
+    color: var(--color-ink-secondary);
+  }
+  .composer-scope .scope-chip {
+    height: 22px;
+    max-width: 12rem;
+    padding-left: 0;
+  }
+  /* A composer chip's name: its icon and words, a button that opens the "@" picker. */
+  .scope-chip-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 100%;
+    padding: 0 2px 0 6px;
+    border-radius: 4px 0 0 4px;
+    color: inherit;
+
+    &:hover {
+      color: var(--color-ink);
+    }
+  }
+  .scope-chip-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
   }
   /* "+N more" after the first chips of a long Search scope, and "Show fewer". */
   .scope-chip-more {
@@ -1225,6 +1497,9 @@
     &:focus-visible {
       outline: 2px solid var(--color-accent);
     }
+  }
+  .composer-scope .scope-chip-more {
+    padding: 0 6px;
   }
   /* Deleted since: struck through, and ignored by the search. */
   .scope-chip--deleted {
@@ -1264,9 +1539,11 @@
   }
 
   /*
-   * An Answer: no box. Its text keeps the Mind's edge in ink-answer, one step
-   * softer than your writing; the "Answer" label sits in the left margin, level
-   * with its meta line (model, searches, Regenerate) in 12/20 ink-meta.
+   * An Answer: no box, no label. Its text keeps the Mind's edge in ink-answer,
+   * one step softer than your writing. Its meta line (model, searches,
+   * Regenerate) in 12/20 ink-meta sits just under its last line, in the room
+   * before the next Block, so showing it moves nothing: on hover or focus,
+   * and always while it is being written (with Stop) or once stopped.
    */
   .answer-block {
     position: relative;
@@ -1274,30 +1551,43 @@
     flex-direction: column;
     gap: 12px;
   }
-  .answer-head {
+  .answer-meta {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 0 8px;
+    height: 22px;
+    padding-top: 2px;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    white-space: nowrap;
+    color: var(--color-ink-meta);
+    user-select: none;
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+  }
+  .answer-block:hover > .answer-meta,
+  .answer-block:focus-within > .answer-meta,
+  .has-focus > .answer-block > .answer-meta,
+  .answer-block:is([data-status="streaming"], [data-status="stopped"]) > .answer-meta {
+    opacity: 1;
+  }
+  /* A folded Question's Answer (see questionFold). */
+  .mind-editor > .answer-folded {
+    display: none;
+  }
+  /* What it searched, opened from its meta line: under its text. */
+  .answer-searches-open {
     font-family: var(--font-sans);
     font-size: var(--text-meta);
     line-height: var(--text-meta--line-height);
     color: var(--color-ink-meta);
     user-select: none;
-  }
-  .answer-label {
-    position: absolute;
-    top: 0;
-    left: -56px;
-    width: 44px;
-    font-weight: 600;
-    color: var(--color-ink-meta);
-  }
-  .answer-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 8px;
-    min-height: 20px;
   }
   .answer-model {
     overflow: hidden;
@@ -1353,9 +1643,9 @@
   }
   .answer-action {
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 4px;
-    margin-left: auto;
     padding: 0 6px;
     border-radius: 4px;
     color: var(--color-ink-secondary);
@@ -2151,12 +2441,14 @@
   }
 
   /*
-   * A narrow Mind (under 900px): both margins fold away. The Ask button moves
-   * to the band's right, the "Answer" label onto the meta line, and each
-   * Citation marker shows its check, since the margin column is gone.
+   * A narrow Mind (under 900px): both margins fold away, and the composer
+   * takes the same width as the text. A Question keeps only its fold chevron
+   * in what is left of the margin, and each Citation marker shows its check,
+   * since the margin column is gone.
    */
   @container mind (width < 900px) {
-    .mind-measure {
+    .mind-measure,
+    .composer {
       width: auto;
       margin-inline: 24px;
     }
@@ -2166,20 +2458,12 @@
       /* The whole margin left of the measure. */
       --editor-gutter: 24px;
     }
-    .question-block {
-      margin-inline: -12px;
-      padding-left: 12px;
+    .question-fold {
+      left: -22px;
+      padding: 0 4px;
     }
-    .question-ask {
-      left: auto;
-      right: 14px;
-    }
-    .question-row {
-      padding-right: 36px;
-    }
-    .answer-label {
-      position: static;
-      width: auto;
+    .question-spark {
+      display: none;
     }
     .margin-checks {
       display: none;

@@ -143,7 +143,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
   }
 });
 
-test("asking without a chat model says what to set up, under the Question and at the top of the Mind, and its action opens Models", async () => {
+test("asking without a chat model says what to set up, in the composer's row and at the top of the Mind, and its action opens Models", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await window.getByTestId("new-mind").click();
@@ -155,16 +155,20 @@ test("asking without a chat model says what to set up, under the Question and at
   await expect(window.getByRole("status").filter({ has: top })).toHaveCount(0);
   await screenshot(window, "needs-chat-model-en");
 
-  // Under the Question, where it was asked.
+  // In the composer's row, where it was asked; the Question waits there, not in the note.
   await window.getByTestId("mind-editor").click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Is anyone there?");
   await window.keyboard.press("Enter");
-  const notReady = window.getByTestId("question-not-ready");
+  const composer = window.getByTestId("composer");
+  const notReady = composer.getByTestId("composer-not-ready");
   await expect(notReady).toContainText("Asking Questions needs a chat model");
   await expect(notReady.getByRole("button")).toHaveCount(1);
   await expect(notReady).toHaveCSS("color", "rgb(101, 107, 116)");
+  await expect(composer.getByTestId("composer-input")).toHaveValue("Is anyone there?");
+  await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
   await expect(window.locator("dialog[open]")).toHaveCount(0);
+  await screenshot(window, "needs-chat-model-composer-en");
 
   // By keyboard: Tab reaches the action, Enter opens Settings on Models.
   await notReady.getByRole("button").focus();
@@ -177,6 +181,7 @@ test("asking without a chat model says what to set up, under the Question and at
   await bridge(window).settings("zh-CN");
   await expect(top).toContainText("提问需要先设置对话模型");
   await expect(top.getByRole("button")).toHaveText("去设置");
+  await expect(notReady).toContainText("提问需要先设置对话模型");
   await screenshot(window, "needs-chat-model-zh");
   await app.close();
 });

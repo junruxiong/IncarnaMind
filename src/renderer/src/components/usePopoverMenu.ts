@@ -20,14 +20,24 @@ const itemsOf = (menu: HTMLElement | null) =>
  * isn't showing yet isn't laid out (it has no size), so it is laid out for a
  * moment to measure it as it will show.
  */
-function place(button: HTMLElement | null, menu: HTMLElement | null): void {
-  const anchor = button?.getBoundingClientRect();
-  if (!anchor || !menu) return;
+function place(
+  button: HTMLElement | null,
+  menu: HTMLElement | null,
+  around: HTMLElement | null = null,
+): void {
+  const box = button?.getBoundingClientRect();
+  if (!box || !menu) return;
   const hidden = !menu.matches(":popover-open");
   if (hidden) menu.style.display = "block";
   const width = menu.offsetWidth;
   const height = menu.offsetHeight;
   if (hidden) menu.style.removeProperty("display");
+  // Above or below what the button sits in, if given, so the menu doesn't cover it, its
+  // right edge by the button's.
+  const outer = around?.getBoundingClientRect();
+  const anchor = outer
+    ? { left: box.right + GAP_PX - width, top: outer.top, bottom: outer.bottom }
+    : box;
   menu.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX))}px`;
   const below = anchor.bottom + GAP_PX;
   menu.style.top =
@@ -52,12 +62,20 @@ function focusFirst(menu: HTMLElement | null): void {
  *
  * Spread `buttonProps` on the button and `menuProps` on the menu's element,
  * which also takes `role="menu"`, an `aria-label` and `menuClass` (./ui).
+ * `around` names what the button sits in, which the menu then opens above or
+ * below rather than covering it (e.g. the composer, for its model chip).
  */
-export function usePopoverMenu() {
+export function usePopoverMenu({
+  around,
+}: {
+  around?: (button: HTMLElement) => HTMLElement | null;
+} = {}) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const outer = useRef(around);
+  outer.current = around;
 
   // Once rendered with its items, and before it is drawn: placed. A click
   // renders it just before the popover shows, so it shows where it belongs;
@@ -66,7 +84,8 @@ export function usePopoverMenu() {
   // `toggle` event (below), as a popover that hasn't shown can't be focused.
   useLayoutEffect(() => {
     if (!open) return;
-    place(button.current, menu.current);
+    const anchor = button.current;
+    place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
     if (menu.current?.matches(":popover-open")) focusFirst(menu.current);
   }, [open]);
 

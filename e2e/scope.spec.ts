@@ -22,7 +22,7 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("typing @ in a Question limits its search to a Folder: the Answer cites only a Document in it", async () => {
+test("typing @ in the composer limits the search to a Folder: the Answer cites only a Document in it", async () => {
   // Both answer the Question; each is in its own folder of a Linked folder, Notes.
   const notes = join(await realpath(sources), "Notes");
   await mkdir(join(notes, "Ocean"), { recursive: true });
@@ -56,8 +56,10 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
-  const question = editor.getByTestId("question");
-  await expect(question).toBeVisible();
+  const composer = window.getByTestId("composer");
+  await expect(composer.getByTestId("composer-input")).toBeFocused();
+  // With no Search scope, every Document is searched.
+  await expect(composer.getByTestId("composer-scope-all")).toHaveText("All Documents");
 
   // "@" opens the picker: Folders, Tags and Documents, the first one chosen; arrows move.
   await window.keyboard.type("@");
@@ -74,19 +76,26 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   await expect(choices.nth(1)).toHaveText(/^Kitchen/);
   await expect(choices.nth(1)).toHaveAttribute("aria-selected", "true");
 
-  // Typing filters; Enter adds the choice as a chip, and the "@" text goes.
+  // Typing filters; Enter adds the choice as a chip in the composer, and the "@" text goes.
   await window.keyboard.type("oce");
   await expect(choices).toHaveCount(1);
   await expect(choices).toHaveAttribute("data-kind", "folder");
   await window.keyboard.press("Enter");
   await expect(picker).toHaveCount(0);
+  const composerChip = composer.getByTestId("scope-chip");
+  await expect(composerChip).toHaveText("Ocean");
+  await expect(composerChip).toHaveAttribute("data-id", oceanId);
+  await expect(composer.getByTestId("composer-input")).toHaveValue("");
+
+  // Asked, the Question carries the scope, on its line; the composer keeps it for the next.
+  await window.keyboard.type("When do spring tides happen?");
+  await window.keyboard.press("Enter");
+  const question = editor.getByTestId("question");
+  await expect(question.locator(".question-text")).toHaveText("When do spring tides happen?");
   const chip = question.getByTestId("scope-chip");
   await expect(chip).toHaveText("Ocean");
   await expect(chip).toHaveAttribute("data-id", oceanId);
-
-  await window.keyboard.type("When do spring tides happen?");
-  await expect(question.locator(".question-text")).toHaveText("When do spring tides happen?");
-  await window.keyboard.press("Enter");
+  await expect(composerChip).toHaveText("Ocean");
   const answer = editor.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
@@ -114,9 +123,20 @@ test("typing @ in a Question limits its search to a Folder: the Answer cites onl
   await expect(answer).toContainText("has no Documents to search");
   await expect(answer.getByTestId("citation")).toHaveCount(0);
 
-  // The chip's × takes it out of the scope.
+  // The chip's × takes it out of the scope: the Question's, and the composer's.
+  await question.hover();
   await chip.getByTestId("scope-chip-remove").click();
   await expect(question.getByTestId("question-scope")).toHaveCount(0);
+  await expect(composerChip).toHaveAttribute("data-deleted", "true");
+  await composerChip.getByTestId("scope-chip-remove").click();
+  await expect(composer.getByTestId("composer-scope-all")).toBeVisible();
+
+  // Clicking the chip types the "@" that opens the picker.
+  await composer.getByTestId("composer-scope-all").click();
+  await expect(picker).toBeVisible();
+  await expect(composer.getByTestId("composer-input")).toHaveValue("@");
+  await window.keyboard.press("Escape");
+  await expect(picker).toHaveCount(0);
   await app.close();
 });
 
@@ -158,10 +178,12 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
     const choices = window.getByTestId("scope-choice");
     await expect(choices).toHaveCount(1);
     await window.keyboard.press("Enter");
-    const chip = editor.getByTestId("scope-chip");
-    await expect(chip).toHaveText("Ocean research");
+    const composerChip = window.getByTestId("composer").getByTestId("scope-chip");
+    await expect(composerChip).toHaveText("Ocean research");
     await window.keyboard.type("When do spring tides happen?");
     await window.keyboard.press("Enter");
+    const chip = editor.getByTestId("question").getByTestId("scope-chip");
+    await expect(chip).toHaveText("Ocean research");
     const answer = editor.getByTestId("answer");
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer.getByTestId("citation")).toHaveCount(1);
@@ -175,6 +197,7 @@ test("an in-app folder scopes answers and deleting it never broadens the search"
       folderId,
     );
     await expect(chip).toHaveAttribute("data-deleted", "true");
+    await expect(composerChip).toHaveAttribute("data-deleted", "true");
     await answer.hover();
     await answer.getByTestId("answer-regenerate").click();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
