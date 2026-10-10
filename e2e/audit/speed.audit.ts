@@ -431,7 +431,8 @@ test("B1 startup: cold (fresh data folder) and warm, 3× each", async () => {
       await bridge.addLinkedFolder(folder);
     }, fixtures.formats);
     await documentsReady(first.window, 14, 120_000);
-    await click(first.window, first.window.getByTestId("new-mind"));
+    await click(first.window, first.window.getByTestId("plus-menu"));
+    await click(first.window, first.window.getByTestId("plus-new-mind"));
     await click(first.window, first.window.getByTestId("mind-editor"));
     await first.window.keyboard.press("ControlOrMeta+j");
     await first.window.keyboard.type("When do spring tides happen?", { delay: 30 });
@@ -492,7 +493,8 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
     record("speed.cdpAvailable", session !== null);
 
     // A short Mind.
-    await click(window, window.getByTestId("new-mind"));
+    await click(window, window.getByTestId("plus-menu"));
+    await click(window, window.getByTestId("plus-new-mind"));
     await click(window, window.getByTestId("mind-editor"));
     await installKeyLatency(window);
     const m0 = await cdpMetrics(session);
@@ -659,14 +661,16 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
         automatic: false,
       });
     });
-    await click(window, window.getByTestId("new-mind"));
+    await click(window, window.getByTestId("plus-menu"));
+    await click(window, window.getByTestId("plus-new-mind"));
     await click(window, window.getByTestId("mind-editor"));
     await installKeyLatency(window);
     const session = await cdp(window);
 
     // Link the folder as a person does, then type in the Mind while it indexes.
     await answerOpenDialog(app.app, fixtures.scale);
-    await click(window, window.getByTestId("add-linked-folder"));
+    await click(window, window.getByTestId("plus-menu"));
+    await click(window, window.getByTestId("plus-link-folder"));
     const dialog = window.getByTestId("link-folder-dialog");
     const previewStarted = Date.now();
     await expect(dialog.getByTestId("link-folder-files")).toBeVisible({ timeout: 60_000 });
@@ -746,7 +750,8 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
     });
 
     // A long Mind (~300 blocks, many Citations) with 2,000 Documents in the store.
-    await click(window, window.getByTestId("new-mind"));
+    await click(window, window.getByTestId("plus-menu"));
+    await click(window, window.getByTestId("plus-new-mind"));
     await click(window, window.getByTestId("mind-editor"));
     const longShape = await buildLongMind(window, [
       "What does each document say about the harbour tide survey?",
@@ -955,7 +960,7 @@ test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a war
     // Warm starts with 2,000 Documents.
     const warm: unknown[] = [];
     for (let i = 0; i < RUNS; i++) {
-      const { launched, result } = await timedLaunch(dataDir, "new-mind", true);
+      const { launched, result } = await timedLaunch(dataDir, "plus-menu", true);
       const rowsShown = Date.now();
       await expect(launched.window.getByTestId("document-list-item").first()).toBeVisible({
         timeout: 60_000,
@@ -996,7 +1001,8 @@ test("B4 the viewer: a 300-page PDF, a 50k-cell sheet, a Word file with images (
       await bridge.addLinkedFolder(folder);
     }, fixtures.formats);
     await documentsReady(window, 14, 120_000);
-    await click(window, window.getByTestId("new-mind"));
+    await click(window, window.getByTestId("plus-menu"));
+    await click(window, window.getByTestId("plus-new-mind"));
     const session = await cdp(window);
     const rowOf = (name: string) =>
       window

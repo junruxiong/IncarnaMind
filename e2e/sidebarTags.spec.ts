@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   launchApp,
   removeDataFolder,
+  sidebarFolder,
 } from "./app";
 
 /*
@@ -249,9 +250,13 @@ test("the Tags tab lists every Tag with its colour and count, lists its Document
     const views = browse.locator("button[aria-pressed]");
     await expect(views).toHaveText(["Folders", "Tags", "Source locations"]);
     await expect(views.first()).toHaveAttribute("aria-pressed", "true");
-    // In the Folders view, the rows show their Tags' colours too.
-    const folders = window.getByTestId("library-folders");
-    const attentionInFolders = folders
+    // In the Folders view, the rows show their Tags' colours too: Organize files
+    // Attention in Reports & presentations, which opens in place.
+    const reports = sidebarFolder(window, "Reports & presentations");
+    await expect(reports.getByTestId("browse-count")).toHaveText("3");
+    await slideAndClick(window, reports.getByTestId("folder-row"));
+    await expect(reports).toHaveAttribute("data-expanded", "true");
+    const attentionInFolders = reports
       .getByTestId("document-list-item")
       .filter({ hasText: "Attention" });
     await expect(attentionInFolders.getByTestId("tag-dot")).toHaveCount(3);
