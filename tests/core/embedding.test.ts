@@ -23,6 +23,7 @@ import {
   createControlledEmbedder,
   type ModelServer,
   startModelServer,
+  turnOnEmbeddings,
   waitForModel,
 } from "../helpers/embedding";
 
@@ -76,15 +77,19 @@ function waitForStatus(core: Core, id: string, status: Document["status"]): Prom
   });
 }
 
+/** A data folder and a way to start the core on it, with embeddings on: they are off by default. */
 async function setUp(options: { server?: ModelServer; embedder?: ControlledEmbedder } = {}) {
   const dataDir = await createTempDataFolder();
   const sources = await createTempDataFolder();
   const embedder = options.embedder ?? createControlledEmbedder();
-  const start = () =>
-    startCore(dataDir, {
+  const start = async () => {
+    const core = startCore(dataDir, {
       embedder,
       embeddingModelSource: options.server?.source ?? NO_MODEL_FILES,
     });
+    await turnOnEmbeddings(core);
+    return core;
+  };
   return { dataDir, sources, embedder, start };
 }
 
@@ -93,7 +98,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const server = await startModelServer(MODEL_FILES);
     server.behave("onnx/model.onnx", { held: true });
     const { sources, start } = await setUp({ server });
-    const core = start();
+    const core = await start();
     const statuses = statusesOf(core);
     expect(await core.getEmbeddingModel()).toEqual({
       name: "multilingual-e5-small",
@@ -139,7 +144,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const server = await startModelServer(MODEL_FILES);
     server.behave("onnx/model.onnx", { chunkDelayMs: 80 });
     const { dataDir, start } = await setUp({ server });
-    const core = start();
+    const core = await start();
     const events: EmbeddingModelStatus[] = [];
     core.on("embeddingModel.status", (status) => events.push(status));
 
@@ -164,7 +169,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const server = await startModelServer(MODEL_FILES);
     server.behave("tokenizer.json", { corrupt: true });
     const { dataDir, sources, start } = await setUp({ server });
-    const core = start();
+    const core = await start();
 
     await core.downloadEmbeddingModel();
     const failed = await waitForModel(core, (status) => status.state === "failed");
@@ -197,7 +202,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const server = await startModelServer(MODEL_FILES);
     server.behave("onnx/model.onnx", { cutAfter: 150_000 });
     const { dataDir, start } = await setUp({ server });
-    const core = start();
+    const core = await start();
 
     await core.downloadEmbeddingModel();
     const failed = await waitForModel(core, (status) => status.state === "failed");
@@ -222,7 +227,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const server = await startModelServer(MODEL_FILES);
     server.behave("onnx/model.onnx", { chunkDelayMs: 100 });
     const { dataDir, sources, start } = await setUp({ server });
-    const before = start();
+    const before = await start();
     const [added] = (
       await before.addDocuments([await writeSourceFile(sources, "plants.md", PLANTS)])
     ).documents;
@@ -235,7 +240,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     expect(kept).toBeGreaterThan(0);
 
     server.behave("onnx/model.onnx", {});
-    const after = start();
+    const after = await start();
     const [ready] = await waitForProcessing(after, [added.id]);
 
     expect(ready?.status).toBe("ready");
@@ -248,14 +253,14 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
   test("after the download, Documents are embedded with no network", async () => {
     const server = await startModelServer(MODEL_FILES);
     const { sources, start } = await setUp({ server });
-    const before = start();
+    const before = await start();
     await before.downloadEmbeddingModel();
     await waitForModel(before, (status) => status.state === "ready");
     before.close();
     await server.close();
     const requests = server.requests.length;
 
-    const after = start();
+    const after = await start();
     expect(await after.getEmbeddingModel()).toMatchObject({ state: "ready", error: null });
     const [document] = await addAndProcess(after, [
       await writeSourceFile(sources, "plants.md", PLANTS),
@@ -271,7 +276,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const embedder = createControlledEmbedder();
     embedder.failLoads = true;
     const { sources, start } = await setUp({ embedder });
-    const core = start();
+    const core = await start();
     const statuses = statusesOf(core);
 
     const [added] = (await core.addDocuments([await writeSourceFile(sources, "plants.md", PLANTS)]))
@@ -304,7 +309,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const embedder = createControlledEmbedder();
     embedder.failEmbeds = 1;
     const { sources, start } = await setUp({ embedder });
-    const core = start();
+    const core = await start();
 
     const [document] = await addAndProcess(core, [
       await writeSourceFile(sources, "plants.md", PLANTS),
@@ -337,6 +342,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     };
     const sources = await createTempDataFolder();
     const core = startCore(await createTempDataFolder(), { embedder });
+    await turnOnEmbeddings(core);
     const statuses = statusesOf(core);
     const long = Array.from(
       { length: 400 },
@@ -396,6 +402,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
     const dataDir = await createTempDataFolder();
     const sources = await createTempDataFolder();
     const core = startCore(dataDir, { embedder });
+    await turnOnEmbeddings(core);
     const path = await writeSourceFile(sources, "notes.md", PLANTS);
     const [added] = (await core.addDocuments([path])).documents;
     if (!added) throw new Error("Nothing was added.");
@@ -426,7 +433,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
 
   test("Passages are embedded one at a time, with the Document's name and the e5 prefixes", async () => {
     const { sources, start, embedder } = await setUp();
-    const core = start();
+    const core = await start();
     const long = Array.from(
       { length: 120 },
       (_, index) => `Sentence ${index} talks about photosynthesis and light.`,
@@ -455,7 +462,7 @@ describe("The built-in embedding model", { timeout: 30_000 }, () => {
 describe("Vector and hybrid search", { timeout: 30_000 }, () => {
   async function library() {
     const { dataDir, sources, start, embedder } = await setUp();
-    const core = start();
+    const core = await start();
     const [plants, markets, chinese] = await addAndProcess(core, [
       await writeSourceFile(sources, "plants.md", PLANTS),
       await writeSourceFile(sources, "markets.md", MARKETS),
@@ -556,7 +563,7 @@ describe("Vector and hybrid search", { timeout: 30_000 }, () => {
     const before = await core.searchPassages("energy in plants", { mode: "vector" });
     core.close();
 
-    const after = start();
+    const after = await start();
 
     expect(await after.searchPassages("energy in plants", { mode: "vector" })).toEqual(before);
   });

@@ -12,6 +12,7 @@ import {
   openLinkedFolderMenu,
   previewLink,
   removeDataFolder,
+  turnOnEmbeddings,
   useLocalChatModel,
 } from "./app";
 
@@ -150,6 +151,8 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   await writeTree(sources, ["Supervisor meeting notes.txt"]);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  // On, so a Document shows its embedding progress (they are off by default).
+  await turnOnEmbeddings(window);
 
   for (const title of [
     "Methods: evaluation design",

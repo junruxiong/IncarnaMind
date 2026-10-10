@@ -104,7 +104,7 @@ describe("Documents", { timeout: 30_000 }, () => {
     );
   });
 
-  test("processing reports queued, extracting, embedding, then ready", async () => {
+  test("processing reports queued, extracting, then ready: embeddings are off by default", async () => {
     const sources = await createTempDataFolder();
     const core = startCore(await createTempDataFolder());
     const seen: Document[] = [];
@@ -119,10 +119,8 @@ describe("Documents", { timeout: 30_000 }, () => {
     expect(seen.filter((each) => each.id === added.id).map((each) => each.status)).toEqual([
       "queued",
       "extracting",
-      "embedding",
       "ready",
     ]);
-    expect(seen.find((each) => each.status === "embedding")?.progress).toBe(0);
     expect(ready).toMatchObject({
       status: "ready",
       progress: null,
