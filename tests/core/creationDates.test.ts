@@ -486,8 +486,8 @@ describe("Existing Documents get their creation date once, in the background", {
     expect(embedder.texts).toEqual([]);
     expect(stored()).toEqual(before);
     expect(events.every(([, status]) => status === "ready")).toBe(true);
-    // Each Document whose date was found was pushed with it.
-    expect(events.map(([id]) => id).sort()).toEqual(["d1", "d2", "d3"]);
+    // Each Document whose date or title (#213) was found was pushed with it.
+    expect(events.map(([id]) => id).sort()).toEqual(["d1", "d2", "d3", "d4"]);
 
     // Once: the next start reads nothing again.
     const written = queryDatabase(dataDir, "SELECT id, updated_at FROM documents ORDER BY id");

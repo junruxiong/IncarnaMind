@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../../core/api";
+import { displayName, fileNameOf } from "../../../shared/documentNames";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
@@ -92,7 +93,7 @@ export function LibraryPane() {
     // Without a search, every Document's words match: they aren't put together then.
     const found = (doc: Document) =>
       wanted === "" ||
-      [doc.name, ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")]
+      [doc.name, doc.title ?? "", ...doc.tags.map((link) => tagNames.get(link.tagId) ?? "")]
         .join(" ")
         .toLocaleLowerCase()
         .includes(wanted);
@@ -148,37 +149,58 @@ export function LibraryPane() {
       ),
     );
   };
+  const heading = selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all");
   const closeForm = () => {
     setEditing(null);
     if (filter === "new") useAppStore.getState().openLibrary();
   };
   return (
-    <main
+    <section
       data-testid="library"
-      className="library-pane flex min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
+      role="tabpanel"
+      id="mind-tabpanel"
+      aria-labelledby="library-tab"
+      className="library-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sheet text-ui text-ink"
     >
-      <header className="title-bar library-header flex h-9 shrink-0 items-center justify-between bg-tab-strip pl-4">
-        <span className="font-semibold">{t("library.title")}</span>
-        <button
-          type="button"
-          className={buttonStyle("ghost", "sm")}
-          onClick={() => useAppStore.getState().closeLibrary()}
-        >
-          {t("library.back")}
-        </button>
-      </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="mx-auto max-w-[1040px]">
-          <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="break-words font-serif text-heading font-semibold">
-                {selected?.name ?? t(filter === "unsorted" ? "library.unsorted" : "library.all")}
-              </h1>
-              <p className="mt-1 text-[13px] text-ink-meta">
-                {selected?.description || t("library.intro")}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+          {/* The search comes first (#119). */}
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <input
+              aria-label={t("library.search")}
+              placeholder={t("library.search")}
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setLimit(100);
+              }}
+              className={`${inputClass} mt-0 min-w-32 flex-1`}
+            />
+            <button
+              type="button"
+              className={buttonStyle("secondary")}
+              onClick={() => void useAppStore.getState().pickDocuments()}
+            >
+              {t("documents.add")}
+            </button>
+          </div>
+          {/* The name takes the whole width and wraps by word, two lines at most (#213); the actions sit below it, never beside. */}
+          <div className="mb-2">
+            <h1
+              data-testid="library-heading"
+              title={heading}
+              className="line-clamp-2 font-serif text-heading font-semibold [overflow-wrap:break-word]"
+            >
+              {heading}
+            </h1>
+            <p
+              title={selected?.description || t("library.intro")}
+              className="mt-1 line-clamp-2 text-[13px] text-ink-meta"
+            >
+              {selected?.description || t("library.intro")}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {bridge && <WritingBridges bridge={bridge} />}
               <button
                 type="button"
@@ -283,26 +305,6 @@ export function LibraryPane() {
           {(starters || groups.length === 0) && !editing && snapshot && (
             <StarterGroups busy={busy} act={act} close={() => setStarters(false)} />
           )}
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <input
-              aria-label={t("library.search")}
-              placeholder={t("library.search")}
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setLimit(100);
-              }}
-              className={`${inputClass} mt-0 min-w-32 flex-1`}
-            />
-            <button
-              type="button"
-              className={buttonStyle("secondary")}
-              onClick={() => void useAppStore.getState().pickDocuments()}
-            >
-              {t("documents.add")}
-            </button>
-          </div>
           {(inView.length > 0 || filtering) && (
             <LibraryFilterBar
               facets={facets}
@@ -388,7 +390,7 @@ export function LibraryPane() {
           )}
         </div>
       </div>
-    </main>
+    </section>
   );
 }
 
@@ -415,6 +417,8 @@ const LibraryRow = memo(function LibraryRow({
   shownIds(): readonly string[];
 }) {
   const t = useT();
+  const name = displayName(doc);
+  const fileName = fileNameOf(doc.path);
   const status =
     item?.status === "classifying" || item?.status === "pending"
       ? "library.working"
@@ -435,17 +439,20 @@ const LibraryRow = memo(function LibraryRow({
       <div className="library-document-name min-w-0">
         <button
           type="button"
-          title={doc.name}
+          title={name === fileName ? name : `${name}\n${fileName}`}
           className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
           onClick={() => useAppStore.getState().openDocument({ documentId: doc.id })}
         >
           <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-          <span className="truncate font-semibold">{doc.name}</span>
+          <span data-testid="library-document-name" className="truncate font-semibold">
+            {name}
+          </span>
         </button>
         <details className="mt-1 text-[12px] text-ink-meta">
           <summary className="w-fit cursor-pointer">{t(status)}</summary>
-          <p className="mt-1">
-            {doc.kind.toUpperCase()} · {t("library.originalsStay")}
+          <p className="mt-1 break-words">
+            {t("library.file", { name: fileName })} · {doc.kind.toUpperCase()} ·{" "}
+            {t("library.originalsStay")}
           </p>
           {item?.model && (
             <p>
@@ -463,7 +470,7 @@ const LibraryRow = memo(function LibraryRow({
         </details>
       </div>
       <select
-        aria-label={t("library.groupFor", { name: doc.name })}
+        aria-label={t("library.groupFor", { name })}
         disabled={busy}
         value={item?.groupId ?? ""}
         className={`${inputClass} mt-0 min-w-0`}

@@ -13,6 +13,7 @@ describe("Settings", () => {
         viewerWidth: null,
         openMinds: [],
         activeMind: null,
+        libraryTab: "closed",
         chatSetupDismissed: false,
         gettingStarted: {
           started: false,
@@ -92,6 +93,7 @@ describe("Settings", () => {
       viewerWidth: null,
       openMinds: [],
       activeMind: null,
+      libraryTab: "closed",
       chatSetupDismissed: false,
       gettingStarted: {
         started: false,
@@ -127,6 +129,7 @@ describe("Settings", () => {
       viewerWidth: 500,
       openMinds: ["mind-b", "mind-a"],
       activeMind: "mind-a",
+      libraryTab: "shown" as const,
       chatSetupDismissed: true,
       gettingStarted: {
         started: true,

@@ -82,6 +82,7 @@ const deviceScope: Scope<DeviceSettings> = {
     viewerWidth: null,
     openMinds: [],
     activeMind: null,
+    libraryTab: "closed",
     chatSetupDismissed: false,
     gettingStarted: {
       started: false,
@@ -98,6 +99,8 @@ const deviceScope: Scope<DeviceSettings> = {
     viewerWidth: (value): value is number | null => value === null || isPaneWidth(value),
     openMinds: isMindIdList,
     activeMind: (value): value is string | null => value === null || isMindId(value),
+    libraryTab: (value): value is "closed" | "open" | "shown" =>
+      value === "closed" || value === "open" || value === "shown",
     chatSetupDismissed: isBoolean,
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
