@@ -1153,7 +1153,15 @@
     position: relative;
     z-index: 3;
   }
-  .thread-panel {
+  /*
+   * The thread with its composer (`ThreadPanel`), placed by its dock: at the
+   * foot of the Mind, the thread joined to the top of the composer. The
+   * wrapper draws no box, so the composer lays out as it would on its own.
+   */
+  .thread-dock {
+    display: contents;
+  }
+  .thread-dock--bottom > .thread-panel {
     position: absolute;
     /* Down to the composer's top edge: the dock's top padding is 8px. */
     bottom: calc(100% - 8px);
@@ -1170,7 +1178,7 @@
     line-height: var(--text-ui--line-height);
     color: var(--color-ink);
   }
-  .thread-shadow {
+  .thread-dock--bottom > .thread-shadow {
     position: absolute;
     z-index: -1;
     top: calc(8px - var(--thread-height, 0px));
@@ -1182,7 +1190,7 @@
     pointer-events: none;
   }
   /* The composer under it: the card's edge, and the thread's rule as its top. */
-  .composer-dock:has(> .thread-panel) > .composer {
+  .thread-dock--bottom:has(> .thread-panel) > .composer {
     border-color: var(--color-rule-strong);
     border-top-color: var(--color-rule);
     border-top-left-radius: 0;
@@ -1272,8 +1280,27 @@
   /* A Question: the User's words in a bubble at the right, reaching into the checks' margin. */
   .thread-question {
     display: flex;
-    justify-content: flex-end;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
     margin-right: -36px;
+  }
+  /* Its Search scope, under it, on hover or focus (as a note's Question's meta). */
+  .thread-question-meta {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 88%;
+    font-family: var(--font-sans);
+    font-size: var(--text-meta);
+    line-height: var(--text-meta--line-height);
+    color: var(--color-ink-meta);
+    user-select: none;
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+  }
+  .thread-question:hover > .thread-question-meta,
+  .thread-question:focus-within > .thread-question-meta {
+    opacity: 1;
   }
   .thread-question-bubble {
     max-width: 88%;
@@ -1286,12 +1313,6 @@
     font-weight: 500;
     color: var(--color-ink);
     overflow-wrap: break-word;
-  }
-  .thread-question-skill {
-    margin-right: 6px;
-    font-size: var(--text-meta);
-    font-weight: 600;
-    color: var(--color-ink-secondary);
   }
   /*
    * Under an Answer: Copy · Add to note ▾ · Regenerate, its model and what it
@@ -1415,8 +1436,8 @@
     animation: block-just-added 1600ms ease-in both;
   }
   @container mind (width < 900px) {
-    .thread-panel,
-    .thread-shadow {
+    .thread-dock--bottom > .thread-panel,
+    .thread-dock--bottom > .thread-shadow {
       left: 24px;
       width: auto;
       right: 24px;

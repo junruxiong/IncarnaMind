@@ -99,12 +99,12 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   // Asked, the Question carries the Skill, and the Answer follows it, saying so on a Skill card.
   await window.keyboard.type("When is high water in Brest?");
   await window.keyboard.press("Enter");
-  const question = editor.getByTestId("question");
+  const question = window.getByTestId("thread").getByTestId("thread-question");
   const chip = question.getByTestId("question-skill");
   await expect(chip).toHaveText("tide-tables");
   await expect(chip).toHaveAttribute("data-state", "enabled");
   await expect(composer.getByTestId("composer-skill")).toHaveCount(0);
-  const answer = editor.getByTestId("answer");
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const card = answer.getByTestId("answer-skill");
   await expect(card).toHaveAttribute("data-skill-name", "tide-tables");
@@ -142,13 +142,15 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await window.keyboard.press("Enter");
   const composerNotice = composer.getByTestId("composer-skill-unavailable");
   await expect(composerNotice).toContainText("which is turned off");
-  await expect(editor.getByTestId("question")).toHaveCount(1);
+  await expect(window.getByTestId("thread").getByTestId("thread-question")).toHaveCount(1);
   await composerNotice.getByRole("button", { name: "Ask without it" }).click();
   await expect(composerNotice).toHaveCount(0);
   await expect(composer.getByTestId("composer-skill")).toHaveCount(0);
-  const second = editor.getByTestId("answer").nth(1);
+  const second = window.getByTestId("thread").getByTestId("answer").nth(1);
   await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(editor.getByTestId("question").nth(1)).toContainText("And in Calais?");
+  await expect(window.getByTestId("thread").getByTestId("thread-question").nth(1)).toContainText(
+    "And in Calais?",
+  );
   await expect(second).not.toContainText("Following the Skill");
   await app.close();
 });
@@ -187,17 +189,20 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
   await expect(composer.getByTestId("scope-chip")).toContainText("Harbour");
   await expect(composer.getByTestId("composer-input")).toHaveValue("When is high water in Brest?");
 
-  // Asked: the Question carries both; the Skill was loaded up front, and the search found
-  // only the Document in scope.
+  // Asked: the Question carries both, in the thread (#201); the Skill was loaded up front, and
+  // the search found only the Document in scope, which its Answer's line names too.
   await window.keyboard.press("Enter");
-  const question = editor.getByTestId("question");
+  const question = window.getByTestId("thread").getByTestId("thread-question");
   await expect(question.getByTestId("question-skill")).toHaveText("tide-tables");
   const scope = question.getByTestId("scope-chip");
   await expect(scope).toHaveCount(1);
   await expect(scope).toContainText("Harbour");
-  await expect(question.locator(".question-text")).toHaveText("When is high water in Brest?");
-  const answer = editor.getByTestId("answer");
+  await expect(question.locator(".thread-question-text")).toHaveText(
+    "When is high water in Brest?",
+  );
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer.getByTestId("answer-scope")).toHaveText("Harbour");
   await expect(answer.getByTestId("answer-skill")).toHaveAttribute("data-forced", "true");
   await expect(answer).toContainText("Following the Skill tide-tables.");
   await expect(answer.getByTestId("citation-chip")).toHaveAttribute("aria-label", /Harbour/);

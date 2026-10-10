@@ -31,8 +31,16 @@ interface AnswersState {
   /** The models a Question's picker offers; null until first asked for. */
   models: ChatModelGroup[] | null;
 
-  /** Asks a Question; with `discardEdits`, replaces an Answer the User edited. */
-  ask(mindId: string, questionId: string, discardEdits?: boolean): Promise<AskResult | null>;
+  /**
+   * Asks a Question; with `discardEdits`, replaces an Answer the User edited.
+   * `chatId`: the chat it is in, if it is in the thread.
+   */
+  ask(
+    mindId: string,
+    questionId: string,
+    discardEdits?: boolean,
+    chatId?: string | null,
+  ): Promise<AskResult | null>;
   /**
    * Asks a Question just put into the Mind's thread from its composer, in the
    * chat `chatId` (null: the Mind's own Blocks): why it couldn't be asked is
@@ -89,9 +97,9 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
   phases: {},
   models: null,
 
-  async ask(mindId, questionId, discardEdits) {
+  async ask(mindId, questionId, discardEdits, chatId = null) {
     try {
-      const result = await core.askQuestion({ mindId, questionId, discardEdits });
+      const result = await core.askQuestion({ mindId, questionId, discardEdits, chatId });
       settle(questionId, result);
       return result;
     } catch (error) {

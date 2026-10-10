@@ -40,6 +40,11 @@ export interface NoteSchemaOptions {
   answerView?: NodeViewRenderer;
   /** Draws Citations, e.g. as badges that open the cited page. */
   citationView?: NodeViewRenderer;
+  /**
+   * Reads Block ids but never gives any: for a view that doesn't write, such
+   * as the thread (#201), which shows what the core wrote.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -57,6 +62,7 @@ export function noteExtensions({
   questionView,
   answerView,
   citationView,
+  readOnly = false,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -85,6 +91,10 @@ export function noteExtensions({
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
     QuestionContextFlag,
-    UniqueID.configure({ attributeName: BLOCK_ID_ATTRIBUTE, types: [...BLOCK_TYPES] }),
+    UniqueID.configure({
+      attributeName: BLOCK_ID_ATTRIBUTE,
+      types: [...BLOCK_TYPES],
+      updateDocument: !readOnly,
+    }),
   ];
 }

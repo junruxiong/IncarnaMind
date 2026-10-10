@@ -84,9 +84,12 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   // Asked, the Question carries it and the Answer follows it, as with any forced Skill.
   await window.keyboard.type("What do my Documents say about tides?");
   await window.keyboard.press("Enter");
-  const chip = editor.getByTestId("question").getByTestId("question-skill");
+  const chip = window
+    .getByTestId("thread")
+    .getByTestId("thread-question")
+    .getByTestId("question-skill");
   await expect(chip).toHaveText("literature-review");
-  const answer = editor.getByTestId("answer");
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const card = answer.getByTestId("answer-skill");
   await expect(card).toHaveAttribute("data-skill-name", "literature-review");

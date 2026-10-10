@@ -1,13 +1,14 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import type { Editor } from "@tiptap/core";
+
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  pointAndClick,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -38,7 +39,8 @@ async function ask(window: Page, text: string) {
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type(text);
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  // Answered in the thread above the composer (#201).
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   return answer;
 }
@@ -51,26 +53,6 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 
   const answer = await ask(window, "When do spring tides happen?");
-
-  // Copying the sentence into a Note keeps its Citation, check result and all. This goes
-  // through the editor's own clipboard HTML (the system clipboard is shared with the machine).
-  const editor = window.getByTestId("mind-editor");
-  await editor.evaluate((dom) => {
-    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
-    let at = -1;
-    view.state.doc.descendants((node, pos) => {
-      if (at < 0 && node.type.name === "citation") at = pos;
-    });
-    const sentence = view.state.doc.resolve(at);
-    commands.setTextSelection({ from: sentence.start(), to: sentence.end() });
-    const { dom: copied } = view.serializeForClipboard(view.state.selection.content());
-    commands.setTextSelection(view.state.doc.content.size - 1);
-    view.pasteHTML(copied.innerHTML);
-  });
-  const note = editor.locator(":scope > p").last();
-  await expect(note).toContainText("Your Documents answer this");
-  await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
-  await expect(editor.getByTestId("answer")).toHaveCount(1);
 
   // It shows that it searched the Documents, and what for.
   await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
@@ -91,6 +73,14 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   );
   await expect(answer).toContainText("Your Documents answer this");
   await expect(answer).not.toContainText("[^1]");
+
+  // Added to the note, it keeps its Citation, checked again there: found (#201).
+  const editor = window.getByTestId("mind-editor");
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  const note = editor.locator(":scope > p").first();
+  await expect(note).toContainText("Your Documents answer this");
+  await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  await expect(editor.getByTestId("answer")).toHaveCount(0);
 
   // Clicking it shows its badge and opens the viewer at that page, the quote highlighted.
   await citation.getByTestId("citation-chip").click();
@@ -133,13 +123,20 @@ test("a quote that isn't on its page says so, and the page can still be opened, 
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("answer-confirm")).toHaveCount(0);
 
-  // Removing the Citation edits the Answer; regenerating it now asks first.
+  // In the thread an Answer is read, not edited: its card offers no Remove. Added to the note,
+  // the Citation is still not found there, and the Note's copy of it can be removed.
   await citation.getByTestId("citation-chip").click();
+  await expect(window.getByTestId("citation-card").getByTestId("citation-remove")).toHaveCount(0);
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("citation-card")).toHaveCount(0);
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  const editor = window.getByTestId("mind-editor");
+  const kept = editor.getByTestId("citation");
+  await expect(kept).toHaveAttribute("data-check", "not-found");
+  await kept.getByTestId("citation-chip").click();
   await window.getByTestId("citation-card").getByTestId("citation-remove").click();
-  await expect(answer.getByTestId("citation")).toHaveCount(0);
-  await expect(answer).toContainText("Your Documents answer this");
-  await answer.hover();
-  await answer.getByTestId("answer-regenerate").click();
-  await expect(answer.getByTestId("answer-confirm")).toBeVisible();
+  await expect(editor.getByTestId("citation")).toHaveCount(0);
+  await expect(editor).toContainText("Your Documents answer this");
+  await expect(answer.getByTestId("citation")).toHaveCount(1);
   await app.close();
 });

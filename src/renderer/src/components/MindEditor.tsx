@@ -353,14 +353,14 @@ function AskArea({
   const view = useThreads((state) => state.views[mindId]);
   const up = view?.open === true && (view.fresh || chats.length > 0);
   return (
-    <>
-      <ThreadPanel
-        mindId={mindId}
-        doc={doc}
-        note={editor}
-        cursorInMind={cursorInMind}
-        focusComposer={() => useComposer.getState().requestFocus()}
-      />
+    <ThreadPanel
+      mindId={mindId}
+      doc={doc}
+      note={editor}
+      cursorInMind={cursorInMind}
+      focusComposer={() => useComposer.getState().requestFocus()}
+      dock="bottom"
+    >
       <Composer
         ref={composer}
         editor={editor}
@@ -369,6 +369,6 @@ function AskArea({
         cursorInMind={cursorInMind}
         placeholder={up ? t("thread.followUp") : undefined}
       />
-    </>
+    </ThreadPanel>
   );
 }

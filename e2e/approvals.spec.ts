@@ -57,7 +57,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await ask(window, "Please book_boat from Dover");
 
   // The fake model calls book_boat: the Answer waits, showing the Tool, its Connector and the arguments.
-  const answer = editor.getByTestId("answer").first();
+  const answer = window.getByTestId("thread").getByTestId("answer").first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveAttribute("data-tool", "book_boat");
@@ -89,7 +89,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   // Answer still finishes.
   await clickEmptyLine(editor.locator(":scope > p").last());
   await ask(window, "Now book_boat from Calais");
-  const second = editor.getByTestId("answer").nth(1);
+  const second = window.getByTestId("thread").getByTestId("answer").nth(1);
   const secondCard = second.getByTestId("approval-card");
   await expect(secondCard).toBeVisible({ timeout: 15_000 });
   await expect(secondCard.getByTestId("approval-argument")).toContainText("Calais");

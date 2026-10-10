@@ -95,9 +95,10 @@ function setViewer(window: Page, open: boolean) {
 }
 
 /**
- * Adds a sentence with two more Citations to the Answer, after its first
- * paragraph, as copies of its own Citation: one found, and one whose quote
- * wasn't found, on a later line. Like an Answer that cited three times.
+ * Adds a sentence with two more Citations to the first Note that cites (an
+ * Answer added to the note), at its end, as copies of its own Citation: one
+ * found, and one whose quote wasn't found, on a later line. Like an Answer
+ * that cited three times.
  */
 async function citeMore(editor: Locator) {
   await editor.evaluate((dom) => {
@@ -105,30 +106,55 @@ async function citeMore(editor: Locator) {
     let at = -1;
     let cited: Record<string, unknown> | null = null;
     view.state.doc.forEach((node, offset) => {
-      if (node.type.name !== "answer" || at >= 0 || !node.firstChild) return;
-      at = offset + 1 + node.firstChild.nodeSize;
+      if (at >= 0 || node.type.name !== "paragraph") return;
       node.descendants((child) => {
         if (!cited && child.type.name === "citation") cited = { ...child.attrs };
         return cited === null;
       });
+      if (cited) at = offset + node.nodeSize - 1;
     });
-    if (at < 0 || !cited) throw new Error("No Answer with a Citation.");
+    if (at < 0 || !cited) throw new Error("No Note with a Citation.");
     const citation = (check: string, checkReason: string | null) => ({
       type: "citation",
       attrs: { ...(cited as Record<string, unknown>), check, checkReason },
     });
-    commands.insertContentAt(at, {
-      type: "paragraph",
-      content: [
-        { type: "text", text: "They come when the Sun and the Moon pull in line." },
-        citation("found", null),
-        {
-          type: "text",
-          text: " The pull is strongest at new moon and at full moon, when the two line up with the Earth, and weakest in between, at the quarter moons, when the smaller neap tides come instead.",
-        },
-        citation("not-found", "quote-not-on-pages"),
-      ],
-    });
+    commands.insertContentAt(at, [
+      { type: "text", text: " They come when the Sun and the Moon pull in line." },
+      citation("found", null),
+      {
+        type: "text",
+        text: " The pull is strongest at new moon and at full moon, when the two line up with the Earth, and weakest in between, at the quarter moons, when the smaller neap tides come instead.",
+      },
+      citation("not-found", "quote-not-on-pages"),
+    ]);
+  });
+}
+
+/**
+ * Puts a Question and its Answer into the note at its end, as a Mind written
+ * before Questions went to the thread (#201) holds them.
+ */
+async function questionFromBefore(editor: Locator) {
+  await editor.evaluate((dom) => {
+    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
+    const questionId = crypto.randomUUID();
+    commands.insertContentAt(view.state.doc.content.size, [
+      {
+        type: "question",
+        attrs: { id: questionId },
+        content: [{ type: "text", text: "What makes neap tides smaller?" }],
+      },
+      {
+        type: "answer",
+        attrs: { questionId, status: "done" },
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "The Sun pulls across the Moon's pull." }],
+          },
+        ],
+      },
+    ]);
   });
 }
 
@@ -160,23 +186,39 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("When do spring tides happen, and what makes them stronger?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  // Answered in the thread (#201); Add to note keeps it on the empty line, Citation and all.
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await answer.getByTestId("answer-add").click();
+  await expect(editor.getByTestId("citation-chip")).toHaveCount(1);
   await citeMore(editor);
-  await clickEmptyLine(editor.locator(":scope > p").last());
+  // A Question and its Answer from before the thread, still in the note.
+  await questionFromBefore(editor);
+  // The thread folds away, so the whole note shows.
+  await window.getByTestId("thread-fold").click();
+  await expect(window.getByTestId("thread")).not.toHaveAttribute("data-open");
+  await editor.locator(":scope > p").last().click();
+  await window.keyboard.press("End");
+  await window.keyboard.press("Enter");
   await window.keyboard.type(
     "So spring tides follow the Moon. Check whether the tables put numbers on how much higher they are.",
   );
 
-  // One text edge: the title, a Note, a heading, a list item, a Question's text and an Answer's text.
+  // One text edge: the title, a Note, a heading, a list item, an added Answer, and a Question's
+  // and an Answer's text from before.
   const edge = (await textColumn(editor)).x;
+  const noteAnswer = editor.getByTestId("answer");
   const texts = {
     title: title,
     note: editor.locator(":scope > p").first(),
     heading: editor.locator(":scope > h2"),
     "list item": editor.locator(":scope > ul > li").first(),
+    "added Answer": editor
+      .locator(":scope > p")
+      .filter({ has: window.getByTestId("citation") })
+      .first(),
     question: editor.getByTestId("question").locator(".question-text"),
-    answer: answer.locator(".answer-content p").first(),
+    answer: noteAnswer.locator(".answer-content p").first(),
   };
   for (const [name, locator] of Object.entries(texts)) {
     expectNear((await box(locator)).x, edge, 1, `the ${name} starts at the text edge`);
@@ -196,7 +238,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   // It is level with the Question's one 20px line; the Answer has no label.
   const foldMiddle = middle(await box(editor.getByTestId("question-fold")));
   expectNear(foldMiddle, (await box(texts.question)).y + 10, 1, "the fold chevron's middle");
-  await expect(answer.locator(".answer-label")).toHaveCount(0);
+  await expect(noteAnswer.locator(".answer-label")).toHaveCount(0);
   // The composer, pinned under the Mind, is the measure wide at the text edge.
   const composer = await box(window.getByTestId("composer"));
   expectNear(composer.x, edge, 1, "the composer's edge");
@@ -413,7 +455,8 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await window.keyboard.type("Please book_boat from Dover");
   await window.keyboard.press("Enter");
 
-  const answer = editor.getByTestId("answer").first();
+  // Answered in the thread (#201), where the card waits.
+  const answer = window.getByTestId("thread").getByTestId("answer").first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(answer.getByTestId("answer-writing")).toHaveText("Waiting for your approval");
@@ -434,7 +477,7 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Run greeter scripts/hello.js for Calais");
   await window.keyboard.press("Enter");
-  const second = editor.getByTestId("answer").nth(1);
+  const second = window.getByTestId("thread").getByTestId("answer").nth(1);
   const scriptCard = second.getByTestId("approval-card");
   await expect(scriptCard).toBeVisible({ timeout: 15_000 });
   await expect(scriptCard.locator(".approval-title code")).toHaveText("scripts/hello.js");

@@ -50,6 +50,20 @@ async function pointAndClick(
   await window.mouse.click(x, y);
 }
 
+/** Each top-level Block of the note: a Question, an Answer, or a Note's text. */
+const blocksOf = (editor: Locator) =>
+  editor
+    .locator(":scope > *")
+    .evaluateAll((all) =>
+      all.map((block) =>
+        block.matches(".node-question")
+          ? "question"
+          : block.matches(".node-answer")
+            ? "answer"
+            : (block.textContent ?? "").trim(),
+      ),
+    );
+
 /** The "Get started" card's count, e.g. "· 1 of 3". */
 const progress = (window: Page) => window.getByTestId("get-started-count");
 
@@ -198,12 +212,13 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("When are the tide tables published?");
   await window.keyboard.press("Enter");
-  const editor = window.getByTestId("mind-editor");
-  await expect(editor.getByTestId("question")).toHaveCount(1);
-  await expect(guide).toBeHidden();
-  await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+  // It is answered in the thread (#201); the note, still empty, keeps the steps.
+  const thread = window.getByTestId("thread");
+  await expect(thread.getByTestId("thread-question")).toHaveCount(1);
+  await expect(thread.getByTestId("answer")).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
+  await expect(window.getByTestId("mind-editor").getByTestId("question")).toHaveCount(0);
   await expect(progress(window)).toHaveText("· 2 of 3");
 
   // The last step, from the card: the example Mind opens, and checking a Citation there ends it.
@@ -270,37 +285,21 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
   // An empty line after an Answer, not at the end, shows the hint while it is written in.
   await expect(hint).toHaveAttribute("data-place", "afterAnswer");
 
-  // Its link focuses the composer; the Question asked there goes on that line.
+  // Its link focuses the composer; the Question asked there is answered in the thread (#201),
+  // and the note stays as it was.
   await pointAndClick(window, hint.getByTestId("end-hint-ask"));
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await useLocalChatModel(window);
+  const before = await blocksOf(editor);
   await window.keyboard.type("Which tea is drunk most in Britain?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("question")).toHaveCount(2);
-  await expect(editor.getByTestId("question").nth(1)).toContainText(
+  const thread = window.getByTestId("thread");
+  await expect(thread.getByTestId("thread-question").locator(".thread-question-text")).toHaveText(
     "Which tea is drunk most in Britain?",
   );
-  // Right after the example's Answer, before the Note, with a line under its Answer to write on.
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+  await expect(thread.getByTestId("answer")).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  const order = await editor
-    .locator(":scope > *")
-    .evaluateAll((all) =>
-      all.map((block) =>
-        block.matches(".node-question")
-          ? "question"
-          : block.matches(".node-answer")
-            ? "answer"
-            : (block.textContent ?? "").trim(),
-      ),
-    );
-  expect(order.slice(-6)).toEqual([
-    "question",
-    "answer",
-    "question",
-    "answer",
-    "",
-    "Green and black tea come from the same plant.",
-  ]);
+  await expect(editor.getByTestId("question")).toHaveCount(1);
+  expect(await blocksOf(editor)).toEqual(before);
 });

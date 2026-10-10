@@ -8,6 +8,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import * as Y from "yjs";
 import type { CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
@@ -486,6 +487,108 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  */
 export async function clickEmptyLine(line: Locator): Promise<void> {
   await line.click({ position: { x: 4, y: 14 } });
+}
+
+/** Slides the mouse onto an element, in steps, as a person does, and clicks it. */
+export async function pointAndClick(window: Page, target: Locator): Promise<void> {
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't visible.");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await window.mouse.move(x, y, { steps: 8 });
+  await window.mouse.click(x, y);
+}
+
+/** Slides the mouse onto an element and leaves it there. */
+export async function pointAt(window: Page, target: Locator): Promise<void> {
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't visible.");
+  await window.mouse.move(box.x + Math.min(box.width / 2, 40), box.y + box.height / 2, {
+    steps: 8,
+  });
+}
+
+/**
+ * Asks a Question as a person does: ⌘J, the words, Enter. It is answered in
+ * the thread above the composer (#201); resolves with that Answer once it is
+ * done (the scripted model's, with `fakeChat`).
+ */
+export async function askInThread(window: Page, question: string): Promise<Locator> {
+  const answers = window.getByTestId("thread").getByTestId("answer");
+  const before = await answers.count();
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type(question);
+  await window.keyboard.press("Enter");
+  const thread = window.getByTestId("thread");
+  await expect(
+    thread.getByTestId("thread-question").last().locator(".thread-question-text"),
+  ).toHaveText(question);
+  await expect(answers).toHaveCount(before + 1);
+  const answer = answers.last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  return answer;
+}
+
+/** A Block of a Mind written before the thread (#201): a Note, a heading, or a Question with its Answer. */
+export type BlockFromBefore =
+  | { note: string }
+  | { heading: string }
+  | { question: string; answer: string };
+
+/**
+ * Makes a Mind as one written before Questions went to the thread (#201)
+ * holds them: its Questions and Answers in the note, among its Notes. Made
+ * through the core's bridge, in the stored shape. Returns its id.
+ */
+export async function mindWrittenBefore(
+  window: Page,
+  title: string,
+  blocks: BlockFromBefore[],
+): Promise<string> {
+  const doc = new Y.Doc();
+  const fragment = doc.getXmlFragment("blocks");
+  const element = (
+    type: string,
+    text: string,
+    attributes: Record<string, number> = {},
+    id: string = crypto.randomUUID(),
+  ) => {
+    const node = new Y.XmlElement(type);
+    node.setAttribute("id", id);
+    // Stored as the editor stores them: a heading's level is a number.
+    for (const [key, value] of Object.entries(attributes)) {
+      node.setAttribute(key, value as unknown as string);
+    }
+    if (text) node.insert(0, [new Y.XmlText(text)]);
+    return node;
+  };
+  for (const block of blocks) {
+    if ("note" in block) fragment.push([element("paragraph", block.note)]);
+    else if ("heading" in block) fragment.push([element("heading", block.heading, { level: 2 })]);
+    else {
+      const questionId = crypto.randomUUID();
+      const question = element("question", block.question, {}, questionId);
+      const answer = new Y.XmlElement("answer");
+      answer.setAttribute("id", crypto.randomUUID());
+      answer.setAttribute("questionId", questionId);
+      answer.setAttribute("status", "done");
+      answer.insert(0, [element("paragraph", block.answer)]);
+      fragment.push([question, answer]);
+    }
+  }
+  const update = Array.from(Y.encodeStateAsUpdate(doc));
+  return window.evaluate(
+    async ([name, change]) => {
+      const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const mind = await core.createMind({ title: name });
+      await core.applyMindUpdate(mind.id, new Uint8Array(change));
+      await core.closeMind(mind.id);
+      return mind.id;
+    },
+    [title, update] as const,
+  );
 }
 
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */

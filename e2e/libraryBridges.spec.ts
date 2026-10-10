@@ -222,7 +222,7 @@ test("filters by year, format and status with counts, and asks about the Documen
   }
 });
 
-test("starts a Mind named after the Folder with its scoped Question first, in English and Chinese", async () => {
+test("starts a Mind named after the Folder with its scoped Question first in its thread, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
@@ -272,28 +272,23 @@ test("starts a Mind named after the Folder with its scoped Question first, in En
     await window.keyboard.type("What do these say about tides?");
     await screenshot(window, "library-start-mind");
 
-    // Asked, the Question is the Mind's first Block, with the Folder as its Search scope.
+    // Asked, the Question is the thread's first (#201), with the Folder as its Search scope; the
+    // note is left empty.
     await connectLocalChatModel(window);
     await window.keyboard.press("Enter");
-    await expect
-      .poll(() =>
-        editor.evaluate(
-          (element) =>
-            element.firstElementChild?.matches(
-              '[data-testid="question"], :has(> [data-testid="question"])',
-            ) === true,
-        ),
-      )
-      .toBe(true);
-    const chip = editor.getByTestId("question").getByTestId("scope-chip");
+    const thread = window.getByTestId("thread");
+    const question = thread.getByTestId("thread-question");
+    await expect(question).toHaveCount(1);
+    const chip = question.getByTestId("scope-chip");
     await expect(chip).toHaveText(FOLDER);
     await expect(chip).toHaveAttribute("data-id", folderId ?? "");
-    await expect(editor.getByTestId("question").locator(".question-text")).toHaveText(
+    await expect(question.locator(".thread-question-text")).toHaveText(
       "What do these say about tides?",
     );
-    await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+    await expect(thread.getByTestId("answer")).toHaveAttribute("data-status", "done", {
       timeout: 15_000,
     });
+    await expect(editor.getByTestId("question")).toHaveCount(0);
   } finally {
     await app.close();
   }

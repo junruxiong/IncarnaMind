@@ -22,6 +22,7 @@ import {
   launchApp,
   linkFolderFromSidebar,
   openDocumentAt,
+  pointAndClick,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -95,7 +96,7 @@ async function ask(window: Page, text: string) {
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type(text);
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 20_000 });
   return answer;
 }
@@ -142,7 +143,10 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   const viewer = window.getByTestId("viewer");
   const mark = viewer.getByTestId("viewer-quote-mark");
   const open = async (document: string) => {
-    await window.keyboard.press("Escape");
+    // Esc closes the last Citation's card, if one is open (with none, it would fold the thread).
+    if ((await window.getByTestId("citation-card").count()) > 0) {
+      await window.keyboard.press("Escape");
+    }
     const index = labels.findIndex((label) => label.includes(document));
     await chips.nth(index).click();
     await expect(window.getByTestId("viewer-title")).toHaveText(document);
@@ -252,10 +256,13 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   await expect(mark.getByTestId("viewer-quote-mark-label")).toHaveText("rows 4–5");
   await screenshot(window, "csv-grid");
 
-  // Exported to .docx, each Citation's footnote names its Location.
+  // Kept in the note with Add to note (#201), then exported to .docx: each Citation's footnote
+  // names its Location.
   const target = join(sources, "Formats.docx");
   await interceptSaveDialog(app, target);
   await window.keyboard.press("Escape");
+  await pointAndClick(window, answer.getByTestId("answer-add"));
+  await expect(window.getByTestId("mind-editor").getByTestId("citation-chip")).toHaveCount(4);
   await window.getByTestId("export-mind").click();
   const dialog = window.getByTestId("export-dialog");
   await expect(dialog.getByTestId("export-citations")).toHaveAttribute("data-unverified", "0");

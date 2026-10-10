@@ -1,6 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, launchApp, removeDataFolder } from "./app";
+import { createDataFolder, launchApp, removeDataFolder, useLocalChatModel } from "./app";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -13,7 +12,7 @@ test.afterEach(async () => {
 /** A Tab stop: what it is, where it is, and whether its focus shows. */
 interface Stop {
   what: string;
-  where: "sidebar" | "mind" | "settings" | "other";
+  where: "sidebar" | "mind" | "thread" | "settings" | "other";
   shows: boolean;
 }
 
@@ -76,9 +75,11 @@ async function pressTab(window: Page): Promise<Stop | null> {
       ? "settings"
       : element.closest('[data-testid="sidebar"]')
         ? "sidebar"
-        : element.closest('[data-testid="mind-area"]')
-          ? "mind"
-          : "other";
+        : element.closest('[data-testid="thread"]')
+          ? "thread"
+          : element.closest('[data-testid="mind-area"]')
+            ? "mind"
+            : "other";
     return {
       what: `${element.tagName.toLowerCase()} [${testId}] "${label}"`,
       where,
@@ -110,25 +111,29 @@ async function pointAndClick(window: Page, target: Locator): Promise<void> {
   await window.mouse.click(x, y);
 }
 
-test("every Tab stop in a Mind, the sidebar and Settings shows the blue focus ring", async () => {
+test("every Tab stop in a Mind, its thread, the sidebar and Settings shows the blue focus ring", async () => {
   // The example Mind is a working one: a Question with a scope, an Answer with checked Citations.
-  const { app, window } = await launchApp(dataDir, { examples: true });
-  // A chat model, so the composer shows its model chip: an Ollama on a closed port, never called.
-  await window.evaluate(async () => {
-    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await core.saveChatProvider({
-      kind: "ollama",
-      modelId: "a-model",
-      baseUrl: "http://127.0.0.1:9",
-    });
-  });
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  // A chat model, so the composer shows its model chip: the scripted one.
+  await useLocalChatModel(window);
   await expect(window.getByTestId("composer-model")).toBeVisible();
   const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
+  // A Question of one's own, answered in the thread above the composer (#201).
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("Where does tea come from?");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("thread").getByTestId("answer")).toHaveAttribute(
+    "data-status",
+    "done",
+    { timeout: 15_000 },
+  );
 
-  const stops = await tabRound(window, 120);
+  const stops = await tabRound(window, 160);
   expect(stops.filter((stop) => stop.where === "sidebar").length).toBeGreaterThan(5);
   expect(stops.filter((stop) => stop.where === "mind").length).toBeGreaterThan(5);
+  // The thread's header, its Answer's Citations and its actions.
+  expect(stops.filter((stop) => stop.where === "thread").length).toBeGreaterThan(5);
   expect(stops.filter((stop) => !stop.shows).map((stop) => stop.what)).toEqual([]);
 
   // Settings, opened with the mouse and gone through with the keyboard.

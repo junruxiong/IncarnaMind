@@ -10,8 +10,12 @@ import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode, type Slice } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../../../core/api";
-import { type BlockJSON, recheckCitations, withoutIds } from "../../../shared/noteBlocks";
-import { core } from "../core";
+import {
+  type BlockJSON,
+  type Recheck,
+  recheckCitations,
+  withoutIds,
+} from "../../../shared/noteBlocks";
 import { findBlock } from "./blockCommands";
 import { type QuestionPlace, questionPlace } from "./composerAsk";
 
@@ -68,27 +72,38 @@ export function answerBlocks(view: EditorView, answerId: string): BlockJSON[] | 
   if (!answer) return null;
   const selected = selectedIn(view, answer.from, answer.to);
   const blocks = selected
-    ? notesOf(view.state.doc.slice(selected.from, selected.to))
+    ? // From the top, so the Answer around a selection inside one paragraph comes too.
+      notesOf(view.state.doc.slice(selected.from, selected.to, true))
     : notesOf(view.state.doc.slice(answer.from - 1, answer.to + 1));
   const withText = blocks.filter((block) => JSON.stringify(block).includes('"text"'));
   return withText.length > 0 ? withText : null;
 }
 
-/** The Blocks without their ids, their Citations checked again against their Documents now. */
-export const checkedBlocks = (blocks: readonly BlockJSON[]): Promise<BlockJSON[]> =>
-  recheckCitations(withoutIds(blocks), (input) => core.recheckCitation(input));
+/** The Blocks without their ids, their Citations checked again (by `recheck`, the core's) now. */
+export const checkedBlocks = (
+  blocks: readonly BlockJSON[],
+  recheck: Recheck,
+): Promise<BlockJSON[]> => recheckCitations(withoutIds(blocks), recheck);
+
+/** What adding put into the open Mind, so Undo can take exactly that back. */
+export interface AddedHere {
+  /** The new top-level Blocks' ids, in order. */
+  blockIds: string[];
+  /** The id of the empty line they took the place of, which Undo puts back; null if none. */
+  emptyLine: string | null;
+}
 
 /**
  * Puts checked Blocks into the open Mind at `place` (see `questionPlace`):
- * at the cursor, or at the end. Returns the ids of the new top-level Blocks,
- * or null if the editor couldn't take them.
+ * at the cursor, or at the end. Null if the editor couldn't take them.
  */
 export function addAtPlace(
   note: Editor,
   blocks: readonly BlockJSON[],
   place: QuestionPlace,
-): string[] | null {
-  if (note.isDestroyed) return null;
+): AddedHere | null {
+  const replaced = place.to > place.from ? note.state.doc.nodeAt(place.from) : null;
+  const emptyLine = replaced?.attrs[BLOCK_ID_ATTRIBUTE];
   const ids = blocks.map(() => crypto.randomUUID());
   let nodes: ProseMirrorNode[];
   try {
@@ -105,23 +120,32 @@ export function addAtPlace(
     tr.replaceWith(place.from, place.to, Fragment.from(nodes));
     return true;
   });
-  return done ? ids : null;
+  return done
+    ? { blockIds: ids, emptyLine: typeof emptyLine === "string" ? emptyLine : null }
+    : null;
 }
 
 /** Where "Add to note" puts Blocks in the open Mind: at its cursor if it is there, else at its end. */
 export const placeInNote = (note: Editor, atCursor: boolean): QuestionPlace =>
   questionPlace(note.state.doc, atCursor ? note.state.selection : null);
 
-/** Takes the Blocks with these ids back out of the open Mind. */
-export function removeFromNote(note: Editor, blockIds: readonly string[]): void {
-  if (note.isDestroyed) return;
-  note.commands.command(({ tr }) => {
+/** Takes the Blocks with these ids back out of the open Mind, and puts back the empty line they took. */
+export function removeFromNote(note: Editor, added: AddedHere): void {
+  note.commands.command(({ tr, state }) => {
     // From the end, so each position stays right.
-    const found = blockIds
+    const found = added.blockIds
       .map((id) => findBlock(tr.doc, id))
       .filter((block) => block !== null)
       .sort((a, b) => b.pos - a.pos);
+    if (found.length === 0) return false;
     for (const { pos, node } of found) tr.delete(pos, pos + node.nodeSize);
-    return found.length > 0;
+    const line = added.emptyLine
+      ? state.schema.nodes.paragraph?.create({ [BLOCK_ID_ATTRIBUTE]: added.emptyLine })
+      : null;
+    const at = found.at(-1)?.pos;
+    if (line && at !== undefined && !findBlock(tr.doc, added.emptyLine ?? "")) {
+      tr.insert(Math.min(at, tr.doc.content.size), line);
+    }
+    return true;
   });
 }

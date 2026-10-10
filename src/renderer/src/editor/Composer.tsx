@@ -418,7 +418,13 @@ export function Composer({
       setExpanded(false);
       return;
     }
-    if (event.key === "Escape" && threadUp(mindId, doc)) {
+    if (
+      event.key === "Escape" &&
+      // Not when a card or menu took this Esc to close, nor with a Document open beside the Mind.
+      !event.defaultPrevented &&
+      !useAppStore.getState().viewerOpen &&
+      threadUp(mindId, doc)
+    ) {
       // The thread folds first (the innermost thing open); the next Esc goes to the note.
       event.preventDefault();
       useThreads.getState().fold(mindId);
