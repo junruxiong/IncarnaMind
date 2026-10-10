@@ -81,7 +81,13 @@ export interface FilesBridge {
 }
 
 /** What the application menu asks the window to do (see src/main/menu.ts). */
-export type MenuCommand = "new-mind" | "close-tab" | "open-settings" | "toggle-sidebar";
+export type MenuCommand =
+  | "new-mind"
+  | "close-tab"
+  | "reopen-tab"
+  | "split-right"
+  | "open-settings"
+  | "toggle-sidebar";
 
 export type SkillPickKind = "folder" | "zip";
 

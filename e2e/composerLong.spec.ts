@@ -2,7 +2,6 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import type { TestHooks } from "../src/shared/testHooks";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -10,6 +9,7 @@ import {
   dismissChatSetup,
   launchApp,
   removeDataFolder,
+  setLibraryBeside,
   useLocalChatModel,
 } from "./app";
 
@@ -56,15 +56,6 @@ async function resize(app: ElectronApplication, window: Page, width: number, hei
   );
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeLessThan(width + 1);
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(width - 40);
-}
-
-function setViewer(window: Page, open: boolean) {
-  return window.evaluate((show) => {
-    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
-    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
-    if (show) hooks.openViewer();
-    else hooks.closeViewer();
-  }, open);
 }
 
 const bridge = (window: Page) => ({
@@ -135,7 +126,7 @@ for (const language of ["en", "zh-CN"] as const) {
       [1000, true],
     ] as const) {
       await resize(app, window, width, 900);
-      await setViewer(window, viewer);
+      await setLibraryBeside(window, viewer);
       await pointAndClick(window, input);
       await window.keyboard.press("ControlOrMeta+a");
       await window.keyboard.press("Backspace");

@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo, useState } from "react";
 import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
+import { currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { ChevronDownLineIcon, ChevronRightLineIcon, FolderLineIcon } from "./lineIcons";
 import { rowButtonClass, rowClass } from "./sidebarRows";
@@ -21,7 +22,9 @@ export function LibraryFolders({
   const t = useT();
   const groups = useAppStore((state) => state.library?.groups);
   const assignments = useAppStore((state) => state.library?.assignments);
-  const active = useAppStore((state) => (state.libraryOpen ? state.libraryFilter : null));
+  const active = useAppStore((state) =>
+    currentTabOf(state.layout)?.item.kind === "library" ? state.libraryFilter : null,
+  );
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // Each Folder's Documents (Unsorted's under "unsorted"), in one pass, again only when they change.
   const byFolder = useMemo(() => {

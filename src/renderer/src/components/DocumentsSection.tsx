@@ -11,6 +11,7 @@ import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../..
 import { displayName, fileNameOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
+import { currentTabOf } from "../layoutSlice";
 import { fileStatusLabel } from "../linkedFolders";
 import { selectVisibleDocuments, useAppStore } from "../store";
 import { chipsOf, tagIndex } from "../tagEditing";
@@ -114,7 +115,9 @@ export function DocumentsSection() {
   const hasAnyDocuments = useAppStore((state) => state.documents.length > 0);
   const [chosenView, setView] = useState<BrowseView>("folders");
   const libraryOpen = useAppStore(
-    (state) => state.libraryOpen && ["all", "new"].includes(state.libraryFilter),
+    (state) =>
+      currentTabOf(state.layout)?.item.kind === "library" &&
+      ["all", "new"].includes(state.libraryFilter),
   );
   // The same array until the Documents or the Tag filter change (see `selectVisibleDocuments`).
   const documents = useAppStore(selectVisibleDocuments);
@@ -228,7 +231,10 @@ export function DocumentsSection() {
         <button
           type="button"
           data-testid="open-library"
-          onClick={() => useAppStore.getState().openLibrary()}
+          // ⌘-click (Ctrl-click) opens it to the side, as a Mind's row does.
+          onClick={(event) =>
+            useAppStore.getState().openLibrary(undefined, { side: event.metaKey || event.ctrlKey })
+          }
           className={rowButtonClass}
         >
           <DocumentLineIcon kind="text" className="size-4 shrink-0" />
@@ -354,9 +360,10 @@ const DocumentRow = memo(function DocumentRow({
       ? t("tags.marks", { names: chips.map(({ tag }) => tag.name).join(", ") })
       : undefined;
   const openDocument = useAppStore((state) => state.openDocument);
-  const isOpen = useAppStore(
-    (state) => state.viewerOpen && state.viewerTarget?.documentId === item.id,
-  );
+  const isOpen = useAppStore((state) => {
+    const shown = currentTabOf(state.layout)?.item;
+    return shown?.kind === "document" && shown.documentId === item.id;
+  });
   const muted = !isOpen && (isProcessing(item.status) || item.fileStatus !== "available");
 
   return (
@@ -389,6 +396,7 @@ const DocumentRow = memo(function DocumentRow({
           title={[shownName === fileName ? shownName : `${shownName}\n${fileName}`, tagNames]
             .filter(Boolean)
             .join("\n")}
+          // A preview beside the Mind, or in the group already showing a Document.
           onClick={() => openDocument({ documentId: item.id })}
           className={rowButtonClass}
           style={rowPadding(depth)}

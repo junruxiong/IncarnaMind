@@ -376,22 +376,36 @@ export async function openLinkedFolderMenu(row: Locator): Promise<Locator> {
   return menu;
 }
 
-/** Opens the empty Document viewer panel through the test hook. */
-export async function openViewer(window: Page): Promise<void> {
-  await window.evaluate(() => {
-    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
-    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
-    hooks.openViewer();
-  });
-  // The viewer slides in; measure it once it has settled, not mid-animation.
-  await window.waitForFunction(() => {
-    const viewer = document.querySelector('[data-testid="viewer"]');
-    const animations = viewer?.getAnimations({ subtree: true });
-    return animations?.every((animation) => animation.playState !== "running") === true;
-  });
+/**
+ * Opens the Library in a group beside the Mind, the focus staying in the
+ * Mind, or closes it, through the core's bridge: the Mind then has half the
+ * card, as beside a Document.
+ */
+export async function setLibraryBeside(window: Page, open: boolean): Promise<void> {
+  await window.evaluate(async (show) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const layout = await bridge.getLayout("main");
+    const tab = layout.groups
+      .flatMap((group) => group.tabs)
+      .find((each) => each.item.kind === "library");
+    if (show && !tab) {
+      await bridge.changeLayout("main", {
+        type: "open",
+        item: { kind: "library" },
+        where: { in: "side" },
+        focus: false,
+      });
+    } else if (!show && tab) {
+      await bridge.changeLayout("main", { type: "close", tabId: tab.id });
+    }
+  }, open);
+  await expect(window.getByTestId("tab-group")).toHaveCount(open ? 2 : 1);
 }
 
-/** Opens a Document in the viewer at a location, as a Citation will, through the test hook. */
+/**
+ * Opens a Document at a location as a Citation does, through the test hook: as a
+ * preview in the group right of the one the User is in (made if needed).
+ */
 export async function openDocumentAt(window: Page, location: DocumentLocation): Promise<void> {
   await window.evaluate((at) => {
     const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
@@ -486,6 +500,28 @@ export async function dragBy(window: Page, handle: Locator, dx: number): Promise
   await window.mouse.move(x, y, { steps: 6 });
   await window.mouse.down();
   await window.mouse.move(x + dx, y, { steps: 5 });
+  await window.mouse.up();
+}
+
+/**
+ * Drags a tab as a person does: slides onto it, presses, slides to (x, y) in
+ * small steps, then, once `whileHeld` has looked at what the drag shows, lets go.
+ */
+export async function dragTabTo(
+  window: Page,
+  tab: Locator,
+  to: { x: number; y: number },
+  whileHeld?: () => Promise<void>,
+): Promise<void> {
+  const box = await tab.boundingBox();
+  if (!box) throw new Error("The tab isn't visible.");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await window.mouse.move(x - 20, y + 30);
+  await window.mouse.move(x, y, { steps: 5 });
+  await window.mouse.down();
+  await window.mouse.move(to.x, to.y, { steps: 16 });
+  await whileHeld?.();
   await window.mouse.up();
 }
 

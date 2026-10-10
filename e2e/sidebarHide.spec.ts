@@ -5,21 +5,20 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
-  openViewer,
   removeDataFolder,
   setWindowSize,
 } from "./app";
 
 /*
- * Hiding and showing the sidebar (#219): Cmd+\ (Ctrl+\), the button, View >
- * Hide Sidebar, peeking at the left edge, dragging the divider shut, narrow
- * windows, and what is remembered. Driven with a real mouse and keyboard.
- * Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ * Hiding and showing the sidebar (#219): ⌃⌘S (Ctrl+Shift+\ elsewhere, as ⌘\
+ * splits a tab), the button, View > Hide Sidebar, peeking at the left edge,
+ * dragging the divider shut, and what is remembered. Driven with a real mouse
+ * and keyboard. Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 const isMac = process.platform === "darwin";
-const COMMAND = isMac ? "Meta" : "Control";
+const SIDEBAR_KEYS = isMac ? "Control+Meta+KeyS" : "Control+Shift+Backslash";
 
 let dataDir: string;
 test.beforeEach(async () => {
@@ -85,7 +84,7 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
   await screenshot(window, "shown");
 
   // The keyboard: the focus stays where it was, and the Mind keeps its state.
-  await window.keyboard.press(`${COMMAND}+Backslash`);
+  await window.keyboard.press(SIDEBAR_KEYS);
   await expect.poll(() => isHidden(window)).toBe(true);
   await expect(title).toBeFocused();
   await expect(title).toHaveValue("A place to keep");
@@ -96,7 +95,7 @@ test("the shortcut, the button and the View menu hide and show the sidebar, and 
   // Not a place the pointer can reach by accident: the sidebar is out of the window.
   expect(await sidebarLeft(window)).toBeLessThan(0);
 
-  await window.keyboard.press(`${COMMAND}+Backslash`);
+  await window.keyboard.press(SIDEBAR_KEYS);
   await expect.poll(() => isHidden(window)).toBe(false);
   await expect(title).toBeFocused();
   await expect(window.getByTestId("sidebar-announcement")).toHaveText("Sidebar shown");
@@ -141,7 +140,7 @@ test("a hidden sidebar peeks at the left edge, and keyboard focus shows it", asy
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await setWindowSize(app, window, 1280, 800);
-  await window.keyboard.press(`${COMMAND}+Backslash`);
+  await window.keyboard.press(SIDEBAR_KEYS);
   await expect.poll(() => isHidden(window)).toBe(true);
   const panel = window.getByTestId("sidebar-panel");
   // It slides away over 160ms: until it has, it covers the left edge the pointer goes to.
@@ -172,7 +171,7 @@ test("a hidden sidebar peeks at the left edge, and keyboard focus shows it", asy
   await window.keyboard.press("Tab");
   await expect(newMind).toBeFocused();
   await expect(panel).toHaveAttribute("data-open", "true");
-  await window.getByTestId("mind-area").click({ position: { x: 400, y: 300 } });
+  await window.getByTestId("tab-group").click({ position: { x: 400, y: 300 } });
   await expect(panel).not.toHaveAttribute("data-open", "true");
   await app.close();
 });
@@ -217,7 +216,7 @@ test("dragging the divider past its minimum hides the sidebar, and its width and
   await setWindowSize(app, window, 1280, 800);
   await expect.poll(() => isHidden(window)).toBe(true);
   await expect.poll(() => cardLeft(window)).toBe(8);
-  await window.keyboard.press(`${COMMAND}+Backslash`);
+  await window.keyboard.press(SIDEBAR_KEYS);
   await expect.poll(() => isHidden(window)).toBe(false);
   expect(await window.getByTestId("sidebar").evaluate((el) => el.clientWidth)).toBe(165);
 
@@ -225,40 +224,6 @@ test("dragging the divider past its minimum hides the sidebar, and its width and
   await app.close();
   ({ app, window } = await launchApp(dataDir));
   expect(await isHidden(window)).toBe(false);
-  await app.close();
-});
-
-test("a narrow window with the viewer open hides the sidebar on its own, and widening brings it back unless the User chose", async () => {
-  const { app, window } = await launchApp(dataDir);
-  await dismissChatSetup(window);
-  await setWindowSize(app, window, 1400, 800);
-  await openViewer(window);
-  expect(await isHidden(window)).toBe(false);
-
-  await setWindowSize(app, window, 900, 800);
-  await expect.poll(() => isHidden(window)).toBe(true);
-  await expect(window.getByTestId("viewer")).toBeVisible();
-  await screenshot(window, "narrow-viewer");
-  await setWindowSize(app, window, 1400, 800);
-  await expect.poll(() => isHidden(window)).toBe(false);
-
-  // The User shows it in the narrow window: it stays while the window is narrow.
-  await setWindowSize(app, window, 900, 800);
-  await expect.poll(() => isHidden(window)).toBe(true);
-  await window.getByTestId("sidebar-toggle").click();
-  await expect.poll(() => isHidden(window)).toBe(false);
-  await setWindowSize(app, window, 940, 800);
-  expect(await isHidden(window)).toBe(false);
-  // The choice was not remembered as "hidden": after the narrow spell it is shown.
-  await setWindowSize(app, window, 1400, 800);
-  expect(await isHidden(window)).toBe(false);
-
-  // The User hides it in a wide window: widening or narrowing never brings it back.
-  await window.keyboard.press(`${COMMAND}+Backslash`);
-  await expect.poll(() => isHidden(window)).toBe(true);
-  await setWindowSize(app, window, 900, 800);
-  await setWindowSize(app, window, 1400, 800);
-  expect(await isHidden(window)).toBe(true);
   await app.close();
 });
 

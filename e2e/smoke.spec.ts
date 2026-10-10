@@ -6,15 +6,12 @@ import {
   addDocuments,
   createDataFolder,
   dismissChatSetup,
-  dragBy,
   launchApp,
   linkFolderFromSidebar,
   openDocumentMenu,
   openSettings,
-  openViewer,
   removeDataFolder,
   showSettingsPage,
-  widthOf,
 } from "./app";
 
 let dataDir: string;
@@ -101,81 +98,13 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   await older.getByTestId("delete-mind").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
-  await expect(window.getByTestId("mind-tab-title")).toHaveText(["Newer"]);
+  await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-pane")).not.toHaveAttribute("data-mind-id", `${olderId}`);
   await first.app.close();
 
   // It stays deleted after a restart.
   const second = await launchApp(dataDir);
   await expect(second.window.getByTestId("mind-list-item")).toHaveText(["Newer"]);
-  await second.app.close();
-});
-
-test("the Document viewer is hidden until opened, resizes from its left edge and keeps its width", async () => {
-  const first = await launchApp(dataDir);
-  const { window } = first;
-  await dismissChatSetup(window);
-  const viewer = window.getByTestId("viewer");
-  const mindArea = window.getByTestId("mind-area");
-
-  // Closed on launch: no panel at all, and the Mind area takes the rest of the width.
-  await expect(viewer).toHaveCount(0);
-  const fullWidth = await widthOf(mindArea);
-
-  // Opening it narrows the Mind area: it opens at half the card (DESIGN.md: 8px from the
-  // sidebar and from the window's right edge), which it shares with the Mind about evenly.
-  await openViewer(window);
-  await expect(viewer).toBeVisible();
-  expect(await widthOf(mindArea)).toBeLessThan(fullWidth);
-  const sidebarWidth = await widthOf(window.getByTestId("sidebar"));
-  expect(sidebarWidth).toBe(248);
-  const halfRoom = await window.evaluate(
-    (sidebar) => Math.round((globalThis.innerWidth - sidebar - 16) / 2),
-    sidebarWidth,
-  );
-  expect(await widthOf(viewer)).toBe(halfRoom);
-  expect(Math.abs((await widthOf(mindArea)) - halfRoom)).toBeLessThanOrEqual(2);
-
-  // Until it's resized, it keeps to half the room as the window changes: at 1280px, 508px.
-  const resize = (width: number) =>
-    first.app.evaluate(({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(size, 800);
-    }, width);
-  await resize(1000);
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1000);
-  await expect.poll(() => widthOf(viewer)).toBe(368);
-  await resize(1280);
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
-  await expect.poll(() => widthOf(viewer)).toBe(508);
-
-  // Dragging the left edge 100px to the left widens the panel by 100px.
-  const draggedWidth = (await widthOf(viewer)) + 100;
-  await dragBy(window, window.getByTestId("viewer-resize"), -100);
-  await expect.poll(() => widthOf(viewer)).toBe(draggedWidth);
-
-  // In a window too narrow for that width it gives way to the Mind, which keeps its 300px;
-  // the width comes back as the window grows.
-  await resize(1000);
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1000);
-  await expect.poll(() => widthOf(mindArea)).toBe(300);
-  expect(await widthOf(viewer)).toBeLessThan(draggedWidth);
-  await resize(1280);
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
-  await expect.poll(() => widthOf(viewer)).toBe(draggedWidth);
-
-  // Esc closes it and the Mind area gets its full width back.
-  await window.keyboard.press("Escape");
-  await expect(viewer).toHaveCount(0);
-  expect(await widthOf(mindArea)).toBe(fullWidth);
-  await first.app.close();
-
-  // The width is a per-device setting, so it survives a restart. The close button closes it.
-  const second = await launchApp(dataDir);
-  await expect(second.window.getByTestId("viewer")).toHaveCount(0);
-  await openViewer(second.window);
-  await expect.poll(() => widthOf(second.window.getByTestId("viewer"))).toBe(draggedWidth);
-  await second.window.getByTestId("viewer-close").click();
-  await expect(second.window.getByTestId("viewer")).toHaveCount(0);
   await second.app.close();
 });
 

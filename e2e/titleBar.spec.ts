@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
-import { createDataFolder, dismissChatSetup, launchApp, openViewer, removeDataFolder } from "./app";
+import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
 
 /*
  * The window's title bar (src/shared/titleBar.ts): on macOS there is no title
@@ -102,7 +102,7 @@ async function dragTab(
 }
 
 const tabsOf = (window: Page) => window.getByTestId("mind-tab");
-const titlesOf = (window: Page) => window.getByTestId("mind-tab-title");
+const titlesOf = (window: Page) => tabsOf(window).getByTestId("tab-title");
 const tabNamed = (window: Page, title: string) =>
   window.locator(`[data-testid="mind-tab"][title=${JSON.stringify(title)}]`);
 
@@ -158,7 +158,7 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
 
   // The band's empty parts drag the window: the sidebar's header, beside and between the
   // lights too, and the strip past the tabs. Tabs, their ✕, "+" and Export don't.
-  const strip = await boxOf(window.getByTestId("mind-header"));
+  const strip = await boxOf(window.getByTestId("tab-strip"));
   const plus = await boxOf(newTab);
   expect(await regionAt(window, 30, 22)).toBe("drag");
   expect(await regionAt(window, 120, 22)).toBe("drag");
@@ -168,7 +168,7 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   for (const control of [
     tabNamed(window, "Alpha"),
     tabNamed(window, "Gamma"),
-    tabNamed(window, "Gamma").getByTestId("mind-tab-close"),
+    tabNamed(window, "Gamma").getByTestId("tab-close"),
     window.getByTestId("export-mind"),
   ]) {
     expect(await regionOf(window, control)).toBe("no-drag");
@@ -187,7 +187,7 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   await dragTab(window, tabNamed(window, "Alpha"), tabNamed(window, "Gamma"), "after");
   await expect(titlesOf(window)).toHaveText(["Beta", "Gamma", "Alpha"]);
   await window.mouse.move(400, 400, { steps: 4 });
-  await slideAndClick(window, tabNamed(window, "Beta").getByTestId("mind-tab-close"));
+  await slideAndClick(window, tabNamed(window, "Beta").getByTestId("tab-close"));
   await expect(titlesOf(window)).toHaveText(["Gamma", "Alpha"]);
 
   // However narrow the sidebar, the tabs start right of the lights' room.
@@ -201,17 +201,23 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   expect((await boxOf(tabsOf(window).first())).x).toBeGreaterThanOrEqual(LIGHTS_ROOM);
   await screenshot(window, "title-bar-narrow-sidebar");
 
-  // The viewer's toolbar carries the band on: its empty part drags, its buttons click.
-  await openViewer(window);
-  const toolbar = window.getByTestId("viewer-header");
-  const toolbarBox = await boxOf(toolbar);
-  expect(toolbarBox).toMatchObject({ y: 8, height: 36 });
-  expect(await regionAt(window, toolbarBox.x + 40, 22)).toBe("drag");
-  const close = window.getByTestId("viewer-close");
-  expect(await regionOf(window, close)).toBe("no-drag");
-  await screenshot(window, "title-bar-viewer");
-  await slideAndClick(window, close);
-  await expect(window.getByTestId("viewer")).toHaveCount(0);
+  // A second group's strip carries the band on: its empty part drags, its tabs and buttons click.
+  await window.keyboard.press("ControlOrMeta+Backslash");
+  const second = window.getByTestId("tab-strip").nth(1);
+  const secondBox = await boxOf(second);
+  expect(secondBox).toMatchObject({ y: 8, height: 36 });
+  const secondPlus = await boxOf(second.getByTestId("new-tab"));
+  expect(await regionAt(window, secondPlus.x + secondPlus.width + 20, 22)).toBe("drag");
+  for (const control of [
+    second.getByRole("tab"),
+    second.getByTestId("tab-close"),
+    second.getByTestId("group-menu"),
+  ]) {
+    expect(await regionOf(window, control)).toBe("no-drag");
+  }
+  await screenshot(window, "title-bar-groups");
+  await slideAndClick(window, second.getByTestId("tab-close"));
+  await expect(window.getByTestId("tab-strip")).toHaveCount(1);
 
   // The Library opens as a tab in the same band (#119): past the tabs the band still drags,
   // and the Library's tab and its ✕ don't.
@@ -220,8 +226,8 @@ test("no title row of the system's: the traffic lights sit in the sidebar's head
   await expect(libraryTab).toHaveAttribute("aria-selected", "true");
   const plusNow = await boxOf(newTab);
   expect(await regionAt(window, plusNow.x + plusNow.width + 40, 22)).toBe("drag");
-  expect(await regionOf(window, libraryTab.getByTestId("library-tab-title"))).toBe("no-drag");
-  expect(await regionOf(window, libraryTab.getByTestId("library-tab-close"))).toBe("no-drag");
+  expect(await regionOf(window, libraryTab.getByTestId("tab-title"))).toBe("no-drag");
+  expect(await regionOf(window, libraryTab.getByTestId("tab-close"))).toBe("no-drag");
   await app.close();
 });
 

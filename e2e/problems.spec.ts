@@ -203,7 +203,7 @@ test("a Document whose file moved says so in the viewer with Locate file…, whi
   const moved = join(sources, "Archive", "Amendment 2 (signed).md");
   await rename(original, moved);
   await expect(item).toHaveAttribute("data-file-status", "missing", { timeout: 15_000 });
-  await window.getByTestId("viewer-close").click();
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await item.getByTestId("open-document").click();
   const gone = window.getByTestId("viewer-removed");
   await expect(gone).toHaveAttribute("data-reason", "missing");
@@ -260,7 +260,7 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
   await screenshot(window, "viewer-file-moved-zh");
 
   // Deleted from IncarnaMind: a line and the quote it kept, with no action to take.
-  await window.getByTestId("viewer-close").click();
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await openDocumentAt(window, {
     documentId: `${documentId}-deleted`,
     pageFrom: 1,

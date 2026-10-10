@@ -79,7 +79,7 @@ async function pressTab(window: Page): Promise<Stop | null> {
       ? "settings"
       : element.closest('[data-testid="sidebar"]')
         ? "sidebar"
-        : element.closest('[data-testid="mind-area"]')
+        : element.closest('[data-testid="tab-groups"]')
           ? "mind"
           : "other";
     return {

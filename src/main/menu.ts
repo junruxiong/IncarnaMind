@@ -10,12 +10,18 @@ function send(command: MenuCommand): void {
 }
 
 /**
+ * Hides and shows the sidebar: ⌃⌘S on macOS, as in Finder; ⌘\ splits the tab
+ * to the right, as in VS Code, so elsewhere it is Ctrl+Shift+\.
+ */
+const SIDEBAR_ACCELERATOR = process.platform === "darwin" ? "Ctrl+Cmd+S" : "Ctrl+Shift+\\";
+
+/**
  * The application menu, in the interface language: New Mind (⌘N), Close Tab
- * (⌘W) and Settings… (⌘,) with the usual Edit, View and Window items. As in
- * a browser, ⌘W closes the tab and Shift+⌘W the window; the window's page
- * also handles ⌘T, ⌘1–⌘9 and Ctrl+Tab (see MindTabs.tsx). Reload and the
- * developer tools are only in development and test builds. Ctrl stands in
- * for ⌘ on Windows and Linux.
+ * (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
+ * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
+ * window; the window's page also handles ⌘T, ⌘1–⌘3 and Ctrl+Tab (see
+ * components/tabs/useTabShortcuts.ts). Reload and the developer tools are
+ * only in development and test builds. Ctrl stands in for ⌘ on Windows and Linux.
  */
 export function installAppMenu(language: Language, { developer }: { developer: boolean }): void {
   installed = { language, developer };
@@ -71,6 +77,11 @@ function buildMenu(): void {
         { label: t("menu.newMind"), accelerator: "CmdOrCtrl+N", click: () => send("new-mind") },
         { type: "separator" },
         { label: t("menu.closeTab"), accelerator: "CmdOrCtrl+W", click: () => send("close-tab") },
+        {
+          label: t("menu.reopenTab"),
+          accelerator: "Shift+CmdOrCtrl+T",
+          click: () => send("reopen-tab"),
+        },
         { role: "close", label: t("menu.closeWindow"), accelerator: "Shift+CmdOrCtrl+W" },
         ...(isMac
           ? []
@@ -107,8 +118,13 @@ function buildMenu(): void {
           : []),
         {
           label: t(sidebarHidden ? "menu.showSidebar" : "menu.hideSidebar"),
-          accelerator: "CmdOrCtrl+\\",
+          accelerator: SIDEBAR_ACCELERATOR,
           click: () => send("toggle-sidebar"),
+        },
+        {
+          label: t("menu.splitRight"),
+          accelerator: "CmdOrCtrl+\\",
+          click: () => send("split-right"),
         },
         { type: "separator" },
         { role: "resetZoom", label: t("menu.actualSize") },
