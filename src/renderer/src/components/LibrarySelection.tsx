@@ -21,8 +21,11 @@ export function LibrarySelectBox({
   shownIds,
 }: {
   document: Pick<Document, "id" | "name">;
-  /** The rows in view, in order, for Shift-click ranges. */
-  shownIds: readonly string[];
+  /**
+   * The rows in view, in order, for Shift-click ranges: read when clicked,
+   * so the box isn't drawn again each time the rows change.
+   */
+  shownIds(): readonly string[];
 }) {
   const t = useT();
   const checked = useAppStore((state) => state.selectedDocuments.has(document.id));
@@ -36,7 +39,7 @@ export function LibrarySelectBox({
       onChange={(event) => {
         const range =
           (event.nativeEvent as MouseEvent).shiftKey && anchor !== null
-            ? rangeBetween(shownIds, anchor, document.id)
+            ? rangeBetween(shownIds(), anchor, document.id)
             : [document.id];
         useAppStore.getState().selectDocuments(range, event.target.checked);
         anchor = document.id;
