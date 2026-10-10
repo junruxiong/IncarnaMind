@@ -446,6 +446,24 @@ describe("Moving back and untagging", { timeout: 30_000 }, () => {
     ]);
   });
 
+  test("a merge and a Document deleted after it come back together, whatever the order", async () => {
+    const { core, clock } = await start();
+    const kept = await addText(core, "Kept.txt", "Notes kept for later.");
+    const report = await tagNamed(core, "Report");
+    const findings = await core.createTag({ name: "Findings" });
+    await core.addDocumentTag(kept.id, report.id);
+    const before = (await core.listDocuments()).map((each) => [each.id, each.tags]);
+
+    clock.advance(1000);
+    const merge = await core.mergeTags(report.id, findings.id);
+    clock.advance(1000);
+    await core.deleteDocument(kept.id);
+    clock.advance(1000);
+    await core.restore([merge.merged, { kind: "document", id: kept.id }]);
+
+    expect((await core.listDocuments()).map((each) => [each.id, each.tags])).toEqual(before);
+  });
+
   test("a merge leaves deleted Documents as they were, so it can be undone and they restored", async () => {
     const { core, clock } = await start();
     const kept = await addText(core, "Kept.txt", "Notes kept for later.");
