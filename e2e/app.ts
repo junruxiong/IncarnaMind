@@ -478,6 +478,16 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  */
 export async function clickEmptyLine(line: Locator): Promise<void> {
   await line.click({ position: { x: 4, y: 14 } });
+  // What is typed next goes where the caret is: wait until it is on the line.
+  await expect
+    .poll(() =>
+      line.evaluate((element) => {
+        const caret = element.ownerDocument.getSelection()?.anchorNode;
+        const focused = element.ownerDocument.activeElement;
+        return !!caret && element.contains(caret) && !!focused && focused.contains(element);
+      }),
+    )
+    .toBe(true);
 }
 
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
