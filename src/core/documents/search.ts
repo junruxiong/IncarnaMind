@@ -11,7 +11,7 @@ import type { Database } from "../storage";
 import { keywordQuery } from "./keywords";
 
 /** Reciprocal rank fusion's k: a Passage at rank r (from 1) in a list scores 1 / (k + r). */
-const RRF_K = 60;
+export const RRF_K = 60;
 
 /** How many results each list hands to a hybrid search. */
 export const HYBRID_CANDIDATES = 50;

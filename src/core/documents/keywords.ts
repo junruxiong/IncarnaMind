@@ -38,14 +38,22 @@ export function keywordText(text: string): string {
   return words(normaliseText(text)).join(" ");
 }
 
+/** Whether a word (lowercased, as `keywordText` gives it) is left out of searches. */
+export const isStopword = (word: string) => STOPWORDS.has(word);
+
+/** The words a search looks for: each distinct word of the query that isn't a stopword, in order. */
+export function keywordTerms(query: string): string[] {
+  return [...new Set(words(normaliseText(query)))]
+    .filter((word) => !STOPWORDS.has(word))
+    .slice(0, MAX_TERMS);
+}
+
 /**
- * The FTS5 query for a search: each distinct word that isn't a stopword, as a
+ * The FTS5 query for a search: each of its terms (see `keywordTerms`) as a
  * phrase, any of them. Null when nothing is left to search for.
  */
 export function keywordQuery(query: string): string | null {
-  const terms = [...new Set(words(normaliseText(query)))]
-    .filter((word) => !STOPWORDS.has(word))
-    .slice(0, MAX_TERMS);
+  const terms = keywordTerms(query);
   if (terms.length === 0) return null;
   return terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" OR ");
 }
