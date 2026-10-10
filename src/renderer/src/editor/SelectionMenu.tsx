@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import type { MessageKey } from "../../../shared/i18n";
-import { ChevronDownIcon } from "../components/icons";
+import { ChevronIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { Popover } from "./Popover";
 import {
@@ -327,7 +327,7 @@ export function SelectionMenu({
             >
               <span className="editor-menu-icon">T</span>
               <span className="flex-1 truncate">{t(state.turn)}</span>
-              <ChevronDownIcon className="size-4 -rotate-90 text-ink-meta" />
+              <ChevronIcon className="size-4 text-ink-meta" />
             </button>
             <hr className="selection-rule" />
           </>
