@@ -5,10 +5,10 @@
  * the expected pages, and (c) contains the expected quote, matched as the
  * Citation check matches quotes (both normalised by the shared normaliser).
  *
- * Keyword + rerank, the gating mode: keyword search's top 20, reordered by a
- * reranking model (see ./rerank), as the search Tool does by default, with
- * embeddings off (ADR-0009, 2026-10-10). The built-in reranking model's is
- * the gate; the other candidates' are reported only.
+ * Keyword top 60 + rerank, the gating mode: keyword search's top 60,
+ * reordered by a reranking model (see ./rerank), as the search Tool does by
+ * default, with embeddings off (ADR-0009, 2026-10-10). The built-in reranking
+ * model's is the gate; the other candidates' are reported only.
  *
  * Hybrid + rerank: what the search Tool hands a reranker while the User has
  * embeddings on (keyword search's top 10 and vector search's top 10, each
@@ -24,8 +24,8 @@
  *   so this is the most the approach can bring.
  * - Paraphrase Questions: asked in words that avoid their passage's own, as a
  *   group of their own, out of the gating counts.
- * - Other ways to find what the reranker sees, with embeddings off (more of
- *   keyword search's Passages, feedback terms, a chat model's rewrites,
+ * - Other ways to find what the reranker sees, with embeddings off (keyword
+ *   search's top 20 or 40, feedback terms, a chat model's rewrites,
  *   small-to-big, document first; see ./searches), each reranked by the
  *   built-in model: never gating, to choose what the search Tool does next.
  * - For each Question, where plain keyword search ranks its expected Passage,
@@ -70,8 +70,8 @@ export const KEYWORD_RANK_DEPTH = 200;
 /** A reranker sees this many of keyword search's best Passages, and of vector search's: the search Tool's. */
 export const RERANK_PER_LIST = SEARCH_TOOL_PARAMETERS.rerankPerList;
 
-/** Keyword + rerank sees this many of keyword search's best: the search Tool's, with embeddings off. */
-export const KEYWORD_RERANK_DEPTH = 2 * RERANK_PER_LIST;
+/** The gate sees this many of keyword search's best: the search Tool's, with embeddings off. */
+export const KEYWORD_RERANK_DEPTH = SEARCH_TOOL_PARAMETERS.keywordRerankCandidates;
 
 export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
 
@@ -79,11 +79,12 @@ export const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector
 export const HYBRID: SearchMode = "hybrid";
 
 /**
- * What a reranked mode reranks: keyword search's top 20 alone ("keyword"),
+ * What a reranked mode reranks: keyword search's top 60 alone ("keyword-60"),
  * what the search Tool hands a reranker by default, or keyword search's top
  * 10 and vector search's top 10 ("hybrid"), as it does with embeddings on.
  * The others are other ways to find candidates with embeddings off (see
- * ./searches), reported only.
+ * ./searches), reported only: keyword search's top 20 ("keyword", the gate
+ * before keyword search's top 60) and top 40 among them.
  */
 export type RerankedSearch =
   | "hybrid"
@@ -96,16 +97,19 @@ export type RerankedSearch =
   | "small-to-big"
   | "document-first";
 
+/** The gate's search: keyword search's top 60, what the search Tool hands its reranker with embeddings off. */
+export const GATING_SEARCH: RerankedSearch = "keyword-60";
+
 /** The reranked searches each reranking model runs, in the order the report lists them: the gate's first. */
-export const RERANKED_SEARCHES: readonly RerankedSearch[] = ["keyword", "hybrid"];
+export const RERANKED_SEARCHES: readonly RerankedSearch[] = [GATING_SEARCH, "hybrid"];
 
 /**
  * The other ways to find candidates, run with the built-in reranking model on
  * the gating set only, after its two (see ./searches). Never gating.
  */
 export const OTHER_SEARCHES: readonly RerankedSearch[] = [
+  "keyword",
   "keyword-40",
-  "keyword-60",
   "feedback",
   "rewrites",
   "sub-questions",
@@ -113,15 +117,16 @@ export const OTHER_SEARCHES: readonly RerankedSearch[] = [
   "document-first",
 ];
 
-/** How deep keyword search's candidates go in the modes that take more of them. */
+/** How deep keyword search's candidates go in the modes that are keyword search's alone. */
 export const KEYWORD_DEPTHS: Partial<Record<RerankedSearch, number>> = {
+  keyword: 2 * RERANK_PER_LIST,
   "keyword-40": 40,
-  "keyword-60": 60,
+  "keyword-60": KEYWORD_RERANK_DEPTH,
 };
 
 /** Each reranked search, as its mode's label starts. */
 export const SEARCH_LABELS: Record<RerankedSearch, string> = {
-  keyword: "keyword",
+  keyword: "keyword top 20",
   hybrid: "hybrid",
   "keyword-40": "keyword top 40",
   "keyword-60": "keyword top 60",
@@ -134,10 +139,10 @@ export const SEARCH_LABELS: Record<RerankedSearch, string> = {
 
 /** What each reranked search hands a reranker, for the report and the log. */
 export const SEARCH_DESCRIPTIONS: Record<RerankedSearch, string> = {
-  keyword: `keyword search's top ${KEYWORD_RERANK_DEPTH}, no vector search`,
+  keyword: `keyword search's top ${KEYWORD_DEPTHS.keyword}, no vector search, the gate before keyword search's top ${KEYWORD_RERANK_DEPTH}`,
   hybrid: `keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once`,
-  "keyword-40": "keyword search's top 40",
-  "keyword-60": "keyword search's top 60",
+  "keyword-40": "keyword search's top 40, no vector search",
+  "keyword-60": `keyword search's top ${KEYWORD_RERANK_DEPTH}, no vector search`,
   feedback: `keyword search's top ${CANDIDATES}, fused with a second search for the Question's words and ${FEEDBACK.terms} feedback terms from its top ${FEEDBACK.passages}, the best ${CANDIDATES}`,
   rewrites: `keyword search's top ${CANDIDATES} for the Question and for each of a chat model's ${MOST_QUERIES.rewrites} rephrasings, fused, the best ${CANDIDATES}`,
   "sub-questions": `keyword search's top ${CANDIDATES} for the Question and for each one-hop question a chat model broke it into, if any, fused, the best ${CANDIDATES}`,
@@ -169,19 +174,20 @@ export function rerankedSearchOf(mode: string): RerankedSearch | null {
   );
 }
 
-/** A reranked mode as people read it: "hybrid + <model>", "keyword + <model>", "small-to-big + <model>". */
+/** A reranked mode as people read it: "hybrid + <model>", "keyword top 60 + <model>", "small-to-big + <model>". */
 export const rerankedLabel = (search: RerankedSearch, modelName: string) =>
   `${SEARCH_LABELS[search]} + ${modelName}`;
 
 /**
  * The gating mode: what the search Tool runs by default, keyword search's top
- * 20 reranked by the built-in reranking model, with embeddings off (ADR-0009,
- * 2026-10-10). Before, the gate was hybrid search reranked (#31).
+ * 60 reranked by the built-in reranking model, with embeddings off (ADR-0009,
+ * 2026-10-10). Before, it was keyword search's top 20, and before that hybrid
+ * search reranked (#31).
  */
-export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL, "keyword");
+export const GATING_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL, GATING_SEARCH);
 
 /** The gating mode, as people read it. */
-export const GATING_LABEL = rerankedLabel("keyword", BUILT_IN_RERANKING_MODEL.name);
+export const GATING_LABEL = rerankedLabel(GATING_SEARCH, BUILT_IN_RERANKING_MODEL.name);
 
 /** Hybrid + rerank with the built-in reranking model, as with embeddings on: reported next to the gate, never gating. */
 export const HYBRID_RERANK_MODE: RetrievalMode = rerankMode(BUILT_IN_RERANKING_MODEL);
@@ -396,7 +402,7 @@ export async function rerankCandidates(core: Core, query: string): Promise<Passa
   return topsOfEach([keyword ?? [], vector ?? []], RERANK_PER_LIST, (passage) => passage.passageId);
 }
 
-/** What keyword + rerank hands a reranker for a query: keyword search's top 20, with no vector search. */
+/** What the gate hands a reranker for a query: keyword search's top 60, with no vector search. */
 export const keywordRerankCandidates = (
   core: Core,
   query: string,
@@ -407,14 +413,14 @@ export type CandidateSource = (query: string, question: EvalQuestion) => Promise
 
 /**
  * The candidates of the reranked searches that need nothing but the core:
- * keyword + rerank's, hybrid + rerank's, and keyword search's top 40 and 60.
+ * hybrid + rerank's, and keyword search's top 60 (the gate's), 20 and 40.
  * Null for the others, whose candidates `runReranked` is given.
  */
 export function coreSource(core: Core, search: RerankedSearch): CandidateSource | null {
   if (search === "hybrid") {
     return async (query) => ({ candidates: await rerankCandidates(core, query) });
   }
-  const depth = search === "keyword" ? KEYWORD_RERANK_DEPTH : KEYWORD_DEPTHS[search];
+  const depth = KEYWORD_DEPTHS[search];
   if (depth === undefined) return null;
   return async (query) => ({ candidates: await keywordTop(core, query, depth) });
 }
@@ -508,9 +514,10 @@ export async function runRetrieval(
  * Adds the reranker's mode to `results`: each Question's candidates (and its
  * translated query's, unless `translated` is false), reordered by the
  * candidate model, scored like the others. What is reranked follows from the
- * mode (see `rerankedSearchOf`): what the search Tool hands a reranker
- * (`rerankCandidates`), keyword search's top 20 (`keywordRerankCandidates`)
- * or its top 40 or 60, or what `source` gives. Records how many candidates
+ * mode (see `rerankedSearchOf`): what the search Tool hands a reranker with
+ * embeddings on (`rerankCandidates`) or off (keyword search's top 60,
+ * `keywordRerankCandidates`), keyword search's top 20 or 40, or what
+ * `source` gives. Records how many candidates
  * each search had and whether they held the expected Passage, and returns how
  * long finding them took per search.
  */

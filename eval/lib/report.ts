@@ -20,6 +20,7 @@ import {
   type CandidateCounts,
   GATING_LABEL,
   GATING_MODE,
+  GATING_SEARCH,
   HYBRID,
   HYBRID_RERANK_LABEL,
   HYBRID_RERANK_MODE,
@@ -187,11 +188,11 @@ function otherSearchesSection(run: RetrievalRun): string[] {
   const report = run.otherSearches;
   if (!report) return [];
   const model = BUILT_IN_RERANKING_MODEL;
-  const rows = (["keyword", ...OTHER_SEARCHES] as const).map((search) => {
+  const rows = [GATING_SEARCH, ...OTHER_SEARCHES].map((search) => {
     const mode = rerankMode(model, search);
     const summary = run.summary[mode];
     const label =
-      search === "keyword" ? `${GATING_LABEL} (gating)` : rerankedLabel(search, model.name);
+      search === GATING_SEARCH ? `${GATING_LABEL} (gating)` : rerankedLabel(search, model.name);
     if (!summary) {
       return `| ${label} | skipped: ${report.skipped[search] ?? "it didn't run."} ||||||||||`;
     }
@@ -487,13 +488,13 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, with embeddings off, ${GATING_LABEL}: keyword search, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, hybrid + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models are reported only.`,
     "",
-    `- **Keyword + rerank** ("keyword + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, reordered by a reranking model, as the search Tool hands its reranker by default.`,
+    `- **Keyword + rerank** ("keyword top ${KEYWORD_RERANK_DEPTH} + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, reordered by a reranking model, as the search Tool hands its reranker by default.`,
     `- **Hybrid + rerank** ("${HYBRID} + model"): what the search Tool hands a reranker with embeddings on, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by the same reranking models.`,
     "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
     "- **Paraphrase:** Questions that ask for a fact on one page in words that avoid its passage's own, as a person asks without the text in front of them; hits in both languages, then in English + Chinese. They are out of the gating set's counts and bar.",
     ...(builtIn.otherSearches
       ? [
-          '- **Other ways to find the candidates** ("keyword top 40 + model" and the like): with embeddings off, other candidates for the built-in reranking model, to see what recovers the Passages keyword search ranks too low; see below.',
+          '- **Other ways to find the candidates** ("keyword top 20 + model", the gate before, and the like): with embeddings off, other candidates for the built-in reranking model, to compare with the gate; see below.',
         ]
       : []),
     "",

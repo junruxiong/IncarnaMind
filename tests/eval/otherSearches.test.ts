@@ -60,18 +60,22 @@ function fakeCore(ranking: (query: string) => readonly PassageSearchResult[]) {
   return { core, asked };
 }
 
-describe("Keyword search's top 40 and top 60", () => {
+describe("Keyword search's top 20, 40 and 60", () => {
   test("hand the reranker that many of keyword search's Passages", async () => {
     const ranking = Array.from({ length: 70 }, (_, index) =>
       passage("d", `p${index}`, { passageId: `k${index}` }),
     );
     const { core, asked } = fakeCore(() => ranking);
-    for (const search of ["keyword-40", "keyword-60"] as const) {
+    for (const [search, depth] of [
+      ["keyword", 20],
+      ["keyword-40", 40],
+      ["keyword-60", 60],
+    ] as const) {
       const source = coreSource(core, search);
       const found = await source?.("tides", {} as EvalQuestion);
-      expect(found?.candidates).toHaveLength(search === "keyword-40" ? 40 : 60);
+      expect(found?.candidates).toHaveLength(depth);
     }
-    expect(asked).toEqual(["tides: keyword 40", "tides: keyword 60"]);
+    expect(asked).toEqual(["tides: keyword 20", "tides: keyword 40", "tides: keyword 60"]);
     // The searches that need more than the core have no source of their own here.
     expect(coreSource(core, "feedback")).toBeNull();
   });
@@ -246,14 +250,14 @@ describe("The report of the other searches", () => {
       },
     ],
     summary: {
-      [GATING_MODE]: summary(15, 19, [6, 4]),
-      [rerankMode(model, "keyword-60")]: summary(17, 20, [6, 5]),
+      [GATING_MODE]: summary(16, 20, [6, 5]),
+      [rerankMode(model, "keyword")]: summary(15, 19, [6, 4]),
       [rerankMode(model, "sub-questions")]: summary(15, 19, [6, 4]),
     },
-    rerankers: [info("keyword", 2), info("keyword-60", 3), info("sub-questions", 5)],
+    rerankers: [info("keyword-60", 3), info("keyword", 2), info("sub-questions", 5)],
     candidates: [
-      counts("keyword", 19.5, 36, 10),
       counts("keyword-60", 58, 39, 13),
+      counts("keyword", 19.5, 36, 10),
       counts("sub-questions", 19.8, 36, 10),
     ],
     otherSearches: {
@@ -317,11 +321,30 @@ describe("The report of the other searches", () => {
       const name = model.name;
       expect(markdown).toContain("### Other ways to find the candidates (reported, not gating)");
       expect(markdown).toContain(
-        `| keyword + ${name} (gating) | 15/20 | 19/20 | 34/40 | 10/15 (6 + 4) | 36/40 | 10/15 | 19.5 | 2 ms | 700 ms | 702 ms |`,
+        `| keyword top 60 + ${name} (gating) | 16/20 | 20/20 | 36/40 | 11/15 (6 + 5) | 39/40 | 13/15 | 58.0 | 3 ms | 700 ms | 703 ms |`,
       );
       expect(markdown).toContain(
-        `| keyword top 60 + ${name} | 17/20 | 20/20 | 37/40 | 11/15 (6 + 5) | 39/40 | 13/15 | 58.0 | 3 ms | 700 ms | 703 ms |`,
+        `| keyword top 20 + ${name} | 15/20 | 19/20 | 34/40 | 10/15 (6 + 4) | 36/40 | 10/15 | 19.5 | 2 ms | 700 ms | 702 ms |`,
       );
+      // The gate's row first, then the other seven.
+      const header = markdown.findIndex((line) =>
+        line.startsWith("| Reranked mode | English | Chinese |"),
+      );
+      const end = markdown.indexOf("", header);
+      expect(
+        markdown.slice(header + 2, end).map((line) => line.split(" | ")[0]?.replace(/^\| /, "")),
+      ).toEqual([
+        `keyword top 60 + ${name} (gating)`,
+        ...[
+          "keyword top 20",
+          "keyword top 40",
+          "keyword + feedback terms",
+          "keyword + rewrites",
+          "keyword + sub-questions",
+          "small-to-big",
+          "document first",
+        ].map((search) => `${search} + ${name}`),
+      ]);
       // A chat model's call is part of the cost, as measured when it was made.
       expect(markdown).toContain(
         `| keyword + sub-questions + ${name} | 15/20 | 19/20 | 34/40 | 10/15 (6 + 4) | 36/40 | 10/15 | 19.8 | 5 ms + 850 ms model call | 700 ms | 1555 ms |`,

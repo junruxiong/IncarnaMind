@@ -1,11 +1,14 @@
 /**
  * Other ways to find the Passages a reranker sees, with embeddings off:
- * reranked modes reported next to the gate (keyword search's top 20,
- * reranked), never gating, to see which recovers the Passages keyword search
- * ranks too low (see `RerankedSearch` in ./retrieval). Each builds at most 20
- * candidates, like the gate's, unless it is about more candidates:
+ * reranked modes reported next to the gate, never gating, to see which
+ * recovers the Passages keyword search ranks too low (see `RerankedSearch`
+ * in ./retrieval). They were measured against keyword search's top 20, the
+ * gate when they were built; keyword search's top 60, which recovered as
+ * many as hybrid search, is the gate now (ADR-0009, 2026-10-10). Each builds
+ * at most 20 candidates, like keyword search's top 20, unless it is about
+ * more candidates:
  *
- * - Keyword top 40 and top 60: keyword search's top 40 or 60.
+ * - Keyword top 40 (and top 20 and 60, see `coreSource` in ./retrieval).
  * - Keyword + feedback terms (pseudo-relevance feedback, RM3-style, no
  *   model): words from keyword search's top 10 Passages added to the query,
  *   searched again, fused with keyword search's own.
@@ -25,7 +28,7 @@ import { RRF_K } from "../../src/core/documents/search";
 import { type Corpus, type CorpusPassage, queryWeights } from "./corpus";
 import type { SubChunkIndex } from "./subChunks";
 
-/** How many candidates the modes hand a reranker, as the gate does: keyword search's top 20. */
+/** How many candidates the modes hand a reranker: as many as keyword search's top 20, which they are compared with. */
 export const CANDIDATES = 20;
 
 /** What a search hands the reranker, and what it searched for besides the Question, if anything. */
