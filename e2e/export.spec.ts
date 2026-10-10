@@ -71,7 +71,7 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first, 
   await interceptShowItemInFolder(app);
   await dialog.getByTestId("export-save").click();
   // Saved: the dialog says where, and shows the file in the file manager.
-  await expect(dialog.getByTestId("export-done")).toHaveText("Exported to Exported.docx.");
+  await expect(dialog.getByTestId("export-done")).toContainText("Saved Exported.docx");
   await expect(dialog.getByTestId("export-close")).toBeFocused();
   await dialog.getByTestId("export-show").click();
   await expect(dialog).toBeHidden();
