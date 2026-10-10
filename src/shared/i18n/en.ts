@@ -20,8 +20,7 @@ export const en = {
     "Organize assigns one folder and relevant tags to each document. Your files stay at their original locations, and your manual choices are kept.",
   "library.settingsTitle": "Organization",
   "library.showMore": "Show more Documents",
-  "library.title": "Documents",
-  "library.back": "Back to Mind",
+  "library.file": "File: {name}",
   "library.loading": "Loading Library…",
   "library.groups": "Folders",
   "library.all": "All Documents",
@@ -119,14 +118,14 @@ export const en = {
   "library.status.unavailable": "Unavailable",
   "library.ask.folder": "Ask about this Folder",
   "library.ask.documents": "Ask about these {count} Documents",
-  "library.ask.document": "Ask about this Document",
+  "library.ask.document": "Ask about this result",
   "library.ask.folderHint":
     "Adds a Question that searches only this Folder to your most recent Mind.",
   "library.ask.documentsHint":
     "Adds a Question that searches only the {count} Documents shown to your most recent Mind.",
   "library.start.folder": "Start a Mind from this Folder",
   "library.start.documents": "Start a Mind from these {count} Documents",
-  "library.start.document": "Start a Mind from this Document",
+  "library.start.document": "Start a Mind from this result",
   "library.start.folderHint":
     "Makes a Mind named after this Folder, starting with a Question that searches only this Folder.",
   "library.start.documentsHint":
@@ -298,6 +297,8 @@ export const en = {
   "documents.fileShort.missing": "Missing",
   "documents.fileShort.unavailable": "Unavailable",
   "documents.failure.processingError": "something went wrong while processing it",
+  "documents.ask": "Ask about this Document",
+  "documents.startMind": "Start a Mind from this Document",
   "documents.more": "More actions for {name}",
   "documents.renameAction": "Rename",
   "documents.pick.title": "Add Documents",

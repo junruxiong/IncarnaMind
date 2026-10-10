@@ -111,12 +111,17 @@ interface AppState {
   /** The Library's Documents the User selected, e.g. to tag them at once. */
   selectedDocuments: ReadonlySet<string>;
   tagsDialogOpen: boolean;
+  /** The Library has a tab beside the Mind tabs (#119). */
+  libraryTab: boolean;
+  /** The Library's tab is the one shown, in place of the open Mind. */
   libraryOpen: boolean;
   library: LibrarySnapshot | null;
   libraryFilter: string;
   refreshLibrary(): Promise<void>;
   openLibrary(filter?: string): void;
   closeLibrary(): void;
+  /** Brings the Library's tab, if open, in front of the Mind. */
+  showLibrary(): void;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The example Mind and its Documents (onboarding). Null until loaded. */
@@ -318,6 +323,11 @@ function saveTabs(tabs: readonly string[], openMindId: string | null): void {
     .catch(() => undefined);
 }
 
+/** Saves how the Library's tab stands, for this device. A failure only loses that. */
+function saveLibrary(library: "closed" | "open" | "shown"): void {
+  core.updateSettings({ device: { libraryTab: library } }).catch(() => undefined);
+}
+
 /** The last list `selectVisibleDocuments` filtered, and what from. */
 let visible: { documents: Document[]; tagFilter: readonly string[]; shown: Document[] } | null =
   null;
@@ -367,6 +377,13 @@ export const useAppStore = create<AppState>()((set, get) => {
     } catch (error) {
       set({ actionError: messageOf(error) });
     }
+  };
+
+  /** Brings a Mind in front of the Library's tab, which stays open beside it. */
+  const leaveLibrary = () => {
+    if (!get().libraryOpen) return;
+    saveLibrary("open");
+    set({ libraryOpen: false });
   };
 
   /** Changes the tabs, and saves them if they changed. */
@@ -494,6 +511,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     tagFilter: [],
     selectedDocuments: new Set(),
     tagsDialogOpen: false,
+    libraryTab: false,
     libraryOpen: false,
     library: null,
     libraryFilter: "all",
@@ -513,14 +531,25 @@ export const useAppStore = create<AppState>()((set, get) => {
           : {}),
       });
     },
-    openLibrary: (filter = "all") =>
+    openLibrary: (filter = "all") => {
+      saveLibrary("shown");
       set((state) => ({
+        libraryTab: true,
         libraryOpen: true,
         libraryFilter: filter,
         // Another Folder: what was selected in this one isn't in view any more.
         ...(filter !== state.libraryFilter && { selectedDocuments: new Set<string>() }),
-      })),
-    closeLibrary: () => set({ libraryOpen: false }),
+      }));
+    },
+    closeLibrary() {
+      saveLibrary("closed");
+      set({ libraryTab: false, libraryOpen: false });
+    },
+    showLibrary() {
+      if (!get().libraryTab) return;
+      saveLibrary("shown");
+      set({ libraryOpen: true });
+    },
     skills: [],
     examples: null,
     privacy: null,
@@ -574,6 +603,8 @@ export const useAppStore = create<AppState>()((set, get) => {
           minds,
           tabs,
           openMindId: active !== null && tabs.includes(active) ? active : (tabs[0] ?? null),
+          libraryTab: settings.device.libraryTab !== "closed",
+          libraryOpen: settings.device.libraryTab === "shown",
           settings,
           documents,
           keptCitationTexts,
@@ -598,7 +629,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     createMind: (options) =>
       attempt(async () => {
         const mind = await core.createMind(options?.title ? { title: options.title } : undefined);
-        set({ libraryOpen: false });
+        leaveLibrary();
         // The "minds.changed" event may have listed it already.
         set((state) => ({
           minds: [mind, ...state.minds.filter((each) => each.id !== mind.id)],
@@ -665,7 +696,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     openMind(id, options) {
-      set({ libraryOpen: false });
+      leaveLibrary();
       const { tabs, openMindId } = get();
       if (tabs.includes(id)) {
         setTabs({ tabs: [...tabs], openMindId: id });
