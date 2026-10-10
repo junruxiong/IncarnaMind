@@ -11,7 +11,7 @@ We replaced the approved design that grouped Documents into a two-level tree of 
 
 ## Consequences
 
-- Organising needs a model: a cloud model under the existing consent rules, or a local one. Without one, Documents stay Unsorted until the User files them by hand.
+- Organising needs a model: a cloud model under the existing consent rules, or a local one. Without one, Documents stay Not in a Folder until the User files them by hand.
 - "Folder" now means an in-app Folder. A folder on disk is part of a source location (CONTEXT.md).
 - Bridges from a Folder into writing, and year, format and status filters, are not built yet (#59).
 

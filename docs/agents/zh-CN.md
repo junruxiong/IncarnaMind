@@ -59,7 +59,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |
 | Library | 资料库 | Where the User's files live in ChatGPT (资料库), Yuanbao (资料库, 加入资料库) and LobeChat. Not 知识库, which in Feishu and Yuque is a wiki and in AI clients a collection built for one assistant. |
 | Organize | 整理 | "整理此文件夹". As Tencent Docs (批量整理文档) and Apple Notes (整理备忘录). |
-| Not in a Folder | 不在文件夹中 | The one place for Documents and Minds in no Folder, which replaced Unsorted (ADR-0012). Not 未分类 or 未分组. |
+| Not in a Folder | 不在文件夹中 | One place for Documents and Minds in no Folder. |
 | Tool | 工具 | Calling one: 调用. |
 | Connector | 连接器 | As Doubao, Feishu, LobeChat and Microsoft. |
 | Skill | 技能 | As Kimi, Doubao, Yuanbao, Feishu, Notion and Cherry Studio. |
