@@ -148,10 +148,11 @@ export function createMinds(db: Database, now: () => string) {
         "SELECT count(*) AS count FROM minds WHERE folder_id = ? AND deleted_at IS NULL",
         [folderId],
       );
-      db.run("UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ?", [
-        now(),
-        folderId,
-      ]);
+      // Live Minds only: a deleted one stays as it was deleted.
+      db.run(
+        "UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
+        [now(), folderId],
+      );
       return (inIt?.count ?? 0) > 0;
     },
 

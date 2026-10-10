@@ -1177,7 +1177,9 @@ export function createCore(adapters: CoreAdapters): Core {
         minds: minds.move(mindIds, folderId),
         documents: library.move(documentIds, folderId),
       }));
+      // Said once it is saved, so a move that rolled back says nothing.
       if (move.minds.some((item) => item.from !== folderId)) mindsChanged();
+      library.moved(move.documents.map((item) => item.id));
       return move;
     },
 
