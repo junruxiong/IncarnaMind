@@ -28,6 +28,7 @@ interface Layout {
 /** A tab closed in this session, and where it was, for ⇧⌘T. */
 interface ClosedTab {
   tab: LayoutTab;
+  groupId: string;
   groupIndex: number;
   index: number;
 }
@@ -459,7 +460,7 @@ class WindowState {
   private close(group: LayoutGroup, tab: LayoutTab): void {
     const groupIndex = this.layout.groups.indexOf(group);
     const index = takeOut(group, tab);
-    this.closed.push({ tab, groupIndex, index });
+    this.closed.push({ tab, groupId: group.id, groupIndex, index });
     if (this.closed.length > MAX_CLOSED) this.closed.shift();
   }
 
@@ -552,14 +553,18 @@ class WindowState {
     let closed = this.closed.pop();
     while (closed && !valid(closed.tab.item)) closed = this.closed.pop();
     if (!closed) return;
+    const { groupId, groupIndex } = closed;
     const last = layout.groups.at(-1) as LayoutGroup;
     const only = layout.groups.length === 1 && last.tabs.length === 0 ? last : undefined;
+    // Its group, if it is still there; else a new one where it was, if there is room.
+    const at = Math.min(groupIndex, layout.groups.length);
+    const neighbour = (layout.groups[at] ?? last) as LayoutGroup;
     const group =
       only ??
-      layout.groups[closed.groupIndex] ??
+      layout.groups.find((each) => each.id === groupId) ??
       (layout.groups.length < MAX_TAB_GROUPS
-        ? addGroup(layout, layout.groups.length, last, this.newId)
-        : last);
+        ? addGroup(layout, at, neighbour, this.newId)
+        : neighbour);
     insert(group, closed.tab, closed.index);
     show(layout, group, closed.tab, true);
   }

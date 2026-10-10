@@ -22,11 +22,23 @@ import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
 import { DocumentTagChips } from "./TagChips";
+import { useTabPlace } from "./tabs/tabItems";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
 
 const NO_GROUPS: readonly LibraryGroup[] = [];
+
+/** Keeps the preview showing a Document, if one does. */
+function keepPreviewOf(documentId: string): void {
+  const { layout, changeLayout } = useAppStore.getState();
+  const preview = layout?.groups
+    .flatMap((group) => group.tabs)
+    .find(
+      (tab) => tab.preview && tab.item.kind === "document" && tab.item.documentId === documentId,
+    );
+  if (preview) void changeLayout({ type: "keep", tabId: preview.id });
+}
 
 /** The sidebar chooses a folder; this sheet shows its documents and editable tags. */
 export function LibraryPane() {
@@ -417,6 +429,7 @@ const LibraryRow = memo(function LibraryRow({
   shownIds(): readonly string[];
 }) {
   const t = useT();
+  const place = useTabPlace();
   const name = displayName(doc);
   const fileName = fileNameOf(doc.path);
   const status =
@@ -441,7 +454,18 @@ const LibraryRow = memo(function LibraryRow({
           type="button"
           title={name === fileName ? name : `${name}\n${fileName}`}
           className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-          onClick={() => useAppStore.getState().openDocument({ documentId: doc.id })}
+          // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
+          onClick={(event) =>
+            useAppStore.getState().openDocument(
+              { documentId: doc.id },
+              {
+                as: event.metaKey || event.ctrlKey ? "here" : "library",
+                ...(place && { from: place.groupId }),
+              },
+            )
+          }
+          // A double-click keeps the preview it opened.
+          onDoubleClick={() => keepPreviewOf(doc.id)}
         >
           <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
           <span data-testid="library-document-name" className="truncate font-semibold">

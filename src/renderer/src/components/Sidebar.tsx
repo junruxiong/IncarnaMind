@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
+import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { DeleteMindDialog } from "./DeleteMindDialog";
@@ -15,9 +16,9 @@ import {
   SettingsLineIcon,
   TrashLineIcon,
 } from "./lineIcons";
-import { NEW_MIND_SHORTCUT } from "./MindTabs";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
+import { NEW_MIND_SHORTCUT } from "./shortcuts";
 import {
   rowActionButtonClass,
   rowActionsClass,
@@ -230,7 +231,10 @@ function PlusMenu() {
  */
 function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
   const t = useT();
-  const isOpen = useAppStore((state) => state.openMindId === mind.id && !state.libraryOpen);
+  const isOpen = useAppStore((state) => {
+    const shown = currentTabOf(state.layout)?.item;
+    return shown?.kind === "mind" && shown.mindId === mind.id;
+  });
   const openMind = useAppStore((state) => state.openMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
   const isExample = useIsExample(mind.id);
@@ -252,13 +256,13 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
         data-testid="mind-list-item"
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
-        // ⌘-click (Ctrl-click) or a middle click opens it in a new tab, as in a browser.
-        onClick={(event) => openMind(mind.id, { newTab: event.metaKey || event.ctrlKey })}
+        // ⌘-click (Ctrl-click) or a middle click opens it to the side, as in VS Code.
+        onClick={(event) => openMind(mind.id, { side: event.metaKey || event.ctrlKey })}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault(); // no autoscroll
         }}
         onAuxClick={(event) => {
-          if (event.button === 1) openMind(mind.id, { newTab: true });
+          if (event.button === 1) openMind(mind.id, { side: true });
         }}
         onDoubleClick={() => setRenaming(true)}
         className={rowButtonClass}
