@@ -17,7 +17,10 @@
  *   ../providers/ollamaModels): one search, its Passages in the instructions,
  *   and the Answer and its records returned as one JSON object. A follow-up
  *   Question is first rewritten by the model into a search query that stands
- *   on its own (see `searchQuery`).
+ *   on its own (see `searchQuery`). When some of the Documents are in another
+ *   language than the Question, the query is also translated into theirs and
+ *   searched again, as the search Tool tells a model in the loop to do (see
+ *   `searchLanguage`).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output. A model may give records but
@@ -51,6 +54,7 @@
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
 import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
+import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import {
   classifyProviderError,
@@ -62,7 +66,12 @@ import type { GateDecision, RunEngine, RunMessage, RunToolCall, RunWindow } from
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
 import { earlierContext } from "./context";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
-import { SEARCH_QUERY_INSTRUCTIONS, searchQueryPrompt } from "./prompt";
+import {
+  SEARCH_QUERY_INSTRUCTIONS,
+  searchQueryPrompt,
+  TRANSLATE_QUERY_INSTRUCTIONS,
+  translateQueryPrompt,
+} from "./prompt";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
@@ -479,6 +488,90 @@ async function searchQuery(
   }
 }
 
+/** Languages told by their scripts: a Question with none of those scripts isn't in them. */
+const SCRIPT_LANGUAGES: ReadonlySet<string> = new Set(["Chinese", "Japanese", "Korean"]);
+const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/**
+ * The language a model without Tools searches in a second time: the most
+ * common language of the Documents that the Question isn't written in, as
+ * the search Tool tells a model in the loop to search (`searchToolDescription`,
+ * ADR-0009: search finds Passages best in their own language). Null when the
+ * Documents are all in the Question's language, or that can't be told. A
+ * Question whose language can't be told (a short one, in English, say) is
+ * known not to be in a language written in CJK scripts if it has none.
+ */
+export function searchLanguage(
+  question: string,
+  languages: readonly DocumentLanguage[],
+): string | null {
+  const asked = detectLanguage(question);
+  const other = languages.find(({ language }) =>
+    asked ? language !== asked : SCRIPT_LANGUAGES.has(language) && !CJK_SCRIPT.test(question),
+  );
+  return other?.language ?? null;
+}
+
+/** A Passage in a search's result, as the model reads it, with its id. */
+const PASSAGE_BLOCK = /<passage id="([^"]+)"[^>]*>[\s\S]*?<\/passage>/g;
+
+/**
+ * Searches' results as one: each Passage once, the first search's first, in
+ * the order each gave them, ranked alternately (the first's best, the
+ * second's best, then each one's next), so a window too small for all keeps
+ * the best of each. With no Passages in any, the first's text.
+ */
+export function mergeSearches(results: readonly SearchResultForModel[]): SearchResultForModel {
+  const passages: { id: string; text: string; rank: number }[] = [];
+  results.forEach((result, which) => {
+    [...result.text.matchAll(PASSAGE_BLOCK)].forEach((match, index) => {
+      const rank = (result.ranks?.[index] ?? index) * results.length + which;
+      const seen = passages.find((passage) => passage.id === match[1]);
+      if (seen) seen.rank = Math.min(seen.rank, rank);
+      else passages.push({ id: match[1] as string, text: match[0], rank });
+    });
+  });
+  const [first] = results;
+  if (passages.length === 0 || !first) return first ?? { text: "", passageCount: 0 };
+  if (results.length === 1) return first;
+  return {
+    text: passages.map((passage) => passage.text).join("\n\n"),
+    passageCount: passages.length,
+    ranks: passages.map((passage) => passage.rank),
+  };
+}
+
+/**
+ * The query translated into `language` by the model, for a second search; null
+ * when the translation fails, comes back empty or is the query itself.
+ */
+async function translatedQuery(
+  request: AnswerRequest,
+  query: string,
+  language: string,
+  temperature: number | undefined,
+): Promise<string | null> {
+  try {
+    const { text } = await generateText({
+      model: request.model,
+      instructions: TRANSLATE_QUERY_INSTRUCTIONS,
+      prompt: translateQueryPrompt(query, language),
+      temperature,
+      // A short query; a cut-off reply means no second search.
+      maxOutputTokens: 256,
+      maxRetries: 0,
+      abortSignal: request.signal,
+    });
+    const translated = queryIn(text);
+    return translated && translated !== query ? translated : null;
+  } catch (error) {
+    if (!request.signal.aborted) {
+      console.error(`The search query couldn't be translated: ${messageOf(error)}`);
+    }
+    return null;
+  }
+}
+
 /**
  * The Answer engine: its Tool-calling loop on a Run engine, and the ways of
  * answering without Tools on the model layer (the Vercel AI SDK).
@@ -626,32 +719,50 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         return;
       }
 
-      // A model without Tools searches once, for the Question rewritten to stand on its own;
-      // the result is kept for the next way of answering if the provider refuses this one.
+      // A model without Tools searches once, for the Question rewritten to stand on its own, and
+      // again in the Documents' language if the Question is in another (see `searchLanguage`); the
+      // result is kept for the next way of answering if the provider refuses this one.
       let searched: SearchResultForModel | undefined;
       async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, SearchResultForModel> {
         if (searched !== undefined) return searched;
         const query = await searchQuery(request, temperature());
         signal.throwIfAborted();
-        const id = "question-search";
+        const language = searchLanguage(
+          request.question,
+          request.documents.documentLanguages ?? [],
+        );
+        const translated = language
+          ? await translatedQuery(request, query, language, temperature())
+          : null;
+        signal.throwIfAborted();
+        const searches: [string, string][] = [
+          ["question-search", query],
+          ...(translated ? [["question-search-translated", translated] as [string, string]] : []),
+        ];
         yield { type: "phase", phase: "searching" };
-        yield {
-          type: "tool-call-started",
-          id,
-          provider: DOCUMENTS_PROVIDER,
-          tool: DOCUMENT_TOOLS.search,
-          input: { query },
-        };
-        try {
-          const result = await request.documents.searchDocuments(query, signal);
-          yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
-          searched = result;
-        } catch (error) {
-          if (signal.aborted) throw error;
-          console.error(error);
-          yield { type: "tool-call-finished", id, ok: false, resultCount: null };
-          searched = { text: "The search of the User's Documents failed.", passageCount: 0 };
+        const results: SearchResultForModel[] = [];
+        for (const [id, each] of searches) {
+          yield {
+            type: "tool-call-started",
+            id,
+            provider: DOCUMENTS_PROVIDER,
+            tool: DOCUMENT_TOOLS.search,
+            input: { query: each },
+          };
+          try {
+            const result = await request.documents.searchDocuments(each, signal);
+            yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
+            results.push(result);
+          } catch (error) {
+            if (signal.aborted) throw error;
+            console.error(error);
+            yield { type: "tool-call-finished", id, ok: false, resultCount: null };
+          }
         }
+        searched =
+          results.length > 0
+            ? mergeSearches(results)
+            : { text: "The search of the User's Documents failed.", passageCount: 0 };
         yield { type: "phase", phase: "writing" };
         return searched;
       }
