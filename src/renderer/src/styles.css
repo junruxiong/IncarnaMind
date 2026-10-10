@@ -3245,7 +3245,7 @@
       }
     }
     .answer-block[data-status="failed"]
-    > .answer-content:has(> [data-node-view-content-react] > p:only-child > br:only-child) {
+      > .answer-content:has(> [data-node-view-content-react] > p:only-child > br:only-child) {
       display: none;
     }
     .answer-info,
