@@ -20,7 +20,9 @@
  *   on its own (see `searchQuery`). When some of the Documents are in another
  *   language than the Question, the query is also translated into theirs and
  *   searched again, as the search Tool tells a model in the loop to do (see
- *   `searchLanguage`).
+ *   `searchLanguage`). A local model whose quotes the check doesn't find is
+ *   asked for them once more, as `cite`'s feedback lets a model in the loop
+ *   fix them (see ./quoteRetry).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output. A model may give records but
@@ -53,7 +55,7 @@
  * answers without.
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
-import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
+import type { AnswerPhase, CitationSupport, ProviderError, QuoteRetry } from "../api";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import {
@@ -72,6 +74,7 @@ import {
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
 } from "./prompt";
+import { retryQuotes } from "./quoteRetry";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
@@ -153,6 +156,30 @@ export interface AnswerTools {
   cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
   hasRecord?(marker: number): boolean;
+  /**
+   * The records taken whose quotes the check doesn't find on the pages they
+   * cite, by marker: what structured output's one request for exact quotes
+   * asks about (see ./quoteRetry).
+   */
+  unfoundQuotes?(): UnfoundQuote[];
+  /**
+   * A new quote for a marker's record, from that request: it replaces the
+   * record's quote, cited where it is in the record's Passage as structured
+   * output's records are (see `CiteOptions`), only when the check finds it
+   * there. Whether it did; if not, the record stays as it was.
+   */
+  correctQuote?(marker: number, quote: string): boolean;
+}
+
+/** A record whose quote the check doesn't find, with the text of the Passage it names (see `AnswerTools.unfoundQuotes`). */
+export interface UnfoundQuote {
+  marker: number;
+  /** The Passage's id, as the model was given it (e.g. "P3"). */
+  passage: string;
+  /** The quote, as taken: without the quotation marks or ellipses around it. */
+  quote: string;
+  /** The Passage's text, as the model was given it, with its location marks. */
+  text: string;
 }
 
 export interface InstructionOptions {
@@ -217,10 +244,15 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
-  /** What the Answer is doing now: searching the Documents, or the model's turn. */
-  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing"> }
+  /**
+   * What the Answer is doing now: searching the Documents, the model's turn,
+   * or asking the model once more for exact quotes (see ./quoteRetry).
+   */
+  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes"> }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
+  /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
+  | { type: "quotes-retried"; retry: QuoteRetry }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */
   | { type: "text-delta"; text: string }
   /**
@@ -695,9 +727,10 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
             estimated: fit.estimated,
             learn: (actual) => budget.learn(actual, fit.estimated),
           };
+          // A local model's quotes the check doesn't find are asked for once more (see ./quoteRetry).
           yield* tempered((sent) =>
             mode === "structured-output"
-              ? structured(sized, instructions, sent, window)
+              ? structured(sized, instructions, sent, window, budget)
               : plain(sized, instructions, sent, window),
           );
         });
@@ -1118,12 +1151,18 @@ interface Sized {
   learn(actual: number): void;
 }
 
-/** The Answer and its records as one JSON object, streamed: its `answer` text as it grows. */
+/**
+ * The Answer and its records as one JSON object, streamed: its `answer` text
+ * as it grows. With a local model's window (`budget`), the quotes the check
+ * doesn't find are then asked for once more (see ./quoteRetry); never for a
+ * cloud model.
+ */
 async function* structured(
   request: AnswerRequest,
   instructions: string,
   temperature: number | undefined,
   sized?: Sized,
+  budget?: WindowBudget,
 ): Attempt {
   const { signal } = request;
   const result = streamText({
@@ -1196,8 +1235,12 @@ async function* structured(
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
   yield* emit(answer);
-  // A small model often gives the records but leaves their markers out.
-  if (typeof answer === "string") yield* missingMarkerEvents(emitted, records, request.documents);
+  if (typeof answer === "string") {
+    // A small model often gives the records but leaves their markers out.
+    const placed = yield* missingMarkerEvents(emitted, records, request.documents);
+    if (budget) yield* retryQuotes(request, placed, temperature, budget);
+    if (signal.aborted) return;
+  }
   yield { type: "finished" };
 }
 

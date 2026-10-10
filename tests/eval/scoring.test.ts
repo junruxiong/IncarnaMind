@@ -19,8 +19,10 @@ import {
   outcomeOf,
   questionsToAsk,
   quotePages,
+  quoteRetryLine,
   sentencesOf,
   summariseGroup,
+  summariseQuoteRetries,
 } from "../../eval/lib/citations";
 import type { PassageSearchResult } from "../../src/core";
 import { checkCitation } from "../../src/core/answers/citations";
@@ -932,6 +934,38 @@ describe("A language's Citation figures", () => {
       medianSeconds: null,
     });
   });
+
+  test("the requests for exact quotes: how many Answers made one, what they recovered, and the time they added", () => {
+    const answers = [
+      record({ quoteRetry: { records: 2, recovered: 1, durationMs: 3_000 } }),
+      record({ quoteRetry: { records: 1, recovered: 1, durationMs: 1_000 } }),
+      record({ quoteRetry: { records: 1, recovered: 0, durationMs: 2_000 } }),
+      // None made, or none recorded (a report from before them).
+      record({ quoteRetry: null }),
+      record({}),
+    ];
+
+    expect(summariseGroup(answers).quoteRetries).toEqual({
+      answers: 3,
+      records: 4,
+      recovered: 2,
+      medianSeconds: 2,
+      maxSeconds: 3,
+      secondsPerAnswer: 6 / 5,
+    });
+    expect(quoteRetryLine(summariseQuoteRetries(answers))).toBe(
+      "3 Answers, 2 of 4 records recovered, 2.0 s median, 3.0 s most, 1.2 s per Answer",
+    );
+    expect(summariseQuoteRetries([record({})])).toEqual({
+      answers: 0,
+      records: 0,
+      recovered: 0,
+      medianSeconds: null,
+      maxSeconds: null,
+      secondsPerAnswer: 0,
+    });
+    expect(quoteRetryLine(summariseQuoteRetries([]))).toBe("none");
+  });
 });
 
 describe("The reviewer sheet", () => {
@@ -984,6 +1018,7 @@ describe("Why Citations aren't found, in report.md", () => {
         droppedMarkers: 2,
         searches: ["交通事故"],
         sentences: [{ text: "文档没有提到。", cited: false }],
+        quoteRetry: { records: 2, recovered: 1, durationMs: 2_500 },
       }),
     ];
     const citations: CitationRun = {
@@ -1051,9 +1086,25 @@ describe("Why Citations aren't found, in report.md", () => {
         "| zh-02 | 1 | done | structured-output | 2 | 0 |  | 交通事故 | 文档没有提到。 |",
       );
       expect(markdown).toContain("Skipped: INCARNAMIND_EVAL_FORMATS is off.");
+      // What the requests for exact quotes cost and gave, per group.
+      expect(markdown).toContain(
+        "| Answers that asked again for quotes | 0/1 | 1/1 | 0/0 | 0/0 | reported |",
+      );
+      expect(markdown).toContain(
+        "| Records asked again: recovered | 0/0 | 1/2 | 0/0 | 0/0 | reported |",
+      );
+      expect(markdown).toContain(
+        "| Time the request added: median, most | – | 2.5 s, 2.5 s | – | – | reported |",
+      );
+      expect(markdown).toContain(
+        "| Time the requests added per Answer | 0.0 s | 2.5 s | – | – | reported |",
+      );
       const summary = terminalSummary(report, "/repo/eval/results/x", "/repo");
       expect(summary).toContain(
         "Citation quality, ollama/qwen3.5:4b (2 Questions only, not gating)",
+      );
+      expect(summary).toContain(
+        "quotes asked again: 1 Answer, 1 of 2 records recovered, 2.5 s median, 2.5 s most, 2.5 s per Answer",
       );
       expect(summary).toContain("Every format: skipped. INCARNAMIND_EVAL_FORMATS is off.");
     } finally {

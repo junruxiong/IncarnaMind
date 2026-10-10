@@ -28,6 +28,7 @@ import {
   type OllamaModels,
   type ProviderError,
   QUESTION_BLOCK,
+  type QuoteRetry,
   type RejectedRecord,
 } from "../../src/core";
 import { outputTokensFor } from "../../src/core/providers/ollamaModels";
@@ -112,6 +113,13 @@ export interface AnswerRecord {
   droppedRecords: number;
   /** The records the core couldn't take, as the model gave them, and why. */
   rejectedRecords: RejectedRecord[];
+  /**
+   * The one request for exact quotes a local model in structured output
+   * makes when the check doesn't find some of its quotes (ADR-0007): how many
+   * records it asked about, how many it recovered, how long it took. Null or
+   * absent: none was made.
+   */
+  quoteRetry?: QuoteRetry | null;
   /** Each sentence of the Answer (headings and code left out), and whether a Citation is anchored in it. */
   sentences: { text: string; cited: boolean }[];
   citations: CitationRecord[];
@@ -144,6 +152,23 @@ export interface GroupSummary {
   droppedMarkers: number;
   droppedRecords: number;
   citationSupport: Partial<Record<CitationSupport | "unknown", number>>;
+  /** What the requests for exact quotes cost and gave (see `AnswerRecord.quoteRetry`). */
+  quoteRetries: QuoteRetrySummary;
+}
+
+/** The requests for exact quotes of a group of Answers. */
+export interface QuoteRetrySummary {
+  /** Answers that made one. */
+  answers: number;
+  /** Records they asked about. */
+  records: number;
+  /** Of those, records whose new quote the check found. */
+  recovered: number;
+  /** The time a request added to an Answer that made one, in seconds: the median and the most; null without any. */
+  medianSeconds: number | null;
+  maxSeconds: number | null;
+  /** The time they added, in seconds, per Answer of the group, whether it made one or not; null without Answers. */
+  secondsPerAnswer: number | null;
 }
 
 export interface CitationRun {
@@ -538,6 +563,7 @@ async function askOne(
     droppedMarkers: finished?.droppedMarkers ?? 0,
     droppedRecords: finished?.droppedRecords ?? 0,
     rejectedRecords: finished?.rejectedRecords ?? [],
+    quoteRetry: finished?.quoteRetry ?? null,
     sentences: sentences.map((sentence) => ({
       text: sentence.text,
       cited: sentence.citations.length > 0,
@@ -561,6 +587,28 @@ function median(values: readonly number[]): number | null {
   return sorted.length % 2 === 1
     ? (sorted[middle] as number)
     : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
+}
+
+/** What a group of Answers' requests for exact quotes cost and gave. */
+export function summariseQuoteRetries(answers: readonly AnswerRecord[]): QuoteRetrySummary {
+  const retries = answers.flatMap((answer) => (answer.quoteRetry ? [answer.quoteRetry] : []));
+  const seconds = retries.map((retry) => retry.durationMs / 1000);
+  const total = seconds.reduce((sum, each) => sum + each, 0);
+  return {
+    answers: retries.length,
+    records: retries.reduce((sum, retry) => sum + retry.records, 0),
+    recovered: retries.reduce((sum, retry) => sum + retry.recovered, 0),
+    medianSeconds: median(seconds),
+    maxSeconds: seconds.length > 0 ? Math.max(...seconds) : null,
+    secondsPerAnswer: answers.length > 0 ? total / answers.length : null,
+  };
+}
+
+/** The requests for exact quotes in a line: '2 Answers, 1 of 3 records recovered, 2.1 s median, 3.0 s most, 0.4 s per Answer'. */
+export function quoteRetryLine(summary: QuoteRetrySummary): string {
+  if (summary.answers === 0) return "none";
+  const seconds = (value: number | null) => (value === null ? "–" : `${value.toFixed(1)} s`);
+  return `${summary.answers} Answer${summary.answers === 1 ? "" : "s"}, ${summary.recovered} of ${summary.records} records recovered, ${seconds(summary.medianSeconds)} median, ${seconds(summary.maxSeconds)} most, ${seconds(summary.secondsPerAnswer)} per Answer`;
 }
 
 export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
@@ -596,6 +644,7 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
     droppedMarkers: answers.reduce((sum, answer) => sum + answer.droppedMarkers, 0),
     droppedRecords: answers.reduce((sum, answer) => sum + answer.droppedRecords, 0),
     citationSupport,
+    quoteRetries: summariseQuoteRetries(answers),
   };
 }
 
@@ -720,8 +769,9 @@ export async function runCitations(
         const answer = await askOne(library, question, round, config.answerTimeoutMs);
         answers.push(answer);
         const found = answer.citations.filter((citation) => citation.outcome === "found").length;
+        const retry = answer.quoteRetry;
         log(
-          `${question.id} (round ${round}): ${answer.status}, ${answer.citationSupport ?? "unknown"}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s`,
+          `${question.id} (round ${round}): ${answer.status}, ${answer.citationSupport ?? "unknown"}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s${retry ? `; quotes asked again: ${retry.recovered} of ${retry.records} recovered in ${(retry.durationMs / 1000).toFixed(1)} s` : ""}`,
         );
         // Why, as it happens, so a run stopped before its report still says.
         if (answer.citations.length === 0) log(`  no Citation: ${uncitedLine(answer)}`);

@@ -2,7 +2,7 @@ import type { ChatReadiness } from "../../../../core/api";
 import { useT } from "../../i18n";
 import type { SettingsPage } from "../../settingsPages";
 import { useAppStore } from "../../store";
-import { buttonStyle } from "../ui";
+import { ProblemLine } from "../ProblemLine";
 import { readinessKey, serviceName } from "./shared";
 
 /** Where to fix it: a declined data flow is allowed again on the Privacy page, the rest under Models. */
@@ -10,15 +10,21 @@ export const settingsPageFor = (
   readiness: Extract<ChatReadiness, { ready: false }>,
 ): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "models");
 
-/** What to configure before Questions can be asked. */
+/**
+ * What to configure before Questions can be asked. `inLine`: ahead of an
+ * action on the same line, so without the full stop that ends it otherwise.
+ */
 export function ReadinessExplanation({
   readiness,
+  inLine = false,
 }: {
   readiness: Extract<ChatReadiness, { ready: false }>;
+  inLine?: boolean;
 }) {
   const t = useT();
   const service = "provider" in readiness ? serviceName(readiness.provider, t) : "";
-  return <>{t(readinessKey(readiness.reason), { service })}</>;
+  const words = t(readinessKey(readiness.reason), { service });
+  return <>{inLine ? words.replace(/[.。]$/, "") : words}</>;
 }
 
 /**
@@ -31,21 +37,16 @@ export function ChatReadinessNotice() {
   const openSettings = useAppStore((state) => state.openSettings);
   if (!readiness || readiness.ready) return null;
   return (
-    <p
-      data-testid="chat-readiness"
-      // The box reaches 12px into the margins, so its text keeps the Mind's text edge.
-      className="-mx-3 flex items-center gap-3 rounded-lg bg-frame py-1.5 pr-1.5 pl-3 text-[13px] leading-5 text-ink-secondary"
+    <ProblemLine
+      role="status"
+      testId="chat-readiness"
+      className="mb-3"
+      action={{
+        label: t("providers.readiness.setUp"),
+        onClick: () => openSettings(settingsPageFor(readiness)),
+      }}
     >
-      <span className="flex-1">
-        <ReadinessExplanation readiness={readiness} />
-      </span>
-      <button
-        type="button"
-        onClick={() => openSettings(settingsPageFor(readiness))}
-        className={buttonStyle("secondary", "sm")}
-      >
-        {t("providers.readiness.setUp")}
-      </button>
-    </p>
+      <ReadinessExplanation readiness={readiness} inLine />
+    </ProblemLine>
   );
 }

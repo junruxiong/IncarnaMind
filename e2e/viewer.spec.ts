@@ -621,13 +621,17 @@ test("a Document deleted while it is open, or already deleted, shows Document re
   await item.getByTestId("delete-document").click();
   await window.getByTestId("confirm-delete-document").click();
   await expect(item).toHaveCount(0);
-  await expect(window.getByTestId("viewer-removed")).toContainText("Document removed");
+  await expect(window.getByTestId("viewer-removed")).toContainText(
+    "has been deleted from IncarnaMind",
+  );
   await expect(viewer.locator("[data-page-number]")).toHaveCount(0);
 
   // A Citation of a deleted Document opens the panel on the message and its stored quote.
   await window.getByTestId("viewer-close").click();
   await openDocumentAt(window, { documentId, pageFrom: 2, quote: "Revenue grew by ten percent" });
-  await expect(window.getByTestId("viewer-removed")).toContainText("Document removed");
+  await expect(window.getByTestId("viewer-removed")).toContainText(
+    "has been deleted from IncarnaMind",
+  );
   await expect(window.getByTestId("viewer-removed")).toContainText("Revenue grew by ten percent");
   // Deleted by the User, not unlinked with its folder: it says so.
   await expect(window.getByTestId("viewer-removed")).toContainText(
@@ -682,8 +686,8 @@ test("the open viewer follows its file on disk: the new version once indexed, an
   await window.getByTestId("viewer-close").click();
   await notesItem.getByTestId("open-document").click();
   const gone = window.getByTestId("viewer-removed");
-  await expect(gone).toContainText("File missing");
-  await expect(gone).toContainText("It shows here again once the file is back.");
+  await expect(gone).toContainText("The file for Notes is missing from its folder");
+  await expect(gone).toContainText("It shows here again once it is back");
   await expect(gone).not.toContainText("deleted");
   await screenshot(viewer, "viewer-missing");
   // ...until the file comes back: then the viewer shows it, by itself.
@@ -751,7 +755,7 @@ test("the open viewer follows its file on disk: the new version once indexed, an
   await app.close();
 });
 
-test("the viewer has one 44px header, level with the Mind's, holding every control in order", async () => {
+test("the viewer has one 36px header, level with the Mind's, holding every control in order", async () => {
   const guide = join(sources, "Guide.pdf");
   await writeFile(guide, GUIDE);
   const { app, window } = await launchApp(dataDir);
@@ -762,12 +766,12 @@ test("the viewer has one 44px header, level with the Mind's, holding every contr
   const viewer = window.getByTestId("viewer");
   await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");
 
-  // One header, 44px tall, its top level with the Mind pane's header.
+  // One header, 36px tall, its top level with the Mind pane's header.
   const header = viewer.getByTestId("viewer-header");
   await expect(viewer.locator("header")).toHaveCount(1);
   const headerBox = await boxOf(header);
   const mindHeader = window.getByTestId("mind-area").locator(":scope > *").first();
-  expect(headerBox.height).toBe(44);
+  expect(headerBox.height).toBe(36);
   expect(headerBox.y).toBe((await boxOf(mindHeader)).y);
 
   // In order: the outline toggle, the name, its Tags, page navigation, zoom, open, close.

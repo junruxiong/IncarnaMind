@@ -191,6 +191,46 @@ export function translateQueryPrompt(query: string, language: string): string {
   return `Translate this query into ${language}:\n${query}`;
 }
 
+/**
+ * For a local model that answered with structured output, once its Answer is
+ * written: the one request for exact quotes, for the records whose quotes the
+ * check didn't find (see ./quoteRetry).
+ */
+export const QUOTE_RETRY_INSTRUCTIONS = [
+  "You fix the quotes of an Answer's Citations. A program looks for each quote in its Passage's text, word for word, and didn't find these.",
+  "- For each marker, copy from its Passage's text the words that support its sentence: one unbroken stretch, character for character, no longer than a sentence. Don't reword, translate, join sentences, change characters or leave words out.",
+  "- If the Passage's text has nothing that supports the sentence, give an empty quote.",
+  'Reply with one JSON object: {"quotes": [{"marker": 1, "quote": "…"}]}, with an item for each marker.',
+].join("\n");
+
+/** A record whose quote wasn't found, as the request for exact quotes shows it. */
+export interface QuoteToRetry {
+  marker: number;
+  /** The Answer's sentence its marker is in. */
+  sentence: string;
+  /** The quote the model gave. */
+  quote: string;
+  /** Its Passage's id, e.g. "P3". */
+  passage: string;
+  /** Its Passage's text, or the part of it nearest the quote. */
+  text: string;
+}
+
+/** The request for exact quotes: each record's marker, sentence, quote and Passage text. */
+export function quoteRetryPrompt(records: readonly QuoteToRetry[]): string {
+  return records
+    .map((record) =>
+      [
+        `[^${record.marker}] is on this sentence of the Answer: ${record.sentence}`,
+        `Its quote, not found word for word: ${record.quote ? `"${record.quote}"` : "(none)"}`,
+        `<passage id="${attribute(record.passage)}">`,
+        record.text,
+        "</passage>",
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
+
 /** The request to rewrite `question` into a search query, with the notebook text above it. */
 export function searchQueryPrompt(earlier: string, question: string): string {
   return [

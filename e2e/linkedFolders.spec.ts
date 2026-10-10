@@ -340,9 +340,7 @@ test("a file deleted on disk shows as missing, still opens, and can be removed f
   // Opening it still opens the viewer, as for any Document, which says its file is missing.
   await doomed.getByTestId("open-document").click();
   await expect(window.getByTestId("viewer")).toBeVisible();
-  await expect(window.getByTestId("viewer-removed")).toContainText(
-    "This Document's file is missing from its folder",
-  );
+  await expect(window.getByTestId("viewer-removed")).toContainText("is missing from its folder");
 
   // Its file can't be opened or shown: the items say why, and do nothing.
   await openDocumentMenu(doomed);
@@ -501,7 +499,7 @@ test("a Linked folder that can't be reached shows as unavailable, and so do its 
   await window.keyboard.press("Escape");
   // The viewer says so too, rather than that the Document was deleted.
   await items.first().getByTestId("open-document").click();
-  await expect(window.getByTestId("viewer-removed")).toContainText("File can't be reached");
+  await expect(window.getByTestId("viewer-removed")).toContainText("can't be reached right now");
   await expect(window.getByTestId("viewer-removed")).not.toContainText("deleted");
   await running.app.close();
 });
