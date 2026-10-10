@@ -1,6 +1,6 @@
 # The Library organises Documents into Folders and Tags, not generated Topics
 
-The Library puts each Document into one in-app Folder (or Unsorted) and gives it Tags, in a single Organize action. A classifier makes the assignment: the User's connected model, Auto local routing between local decision models, or Clef-Flash run locally for image-heavy PDFs. Folders are starter ones the User picks or their own, each with a description of what belongs there. The User's manual choices always win and are kept. Original files never move; Folders only change IncarnaMind's index, and source locations (Linked folders as they are on disk) are shown separately.
+The Library puts each Document into one in-app Folder (or Not in a Folder) and gives it Tags, in a single Organize action. A classifier makes the assignment: the User's connected model, Auto local routing between local decision models, or Clef-Flash run locally for image-heavy PDFs. Folders are starter ones the User picks or their own, each with a description of what belongs there. The User's manual choices always win and are kept. Original files never move; Folders only change IncarnaMind's index, and source locations (Linked folders as they are on disk) are shown separately.
 
 We replaced the approved design that grouped Documents into a two-level tree of generated Topics by clustering their vectors (`docs/designs/library-structure-view.md`, engineering-reviewed 2026-10-07). There were two reasons. The User judged it too complicated: they wanted Documents in the right folders with the right tags, which is simple to understand and correct. And the check before building showed that clustering with the built-in embedding model splits Topics by language: in held-out English–Chinese same-subject pairs, 0 of 5 landed together (#51). The classifier reads the Documents' content, so a Chinese and an English Document on one subject can share a Folder.
 
@@ -14,3 +14,12 @@ We replaced the approved design that grouped Documents into a two-level tree of 
 - Organising needs a model: a cloud model under the existing consent rules, or a local one. Without one, Documents stay Unsorted until the User files them by hand.
 - "Folder" now means an in-app Folder. A folder on disk is part of a source location (CONTEXT.md).
 - Bridges from a Folder into writing, and year, format and status filters, are not built yet (#59).
+
+## Folders are projects (2026-10-10, #111)
+
+A Folder holds Minds as well as Documents: the sidebar's one tree lists each Folder's Minds above its Documents, and "Not in a Folder" holds every Mind and Document in none. What was "Unsorted" for Documents and "Not in a Folder" for Minds is one place, so the User learns one idea, not two. A Mind made in a Folder (or moved into one, by its menu or by dragging) starts each Question with the Folder as its Search scope, a chip the User can remove to search everything; the Folder is resolved when the Question is asked, so Documents filed in or out by Organize or by hand count as they are then. A Mind in no Folder searches every Document, as before.
+
+- `minds.folder_id` (migration 32) names the Folder; NULL is Not in a Folder, where every Mind made before is. No foreign key, as everywhere (ADR-0003).
+- Moving is one call for Minds and Documents together (`moveToFolder`), all or none, returning where each was so the move can be undone; a Document moved is a manual choice, which Organize keeps. Drag and drop, "Move to…" and #212's multi-select share it.
+- Deleting a Folder moves its Minds and Documents to Not in a Folder. Its row is kept, marked deleted, so a Question whose Search scope named it shows the Folder's name struck through; that Question searches nothing rather than everything, as for any deleted Folder.
+- We considered Projects as a kind of their own, apart from the Library's Folders, as some notebook apps do. Rejected: two ideas for "where my work lives" is harder to pick up, and Organize already files Documents into Folders by what they are about.
