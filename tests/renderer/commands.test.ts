@@ -151,9 +151,11 @@ describe("shortcuts", () => {
 
 describe("keys", () => {
   const press = (
+    key: string,
     code: string,
     held: Partial<Record<"meta" | "ctrl" | "alt" | "shift", boolean>>,
   ) => ({
+    key,
     code,
     metaKey: held.meta ?? false,
     ctrlKey: held.ctrl ?? false,
@@ -162,14 +164,31 @@ describe("keys", () => {
   });
 
   test("CmdOrCtrl is ⌘ on macOS and Ctrl elsewhere, with exactly the modifiers written", () => {
-    expect(pressed("CmdOrCtrl+J", press("KeyJ", { meta: true }), true)).toBe(true);
-    expect(pressed("CmdOrCtrl+J", press("KeyJ", { ctrl: true }), true)).toBe(false);
-    expect(pressed("CmdOrCtrl+J", press("KeyJ", { ctrl: true }), false)).toBe(true);
-    expect(pressed("CmdOrCtrl+J", press("KeyJ", { meta: true, shift: true }), true)).toBe(false);
-    expect(pressed("Ctrl+Tab", press("Tab", { ctrl: true }), true)).toBe(true);
-    expect(pressed("Ctrl+Shift+Tab", press("Tab", { ctrl: true, shift: true }), false)).toBe(true);
-    expect(pressed("CmdOrCtrl+\\", press("Backslash", { meta: true }), true)).toBe(true);
-    expect(pressed("CmdOrCtrl+1", press("Digit1", { ctrl: true }), false)).toBe(true);
+    expect(pressed("CmdOrCtrl+J", press("j", "KeyJ", { meta: true }), true)).toBe(true);
+    expect(pressed("CmdOrCtrl+J", press("j", "KeyJ", { ctrl: true }), true)).toBe(false);
+    expect(pressed("CmdOrCtrl+J", press("j", "KeyJ", { ctrl: true }), false)).toBe(true);
+    expect(pressed("CmdOrCtrl+J", press("J", "KeyJ", { meta: true, shift: true }), true)).toBe(
+      false,
+    );
+    expect(
+      pressed("CmdOrCtrl+Shift+D", press("D", "KeyD", { meta: true, shift: true }), true),
+    ).toBe(true);
+    expect(pressed("Ctrl+Tab", press("Tab", "Tab", { ctrl: true }), true)).toBe(true);
+    expect(pressed("Ctrl+Shift+Tab", press("Tab", "Tab", { ctrl: true, shift: true }), false)).toBe(
+      true,
+    );
+    expect(pressed("CmdOrCtrl+\\", press("\\", "Backslash", { meta: true }), true)).toBe(true);
+    expect(pressed("CmdOrCtrl+1", press("1", "Digit1", { ctrl: true }), false)).toBe(true);
+  });
+
+  test("letters follow the User's keyboard layout, and the physical key stands in where it types none", () => {
+    // AZERTY: Z is where QWERTY has W, so ⌘Z stays the text's undo, and the key marked W closes the tab.
+    expect(pressed("CmdOrCtrl+W", press("z", "KeyW", { meta: true }), true)).toBe(false);
+    expect(pressed("CmdOrCtrl+W", press("w", "KeyZ", { meta: true }), true)).toBe(true);
+    expect(pressed("CmdOrCtrl+1", press("&", "Digit1", { meta: true }), true)).toBe(true);
+    // Cyrillic, and a German Mac's key where US layouts have \.
+    expect(pressed("CmdOrCtrl+W", press("ц", "KeyW", { ctrl: true }), false)).toBe(true);
+    expect(pressed("CmdOrCtrl+\\", press("#", "Backslash", { meta: true }), true)).toBe(true);
   });
 
   test("are written as each system writes them", () => {
