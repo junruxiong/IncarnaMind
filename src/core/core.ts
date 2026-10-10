@@ -49,7 +49,13 @@ import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifi
 import { documentPageImages } from "./library/pageImages";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
-import { createMinds, parseMindId } from "./minds";
+import {
+  createMinds,
+  parseCreateMindInput,
+  parseFolderChoice,
+  parseIds,
+  parseMindId,
+} from "./minds";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
@@ -844,7 +850,7 @@ export function createCore(adapters: CoreAdapters): Core {
     readValue: (key) => settings.readDeviceValue(key),
     writeValue: (key, value) => settings.writeDeviceValue(key, value),
     createMind: (title) => {
-      const mind = minds.create({ title });
+      const mind = minds.create(parseCreateMindInput({ title }));
       mindsChanged();
       return mind;
     },
@@ -878,7 +884,9 @@ export function createCore(adapters: CoreAdapters): Core {
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => {
-      const mind = minds.create(input);
+      const parsed = parseCreateMindInput(input);
+      if (parsed.folderId !== null) library.folder(parsed.folderId);
+      const mind = minds.create(parsed);
       mindsChanged();
       usageData.record({ event: "mind_created", fields: {} });
       return mind;
@@ -1131,7 +1139,14 @@ export function createCore(adapters: CoreAdapters): Core {
     getLibrary: async () => library.snapshot(),
     createLibraryGroup: async (input) => library.create(input),
     updateLibraryGroup: async (id, input) => library.update(id, input),
-    deleteLibraryGroup: async (id) => library.delete(id),
+    deleteLibraryGroup: async (id) => {
+      // Its Minds go to Not in a Folder with it, as its Documents do.
+      const moved = db.transaction(() => {
+        library.delete(id);
+        return minds.leaveFolder(id as string);
+      });
+      if (moved) mindsChanged();
+    },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => library.saveSettings(input),
     classifyDocuments: async (ids) => {
@@ -1149,6 +1164,22 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
+    moveToFolder: async (input) => {
+      if (!isRecord(input)) throw new InvalidInputError("moveToFolder expects an object.");
+      const folderId = parseFolderChoice(input.folderId);
+      const mindIds = parseIds(input.mindIds, "The Minds to move");
+      const documentIds = parseIds(input.documentIds, "The Documents to move");
+      // All or none: every one is checked before anything moves.
+      if (folderId !== null) library.folder(folderId);
+      for (const id of mindIds) minds.get(id);
+      const move = db.transaction(() => ({
+        folderId,
+        minds: minds.move(mindIds, folderId),
+        documents: library.move(documentIds, folderId),
+      }));
+      if (move.minds.some((item) => item.from !== folderId)) mindsChanged();
+      return move;
+    },
 
     listTags: async () => tags.list(),
     createTag: async (input) => {
