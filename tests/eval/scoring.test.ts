@@ -3,6 +3,9 @@
  * returns. The evaluation itself needs the real model and isn't part of
  * `npm test`; its scoring is, since a mistake there would skew every report.
  */
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
@@ -35,18 +38,31 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
 });
 
 import { readConfig } from "../../eval/lib/config";
-import { loadEvaluationSet } from "../../eval/lib/evaluationSet";
-import { type EvalReport, reviewerSheet, terminalSummary } from "../../eval/lib/report";
+import { type EvalQuestion, loadEvaluationSet } from "../../eval/lib/evaluationSet";
+import {
+  type EvalReport,
+  reviewerSheet,
+  terminalSummary,
+  writeReports,
+} from "../../eval/lib/report";
+import type { OpenReranker, RerankerInfo } from "../../eval/lib/rerank";
 import {
   candidateCounts,
   checkPassage,
   GATING_LABEL,
   GATING_MODE,
   isHit,
+  KEYWORD_RERANK_LABEL,
+  KEYWORD_RERANK_MODE,
+  keywordRerankCandidates,
   modesOf,
   type QuestionResult,
+  type RetrievalRun,
   rerankCandidates,
+  rerankedSearchOf,
+  rerankMode,
   retrievalFailures,
+  runReranked,
   scoreRanking,
   summarise,
 } from "../../eval/lib/retrieval";
@@ -254,7 +270,100 @@ describe("What the reranked modes rerank", () => {
         result({ question: 20, translated: 16 }),
         result(),
       ]),
-    ).toEqual({ perList: 10, searches: 3, mean: 16, min: 12, max: 20 });
+    ).toEqual({ search: "hybrid", perList: 10, searches: 3, mean: 16, min: 12, max: 20 });
+    // Keyword + rerank's counts are its own.
+    expect(candidateCounts([result({ question: 12 })], "keyword")).toBeNull();
+  });
+
+  test("keyword + rerank reranks keyword search's top 20 alone, with no vector search", async () => {
+    const asked: string[] = [];
+    const core = {
+      searchPassages: async (_query: string, options: { mode: string; limit: number }) => {
+        asked.push(`${options.mode} ${options.limit}`);
+        return Array.from({ length: options.limit }, (_, index) => passage(`k${index}`));
+      },
+    } as unknown as Core;
+
+    const candidates = await keywordRerankCandidates(core, "tides");
+
+    expect(asked).toEqual(["keyword 20"]);
+    expect(candidates.map((each) => each.passageId)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `k${index}`),
+    );
+  });
+
+  test("a keyword + rerank mode reranks keyword search's candidates and records their counts apart", async () => {
+    const asked: string[] = [];
+    // Keyword search finds 14 Passages; the expected one is its last.
+    const keyword = Array.from({ length: 14 }, (_, index) => ({
+      ...passage(`k${index}`),
+      text: index === 13 ? "Spring tides happen at full moon." : `k${index}`,
+    }));
+    const core = {
+      searchPassages: async (query: string, options: { mode: string; limit: number }) => {
+        asked.push(`${query}: ${options.mode} ${options.limit}`);
+        return options.mode === "keyword" ? keyword.slice(0, options.limit) : [];
+      },
+    } as unknown as Core;
+    const reversing = (mode: string): OpenReranker => ({
+      mode,
+      rerank: async (_query, passages) => [...passages].reverse(),
+      info: () => ({}) as RerankerInfo,
+      close: () => {},
+    });
+    const question: EvalQuestion = {
+      id: "xl-01",
+      language: "zh",
+      crossLingual: true,
+      question: "大潮什么时候出现？",
+      translatedQuery: "When are spring tides?",
+      expected: { document: "tides", pages: [1, 1], quote: "Spring tides happen at full moon." },
+    };
+    const results: QuestionResult[] = [
+      {
+        id: "xl-01",
+        language: "zh",
+        crossLingual: true,
+        question: question.question,
+        modes: {},
+        translated: {},
+      },
+    ];
+    const ids = new Map([["tides", "doc-1"]]);
+
+    await runReranked(core, [question], ids, reversing("keyword-rerank:fake"), results);
+
+    expect(asked).toEqual(["大潮什么时候出现？: keyword 20", "When are spring tides?: keyword 20"]);
+    expect(results[0]?.modes["keyword-rerank:fake"]).toMatchObject({ hit: true, rank: 1 });
+    expect(results[0]?.translated?.["keyword-rerank:fake"]).toMatchObject({ hit: true, rank: 1 });
+    expect(results[0]).toMatchObject({ keywordRerankCandidates: { question: 14, translated: 14 } });
+    expect(results[0]?.rerankCandidates).toBeUndefined();
+    expect(candidateCounts(results, "keyword")).toEqual({
+      search: "keyword",
+      perList: 20,
+      searches: 2,
+      mean: 14,
+      min: 14,
+      max: 14,
+    });
+    expect(summarise(results)["keyword-rerank:fake"]?.crossLingualTranslated).toEqual({
+      hits: 1,
+      total: 1,
+    });
+  });
+});
+
+describe("Keyword + rerank's mode", () => {
+  test("is the built-in reranking model's over keyword search's candidates, and never gates", () => {
+    expect(KEYWORD_RERANK_MODE).toBe(`keyword-rerank:${BUILT_IN_RERANKING_MODEL.id}`);
+    expect(KEYWORD_RERANK_LABEL).toBe(`keyword + ${BUILT_IN_RERANKING_MODEL.name}`);
+    expect(rerankMode(BUILT_IN_RERANKING_MODEL, "keyword")).toBe(KEYWORD_RERANK_MODE);
+    expect(rerankMode(BUILT_IN_RERANKING_MODEL)).toBe(GATING_MODE);
+    expect([GATING_MODE, KEYWORD_RERANK_MODE, "hybrid"].map(rerankedSearchOf)).toEqual([
+      "hybrid",
+      "keyword",
+      null,
+    ]);
   });
 });
 
@@ -321,6 +430,89 @@ describe("The retrieval gate", () => {
       `hybrid + ${BUILT_IN_RERANKING_MODEL.name} (gating) English 16/20`,
     );
     expect(lines.find((line) => line.trim().startsWith("hybrid "))).toContain("English 13/20");
+  });
+
+  test("keyword + rerank is reported next to the gating row, never gating", async () => {
+    const reranker = (mode: string): RerankerInfo => ({
+      mode,
+      name: BUILT_IN_RERANKING_MODEL.name,
+      licence: "Apache-2.0",
+      downloadBytes: 136e6,
+      loadSeconds: 1.5,
+      latency: { queries: 74, mean: 700, median: 690, p95: 900, max: 950 },
+    });
+    const run = {
+      embedding: "multilingual-e5-small (built-in)",
+      gating: true,
+      passageCount: 1199,
+      processingSeconds: 60,
+      questions: [],
+      summary: {
+        hybrid: summary(13, 19),
+        [GATING_MODE]: summary(16, 20),
+        // Under the bar in English: reported, and the run still passes.
+        [KEYWORD_RERANK_MODE]: summary(15, 20),
+      },
+      rerankers: [reranker(GATING_MODE), reranker(KEYWORD_RERANK_MODE)],
+      rerankCandidates: { search: "hybrid", perList: 10, searches: 75, mean: 16, min: 12, max: 20 },
+      keywordRerankCandidates: {
+        search: "keyword",
+        perList: 20,
+        searches: 75,
+        mean: 19.5,
+        min: 9,
+        max: 20,
+      },
+    } satisfies RetrievalRun;
+    const failures = retrievalFailures(run.summary[GATING_MODE]);
+    const report = {
+      result: failures.length === 0 ? "pass" : "fail",
+      failures,
+      run: {
+        startedAt: "2026-10-10T08:00:00.000Z",
+        seconds: 60,
+        commit: "abc1234",
+        node: "v25",
+        platform: "darwin arm64",
+        cpu: "M2",
+      },
+      evaluationSet: {
+        source: "eval/retrieval/questions.json",
+        hitRule: "",
+        questions: { gating: { en: 20, zh: 20 }, crossLingual: 10 },
+      },
+      documents: [],
+      retrieval: { topK: 5, gatingMode: GATING_MODE, runs: [run] },
+      citations: { skipped: "no chat model" },
+    } satisfies EvalReport;
+
+    expect(report.result).toBe("pass");
+    const lines = terminalSummary(report, "/repo/eval/results/x", "/repo").split("\n");
+    expect(lines.find((line) => line.trim().startsWith("keyword + "))).toContain("English 15/20");
+    expect(lines.some((line) => line.includes("keyword + rerank search"))).toBe(true);
+
+    const results = await mkdtemp(join(tmpdir(), "retrieval-report-"));
+    try {
+      const markdown = (
+        await readFile(join(await writeReports(report, results, "/"), "report.md"), "utf8")
+      ).split("\n");
+      const model = BUILT_IN_RERANKING_MODEL.name;
+      expect(markdown).toContain(
+        `| multilingual-e5-small (built-in) | **hybrid + ${model} (gating)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 |`,
+      );
+      expect(markdown).toContain(
+        `| multilingual-e5-small (built-in) | keyword + ${model} | 15/20 | 20/20 | 35/40 | 2/10 | 7/10 |`,
+      );
+      expect(markdown).toContain(
+        "Candidates per keyword + rerank search (keyword search's top 20, no vector search): 19.5 on average, from 9 to 20, over 75 searches.",
+      );
+      expect(markdown.filter((line) => line.includes("| Apache-2.0 | 136 MB | 700 ms"))).toEqual([
+        `| hybrid + ${model} | Apache-2.0 | 136 MB | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
+        `| keyword + ${model} | Apache-2.0 | 136 MB | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
+      ]);
+    } finally {
+      await rm(results, { recursive: true, force: true });
+    }
   });
 });
 

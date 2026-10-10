@@ -5,7 +5,8 @@
  * would: a new temporary data folder, the evaluation set's Documents added
  * and processed with the real built-in embedding model (on a worker thread),
  * then searches for each Question, reranked by the real built-in reranking
- * model as the search Tool does by default (the gate), and, when a chat model
+ * model as the search Tool does by default (the gate), keyword search's top
+ * 20 reranked alone (keyword + rerank, reported only), and, when a chat model
  * is given, Answers and their Citations. Then the same for the every-format
  * set (#70), on a library of its own, reported per format and never gating.
  * It runs under Vitest only for its TypeScript and worker-thread handling
@@ -34,9 +35,13 @@ import {
   candidateCounts,
   GATING_MODE,
   HYBRID,
+  KEYWORD_RERANK_DEPTH,
   RERANK_PER_LIST,
+  RERANKED_SEARCHES,
   type RetrievalMode,
   type RetrievalRun,
+  rerankedLabel,
+  rerankMode,
   retrievalFailures,
   runReranked,
   runRetrieval,
@@ -79,35 +84,40 @@ async function retrieve(
   };
   line(HYBRID, HYBRID);
 
-  // Reranked modes, one model at a time: each is downloaded once into the model cache.
+  // Reranked modes, one model at a time: each is downloaded once into the model cache. Each
+  // model reranks hybrid search's candidates, then keyword search's alone (keyword + rerank),
+  // opened afresh for each so the timings are the mode's own.
   const rerankers: RerankerInfo[] = [];
   for (const candidate of rerank?.candidates ?? []) {
-    log(
-      `Reranking keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST} with ${candidate.name}`,
-    );
-    const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log);
-    try {
-      await runReranked(library.core, questions, ids, reranker, results);
-      const info = reranker.info();
-      rerankers.push(info);
-      line(
-        info.mode as RetrievalMode,
-        info.mode === GATING_MODE
-          ? `${HYBRID} + ${candidate.name} (gating)`
-          : `${HYBRID} + ${candidate.name}`,
-      );
+    for (const search of RERANKED_SEARCHES) {
+      const mode = rerankMode(candidate, search);
+      const label = rerankedLabel(search, candidate.name);
       log(
-        `${candidate.name}: ${info.latency.mean.toFixed(0)} ms a query on average (95th percentile ${info.latency.p95.toFixed(0)} ms), loaded in ${info.loadSeconds.toFixed(1)} s`,
+        search === "hybrid"
+          ? `Reranking keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST} with ${candidate.name}`
+          : `Reranking keyword search's top ${KEYWORD_RERANK_DEPTH} with ${candidate.name}`,
       );
-    } finally {
-      reranker.close();
+      const reranker = await openReranker(candidate, rerank?.cacheDir ?? "", log, mode);
+      try {
+        await runReranked(library.core, questions, ids, reranker, results);
+        const info = reranker.info();
+        rerankers.push(info);
+        line(mode, mode === GATING_MODE ? `${label} (gating)` : label);
+        log(
+          `${label}: ${info.latency.mean.toFixed(0)} ms a query on average (95th percentile ${info.latency.p95.toFixed(0)} ms), loaded in ${info.loadSeconds.toFixed(1)} s`,
+        );
+      } finally {
+        reranker.close();
+      }
     }
   }
 
   const candidates = candidateCounts(results);
-  if (candidates) {
+  const keywordCandidates = candidateCounts(results, "keyword");
+  for (const counts of [candidates, keywordCandidates]) {
+    if (!counts) continue;
     log(
-      `Reranked searches had ${candidates.mean.toFixed(1)} candidates on average (${candidates.min} to ${candidates.max}, over ${candidates.searches} searches)`,
+      `${counts.search === "keyword" ? "Keyword + rerank searches" : "Reranked hybrid searches"} had ${counts.mean.toFixed(1)} candidates on average (${counts.min} to ${counts.max}, over ${counts.searches} searches)`,
     );
   }
 
@@ -120,6 +130,7 @@ async function retrieve(
     summary: summarise(results),
     ...(rerankers.length > 0 && { rerankers }),
     ...(candidates && { rerankCandidates: candidates }),
+    ...(keywordCandidates && { keywordRerankCandidates: keywordCandidates }),
   };
 }
 
