@@ -42,6 +42,7 @@ import {
   type Effect,
   type ProviderError,
   QUESTION_BLOCK,
+  type QuoteRetry,
   type SearchScope,
   type SkillAvailability,
   type SkillScriptRun,
@@ -368,6 +369,8 @@ export function createAnswers(options: AnswersOptions) {
     let support: CitationSupport | null = null;
     /** Markers the engine put in for records the model gave without them. */
     let placedMarkers = 0;
+    /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
+    let quoteRetry: QuoteRetry | null = null;
     const toolCalls: AnswerToolCall[] = [];
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
@@ -444,6 +447,7 @@ export function createAnswers(options: AnswersOptions) {
           ...session.summary(),
           placedMarkers,
           citationSupport: support,
+          quoteRetry,
         });
       }
     };
@@ -699,16 +703,17 @@ export function createAnswers(options: AnswersOptions) {
       }
       // The phase the meta line shows: waiting for the User to allow the Question to go to the
       // model's service, searching, the model loading (a local model, until Ollama has it
-      // loaded or it starts to answer), or writing.
+      // loaded or it starts to answer), writing, or checking quotes (asking a local model once
+      // more for the quotes the check didn't find).
       let consenting = input.consentNeeded;
-      let activity: Extract<AnswerPhase, "searching" | "writing"> = "writing";
+      let activity: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes"> = "writing";
       let loading = false;
       let responded = false;
       let shown: AnswerPhase | null = null;
       const showPhase = () => {
         const phase: AnswerPhase = consenting
           ? "waiting-for-consent"
-          : activity === "searching"
+          : activity !== "writing"
             ? activity
             : loading && !responded
               ? "loading"
@@ -862,6 +867,9 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "markers-placed":
             placedMarkers += event.count;
+            break;
+          case "quotes-retried":
+            quoteRetry = event.retry;
             break;
           case "text-delta":
             responded = true;

@@ -53,7 +53,7 @@
  * answers without.
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
-import type { AnswerPhase, CitationSupport, ProviderError } from "../api";
+import type { AnswerPhase, CitationSupport, ProviderError, QuoteRetry } from "../api";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import {
@@ -217,10 +217,15 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
-  /** What the Answer is doing now: searching the Documents, or the model's turn. */
-  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing"> }
+  /**
+   * What the Answer is doing now: searching the Documents, the model's turn,
+   * or asking the model once more for exact quotes (see ./quoteRetry).
+   */
+  | { type: "phase"; phase: Extract<AnswerPhase, "searching" | "writing" | "checking-quotes"> }
   /** The engine put in `count` Citation markers the model left out of its text (see ./markerPlacement). */
   | { type: "markers-placed"; count: number }
+  /** The model was asked once more for exact quotes (see ./quoteRetry), and what that gave. */
+  | { type: "quotes-retried"; retry: QuoteRetry }
   /** More of the Answer's text (Markdown, with Citation markers), in order. */
   | { type: "text-delta"; text: string }
   /**
