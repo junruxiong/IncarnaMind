@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../../core/api";
-import { displayName, fileNameOf } from "../../../shared/documentNames";
+import { displayName, fileNameOf, sourceOf } from "../../../shared/documentNames";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
@@ -419,6 +419,7 @@ const LibraryRow = memo(function LibraryRow({
   const t = useT();
   const name = displayName(doc);
   const fileName = fileNameOf(doc.path);
+  const source = sourceOf(doc);
   const status =
     item?.status === "classifying" || item?.status === "pending"
       ? "library.working"
@@ -439,7 +440,7 @@ const LibraryRow = memo(function LibraryRow({
       <div className="library-document-name min-w-0">
         <button
           type="button"
-          title={name === fileName ? name : `${name}\n${fileName}`}
+          title={name === source ? name : `${name}\n${source}`}
           className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
           onClick={() => useAppStore.getState().openDocument({ documentId: doc.id })}
         >
@@ -451,8 +452,14 @@ const LibraryRow = memo(function LibraryRow({
         <details className="mt-1 text-[12px] text-ink-meta">
           <summary className="w-fit cursor-pointer">{t(status)}</summary>
           <p className="mt-1 break-words">
-            {t("library.file", { name: fileName })} · {doc.kind.toUpperCase()} ·{" "}
-            {t("library.originalsStay")}
+            {doc.web ? (
+              t("library.webAddress", { address: doc.web.address })
+            ) : (
+              <>
+                {t("library.file", { name: fileName })} · {doc.kind.toUpperCase()} ·{" "}
+                {t("library.originalsStay")}
+              </>
+            )}
           </p>
           {item?.model && (
             <p>

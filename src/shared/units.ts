@@ -2,10 +2,10 @@
  * Units (ADR-0011): the spans a Document's text is stored in, in reading
  * order, and what a Citation's Location points at. A Unit is a PDF's page, a
  * deck's slide (its speaker notes included), a heading section of a Word or
- * Markdown file, a block of rows of one sheet of a spreadsheet or CSV, or a
- * block of lines of a plain-text file. Each is one `document_pages` row of a
- * version: `page` is the Unit's number, from 1, which for a PDF is its page
- * and for a deck its slide.
+ * Markdown file or a saved web page, a block of rows of one sheet of a
+ * spreadsheet or CSV, or a block of lines of a plain-text file. Each is one
+ * `document_pages` row of a version: `page` is the Unit's number, from 1,
+ * which for a PDF is its page and for a deck its slide.
  *
  * A Citation names one Unit, or two consecutive ones in the same sheet or
  * Document, and its quote is checked against their stored text. Anchors map
@@ -20,8 +20,9 @@
 /**
  * - "page": a PDF's page.
  * - "slide": a deck's slide, with its speaker notes.
- * - "section": the text under one heading of a Word or Markdown file (or the
- *   part of a long one), or what comes before the first heading.
+ * - "section": the text under one heading of a Word or Markdown file or a
+ *   web page (or the part of a long one), or what comes before the first
+ *   heading.
  * - "rows": a block of rows of one sheet (a CSV has one sheet).
  * - "lines": a block of lines of a plain-text file.
  * - "text": a whole TXT or Markdown file, as text was stored before Units
@@ -40,6 +41,11 @@ export interface UnitLabel {
   part?: number;
   /** section: the Word file's footnotes and endnotes, gathered at the end. */
   notes?: boolean;
+  /**
+   * section: a web page's, whose anchors number its paragraphs from its
+   * heading ("p3"), so its Location names the paragraph too ("§ History, ¶ 3").
+   */
+  paragraphs?: boolean;
   /**
    * section: the Word comments anchored in it, in order, read after its own
    * text: each one's anchor and its author.
@@ -76,8 +82,8 @@ export interface Anchor {
   end: number;
   /**
    * slide: "title", "shape2", "table1.row3", "chart1", "image1" or "notes";
-   * section: "p12" (the 12th paragraph read), or "comment3" (a Word comment,
-   * by its id); rows: a cell, "B12".
+   * section: "p12" (the 12th paragraph read; in a web page's, the 12th from
+   * its heading), or "comment3" (a Word comment, by its id); rows: a cell, "B12".
    */
   target: string;
 }

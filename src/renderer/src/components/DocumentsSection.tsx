@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
-import { displayName, fileNameOf } from "../../../shared/documentNames";
+import { displayName, sourceOf } from "../../../shared/documentNames";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
@@ -347,7 +347,7 @@ const DocumentRow = memo(function DocumentRow({
   const t = useT();
   const [renaming, setRenaming] = useState(false);
   const shownName = displayName(item);
-  const fileName = fileNameOf(item.path);
+  const source = sourceOf(item);
   const chips = chipsOf(item.tags, tagsById);
   const tagNames =
     chips.length > 0
@@ -386,7 +386,7 @@ const DocumentRow = memo(function DocumentRow({
           data-testid="open-document"
           aria-current={isOpen ? "true" : undefined}
           aria-description={tagNames}
-          title={[shownName === fileName ? shownName : `${shownName}\n${fileName}`, tagNames]
+          title={[shownName === source ? shownName : `${shownName}\n${source}`, tagNames]
             .filter(Boolean)
             .join("\n")}
           onClick={() => openDocument({ documentId: item.id })}

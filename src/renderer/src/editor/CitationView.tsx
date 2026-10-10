@@ -5,8 +5,11 @@ import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, type CitationAttributes } from "../..
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { useAnswers } from "../answers";
-import { useT } from "../i18n";
+import { files } from "../core";
+import { errorMessage } from "../errors";
+import { useLanguage, useT } from "../i18n";
 import { recordUsage, useAppStore } from "../store";
+import { pageDate } from "../webPages";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { useMindId } from "./mindContext";
@@ -177,9 +180,10 @@ export function CitationView({
 }
 
 /**
- * A Citation's card: the state line with its icon, the Document, the quote
- * washed in the state's colour, what the state means (or why the quote wasn't
- * found), and what to do next.
+ * A Citation's card: the state line with its icon, the Document (for a web
+ * page, its site and when it was fetched too), the quote washed in the
+ * state's colour, what the state means (or why the quote wasn't found), and
+ * what to do next (for a web page, also "Open the live page").
  */
 function CitationCard({
   state,
@@ -199,10 +203,18 @@ function CitationCard({
   onRegenerate(): void;
 }) {
   const t = useT();
+  const language = useLanguage();
+  const web = useAppStore(
+    (store) => store.documents.find((each) => each.id === state.documentId)?.web ?? null,
+  );
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
-  const opens = openKind(location);
+  const opens = web ? "web" : openKind(location);
   const name = attributes.documentName ?? "";
+  // When the version it quotes was fetched: an older one's, if the page changed since.
+  const fetchedAt =
+    web?.versions.find((each) => each.contentHash === attributes.contentHash)?.fetchedAt ??
+    web?.fetchedAt;
   const checked = state.check === "found" || state.check === "not-found";
   // Once checked, the state line names the place, or the Document if it names none.
   const source = checked
@@ -227,6 +239,11 @@ function CitationCard({
           <span>{badgeText}</span>
         </p>
         {source && <p className="citation-card-source">{source}</p>}
+        {web && fetchedAt && (
+          <p data-testid="citation-web-source" className="citation-card-source">
+            {web.siteName} · {t("webPages.fetched", { date: pageDate(fetchedAt, language) })}
+          </p>
+        )}
       </div>
       {attributes.quote && (
         <figure className="citation-card-quote">
@@ -284,6 +301,22 @@ function CitationCard({
               {t(`citation.open.${opens}`)}
             </button>
           )
+        )}
+        {web && state.documentId && (
+          <button
+            type="button"
+            data-testid="citation-open-live"
+            title={web.address}
+            className="citation-card-action"
+            onClick={() => {
+              if (!state.documentId) return;
+              files.openDocumentExternally(state.documentId).catch((failure: unknown) => {
+                useAppStore.setState({ actionError: errorMessage(failure) });
+              });
+            }}
+          >
+            {t("webPages.openLive")}
+          </button>
         )}
       </div>
     </div>

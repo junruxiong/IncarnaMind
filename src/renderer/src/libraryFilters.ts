@@ -177,6 +177,7 @@ const FORMAT_ORDER: readonly DocumentKind[] = [
   "csv",
   "markdown",
   "text",
+  "web",
 ];
 
 const byOrder =
@@ -192,6 +193,7 @@ const FORMAT_LABELS: Record<DocumentKind, MessageKey> = {
   csv: "library.format.csv",
   markdown: "library.format.markdown",
   text: "library.format.text",
+  web: "library.format.web",
 };
 
 const STATUS_LABELS: Record<LibraryStatus, MessageKey> = {

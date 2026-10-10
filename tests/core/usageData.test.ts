@@ -480,6 +480,7 @@ function counts(): UsageEventFields<"documents_added"> {
     csv: 0,
     markdown: 0,
     text: 0,
+    web: 0,
   };
 }
 
