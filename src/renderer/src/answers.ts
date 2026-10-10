@@ -34,16 +34,25 @@ interface AnswersState {
   /** Asks a Question; with `discardEdits`, replaces an Answer the User edited. */
   ask(mindId: string, questionId: string, discardEdits?: boolean): Promise<AskResult | null>;
   /**
-   * Asks a Question just put into the Mind from its composer: why it couldn't
-   * be asked is kept for the composer (`composerKey`), not for the Question.
+   * Asks a Question just put into the Mind's thread from its composer, in the
+   * chat `chatId` (null: the Mind's own Blocks): why it couldn't be asked is
+   * kept for the composer (`composerKey`), not for the Question.
    */
-  askFromComposer(mindId: string, questionId: string): Promise<AskResult | null>;
-  /** Writes an Answer again; with `discardEdits`, even if the User edited it. */
+  askFromComposer(
+    mindId: string,
+    questionId: string,
+    chatId?: string | null,
+  ): Promise<AskResult | null>;
+  /**
+   * Writes an Answer again; with `discardEdits`, even if the User edited it.
+   * `chatId`: the chat it is in, if it is in the thread.
+   */
   regenerate(
     mindId: string,
     answerId: string,
     questionId: string,
     discardEdits?: boolean,
+    chatId?: string | null,
   ): Promise<void>;
   stop(mindId: string, answerId: string): void;
   dismiss(questionId: string): void;
@@ -91,10 +100,10 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
     }
   },
 
-  async askFromComposer(mindId, questionId) {
+  async askFromComposer(mindId, questionId, chatId = null) {
     const key = composerKey(mindId);
     try {
-      const result = await core.askQuestion({ mindId, questionId });
+      const result = await core.askQuestion({ mindId, questionId, chatId });
       settle(key, result);
       return result;
     } catch (error) {
@@ -103,9 +112,9 @@ export const useAnswers = create<AnswersState>()((set, get) => ({
     }
   },
 
-  async regenerate(mindId, answerId, questionId, discardEdits) {
+  async regenerate(mindId, answerId, questionId, discardEdits, chatId = null) {
     try {
-      settle(questionId, await core.regenerateAnswer({ mindId, answerId, discardEdits }));
+      settle(questionId, await core.regenerateAnswer({ mindId, answerId, discardEdits, chatId }));
     } catch (error) {
       // E.g. its Question was deleted: there may be no Question to show this, so the app does.
       settle(questionId, null);

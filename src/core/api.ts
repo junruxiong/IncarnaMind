@@ -118,6 +118,33 @@ export const MIND_CONTENT_FIELD = "blocks";
  */
 export const MIND_SETTINGS_FIELD = "settings";
 
+/**
+ * The name of the Y.Map that holds a Mind's chats in its Yjs document, beside
+ * its Blocks (#201): what is asked in the thread above its composer, kept with
+ * it and out of its note. By chat id, each chat is a Y.Map with its
+ * `createdAt` (ISO 8601) and its `blocks`: a Y.XmlFragment of Questions and
+ * their Answers, in the shape the Mind's own Blocks have, so Answers there
+ * are written, cited and checked as anywhere. See src/shared/mindChats.ts.
+ * Older versions leave it as it is: it isn't in the Blocks their editor binds to.
+ */
+export const MIND_CHATS_FIELD = "chats";
+
+/**
+ * The name of the Y.Map that holds where a Mind's Blocks came from: by Block
+ * id, a `BlockOrigin`. A Note added from a chat keeps its link back to the
+ * Answer here, beside the Blocks rather than in their attributes, which an
+ * older version's editor would strip. See src/shared/blockOrigins.ts.
+ */
+export const MIND_ORIGINS_FIELD = "origins";
+
+/** Where a Block came from: a Note added from an Answer in a chat links back to it. */
+export interface BlockOrigin {
+  /** The Answer, in the Mind whose chat holds it. */
+  from: ArtifactReference;
+  /** The chat's first Question when the Block was added, to name the chat in the link's tooltip. */
+  label: string;
+}
+
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
 
@@ -1343,6 +1370,13 @@ export interface AskQuestionInput {
   mindId: string;
   /** The Question Block's id. */
   questionId: string;
+  /**
+   * The chat the Question is in (`MIND_CHATS_FIELD`): its Answer goes right
+   * after it there, never into the note, and its Question context is the
+   * Mind's Notes, then the chat's earlier Questions and Answers. Absent or
+   * null: the Question is one of the Mind's own Blocks.
+   */
+  chatId?: string | null;
   /** Replace the Question's Answer even if the User has edited it. Defaults to false. */
   discardEdits?: boolean;
 }
@@ -1350,8 +1384,38 @@ export interface AskQuestionInput {
 export interface RegenerateAnswerInput {
   mindId: string;
   answerId: string;
+  /** The chat the Answer is in, as for `AskQuestionInput.chatId`. */
+  chatId?: string | null;
   /** Replace the Answer even if the User has edited it. Defaults to false. */
   discardEdits?: boolean;
+}
+
+/**
+ * "Add to note" for a Mind that isn't open in the editor (#201): Blocks to put
+ * at the end of a Mind's note, with their Citations checked again there.
+ */
+export interface AddToNoteInput {
+  mindId: string;
+  /**
+   * The Blocks, as the editor writes them in JSON: Notes only
+   * (`NOTE_BLOCK_TYPES`) at the top level, with whatever they hold, Citations
+   * included. Block ids are given anew.
+   */
+  blocks: unknown[];
+  /** Where they came from, kept as their link back (`MIND_ORIGINS_FIELD`); null for none. */
+  origin: BlockOrigin | null;
+}
+
+/** What "Add to note" put into the Mind: the ids of its new top-level Blocks, in order. */
+export interface AddedToNote {
+  mindId: string;
+  blockIds: string[];
+}
+
+/** Undoes an "Add to note": its Blocks leave the Mind, with their links back. */
+export interface UndoAddToNoteInput {
+  mindId: string;
+  blockIds: string[];
 }
 
 export interface StopAnswerInput {
@@ -2661,6 +2725,15 @@ export interface CoreApi {
    * marked "stopped". Stopping a finished Answer does nothing.
    */
   stopAnswer(input: StopAnswerInput): Promise<void>;
+  /**
+   * Puts Blocks at the end of a Mind's note (replacing its empty last line),
+   * each Citation in them checked again against its Document, and keeps
+   * where they came from. For "Add to note" into a Mind that isn't open in
+   * the editor; the open Mind's editor adds at its cursor itself.
+   */
+  addToNote(input: AddToNoteInput): Promise<AddedToNote>;
+  /** Takes Blocks an "Add to note" put into a Mind back out, and their links back. */
+  undoAddToNote(input: UndoAddToNoteInput): Promise<void>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -3135,6 +3208,8 @@ const methods: Record<CoreApiMethod, true> = {
   askQuestion: true,
   regenerateAnswer: true,
   stopAnswer: true,
+  addToNote: true,
+  undoAddToNote: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,

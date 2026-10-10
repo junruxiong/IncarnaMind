@@ -34,15 +34,9 @@ import { useT } from "../i18n";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
+import { chatToAskIn, threadUp, useThreads } from "../threads";
 import { AnswerAnnouncer } from "./AnswerAnnouncer";
-import {
-  cursorBelowAnswer,
-  placeQuestion,
-  type QuestionToAsk,
-  questionPlace,
-  takeBackQuestion,
-  whenAnswerShown,
-} from "./composerAsk";
+import type { QuestionToAsk } from "./composerAsk";
 import { AskArrowIcon, CollapseIcon, ExpandIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
 import { PasteChip, usePasteLabel } from "./PasteChip";
@@ -50,6 +44,7 @@ import { SkillChip } from "./QuestionView";
 import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
 import { SkillChoiceList } from "./SkillChoiceList";
+import { placeInThread, takeBackFromThread } from "./threadAsk";
 
 /** In the composer, a long Search scope shows this many chips, then "+N more". */
 const CHIPS_SHOWN = 3;
@@ -106,13 +101,16 @@ export function Composer({
   doc,
   mindId,
   cursorInMind,
+  placeholder,
   ref,
 }: {
   editor: Editor;
   doc: Y.Doc;
   mindId: string;
-  /** Whether the Mind's cursor is where a Question goes: false sends it to the end. */
+  /** Whether the note's cursor is where Esc goes back to: false goes to its end. */
   cursorInMind: RefObject<boolean>;
+  /** In place of "Ask, or say what to change…": "Ask a follow-up…" while the thread is up. */
+  placeholder?: string;
   ref?: Ref<ComposerHandle>;
 }) {
   const t = useT();
@@ -369,28 +367,24 @@ export function Composer({
       scope: current.scope,
       skill: current.skill,
     };
-    const selection = cursorInMind.current ? editor.state.selection : null;
-    const placed = placeQuestion(editor, question, questionPlace(editor.state.doc, selection));
-    if (!placed) return;
+    // Into the thread, never the note (#201): the chat it shows, or a new one.
+    const threads = useThreads.getState();
+    const before = threads.view(mindId);
+    const placed = placeInThread(doc, chatToAskIn(before, doc), question);
+    threads.update(mindId, { chatId: placed.chatId, fresh: false, open: true, focusAnswer: null });
+    threads.setAdded(null, mindId);
     update({ text: "", skill: null, pastes: [] });
     setExpanded(false);
     setViewing(null);
     setPicking(null);
-    const line = editor.view.nodeDOM(placed.pos);
-    if (line instanceof HTMLElement) line.scrollIntoView({ block: "nearest" });
 
-    const result = await useAnswers.getState().askFromComposer(mindId, question.id);
-    if (result?.asked) {
-      // The next Question goes after this Answer; Esc comes back to write there. (Unless
-      // another Mind is shown by then: this one's editor is gone, with its cursor.)
-      const answered = await whenAnswerShown(editor, result.answerId);
-      if (answered && !editor.isDestroyed && cursorBelowAnswer(editor, result.answerId)) {
-        cursorInMind.current = true;
-      }
-      return;
+    const result = await useAnswers.getState().askFromComposer(mindId, question.id, placed.chatId);
+    if (result?.asked) return;
+    // Not asked: the Question leaves the thread, and its words come back here.
+    takeBackFromThread(doc, placed);
+    if (placed.startedChat) {
+      useThreads.getState().update(mindId, { chatId: before.chatId, fresh: before.fresh });
     }
-    // Not asked: the Question leaves the note, and its words come back here.
-    if (!editor.isDestroyed) takeBackQuestion(editor, placed, text);
     const now = useComposer.getState().draft(mindId);
     if (now.text === "" && now.pastes.length === 0) {
       update({ text: typed, pastes: current.pastes, skill: now.skill ?? question.skill });
@@ -422,6 +416,12 @@ export function Composer({
       // The tall editor goes back to its size; the next Esc goes to the note.
       event.preventDefault();
       setExpanded(false);
+      return;
+    }
+    if (event.key === "Escape" && threadUp(mindId, doc)) {
+      // The thread folds first (the innermost thing open); the next Esc goes to the note.
+      event.preventDefault();
+      useThreads.getState().fold(mindId);
       return;
     }
     if (event.key === "Escape") {
@@ -534,7 +534,7 @@ export function Composer({
           rows={1}
           data-testid="composer-input"
           aria-label={t("composer.label", { shortcut: SHORTCUT })}
-          placeholder={t("composer.placeholder")}
+          placeholder={placeholder ?? t("composer.placeholder")}
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
           aria-activedescendant={activeOption}

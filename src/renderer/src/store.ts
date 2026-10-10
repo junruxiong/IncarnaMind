@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  ArtifactReference,
   ChatReadiness,
   DeviceSettings,
   Document,
@@ -24,11 +25,13 @@ import type {
 } from "../../core/api";
 import type { UiUsageEvent } from "../../core/usageEvents";
 import type { DocumentLocation } from "../../shared/documentViewer";
+import { translate } from "../../shared/i18n";
 import { core, files } from "./core";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
 import { isSettingsPage, type SettingsPage } from "./settingsPages";
+import { useThreads } from "./threads";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
 
@@ -180,6 +183,12 @@ interface AppState {
   openMind(id: string, options?: { newTab?: boolean }): void;
   /** Closes a Mind's tab; if it was shown, the tab after it (or else before it) is shown. */
   closeTab(id: string): void;
+  /**
+   * A Note's link back to the chat it was added from (#201): its Mind opens in
+   * a tab beside this one (or this one, if it is the same), with its thread up
+   * at the Answer, which takes the focus.
+   */
+  openChat(reference: ArtifactReference): void;
   /** Moves a tab to a place among the tabs (0 is first). */
   moveTab(id: string, index: number): void;
   renameMind(id: string, title: string): Promise<void>;
@@ -708,6 +717,21 @@ export const useAppStore = create<AppState>()((set, get) => {
       else if (options?.newTab) next.splice(current + 1, 0, id);
       else next[current] = id;
       setTabs({ tabs: next, openMindId: id });
+    },
+
+    openChat(reference) {
+      const { minds, openMindId, settings } = get();
+      const mindId = reference.artifactId;
+      if (!minds.some((mind) => mind.id === mindId)) {
+        set({ actionError: translate(settings?.language ?? "en", "thread.link.gone") });
+        return;
+      }
+      useThreads.getState().update(mindId, {
+        open: true,
+        fresh: false,
+        focusAnswer: reference.anchor.blockId,
+      });
+      if (mindId !== openMindId) get().openMind(mindId, { newTab: true });
     },
 
     closeTab(id) {

@@ -1,3 +1,4 @@
+import type { Editor } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
 import { Fragment, type ReactNode, useId, useMemo, useState } from "react";
 import {
@@ -9,6 +10,7 @@ import {
   type SkillScriptApprovalRequest,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { hasSearchScope, searchScopeOf } from "../../../shared/searchScope";
 import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
@@ -17,10 +19,13 @@ import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { ProblemLine } from "../components/ProblemLine";
 import { useT } from "../i18n";
 import { ANSWER_PROBLEMS } from "../problems";
+import { scopeChips } from "../scope";
 import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
+import { findBlock } from "./blockCommands";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
+import { ThreadAnswerActions, useThread } from "./ThreadAnswerActions";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
@@ -46,6 +51,26 @@ function toolCallsOf(value: unknown): AnswerToolCall[] {
 const RUN_SCRIPT = "run_skill_script";
 const SEARCH = "search_documents";
 
+/**
+ * The Search scope the Question with this id searched, in `editor`, as names
+ * ("Thesis: urban heat, Tides"); null when it searched everything, or with no editor.
+ */
+function useQuestionScope(editor: Editor | null, questionId: string | null): string | null {
+  const folders = useAppStore((state) => state.folders);
+  const groups = useAppStore((state) => state.library?.groups);
+  const tags = useAppStore((state) => state.tags);
+  const documents = useAppStore((state) => state.documents);
+  if (!editor || !questionId || editor.isDestroyed) return null;
+  const question = findBlock(editor.state.doc, questionId);
+  if (!question) return null;
+  const scope = searchScopeOf(question.node.attrs);
+  if (!hasSearchScope(scope)) return null;
+  const names = scopeChips({ folders, groups, tags, documents }, scope)
+    .map((chip) => chip.name)
+    .filter((name): name is string => name !== null);
+  return names.length > 0 ? names.join(", ") : null;
+}
+
 /** Items of the meta line, with a dot between each two. */
 function Dotted({ items }: { items: ReactNode[] }) {
   return items.map((item, index) => (
@@ -67,9 +92,10 @@ function Dotted({ items }: { items: ReactNode[] }) {
  * calls and Skill scripts it used; under it, what went wrong and how to fix
  * it, and the approval cards of calls waiting for the User.
  */
-export function AnswerView({ node }: ReactNodeViewProps) {
+export function AnswerView({ node, editor }: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
+  const thread = useThread();
   const answerId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
   const questionId = text(node.attrs.questionId);
   const modelId = text(node.attrs.modelId);
@@ -92,8 +118,12 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const isExample = useIsExampleAnswer(answerId);
 
   const writeAgain = (discardEdits = false) => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
+    if (answerId && questionId) {
+      void regenerate(mindId, answerId, questionId, discardEdits, thread?.chatId ?? null);
+    }
   };
+  // In the thread, the Search scope its Question searched shows in its meta too.
+  const scope = useQuestionScope(thread ? editor : null, questionId);
 
   const meta: ReactNode[] = [];
   if (streaming) {
@@ -109,6 +139,13 @@ export function AnswerView({ node }: ReactNodeViewProps) {
     meta.push(
       <span data-testid="answer-model" className="answer-model">
         {modelId}
+      </span>,
+    );
+  }
+  if (thread && scope) {
+    meta.push(
+      <span data-testid="answer-scope" className="answer-model">
+        {scope}
       </span>,
     );
   }
@@ -193,32 +230,47 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         </div>
       )}
 
-      {/* Under its last line, in the room before the next Block: shown on hover or focus. */}
-      <div contentEditable={false} data-testid="answer-meta" className="answer-meta">
-        <Dotted items={meta} />
-        {streaming && answerId && (
-          <button
-            type="button"
-            data-testid="answer-stop"
-            onClick={() => stop(mindId, answerId)}
-            className="answer-action"
-          >
-            <StopIcon className="size-3" />
-            {t("answer.stop")}
-          </button>
-        )}
-        {!streaming && questionId && (
-          <button
-            type="button"
-            data-testid="answer-regenerate"
-            onClick={() => writeAgain()}
-            className="answer-action"
-          >
-            <RegenerateSmallIcon className="size-3" />
-            {t("answer.regenerate")}
-          </button>
-        )}
-      </div>
+      {thread ? (
+        // In the thread: Copy · Add to note ▾ · Regenerate, under its text.
+        <ThreadAnswerActions
+          answerId={answerId}
+          canRegenerate={questionId !== null}
+          streaming={streaming}
+          meta={meta}
+          writing={<AnswerWriting answerId={answerId} waitingForApproval={approvals.length > 0} />}
+          onStop={() => {
+            if (answerId) stop(mindId, answerId);
+          }}
+          onRegenerate={() => writeAgain()}
+        />
+      ) : (
+        /* Under its last line, in the room before the next Block: shown on hover or focus. */
+        <div contentEditable={false} data-testid="answer-meta" className="answer-meta">
+          <Dotted items={meta} />
+          {streaming && answerId && (
+            <button
+              type="button"
+              data-testid="answer-stop"
+              onClick={() => stop(mindId, answerId)}
+              className="answer-action"
+            >
+              <StopIcon className="size-3" />
+              {t("answer.stop")}
+            </button>
+          )}
+          {!streaming && questionId && (
+            <button
+              type="button"
+              data-testid="answer-regenerate"
+              onClick={() => writeAgain()}
+              className="answer-action"
+            >
+              <RegenerateSmallIcon className="size-3" />
+              {t("answer.regenerate")}
+            </button>
+          )}
+        </div>
+      )}
     </NodeViewWrapper>
   );
 }

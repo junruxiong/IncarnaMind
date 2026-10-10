@@ -142,6 +142,34 @@ export function createMindContent(
     }
   };
 
+  /** See `peekDoc` below. */
+  const peekDoc = <T>(mindId: string, look: (doc: Y.Doc) => T): T => {
+    const mind = loaded.get(mindId);
+    if (mind) return look(mind.doc);
+    const { doc } = fromStorage(mindId);
+    try {
+      return look(doc);
+    } finally {
+      doc.destroy();
+    }
+  };
+
+  /** See `editDoc` below. */
+  const editDoc = <T>(mindId: string, change: (doc: Y.Doc) => T): T => {
+    const mind = load(mindId);
+    requireWritable(mind);
+    let result: T | undefined;
+    try {
+      mind.doc.transact(() => {
+        result = change(mind.doc);
+        stampContentVersion(mind.doc);
+      }, CORE_ORIGIN);
+    } finally {
+      flush(mindId, mind);
+    }
+    return result as T;
+  };
+
   return {
     /** The Mind's whole document, encoded as one update. */
     state(mindId: string): Uint8Array {
@@ -210,19 +238,23 @@ export function createMindContent(
     },
 
     /**
+     * Reads the Mind's whole document, as `read` reads its Blocks: its chats
+     * and settings too. `look` must not change it, nor keep any part of it.
+     */
+    readDoc<T>(mindId: string, look: (doc: Y.Doc) => T): T {
+      return look(load(mindId).doc);
+    },
+
+    /**
      * Reads the Mind's Blocks as `read` does, but a Mind that isn't loaded is
      * read from what is stored and left unloaded, writing nothing.
      */
     peek<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T {
-      const mind = loaded.get(mindId);
-      if (mind) return look(mind.doc.getXmlFragment(MIND_CONTENT_FIELD));
-      const { doc } = fromStorage(mindId);
-      try {
-        return look(doc.getXmlFragment(MIND_CONTENT_FIELD));
-      } finally {
-        doc.destroy();
-      }
+      return peekDoc(mindId, (doc) => look(doc.getXmlFragment(MIND_CONTENT_FIELD)));
     },
+
+    /** Reads the Mind's whole document as `peek` reads its Blocks: its chats too. */
+    peekDoc,
 
     /**
      * Changes the Mind's Blocks in one Yjs transaction (the core's own edits,
@@ -230,19 +262,15 @@ export function createMindContent(
      * client's. `change` must not keep the Blocks, as for `read`.
      */
     edit<T>(mindId: string, change: (blocks: Y.XmlFragment) => T): T {
-      const mind = load(mindId);
-      requireWritable(mind);
-      let result: T | undefined;
-      try {
-        mind.doc.transact(() => {
-          result = change(mind.doc.getXmlFragment(MIND_CONTENT_FIELD));
-          stampContentVersion(mind.doc);
-        }, CORE_ORIGIN);
-      } finally {
-        flush(mindId, mind);
-      }
-      return result as T;
+      return editDoc(mindId, (doc) => change(doc.getXmlFragment(MIND_CONTENT_FIELD)));
     },
+
+    /**
+     * Changes the Mind's whole document in one Yjs transaction, as `edit`
+     * changes its Blocks: e.g. an Answer in one of its chats. `change` must
+     * not keep any part of it.
+     */
+    editDoc,
 
     /** Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded. */
     close(mindId: string): void {

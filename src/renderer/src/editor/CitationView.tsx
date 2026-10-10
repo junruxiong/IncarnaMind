@@ -11,6 +11,7 @@ import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { Popover } from "./Popover";
+import { useThread } from "./ThreadAnswerActions";
 
 /** The Answer a Citation sits in, if it does (it may have been copied into a Note). */
 function answerAround(
@@ -49,6 +50,8 @@ export function CitationView({
 }: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
+  // In the thread, an Answer is read, not edited: its Citations stay, and Regenerate is its chat's.
+  const thread = useThread();
   const attributes = node.attrs as CitationAttributes;
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
@@ -164,10 +167,19 @@ export function CitationView({
                 const answer = answerAround(editor, getPos());
                 setOpen(false);
                 if (answer) {
-                  void useAnswers.getState().regenerate(mindId, answer.answerId, answer.questionId);
+                  void useAnswers
+                    .getState()
+                    .regenerate(
+                      mindId,
+                      answer.answerId,
+                      answer.questionId,
+                      false,
+                      thread?.chatId ?? null,
+                    );
                 }
               }}
               inAnswer={answerAround(editor, getPos()) !== null}
+              canRemove={editor.isEditable}
             />
           </Popover>,
           document.body,
@@ -186,6 +198,7 @@ function CitationCard({
   attributes,
   badgeText,
   inAnswer,
+  canRemove,
   onOpen,
   onRemove,
   onRegenerate,
@@ -194,6 +207,8 @@ function CitationCard({
   attributes: CitationAttributes;
   badgeText: string;
   inAnswer: boolean;
+  /** Whether the text it is in can be edited: not an Answer in the thread. */
+  canRemove: boolean;
   onOpen(withQuote: boolean): void;
   onRemove(): void;
   onRegenerate(): void;
@@ -254,14 +269,16 @@ function CitationCard({
             >
               {t(`citation.openAnyway.${opens}`)}
             </button>
-            <button
-              type="button"
-              data-testid="citation-remove"
-              className="citation-card-action"
-              onClick={onRemove}
-            >
-              {t("citation.remove")}
-            </button>
+            {canRemove && (
+              <button
+                type="button"
+                data-testid="citation-remove"
+                className="citation-card-action"
+                onClick={onRemove}
+              >
+                {t("citation.remove")}
+              </button>
+            )}
             {inAnswer && (
               <button
                 type="button"
