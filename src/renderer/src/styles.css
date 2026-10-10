@@ -835,6 +835,170 @@
   .composer-row > .composer-input::placeholder {
     color: var(--color-ink-placeholder);
   }
+  /*
+   * Once the text runs past one line it takes the full width, and the controls
+   * wrap to a row of their own under it, at the right (Final-54). Nothing is
+   * reserved beside the text.
+   */
+  .composer-row[data-stacked] > .composer-input {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  /* The Expand button (↗) sits at the top right, clear of the text. */
+  .composer-row:has(> .composer-expand) > .composer-input {
+    padding-right: 28px;
+  }
+  .composer-expand {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  /* Expanded: a tall editor over the lower 60% of the column; Esc returns. */
+  .composer--expanded .composer-row > .composer-input {
+    min-height: calc(60vh - 128px);
+    max-height: none;
+    overflow-y: auto;
+  }
+  /* Long pastes: chips above the text. */
+  .composer-pastes {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    padding-right: 28px;
+  }
+  .paste-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    height: 24px;
+    padding-right: 2px;
+    border-radius: 6px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-secondary);
+    user-select: none;
+  }
+  .paste-chip-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 100%;
+    padding: 0 4px 0 8px;
+    border-radius: 6px 0 0 6px;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      color: var(--color-ink);
+    }
+  }
+  .paste-chip-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--color-ink-meta);
+  }
+  .paste-menu {
+    position: fixed;
+    inset: auto;
+    width: 320px;
+    max-width: calc(100vw - 16px);
+    margin: 0;
+    padding: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+  }
+  .paste-menu-item {
+    display: flex;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    text-align: left;
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+    }
+  }
+  .paste-menu-name {
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .paste-menu-hint {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .paste-menu-rule {
+    margin: 4px 8px;
+    border-top: 1px solid var(--color-rule);
+  }
+  /* View: the whole paste, read-only, above the composer. */
+  .composer-view {
+    position: absolute;
+    z-index: 20;
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: 100%;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+  }
+  .composer-view-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 8px 0 16px;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .composer-view-close {
+    flex-shrink: 0;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    color: var(--color-ink-secondary);
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .composer-view-text {
+    max-height: 40vh;
+    margin: 0;
+    padding: 8px 16px 12px;
+    overflow: auto;
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--color-ink);
+  }
   .composer-controls {
     display: flex;
     flex-shrink: 0;

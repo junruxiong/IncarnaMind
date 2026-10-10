@@ -2,6 +2,7 @@ import { type Editor, isMacOS } from "@tiptap/core";
 import { Selection } from "@tiptap/pm/state";
 import {
   type ChangeEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
   type Ref,
   type RefObject,
@@ -20,7 +21,15 @@ import { useAnswers } from "../answers";
 import { SearchIcon } from "../components/icons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
-import { composerKey, type Draft, NO_SCOPE, useComposer } from "../composer";
+import {
+  composerKey,
+  type Draft,
+  isLongPaste,
+  NO_SCOPE,
+  type Paste,
+  useComposer,
+} from "../composer";
+import { core } from "../core";
 import { useT } from "../i18n";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
@@ -34,8 +43,9 @@ import {
   takeBackQuestion,
   whenAnswerShown,
 } from "./composerAsk";
-import { AskArrowIcon } from "./icons";
+import { AskArrowIcon, CollapseIcon, ExpandIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
+import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
 import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
@@ -43,6 +53,19 @@ import { SkillChoiceList } from "./SkillChoiceList";
 
 /** In the composer, a long Search scope shows this many chips, then "+N more". */
 const CHIPS_SHOWN = 3;
+
+/** From this many lines, the composer offers Expand (DESIGN.md, Composer › Height). */
+const EXPAND_FROM_LINES = 4;
+
+let measuring: CanvasRenderingContext2D | null = null;
+
+/** The text's width on one line, in the font the field draws it in. */
+function widthOf(text: string, field: HTMLElement): number {
+  measuring ??= document.createElement("canvas").getContext("2d");
+  if (!measuring) return 0;
+  measuring.font = getComputedStyle(field).font;
+  return measuring.measureText(text).width;
+}
 
 /** The "@" or "/" being typed: what it picks, what follows it, and where it is in the text. */
 interface Picking {
@@ -101,6 +124,17 @@ export function Composer({
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<ChoiceListHandle>(null);
   const listId = useId();
+  const row = useRef<HTMLDivElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
+  /** The text runs past one line: it takes the full width and the controls go under it. */
+  const [stacked, setStacked] = useState(false);
+  /** How many lines the text takes, for Expand. */
+  const [lines, setLines] = useState(1);
+  const [expanded, setExpanded] = useState(false);
+  /** The pasted text being read (View), and whether one couldn't be saved. */
+  const [viewing, setViewing] = useState<Paste | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const pasteLabel = usePasteLabel();
   const [picking, setPicking] = useState<Picking | null>(null);
   const [option, setOption] = useState(-1);
   /** An "@" or "/" whose picker Esc closed: it stays text. */
@@ -111,6 +145,46 @@ export function Composer({
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(mindId, change);
+
+  // Single-line text sits beside the controls; once it would run past one line, it takes the
+  // full width and they move to a row under it. Decided from the width one line has beside the
+  // controls, never from how the text wrapped, so the two layouts can't flip each other.
+  const measureLayout = () => {
+    const element = field.current;
+    const rowElement = row.current;
+    if (!element || !rowElement) return;
+    const style = getComputedStyle(rowElement);
+    const fieldStyle = getComputedStyle(element);
+    const gap = Number.parseFloat(style.columnGap) || 0;
+    const skillElement = rowElement.querySelector<HTMLElement>(".question-skill");
+    const room =
+      rowElement.clientWidth -
+      Number.parseFloat(style.paddingLeft) -
+      Number.parseFloat(style.paddingRight) -
+      (skillElement ? skillElement.offsetWidth + gap : 0) -
+      (controls.current?.offsetWidth ?? 0) -
+      gap -
+      Number.parseFloat(fieldStyle.paddingLeft);
+    const runsPast = draft.text.includes("\n") || widthOf(draft.text, element) > room - 2;
+    const lineHeight = Number.parseFloat(fieldStyle.lineHeight) || 20;
+    const padding =
+      Number.parseFloat(fieldStyle.paddingTop) + Number.parseFloat(fieldStyle.paddingBottom);
+    setStacked(runsPast);
+    setLines(Math.max(1, Math.round((element.scrollHeight - padding) / lineHeight)));
+  };
+  const measure = useRef(measureLayout);
+  measure.current = measureLayout;
+  // After every drawing: the text, a Skill or the controls may have changed its width.
+  useLayoutEffect(measureLayout);
+  useEffect(() => {
+    const element = row.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => measure.current());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const showExpand = lines >= EXPAND_FROM_LINES || expanded;
 
   useLayoutEffect(() => {
     const at = caret.current;
@@ -235,10 +309,57 @@ export function Composer({
     element?.focus();
   };
 
+  /** A paste over 2,000 characters or 30 lines becomes a chip instead of going into the text. */
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = event.clipboardData.getData("text/plain");
+    if (!isLongPaste(pasted)) return;
+    event.preventDefault();
+    setSaveFailed(false);
+    update({ pastes: [...draft.pastes, { id: crypto.randomUUID(), text: pasted }] });
+  };
+
+  const withoutPaste = (paste: Paste) => draft.pastes.filter((each) => each.id !== paste.id);
+
+  const putBack = (paste: Paste) => {
+    const element = field.current;
+    const at = element ? element.selectionEnd : draft.text.length;
+    const text = draft.text.slice(0, at) + paste.text + draft.text.slice(at);
+    caret.current = at + paste.text.length;
+    update({ text, pastes: withoutPaste(paste) });
+    element?.focus();
+  };
+
+  /** Keeps the paste as a Document and adds it to the Search scope, so Answers can cite it. */
+  const savePaste = async (paste: Paste) => {
+    setSaveFailed(false);
+    const first = paste.text.split("\n").find((line) => line.trim() !== "") ?? "";
+    try {
+      const saved = await core.saveTextAsDocument({
+        name: first.trim().slice(0, 60) || t("composer.paste.name"),
+        text: paste.text,
+      });
+      const now = useComposer.getState().draft(mindId);
+      const ids = scopeIds(now.scope, "document");
+      update({
+        pastes: now.pastes.filter((each) => each.id !== paste.id),
+        scope: ids.includes(saved.id)
+          ? now.scope
+          : { ...now.scope, documentIds: [...ids, saved.id] },
+      });
+    } catch {
+      setSaveFailed(true);
+    }
+    field.current?.focus();
+  };
+
   const ask = async () => {
     // As it is now, not as it was drawn: "Ask without it" has just taken the Skill off.
     const current = useComposer.getState().draft(mindId);
-    const text = current.text.trim();
+    const typed = current.text.trim();
+    // What is pasted, in chips, goes with the words typed.
+    const text = [typed, ...current.pastes.map((paste) => paste.text.trim())]
+      .filter((part) => part !== "")
+      .join("\n\n");
     if (!text || editor.isDestroyed) return;
     useAnswers.getState().dismiss(composerKey(mindId));
     const question: QuestionToAsk = {
@@ -251,7 +372,9 @@ export function Composer({
     const selection = cursorInMind.current ? editor.state.selection : null;
     const placed = placeQuestion(editor, question, questionPlace(editor.state.doc, selection));
     if (!placed) return;
-    update({ text: "", skill: null });
+    update({ text: "", skill: null, pastes: [] });
+    setExpanded(false);
+    setViewing(null);
     setPicking(null);
     const line = editor.view.nodeDOM(placed.pos);
     if (line instanceof HTMLElement) line.scrollIntoView({ block: "nearest" });
@@ -269,7 +392,9 @@ export function Composer({
     // Not asked: the Question leaves the note, and its words come back here.
     if (!editor.isDestroyed) takeBackQuestion(editor, placed, text);
     const now = useComposer.getState().draft(mindId);
-    if (now.text === "") update({ text, skill: now.skill ?? question.skill });
+    if (now.text === "" && now.pastes.length === 0) {
+      update({ text: typed, pastes: current.pastes, skill: now.skill ?? question.skill });
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -293,6 +418,12 @@ export function Composer({
       void ask();
       return;
     }
+    if (event.key === "Escape" && expanded) {
+      // The tall editor goes back to its size; the next Esc goes to the note.
+      event.preventDefault();
+      setExpanded(false);
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       // Back to the note, where the cursor was (or at its end), at once: what is typed next
@@ -308,11 +439,16 @@ export function Composer({
     }
   };
 
-  const canAsk = draft.text.trim() !== "";
+  const canAsk = draft.text.trim() !== "" || draft.pastes.length > 0;
   const activeOption = picking && option >= 0 ? `${listId}-${option}` : undefined;
 
   return (
-    <div ref={root} data-testid="composer" className="composer">
+    <div
+      ref={root}
+      data-testid="composer"
+      data-expanded={expanded || undefined}
+      className={expanded ? "composer composer--expanded" : "composer"}
+    >
       {problem && (
         <ComposerProblem
           problem={problem}
@@ -323,7 +459,65 @@ export function Composer({
           }}
         />
       )}
-      <div className="composer-row">
+      {saveFailed && (
+        <ProblemLine
+          testId="composer-paste-save-failed"
+          className="composer-problem"
+          action={{ label: t("composer.paste.close"), onClick: () => setSaveFailed(false) }}
+        >
+          {t("composer.paste.saveFailed")}
+        </ProblemLine>
+      )}
+      {viewing && (
+        <section
+          data-testid="composer-paste-view"
+          aria-label={pasteLabel(viewing)}
+          className="composer-view"
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            setViewing(null);
+            field.current?.focus();
+          }}
+        >
+          <header className="composer-view-head">
+            <span className="truncate">{pasteLabel(viewing)}</span>
+            <button
+              type="button"
+              // biome-ignore lint/a11y/noAutofocus: opened by the User's click, so reading starts here.
+              autoFocus
+              data-testid="composer-paste-view-close"
+              onClick={() => {
+                setViewing(null);
+                field.current?.focus();
+              }}
+              className="composer-view-close"
+            >
+              {t("composer.paste.close")}
+            </button>
+          </header>
+          <pre className="composer-view-text">{viewing.text}</pre>
+        </section>
+      )}
+      <div ref={row} data-stacked={stacked || expanded || undefined} className="composer-row">
+        {draft.pastes.length > 0 && (
+          <div className="composer-pastes">
+            {draft.pastes.map((paste) => (
+              <PasteChip
+                key={paste.id}
+                paste={paste}
+                onView={() => setViewing(paste)}
+                onPutBack={() => putBack(paste)}
+                onSave={() => void savePaste(paste)}
+                onRemove={() => {
+                  update({ pastes: withoutPaste(paste) });
+                  field.current?.focus();
+                }}
+              />
+            ))}
+          </div>
+        )}
         {draft.skill && (
           <SkillChip
             name={draft.skill}
@@ -348,12 +542,13 @@ export function Composer({
           onChange={onChange}
           onSelect={onSelect}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           onBlur={(event) => {
             if (!root.current?.contains(event.relatedTarget)) setPicking(null);
           }}
           className="composer-input"
         />
-        <div className="composer-controls">
+        <div ref={controls} className="composer-controls">
           <ModelChip doc={doc} onChosen={() => field.current?.focus()} />
           {hasSearchScope(draft.scope) ? (
             <ScopeChips
@@ -391,6 +586,24 @@ export function Composer({
             <AskArrowIcon className="size-3" />
           </button>
         </div>
+        {showExpand && (
+          <button
+            type="button"
+            data-testid="composer-expand"
+            aria-label={expanded ? t("composer.collapse") : t("composer.expand")}
+            title={expanded ? t("composer.collapse") : t("composer.expand")}
+            aria-pressed={expanded}
+            // The text keeps the focus.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setExpanded(!expanded);
+              field.current?.focus();
+            }}
+            className="composer-expand"
+          >
+            {expanded ? <CollapseIcon className="size-3.5" /> : <ExpandIcon className="size-3.5" />}
+          </button>
+        )}
       </div>
       {picking && (
         <div className="composer-picker">
@@ -421,7 +634,7 @@ export function Composer({
   );
 }
 
-const EMPTY: Draft = { text: "", scope: NO_SCOPE, skill: null };
+const EMPTY: Draft = { text: "", scope: NO_SCOPE, skill: null, pastes: [] };
 
 const SHORTCUT = isMacOS() ? "⌘J" : "Ctrl+J";
 
