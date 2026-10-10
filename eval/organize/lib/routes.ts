@@ -20,7 +20,8 @@ import {
   decisionGroupClassifier,
   type GroupClassifier,
 } from "../../../src/core/library/classifier";
-import { chatModelReadsImages } from "../../../src/core/providers/imageInput";
+import { readsImages, resolveCapabilities } from "../../../src/core/providers/capabilities";
+import { catalogFacts, modelsProviderOfKind } from "../../../src/core/providers/catalog";
 import { serviceForUrl } from "../../../src/core/providers/kinds";
 import { createAiSdkChatModel } from "../../../src/core/providers/models";
 import { DEFAULT_OLLAMA_SETTINGS } from "../../../src/core/providers/ollamaModels";
@@ -99,7 +100,12 @@ export function buildRoute(
         // Local chat models keep within an 8K window, like the app's default.
         ollama: DEFAULT_OLLAMA_SETTINGS,
       });
-      const images = chatModelReadsImages(chat.kind, chat.modelId);
+      // As the app knows it before a request: from the catalog.
+      const images = readsImages(
+        resolveCapabilities({
+          catalog: catalogFacts(modelsProviderOfKind(chat.kind), chat.modelId),
+        }),
+      );
       return {
         name,
         label: `Chat model ${chat.kind}/${chat.modelId}${images ? ", with page images of scans" : ""}`,
