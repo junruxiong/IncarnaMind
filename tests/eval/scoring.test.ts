@@ -10,8 +10,10 @@ import {
   type CitationOutcome,
   type CitationRecord,
   type CitationRun,
+  checkQuestionIds,
   evalOllamaModels,
   outcomeOf,
+  questionsToAsk,
   sentencesOf,
   summariseGroup,
 } from "../../eval/lib/citations";
@@ -350,6 +352,38 @@ describe("The evaluation's settings for reranking", () => {
     for (const question of set.questions) {
       expect(question.translatedQuery !== undefined, question.id).toBe(question.crossLingual);
     }
+  });
+});
+
+describe("The evaluation's settings for a short check", () => {
+  test("INCARNAMIND_EVAL_QUESTIONS names Questions by id, each once; all of them by default", () => {
+    expect(readConfig("/repo", {}).questionIds).toBeNull();
+    expect(
+      readConfig("/repo", { INCARNAMIND_EVAL_QUESTIONS: " en-07, zh-02,,en-07 " }).questionIds,
+    ).toEqual(["en-07", "zh-02"]);
+    expect(() => readConfig("/repo", { INCARNAMIND_EVAL_QUESTIONS: ", ," })).toThrow(
+      /Question ids separated by commas/,
+    );
+  });
+
+  test("INCARNAMIND_EVAL_FORMATS=off skips the every-format set, which runs by default", () => {
+    expect(readConfig("/repo", {}).formats).toBe(true);
+    expect(readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "on" }).formats).toBe(true);
+    expect(readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "off" }).formats).toBe(false);
+    expect(() => readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "no" })).toThrow(/"on" or "off"/);
+  });
+
+  test("the Questions named are asked in the set's order; an id in no set asked from is refused", () => {
+    const set = loadEvaluationSet(fileURLToPath(new URL("../..", import.meta.url)));
+    expect(questionsToAsk(set.questions, null)).toHaveLength(set.questions.length);
+    expect(questionsToAsk(set.questions, ["zh-02", "en-07"]).map((each) => each.id)).toEqual([
+      "en-07",
+      "zh-02",
+    ]);
+    expect(() => checkQuestionIds(["en-07", "zh-02"], [set.questions])).not.toThrow();
+    expect(() => checkQuestionIds(["en-07", "en-99", "docx-en-01"], [set.questions])).toThrow(
+      /en-99, docx-en-01/,
+    );
   });
 });
 

@@ -29,6 +29,22 @@ const QUESTION: EvalQuestion = {
 
 const first = (passages: ShownPassage[]) => passages[0]?.id ?? "none";
 
+/** The evaluation's library over a core the test set up. */
+const libraryOf = (core: Library["core"], dataDir: string): Library => ({
+  core,
+  dataDir,
+  documents: new Map(),
+  processingSeconds: 0,
+  passageCount: 0,
+  pageTexts: (documentId) =>
+    queryDatabase(
+      dataDir,
+      "SELECT page, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page",
+      [documentId],
+    ),
+  close: async () => {},
+});
+
 describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
   test("scores each Citation of each Answer, and asks again while a language has too few", async () => {
     const model = citingModel({
@@ -53,23 +69,9 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
     const { core, dataDir } = await setUpWithDocuments(model, [
       { name: "Tides.pdf", contents: TIDES },
     ]);
-    const library: Library = {
-      core,
-      dataDir,
-      documents: new Map(),
-      processingSeconds: 0,
-      passageCount: 0,
-      pageTexts: (documentId) =>
-        queryDatabase(
-          dataDir,
-          "SELECT page, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page",
-          [documentId],
-        ),
-      close: async () => {},
-    };
 
     const run = await runCitations(
-      library,
+      libraryOf(core, dataDir),
       [QUESTION],
       {
         kind: "ollama",
@@ -122,5 +124,40 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
       coverage: 6 / 8,
     });
     expect(run.summary.zh).toMatchObject({ answers: 0, citations: 0, foundShare: null });
+  });
+
+  test("with some Questions named, asks only those, once each, and never gates, even with a cloud model", async () => {
+    const model = citingModel({
+      query: "spring tides",
+      records: (passages) => [
+        { marker: 1, passage: first(passages), pageFrom: 2, pageTo: 2, quote: SPRING },
+      ],
+      answer: "Spring tides come at new moon [^1].",
+    });
+    const { core, dataDir } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+    const other: EvalQuestion = { ...QUESTION, id: "en-02", question: "What are neap tides?" };
+    const logged: string[] = [];
+
+    const run = await runCitations(
+      libraryOf(core, dataDir),
+      [QUESTION, other],
+      {
+        kind: "anthropic",
+        modelId: "a-cloud-model",
+        apiKey: "a-key",
+        baseUrl: null,
+        numCtx: null,
+        citing: null,
+      },
+      { minCitations: 30, maxRounds: 3, answerTimeoutMs: 30_000, questionIds: ["en-02"] },
+      (line) => logged.push(line),
+    );
+
+    // Far fewer than 30 Citations, yet no second round: a short check gathers none for the targets.
+    expect(run).toMatchObject({ gating: false, subset: ["en-02"], rounds: 1, failures: [] });
+    expect(run.answers.map((answer) => answer.questionId)).toEqual(["en-02"]);
+    expect(logged.join("\n")).toMatch(/asking only en-02, once each \(not gating\)/);
   });
 });

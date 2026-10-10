@@ -69,6 +69,14 @@ export interface EvalConfig {
   maxRounds: number;
   /** An Answer that takes longer is stopped and counted as failed. */
   answerTimeoutMs: number;
+  /**
+   * Only these Questions are asked, by id, each once: a short check
+   * (INCARNAMIND_EVAL_QUESTIONS). Retrieval still scores every Question, and
+   * a run that asks only some never gates on Citations. Null: all of them.
+   */
+  questionIds: string[] | null;
+  /** Whether the every-format set runs too (INCARNAMIND_EVAL_FORMATS: on by default). */
+  formats: boolean;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -171,6 +179,34 @@ function rerankCandidates(env: Env): RerankingModelDefinition[] {
   });
 }
 
+/** Question ids separated by commas, e.g. "en-07,zh-02", each once; null when not set. */
+function questionIds(env: Env): string[] | null {
+  const raw = value(env, "QUESTIONS");
+  if (raw === null) return null;
+  const ids = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((each) => each.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) {
+    throw new Error(
+      `${PREFIX}QUESTIONS takes Question ids separated by commas, e.g. "en-07,zh-02".`,
+    );
+  }
+  return ids;
+}
+
+/** "on" (the default) or "off". */
+function formatsOn(env: Env): boolean {
+  const raw = value(env, "FORMATS");
+  if (raw === null || raw === "on") return true;
+  if (raw === "off") return false;
+  throw new Error(`${PREFIX}FORMATS must be "on" or "off", not "${raw}".`);
+}
+
 export function readConfig(root: string, env: Env = process.env): EvalConfig {
   return {
     root,
@@ -183,5 +219,7 @@ export function readConfig(root: string, env: Env = process.env): EvalConfig {
     minCitations: positiveInteger(env, "MIN_CITATIONS", 30),
     maxRounds: positiveInteger(env, "MAX_ROUNDS", 3),
     answerTimeoutMs: positiveInteger(env, "ANSWER_TIMEOUT_S", 300) * 1000,
+    questionIds: questionIds(env),
+    formats: formatsOn(env),
   };
 }

@@ -137,8 +137,16 @@ export interface CitationRun {
   model: string;
   /** Where Questions went, e.g. "Anthropic"; null for a model on this computer. */
   service: string | null;
-  /** A cloud model gates; a model on this computer (Ollama) is only reported. */
+  /**
+   * A cloud model gates; a model on this computer (Ollama) is only reported,
+   * and so is a run that asked only some Questions (`subset`).
+   */
   gating: boolean;
+  /**
+   * The ids of the Questions asked, when the run asked only some
+   * (INCARNAMIND_EVAL_QUESTIONS): a short check, never gating. Null: all.
+   */
+  subset: string[] | null;
   /** What the run set instead of the app's choice ("ollama" only), e.g. "num_ctx 8192"; empty for none. */
   overrides: string[];
   minCitations: number;
@@ -490,17 +498,48 @@ function citationFailures(
 }
 
 /**
+ * The Questions to ask: those `ids` names (INCARNAMIND_EVAL_QUESTIONS), in
+ * the set's order, or all of them when `ids` is null.
+ */
+export function questionsToAsk(
+  questions: readonly EvalQuestion[],
+  ids: readonly string[] | null,
+): EvalQuestion[] {
+  return ids === null ? [...questions] : questions.filter((question) => ids.includes(question.id));
+}
+
+/** Throws when an id names no Question of the sets the run asks from. */
+export function checkQuestionIds(
+  ids: readonly string[],
+  sets: readonly (readonly EvalQuestion[])[],
+): void {
+  const known = new Set(sets.flatMap((questions) => questions.map((question) => question.id)));
+  const unknown = ids.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    throw new Error(
+      `INCARNAMIND_EVAL_QUESTIONS names Questions that aren't in the evaluation sets this run asks from: ${unknown.join(", ")}.`,
+    );
+  }
+}
+
+/**
  * Sets up the chat model on the library's core and asks the evaluation's
  * Questions: every Question once, then more rounds of the gating Questions in
- * a language with too few Citations, up to `maxRounds`.
+ * a language with too few Citations, up to `maxRounds`. With `questionIds`,
+ * only those Questions, each once: a short check, which never gates.
  */
 export async function runCitations(
   library: Library,
   questions: readonly EvalQuestion[],
   chat: ChatSettings,
-  config: Pick<EvalConfig, "minCitations" | "maxRounds" | "answerTimeoutMs">,
+  config: Pick<EvalConfig, "minCitations" | "maxRounds" | "answerTimeoutMs"> &
+    Partial<Pick<EvalConfig, "questionIds">>,
   log: Log,
 ): Promise<CitationRun> {
+  const subset = config.questionIds ?? null;
+  const asked = questionsToAsk(questions, subset);
+  // More rounds only gather Citations for the gating targets, which a subset doesn't meet.
+  const maxRounds = subset ? 1 : config.maxRounds;
   const { core } = library;
   // Setting the variables is the consent to send Questions and Passages to the chat
   // model. Automatic tagging would send Document excerpts as well, so it is declined.
@@ -517,13 +556,14 @@ export async function runCitations(
       ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
     });
     const model = `${chat.kind}/${chat.modelId}`;
-    const gating = provider.service !== null;
+    const gating = provider.service !== null && subset === null;
     const overrides = [
       ...(chat.numCtx !== null ? [`num_ctx ${chat.numCtx}`] : []),
       ...(chat.citing !== null ? [`citing mode "${chat.citing}"`] : []),
     ];
+    const where = provider.service ? `, sent to ${provider.service.name}` : " (local, not gating)";
     log(
-      `Asking with ${model}${gating ? `, sent to ${provider.service?.name}` : " (local, not gating)"}${overrides.length > 0 ? `, ${overrides.join(", ")}` : ""}`,
+      `Asking with ${model}${where}${overrides.length > 0 ? `, ${overrides.join(", ")}` : ""}${subset ? `; asking only ${asked.map((question) => question.id).join(", ")}, once each (not gating)` : ""}`,
     );
 
     const answers: AnswerRecord[] = [];
@@ -532,11 +572,11 @@ export async function runCitations(
         .filter((answer) => groupOf(answer) === group)
         .reduce((sum, answer) => sum + answer.citations.length, 0);
     let rounds = 0;
-    for (let round = 1; round <= config.maxRounds; round++) {
+    for (let round = 1; round <= maxRounds; round++) {
       const asking =
         round === 1
-          ? questions
-          : questions.filter(
+          ? asked
+          : asked.filter(
               (question) =>
                 !question.crossLingual && citationsIn(question.language) < config.minCitations,
             );
@@ -561,6 +601,7 @@ export async function runCitations(
       model,
       service: provider.service?.name ?? null,
       gating,
+      subset: subset ? asked.map((question) => question.id) : null,
       overrides,
       minCitations: config.minCitations,
       rounds,
