@@ -193,7 +193,7 @@ describe("Tabs and groups", () => {
     for (const item of [alpha, beta, gamma]) await change({ type: "open", item });
     let layout = await change({ type: "open", item: alpha });
 
-    // ⌘\ copies the shown tab into a new group on the right.
+    // ⌥⌘\ copies the shown tab into a new group on the right.
     layout = await change({
       type: "split",
       tabId: tabOf(layout, alpha).tab.id,
@@ -322,6 +322,40 @@ describe("Tabs and groups", () => {
 
     expect(shown(layout)).toEqual(["*Draft", "*Report"]);
     expect(focusedIndex(layout)).toBe(0);
+  });
+
+  test("a closed tab opened again since is shown on reopening, not doubled; a closed copy still comes back", async () => {
+    const { mind, change, shown } = await setUp();
+    const draft = await mind("Draft");
+    const notes = await mind("Notes");
+    for (const item of [{ kind: "library" } as const, draft]) await change({ type: "open", item });
+    let layout = await change({ type: "open", item: notes });
+    layout = await change({ type: "close", tabId: tabOf(layout, draft).tab.id });
+    layout = await change({ type: "close", tabId: tabOf(layout, { kind: "library" }).tab.id });
+    layout = await change({ type: "open", item: { kind: "library" }, where: { in: "side" } });
+    const first = layout.groups[0]?.id as string;
+    layout = await change({ type: "open", item: draft, where: { in: "group", groupId: first } });
+    expect(shown(layout)).toEqual(["Notes *Draft", "*Library"]);
+
+    layout = await change({ type: "reopen" });
+    expect(shown(layout)).toEqual(["Notes *Draft", "*Library"]);
+    expect(focusedIndex(layout)).toBe(1);
+    layout = await change({ type: "reopen" });
+    expect(shown(layout)).toEqual(["Notes *Draft", "*Library"]);
+    expect(focusedIndex(layout)).toBe(0);
+
+    // A copy split off to the right, closed with its group, comes back there.
+    layout = await change({ type: "closeGroup", groupId: layout.groups[1]?.id as string });
+    layout = await change({
+      type: "split",
+      tabId: tabOf(layout, draft).tab.id,
+      side: "right",
+      copy: true,
+    });
+    layout = await change({ type: "close", tabId: layout.groups[1]?.tabs[0]?.id as string });
+    expect(shown(layout)).toEqual(["Notes *Draft"]);
+    layout = await change({ type: "reopen" });
+    expect(shown(layout)).toEqual(["Notes *Draft", "*Draft"]);
   });
 
   test("a deleted Mind's tab closes in every window, with an event", async () => {

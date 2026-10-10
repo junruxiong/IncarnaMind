@@ -193,6 +193,7 @@ test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc a
   await field.fill("Not this");
   await field.press("Escape");
   await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
+  await expect(tab).toBeFocused();
   await window.keyboard.press("F2");
   await field.fill("   ");
   await field.press("Enter");

@@ -14,8 +14,8 @@ import { useAppStore } from "../../store";
  * another group's strip to move it there (an insertion line shows where), or
  * onto a group's body: its outer 30% splits off a new group on that side (the
  * half it will take lights up), its middle moves it into that group. The
- * tab's menu has the same moves (Move to the left or right group, Split to the
- * right), and ⌘\ splits from the keyboard. Pointer events, so it works the
+ * tab's menu has the same moves (Move to the left or right group, Open to the
+ * side), and ⌥⌘\ splits from the keyboard. Pointer events, so it works the
  * same with a mouse, a pen or a test's sliding mouse.
  */
 
@@ -121,7 +121,9 @@ export function useTabDrag(merged: boolean) {
   /** Set as a drag ends, so the click it makes doesn't show the tab under the pointer. */
   const ended = useRef(false);
   const mergedNow = useRef(merged);
-  mergedNow.current = merged;
+  useEffect(() => {
+    mergedNow.current = merged;
+  }, [merged]);
 
   useEffect(() => {
     const stop = () => {

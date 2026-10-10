@@ -49,8 +49,8 @@ export async function focusGroup(number: number): Promise<void> {
     store.showTabNotice({ kind: "noGroup", group: number });
     return;
   }
-  await store.changeLayout({ type: "focus", groupId: group.id });
-  focusTab(group.activeTabId);
+  const next = await store.changeLayout({ type: "focus", groupId: group.id });
+  if (next) focusTab(group.activeTabId);
 }
 
 /** Moves a tab to the group on its left or right, or into a new group on the right. */
