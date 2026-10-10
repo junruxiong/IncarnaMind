@@ -26,6 +26,7 @@ import {
   type RunFormat,
   run,
   W_NAMESPACE,
+  WordIds,
   XML_DECLARATION,
 } from "./wordml";
 
@@ -163,7 +164,8 @@ class DocxWriter {
   /** Each list written: a Word numbering instance, numbered from 1. */
   readonly lists: List[] = [];
   private readonly links = new Map<string, string>();
-  private drawings = 0;
+  /** The footnotes' and drawings' ids, each from 1. */
+  private readonly ids = new WordIds();
 
   constructor(
     private readonly options: DocxOptions,
@@ -346,7 +348,7 @@ class DocxWriter {
 
   /** A Citation's footnote, and the reference to it in the text. */
   private footnote(citation: Footnote): string {
-    const id = this.footnotes.length + 1;
+    const id = this.ids.take("footnote");
     const marker = citation.unverified
       ? run(` ${this.options.labels.unverified}`, { bold: true })
       : "";
@@ -382,7 +384,7 @@ class DocxWriter {
       cy = Math.round((cy * maxWidth) / cx);
       cx = maxWidth;
     }
-    const drawing = ++this.drawings;
+    const drawing = this.ids.take("drawing");
     const description = escapeXml(image.alt);
     return (
       `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
