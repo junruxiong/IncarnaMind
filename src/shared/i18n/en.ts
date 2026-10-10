@@ -263,6 +263,8 @@ export const en = {
   "location.section": "§ {heading}",
   "location.section.start": "§ Start",
   "location.section.notes": "§ Notes",
+  "location.section.comment": "{section}, comment by {author}",
+  "location.section.comment.anonymous": "{section}, comment",
   "location.lines.one": "line {range}",
   "location.lines.other": "lines {range}",
 
