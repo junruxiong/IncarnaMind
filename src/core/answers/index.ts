@@ -55,6 +55,7 @@ import type { createEventHub } from "../events";
 import type { ExecAccess } from "../execution";
 import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
+import { givesStructuredOutput } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { GateDecision } from "../runs/engine";
@@ -850,7 +851,10 @@ export function createAnswers(options: AnswersOptions) {
         tools: [...provided, ...fromSkills],
         gate,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
+        structuredOutput: givesStructuredOutput(prepared.capabilities),
+        takesTemperature: prepared.capabilities.facts.temperature,
         window: prepared.window,
+        retryQuotes: prepared.retryQuotes,
         signal: controller.signal,
       })) {
         if (finished) break;
