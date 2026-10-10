@@ -2404,8 +2404,8 @@ export interface DeletedItem {
   deletedAt: string;
   /** A Document's kind; null for the others. */
   documentKind: DocumentKind | null;
-  /** The Folder a Document was in, or null: none, and for the others. */
-  folderId: string | null;
+  /** The in-app Folder (`LibraryGroup`) a Document was filed in, or null: none, and for the others. */
+  groupId: string | null;
   /** A Document's Linked folder, or null: a file added on its own, and for the others. */
   linkedFolderId: string | null;
 }

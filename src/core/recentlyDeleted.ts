@@ -162,14 +162,14 @@ export function createRecentlyDeleted(options: {
       const item = (
         kind: DeletedKind,
         row: { id: string; name: string; deleted_at: string },
-        document?: { kind: DocumentKind; folderId: string | null; linkedFolderId: string | null },
+        document?: { kind: DocumentKind; groupId: string | null; linkedFolderId: string | null },
       ): DeletedItem => ({
         kind,
         id: row.id,
         name: row.name,
         deletedAt: row.deleted_at,
         documentKind: document?.kind ?? null,
-        folderId: document?.folderId ?? null,
+        groupId: document?.groupId ?? null,
         linkedFolderId: document?.linkedFolderId ?? null,
       });
       const items = [
@@ -201,7 +201,7 @@ export function createRecentlyDeleted(options: {
           .map((row) =>
             item("document", row, {
               kind: row.kind,
-              folderId: row.group_id,
+              groupId: row.group_id,
               linkedFolderId: row.linked_folder_id,
             }),
           ),
