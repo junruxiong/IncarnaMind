@@ -596,7 +596,8 @@ describe("The Citation check", { timeout: 30_000 }, () => {
     const lost = `# Report\n\nThe goal is to fnance and facilitate growth. ${"The frm's fnancial eforts beneft its ofce. ".repeat(50)}\n`;
     const kept = `# Log\n\nThe fight was delayed by fog. ${"The first financial effort of the office was flawed. ".repeat(50)}\n`;
     const model = citingModel({
-      query: "goal",
+      // Words of both Documents, so keyword search alone, the default, finds both.
+      query: "goal delayed",
       records: (passages) => {
         const of = (document: string) =>
           passages.find((passage) => passage.document === document)?.id ?? "none";

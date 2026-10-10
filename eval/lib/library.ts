@@ -23,13 +23,18 @@ import {
 } from "../../src/core";
 import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase } from "../../src/core/storage";
+import type { CorpusPassage } from "./corpus";
 import type { EvalDocument } from "./evaluationSet";
 import type { Log } from "./log";
 
 export interface LibraryOptions {
   /** For the temporary folder's name and the log. */
   name: string;
-  /** Runs the built-in model; never started when `embeddingProvider` is given. */
+  /**
+   * Runs the built-in model; never started when `embeddingProvider` is given.
+   * Embeddings are off by default in the app: the library turns them on with
+   * one or the other before any Document is added.
+   */
   embedder: Embedder;
   /**
    * An embedding provider to use instead of the built-in model, chosen
@@ -62,6 +67,12 @@ export interface LibraryOptions {
    * counted in the log, and skipped files are left out of `documents`.
    */
   allowUnprocessed?: boolean;
+  /**
+   * False: add the Documents with embeddings off, as the app does by default,
+   * so they are ready once their keyword index is; the caller can turn
+   * embeddings on afterwards. True by default.
+   */
+  embeddings?: boolean;
 }
 
 export interface Library {
@@ -77,6 +88,8 @@ export interface Library {
   pageTexts(documentId: string): { page: number | null; text: string }[];
   /** The pages (Units) a Passage covers; null when it has none or is unknown. */
   passagePages(passageId: string): [number, number] | null;
+  /** Every live Passage, with the `seq` it is indexed under, Document by Document in reading order. */
+  passages(): CorpusPassage[];
   /** Closes the core, and deletes the data folder unless it is kept. */
   close(): Promise<void>;
 }
@@ -100,7 +113,7 @@ function memoryKeychain(): Keychain {
 const FINISHED: ReadonlySet<DocumentStatus> = new Set(["ready", "failed", "no-text"]);
 
 /** Resolves once the built-in model is ready; rejects if its download fails. */
-function modelReady(core: Core, log: Log): Promise<void> {
+export function modelReady(core: Core, log: Log): Promise<void> {
   return new Promise((resolve, reject) => {
     let lastLogged = 0;
     const settle = (status: EmbeddingModelStatus) => {
@@ -249,7 +262,10 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       });
       const saved = await core.saveEmbeddingProvider(provider);
       log(`Embedding with ${saved.provider.kind}/${saved.provider.modelId}`);
-    } else {
+    } else if (options.embeddings !== false) {
+      // Embeddings are off by default: on, as a User turns them on in Settings, the vector
+      // and hybrid modes can be measured next to keyword search.
+      await core.saveEmbeddingProvider({ kind: "built-in" });
       await modelReady(core, log);
       log(`The embedding model is ready (${((Date.now() - started) / 1000).toFixed(1)} s)`);
     }
@@ -323,6 +339,35 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
         );
         if (!row || row.page_from === null || row.page_to === null) return null;
         return [row.page_from, row.page_to];
+      },
+      passages() {
+        return db
+          .all<{
+            seq: number;
+            passage_id: string;
+            document_id: string;
+            document_name: string;
+            page_from: number | null;
+            page_to: number | null;
+            position: number;
+            text: string;
+          }>(
+            `SELECT p.seq, p.id AS passage_id, p.document_id, d.name AS document_name,
+               p.page_from, p.page_to, p.position, p.text
+             FROM passages p JOIN documents d ON d.id = p.document_id
+             WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL
+             ORDER BY d.created_at, d.rowid, p.position`,
+          )
+          .map((row) => ({
+            seq: row.seq,
+            passageId: row.passage_id,
+            documentId: row.document_id,
+            documentName: row.document_name,
+            pageFrom: row.page_from,
+            pageTo: row.page_to,
+            position: row.position,
+            text: row.text,
+          }));
       },
       async close() {
         db.close();

@@ -1,13 +1,15 @@
 /**
- * The reranked mode: the candidates the search Tool hands a reranker
- * (keyword search's top 10 and vector search's top 10, each Passage once;
- * see `rerankCandidates` in ./retrieval), reranked by a built-in reranking
- * candidate (src/core/reranking/model.ts), as the search Tool reranks them
- * when the User turns reranking on. It uses the core's own
- * reranking code (download and check, what the model reads, its scores)
- * with the model on a worker thread, outside the evaluation's core: one run
- * compares every candidate given in INCARNAMIND_EVAL_RERANK over the same
- * searches, one model at a time.
+ * The reranked modes: keyword search's top 60 (keyword + rerank), what the
+ * search Tool hands a reranker by default, or keyword search's top 10 and
+ * vector search's top 10, each Passage once (see `rerankCandidates` in
+ * ./retrieval), as it does with embeddings on, or the other searches'
+ * candidates (./searches), reranked by a built-in reranking candidate
+ * (src/core/reranking/model.ts), as the search Tool reranks them. It uses
+ * the core's own reranking code (download and check, what the model reads,
+ * its scores) with the model on a worker thread, outside the evaluation's
+ * core: one run compares every candidate given in INCARNAMIND_EVAL_RERANK
+ * over the same searches, one model and one mode at a time, so each mode's
+ * timings are its own.
  */
 import type { CrossEncoder, PassageSearchResult, RerankingModelDefinition } from "../../src/core";
 import {
@@ -33,9 +35,18 @@ export function createWorkerCrossEncoder(): CrossEncoder {
   });
 }
 
-/** What the report says about a candidate. */
+/** How long something took per search, in milliseconds. */
+export interface Latency {
+  queries: number;
+  mean: number;
+  median: number;
+  p95: number;
+  max: number;
+}
+
+/** What the report says about a candidate in one reranked mode. */
 export interface RerankerInfo {
-  /** The mode it adds, e.g. "rerank:mmarco-minilm". */
+  /** The mode it adds, e.g. "rerank:mmarco-minilm" or "keyword-rerank:mmarco-minilm". */
   mode: string;
   name: string;
   licence: string;
@@ -43,7 +54,13 @@ export interface RerankerInfo {
   /** Loading the model, the first time it reranks. */
   loadSeconds: number;
   /** Reranking one search's candidates, in milliseconds, after the first. */
-  latency: { queries: number; mean: number; median: number; p95: number; max: number };
+  latency: Latency;
+  /**
+   * Finding one search's candidates, before they are reranked: the searches
+   * the mode runs, without a chat model's call (see `QueryModelCost` in
+   * ./rewrites). Absent in reports from before it was measured.
+   */
+  candidates?: Latency;
 }
 
 export interface OpenReranker {
@@ -58,16 +75,30 @@ export interface OpenReranker {
 const quantile = (sorted: readonly number[], share: number) =>
   sorted[Math.min(sorted.length - 1, Math.ceil(share * sorted.length) - 1)] ?? 0;
 
+/** The mean, median, 95th percentile and slowest of some timings, in milliseconds. */
+export function latencyOf(timings: readonly number[]): Latency {
+  const sorted = [...timings].sort((a, b) => a - b);
+  return {
+    queries: sorted.length,
+    mean: sorted.reduce((sum, ms) => sum + ms, 0) / Math.max(1, sorted.length),
+    median: quantile(sorted, 0.5),
+    p95: quantile(sorted, 0.95),
+    max: sorted.at(-1) ?? 0,
+  };
+}
+
 /**
  * Downloads (once, into the evaluation's model cache, checked against the
- * pinned hashes) and opens a candidate.
+ * pinned hashes) and opens a candidate, for one reranked mode: hybrid
+ * search's candidates unless another mode is named (see `rerankMode` in
+ * ./retrieval).
  */
 export async function openReranker(
   definition: RerankingModelDefinition,
   cacheDir: string,
   log: Log,
+  mode = `rerank:${definition.id}`,
 ): Promise<OpenReranker> {
-  const mode = `rerank:${definition.id}`;
   let lastLogged = 0;
   const ready = Promise.withResolvers<void>();
   const model = createRerankingModel({
@@ -116,21 +147,13 @@ export async function openReranker(
       return ranked.map(({ score: _score, ...passage }) => passage);
     },
     info() {
-      const sorted = [...latencies].sort((a, b) => a - b);
-      const mean = sorted.reduce((sum, ms) => sum + ms, 0) / Math.max(1, sorted.length);
       return {
         mode,
         name: definition.name,
         licence: definition.licence,
         downloadBytes: downloadSize(definition),
         loadSeconds,
-        latency: {
-          queries: sorted.length,
-          mean,
-          median: quantile(sorted, 0.5),
-          p95: quantile(sorted, 0.95),
-          max: sorted.at(-1) ?? 0,
-        },
+        latency: latencyOf(latencies),
       };
     },
     close() {

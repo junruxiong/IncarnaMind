@@ -27,6 +27,16 @@ const QUESTION: EvalQuestion = {
   expected: { document: "tides", pages: [2, 2], quote: SPRING },
 };
 
+/** The same fact in other words: a group of its own, never asked again for a language's count. */
+const PARAPHRASE: EvalQuestion = {
+  id: "para-en-01",
+  language: "en",
+  crossLingual: false,
+  paraphrase: true,
+  question: "When does the sea rise highest?",
+  expected: { document: "tides", pages: [2, 2], quote: SPRING },
+};
+
 const first = (passages: ShownPassage[]) => passages[0]?.id ?? "none";
 
 /** The evaluation's library over a core the test set up. */
@@ -50,6 +60,7 @@ const libraryOf = (core: Library["core"], dataDir: string): Library => ({
     );
     return row?.page_from && row.page_to ? [row.page_from, row.page_to] : null;
   },
+  passages: () => [],
   close: async () => {},
 });
 
@@ -81,7 +92,7 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
 
     const run = await runCitations(
       libraryOf(core, dataDir),
-      [QUESTION],
+      [QUESTION, PARAPHRASE],
       {
         kind: "ollama",
         modelId: "local-model",
@@ -94,14 +105,19 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
       (line) => logged.push(line),
     );
 
-    // Three Citations in round 1 are fewer than 4, so the Question was asked again.
+    // Three Citations in round 1 are fewer than 4, so the gating Question was asked again;
+    // the paraphrase Question's Citations don't count for English, and it isn't asked again.
     expect(run).toMatchObject({
       model: "ollama/local-model",
       gating: false,
       rounds: 2,
       failures: [],
     });
-    expect(run.answers).toHaveLength(2);
+    expect(run.answers.map((each) => [each.questionId, each.round])).toEqual([
+      ["en-01", 1],
+      ["para-en-01", 1],
+      ["en-01", 2],
+    ]);
     const [answer] = run.answers;
     expect(answer).toMatchObject({
       questionId: "en-01",
@@ -152,6 +168,8 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
       coverage: 6 / 8,
     });
     expect(run.summary.zh).toMatchObject({ answers: 0, citations: 0, foundShare: null });
+    expect(run.summary.paraphrase).toMatchObject({ answers: 1, citations: 3, foundShare: 1 / 3 });
+    expect(run.answers[1]).toMatchObject({ paraphrase: true });
   });
 
   test("with some Questions named, asks only those, once each, and never gates, even with a cloud model", async () => {

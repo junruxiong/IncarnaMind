@@ -1,8 +1,17 @@
 /**
- * The embedding model document search uses on this device (ADR-0005): the
- * built-in model by default, or a provider the User chose instead (OpenAI,
- * Google, an OpenAI-compatible server, or Ollama), through the AI SDK's
- * `embed` and `embedMany`.
+ * The embedding model document search uses on this device (ADR-0005): none
+ * by default, since embeddings are off and search finds Passages by their
+ * words, reranked (ADR-0009, 2026-10-10). The User can turn them on with the
+ * built-in model, or a provider (OpenAI, Google, an OpenAI-compatible server,
+ * or Ollama), through the AI SDK's `embed` and `embedMany`. While they are
+ * off, nothing is downloaded, loaded or sent, and Documents are ready once
+ * their keyword index is.
+ *
+ * An install from before embeddings could be off has no stored on/off: it
+ * keeps them on only if the User had chosen a provider other than the
+ * built-in model, which only an explicit choice stored. The built-in model,
+ * the old default, goes off; the vectors it made stay stored, unused, and
+ * are used again if the User turns it back on.
  *
  * Documents see one `SearchEmbedder` whatever the provider. Its `id` names
  * the model, and is recorded with every vector (documents.embedding_model,
@@ -52,6 +61,7 @@ import type { EmbeddingModel } from "./index";
 const EMBEDDINGS_FLOW_SENDS = ["document-text", "queries"] as const;
 
 /** Device values: only this module changes them. */
+const ENABLED_VALUE = "embeddingsOn";
 const PROVIDER_VALUE = "embeddingProvider";
 const LOCAL_ONLY_VALUE = "localOnly";
 const REBUILD_VALUE = "embeddingRebuild";
@@ -79,6 +89,12 @@ export class EmbeddingUnavailableError extends Error {
 
 /** The embedding model as Documents use it, whatever the provider. */
 export interface SearchEmbedder {
+  /**
+   * Whether embeddings are on. While they are off (the default), nothing is
+   * embedded: Documents are ready once their keyword index is, and search
+   * doesn't embed queries. The rest is the model the User would turn on.
+   */
+  enabled(): boolean;
   /** The model vectors come from: recorded with them. Changes when the User switches. */
   readonly id: string;
   /** How many Passages one `embedPassages` call takes. */
@@ -202,6 +218,12 @@ export function createActiveEmbedding(options: {
 
   const stored = () => parseStored(settings.readDeviceValue(PROVIDER_VALUE));
   const localOnly = () => settings.readDeviceValue(LOCAL_ONLY_VALUE) === true;
+  // No choice stored, on a new install or one from before embeddings could be off: on only
+  // for a provider the User chose (see above), and stored, so it holds from now on.
+  if (typeof settings.readDeviceValue(ENABLED_VALUE) !== "boolean") {
+    settings.writeDeviceValue(ENABLED_VALUE, stored() !== null);
+  }
+  const enabled = () => settings.readDeviceValue(ENABLED_VALUE) === true;
 
   const notify = (listeners: ReadonlySet<() => void>) => {
     for (const listener of listeners) {
@@ -350,7 +372,7 @@ export function createActiveEmbedding(options: {
   let current: ProviderModel = initial ? apiProvider(initial) : builtInModel;
   // The built-in model's download finishing makes it ready, if it is the one in use.
   builtIn.onReady(() => {
-    if (current === builtInModel) notify(readyListeners);
+    if (enabled() && current === builtInModel) notify(readyListeners);
   });
 
   /** Makes `next` the model in use, and tells Documents to embed again with it. */
@@ -360,6 +382,23 @@ export function createActiveEmbedding(options: {
     error = null;
     if (previous !== next) previous.release();
     settings.writeDeviceValue(REBUILD_VALUE, { reason });
+    notify(switchListeners);
+    options.onChange();
+  }
+
+  /**
+   * Turns embeddings off: the model in use stops (its requests, or the
+   * built-in model's process), any rebuild ends, and Documents being
+   * embedded, or waiting for the model, are ready as they are.
+   */
+  function turnOff(): void {
+    settings.writeDeviceValue(ENABLED_VALUE, false);
+    settings.writeDeviceValue(PROVIDER_VALUE, null);
+    settings.writeDeviceValue(REBUILD_VALUE, null);
+    const previous = current;
+    current = builtInModel;
+    error = null;
+    previous.release();
     notify(switchListeners);
     options.onChange();
   }
@@ -384,6 +423,7 @@ export function createActiveEmbedding(options: {
   }
 
   const model: SearchEmbedder = {
+    enabled,
     get id() {
       return current.id;
     },
@@ -417,8 +457,18 @@ export function createActiveEmbedding(options: {
   return {
     model,
 
-    /** The provider in use, as the public interface describes it. */
+    /** The provider in use, as the public interface describes it: "off" while embeddings are. */
     async provider(): Promise<EmbeddingProvider> {
+      if (!enabled()) {
+        return {
+          kind: "off",
+          baseUrl: null,
+          modelId: "",
+          hasApiKey: false,
+          dimensions: null,
+          service: null,
+        };
+      }
       const provider = stored();
       if (!provider) {
         return {
@@ -461,17 +511,25 @@ export function createActiveEmbedding(options: {
     },
 
     /**
-     * Switches to the provider in `input`, after consent for a cloud one. A
-     * different model makes Documents embed again; the same one only takes
-     * the new key, and tries again after an error.
+     * Switches to the provider in `input`, after consent for a cloud one, or
+     * turns embeddings off ("off", which deletes any key). Turning them on,
+     * or a different model, makes Documents without its vectors embed; the
+     * same model only takes the new key, and tries again after an error.
      */
     async save(input: unknown): Promise<void> {
       const parsed = parseEmbeddingInput(input);
+      const wasOn = enabled();
+      if (parsed.kind === "off") {
+        await secrets.delete(KEY_NAME);
+        if (wasOn) turnOff();
+        return;
+      }
       if (parsed.kind === "built-in") {
         const wasApi = stored() !== null;
+        settings.writeDeviceValue(ENABLED_VALUE, true);
         settings.writeDeviceValue(PROVIDER_VALUE, null);
         await secrets.delete(KEY_NAME);
-        if (wasApi) switchTo(builtInModel, "provider-changed");
+        if (wasApi || !wasOn) switchTo(builtInModel, "provider-changed");
         return;
       }
       const { choice } = parsed;
@@ -485,13 +543,15 @@ export function createActiveEmbedding(options: {
       if (service) await consent.ensure("embeddings", service);
 
       const saved = stored();
-      const sameModel = saved !== null && embeddingModelKey(saved) === embeddingModelKey(choice);
+      const sameModel =
+        wasOn && saved !== null && embeddingModelKey(saved) === embeddingModelKey(choice);
       if (apiKey) await secrets.set(KEY_NAME, apiKey);
       else await secrets.delete(KEY_NAME);
       settings.writeDeviceValue(PROVIDER_VALUE, {
         ...choice,
         dimensions: sameModel ? saved.dimensions : null,
       } satisfies StoredProvider);
+      settings.writeDeviceValue(ENABLED_VALUE, true);
       if (sameModel) {
         // A new key: try again whatever failed before.
         if (error !== null) setError(null);
@@ -504,6 +564,9 @@ export function createActiveEmbedding(options: {
     /** Embeds a fixed text with the given settings, after consent for a cloud provider. */
     async test(input: unknown): Promise<EmbeddingConnectionTestResult> {
       const parsed = parseEmbeddingInput(input);
+      if (parsed.kind === "off") {
+        throw new InvalidInputError("Embeddings are off: there is no model to test.");
+      }
       if (parsed.kind === "built-in") {
         if (!(await builtIn.load())) {
           const status = builtIn.status();
@@ -543,8 +606,9 @@ export function createActiveEmbedding(options: {
       }
     },
 
-    /** Tries the provider again: Documents waiting for it carry on. */
+    /** Tries the provider again: Documents waiting for it carry on. Nothing while embeddings are off. */
     retry(): void {
+      if (!enabled()) return;
       if (current === builtInModel) {
         builtIn.retry();
         return;

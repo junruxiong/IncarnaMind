@@ -317,6 +317,8 @@ describe("Library groups", () => {
       },
     });
     const provider = await core.saveChatProvider({ kind: "ollama", modelId: "small" });
+    // Embeddings are off by default: on, the Document waits for the model.
+    await core.saveEmbeddingProvider({ kind: "built-in" });
     await core.createLibraryGroup({ name: "Research", description: "Scientific papers" });
     await core.saveLibrarySettings({
       classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "small" } },
