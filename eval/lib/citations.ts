@@ -23,11 +23,16 @@ import {
   type CitationCheckReason,
   type CitationSupport,
   type Core,
+  createOllamaModels,
   MIND_CONTENT_FIELD,
+  type OllamaModels,
   type ProviderError,
   QUESTION_BLOCK,
+  type RejectedRecord,
 } from "../../src/core";
+import { outputTokensFor } from "../../src/core/providers/ollamaModels";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
+import { SIMPLIFIED } from "../../src/shared/hanVariants";
 import { normaliseText } from "../../src/shared/text";
 import type { ChatSettings, EvalConfig } from "./config";
 import type { EvalLanguage, EvalQuestion } from "./evaluationSet";
@@ -80,6 +85,14 @@ export interface CitationRecord {
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
   outcome: CitationOutcome;
+  /** The pages (Units) of the Passage the Citation names; null when unknown. */
+  passagePages: [number, number] | null;
+  /**
+   * Where the quote is in its Document under the looser normalisation: the
+   * first page (Unit) that holds it, or two consecutive ones; null when it
+   * isn't there, e.g. paraphrased (see `quotePages`).
+   */
+  quoteOn: [number, number] | null;
 }
 
 export interface AnswerRecord {
@@ -95,6 +108,8 @@ export interface AnswerRecord {
   searches: string[];
   droppedMarkers: number;
   droppedRecords: number;
+  /** The records the core couldn't take, as the model gave them, and why. */
+  rejectedRecords: RejectedRecord[];
   /** Each sentence of the Answer (headings and code left out), and whether a Citation is anchored in it. */
   sentences: { text: string; cited: boolean }[];
   citations: CitationRecord[];
@@ -108,6 +123,12 @@ export interface GroupSummary {
   answers: number;
   /** Answers that failed or timed out. */
   failedAnswers: number;
+  /** Answers with at least one Citation. */
+  citedAnswers: number;
+  /** Share of Answers with at least one Citation; null without Answers. */
+  citedAnswerShare: number | null;
+  /** The median time an Answer took, in seconds; null without Answers. */
+  medianSeconds: number | null;
   citations: number;
   outcomes: Record<CitationOutcome, number>;
   /** Share of Citations showing "Quote found"; null without Citations. */
@@ -128,8 +149,18 @@ export interface CitationRun {
   model: string;
   /** Where Questions went, e.g. "Anthropic"; null for a model on this computer. */
   service: string | null;
-  /** A cloud model gates; a model on this computer (Ollama) is only reported. */
+  /**
+   * A cloud model gates; a model on this computer (Ollama) is only reported,
+   * and so is a run that asked only some Questions (`subset`).
+   */
   gating: boolean;
+  /**
+   * The ids of the Questions asked, when the run asked only some
+   * (INCARNAMIND_EVAL_QUESTIONS): a short check, never gating. Null: all.
+   */
+  subset: string[] | null;
+  /** What the run set instead of the app's choice ("ollama" only), e.g. "num_ctx 8192"; empty for none. */
+  overrides: string[];
   minCitations: number;
   rounds: number;
   answers: AnswerRecord[];
@@ -205,17 +236,34 @@ function answerSentences(
   return sentences;
 }
 
+/** An f-ligature's letters: "ffi", "ffl", "ff", "fi" or "fl". */
+const F_LIGATURE = /f(?:f[il]?|[il])/g;
+
 /**
  * The looser normalisation: the shared one, then accents dropped, lower case,
  * and only letters and digits kept, so punctuation, spacing, hyphens and
- * quote marks can't stop a match.
+ * quote marks can't stop a match. An f-ligature's letters are read as one
+ * "f" too: some PDFs' text lost the letters after it, so a page shows
+ * "finance" where its stored text reads "fnance" (JP Morgan's ESG report),
+ * and a quote of the page as it shows is still on it.
  */
 function looseText(text: string): string {
-  return normaliseText(text)
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
+  let loose = [
+    ...normaliseText(text)
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]/gu, ""),
+  ]
+    // As the check reads them: traditional Chinese characters as simplified ones.
+    .map((char) => SIMPLIFIED.get(char) ?? char)
+    .join("");
+  // Until nothing changes: "fifty" reads "ffty", then "fty", as a lost ligature's "ffty" does.
+  for (let before = ""; before !== loose; ) {
+    before = loose;
+    loose = loose.replace(F_LIGATURE, "f");
+  }
+  return loose;
 }
 
 type PageText = { page: number | null; text: string };
@@ -240,6 +288,133 @@ export function outcomeOf(
     looseText(some.map((page) => page.text).join("\n")).includes(quote);
   if (onPages(cited)) return "false-not-found";
   return onPages(pages) ? "wrong-page" : "not-in-document";
+}
+
+/** Each Document's pages under the looser normalisation, by the array `pageTexts` gave. */
+const loosePagesOf = new WeakMap<readonly PageText[], { page: number | null; text: string }[]>();
+
+/**
+ * Where a quote is in its Document's stored pages under the looser
+ * normalisation: the first page (Unit) that holds it, or else the first two
+ * consecutive ones; null when it isn't there, e.g. paraphrased.
+ */
+export function quotePages(quote: string, pages: readonly PageText[]): [number, number] | null {
+  const needle = looseText(quote);
+  if (!needle) return null;
+  let loose = loosePagesOf.get(pages);
+  if (!loose) {
+    loose = pages.map(({ page, text }) => ({ page, text: looseText(text) }));
+    loosePagesOf.set(pages, loose);
+  }
+  for (const { page, text } of loose) {
+    if (page !== null && text.includes(needle)) return [page, page];
+  }
+  for (let index = 0; index + 1 < loose.length; index++) {
+    const first = loose[index] as PageText;
+    const second = loose[index + 1] as PageText;
+    if (first.page === null || second.page !== first.page + 1) continue;
+    if (`${first.text}${second.text}`.includes(needle)) return [first.page, second.page];
+  }
+  return null;
+}
+
+const OUTCOME_WORDS: Record<CitationOutcome, string> = {
+  found: "found",
+  "false-not-found": 'false "not found"',
+  "wrong-page": "wrong page",
+  "not-in-document": "not in the Document",
+  "page-range": "breaks the page-range rule",
+  "cant-check": "can't check",
+};
+
+/** "p. 4" or "pp. 4–5" ("Unit 4", "Units 4–5" for any format); "–" for none. */
+export function pagesLabel(range: readonly [number, number] | null, unit: "p." | "Unit"): string {
+  if (!range) return "–";
+  const [from, to] = range;
+  const plural = from !== to;
+  const span = plural ? `${from}–${to}` : `${from}`;
+  return unit === "p."
+    ? `${plural ? "pp." : "p."} ${span}`
+    : `${plural ? "Units" : "Unit"} ${span}`;
+}
+
+/** A quote on one line, cut short. */
+export const shortQuote = (quote: string, length = 160) => {
+  const line = quote.replace(/\s+/g, " ").trim();
+  return line.length > length ? `${line.slice(0, length - 1)}…` : line;
+};
+
+/**
+ * Why a Citation isn't "found", in a line: what the check said, the pages it
+ * cites and its Passage's, where the quote is, and the quote. `unit` names
+ * what the pages are: "p." for PDFs, "Unit" for any format.
+ */
+export function citationLine(citation: CitationRecord, unit: "p." | "Unit" = "p."): string {
+  const cited =
+    citation.pageFrom === null
+      ? "the whole Document"
+      : pagesLabel([citation.pageFrom, citation.pageTo ?? citation.pageFrom], unit);
+  const reason = citation.checkReason ? ` (${citation.checkReason})` : "";
+  const on = citation.quoteOn
+    ? `the quote is on ${pagesLabel(citation.quoteOn, unit)}`
+    : "the quote isn't in the Document";
+  return `${OUTCOME_WORDS[citation.outcome]}${reason}: ${citation.documentName}, cites ${cited} of a Passage on ${pagesLabel(citation.passagePages, unit)}; ${on}: "${shortQuote(citation.quote)}"`;
+}
+
+/** The records the core couldn't take, as given: '[^1] "JP Morgan…" (no such Passage)'. */
+export function rejectedLine(records: readonly RejectedRecord[]): string {
+  return records
+    .map(
+      (record) =>
+        `${record.marker === null ? "[^?]" : `[^${record.marker}]`} "${shortQuote(record.passage, 60)}" (${record.reason === "marker" ? "no marker number" : "no such Passage"})`,
+    )
+    .join(", ");
+}
+
+/** Why an Answer has no Citation, in a line: how it cited, what was dropped, and how it begins. */
+export function uncitedLine(answer: AnswerRecord): string {
+  const begins = answer.sentences[0]?.text;
+  return [
+    `${answer.status}, ${answer.citationSupport ?? "unknown"}`,
+    `${answer.droppedMarkers} markers without records removed, ${answer.droppedRecords} records dropped`,
+    ...(answer.rejectedRecords.length > 0
+      ? [`rejected: ${rejectedLine(answer.rejectedRecords)}`]
+      : []),
+    ...(answer.error ? [`${answer.error.kind}: ${answer.error.message}`] : []),
+    begins ? `begins "${shortQuote(begins, 120)}"` : "no text",
+  ].join("; ");
+}
+
+/**
+ * "ollama" only: the app's lookup of models in Ollama, with the window and
+ * the citing mode the run asks for (`ChatSettings.numCtx` and `citing`)
+ * instead of the app's choice; the output cap follows the window, as in the
+ * app. Null when the run asks for neither.
+ */
+export function evalOllamaModels(
+  chat: ChatSettings | null,
+  models: OllamaModels = createOllamaModels(),
+): OllamaModels | null {
+  if (!chat || (chat.numCtx === null && chat.citing === null)) return null;
+  const { numCtx, citing } = chat;
+  return {
+    async describe(baseUrl, model) {
+      const profile = await models.describe(baseUrl, model);
+      if (!profile) return null;
+      return {
+        ...profile,
+        ...(citing !== null && { support: citing }),
+        ...(numCtx !== null && {
+          settings: {
+            ...profile.settings,
+            numCtx,
+            outputTokens: outputTokensFor(numCtx, profile.settings.think),
+          },
+        }),
+      };
+    },
+    loaded: (baseUrl, model, numCtx) => models.loaded(baseUrl, model, numCtx),
+  };
 }
 
 /** Writes a Question into the Mind, as the editor would store it, through the public interface. */
@@ -341,6 +516,8 @@ async function askOne(
         documentName: citation.documentName ?? "",
         ...checked,
         outcome: outcomeOf(checked, pages),
+        passagePages: citation.passageId ? library.passagePages(citation.passageId) : null,
+        quoteOn: quotePages(checked.quote, pages),
       };
     }),
   );
@@ -357,6 +534,7 @@ async function askOne(
     searches,
     droppedMarkers: finished?.droppedMarkers ?? 0,
     droppedRecords: finished?.droppedRecords ?? 0,
+    rejectedRecords: finished?.rejectedRecords ?? [],
     sentences: sentences.map((sentence) => ({
       text: sentence.text,
       cited: sentence.citations.length > 0,
@@ -371,6 +549,15 @@ const groupOf = (answer: Pick<AnswerRecord, "crossLingual" | "language">): Citat
 
 const share = (part: number, whole: number) => (whole > 0 ? part / whole : null);
 
+function median(values: readonly number[]): number | null {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length === 0) return null;
+  return sorted.length % 2 === 1
+    ? (sorted[middle] as number)
+    : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
+}
+
 export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
   const citations = answers.flatMap((answer) => answer.citations);
   const outcomes = Object.fromEntries(CITATION_OUTCOMES.map((outcome) => [outcome, 0])) as Record<
@@ -380,6 +567,7 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
   for (const citation of citations) outcomes[citation.outcome]++;
   const sentences = answers.flatMap((answer) => answer.sentences);
   const cited = sentences.filter((sentence) => sentence.cited).length;
+  const citedAnswers = answers.filter((answer) => answer.citations.length > 0).length;
   const citationSupport: GroupSummary["citationSupport"] = {};
   for (const answer of answers) {
     const key = answer.citationSupport ?? "unknown";
@@ -390,6 +578,9 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
     failedAnswers: answers.filter(
       (answer) => answer.status === "failed" || answer.status === "timed-out",
     ).length,
+    citedAnswers,
+    citedAnswerShare: share(citedAnswers, answers.length),
+    medianSeconds: median(answers.map((answer) => answer.seconds)),
     citations: citations.length,
     outcomes,
     foundShare: share(outcomes.found, citations.length),
@@ -434,17 +625,50 @@ function citationFailures(
 }
 
 /**
+ * The Questions to ask: those `ids` names (INCARNAMIND_EVAL_QUESTIONS), in
+ * the set's order, or all of them when `ids` is null.
+ */
+export function questionsToAsk(
+  questions: readonly EvalQuestion[],
+  ids: readonly string[] | null,
+): EvalQuestion[] {
+  return ids === null ? [...questions] : questions.filter((question) => ids.includes(question.id));
+}
+
+/** Throws when an id names no Question of the sets the run asks from. */
+export function checkQuestionIds(
+  ids: readonly string[],
+  sets: readonly (readonly EvalQuestion[])[],
+): void {
+  const known = new Set(sets.flatMap((questions) => questions.map((question) => question.id)));
+  const unknown = ids.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    throw new Error(
+      `INCARNAMIND_EVAL_QUESTIONS names Questions that aren't in the evaluation sets this run asks from: ${unknown.join(", ")}.`,
+    );
+  }
+}
+
+/**
  * Sets up the chat model on the library's core and asks the evaluation's
  * Questions: every Question once, then more rounds of the gating Questions in
- * a language with too few Citations, up to `maxRounds`.
+ * a language with too few Citations, up to `maxRounds`. With `questionIds`,
+ * only those Questions, each once: a short check, which never gates.
  */
 export async function runCitations(
   library: Library,
   questions: readonly EvalQuestion[],
   chat: ChatSettings,
-  config: Pick<EvalConfig, "minCitations" | "maxRounds" | "answerTimeoutMs">,
+  config: Pick<EvalConfig, "minCitations" | "maxRounds" | "answerTimeoutMs"> &
+    Partial<Pick<EvalConfig, "questionIds">>,
   log: Log,
+  /** What the set's pages are, in the log: "p." for PDFs, "Unit" for any format. */
+  unit: "p." | "Unit" = "p.",
 ): Promise<CitationRun> {
+  const subset = config.questionIds ?? null;
+  const asked = questionsToAsk(questions, subset);
+  // More rounds only gather Citations for the gating targets, which a subset doesn't meet.
+  const maxRounds = subset ? 1 : config.maxRounds;
   const { core } = library;
   // Setting the variables is the consent to send Questions and Passages to the chat
   // model. Automatic tagging would send Document excerpts as well, so it is declined.
@@ -461,9 +685,14 @@ export async function runCitations(
       ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
     });
     const model = `${chat.kind}/${chat.modelId}`;
-    const gating = provider.service !== null;
+    const gating = provider.service !== null && subset === null;
+    const overrides = [
+      ...(chat.numCtx !== null ? [`num_ctx ${chat.numCtx}`] : []),
+      ...(chat.citing !== null ? [`citing mode "${chat.citing}"`] : []),
+    ];
+    const where = provider.service ? `, sent to ${provider.service.name}` : " (local, not gating)";
     log(
-      `Asking with ${model}${gating ? `, sent to ${provider.service?.name}` : " (local, not gating)"}`,
+      `Asking with ${model}${where}${overrides.length > 0 ? `, ${overrides.join(", ")}` : ""}${subset ? `; asking only ${asked.map((question) => question.id).join(", ")}, once each (not gating)` : ""}`,
     );
 
     const answers: AnswerRecord[] = [];
@@ -472,11 +701,11 @@ export async function runCitations(
         .filter((answer) => groupOf(answer) === group)
         .reduce((sum, answer) => sum + answer.citations.length, 0);
     let rounds = 0;
-    for (let round = 1; round <= config.maxRounds; round++) {
+    for (let round = 1; round <= maxRounds; round++) {
       const asking =
         round === 1
-          ? questions
-          : questions.filter(
+          ? asked
+          : asked.filter(
               (question) =>
                 !question.crossLingual && citationsIn(question.language) < config.minCitations,
             );
@@ -487,8 +716,16 @@ export async function runCitations(
         answers.push(answer);
         const found = answer.citations.filter((citation) => citation.outcome === "found").length;
         log(
-          `${question.id} (round ${round}): ${answer.status}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s`,
+          `${question.id} (round ${round}): ${answer.status}, ${answer.citationSupport ?? "unknown"}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s`,
         );
+        // Why, as it happens, so a run stopped before its report still says.
+        if (answer.citations.length === 0) log(`  no Citation: ${uncitedLine(answer)}`);
+        else if (answer.rejectedRecords.length > 0) {
+          log(`  records rejected: ${rejectedLine(answer.rejectedRecords)}`);
+        }
+        for (const citation of answer.citations) {
+          if (citation.outcome !== "found") log(`  ${citationLine(citation, unit)}`);
+        }
       }
     }
 
@@ -501,6 +738,8 @@ export async function runCitations(
       model,
       service: provider.service?.name ?? null,
       gating,
+      subset: subset ? asked.map((question) => question.id) : null,
+      overrides,
       minCitations: config.minCitations,
       rounds,
       answers,

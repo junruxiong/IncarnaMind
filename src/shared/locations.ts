@@ -11,7 +11,7 @@
  */
 import type { CitationAttributes, CitationLocation } from "../core/api";
 import { type MessageKey, type MessageParams, translate } from "./i18n";
-import { findQuote, type TextRange } from "./quoteMatch";
+import { findQuote, type MatchOptions, type TextRange } from "./quoteMatch";
 import { anchorsOf, lineAt, parseCellRef, type UnitText } from "./units";
 
 /** "12" or "12–14". */
@@ -151,13 +151,21 @@ export function unitLocation(unit: UnitText): CitationLocation | null {
 
 /**
  * Where a quote is in the text of Units (see `joinUnits`), matched as the
- * Citation check matches it, number formatting normalised in sheets' rows;
+ * Citation check matches it, number formatting normalised in sheets' rows
+ * (and lost f-ligatures forgiven with `lostLigatures`, of their Document);
  * null if it isn't there.
  */
-export function quoteInUnits(units: readonly UnitText[], quote: string): TextRange[] | null {
+export function quoteInUnits(
+  units: readonly UnitText[],
+  quote: string,
+  options: Pick<MatchOptions, "lostLigatures"> = {},
+): TextRange[] | null {
   const { text } = joinUnits(units);
   if (!quote || text.trim() === "") return null;
-  return findQuote(text, quote, { numbers: units.some((unit) => unit.kind === "rows") });
+  return findQuote(text, quote, {
+    ...options,
+    numbers: units.some((unit) => unit.kind === "rows"),
+  });
 }
 
 /**

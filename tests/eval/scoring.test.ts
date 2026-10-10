@@ -3,6 +3,9 @@
  * returns. The evaluation itself needs the real model and isn't part of
  * `npm test`; its scoring is, since a mistake there would skew every report.
  */
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
@@ -10,11 +13,17 @@ import {
   type CitationOutcome,
   type CitationRecord,
   type CitationRun,
+  checkQuestionIds,
+  citationLine,
+  evalOllamaModels,
   outcomeOf,
+  questionsToAsk,
+  quotePages,
   sentencesOf,
   summariseGroup,
 } from "../../eval/lib/citations";
 import type { PassageSearchResult } from "../../src/core";
+import { checkCitation } from "../../src/core/answers/citations";
 
 const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
   questionId: "en-01",
@@ -28,6 +37,7 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
   searches: [],
   droppedMarkers: 0,
   droppedRecords: 0,
+  rejectedRecords: [],
   sentences: [],
   citations: [],
   seconds: 1,
@@ -36,7 +46,12 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
 
 import { readConfig } from "../../eval/lib/config";
 import { loadEvaluationSet } from "../../eval/lib/evaluationSet";
-import { type EvalReport, reviewerSheet, terminalSummary } from "../../eval/lib/report";
+import {
+  type EvalReport,
+  reviewerSheet,
+  terminalSummary,
+  writeReports,
+} from "../../eval/lib/report";
 import {
   candidateCounts,
   checkPassage,
@@ -50,7 +65,13 @@ import {
   scoreRanking,
   summarise,
 } from "../../eval/lib/retrieval";
-import { BUILT_IN_RERANKING_MODEL, type Core, RERANKING_MODEL_CANDIDATES } from "../../src/core";
+import {
+  BUILT_IN_RERANKING_MODEL,
+  type Core,
+  type OllamaModelProfile,
+  type OllamaModels,
+  RERANKING_MODEL_CANDIDATES,
+} from "../../src/core";
 
 const MARK = "\uE000";
 
@@ -97,6 +118,74 @@ describe("What became of a Citation", () => {
   test("a quote on another page is a wrong page; one nowhere in the Document isn't in it", () => {
     expect(outcomeOf(citation("Tides rise and fall"), pages)).toBe("wrong-page");
     expect(outcomeOf(citation("Revenue rose by 10%"), pages)).toBe("not-in-document");
+  });
+
+  test("where a quote is: the first page that holds it, or two consecutive ones, or nowhere", () => {
+    const twoPages = [
+      ...pages,
+      { page: 4, text: "Costs fell, and then" },
+      { page: 5, text: "rose again." },
+    ];
+    expect(quotePages("Revenue grew by ten percent", twoPages)).toEqual([2, 2]);
+    expect(quotePages("and then rose again", twoPages)).toEqual([4, 5]);
+    expect(quotePages("Revenue rose by 10%", twoPages)).toBeNull();
+  });
+
+  test("a Citation not found reads as a line: the check, the pages cited and its Passage's, where the quote is", () => {
+    const line = citationLine({
+      sentence: "Revenue grew.",
+      quote: "Revenue grew by ten percent",
+      documentName: "Report",
+      pageFrom: 1,
+      pageTo: 1,
+      check: "not-found",
+      checkReason: "quote-not-on-pages",
+      outcome: "wrong-page",
+      passagePages: [1, 2],
+      quoteOn: [2, 2],
+    });
+    expect(line).toBe(
+      'wrong page (quote-not-on-pages): Report, cites p. 1 of a Passage on pp. 1–2; the quote is on p. 2: "Revenue grew by ten percent"',
+    );
+  });
+
+  test("a quote of a page whose stored text lost its f-ligatures is found, told so; not told, it is the check's miss", () => {
+    // JP Morgan 2022 Environmental Social Governance Report, p. 8, as stored: pdf.js reads its
+    // "fi" ligature as "f", so the page shows "finance" where its text reads "fnance".
+    const stored = [
+      {
+        page: 8,
+        text: "set our Sustainable Development Target (the “Target”) with the goal to fnance and\nfacilitate more than $2.5 trillion over 10 years—from 2021 through the end of 2030—",
+      },
+    ];
+    const asShown = "with the goal to finance and facilitate more than $2.5 trillion over 10 years";
+    const range = { pageFrom: 8, pageTo: 8 };
+    const check = (quote: string, lostLigatures = false) =>
+      checkCitation({
+        quote,
+        range,
+        passage: { pageFrom: 7, pageTo: 8 },
+        documentDeleted: false,
+        pages: stored,
+        lostLigatures,
+      });
+
+    // Told the Document's text lost its ligatures, as the core tells it from the whole text, the
+    // check finds the quote as the page shows it (ADR-0009's amendment).
+    expect(check(asShown, true)).toEqual({ check: "found", checkReason: null });
+    // Not told, it finds it only as the stored text reads it; the evaluation calls that its miss.
+    expect(check(asShown.replace("finance", "fnance")).check).toBe("found");
+    const checked = check(asShown);
+    expect(checked).toEqual({ check: "not-found", checkReason: "quote-not-on-pages" });
+    expect(outcomeOf({ ...checked, ...range, quote: asShown }, stored)).toBe("false-not-found");
+    // "efforts" for "eforts", "office" for "ofce", "fifty" for a lost ligature's "ffty".
+    const pages = [{ page: 1, text: "our eforts in the ofce, ffty in all" }];
+    expect(
+      outcomeOf(
+        { ...checked, pageFrom: 1, pageTo: 1, quote: "our efforts in the office, fifty in all" },
+        pages,
+      ),
+    ).toBe("false-not-found");
   });
 
   test("the check's own results are kept", () => {
@@ -346,6 +435,92 @@ describe("The evaluation's settings for reranking", () => {
   });
 });
 
+describe("The evaluation's settings for a short check", () => {
+  test("INCARNAMIND_EVAL_QUESTIONS names Questions by id, each once; all of them by default", () => {
+    expect(readConfig("/repo", {}).questionIds).toBeNull();
+    expect(
+      readConfig("/repo", { INCARNAMIND_EVAL_QUESTIONS: " en-07, zh-02,,en-07 " }).questionIds,
+    ).toEqual(["en-07", "zh-02"]);
+    expect(() => readConfig("/repo", { INCARNAMIND_EVAL_QUESTIONS: ", ," })).toThrow(
+      /Question ids separated by commas/,
+    );
+  });
+
+  test("INCARNAMIND_EVAL_FORMATS=off skips the every-format set, which runs by default", () => {
+    expect(readConfig("/repo", {}).formats).toBe(true);
+    expect(readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "on" }).formats).toBe(true);
+    expect(readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "off" }).formats).toBe(false);
+    expect(() => readConfig("/repo", { INCARNAMIND_EVAL_FORMATS: "no" })).toThrow(/"on" or "off"/);
+  });
+
+  test("the Questions named are asked in the set's order; an id in no set asked from is refused", () => {
+    const set = loadEvaluationSet(fileURLToPath(new URL("../..", import.meta.url)));
+    expect(questionsToAsk(set.questions, null)).toHaveLength(set.questions.length);
+    expect(questionsToAsk(set.questions, ["zh-02", "en-07"]).map((each) => each.id)).toEqual([
+      "en-07",
+      "zh-02",
+    ]);
+    expect(() => checkQuestionIds(["en-07", "zh-02"], [set.questions])).not.toThrow();
+    expect(() => checkQuestionIds(["en-07", "en-99", "docx-en-01"], [set.questions])).toThrow(
+      /en-99, docx-en-01/,
+    );
+  });
+});
+
+describe("The evaluation's settings for a model in Ollama", () => {
+  test("an Ollama run may set num_ctx and the citing mode; no other kind may", () => {
+    const ollama = {
+      INCARNAMIND_EVAL_CHAT_KIND: "ollama",
+      INCARNAMIND_EVAL_CHAT_MODEL: "qwen3.5:4b",
+    };
+    expect(readConfig("/repo", ollama).chat).toMatchObject({ numCtx: null, citing: null });
+    expect(
+      readConfig("/repo", {
+        ...ollama,
+        INCARNAMIND_EVAL_CHAT_NUM_CTX: "8192",
+        INCARNAMIND_EVAL_CHAT_CITING: "structured-output",
+      }).chat,
+    ).toMatchObject({ numCtx: 8192, citing: "structured-output" });
+    expect(() => readConfig("/repo", { ...ollama, INCARNAMIND_EVAL_CHAT_CITING: "json" })).toThrow(
+      /json/,
+    );
+    expect(() =>
+      readConfig("/repo", {
+        INCARNAMIND_EVAL_CHAT_KIND: "anthropic",
+        INCARNAMIND_EVAL_CHAT_MODEL: "a-model",
+        INCARNAMIND_EVAL_CHAT_KEY: "a-key",
+        INCARNAMIND_EVAL_CHAT_NUM_CTX: "8192",
+      }),
+    ).toThrow(/only apply to "ollama"/);
+  });
+
+  test("an Ollama run's window and citing mode replace the app's choice", async () => {
+    const profile: OllamaModelProfile = {
+      digest: "d1",
+      capabilities: ["completion", "tools"],
+      contextLength: 262_144,
+      parameters: 9_653_104_368,
+      support: "tools",
+      chat: true,
+      settings: { numCtx: 16_384, outputTokens: 4_096, keepAlive: "30m", think: false },
+    };
+    const app: OllamaModels = { describe: async () => profile, loaded: async () => true };
+    const chat = {
+      kind: "ollama" as const,
+      modelId: "qwen3.5:4b",
+      apiKey: null,
+      baseUrl: null,
+    };
+    expect(evalOllamaModels({ ...chat, numCtx: null, citing: null }, app)).toBeNull();
+    const models = evalOllamaModels({ ...chat, numCtx: 8_192, citing: "structured-output" }, app);
+    expect(await models?.describe("http://127.0.0.1:11434", "qwen3.5:4b")).toEqual({
+      ...profile,
+      support: "structured-output",
+      settings: { ...profile.settings, numCtx: 8_192, outputTokens: 2_048 },
+    });
+  });
+});
+
 const cited = (outcome: CitationOutcome, sentence = "A claim."): CitationRecord => ({
   sentence,
   quote: "a quote",
@@ -355,6 +530,8 @@ const cited = (outcome: CitationOutcome, sentence = "A claim."): CitationRecord 
   check: outcome === "found" ? "found" : "not-found",
   checkReason: outcome === "found" ? null : "quote-not-on-pages",
   outcome,
+  passagePages: [1, 1],
+  quoteOn: outcome === "not-in-document" ? null : [1, 1],
 });
 
 describe("A language's Citation figures", () => {
@@ -374,22 +551,32 @@ describe("A language's Citation figures", () => {
         citations: [cited("found")],
         sentences: [{ text: "A third.", cited: true }],
         droppedRecords: 2,
+        seconds: 4,
       }),
+      record({ sentences: [{ text: "Uncited.", cited: false }], seconds: 2 }),
     ]);
     expect(summary).toMatchObject({
-      answers: 2,
+      answers: 3,
       failedAnswers: 1,
+      citedAnswers: 2,
+      citedAnswerShare: 2 / 3,
+      medianSeconds: 2,
       citations: 4,
       foundShare: 0.75,
       falseNotFoundShare: 0.25,
-      sentences: 3,
+      sentences: 4,
       citedSentences: 2,
-      coverage: 2 / 3,
+      coverage: 2 / 4,
       droppedMarkers: 1,
       droppedRecords: 2,
-      citationSupport: { tools: 1, unknown: 1 },
+      citationSupport: { tools: 2, unknown: 1 },
     });
-    expect(summariseGroup([])).toMatchObject({ foundShare: null, coverage: null });
+    expect(summariseGroup([])).toMatchObject({
+      foundShare: null,
+      coverage: null,
+      citedAnswerShare: null,
+      medianSeconds: null,
+    });
   });
 });
 
@@ -417,5 +604,105 @@ describe("The reviewer sheet", () => {
       'zh-01,zh,1,可持续发展目标一共包含多少项具体目标？,"It has 169 ""targets"", in all.",共有 169 项,维基百科-可持续发展目标,1–2,,',
       "",
     ]);
+  });
+});
+
+describe("Why Citations aren't found, in report.md", () => {
+  test("lists each Citation not found and each Answer without one; a short run says it doesn't gate", async () => {
+    const answers = [
+      record({
+        citations: [
+          cited("found"),
+          {
+            ...cited("wrong-page"),
+            quote: "a quote | with a pipe",
+            pageFrom: 7,
+            pageTo: 7,
+            passagePages: [7, 8],
+            quoteOn: [8, 8],
+          },
+        ],
+      }),
+      record({
+        questionId: "zh-02",
+        language: "zh",
+        citationSupport: "structured-output",
+        droppedMarkers: 2,
+        searches: ["交通事故"],
+        sentences: [{ text: "文档没有提到。", cited: false }],
+      }),
+    ];
+    const citations: CitationRun = {
+      model: "ollama/qwen3.5:4b",
+      service: null,
+      gating: false,
+      subset: ["en-01", "zh-02"],
+      overrides: ["num_ctx 8192"],
+      minCitations: 30,
+      rounds: 1,
+      answers,
+      summary: {
+        en: summariseGroup([answers[0] as AnswerRecord]),
+        zh: summariseGroup([answers[1] as AnswerRecord]),
+        crossLingual: summariseGroup([]),
+      },
+      failures: [],
+    };
+    const report = {
+      result: "pass",
+      failures: [],
+      run: {
+        startedAt: "2026-10-10T08:00:00.000Z",
+        seconds: 1,
+        commit: "",
+        node: "",
+        platform: "",
+        cpu: "",
+      },
+      evaluationSet: {
+        source: "",
+        hitRule: "",
+        questions: { gating: { en: 1, zh: 1 }, crossLingual: 0 },
+      },
+      documents: [],
+      retrieval: {
+        topK: 5,
+        gatingMode: GATING_MODE,
+        runs: [
+          {
+            embedding: "multilingual-e5-small (built-in)",
+            gating: true,
+            passageCount: 1,
+            processingSeconds: 1,
+            questions: [],
+            summary: summarise([]),
+          },
+        ],
+      },
+      citations,
+      formats: { skipped: "INCARNAMIND_EVAL_FORMATS is off." },
+    } satisfies EvalReport;
+    const results = await mkdtemp(join(tmpdir(), "why-report-"));
+    try {
+      const dir = await writeReports(report, results, "/");
+      const markdown = (await readFile(join(dir, "report.md"), "utf8")).split("\n");
+      expect(markdown.join("\n")).toContain(
+        "Only 2 of the Questions were asked (INCARNAMIND_EVAL_QUESTIONS: en-01, zh-02), once each: a short check, reported, never gating.",
+      );
+      expect(markdown).toContain(
+        '| en-01 | 1 | "Not found": quote on other pages | quote-not-on-pages | Tides | p. 7 | pp. 7–8 | p. 8 | a quote \\| with a pipe |',
+      );
+      expect(markdown).toContain(
+        "| zh-02 | 1 | done | structured-output | 2 | 0 |  | 交通事故 | 文档没有提到。 |",
+      );
+      expect(markdown).toContain("Skipped: INCARNAMIND_EVAL_FORMATS is off.");
+      const summary = terminalSummary(report, "/repo/eval/results/x", "/repo");
+      expect(summary).toContain(
+        "Citation quality, ollama/qwen3.5:4b (2 Questions only, not gating)",
+      );
+      expect(summary).toContain("Every format: skipped. INCARNAMIND_EVAL_FORMATS is off.");
+    } finally {
+      await rm(results, { recursive: true, force: true });
+    }
   });
 });

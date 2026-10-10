@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { findQuote, findQuoteInPieces } from "../../src/shared/quoteMatch";
+import { findQuote, findQuoteInPieces, lostLigatures } from "../../src/shared/quoteMatch";
 
 /** The original text a match covers: one string, or one for each part of a quote with an ellipsis. */
 const covered = (text: string, quote: string) => {
@@ -218,5 +218,43 @@ describe("finding a quote across pieces of text", () => {
       { piece: 0, start: 31, end: 49 },
       { piece: 1, start: 0, end: 14 },
     ]);
+  });
+});
+
+describe("a Document whose text lost its f-ligatures", () => {
+  /** As JP Morgan's ESG report reads: every "fi", "ff" and "ffi" kept only its "f". */
+  const LOST = "The frm's fnancial eforts beneft its ofce and fve nonproft partners. ".repeat(40);
+  /** English that keeps them: about a fifth of its "f"s come before "f", "i" or "l". */
+  const KEPT =
+    "The first financial effort of the office was flawed, so staff found a different flow for the fund. ".repeat(
+      40,
+    );
+
+  test("shows it in its text: many f's before a letter, hardly any before f, i or l", () => {
+    expect(lostLigatures(LOST)).toBe(true);
+    expect(lostLigatures(KEPT)).toBe(false);
+    // Too few f's to tell, whatever their share.
+    expect(lostLigatures("The frm's fnancial eforts.")).toBe(false);
+  });
+
+  test("its text matches a quote's ligature letters with the lone f it kept, only when told", () => {
+    const text = "the goal to fnance and facilitate more than $2.5 trillion over 10 years";
+    const quote = "to finance and facilitate";
+    expect(findQuote(text, quote)).toBeNull();
+    expect(findQuote(text, quote, { lostLigatures: true })).toEqual([
+      {
+        start: text.indexOf("to fnance"),
+        end: text.indexOf("to fnance") + "to fnance and facilitate".length,
+      },
+    ]);
+    // "office" with its ffi kept as one f, and the same in a sheet's row of numbers.
+    expect(
+      findQuote("Reduce ofce paper use by 90%", "office paper", { lostLigatures: true }),
+    ).not.toBeNull();
+    expect(
+      findQuote("Ofce\t1,250", "Office 1250", { lostLigatures: true, numbers: true }),
+    ).not.toBeNull();
+    // A quote as the text reads it is found as it is, either way.
+    expect(findQuote(text, "to fnance and", { lostLigatures: true })).not.toBeNull();
   });
 });

@@ -61,9 +61,19 @@ npm run eval
 ```
 
 - **Gating:** a cloud model (`anthropic`, `openai`, `google`, or `openai-compatible` with a server elsewhere) is the gating model. Its name is recorded in the report. Use one named model for runs you compare, such as the current Claude Sonnet.
-- **Local models:** an Ollama model, or an `openai-compatible` server on this computer, is reported but never gates. For example: `INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=llama3.2 npm run eval`.
+- **Local models:** an Ollama model, or an `openai-compatible` server on this computer, is reported but never gates. For example: `INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=llama3.2 npm run eval`. The `ollama` kind talks to Ollama's own `/api/chat`, as the app does, and cites as the app's rule says: a model under 7 billion parameters with structured output, a larger one that can call Tools in the Tool loop (ADR-0007, #67). `INCARNAMIND_EVAL_CHAT_NUM_CTX` fixes its window and `INCARNAMIND_EVAL_CHAT_CITING` its citing mode (see the table below), so the modes can be compared, e.g. `INCARNAMIND_EVAL_CHAT_NUM_CTX=8192 INCARNAMIND_EVAL_CHAT_CITING=tools INCARNAMIND_EVAL_MAX_ROUNDS=1`.
 - **Consent:** setting the variables is the consent to send Questions and Passages to the chat model. The run declines automatic tagging's consent request, so no Document excerpts are sent for tagging. A local model has no consent step, so it also tags the Documents while the run asks its Questions, which slows the run.
 - **Cost:** each Question is asked in a Mind of its own. Round 1 asks all 50. Each later round, up to 3 in all, asks again the gating Questions of any language that still has fewer than 30 Citations. That is between 50 and 130 Answers, each with up to 5 searches. The every-format set's 137 Questions are then asked once each: 137 Answers more.
+- **Short checks:** `INCARNAMIND_EVAL_QUESTIONS` names the Questions to ask, by id, and `INCARNAMIND_EVAL_FORMATS=off` skips the every-format set, so a local model can be tried on a few Questions in minutes. Retrieval still scores every Question. The Questions named are asked once each, with no further rounds, and the run never gates on Citations, whatever the model: the report and the summary say which Questions were asked. For example, ten gating Questions with a small model in Ollama:
+
+  ```sh
+  INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=qwen3.5:4b \
+  INCARNAMIND_EVAL_CHAT_NUM_CTX=8192 INCARNAMIND_EVAL_FORMATS=off \
+  INCARNAMIND_EVAL_QUESTIONS=en-02,en-07,en-08,en-17,en-19,zh-02,zh-04,zh-08,zh-14,zh-17 \
+  npm run eval
+  ```
+
+  These ten are the gating Questions whose Citations the long PDFs made hardest to get found (`tests/eval/smallModelCitations.test.ts`), each now handled by the engine or the check: an answer on the second page of a two-page Passage (en-02, en-08, zh-02), or across a page break (en-17), which structured output now places; JP Morgan's report, whose stored text lost its f-ligatures (en-07, en-19); pages in traditional characters (zh-02, zh-04, zh-14, zh-17); and a Passage over four pages (zh-08, zh-14). In this library of English and Chinese Documents, each Answer also makes one short call to translate its query and a second search. Such a run should take 10 to 15 minutes on an Apple M2 Max: about 5 to process and search the Documents, as always, then the ten Answers, while the model also tags the 12 Documents.
 
 ### Cloud embeddings
 
@@ -89,6 +99,8 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_CHAT_MODEL` | none | The model id. |
 | `INCARNAMIND_EVAL_CHAT_KEY` | none | Required for `anthropic`, `openai` and `google`. |
 | `INCARNAMIND_EVAL_CHAT_BASE_URL` | none | Required for `openai-compatible`; Ollama's address for `ollama`. |
+| `INCARNAMIND_EVAL_CHAT_NUM_CTX` | the app's choice | `ollama` only: the context window (`num_ctx`) every request carries, instead of the one the app chooses from this computer's memory, so local runs are comparable. The output cap follows it, as in the app. |
+| `INCARNAMIND_EVAL_CHAT_CITING` | the app's rule | `ollama` only: `tools`, `structured-output` or `none`, how the model cites instead of the app's rule (`citingMode`), to compare the citing modes. |
 | `INCARNAMIND_EVAL_EMBED_KIND` | none | `openai` or `google`. Turns on the cloud embedding run. |
 | `INCARNAMIND_EVAL_EMBED_MODEL` | none | For example `text-embedding-3-small` or `gemini-embedding-001`. |
 | `INCARNAMIND_EVAL_EMBED_KEY` | none | Required with `INCARNAMIND_EVAL_EMBED_KIND`. |
@@ -98,6 +110,8 @@ Keys are read from these variables only, never from `OPENAI_API_KEY` and the lik
 | `INCARNAMIND_EVAL_MIN_CITATIONS` | `30` | Citations each language needs for the Citation targets to count. |
 | `INCARNAMIND_EVAL_MAX_ROUNDS` | `3` | Rounds of Questions at most. |
 | `INCARNAMIND_EVAL_ANSWER_TIMEOUT_S` | `300` | An Answer that takes longer is stopped and counted as failed. |
+| `INCARNAMIND_EVAL_QUESTIONS` | all | Question ids separated by commas, e.g. `en-07,zh-02`, from either set: only these are asked, once each. Retrieval still scores every Question. A run that asks only some never gates on Citations, and its report says so. |
+| `INCARNAMIND_EVAL_FORMATS` | `on` | `off` skips the every-format set: its Documents, searches and Questions. |
 | `INCARNAMIND_EVAL_KEEP_DATA` | off | `1` keeps the temporary data folders, for looking into a run. |
 
 ### In GitHub Actions
@@ -142,14 +156,23 @@ Each Answer is read back from its Mind, as the editor shows it, and split into s
 
 | Figure | Definition | Target (per language) |
 |---|---|---|
+| Answers with a Citation | The share of Answers with at least one Citation. | reported |
+| Time per Answer | The median time from asking to the Answer's end. | reported |
 | Citations | How many Citations the Answers have. | at least 30, for the other targets to count |
 | "Quote found" | The share of Citations whose check found the quote on the cited pages. | at least 90% |
-| False "not found" | The share of Citations the check marked "not found" whose quote is on the cited pages under a looser normalisation. The looser normalisation keeps only letters and digits, ignoring case, accents, punctuation, spacing and hyphens. It is compared with the stored page text the check read. | at most 5% |
+| False "not found" | The share of Citations the check marked "not found" whose quote is on the cited pages under a looser normalisation. The looser normalisation keeps only letters and digits, ignoring case, accents, punctuation, spacing and hyphens, reads traditional Chinese characters as simplified ones, as the check does, and reads an f-ligature's letters (fi, fl, ff, ffi, ffl) as one "f": some PDFs' text lost the letters after it, so the page shows "finance" where the stored text reads "fnance" (JP Morgan's ESG report, nearly every such word), and a quote of the page as it shows is the check's miss, not the model's (the check forgives it too in such a Document, ADR-0009). It is compared with the stored page text the check read. | at most 5% |
 | Other "not found" | Split into: the quote is on other pages of the Document; the quote isn't in the Document (e.g. paraphrased); the cited pages break the page-range rule. | reported |
 | "Can't check" | The cited pages have no text. | reported |
 | Coverage | The share of sentences with at least one Citation. A Citation just after a sentence's full stop counts for that sentence. Every sentence is treated as drawn from Documents, so this is a lower bound: a sentence saying the Documents don't cover something counts as uncited. | reported |
 | Dropped markers and records | From `answer.finished`: markers the model wrote without a valid record, which were removed, and records given for no marker, which were dropped. | reported |
 | Support | The share of "found" quotes that support their sentence. A reviewer judges this in `reviewer-sheet.csv`. | at least 80% |
+
+Below the figures, `report.md` lists why, Citation by Citation and Answer by Answer, for the gating set and per format alike:
+
+- **Citations not found:** each Citation the check didn't find, with its outcome and the check's reason, the pages it cites, its Passage's pages, where its quote is in the Document under the looser normalisation (the first page that holds it, or two consecutive ones; "–" when it isn't there, e.g. paraphrased, or written in other characters), and the quote.
+- **Answers without a Citation:** how the model cited, the markers removed and records dropped, what it searched for, and how the Answer begins.
+
+The log prints the same lines as each Answer ends, so a run stopped before its report still says why.
 
 The run gates on the first three targets for a cloud model. Support is judged by hand:
 
@@ -192,6 +215,7 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 |---|---|---|---|
 | Hyphenation | A word split at a line end is joined. A compound broken after its hyphen keeps the hyphen. The quote may keep the hyphen with a space ("hyper- step"). A soft hyphen at a line end joins the word. | An English term split at a line end inside Chinese text, by a hyphen or a soft hyphen. | `tests/shared/quoteMatch.test.ts` ("matches a word split at a line end…", "matches a hyphenated compound…", "joins a word split by a soft hyphen…") and `tests/shared/text.test.ts` ("line-break hyphenation") |
 | Ligatures | ﬁ, ﬂ and ﬃ on the page match plain letters. | A ligature in an English term inside Chinese text. | `tests/shared/quoteMatch.test.ts` ("maps back through characters NFKC changes") |
+| Lost ligatures | In a Document whose text lost its f-ligatures ("fnance" where the page shows "finance"), the quote as the page shows it. Where the text keeps them, "flight" isn't found in "fight". | An English term in Chinese text, either way. | `tests/eval/recordedCitations.test.ts` (JP Morgan's report, the only one of the gating set's PDFs whose text lost them), `tests/core/citations.test.ts` ("…lost its f-ligatures…") |
 | Full-width punctuation | Full-width letters, digits and hyphen in the quote. | Full-width colon, comma and full stop, Chinese quotation marks and full-width brackets. | `tests/core/citations.test.ts` ("a Chinese quote across a page break is found, with full-width punctuation and spacing normalised") |
 | Quote marks and dashes | Curly and angle quotes, apostrophes, en, em and long dashes. | Corner brackets and a double em dash. | `tests/shared/quoteMatch.test.ts` ("unifies the quote marks and dashes…") |
 | Whitespace | Line breaks, tabs, blank lines and non-breaking spaces. | Line breaks and spaces inside Chinese text. | |
@@ -199,9 +223,9 @@ These cases of the Citation check are unit tests, so they run with `npm test` on
 | Greek letters | ε matches the lunate ϵ and the mathematical 𝜖. | ε in Chinese text. | |
 | Reference marks | A reference "[36]" written "[^36]" (from the 2026-10-07 run), and the other way round; another number isn't found. | "[2]" written "[^2]". | `tests/core/citations.test.ts` ("a quote that writes the page's reference [36] as [^36] is found…") |
 | Ellipsis | Parts on the pages in order are found (from the 2026-10-07 run); a part shorter than 3 words or 15 letters, parts out of order and a reworded part aren't. | A Chinese ellipsis "……"; a part shorter than 15 characters. | `tests/shared/quoteMatch.test.ts` ("a quote with an ellipsis"), `tests/core/citations.test.ts` ("a quote with an ellipsis is found when each part is on the cited page…") |
-| CJK text | A Chinese term in English text, whatever the spacing. | Radical look-alikes and the spaces pdf.js adds. Simplified characters don't match traditional ones (ADR-0009). | `tests/core/citations.test.ts` ("a Chinese quote is found in text that has radical look-alikes…") and `tests/shared/quoteMatch.test.ts` |
+| CJK text | A Chinese term in English text, whatever the spacing. | Radical look-alikes and the spaces pdf.js adds. Simplified characters match traditional ones, character by character, either way; another word for the same thing doesn't (ADR-0009). | `tests/core/citations.test.ts` ("a Chinese quote is found in text that has radical look-alikes…") and `tests/shared/quoteMatch.test.ts` |
 | A quote across a page break | Citing both pages; a word hyphenated across the break; citing only the first page ("not found"). | Citing both pages. | `tests/core/citations.test.ts` ("a quote across a page break is found once running headers, footers and page numbers are left out", and the Chinese one above), `tests/shared/citations.test.ts` (the viewer's highlight) |
-| A range breaking the page-range rule | Three pages; a page outside the cited Passage. | The same. | `tests/core/citations.test.ts` ("The page-range rule") |
+| A range breaking the page-range rule | Three pages; a page outside the cited Passage. A record that names no page, for a Passage over three pages, cites the page its quote is on instead. | The same. | `tests/core/citations.test.ts` ("The page-range rule") |
 | The match is exact | A paraphrase, a quote with one word changed, and a quote from another page than the one cited aren't found. | A paraphrase, and a quote from another page. | `tests/core/citations.test.ts` ("a paraphrased quote is 'not found'") |
 
 `tests/eval/recordedCitations.test.ts` also checks again the Citations a real run recorded (see Results).
@@ -333,6 +357,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
   - `tests/eval/scoring.test.ts` checks how the evaluation scores sentences, Citations, hits and the reviewer sheet.
   - `tests/eval/citations.test.ts` runs the Citation part through a core with a scripted model.
   - `tests/eval/recordedCitations.test.ts` checks the Citations of the 2026-10-07 run again with today's check.
+  - `tests/eval/smallModelCitations.test.ts` shows, without a model, the ways a small model's Citations of the gating set's long PDFs aren't found (#67): records written by hand, through the core's citation session, over the stored text of their pages.
   - `tests/eval/formatSet.test.ts` checks the every-format set against the stored text; `tests/eval/formatScoring.test.ts`, its figures and reports; `tests/eval/formatCitations.test.ts`, the Citation check on every Location kind.
 
 ## The grouping check

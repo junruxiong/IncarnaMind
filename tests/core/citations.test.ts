@@ -3,7 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import type { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, onTestFinished, test } from "vitest";
 import type { Citation, Core, CoreEvents } from "../../src/core";
-import { ANSWER_TEMPERATURE } from "../../src/core/answers/engine";
+import { ANSWER_TEMPERATURE, mergeSearches, searchLanguage } from "../../src/core/answers/engine";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import {
   answerEnded,
@@ -348,6 +348,37 @@ describe("The page-range rule", { timeout: 30_000 }, () => {
     expect(citeFeedback(model)).toMatch(/cite one page, or two consecutive pages/);
   });
 
+  test("a record that names no page, for a Passage over three pages, cites the page its quote is on", async () => {
+    // Three short pages: one Passage covers them all. A small model often names no page (#67).
+    const threePages = buildPdf([
+      { lines: ["Tides rise and fall twice a day."] },
+      { lines: ["Spring tides happen at new moon and at full moon."] },
+      { lines: ["Neap tides are the smallest."] },
+    ]);
+    let shown: ShownPassage[] = [];
+    const model = citingModel({
+      query: "spring tides",
+      records: (passages) => {
+        shown = passages;
+        return [{ marker: 1, passage: first(passages).id, quote: SPRING }];
+      },
+      answer: "At new and full moon [^1].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Three.pdf", contents: threePages },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "When are spring tides?");
+
+    expect(first(shown).pages).toBe("1-3");
+    expect(onlyCitation(client, answerId)).toMatchObject({
+      pageFrom: 2,
+      pageTo: 2,
+      location: { kind: "page", from: 2, to: 2 },
+      check: "found",
+    });
+  });
+
   test("a quote from another page than the one cited is 'not found'", async () => {
     const model = citingModel({
       query: "spring tides",
@@ -539,6 +570,65 @@ describe("The Citation check", { timeout: 30_000 }, () => {
       location: { kind: "section" },
       check: "found",
     });
+  });
+
+  test("the Passages the model reads have the ideographs, not their radical look-alikes", async () => {
+    let shown: ShownPassage[] = [];
+    const model = citingModel({
+      query: "大型语言模型",
+      records: (passages) => {
+        shown = passages;
+        return [{ marker: 1, passage: first(passages).id, quote: "大型语言模型的参数规模很大" }];
+      },
+      answer: "大型语言模型的参数规模很大[^1]。",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "笔记.md", contents: RADICAL_NOTES },
+    ]);
+
+    await askAndFinish(core, client, mind.id, "大型语言模型有多大？");
+
+    expect(first(shown).text).toContain("大型语言模型的参数规模很大，训练需要大量数据。");
+    expect(first(shown).text).not.toMatch(/[⼤⾔]/);
+  });
+
+  test("in a Document whose text lost its f-ligatures, a quote of it as it shows is found; elsewhere a lone f stays an f", async () => {
+    const lost = `# Report\n\nThe goal is to fnance and facilitate growth. ${"The frm's fnancial eforts beneft its ofce. ".repeat(50)}\n`;
+    const kept = `# Log\n\nThe fight was delayed by fog. ${"The first financial effort of the office was flawed. ".repeat(50)}\n`;
+    const model = citingModel({
+      query: "goal",
+      records: (passages) => {
+        const of = (document: string) =>
+          passages.find((passage) => passage.document === document)?.id ?? "none";
+        return [
+          {
+            marker: 1,
+            passage: of("Report"),
+            quote: "The goal is to finance and facilitate growth.",
+          },
+          { marker: 2, passage: of("Log"), quote: "The flight was delayed by fog." },
+        ];
+      },
+      answer: "Growth [^1]. A delay [^2].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Report.md", contents: lost },
+      { name: "Log.md", contents: kept },
+    ]);
+
+    const { answerId } = await askAndFinish(
+      core,
+      client,
+      mind.id,
+      "What is the goal, and what was delayed?",
+    );
+
+    expect(
+      citationsIn(client, answerId).map(({ documentName, check }) => [documentName, check]),
+    ).toEqual([
+      ["Report", "found"],
+      ["Log", "not-found"],
+    ]);
   });
 
   test("a Citation of a page with no text, such as a scan, 'can't be checked'", async () => {
@@ -989,5 +1079,104 @@ describe("Citations in the Mind", { timeout: 30_000 }, () => {
     expect(promptOf(model, 0)[1]?.text).toBe(
       "Spring tides come at full moon[Tides, p. 2].\n\nIs that right?",
     );
+  });
+});
+
+describe("Searching across languages without Tools", { timeout: 30_000 }, () => {
+  const refusesTools = { status: 400, message: "tiny:latest does not support tools" };
+  /** The instructions of a request to translate a search query. */
+  const TRANSLATING = /You translate a query for searching the User's Documents/;
+
+  /** A model that can't call Tools: it answers in JSON, and translates queries with `translate`. */
+  const withoutTools = (translate: (call: GenerateCall) => GeneratedReply) =>
+    scriptedModel(
+      (call) =>
+        call.tools.length > 0
+          ? { error: refusesTools }
+          : { text: JSON.stringify({ answer: "At new and full moon.", citations: [] }) },
+      {
+        generate: (call) =>
+          TRANSLATING.test(call.system)
+            ? translate(call)
+            : { error: { status: 400, message: "This model doesn't tag Documents." } },
+      },
+    );
+
+  /** What the Answer's searches looked for, as their Tool-call cards show them. */
+  const searchesOf = (client: MindClient, answerId: string): unknown[] =>
+    (
+      JSON.parse(answerIn(client, answerId).attrs.toolCalls as string) as {
+        input: { query: unknown };
+      }[]
+    ).map((call) => call.input.query);
+
+  test("a Question in another language than the Documents is searched again, translated into theirs, by one short request", async () => {
+    const translations: string[] = [];
+    const model = withoutTools(({ prompt }) => {
+      translations.push(prompt);
+      return { text: "When do spring tides happen?" };
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "大潮在什么时候发生？");
+
+    expect(translations).toEqual(["Translate this query into English:\n大潮在什么时候发生？"]);
+    expect(searchesOf(client, answerId)).toEqual([
+      "大潮在什么时候发生？",
+      "When do spring tides happen?",
+    ]);
+    expect(promptOf(model, 1)[0]?.text).toContain(SPRING);
+  });
+
+  test("a Question in the Documents' language is searched once, with no translation", async () => {
+    const model = withoutTools(() => ({ text: "A translation that shouldn't be asked for" }));
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Tides.pdf", contents: TIDES },
+    ]);
+
+    const { answerId } = await askAndFinish(core, client, mind.id, "When are the spring tides?");
+
+    expect(
+      model.doGenerateCalls.filter((call) => TRANSLATING.test(JSON.stringify(call.prompt))),
+    ).toHaveLength(0);
+    expect(searchesOf(client, answerId)).toEqual(["When are the spring tides?"]);
+  });
+
+  test("the language searched again is the Documents' most common one the Question isn't in", () => {
+    const english = { language: "English", documents: 7 };
+    const chinese = { language: "Chinese", documents: 5 };
+    expect(searchLanguage("大潮在什么时候发生？", [english])).toBe("English");
+    expect(searchLanguage("大潮在什么时候发生？", [chinese, english])).toBe("English");
+    expect(searchLanguage("What is the size of the data that is used?", [english])).toBeNull();
+    expect(searchLanguage("What is the size of the data that is used?", [english, chinese])).toBe(
+      "Chinese",
+    );
+    // Too short to tell it is English, but it can't be Chinese: it has no Chinese characters.
+    expect(searchLanguage("When are spring tides?", [english, chinese])).toBe("Chinese");
+    expect(
+      searchLanguage("When are spring tides?", [english, { language: "French", documents: 1 }]),
+    ).toBeNull();
+    expect(searchLanguage("When are spring tides?", [])).toBeNull();
+  });
+
+  test("two searches' Passages are given once each, ranked alternately so a small window keeps the best of each", () => {
+    const shown = (id: string) =>
+      `<passage id="${id}" document="Tides" pages="1">\nText ${id}\n</passage>`;
+    const merged = mergeSearches([
+      { text: [shown("P1"), shown("P2")].join("\n\n"), passageCount: 2, ranks: [1, 0] },
+      { text: [shown("P2"), shown("P3")].join("\n\n"), passageCount: 2, ranks: [0, 1] },
+    ]);
+    expect(merged).toEqual({
+      text: [shown("P1"), shown("P2"), shown("P3")].join("\n\n"),
+      passageCount: 3,
+      ranks: [2, 0, 3],
+    });
+    const none = {
+      text: "No Passages in the User's Documents match this search.",
+      passageCount: 0,
+    };
+    expect(mergeSearches([none, none])).toBe(none);
   });
 });

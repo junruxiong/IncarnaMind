@@ -23,6 +23,10 @@
  *    together (reciprocal rank fusion, k = 60), so a sum mostly counts hits,
  *    and a long, repetitive Document's windows of three weaker hits would
  *    otherwise outrank a short one's single best match.
+ * 6. Each Passage returned has its `rank`: by its window's, the best window's
+ *    first, and within a window its hits first, best first, then its other
+ *    Passages in reading order. A local model's window too small for all of
+ *    them keeps the most relevant (see ../answers/window).
  *
  * Every count is a parameter; the retrieval evaluation (#31) tunes them.
  */
@@ -264,8 +268,10 @@ export async function searchDocumentsTool(
   const windowsTaken = new Map<string, number>();
   const passages = new Map<string, WindowedPassage[]>();
   const seen = new Set<string>();
+  /** Each Passage's rank, as it is taken (see step 6). */
+  const ranks = new Map<string, number>();
   let count = 0;
-  for (const { documentId, window } of windows) {
+  for (const { documentId, window, hits } of windows) {
     if (count >= parameters.maxPassages) break;
     if (!documents.includes(documentId)) {
       if (documents.length >= parameters.maxDocuments) continue;
@@ -275,16 +281,28 @@ export async function searchDocumentsTool(
     if (taken >= parameters.maxWindowsPerDocument) continue;
     windowsTaken.set(documentId, taken + 1);
     const list = passages.get(documentId) ?? [];
+    const added: WindowedPassage[] = [];
     for (const passage of sources.window(documentId, window)) {
       if (count >= parameters.maxPassages) break;
       if (seen.has(passage.passageId)) continue;
       seen.add(passage.passageId);
-      list.push(passage);
+      added.push(passage);
       count++;
     }
+    list.push(...added);
     passages.set(documentId, list);
+    const best = [...hits].sort((a, b) => b.score - a.score).map((each) => each.passageId);
+    const hitFirst = (passage: WindowedPassage) => {
+      const index = best.indexOf(passage.passageId);
+      return index < 0 ? best.length : index;
+    };
+    for (const passage of [...added].sort((a, b) => hitFirst(a) - hitFirst(b))) {
+      ranks.set(passage.passageId, ranks.size);
+    }
   }
   return documents.flatMap((documentId) =>
-    (passages.get(documentId) ?? []).sort((a, b) => a.position - b.position),
+    (passages.get(documentId) ?? [])
+      .sort((a, b) => a.position - b.position)
+      .map((passage) => ({ ...passage, rank: ranks.get(passage.passageId) ?? ranks.size })),
   );
 }

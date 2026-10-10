@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { normaliseText, normaliseWithOffsets } from "../../src/shared/text";
+import { foldRadicals, normaliseText, normaliseWithOffsets } from "../../src/shared/text";
 
 describe("normalising text", () => {
   test("collapses whitespace, line breaks included, and trims it", () => {
@@ -104,5 +104,16 @@ describe("normalising text", () => {
       "r",
       "d",
     ]);
+  });
+});
+
+describe("folding radical look-alikes in text a model reads", () => {
+  test("folds Kangxi radicals and their supplement's look-alikes, and changes nothing else", () => {
+    expect(foldRadicals("⼤型语⾔模型\n⽣產⼒與⻝品，⺠眾")).toBe(
+      "大型语言模型\n生產力與食品，民眾",
+    );
+    expect(foldRadicals("ﬁne “quotes”，　full-width\n\n[p. 4] １２")).toBe(
+      "ﬁne “quotes”，　full-width\n\n[p. 4] １２",
+    );
   });
 });

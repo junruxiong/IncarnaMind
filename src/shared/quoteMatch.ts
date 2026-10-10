@@ -20,7 +20,13 @@
  *   reference "[36]" in the syntax of our own Citation markers. Only matching
  *   reads it so: the markers in an Answer's text are never touched;
  * - a soft hyphen that ends a line is read as a hyphen, so the word split
- *   there is joined like any other ("inter\u00ad\nnational").
+ *   there is joined like any other ("inter\u00ad\nnational");
+ * - traditional Chinese characters are read as simplified ones, character by
+ *   character, by OpenCC's table (./hanVariants): a page in traditional
+ *   characters is quoted in simplified ones when the Answer is written in
+ *   them ("讓全球" as "让全球"), and the other way round. Phrases aren't
+ *   converted, and a character stays one character, so offsets hold
+ *   (ADR-0009).
  *
  * The match itself has two tolerances:
  *
@@ -36,6 +42,15 @@
  *   almost anywhere, and "found" must keep meaning that these words are on the
  *   page. Each part is returned, for the viewer to highlight. An ellipsis at
  *   the start or the end of a quote leaves nothing out of it.
+ *
+ * - In a Document whose text lost its f-ligatures (see `lostLigatures`), a
+ *   quote's "fi", "fl", "ff", "ffi" or "ffl" may be the lone "f" the text
+ *   kept: pdf.js reads some PDFs' ligatures as their first letter only, so a
+ *   page that shows "finance" has "fnance" for text. Not every one is lost
+ *   ("Firm", with a capital, kept its "Fi"), so the quote and the text are
+ *   both read with each ligature's letters as one "f". Only there: in other
+ *   text, 4% of words would then match another ("of" an "off", "food" a
+ *   "flood", "four" a "flour"), which is a word changed (ADR-0009).
  *
  * Nothing else is forgiven: a quote with a word changed, added or dropped
  * isn't found.
@@ -55,6 +70,7 @@
  * - a number is matched whole: "4812" isn't found in "14812", "48125",
  *   "4812.5" or "-4812".
  */
+import { SIMPLIFIED } from "./hanVariants";
 import { type NormalisedUnit, normaliseWithOffsets } from "./text";
 
 /** A span of the original text, in UTF-16 offsets; `end` is exclusive. */
@@ -101,17 +117,82 @@ const ELLIPSIS = / ?\.{3,} ?/;
 const DIGIT = /^[0-9]$/;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/gu;
 
-/** A letter in lower case, folded as `FOLDED` says. Stays one UTF-16 code unit, so offsets hold. */
+/**
+ * A letter in lower case, folded as `FOLDED` says, and a traditional Chinese
+ * character as its simplified one. Stays one UTF-16 code unit, so offsets hold.
+ */
 function fold(char: string): string {
   const lower = char.toLowerCase();
   const one = lower.length === 1 ? lower : char;
-  return FOLDED[one] ?? one;
+  return FOLDED[one] ?? SIMPLIFIED.get(one) ?? one;
 }
 
 /** How matching treats numbers (see the module comment). */
 export interface MatchOptions {
   /** Normalise number formatting in the quote and the text: for spreadsheets. */
   numbers?: boolean;
+  /**
+   * The Document's text lost its f-ligatures (see `lostLigatures`): a quote
+   * not found as it is is looked for with each ligature's letters read as
+   * one "f", in the quote and in the text alike.
+   */
+  lostLigatures?: boolean;
+}
+
+/** At least this many "f"s before a letter, for a text's lost ligatures to show. */
+const MIN_F_BEFORE_LETTER = 200;
+
+/**
+ * Below this share of them followed by "f", "i" or "l", a text lost its
+ * f-ligatures. In the evaluation's Documents that keep them, with enough
+ * "f"s to tell, it is 24 to 39%; JP Morgan's ESG report, whose text lost
+ * them, has 1.3% (#67).
+ */
+const MAX_LIGATURE_SHARE = 0.05;
+
+/**
+ * Whether a Document's text shows that it lost its f-ligatures: it has many
+ * "f"s before a letter, and hardly any are followed by "f", "i" or "l", as
+ * in English text a fifth or more are. Read the whole Document's text: a
+ * page alone can have too few, or a table of names with none.
+ */
+export function lostLigatures(text: string): boolean {
+  const before = text.match(/f(?=[a-z])/g)?.length ?? 0;
+  if (before < MIN_F_BEFORE_LETTER) return false;
+  const ligatures = text.match(/f(?=[fil])/g)?.length ?? 0;
+  return ligatures / before < MAX_LIGATURE_SHARE;
+}
+
+/** An f-ligature's letters, in a normalised, lower-case needle. */
+const LIGATURE_LETTERS = /f(?:f[il]?|[il])/g;
+
+/** A needle with each f-ligature's letters read as one "f", until none is left ("fifty" reads "fty"). */
+function withoutLigatures(needle: string): string {
+  let folded = needle;
+  for (let before = ""; before !== folded; ) {
+    before = folded;
+    folded = folded.replace(LIGATURE_LETTERS, "f");
+  }
+  return folded;
+}
+
+/**
+ * A text's units read as `withoutLigatures` reads a needle: the letters after
+ * each ligature's "f" marked `removed`, so offsets still point into the text.
+ */
+function unitsWithoutLigatures(units: NormalisedUnit[]): NormalisedUnit[] {
+  for (let changed = true; changed; ) {
+    changed = false;
+    const live = units.filter((unit) => !unit.removed);
+    const chars = live.map((unit) => unit.char).join("");
+    for (const match of chars.matchAll(LIGATURE_LETTERS)) {
+      for (let at = 1; at < match[0].length; at++) {
+        (live[match.index + at] as NormalisedUnit).removed = true;
+        changed = true;
+      }
+    }
+  }
+  return units;
 }
 
 /**
@@ -358,13 +439,27 @@ export function findQuote(
   quote: string,
   options: MatchOptions = {},
 ): TextRange[] | null {
-  if (!options.numbers) return findNeedle(matchUnits(text), needleOf(quote));
-  const units = matchUnits(text, "text");
+  const found = findRead(text, quote, options, false);
+  if (found || !options.lostLigatures) return found;
+  return findRead(text, quote, options, true);
+}
+
+/** `findQuote`, with the quote and the text both read without f-ligatures' letters when asked. */
+function findRead(
+  text: string,
+  quote: string,
+  options: MatchOptions,
+  withoutLigatureLetters: boolean,
+): TextRange[] | null {
+  const shape = withoutLigatureLetters ? withoutLigatures : (needle: string) => needle;
+  const read = withoutLigatureLetters ? unitsWithoutLigatures : (units: NormalisedUnit[]) => units;
+  if (!options.numbers) return findNeedle(read(matchUnits(text)), shape(needleOf(quote)));
+  const units = read(matchUnits(text, "text"));
   const accept = wholeNumbers(units);
-  const grouped = needleOf(quote, "all");
+  const grouped = shape(needleOf(quote, "all"));
   const found = findNeedle(units, grouped, accept);
   if (found) return found;
-  const spaced = needleOf(quote, "none");
+  const spaced = shape(needleOf(quote, "none"));
   return spaced === grouped ? null : findNeedle(units, spaced, accept);
 }
 
@@ -420,6 +515,7 @@ export function findQuoteInPages(
   pages: readonly (readonly TextPiece[])[],
   quote: string,
   edgeLines = 4,
+  options: Pick<MatchOptions, "lostLigatures"> = {},
 ): PagePieceRange[] | null {
   // The line each piece is on, counted from the top and from the bottom of its page.
   const lines = pages.map((pieces) => {
@@ -456,7 +552,7 @@ export function findQuoteInPages(
       if (last && origin.at(-1)?.page === page)
         kept[kept.length - 1] = { ...last, breakAfter: true };
     });
-    const found = findQuoteInPieces(kept, quote);
+    const found = findQuoteInPieces(kept, quote, options);
     if (found) {
       return found.map((part) => {
         const { page, piece } = origin[part.piece] as { page: number; piece: number };

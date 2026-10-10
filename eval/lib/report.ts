@@ -14,6 +14,9 @@ import {
   type CitationOutcome,
   type CitationRun,
   type GroupSummary,
+  pagesLabel,
+  rejectedLine,
+  shortQuote,
 } from "./citations";
 import type { FormatsReport } from "./formats";
 import {
@@ -57,8 +60,8 @@ export interface EvalReport {
     runs: RetrievalRun[];
   };
   citations: CitationRun | { skipped: string };
-  /** The every-format set (#70): reported per format, never gating. */
-  formats?: FormatsReport;
+  /** The every-format set (#70): reported per format, never gating; or why it didn't run. */
+  formats?: FormatsReport | { skipped: string };
 }
 
 const fraction = ({ hits, total }: Tally) => `${hits}/${total}`;
@@ -210,6 +213,17 @@ function citationTable(
     `| | ${columns.map(([label]) => label).join(" | ")} |${gating ? " Target (per language) |" : ""}`,
     `|---|${columns.map(() => "---|").join("")}${gating ? "---|" : ""}`,
     row("Answers (failed)", (summary) => `${summary.answers} (${summary.failedAnswers})`),
+    row(
+      "Answers with a Citation",
+      (summary) =>
+        `${percent(summary.citedAnswerShare)} (${summary.citedAnswers}/${summary.answers})`,
+      "reported",
+    ),
+    row(
+      "Time per Answer (median)",
+      (summary) => (summary.medianSeconds === null ? "–" : `${summary.medianSeconds.toFixed(1)} s`),
+      "reported",
+    ),
     row("Citations", (summary) => String(summary.citations), `at least ${minCitations}`),
     row(
       OUTCOME_LABELS.found,
@@ -249,6 +263,58 @@ function citationTable(
         ]
       : []),
   ];
+}
+
+/** Text for a cell of a Markdown table. */
+const cell = (text: string) => text.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+
+/**
+ * Each Citation the check didn't find, and each Answer without a Citation,
+ * with why: so a short run shows what went wrong. `unit` names what the
+ * pages are: "p." for PDFs, "Unit" for any format.
+ */
+function whyNotFound(run: CitationRun, unit: "p." | "Unit", heading = "###"): string[] {
+  const missed = run.answers.flatMap((answer) =>
+    answer.citations
+      .filter((citation) => citation.outcome !== "found")
+      .map((citation) => ({ answer, citation })),
+  );
+  const uncited = run.answers.filter((answer) => answer.citations.length === 0);
+  const lines = [
+    `${heading} Citations not found`,
+    "",
+    `Each Citation the check didn't find: the ${unit === "p." ? "pages" : "Units"} it cites, its Passage's, and where its quote is in the Document under the looser normalisation ("–": nowhere, e.g. paraphrased, or written in other characters).`,
+    "",
+  ];
+  if (missed.length === 0) lines.push("None.", "");
+  else {
+    lines.push(
+      "| Question | Round | Outcome | Check | Document | Cites | Passage | Quote is on | Quote |",
+      "|---|---|---|---|---|---|---|---|---|",
+      ...missed.map(({ answer, citation }) => {
+        const cites =
+          citation.pageFrom === null
+            ? "–"
+            : pagesLabel([citation.pageFrom, citation.pageTo ?? citation.pageFrom], unit);
+        return `| ${answer.questionId} | ${answer.round} | ${OUTCOME_LABELS[citation.outcome]} | ${citation.checkReason ?? ""} | ${cell(citation.documentName)} | ${cites} | ${pagesLabel(citation.passagePages, unit)} | ${pagesLabel(citation.quoteOn, unit)} | ${cell(shortQuote(citation.quote))} |`;
+      }),
+      "",
+    );
+  }
+  lines.push(`${heading} Answers without a Citation`, "");
+  if (uncited.length === 0) lines.push("None.", "");
+  else {
+    lines.push(
+      "| Question | Round | Status | Citing | Markers removed | Records dropped | Records rejected | Searched for | Begins |",
+      "|---|---|---|---|---|---|---|---|---|",
+      ...uncited.map(
+        (answer) =>
+          `| ${answer.questionId} | ${answer.round} | ${answer.status}${answer.error ? ` (${answer.error.kind})` : ""} | ${answer.citationSupport ?? "unknown"} | ${answer.droppedMarkers} | ${answer.droppedRecords} | ${cell(rejectedLine(answer.rejectedRecords ?? []))} | ${cell(answer.searches.join("; "))} | ${cell(shortQuote(answer.sentences[0]?.text ?? "", 120))} |`,
+      ),
+      "",
+    );
+  }
+  return lines;
 }
 
 /** The every-format set (#70): per format, per hard place and per Question. Never gating. */
@@ -315,6 +381,7 @@ function formatsSection(formats: FormatsReport): string[] {
       "",
       ...citationTable(columns, null),
       "",
+      ...whyNotFound(citations, "Unit", "####"),
     );
   }
   lines.push(
@@ -389,9 +456,9 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     lines.push(`Skipped: ${citations.skipped}`, "");
   } else {
     lines.push(
-      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.gating ? "It is the gating model." : "A local model: reported, not gating."}`,
+      `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.subset ? `Only ${citations.subset.length} of the Questions were asked (INCARNAMIND_EVAL_QUESTIONS: ${citations.subset.join(", ")}), once each: a short check, reported, never gating.` : citations.gating ? "It is the gating model." : "A local model: reported, not gating."}${citations.overrides.length > 0 ? ` Set by the run: ${citations.overrides.join(", ")}.` : ""}`,
       `- Each Question asked in a Mind of its own; ${citations.rounds} round${citations.rounds === 1 ? "" : "s"} (more rounds ask a language's gating Questions again until it has ${citations.minCitations} Citations).`,
-      `- False "not found": the check said "not found", but the quote is on the cited pages once both are compared by letters and digits only, ignoring case, accents and punctuation. The share is of all Citations.`,
+      `- False "not found": the check said "not found", but the quote is on the cited pages once both are compared by letters and digits only, ignoring case, accents and punctuation, and reading an f-ligature's letters as one "f" (a PDF's text may read "fnance" where the page shows "finance"). The share is of all Citations.`,
       "- Coverage counts every sentence of an Answer (headings and code left out) as drawn from Documents, so it is a lower bound: sentences that only say what the Documents don't cover count as uncited.",
       `- Reviewer sheet: \`${sheet}\`. Mark each found quote "y" if it supports its sentence, "n" if not; the target is ${percent(CITATION_TARGETS.supports)} "y".`,
       "",
@@ -400,9 +467,19 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
         citations.minCitations,
       ),
       "",
+      ...whyNotFound(citations, "p."),
     );
   }
-  if (report.formats) lines.push(...formatsSection(report.formats));
+  if (report.formats && "skipped" in report.formats) {
+    lines.push(
+      "## Every format (reported, not gating)",
+      "",
+      `Skipped: ${report.formats.skipped}`,
+      "",
+    );
+  } else if (report.formats) {
+    lines.push(...formatsSection(report.formats));
+  }
   lines.push(
     "## Citation-check cases",
     "",
@@ -467,7 +544,11 @@ export async function writeReports(
   if (!("skipped" in report.citations)) {
     await writeFile(join(dir, "reviewer-sheet.csv"), reviewerSheet(report.citations));
   }
-  if (report.formats && !("skipped" in report.formats.citations)) {
+  if (
+    report.formats &&
+    !("skipped" in report.formats) &&
+    !("skipped" in report.formats.citations)
+  ) {
     await writeFile(
       join(dir, "reviewer-sheet-formats.csv"),
       reviewerSheet(report.formats.citations),
@@ -506,16 +587,20 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
   } else {
     lines.push(
       "",
-      `Citation quality, ${citations.model}${citations.gating ? " (gating)" : " (local, not gating)"}`,
+      `Citation quality, ${citations.model}${citations.subset ? ` (${citations.subset.length} Questions only, not gating)` : citations.gating ? " (gating)" : " (local, not gating)"}`,
     );
     for (const [group, label] of GROUPS) {
       const summary = citations.summary[group];
       lines.push(
-        `  ${label.padEnd(14)} ${String(summary.citations).padStart(3)} Citations, found ${percent(summary.foundShare)}, false "not found" ${percent(summary.falseNotFoundShare)}, coverage ${percent(summary.coverage)}, dropped ${summary.droppedMarkers} markers and ${summary.droppedRecords} records`,
+        `  ${label.padEnd(14)} ${percent(summary.citedAnswerShare)} of ${summary.answers} Answers cited, ${String(summary.citations).padStart(3)} Citations, found ${percent(summary.foundShare)}, false "not found" ${percent(summary.falseNotFoundShare)}, coverage ${percent(summary.coverage)}, dropped ${summary.droppedMarkers} markers and ${summary.droppedRecords} records, median ${summary.medianSeconds === null ? "–" : `${summary.medianSeconds.toFixed(1)} s`} an Answer`,
       );
     }
   }
-  if (report.formats) lines.push(...formatsSummary(report.formats));
+  if (report.formats && "skipped" in report.formats) {
+    lines.push("", `Every format: skipped. ${report.formats.skipped}`);
+  } else if (report.formats) {
+    lines.push(...formatsSummary(report.formats));
+  }
   lines.push("", `Result: ${report.result}`);
   for (const failure of report.failures) lines.push(`  - ${failure}`);
   lines.push(`Reports: ${relative(root, reportDir)}/`, "");

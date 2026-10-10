@@ -8,9 +8,10 @@
  * 1. The Question context loses its oldest content first, as
  *    `buildQuestionContext` does (see `fitQuestionContext`), down to the
  *    Question alone. In the Tool loop, room for one search is kept first.
- * 2. Search results keep the best Passages, in order, that fit what is left,
- *    and other Tool results are cut at the end. Once nothing more would fit,
- *    the model is told to answer with what it has.
+ * 2. Search results keep the most relevant Passages that fit what is left,
+ *    by the search's own ranks (see `SearchResultForModel.ranks`), in the
+ *    order the search gave them, and other Tool results are cut at the end.
+ *    Once nothing more would fit, the model is told to answer with what it has.
  * 3. Every request keeps the room the model's output cap needs.
  *
  * A request whose instructions and Question alone don't fit fails with a
@@ -118,18 +119,31 @@ export function createWindowBudget(
     message: `The request needs about ${needed} tokens, but the model's context window holds ${window.tokens}, ${window.outputTokens} of them kept for the Answer.`,
   });
 
-  /** Keeps whole Passages, in order, within `room` tokens; text without Passages is cut at the end. */
-  function fitResult(text: string, room: number): { text: string; passages: number | null } {
+  /**
+   * Keeps whole Passages within `room` tokens: the most relevant first, by
+   * `ranks` (the order given when there are none), until the next doesn't
+   * fit, then in the order given. Text without Passages is cut at the end.
+   */
+  function fitResult(
+    text: string,
+    room: number,
+    ranks?: readonly number[],
+  ): { text: string; passages: number | null } {
     const passages = text.match(PASSAGE);
     if (passages) {
-      const kept: string[] = [];
+      const order = passages.map((_, index) => index);
+      if (ranks?.length === passages.length) {
+        order.sort((a, b) => (ranks[a] as number) - (ranks[b] as number) || a - b);
+      }
+      const chosen = new Set<number>();
       let used = 0;
-      for (const passage of passages) {
-        const cost = tokens(passage) + 1;
+      for (const index of order) {
+        const cost = tokens(passages[index] as string) + 1;
         if (used + cost > room) break;
-        kept.push(passage);
+        chosen.add(index);
         used += cost;
       }
+      const kept = passages.filter((_, index) => chosen.has(index));
       if (kept.length === passages.length) return { text, passages: passages.length };
       return {
         text: kept.length > 0 ? kept.join("\n\n") : NO_ROOM_FOR_PASSAGES,
@@ -175,10 +189,18 @@ export function createWindowBudget(
       return { ok: true, messages, estimated: fixed + messagesTokens(messages) };
     },
 
-    /** The Passages of a search, for a request with these instructions and Question: those that fit. */
-    fitPassages(passages: string, instructions: string, question: string): string {
+    /**
+     * The Passages of a search, for a request with these instructions and
+     * Question: the most relevant that fit (by `ranks`, see `fitResult`).
+     */
+    fitPassages(
+      passages: string,
+      instructions: string,
+      question: string,
+      ranks?: readonly number[],
+    ): string {
       const room = limit - tokens(instructions) - tokens(question) - 3 * MESSAGE_TOKENS;
-      return fitResult(passages, room).text;
+      return fitResult(passages, room, ranks).text;
     },
 
     /** Error for a request Ollama refused as too long, after the retry. */
@@ -203,9 +225,13 @@ export function createWindowBudget(
         added += cost;
       };
       return {
-        /** A search's Passages, fitted to the room left, and how many were kept. */
-        passages(text: string, count: number): { text: string; passageCount: number } {
-          const fitted = fitResult(text, room());
+        /** A search's Passages, fitted to the room left (by `ranks`), and how many were kept. */
+        passages(
+          text: string,
+          count: number,
+          ranks?: readonly number[],
+        ): { text: string; passageCount: number } {
+          const fitted = fitResult(text, room(), ranks);
           take(fitted.text);
           return { text: fitted.text, passageCount: fitted.passages ?? count };
         },
