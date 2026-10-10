@@ -72,6 +72,10 @@ test("Settings lists seven pages, and each holds its settings", async () => {
         await expect(content.getByTestId(section), `${name}: ${section}`).toBeAttached();
       }
       await shot(window, `settings-${page}`);
+      if (page === "models") {
+        await content.getByTestId("organization-settings").scrollIntoViewIfNeeded();
+        await shot(window, "settings-models-organization");
+      }
     }
   } finally {
     await app.close();
@@ -137,9 +141,18 @@ test("the pages are named in Chinese too", async () => {
       "技能",
       "隐私",
     ]);
-    await window.getByTestId("settings-nav-models").click();
-    await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
-    await shot(window, "settings-models-zh");
+    const names = ["general", "models", "search", "tools", "connectors", "skills", "privacy"];
+    for (const page of names) {
+      await window.getByTestId(`settings-nav-${page}`).click();
+      await expect(window.getByTestId("settings")).toHaveAttribute("data-page", page);
+      if (page === "models")
+        await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
+      await shot(window, `settings-${page}-zh`);
+      if (page === "models") {
+        await window.getByTestId("organization-settings").scrollIntoViewIfNeeded();
+        await shot(window, "settings-models-organization-zh");
+      }
+    }
   } finally {
     await app.close();
   }
