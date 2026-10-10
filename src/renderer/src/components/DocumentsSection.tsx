@@ -138,16 +138,36 @@ export function DocumentsSection() {
     "sources",
   ];
   const view = views.includes(chosenView) ? chosenView : "sources";
-  // Each row is drawn again only when its Document, depth or the Tags change (#156).
-  const renderDocument = (item: Document, depth: number): ReactNode => (
-    <DocumentRow
-      key={item.id}
-      item={item}
-      depth={depth}
-      tagsById={tagsById}
-      onDelete={setDeleting}
-    />
-  );
+  /**
+   * Each Document's row as last made, by depth, while the Tags stay the same
+   * (#156). A list of thousands drawn again because one Document changed
+   * hands React the same rows for the rest, which it passes over without
+   * comparing them; only the row whose Document changed is made and drawn again.
+   */
+  const renderDocument = useMemo(() => {
+    const made = new WeakMap<Document, Map<number, ReactNode>>();
+    return (item: Document, depth: number): ReactNode => {
+      let atDepth = made.get(item);
+      if (!atDepth) {
+        atDepth = new Map();
+        made.set(item, atDepth);
+      }
+      let row = atDepth.get(depth);
+      if (row === undefined) {
+        row = (
+          <DocumentRow
+            key={item.id}
+            item={item}
+            depth={depth}
+            tagsById={tagsById}
+            onDelete={setDeleting}
+          />
+        );
+        atDepth.set(depth, row);
+      }
+      return row;
+    };
+  }, [tagsById]);
 
   const addPicked = (event: ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(event.target.files ?? []);
