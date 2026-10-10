@@ -572,6 +572,26 @@ describe("The Citation check", { timeout: 30_000 }, () => {
     });
   });
 
+  test("the Passages the model reads have the ideographs, not their radical look-alikes", async () => {
+    let shown: ShownPassage[] = [];
+    const model = citingModel({
+      query: "大型语言模型",
+      records: (passages) => {
+        shown = passages;
+        return [{ marker: 1, passage: first(passages).id, quote: "大型语言模型的参数规模很大" }];
+      },
+      answer: "大型语言模型的参数规模很大[^1]。",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "笔记.md", contents: RADICAL_NOTES },
+    ]);
+
+    await askAndFinish(core, client, mind.id, "大型语言模型有多大？");
+
+    expect(first(shown).text).toContain("大型语言模型的参数规模很大，训练需要大量数据。");
+    expect(first(shown).text).not.toMatch(/[⼤⾔]/);
+  });
+
   test("a Citation of a page with no text, such as a scan, 'can't be checked'", async () => {
     const model = citingModel({
       query: "harbour survey",

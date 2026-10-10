@@ -334,6 +334,19 @@ export function normaliseWithOffsets(text: string): { text: string; units: Norma
   };
 }
 
+/** The Kangxi Radicals and CJK Radicals Supplement blocks: the look-alikes rules 1 and 2 fold. */
+const RADICAL_LOOK_ALIKE = /[\u2e80-\u2eff\u2f00-\u2fdf]/gu;
+
+/**
+ * Text with its CJK radical look-alikes folded into the ideographs they stand
+ * for, as rules 1 and 2 fold them ("⼤" reads "大"), and nothing else changed:
+ * line breaks, punctuation and other compatibility forms stay as they are.
+ * For text a model reads, such as the Passages it is given.
+ */
+export function foldRadicals(text: string): string {
+  return text.replace(RADICAL_LOOK_ALIKE, (char) => RADICALS[char] ?? char.normalize("NFKC"));
+}
+
 /** Normalises text for comparing and indexing (see the module comment for the rules). */
 export function normaliseText(text: string): string {
   let out = "";
