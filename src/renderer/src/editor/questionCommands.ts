@@ -1,7 +1,7 @@
 import { type Editor, Extension, isMacOS } from "@tiptap/core";
 import { BLOCK_ID_ATTRIBUTE, QUESTION_BLOCK } from "../../../core/api";
 import { useAnswers } from "../answers";
-import { cursorBelowAnswer } from "./composerAsk";
+import { cursorBelowAnswer, whenAnswerShown } from "./composerAsk";
 
 /** Focuses the composer, wherever the focus is (see `Composer`). Shown in hints and the guide. */
 export const QUESTION_SHORTCUT_LABEL = isMacOS() ? "⌘J" : "Ctrl+J";
@@ -46,7 +46,8 @@ export const QuestionCommands = Extension.create<QuestionCommandsOptions>({
  */
 export async function askInEditor(editor: Editor, mindId: string, questionId: string) {
   const result = await useAnswers.getState().ask(mindId, questionId);
-  if (result?.asked && !editor.isDestroyed && cursorBelowAnswer(editor, result.answerId)) {
+  if (!result?.asked || !(await whenAnswerShown(editor, result.answerId))) return;
+  if (!editor.isDestroyed && cursorBelowAnswer(editor, result.answerId)) {
     // Never left in the Question, where the next words typed would change it.
     editor.chain().focus().scrollIntoView().run();
   }
