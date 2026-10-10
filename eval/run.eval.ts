@@ -193,6 +193,7 @@ async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> 
               config.chat,
               { ...config, maxRounds: 1 },
               log,
+              "Unit",
             )),
             failures: [],
           }

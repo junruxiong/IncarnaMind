@@ -3,6 +3,9 @@
  * returns. The evaluation itself needs the real model and isn't part of
  * `npm test`; its scoring is, since a mistake there would skew every report.
  */
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
@@ -11,9 +14,11 @@ import {
   type CitationRecord,
   type CitationRun,
   checkQuestionIds,
+  citationLine,
   evalOllamaModels,
   outcomeOf,
   questionsToAsk,
+  quotePages,
   sentencesOf,
   summariseGroup,
 } from "../../eval/lib/citations";
@@ -39,7 +44,12 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
 
 import { readConfig } from "../../eval/lib/config";
 import { loadEvaluationSet } from "../../eval/lib/evaluationSet";
-import { type EvalReport, reviewerSheet, terminalSummary } from "../../eval/lib/report";
+import {
+  type EvalReport,
+  reviewerSheet,
+  terminalSummary,
+  writeReports,
+} from "../../eval/lib/report";
 import {
   candidateCounts,
   checkPassage,
@@ -106,6 +116,35 @@ describe("What became of a Citation", () => {
   test("a quote on another page is a wrong page; one nowhere in the Document isn't in it", () => {
     expect(outcomeOf(citation("Tides rise and fall"), pages)).toBe("wrong-page");
     expect(outcomeOf(citation("Revenue rose by 10%"), pages)).toBe("not-in-document");
+  });
+
+  test("where a quote is: the first page that holds it, or two consecutive ones, or nowhere", () => {
+    const twoPages = [
+      ...pages,
+      { page: 4, text: "Costs fell, and then" },
+      { page: 5, text: "rose again." },
+    ];
+    expect(quotePages("Revenue grew by ten percent", twoPages)).toEqual([2, 2]);
+    expect(quotePages("and then rose again", twoPages)).toEqual([4, 5]);
+    expect(quotePages("Revenue rose by 10%", twoPages)).toBeNull();
+  });
+
+  test("a Citation not found reads as a line: the check, the pages cited and its Passage's, where the quote is", () => {
+    const line = citationLine({
+      sentence: "Revenue grew.",
+      quote: "Revenue grew by ten percent",
+      documentName: "Report",
+      pageFrom: 1,
+      pageTo: 1,
+      check: "not-found",
+      checkReason: "quote-not-on-pages",
+      outcome: "wrong-page",
+      passagePages: [1, 2],
+      quoteOn: [2, 2],
+    });
+    expect(line).toBe(
+      'wrong page (quote-not-on-pages): Report, cites p. 1 of a Passage on pp. 1–2; the quote is on p. 2: "Revenue grew by ten percent"',
+    );
   });
 
   test("the check's own results are kept", () => {
@@ -450,6 +489,8 @@ const cited = (outcome: CitationOutcome, sentence = "A claim."): CitationRecord 
   check: outcome === "found" ? "found" : "not-found",
   checkReason: outcome === "found" ? null : "quote-not-on-pages",
   outcome,
+  passagePages: [1, 1],
+  quoteOn: outcome === "not-in-document" ? null : [1, 1],
 });
 
 describe("A language's Citation figures", () => {
@@ -522,5 +563,105 @@ describe("The reviewer sheet", () => {
       'zh-01,zh,1,可持续发展目标一共包含多少项具体目标？,"It has 169 ""targets"", in all.",共有 169 项,维基百科-可持续发展目标,1–2,,',
       "",
     ]);
+  });
+});
+
+describe("Why Citations aren't found, in report.md", () => {
+  test("lists each Citation not found and each Answer without one; a short run says it doesn't gate", async () => {
+    const answers = [
+      record({
+        citations: [
+          cited("found"),
+          {
+            ...cited("wrong-page"),
+            quote: "a quote | with a pipe",
+            pageFrom: 7,
+            pageTo: 7,
+            passagePages: [7, 8],
+            quoteOn: [8, 8],
+          },
+        ],
+      }),
+      record({
+        questionId: "zh-02",
+        language: "zh",
+        citationSupport: "structured-output",
+        droppedMarkers: 2,
+        searches: ["交通事故"],
+        sentences: [{ text: "文档没有提到。", cited: false }],
+      }),
+    ];
+    const citations: CitationRun = {
+      model: "ollama/qwen3.5:4b",
+      service: null,
+      gating: false,
+      subset: ["en-01", "zh-02"],
+      overrides: ["num_ctx 8192"],
+      minCitations: 30,
+      rounds: 1,
+      answers,
+      summary: {
+        en: summariseGroup([answers[0] as AnswerRecord]),
+        zh: summariseGroup([answers[1] as AnswerRecord]),
+        crossLingual: summariseGroup([]),
+      },
+      failures: [],
+    };
+    const report = {
+      result: "pass",
+      failures: [],
+      run: {
+        startedAt: "2026-10-10T08:00:00.000Z",
+        seconds: 1,
+        commit: "",
+        node: "",
+        platform: "",
+        cpu: "",
+      },
+      evaluationSet: {
+        source: "",
+        hitRule: "",
+        questions: { gating: { en: 1, zh: 1 }, crossLingual: 0 },
+      },
+      documents: [],
+      retrieval: {
+        topK: 5,
+        gatingMode: GATING_MODE,
+        runs: [
+          {
+            embedding: "multilingual-e5-small (built-in)",
+            gating: true,
+            passageCount: 1,
+            processingSeconds: 1,
+            questions: [],
+            summary: summarise([]),
+          },
+        ],
+      },
+      citations,
+      formats: { skipped: "INCARNAMIND_EVAL_FORMATS is off." },
+    } satisfies EvalReport;
+    const results = await mkdtemp(join(tmpdir(), "why-report-"));
+    try {
+      const dir = await writeReports(report, results, "/");
+      const markdown = (await readFile(join(dir, "report.md"), "utf8")).split("\n");
+      expect(markdown.join("\n")).toContain(
+        "Only 2 of the Questions were asked (INCARNAMIND_EVAL_QUESTIONS: en-01, zh-02), once each: a short check, reported, never gating.",
+      );
+      expect(markdown).toContain(
+        '| en-01 | 1 | "Not found": quote on other pages | quote-not-on-pages | Tides | p. 7 | pp. 7–8 | p. 8 | a quote \\| with a pipe |',
+      );
+      expect(markdown).toContain(
+        "| zh-02 | 1 | done | structured-output | 2 | 0 | 交通事故 | 文档没有提到。 |",
+      );
+      expect(markdown).toContain("Skipped: INCARNAMIND_EVAL_FORMATS is off.");
+      const summary = terminalSummary(report, "/repo/eval/results/x", "/repo");
+      expect(summary).toContain(
+        "Citation quality, ollama/qwen3.5:4b (2 Questions only, not gating)",
+      );
+      expect(summary).toContain("Every format: skipped. INCARNAMIND_EVAL_FORMATS is off.");
+    } finally {
+      await rm(results, { recursive: true, force: true });
+    }
   });
 });

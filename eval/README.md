@@ -165,6 +165,13 @@ Each Answer is read back from its Mind, as the editor shows it, and split into s
 | Dropped markers and records | From `answer.finished`: markers the model wrote without a valid record, which were removed, and records given for no marker, which were dropped. | reported |
 | Support | The share of "found" quotes that support their sentence. A reviewer judges this in `reviewer-sheet.csv`. | at least 80% |
 
+Below the figures, `report.md` lists why, Citation by Citation and Answer by Answer, for the gating set and per format alike:
+
+- **Citations not found:** each Citation the check didn't find, with its outcome and the check's reason, the pages it cites, its Passage's pages, where its quote is in the Document under the looser normalisation (the first page that holds it, or two consecutive ones; "–" when it isn't there, e.g. paraphrased, or written in other characters), and the quote.
+- **Answers without a Citation:** how the model cited, the markers removed and records dropped, what it searched for, and how the Answer begins.
+
+The log prints the same lines as each Answer ends, so a run stopped before its report still says why.
+
 The run gates on the first three targets for a cloud model. Support is judged by hand:
 
 1. Open `reviewer-sheet.csv` in a spreadsheet app. It is UTF-8 with a byte-order mark, so the Chinese text shows correctly.
