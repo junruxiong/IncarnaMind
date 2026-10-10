@@ -69,9 +69,11 @@ npm run eval
   ```sh
   INCARNAMIND_EVAL_CHAT_KIND=ollama INCARNAMIND_EVAL_CHAT_MODEL=qwen3.5:4b \
   INCARNAMIND_EVAL_CHAT_NUM_CTX=8192 INCARNAMIND_EVAL_FORMATS=off \
-  INCARNAMIND_EVAL_QUESTIONS=en-02,en-07,en-17,en-18,en-19,zh-02,zh-04,zh-08,zh-14,zh-17 \
+  INCARNAMIND_EVAL_QUESTIONS=en-02,en-07,en-08,en-17,en-19,zh-02,zh-04,zh-08,zh-14,zh-17 \
   npm run eval
   ```
+
+  These ten are the gating Questions whose Citations the long PDFs make hardest to get found (`tests/eval/smallModelCitations.test.ts`): an answer on the second page of a two-page Passage (en-02, en-08, zh-02), or across a page break (en-17); JP Morgan's report, whose stored text lost its f-ligatures (en-07, en-19); pages in traditional characters (zh-02, zh-04, zh-14, zh-17); and a Passage over four pages (zh-08, zh-14). Such a run should take about 10 minutes on an Apple M2 Max: about 5 to process and search the Documents, as always, then the ten Answers, while the model also tags the 12 Documents.
 
 ### Cloud embeddings
 
