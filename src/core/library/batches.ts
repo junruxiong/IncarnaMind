@@ -3,7 +3,6 @@ import type { LinkedFolder } from "../api";
 import type { Database } from "../storage";
 import type { DocumentBatch } from "./types";
 
-/** A batch's progress reaches the UI at most this often. */
 const PROGRESS_INTERVAL_MS = 250;
 const READ = new Set(["ready", "waiting-for-model", "embedding", "no-text", "failed"]);
 
@@ -126,7 +125,6 @@ export function createBatches(options: {
   };
 
   return {
-    /** A batch to add Documents to, with its id. */
     begin(groupId: string | null): string {
       const batch: Batch = {
         id: randomUUID(),
@@ -139,12 +137,10 @@ export function createBatches(options: {
       batches.set(batch.id, batch);
       return batch.id;
     },
-    /** A Document the batch added. */
     added(batchId: string, documentId: string): void {
       const batch = batches.get(batchId);
       if (batch) join(batch, documentId);
     },
-    /** The batch's files are all added. */
     done(batchId: string): void {
       const batch = batches.get(batchId);
       if (batch) done(batch);
@@ -178,7 +174,6 @@ export function createBatches(options: {
         if (!linked || linked.status === "watching") done(batch);
       }
     },
-    /** These Documents' status or assignment changed, or they were removed. */
     changed(documentIds: readonly string[]): void {
       for (const id of documentIds) {
         const batch = byDocument.get(id);

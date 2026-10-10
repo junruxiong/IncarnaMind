@@ -519,7 +519,6 @@ export function createLibrary(options: LibraryOptions) {
     announced: Set<string>;
     moved: Set<string>;
     folders: Set<string>;
-    /** Hears of each new Document instead of `hooks.added`. */
     added?: (documentId: string) => void;
   }
 
@@ -1292,8 +1291,7 @@ export function createLibrary(options: LibraryOptions) {
     /**
      * Adds files on their own (see `CoreApi.addDocuments`), in order: the
      * Document of each, or why it was skipped. Not held up by a pass under
-     * way: every write checks what is there just before it. `added` hears of
-     * each new Document.
+     * way: every write checks what is there just before it.
      */
     addFiles(
       paths: readonly string[],
