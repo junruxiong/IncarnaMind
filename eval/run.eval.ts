@@ -25,7 +25,7 @@ import {
 import { type CitationRun, runCitations, summariseGroup } from "./lib/citations";
 import { type EvalConfig, readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
-import { FORMATS_SET, loadEvaluationSet } from "./lib/evaluationSet";
+import { FORMATS_SET, isGating, loadEvaluationSet } from "./lib/evaluationSet";
 import { type FormatsReport, formatOf, summariseFormats } from "./lib/formats";
 import { type Library, openLibrary } from "./lib/library";
 import { createLog, type Log } from "./lib/log";
@@ -78,8 +78,9 @@ async function retrieve(
     const summary = summarise(results, [mode])[mode];
     if (!summary) return;
     const translated = summary.crossLingualTranslated;
+    const paraphrase = summary.paraphrase.all;
     log(
-      `${embedding}, ${label}: English ${summary.en.hits}/${summary.en.total}, Chinese ${summary.zh.hits}/${summary.zh.total}, cross-lingual ${summary.crossLingual.hits}/${summary.crossLingual.total}${translated ? ` (${translated.hits}/${translated.total} with a translated second query)` : ""}`,
+      `${embedding}, ${label}: English ${summary.en.hits}/${summary.en.total}, Chinese ${summary.zh.hits}/${summary.zh.total}, cross-lingual ${summary.crossLingual.hits}/${summary.crossLingual.total}${translated ? ` (${translated.hits}/${translated.total} with a translated second query)` : ""}${paraphrase.total > 0 ? `, paraphrase ${paraphrase.hits}/${paraphrase.total}` : ""}`,
     );
   };
   line(HYBRID, HYBRID);
@@ -276,7 +277,7 @@ test("retrieval and Citation evaluation", async () => {
       ...("skipped" in citations ? [] : citations.failures),
     ];
     const cpu = cpus();
-    const gating = set.questions.filter((question) => !question.crossLingual);
+    const gating = set.questions.filter(isGating);
     report = {
       result: failures.length === 0 ? "pass" : "fail",
       failures,
@@ -296,7 +297,8 @@ test("retrieval and Citation evaluation", async () => {
             en: gating.filter((question) => question.language === "en").length,
             zh: gating.filter((question) => question.language === "zh").length,
           },
-          crossLingual: set.questions.length - gating.length,
+          crossLingual: set.questions.filter((question) => question.crossLingual).length,
+          paraphrase: set.questions.filter((question) => question.paraphrase).length,
         },
       },
       documents: set.documents.map(({ key }) => {

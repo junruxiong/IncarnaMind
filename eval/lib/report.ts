@@ -24,6 +24,7 @@ import {
   KEYWORD_RERANK_DEPTH,
   KEYWORD_RERANK_LABEL,
   KEYWORD_RERANK_MODE,
+  type LanguageTallies,
   type ModeResult,
   type ModeSummary,
   type QuestionResult,
@@ -52,7 +53,7 @@ export interface EvalReport {
   evaluationSet: {
     source: string;
     hitRule: string;
-    questions: { gating: { en: number; zh: number }; crossLingual: number };
+    questions: { gating: { en: number; zh: number }; crossLingual: number; paraphrase: number };
   };
   documents: { key: string; name: string; pageCount: number | null }[];
   retrieval: {
@@ -75,6 +76,7 @@ const GROUPS: readonly [CitationGroup, string][] = [
   ["en", "English"],
   ["zh", "Chinese"],
   ["crossLingual", "Cross-lingual"],
+  ["paraphrase", "Paraphrase"],
 ];
 
 const OUTCOME_LABELS: Record<CitationOutcome, string> = {
@@ -103,10 +105,14 @@ function modeLabel(run: RetrievalRun, mode: RetrievalMode): string {
   return mode === KEYWORD_RERANK_MODE ? KEYWORD_RERANK_LABEL : mode;
 }
 
+/** A group's hits in both languages, then each: "9/15 (5 + 4)"; "–" for a group with no Questions. */
+const bothLanguages = ({ all, en, zh }: LanguageTallies) =>
+  all.total === 0 ? "–" : `${fraction(all)} (${en.hits} + ${zh.hits})`;
+
 function retrievalTable(runs: readonly RetrievalRun[]): string[] {
   const lines = [
-    "| Embedding model | Mode | English | Chinese | Gating set | Cross-lingual | Cross-lingual, with a translated second query |",
-    "|---|---|---|---|---|---|---|",
+    "| Embedding model | Mode | English | Chinese | Gating set | Cross-lingual | Cross-lingual, with a translated second query | Paraphrase (English + Chinese) |",
+    "|---|---|---|---|---|---|---|---|",
   ];
   for (const run of runs) {
     for (const mode of modesIn(run)) {
@@ -117,7 +123,7 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
       const translated = summary.crossLingualTranslated;
       const cell = (tally: Tally) => (gating ? `**${fraction(tally)}**` : fraction(tally));
       lines.push(
-        `| ${run.embedding} | ${label} | ${cell(summary.en)} | ${cell(summary.zh)} | ${cell(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} |`,
+        `| ${run.embedding} | ${label} | ${cell(summary.en)} | ${cell(summary.zh)} | ${cell(summary.core)} | ${fraction(summary.crossLingual)} | ${translated ? fraction(translated) : "–"} | ${bothLanguages(summary.paraphrase)} |`,
       );
     }
   }
@@ -174,7 +180,11 @@ function perQuestionTable(runs: readonly RetrievalRun[]): string[] {
         ? `${rank(result?.modes[mode])} / ${rank(translated)}`
         : rank(result?.modes[mode]);
     });
-    const id = question.crossLingual ? `${question.id} (cross-lingual)` : question.id;
+    const id = question.crossLingual
+      ? `${question.id} (cross-lingual)`
+      : question.paraphrase
+        ? `${question.id} (paraphrase)`
+        : question.id;
     const text = question.translatedQuery
       ? `${question.question} / ${question.translatedQuery}`
       : question.question;
@@ -360,16 +370,17 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     `- Run: ${run.startedAt}, ${run.seconds.toFixed(0)} s, commit ${run.commit}`,
     `- Machine: ${run.platform}, ${run.cpu}, Node ${run.node}`,
-    `- Evaluation set: \`${report.evaluationSet.source}\`, ${report.evaluationSet.questions.gating.en} English and ${report.evaluationSet.questions.gating.zh} Chinese gating Questions, ${report.evaluationSet.questions.crossLingual} cross-lingual`,
+    `- Evaluation set: \`${report.evaluationSet.source}\`, ${report.evaluationSet.questions.gating.en} English and ${report.evaluationSet.questions.gating.zh} Chinese gating Questions, ${report.evaluationSet.questions.crossLingual} cross-lingual, ${report.evaluationSet.questions.paraphrase} paraphrase`,
     `- Documents: ${report.documents.length} (${report.documents.map((document) => document.name).join(", ")})`,
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, ${GATING_LABEL}: hybrid search with the built-in embedding model, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, keyword + rerank, the other reranking candidates, cross-lingual Questions and cloud embedding models are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, ${GATING_LABEL}: hybrid search with the built-in embedding model, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, keyword + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models are reported only.`,
     "",
     `- **Reranked modes** ("${HYBRID} + model"): what the search Tool hands a reranker, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a reranking model.`,
     `- **Keyword + rerank** ("keyword + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, with no vector search, reordered by the same reranking models: as many candidates as the most the search Tool hands one.`,
     "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
+    "- **Paraphrase:** Questions that ask for a fact on one page in words that avoid its passage's own, as a person asks without the text in front of them; hits in both languages, then in English + Chinese. They are out of the gating set's counts and bar.",
     "",
     ...retrievalTable(retrieval.runs),
     "",
@@ -408,6 +419,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     lines.push(
       `- Model: \`${citations.model}\`, ${citations.service ? `sent to ${citations.service}` : "on this computer"}. ${citations.gating ? "It is the gating model." : "A local model: reported, not gating."}`,
       `- Each Question asked in a Mind of its own; ${citations.rounds} round${citations.rounds === 1 ? "" : "s"} (more rounds ask a language's gating Questions again until it has ${citations.minCitations} Citations).`,
+      "- The targets are for the gating Questions, English and Chinese; the cross-lingual and paraphrase Answers are columns of their own, reported only.",
       `- False "not found": the check said "not found", but the quote is on the cited pages once both are compared by letters and digits only, ignoring case, accents and punctuation. The share is of all Citations.`,
       "- Coverage counts every sentence of an Answer (headings and code left out) as drawn from Documents, so it is a lower bound: sentences that only say what the Documents don't cover count as uncited.",
       `- Reviewer sheet: \`${sheet}\`. Mark each found quote "y" if it supports its sentence, "n" if not; the target is ${percent(CITATION_TARGETS.supports)} "y".`,
@@ -455,7 +467,11 @@ export function reviewerSheet(run: CitationRun): string {
       if (citation.outcome !== "found") continue;
       rows.push([
         answer.questionId,
-        answer.crossLingual ? `${answer.language} (cross-lingual)` : answer.language,
+        answer.crossLingual
+          ? `${answer.language} (cross-lingual)`
+          : answer.paraphrase
+            ? `${answer.language} (paraphrase)`
+            : answer.language,
         answer.round,
         answer.question,
         citation.sentence,
@@ -506,8 +522,9 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
           ? `${modeLabel(run, mode)} (gating)`
           : modeLabel(run, mode);
       const translated = summary.crossLingualTranslated;
+      const paraphrase = summary.paraphrase.all;
       lines.push(
-        `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}`,
+        `    ${label.padEnd(16)} English ${fraction(summary.en).padEnd(6)} Chinese ${fraction(summary.zh).padEnd(6)} gating set ${fraction(summary.core).padEnd(6)} cross-lingual ${fraction(summary.crossLingual)}${translated ? `, with a translated second query ${fraction(translated)}` : ""}${paraphrase.total > 0 ? `; paraphrase ${fraction(paraphrase)}` : ""}`,
       );
     }
     for (const counts of candidateCountsOf(run)) lines.push(`    ${candidatesLine(counts)}`);

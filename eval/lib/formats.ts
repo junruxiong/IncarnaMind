@@ -17,6 +17,7 @@ import {
   GATING_MODE,
   HYBRID,
   KEYWORD_RERANK_MODE,
+  type LanguageTallies,
   type RetrievalMode,
   type RetrievalRun,
   type Tally,
@@ -44,12 +45,6 @@ export function formatOf(path: string): FormatId {
   const format = FORMATS.find((each) => (each.kinds as readonly string[]).includes(kind ?? ""));
   if (!format) throw new Error(`${path} isn't a Document format.`);
   return format.id;
-}
-
-export interface LanguageTallies {
-  en: Tally;
-  zh: Tally;
-  all: Tally;
 }
 
 export interface PlaceSummary {

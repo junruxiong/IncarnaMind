@@ -3,7 +3,7 @@
  * returns. The evaluation itself needs the real model and isn't part of
  * `npm test`; its scoring is, since a mistake there would skew every report.
  */
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +38,7 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
 });
 
 import { readConfig } from "../../eval/lib/config";
-import { type EvalQuestion, loadEvaluationSet } from "../../eval/lib/evaluationSet";
+import { type EvalQuestion, isGating, loadEvaluationSet } from "../../eval/lib/evaluationSet";
 import {
   type EvalReport,
   reviewerSheet,
@@ -206,6 +206,11 @@ describe("Retrieval tallies", () => {
       core: { hits: 1, total: 2 },
       crossLingual: { hits: 2, total: 3 },
       crossLingualTranslated: { hits: 2, total: 2 },
+      paraphrase: {
+        en: { hits: 0, total: 0 },
+        zh: { hits: 0, total: 0 },
+        all: { hits: 0, total: 0 },
+      },
     });
     expect(summary["rerank:mmarco-minilm"]).toMatchObject({
       en: { hits: 1, total: 1 },
@@ -216,6 +221,33 @@ describe("Retrieval tallies", () => {
     expect(summarise([result("xl-01", { keyword: at(1) })]).keyword?.crossLingualTranslated).toBe(
       null,
     );
+  });
+
+  test("paraphrase Questions are tallied apart, out of the gating counts and the bar", () => {
+    const paraphrase = { paraphrase: true };
+    const results = [
+      ...["en-01", "en-02", "en-03", "en-04", "en-05", "zh-01", "zh-02", "zh-03", "zh-04"].map(
+        (id) => result(id, { hybrid: at(1) }),
+      ),
+      result("para-en-01", { hybrid: at(null) }, paraphrase),
+      result("para-en-02", { hybrid: at(7) }, paraphrase),
+      result("para-zh-01", { hybrid: at(4) }, { ...paraphrase, language: "zh" }),
+    ];
+
+    const hybrid = summarise(results).hybrid;
+
+    expect(hybrid).toMatchObject({
+      en: { hits: 5, total: 5 },
+      zh: { hits: 4, total: 4 },
+      core: { hits: 9, total: 9 },
+      paraphrase: {
+        en: { hits: 0, total: 2 },
+        zh: { hits: 1, total: 1 },
+        all: { hits: 1, total: 3 },
+      },
+    });
+    // Counted in, the two English misses would take English to 5 of 7, under 80%.
+    expect(retrievalFailures(hybrid)).toEqual([]);
   });
 });
 
@@ -369,12 +401,18 @@ describe("Keyword + rerank's mode", () => {
 
 describe("The retrieval gate", () => {
   const tally = (hits: number, total = 20) => ({ hits, total });
-  const summary = (en: number, zh: number) => ({
+  /** A mode's summary over today's set: 20 + 20 gating Questions, 10 cross-lingual, 8 + 7 paraphrase. */
+  const summary = (en: number, zh: number, [paraphraseEn, paraphraseZh] = [0, 0]) => ({
     en: tally(en),
     zh: tally(zh),
     core: tally(en + zh, 40),
     crossLingual: tally(2, 10),
     crossLingualTranslated: tally(7, 10),
+    paraphrase: {
+      en: tally(paraphraseEn, 8),
+      zh: tally(paraphraseZh, 7),
+      all: tally(paraphraseEn + paraphraseZh, 15),
+    },
   });
 
   test("is what the search Tool does by default: hybrid search reranked by the built-in model", () => {
@@ -404,7 +442,7 @@ describe("The retrieval gate", () => {
       evaluationSet: {
         source: "eval/retrieval/questions.json",
         hitRule: "",
-        questions: { gating: { en: 20, zh: 20 }, crossLingual: 10 },
+        questions: { gating: { en: 20, zh: 20 }, crossLingual: 10, paraphrase: 0 },
       },
       documents: [],
       retrieval: {
@@ -432,7 +470,7 @@ describe("The retrieval gate", () => {
     expect(lines.find((line) => line.trim().startsWith("hybrid "))).toContain("English 13/20");
   });
 
-  test("keyword + rerank is reported next to the gating row, never gating", async () => {
+  test("keyword + rerank is reported next to the gating row, never gating, and paraphrase Questions in a column of their own", async () => {
     const reranker = (mode: string): RerankerInfo => ({
       mode,
       name: BUILT_IN_RERANKING_MODEL.name,
@@ -448,10 +486,10 @@ describe("The retrieval gate", () => {
       processingSeconds: 60,
       questions: [],
       summary: {
-        hybrid: summary(13, 19),
-        [GATING_MODE]: summary(16, 20),
+        hybrid: summary(13, 19, [5, 4]),
+        [GATING_MODE]: summary(16, 20, [6, 5]),
         // Under the bar in English: reported, and the run still passes.
-        [KEYWORD_RERANK_MODE]: summary(15, 20),
+        [KEYWORD_RERANK_MODE]: summary(15, 20, [4, 3]),
       },
       rerankers: [reranker(GATING_MODE), reranker(KEYWORD_RERANK_MODE)],
       rerankCandidates: { search: "hybrid", perList: 10, searches: 75, mean: 16, min: 12, max: 20 },
@@ -479,7 +517,7 @@ describe("The retrieval gate", () => {
       evaluationSet: {
         source: "eval/retrieval/questions.json",
         hitRule: "",
-        questions: { gating: { en: 20, zh: 20 }, crossLingual: 10 },
+        questions: { gating: { en: 20, zh: 20 }, crossLingual: 10, paraphrase: 15 },
       },
       documents: [],
       retrieval: { topK: 5, gatingMode: GATING_MODE, runs: [run] },
@@ -488,7 +526,9 @@ describe("The retrieval gate", () => {
 
     expect(report.result).toBe("pass");
     const lines = terminalSummary(report, "/repo/eval/results/x", "/repo").split("\n");
-    expect(lines.find((line) => line.trim().startsWith("keyword + "))).toContain("English 15/20");
+    expect(lines.find((line) => line.trim().startsWith("keyword + "))).toMatch(
+      /English 15\/20 .*; paraphrase 7\/15$/,
+    );
     expect(lines.some((line) => line.includes("keyword + rerank search"))).toBe(true);
 
     const results = await mkdtemp(join(tmpdir(), "retrieval-report-"));
@@ -498,10 +538,13 @@ describe("The retrieval gate", () => {
       ).split("\n");
       const model = BUILT_IN_RERANKING_MODEL.name;
       expect(markdown).toContain(
-        `| multilingual-e5-small (built-in) | **hybrid + ${model} (gating)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 |`,
+        "- Evaluation set: `eval/retrieval/questions.json`, 20 English and 20 Chinese gating Questions, 10 cross-lingual, 15 paraphrase",
       );
       expect(markdown).toContain(
-        `| multilingual-e5-small (built-in) | keyword + ${model} | 15/20 | 20/20 | 35/40 | 2/10 | 7/10 |`,
+        `| multilingual-e5-small (built-in) | **hybrid + ${model} (gating)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 | 11/15 (6 + 5) |`,
+      );
+      expect(markdown).toContain(
+        `| multilingual-e5-small (built-in) | keyword + ${model} | 15/20 | 20/20 | 35/40 | 2/10 | 7/10 | 7/15 (4 + 3) |`,
       );
       expect(markdown).toContain(
         "Candidates per keyword + rerank search (keyword search's top 20, no vector search): 19.5 on average, from 9 to 20, over 75 searches.",
@@ -535,6 +578,73 @@ describe("The evaluation's settings for reranking", () => {
     for (const question of set.questions) {
       expect(question.translatedQuery !== undefined, question.id).toBe(question.crossLingual);
     }
+  });
+});
+
+describe("Paraphrase Questions", () => {
+  /** Reads an evaluation set of one Document and these Questions, written to a temporary folder. */
+  async function setOf(questions: unknown[]) {
+    const root = await mkdtemp(join(tmpdir(), "evaluation-set-"));
+    try {
+      await writeFile(join(root, "tides.pdf"), "");
+      await writeFile(
+        join(root, "set.json"),
+        JSON.stringify({ documents: { tides: "tides.pdf" }, questions }),
+      );
+      return loadEvaluationSet(root, "set.json");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+  const asked = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    language: "en",
+    question: "When is the sea highest?",
+    expected: { document: "tides", pages: [1, 1], quote: "Spring tides" },
+    ...extra,
+  });
+
+  test("are marked with paraphrase: true, and only true is kept", async () => {
+    const set = await setOf([
+      asked("en-01"),
+      asked("para-en-01", { paraphrase: true }),
+      asked("en-02", { paraphrase: false }),
+    ]);
+
+    expect(set.questions.map((question) => [question.id, question.paraphrase])).toEqual([
+      ["en-01", undefined],
+      ["para-en-01", true],
+      ["en-02", undefined],
+    ]);
+    expect(set.questions.map(isGating)).toEqual([true, false, true]);
+  });
+
+  test("a flag that isn't true or false, or a cross-lingual paraphrase, is refused", async () => {
+    await expect(setOf([asked("para-en-01", { paraphrase: "yes" })])).rejects.toThrow(
+      "para-en-01: paraphrase must be true or false.",
+    );
+    await expect(
+      setOf([
+        asked("para-xl-01", {
+          paraphrase: true,
+          crossLingual: true,
+          translatedQuery: "大潮什么时候出现？",
+        }),
+      ]),
+    ).rejects.toThrow(/para-xl-01: a paraphrase question isn't cross-lingual/);
+  });
+
+  test("today's set has 8 English and 7 Chinese ones, and its gating Questions are unchanged", () => {
+    const set = loadEvaluationSet(fileURLToPath(new URL("../..", import.meta.url)));
+    const paraphrase = set.questions.filter((question) => question.paraphrase);
+    const gating = set.questions.filter(isGating);
+
+    expect(paraphrase.filter((question) => question.language === "en")).toHaveLength(8);
+    expect(paraphrase.filter((question) => question.language === "zh")).toHaveLength(7);
+    expect(paraphrase.every((question) => !question.crossLingual)).toBe(true);
+    expect(gating.filter((question) => question.language === "en")).toHaveLength(20);
+    expect(gating.filter((question) => question.language === "zh")).toHaveLength(20);
+    expect(set.questions.filter((question) => question.crossLingual)).toHaveLength(10);
   });
 });
 
