@@ -2,7 +2,7 @@
 
 The grouping check (`npm run eval:grouping`, #51) measured whether Documents could be grouped into generated Topics by clustering their vectors, before the Library was built. With the built-in embedding model they couldn't: the Topics split by language (see Results). ADR-0012 replaced Topics with Folders and Tags, and on 2026-10-10 the check was removed with the Topic code it measured (`src/core/topics/`). Its code, how to run it and its full report were last on `main` at commit `145c3a4`.
 
-What stays here is the fixture set, because the local classification comparison (`eval/classification/`) reads it: `set.json` gives each Document's path, subject and language, and `fixtures/` holds the files that were new for the check, with their sources and licences in `fixtures/ATTRIBUTION.md`. The `choosing`, `heldOut`, `sharedNames`, `lateArrivals` and `corrections` entries of `set.json` were the check's own cases; nothing reads them now.
+What stays here is the fixture set, because the local classification comparison (`eval/classification/`) reads it: `set.json` gives each Document's path, subject and language, and `fixtures/` holds the files that were new for the check, with their sources and licences in `fixtures/ATTRIBUTION.md`. The check's own cases (`choosing`, `heldOut`, `sharedNames`, `lateArrivals` and `corrections`) were removed from `set.json` too, because nothing reads them; they are in the history at commit `145c3a4`.
 
 ## The fixture set
 
