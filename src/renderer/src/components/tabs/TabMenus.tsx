@@ -98,8 +98,8 @@ export function TabMenu({
         },
         "rule",
         {
-          id: "split",
-          label: t("tabs.menu.split"),
+          id: "side",
+          label: t("tabs.menu.side"),
           shortcut: SPLIT_SHORTCUT,
           disabled: groups >= MAX_TAB_GROUPS,
           run: () => void splitToTheRight(tab.id),

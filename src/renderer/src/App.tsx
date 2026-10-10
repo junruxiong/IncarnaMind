@@ -68,8 +68,7 @@ function useMenuCommands(): void {
 }
 
 /**
- * Hiding and showing the sidebar (#219): ⌃⌘S (Ctrl+Shift+\ elsewhere) and
- * View > Hide Sidebar (the menu, whose label follows), the title bar's
+ * Hiding and showing the sidebar (#219): ⌘\ (Ctrl+\) and View > Hide Sidebar (the menu, whose label follows), the title bar's
  * button, and dragging the divider shut. The User's choice is remembered.
  */
 function useSidebarControl(userHidden: boolean) {
