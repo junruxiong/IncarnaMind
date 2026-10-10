@@ -22,14 +22,14 @@
   }
 
   /*
-   * The one 44px header, on the band the Mind's tab strip continues across
+   * The one 36px header, on the band the Mind's tab strip continues across
    * (tab-strip, no bottom rule): the divider before the viewer starts below
    * it. Too narrow for its controls, it scrolls sideways.
    */
   .viewer-header {
-    @apply flex h-11 shrink-0 items-center gap-1 overflow-x-auto bg-tab-strip px-2 text-[13px] leading-5 text-ink-secondary;
+    @apply flex h-9 shrink-0 items-center gap-1 overflow-x-auto bg-tab-strip px-2 text-[13px] leading-5 text-ink-secondary;
     /* At the band's right end: clear of Windows' window buttons (styles.css, "The title bar"). */
-    padding-right: calc(8px + var(--window-buttons-right));
+    padding-right: max(8px, var(--window-buttons-right));
     scrollbar-width: none;
 
     /* On Windows, a divider between the viewer's ✕ and the window's buttons. */

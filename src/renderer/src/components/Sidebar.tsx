@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
@@ -8,12 +8,14 @@ import { DocumentsSection } from "./DocumentsSection";
 import { ExampleChip, GetStartedCard, useIsExample } from "./GettingStarted";
 import {
   AppMark,
+  FolderPlusLineIcon,
   MindLineIcon,
   PencilLineIcon,
   PlusLineIcon,
   SettingsLineIcon,
   TrashLineIcon,
 } from "./lineIcons";
+import { NEW_MIND_SHORTCUT } from "./MindTabs";
 import { SidebarStatus } from "./SidebarStatus";
 import {
   rowActionButtonClass,
@@ -24,6 +26,8 @@ import {
   rowInputClass,
   SectionLabel,
 } from "./sidebarRows";
+import { iconButtonClass, menuClass, menuItemClass } from "./ui";
+import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
  * The sidebar, on the frame: a 44px header like every pane's (the window's
@@ -46,7 +50,9 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
       className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
     >
-      <SidebarHeader />
+      <SidebarHeader>
+        <PlusMenu />
+      </SidebarHeader>
 
       <div
         data-testid="sidebar-tree"
@@ -113,17 +119,105 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
 /**
  * The sidebar's 44px header, the start of the window's title bar: macOS's
  * traffic lights sit here, in place of the app's mark (styles.css, "The title
- * bar"). The startup shell draws it too.
+ * bar"). The "+" menu sits at its right end. The startup shell draws it too.
  */
-export function SidebarHeader() {
+export function SidebarHeader({ children }: { children?: ReactNode }) {
   return (
     <header
       data-testid="sidebar-header"
       // Its rule is inset 8px each side, like the rows: it never meets the sidebar's edge.
-      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-4 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
+      className="title-bar sidebar-header relative flex h-11 shrink-0 items-center pr-2 after:absolute after:inset-x-2 after:bottom-0 after:h-px after:bg-rule after:content-['']"
     >
       <AppMark />
+      <span className="flex-1" />
+      {children}
     </header>
+  );
+}
+
+/**
+ * The "+" at the header's right end, drawn alone while the app loads (nothing
+ * in the startup shell can be used yet).
+ */
+export function PlusMenuPlaceholder() {
+  return (
+    <span aria-hidden="true" className={`${iconButtonClass} text-ink-secondary`}>
+      <PlusLineIcon className="size-4" />
+    </span>
+  );
+}
+
+/**
+ * The one "+" menu: New Mind, Add Documents… and Link a folder…. Opened by
+ * keyboard or mouse, its items are menu items reached with the arrow keys.
+ */
+function PlusMenu() {
+  const t = useT();
+  const menu = usePopoverMenu();
+  const createMind = useAppStore((state) => state.createMind);
+  const pickDocuments = useAppStore((state) => state.pickDocuments);
+  const picking = useAppStore((state) => state.pickingDocuments);
+  const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
+
+  /** Closes the menu, then does it. */
+  const choose = (action: () => void) => () => {
+    menu.close();
+    action();
+  };
+
+  return (
+    <>
+      <button
+        {...menu.buttonProps}
+        type="button"
+        data-testid="plus-menu"
+        aria-label={t("sidebar.plus")}
+        title={t("sidebar.plus")}
+        className={`${iconButtonClass} text-ink-secondary`}
+      >
+        <PlusLineIcon className="size-4" />
+      </button>
+      <div
+        {...menu.menuProps}
+        role="menu"
+        aria-label={t("sidebar.plus")}
+        data-testid="plus-menu-items"
+        className={menuClass}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-new-mind"
+          onClick={choose(() => void createMind())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <MindLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("sidebar.newMind")}</span>
+          <span className="pl-4 text-[13px] text-ink-meta">{NEW_MIND_SHORTCUT}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-add-documents"
+          disabled={picking}
+          onClick={choose(() => void pickDocuments())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <PlusLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("sidebar.plus.addDocuments")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-link-folder"
+          onClick={choose(() => void addLinkedFolder())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <FolderPlusLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("sidebar.plus.linkFolder")}</span>
+        </button>
+      </div>
+    </>
   );
 }
 

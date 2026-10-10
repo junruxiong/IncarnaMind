@@ -130,6 +130,9 @@ export const zhCN = {
 
   "sidebar.label": "侧边栏",
   "sidebar.newMind": "新建 Mind",
+  "sidebar.plus": "新建或添加",
+  "sidebar.plus.addDocuments": "添加文档…",
+  "sidebar.plus.linkFolder": "关联文件夹…",
   "sidebar.minds": "Minds",
   "sidebar.minds.count": "Minds（{count}）",
   "sidebar.minds.fold": "收起 Minds",

@@ -11,7 +11,7 @@ import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
 import { buttonStyle } from "./ui";
 
 /**
- * The centre: a 44px strip of the open Minds as tabs (with "+" and Export),
+ * The card's centre: a 36px strip of the open Minds as tabs (with "+" and Export),
  * then the shown Mind, its title and its Blocks. With no tab open, a way to
  * start a Mind.
  */
@@ -28,7 +28,7 @@ export function MindPane() {
       data-testid="mind-area"
       className="flex min-w-[300px] flex-1 flex-col overflow-hidden bg-sheet"
     >
-      {/* 44px, like every pane header, so it lines up with the sidebar's. */}
+      {/* The card's 36px band: its bottom lines up with the sidebar header's rule. */}
       <MindTabs onExport={() => setExportingId(mind?.id ?? null)} />
       <ExportDialog
         mind={mind && mind.id === exportingId ? mind : null}

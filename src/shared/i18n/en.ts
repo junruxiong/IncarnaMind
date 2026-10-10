@@ -142,6 +142,9 @@ export const en = {
 
   "sidebar.label": "Sidebar",
   "sidebar.newMind": "New Mind",
+  "sidebar.plus": "New or add",
+  "sidebar.plus.addDocuments": "Add Documents…",
+  "sidebar.plus.linkFolder": "Link a folder…",
   "sidebar.minds": "Minds",
   "sidebar.minds.count": "Minds ({count})",
   "sidebar.minds.fold": "Fold the Minds away",
