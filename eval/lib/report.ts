@@ -21,9 +21,9 @@ import {
   GATING_LABEL,
   GATING_MODE,
   HYBRID,
+  HYBRID_RERANK_LABEL,
+  HYBRID_RERANK_MODE,
   KEYWORD_RERANK_DEPTH,
-  KEYWORD_RERANK_LABEL,
-  KEYWORD_RERANK_MODE,
   type LanguageTallies,
   type ModeResult,
   type ModeSummary,
@@ -102,7 +102,7 @@ function modeLabel(run: RetrievalRun, mode: RetrievalMode): string {
   const search = rerankedSearchOf(mode);
   if (reranker && search) return rerankedLabel(search, reranker.name);
   if (mode === GATING_MODE) return GATING_LABEL;
-  return mode === KEYWORD_RERANK_MODE ? KEYWORD_RERANK_LABEL : mode;
+  return mode === HYBRID_RERANK_MODE ? HYBRID_RERANK_LABEL : mode;
 }
 
 /** A group's hits in both languages, then each: "9/15 (5 + 4)"; "–" for a group with no Questions. */
@@ -134,11 +134,11 @@ function retrievalTable(runs: readonly RetrievalRun[]): string[] {
 export const candidatesLine = (counts: CandidateCounts) =>
   counts.search === "keyword"
     ? `Candidates per keyword + rerank search (keyword search's top ${counts.perList}, no vector search): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches.`
-    : `Candidates per reranked search (keyword search's top ${counts.perList} and vector search's top ${counts.perList}, each Passage once): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches.`;
+    : `Candidates per hybrid + rerank search (keyword search's top ${counts.perList} and vector search's top ${counts.perList}, each Passage once): ${counts.mean.toFixed(1)} on average, from ${counts.min} to ${counts.max}, over ${counts.searches} searches.`;
 
-/** A run's candidate counts, hybrid's reranked modes' first. */
+/** A run's candidate counts, the gate's (keyword + rerank) first. */
 const candidateCountsOf = (run: RetrievalRun): CandidateCounts[] =>
-  [run.rerankCandidates, run.keywordRerankCandidates].filter(
+  [run.keywordRerankCandidates, run.rerankCandidates].filter(
     (counts): counts is CandidateCounts => counts !== undefined,
   );
 
@@ -286,15 +286,15 @@ function formatsSection(formats: FormatsReport): string[] {
     "",
     `\`${formats.source}\`: ${retrieval.questions.length} Questions over ${formats.documents.length} Documents in Word, PowerPoint, Excel, CSV, Markdown, plain text and PDF, in English and Chinese, about the hard places in each (#70). They are searched in a library of their own, with the gating set's hit rule; the expected pages are the Units a Citation would cite. Known gaps, text the readers don't index today (Word comments, scanned pages), are counted apart. No bar is set yet: \`eval/README.md\` proposes one per format.`,
     "",
-    `| Format | Documents | Questions (English / Chinese), known gaps apart | ${GATING_LABEL}: English | Chinese | All | ${HYBRID}: All | ${KEYWORD_RERANK_LABEL}: All | Known gaps found |`,
+    `| Format | Documents | Questions (English / Chinese), known gaps apart | ${GATING_LABEL}: English | Chinese | All | ${HYBRID}: All | ${HYBRID_RERANK_LABEL}: All | Known gaps found |`,
     "|---|---|---|---|---|---|---|---|---|",
     ...formats.formats.map((format) => {
       const reranked = format.retrieval[GATING_MODE];
       const hybrid = format.retrieval[HYBRID];
-      const keyword = format.retrieval[KEYWORD_RERANK_MODE];
+      const hybridReranked = format.retrieval[HYBRID_RERANK_MODE];
       if (!reranked || !hybrid)
         return `| ${format.label} | ${format.documents} | – | – | – | – | – | – | – |`;
-      return `| ${format.label} | ${format.documents} | ${reranked.en.total} / ${reranked.zh.total} | ${fraction(reranked.en)} | ${fraction(reranked.zh)} | **${fraction(reranked.all)}** | ${fraction(hybrid.all)} | ${keyword ? fraction(keyword.all) : "–"} | ${fraction(format.knownGaps)} |`;
+      return `| ${format.label} | ${format.documents} | ${reranked.en.total} / ${reranked.zh.total} | ${fraction(reranked.en)} | ${fraction(reranked.zh)} | **${fraction(reranked.all)}** | ${fraction(hybrid.all)} | ${hybridReranked ? fraction(hybridReranked.all) : "–"} | ${fraction(format.knownGaps)} |`;
     }),
     "",
     ...(top
@@ -375,10 +375,10 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
     "",
     "## Retrieval",
     "",
-    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, ${GATING_LABEL}: hybrid search with the built-in embedding model, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, keyword + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models are reported only.`,
+    `Top-${retrieval.topK} hit rate through the core's \`searchPassages\`. A Question is a hit when one of the top ${retrieval.topK} Passages belongs to the expected Document, covers the expected pages and contains the expected quote, both normalised (ADR-0009). The gate is what the search Tool does by default, with embeddings off, ${GATING_LABEL}: keyword search, reranked by the built-in reranking model. It must find at least 80% overall and in each language (32 of 40, and 16 of 20 per language, with today's set). The plain search modes, hybrid + rerank, the other reranking candidates, cross-lingual and paraphrase Questions and cloud embedding models are reported only.`,
     "",
-    `- **Reranked modes** ("${HYBRID} + model"): what the search Tool hands a reranker, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by a reranking model.`,
-    `- **Keyword + rerank** ("keyword + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, with no vector search, reordered by the same reranking models: as many candidates as the most the search Tool hands one.`,
+    `- **Keyword + rerank** ("keyword + model"): keyword search's top ${KEYWORD_RERANK_DEPTH}, reordered by a reranking model, as the search Tool hands its reranker by default.`,
+    `- **Hybrid + rerank** ("${HYBRID} + model"): what the search Tool hands a reranker with embeddings on, keyword search's top ${RERANK_PER_LIST} and vector search's top ${RERANK_PER_LIST}, each Passage once, reordered by the same reranking models.`,
     "- **With a translated second query:** the cross-lingual Questions that have a hand-written translation into their Document's language are also searched with it, as an Answer is told to search again in the Documents' language. A hit in either search's top 5 counts. The translation is written by hand, so this is the most the approach can bring.",
     "- **Paraphrase:** Questions that ask for a fact on one page in words that avoid its passage's own, as a person asks without the text in front of them; hits in both languages, then in English + Chinese. They are out of the gating set's counts and bar.",
     "",
@@ -564,10 +564,10 @@ function formatsSummary(formats: FormatsReport): string[] {
   ];
   for (const format of formats.formats) {
     const reranked = format.retrieval[GATING_MODE];
-    const keyword = format.retrieval[KEYWORD_RERANK_MODE];
+    const hybridReranked = format.retrieval[HYBRID_RERANK_MODE];
     const citations = format.citations;
     lines.push(
-      `  ${format.label.padEnd(24)} English ${fraction(reranked?.en ?? { hits: 0, total: 0 }).padEnd(6)} Chinese ${fraction(reranked?.zh ?? { hits: 0, total: 0 }).padEnd(6)} known gaps ${fraction(format.knownGaps)}${keyword ? `; ${KEYWORD_RERANK_LABEL} ${fraction(keyword.all)}` : ""}${citations ? `; ${citations.citations} Citations, found ${percent(citations.foundShare)}, false "not found" ${percent(citations.falseNotFoundShare)}, coverage ${percent(citations.coverage)}` : ""}`,
+      `  ${format.label.padEnd(24)} English ${fraction(reranked?.en ?? { hits: 0, total: 0 }).padEnd(6)} Chinese ${fraction(reranked?.zh ?? { hits: 0, total: 0 }).padEnd(6)} known gaps ${fraction(format.knownGaps)}${hybridReranked ? `; ${HYBRID_RERANK_LABEL} ${fraction(hybridReranked.all)}` : ""}${citations ? `; ${citations.citations} Citations, found ${percent(citations.foundShare)}, false "not found" ${percent(citations.falseNotFoundShare)}, coverage ${percent(citations.coverage)}` : ""}`,
     );
   }
   const top = formats.retrieval.summary[GATING_MODE];

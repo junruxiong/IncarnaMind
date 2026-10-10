@@ -1,10 +1,10 @@
 /**
- * The reranked modes: the candidates the search Tool hands a reranker
- * (keyword search's top 10 and vector search's top 10, each Passage once;
- * see `rerankCandidates` in ./retrieval), or keyword search's top 20 alone
- * (keyword + rerank), reranked by a built-in reranking candidate
- * (src/core/reranking/model.ts), as the search Tool reranks them when the
- * User turns reranking on. It uses the core's own reranking code (download
+ * The reranked modes: keyword search's top 20 (keyword + rerank), what the
+ * search Tool hands a reranker by default, or keyword search's top 10 and
+ * vector search's top 10, each Passage once (see `rerankCandidates` in
+ * ./retrieval), as it does with embeddings on, reranked by a built-in
+ * reranking candidate (src/core/reranking/model.ts), as the search Tool
+ * reranks them. It uses the core's own reranking code (download
  * and check, what the model reads, its scores) with the model on a worker
  * thread, outside the evaluation's core: one run compares every candidate
  * given in INCARNAMIND_EVAL_RERANK over the same searches, one model and one

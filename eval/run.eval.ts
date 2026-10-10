@@ -2,13 +2,16 @@
  * `npm run eval`: the retrieval and Citation evaluation (eval/README.md, #31).
  *
  * It drives the core's public interface in Node, as the desktop app's UI
- * would: a new temporary data folder, the evaluation set's Documents added
- * and processed with the real built-in embedding model (on a worker thread),
- * then searches for each Question, reranked by the real built-in reranking
- * model as the search Tool does by default (the gate), keyword search's top
- * 20 reranked alone (keyword + rerank, reported only), and, when a chat model
- * is given, Answers and their Citations. Then the same for the every-format
- * set (#70), on a library of its own, reported per format and never gating.
+ * would: a new temporary data folder, embeddings turned on (they are off by
+ * default) so the evaluation set's Documents are also processed with the real
+ * built-in embedding model (on a worker thread), then searches for each
+ * Question: keyword search's top 20 reranked by the real built-in reranking
+ * model, as the search Tool does by default (the gate), hybrid search's
+ * candidates reranked as with embeddings on, and the plain search modes,
+ * reported only. When a chat model is given, embeddings are turned off again,
+ * as Users have them, and Answers and their Citations are scored. Then the
+ * same for the every-format set (#70), on a library of its own, reported per
+ * format and never gating.
  * It runs under Vitest only for its TypeScript and worker-thread handling
  * (eval/vitest.config.ts); `npm test` never runs it.
  */
@@ -83,11 +86,12 @@ async function retrieve(
       `${embedding}, ${label}: English ${summary.en.hits}/${summary.en.total}, Chinese ${summary.zh.hits}/${summary.zh.total}, cross-lingual ${summary.crossLingual.hits}/${summary.crossLingual.total}${translated ? ` (${translated.hits}/${translated.total} with a translated second query)` : ""}${paraphrase.total > 0 ? `, paraphrase ${paraphrase.hits}/${paraphrase.total}` : ""}`,
     );
   };
+  line("keyword", "keyword");
   line(HYBRID, HYBRID);
 
   // Reranked modes, one model at a time: each is downloaded once into the model cache. Each
-  // model reranks hybrid search's candidates, then keyword search's alone (keyword + rerank),
-  // opened afresh for each so the timings are the mode's own.
+  // model reranks keyword search's top 20 (keyword + rerank, the gate's mode), then hybrid
+  // search's candidates, opened afresh for each so the timings are the mode's own.
   const rerankers: RerankerInfo[] = [];
   for (const candidate of rerank?.candidates ?? []) {
     for (const search of RERANKED_SEARCHES) {
@@ -136,6 +140,16 @@ async function retrieve(
 }
 
 /**
+ * Turns embeddings off in a library before its Answers are asked, so they
+ * search as Users' do by default: keyword search, reranked. The vectors made
+ * for the hybrid and vector modes stay, unused.
+ */
+async function searchAsByDefault(library: Library, log: Log): Promise<void> {
+  await library.core.saveEmbeddingProvider({ kind: "off" });
+  log("Embeddings off for the Answers, as by default: keyword search, reranked");
+}
+
+/**
  * The every-format set (#70): its own library of Word, PowerPoint, Excel,
  * CSV, Markdown, text and PDF Documents, searched as the gating set is and,
  * with a chat model, each Question asked once. Reported per format; it never
@@ -174,6 +188,7 @@ async function runFormats(config: EvalConfig, log: Log): Promise<FormatsReport> 
       log,
       { candidates: [BUILT_IN_RERANKING_MODEL], cacheDir: config.cacheDir },
     );
+    if (config.chat) await searchAsByDefault(library, log);
     const citations: CitationRun | { skipped: string } = config.chat
       ? {
           ...(await runCitations(
@@ -218,7 +233,8 @@ test("retrieval and Citation evaluation", async () => {
   log(`${set.questions.length} Questions over ${set.documents.length} Documents`);
   log(`Embedding model cache: ${config.cacheDir}`);
 
-  // The core reranks Answers' searches with the built-in reranking model, as the app does by default.
+  // The core reranks Answers' searches with the built-in reranking model, as the app does by
+  // default. The library turns embeddings on, for the hybrid and vector modes reported.
   const builtIn = await openLibrary({
     name: "built-in",
     embedder: createWorkerEmbedder(),
@@ -265,6 +281,7 @@ test("retrieval and Citation evaluation", async () => {
       }
     }
 
+    if (config.chat) await searchAsByDefault(builtIn, log);
     const citations: CitationRun | { skipped: string } = config.chat
       ? await runCitations(builtIn, set.questions, config.chat, config, log)
       : {

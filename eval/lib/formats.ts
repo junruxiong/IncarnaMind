@@ -16,7 +16,7 @@ import type { EvalLanguage, EvaluationSet } from "./evaluationSet";
 import {
   GATING_MODE,
   HYBRID,
-  KEYWORD_RERANK_MODE,
+  HYBRID_RERANK_MODE,
   type LanguageTallies,
   type RetrievalMode,
   type RetrievalRun,
@@ -35,9 +35,9 @@ export type FormatId = (typeof FORMATS)[number]["id"];
 
 /**
  * The modes reported per format, those that ran: the search Tool's default
- * (reranked), plain hybrid search, and keyword + rerank.
+ * (keyword + rerank), plain hybrid search, and hybrid + rerank.
  */
-export const FORMAT_MODES: readonly RetrievalMode[] = [GATING_MODE, HYBRID, KEYWORD_RERANK_MODE];
+export const FORMAT_MODES: readonly RetrievalMode[] = [GATING_MODE, HYBRID, HYBRID_RERANK_MODE];
 
 /** The format of a Document's file, by its kind. */
 export function formatOf(path: string): FormatId {
