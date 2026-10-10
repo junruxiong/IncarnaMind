@@ -20,21 +20,17 @@ import {
 const CREATED_AT = "createdAt";
 const BLOCKS = "blocks";
 
-/** A chat as the thread's history lists it. */
 export interface ChatSummary {
   id: string;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** Its first Question's text, on one line; "" while it has none. */
   title: string;
-  /** How many Questions it holds. */
   questions: number;
 }
 
-/** The Mind's chats, by id. */
 export const chatsOf = (doc: Y.Doc): Y.Map<unknown> => doc.getMap(MIND_CHATS_FIELD);
 
-/** A chat's Questions and Answers, or null when the Mind has no such chat. */
 export function chatBlocks(doc: Y.Doc, chatId: string): Y.XmlFragment | null {
   const chat = chatsOf(doc).get(chatId);
   if (!(chat instanceof Y.Map)) return null;
@@ -48,7 +44,6 @@ export const citingFragments = (doc: Y.Doc): Y.XmlFragment[] => [
   ...chatFragments(doc),
 ];
 
-/** Every chat's Questions and Answers, in no order: e.g. to find what their Citations quote. */
 export function chatFragments(doc: Y.Doc): Y.XmlFragment[] {
   const fragments: Y.XmlFragment[] = [];
   chatsOf(doc).forEach((chat) => {
@@ -76,7 +71,6 @@ export function createChat(doc: Y.Doc, chatId: string, createdAt: string): Y.Xml
   return blocks as unknown as Y.XmlFragment;
 }
 
-/** A Question's text, on one line. */
 const questionText = (element: Y.XmlElement): string =>
   element
     .toArray()
@@ -92,7 +86,6 @@ const questionText = (element: Y.XmlElement): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** What the thread's history shows of a chat. */
 function summaryOf(id: string, chat: Y.Map<unknown>): ChatSummary | null {
   const blocks = chat.get(BLOCKS);
   if (!(blocks instanceof Y.XmlFragment)) return null;
@@ -112,7 +105,6 @@ function summaryOf(id: string, chat: Y.Map<unknown>): ChatSummary | null {
   };
 }
 
-/** The Mind's chats, the newest first. */
 export function listChats(doc: Y.Doc): ChatSummary[] {
   const chats: ChatSummary[] = [];
   chatsOf(doc).forEach((chat, id) => {
@@ -124,13 +116,11 @@ export function listChats(doc: Y.Doc): ChatSummary[] {
   );
 }
 
-/** A chat's summary, or null when the Mind has no such chat. */
 export function chatSummary(doc: Y.Doc, chatId: string): ChatSummary | null {
   const chat = chatsOf(doc).get(chatId);
   return chat instanceof Y.Map ? summaryOf(chatId, chat) : null;
 }
 
-/** The chat whose top-level Blocks include this one (a Question or an Answer), if any. */
 export function chatContaining(doc: Y.Doc, blockId: string): string | null {
   let found: string | null = null;
   chatsOf(doc).forEach((chat, id) => {
@@ -147,7 +137,6 @@ export function chatContaining(doc: Y.Doc, blockId: string): string | null {
   return found;
 }
 
-/** Calls `listener` whenever the Mind's chats may have changed, here or from elsewhere. Returns how to stop. */
 export function observeChats(doc: Y.Doc, listener: () => void): () => void {
   const chats = chatsOf(doc);
   const onChange = () => listener();

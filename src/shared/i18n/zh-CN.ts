@@ -943,6 +943,7 @@ export const zhCN = {
   "thread.fold": "收起对话（Esc）",
   "thread.foldTitle": "收起（Esc）",
   "thread.unfold": "展开对话",
+  "thread.resize": "调整对话高度（双击恢复默认高度）",
   "thread.answer.actions": "这个回答",
   "thread.answer.copy": "复制",
   "thread.answer.copied": "已复制",

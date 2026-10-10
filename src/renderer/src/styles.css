@@ -278,6 +278,21 @@
    * rule at rest, a hairline while pointed at and the focus ring's line when
    * reached by keyboard, with the grip over it.
    */
+  .pane-divider--y {
+    align-self: auto;
+    width: auto;
+    height: 1px;
+    cursor: row-resize;
+
+    &::after {
+      inset: -4px 0;
+    }
+    &::before {
+      content: "•••";
+      padding: 1px 3px;
+      line-height: 1;
+    }
+  }
   .pane-divider--gap {
     width: 8px;
     background: transparent;
@@ -1171,12 +1186,13 @@
   }
   .thread-dock--bottom > .thread-panel {
     position: absolute;
-    /* Down to the composer's top edge: the dock's top padding is 8px. */
+    /* Down to the composer's top edge (the dock's top padding is 8px), and as wide as it is,
+       wherever it sits (`ThreadPanel` measures it). */
     bottom: calc(100% - 8px);
-    left: calc((100% - 784px) / 2 + 56px);
+    left: var(--thread-left, 0px);
+    width: var(--thread-width, 100%);
     display: flex;
     flex-direction: column;
-    width: 680px;
     border: 1px solid var(--color-rule-strong);
     border-bottom: 0;
     border-radius: 10px 10px 0 0;
@@ -1186,18 +1202,26 @@
     line-height: var(--text-ui--line-height);
     color: var(--color-ink);
   }
+  .thread-dock--bottom > .thread-backdrop {
+    position: absolute;
+    z-index: -2;
+    bottom: calc(100% - 8px);
+    left: 0;
+    right: var(--thread-gutter, 0px);
+    height: var(--thread-height, 0px);
+    background: var(--color-sheet);
+  }
   .thread-dock--bottom > .thread-shadow {
     position: absolute;
     z-index: -1;
     top: calc(8px - var(--thread-height, 0px));
     bottom: 16px;
-    left: calc((100% - 784px) / 2 + 56px);
-    width: 680px;
+    left: var(--thread-left, 0px);
+    width: var(--thread-width, 100%);
     border-radius: 10px;
     box-shadow: 0 12px 32px rgb(23 25 28 / 0.12);
     pointer-events: none;
   }
-  /* The composer under it: the card's edge, and the thread's rule as its top. */
   .thread-dock--bottom:has(> .thread-panel) > .composer {
     border-color: var(--color-rule-strong);
     border-top-color: var(--color-rule);
@@ -1212,6 +1236,15 @@
     height: 36px;
     padding: 0 6px 0 14px;
     border-bottom: 1px solid var(--color-rule);
+  }
+  /* The rod on the thread's top edge: the panel's own edge is its rule, until pointed at. */
+  .thread-resize {
+    position: absolute;
+    z-index: 1;
+    top: -1px;
+    left: 10px;
+    right: 10px;
+    background: transparent;
   }
   .thread-panel:not(.thread-panel--open) > .thread-head {
     border-bottom: 0;
@@ -1266,11 +1299,11 @@
     min-height: 0;
     flex-direction: column;
   }
-  /* Newest at the foot, kept in view as it is written; 400px with the header, at most half the window. */
+  /* Newest at the foot, kept in view as it is written. Its height is set as the Mind is measured. */
   .thread-scroller {
     display: flex;
     flex-direction: column-reverse;
-    max-height: min(364px, 50vh - 36px);
+    max-height: calc(33vh - 36px);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -1293,14 +1326,13 @@
     gap: 4px;
     margin-right: -36px;
   }
-  /* Its Search scope, under it, on hover or focus (as a note's Question's meta). */
   .thread-question-meta {
     display: flex;
     justify-content: flex-end;
     max-width: 88%;
     font-family: var(--font-sans);
-    font-size: var(--text-meta);
-    line-height: var(--text-meta--line-height);
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
     color: var(--color-ink-meta);
     user-select: none;
     opacity: 0;
@@ -1312,12 +1344,12 @@
   }
   .thread-question-bubble {
     max-width: 88%;
-    padding: 4px 12px;
+    padding: 4px 10px;
     border-radius: 10px;
     background: var(--color-chip);
     font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 28px;
+    font-size: 13px;
+    line-height: 20px;
     font-weight: 500;
     color: var(--color-ink);
     overflow-wrap: break-word;
@@ -1331,11 +1363,11 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    min-height: 28px;
-    margin: -8px 0 0 -6px;
+    min-height: 24px;
+    margin: -4px 0 0 -6px;
     font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
     white-space: nowrap;
     color: var(--color-ink-meta);
     user-select: none;
@@ -1354,7 +1386,7 @@
     flex-shrink: 0;
     align-items: center;
     gap: 6px;
-    height: 28px;
+    height: 24px;
     padding: 0 8px 0 6px;
     border-radius: 6px;
     font-weight: 600;
@@ -1390,8 +1422,6 @@
     padding-left: 8px;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: var(--text-meta);
-    line-height: 20px;
     color: var(--color-ink-meta);
 
     > * {
@@ -1431,7 +1461,6 @@
       color: var(--color-ink);
     }
   }
-  /* The Answer a Note's link back opened: washed for a moment. */
   .thread-answer--sought {
     border-radius: 2px;
     background: var(--color-frame);
@@ -1444,12 +1473,6 @@
     animation: block-just-added 1600ms ease-in both;
   }
   @container mind (width < 900px) {
-    .thread-dock--bottom > .thread-panel,
-    .thread-dock--bottom > .thread-shadow {
-      left: 24px;
-      width: auto;
-      right: 24px;
-    }
     .thread-log-frame {
       margin-right: 16px;
     }
@@ -1458,7 +1481,6 @@
     }
   }
 
-  /* "Add to note ▾" (board Chat-C2): find a Mind, This Mind, Recent, New Mind…. */
   .add-to-picker {
     display: flex;
     flex-direction: column;
@@ -1573,7 +1595,6 @@
     font-size: 13px;
     color: var(--color-ink-meta);
   }
-  /* The thread's history: New chat, then each chat, its first Question and when. */
   .thread-history {
     width: 300px;
     max-height: 360px;
@@ -1936,11 +1957,7 @@
     padding-left: 0;
     cursor: text;
 
-    > * + *,
-    > * + :where(.node-question),
-    > * + :where(.node-answer),
-    > :where(.node-answer) + *,
-    > :where(.node-question) + :where(.node-answer) {
+    > :not(:first-child) {
       margin-top: 14px;
     }
   }
@@ -3194,6 +3211,51 @@
     }
     .citation-marker-icon {
       display: block;
+    }
+  }
+
+  /*
+   * The thread over a Mind is compact (DESIGN.md D136): Source Sans 14/22
+   * Answers, 12/16 meta lines and 10px Citation markers, so the note's serif
+   * 17/28 stays the largest text on screen.
+   */
+  .thread-dock > .thread-panel {
+    .thread-log-frame {
+      margin-block: 10px;
+    }
+    .mind-editor.thread-editor {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 22px;
+
+      > :not(:first-child) {
+        margin-top: 10px;
+      }
+    }
+    .answer-content {
+      :where([data-node-view-content-react] > * + *) {
+        margin-top: 8px;
+      }
+      :where([data-node-view-content-react] > * + :is(h1, h2, h3, h4, h5, h6)) {
+        margin-top: 12px;
+      }
+      :is(h1, h2, h3, h4, h5, h6) {
+        font-size: 15px;
+        line-height: 22px;
+      }
+    }
+    .answer-info,
+    .answer-notice,
+    [data-testid="answer-error"] {
+      font-size: var(--text-label);
+      line-height: var(--text-label--line-height);
+    }
+    .citation-marker {
+      min-width: 16px;
+      height: 16px;
+      font-size: 10px;
+      line-height: 16px;
+      vertical-align: 1px;
     }
   }
 }

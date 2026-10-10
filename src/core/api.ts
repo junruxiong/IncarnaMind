@@ -211,6 +211,13 @@ export interface QuestionAttributes {
    * still matches.
    */
   forcedSkill: string | null;
+  /**
+   * The id of the Mind the Question was asked from. Its chat is kept with that
+   * Mind for now, but a chat may later follow the User from Mind to Mind, and
+   * then each Question has to say where it was asked. Null for Questions from
+   * before it was kept.
+   */
+  askedFrom: string | null;
 }
 
 /** Where an Answer is: being written, finished, stopped by the User, or failed (see `errorKind`). */
@@ -542,6 +549,12 @@ export interface DeviceSettings {
    * has resized it. Null until then: it opens at about half the room beside the sidebar.
    */
   viewerWidth: number | null;
+  /**
+   * Height of the thread over a Mind (#201), its header included, in CSS
+   * pixels, once the User has resized it. Null until then: it opens at no
+   * more than a third of the Mind's height (DESIGN.md D136).
+   */
+  threadHeight: number | null;
   /**
    * The Minds open as tabs in the Mind pane, by ID, in their order, so they
    * open again after a restart. IDs of Minds deleted since are ignored.

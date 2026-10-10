@@ -31,10 +31,7 @@ interface AnswersState {
   /** The models a Question's picker offers; null until first asked for. */
   models: ChatModelGroup[] | null;
 
-  /**
-   * Asks a Question; with `discardEdits`, replaces an Answer the User edited.
-   * `chatId`: the chat it is in, if it is in the thread.
-   */
+  /** Asks a Question; with `discardEdits`, replaces an Answer the User edited. */
   ask(
     mindId: string,
     questionId: string,
@@ -51,10 +48,7 @@ interface AnswersState {
     questionId: string,
     chatId?: string | null,
   ): Promise<AskResult | null>;
-  /**
-   * Writes an Answer again; with `discardEdits`, even if the User edited it.
-   * `chatId`: the chat it is in, if it is in the thread.
-   */
+  /** Writes an Answer again; with `discardEdits`, even if the User edited it. */
   regenerate(
     mindId: string,
     answerId: string,

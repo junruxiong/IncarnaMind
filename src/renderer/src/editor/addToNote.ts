@@ -19,7 +19,6 @@ import {
 import { findBlock } from "./blockCommands";
 import { type QuestionPlace, questionPlace } from "./composerAsk";
 
-/** The Answer with this id in the thread's editor, and where its content starts and ends. */
 function answerRange(doc: ProseMirrorNode, answerId: string) {
   const found = findBlock(doc, answerId);
   if (!found || found.node.type.name !== ANSWER_BLOCK) return null;
@@ -43,7 +42,6 @@ function notesOf(slice: Slice): BlockJSON[] {
     .map((node) => node.toJSON() as BlockJSON);
 }
 
-/** The part of the Answer the User selected in the thread, if any of it is. */
 function selectedIn(
   view: EditorView,
   from: number,
@@ -79,7 +77,6 @@ export function answerBlocks(view: EditorView, answerId: string): BlockJSON[] | 
   return withText.length > 0 ? withText : null;
 }
 
-/** The Blocks without their ids, their Citations checked again (by `recheck`, the core's) now. */
 export const checkedBlocks = (
   blocks: readonly BlockJSON[],
   recheck: Recheck,
@@ -87,7 +84,6 @@ export const checkedBlocks = (
 
 /** What adding put into the open Mind, so Undo can take exactly that back. */
 export interface AddedHere {
-  /** The new top-level Blocks' ids, in order. */
   blockIds: string[];
   /** The id of the empty line they took the place of, which Undo puts back; null if none. */
   emptyLine: string | null;
@@ -125,11 +121,9 @@ export function addAtPlace(
     : null;
 }
 
-/** Where "Add to note" puts Blocks in the open Mind: at its cursor if it is there, else at its end. */
 export const placeInNote = (note: Editor, atCursor: boolean): QuestionPlace =>
   questionPlace(note.state.doc, atCursor ? note.state.selection : null);
 
-/** Takes the Blocks with these ids back out of the open Mind, and puts back the empty line they took. */
 export function removeFromNote(note: Editor, added: AddedHere): void {
   note.commands.command(({ tr, state }) => {
     // From the end, so each position stays right.

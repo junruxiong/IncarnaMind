@@ -272,8 +272,6 @@ test("starts a Mind named after the Folder with its scoped Question first in its
     await window.keyboard.type("What do these say about tides?");
     await screenshot(window, "library-start-mind");
 
-    // Asked, the Question is the thread's first (#201), with the Folder as its Search scope; the
-    // note is left empty.
     await connectLocalChatModel(window);
     await window.keyboard.press("Enter");
     const thread = window.getByTestId("thread");

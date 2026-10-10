@@ -53,7 +53,6 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first, 
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("When do spring tides happen? Misquote it.");
   await window.keyboard.press("Enter");
-  // It is answered in the thread (#201); Add to note keeps it in the note, its Citation checked again.
   const answer = window.getByTestId("thread").getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", "not-found");

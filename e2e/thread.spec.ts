@@ -9,6 +9,8 @@ import {
   askInThread,
   createDataFolder,
   dismissChatSetup,
+  dragBy,
+  enterContent,
   launchApp,
   pointAndClick,
   pointAt,
@@ -32,7 +34,6 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
   if (SCREENSHOTS) await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-/** Three short pages: the line about spring tides is on page 2. */
 const TIDES = buildPdf([
   { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
   { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
@@ -69,7 +70,6 @@ const blocksOf = (editor: Locator) =>
     }),
   );
 
-/** Adds Tides.pdf, which the scripted model cites. */
 async function addTides(window: Page) {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
@@ -80,13 +80,12 @@ async function mindWithNotes(window: Page, title: string) {
   await pointAndClick(window, window.getByTestId("new-mind"));
   const titleField = window.getByTestId("mind-title");
   await titleField.fill(title);
-  await titleField.press("Enter");
+  await enterContent(window);
   const editor = window.getByTestId("mind-editor");
   await window.keyboard.type("Spring tides come twice a month.");
   await window.keyboard.press("Enter");
   await window.keyboard.press("Enter");
   await window.keyboard.type("Check the tide tables next.");
-  // Back up to the empty line between the two Notes.
   await pointAndClick(window, editor.locator(":scope > p").nth(1));
   await expect(editor.locator(":scope > p").nth(1)).toHaveClass(/has-focus/);
   return editor;
@@ -101,7 +100,6 @@ test("an Answer streams into the thread and leaves the note as it was; Add to no
   const editor = await mindWithNotes(window, "Reading notes: tides");
   const before = await noteJSON(editor);
 
-  // ⌘J and a Question: it is answered in the thread, which rises from the composer.
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("When do spring tides happen?");
@@ -129,12 +127,10 @@ test("an Answer streams into the thread and leaves the note as it was; Add to no
   );
   await screenshot(window, "thread-answer");
 
-  // The note is unchanged: no Question, no Answer, its Blocks as they were.
   expect(await noteJSON(editor)).toBe(before);
   await expect(editor.getByTestId("question")).toHaveCount(0);
   await expect(editor.getByTestId("answer")).toHaveCount(0);
 
-  // A second Question doesn't change the note either.
   await window.keyboard.type("And neap tides?");
   await window.keyboard.press("Enter");
   await expect(thread.getByTestId("thread-question")).toHaveCount(2);
@@ -164,7 +160,6 @@ test("an Answer streams into the thread and leaves the note as it was; Add to no
   expect(copied["text/plain"]).toContain("Your Documents answer this");
   expect(copied["text/plain"]).toContain("Tides, p. 2");
 
-  // Pointing at the first Answer shows its actions; Add to note puts it at the cursor.
   await pointAt(window, answer.locator(".answer-content p").first());
   const add = answer.getByTestId("answer-add");
   await expect(add).toHaveCSS("opacity", "1");
@@ -178,14 +173,12 @@ test("an Answer streams into the thread and leaves the note as it was; Add to no
       "That is all.",
       "Check the tide tables next.",
     ]);
-  // Its Citation came along, checked again where it landed: found.
   const added = editor.getByTestId("citation-chip");
   await expect(added).toHaveCount(1);
   await expect(added).toHaveAttribute("data-check", "found");
   await expect(window.locator(".mind-editor-frame").getByTestId("margin-check")).toHaveCount(1);
   await screenshot(window, "thread-added");
 
-  // Undo takes it out again: the note is as it was.
   await pointAndClick(window, answer.getByTestId("thread-added-undo"));
   await expect.poll(() => noteJSON(editor)).toBe(before);
   await expect(answer.getByTestId("thread-added")).toHaveCount(0);
@@ -198,10 +191,9 @@ test("a selection of an Answer goes to another Mind through the ▾ picker, with
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await addTides(window);
-  // The Mind to add to, then the Mind to ask in.
   await pointAndClick(window, window.getByTestId("new-mind"));
   await window.getByTestId("mind-title").fill("Chapter 2 outline");
-  await window.getByTestId("mind-title").press("Enter");
+  await enterContent(window);
   await window.keyboard.type("Outline.");
   await mindWithNotes(window, "Reading notes: tides");
   const answer = await askInThread(window, "When do spring tides happen?");
@@ -229,7 +221,6 @@ test("a selection of an Answer goes to another Mind through the ▾ picker, with
   await expect(options.filter({ hasText: "Chapter 2 outline" })).toHaveCount(1);
   await expect(options.last()).toContainText("New Mind…");
   await screenshot(window, "thread-picker");
-  // Typing finds the Mind; Enter adds to it.
   await window.keyboard.type("chap");
   await expect(options.first()).toContainText("Chapter 2 outline");
   await window.keyboard.press("Enter");
@@ -237,7 +228,6 @@ test("a selection of an Answer goes to another Mind through the ▾ picker, with
   await expect(answer.getByTestId("thread-added")).toContainText("Added to “Chapter 2 outline”");
   await expect(answer.getByTestId("thread-added-undo")).toBeFocused();
 
-  // Chapter 2 outline now ends with the selected sentence alone, its Citation found.
   const sidebarRow = window.getByTestId("mind-list-item").filter({ hasText: "Chapter 2 outline" });
   await pointAndClick(window, sidebarRow);
   const other = window.getByTestId("mind-editor");
@@ -316,7 +306,6 @@ test("the keyboard reaches the thread: ⌘J focuses the composer, Tab reaches th
   await expect(thread).not.toHaveAttribute("data-open");
   await expect(window.getByTestId("composer-input")).toBeFocused();
 
-  // In Chinese.
   await window.evaluate(() =>
     (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
       user: { language: "zh-CN" },
@@ -350,7 +339,6 @@ test("each Mind keeps its own chats, with the note, after a restart; New chat st
   await expect(thread.getByTestId("thread-question").locator(".thread-question-text")).toHaveText([
     "What is a neap tide?",
   ]);
-  // Another Mind has no chat: no thread.
   await mindWithNotes(first.window, "Empty");
   await expect(first.window.getByTestId("thread")).toHaveCount(0);
   await first.app.close();
@@ -374,5 +362,65 @@ test("each Mind keeps its own chats, with the note, after a restart; New chat st
     ["What is a spring tide?"],
   );
   await expect(reopened.getByTestId("answer")).toHaveAttribute("data-status", "done");
+  await second.app.close();
+});
+
+async function heights(window: Page) {
+  const thread = await window.getByTestId("thread").boundingBox();
+  const mind = await window.getByTestId("composer-dock").locator("xpath=..").boundingBox();
+  if (!thread || !mind) throw new Error("The thread or the Mind isn't visible.");
+  return { thread: thread.height, mind: mind.height };
+}
+
+test("the thread opens at no more than a third of the Mind; its top edge makes it taller, by mouse or keys, remembered after a restart, and a double-click puts it back", async () => {
+  const first = await launchApp(dataDir, { fakeChat: true, home });
+  await setWindowSize(first.app, first.window, 1440, 900);
+  await dismissChatSetup(first.window);
+  await useLocalChatModel(first.window);
+  await addTides(first.window);
+  await mindWithNotes(first.window, "Tides");
+  for (const question of [
+    "When do spring tides happen?",
+    "And neap tides?",
+    "Why twice a month?",
+  ]) {
+    await askInThread(first.window, question);
+  }
+  const opened = await heights(first.window);
+  expect(opened.thread).toBeLessThanOrEqual(opened.mind / 3 + 1);
+
+  const rod = first.window.getByTestId("thread-resize");
+  await dragBy(first.window, rod, 0, -150);
+  await expect
+    .poll(async () => (await heights(first.window)).thread)
+    .toBeGreaterThan(opened.thread + 140);
+  const dragged = (await heights(first.window)).thread;
+  expect(dragged).toBeLessThan(opened.thread + 160);
+  await rod.focus();
+  await first.window.keyboard.press("ArrowUp");
+  await expect.poll(async () => (await heights(first.window)).thread).toBeGreaterThan(dragged + 5);
+  const chosen = (await heights(first.window)).thread;
+  await first.app.close();
+
+  const second = await launchApp(dataDir, { fakeChat: true, home });
+  await setWindowSize(second.app, second.window, 1440, 900);
+  const thread = second.window.getByTestId("thread");
+  await pointAndClick(second.window, thread.getByTestId("thread-fold"));
+  await expect(thread).toHaveAttribute("data-open", "true");
+  await expect
+    .poll(async () => Math.round((await heights(second.window)).thread))
+    .toBe(Math.round(chosen));
+  const again = second.window.getByTestId("thread-resize");
+  const box = await again.boundingBox();
+  if (!box) throw new Error("The thread's top edge isn't visible.");
+  await second.window.mouse.move(box.x + box.width / 2 - 40, box.y - 2);
+  await second.window.mouse.move(box.x + box.width / 2, box.y, { steps: 6 });
+  await second.window.mouse.dblclick(box.x + box.width / 2, box.y);
+  await expect
+    .poll(async () => {
+      const now = await heights(second.window);
+      return now.thread <= now.mind / 3 + 1;
+    })
+    .toBe(true);
   await second.app.close();
 });

@@ -14,13 +14,9 @@ export interface ThreadActions {
   mindId: string;
   /** The chat shown; null when the thread is the Mind's own Blocks (a chat on its own, #203). */
   chatId: string | null;
-  /** The last "Add to note" from this thread, which its Answer shows with Undo. */
   added: AddedToNote | null;
-  /** Copies the Answer, Citations and all; resolves with whether it was copied. */
   copy(answerId: string): Promise<boolean>;
-  /** Adds the Answer, or the part of it selected, to this Mind's note at the cursor. */
   add(answerId: string): void;
-  /** Opens the ▾ picker of the Mind to add it to, under `anchor`. */
   pick(answerId: string, anchor: HTMLElement): void;
   undo(): void;
 }
@@ -35,7 +31,6 @@ export const COPY_SHORTCUT = isMacOS() ? "⌘⇧C" : "Ctrl+Shift+C";
 export const ADD_SHORTCUT = isMacOS() ? "⌘⇧A" : "Ctrl+Shift+A";
 export const UNDO_SHORTCUT = `${MOD}Z`;
 
-/** Items of the meta line, with a dot between each two. */
 function Dotted({ items }: { items: ReactNode[] }) {
   return items.map((item, index) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: the items are fixed slots of the meta line.
@@ -128,9 +123,7 @@ export function ThreadAnswerActions({
   canKeep: boolean;
   canRegenerate: boolean;
   streaming: boolean;
-  /** The model, the Search scope and what it searched. */
   meta: ReactNode[];
-  /** What it is doing while it is written. */
   writing: ReactNode;
   onStop(): void;
   onRegenerate(): void;

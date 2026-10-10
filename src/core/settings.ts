@@ -81,6 +81,7 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarWidth: 248,
     sidebarHidden: false,
     viewerWidth: null,
+    threadHeight: null,
     openMinds: [],
     activeMind: null,
     libraryTab: "closed",
@@ -99,6 +100,7 @@ const deviceScope: Scope<DeviceSettings> = {
     sidebarWidth: isPaneWidth,
     sidebarHidden: isBoolean,
     viewerWidth: (value): value is number | null => value === null || isPaneWidth(value),
+    threadHeight: (value): value is number | null => value === null || isPaneWidth(value),
     openMinds: isMindIdList,
     activeMind: (value): value is string | null => value === null || isMindId(value),
     libraryTab: (value): value is "closed" | "open" | "shown" =>

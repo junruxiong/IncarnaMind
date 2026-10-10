@@ -122,7 +122,6 @@ export function writeChat(client: MindClient, chatId: string, blocks: JSONConten
   );
 }
 
-/** Each of a chat's Blocks' types, with an Answer's status. */
 export function chatOutline(client: MindClient, chatId: string): string[] {
   const types: string[] = [];
   readChat(client, chatId).forEach((block) => {
@@ -131,7 +130,6 @@ export function chatOutline(client: MindClient, chatId: string): string[] {
   return types;
 }
 
-/** The Answer with this Block ID in a chat. */
 export function chatAnswer(client: MindClient, chatId: string, answerId: string): ProseMirrorNode {
   let found: ProseMirrorNode | null = null;
   readChat(client, chatId).forEach((block) => {

@@ -136,7 +136,6 @@ export function QuestionProblem({
   onAskWithoutSkill,
 }: {
   questionId: string | null;
-  /** Takes the Skill off the Question and asks it again. */
   onAskWithoutSkill(): void;
 }) {
   const t = useT();

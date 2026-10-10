@@ -997,6 +997,7 @@ export const en = {
   "thread.fold": "Fold the chat (Esc)",
   "thread.foldTitle": "Fold (Esc)",
   "thread.unfold": "Show the chat",
+  "thread.resize": "Resize the chat (double-click for the default height)",
   "thread.answer.actions": "For this Answer",
   "thread.answer.copy": "Copy",
   "thread.answer.copied": "Copied",

@@ -207,7 +207,6 @@ function CitationCard({
   attributes: CitationAttributes;
   badgeText: string;
   inAnswer: boolean;
-  /** Whether the text it is in can be edited: not an Answer in the thread. */
   canRemove: boolean;
   onOpen(withQuote: boolean): void;
   onRemove(): void;

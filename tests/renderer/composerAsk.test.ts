@@ -69,6 +69,7 @@ const asked = (text: string, more: Partial<QuestionToAsk> = {}): QuestionToAsk =
   model: null,
   scope: { folderIds: [], tagIds: [], documentIds: [] },
   skill: null,
+  askedFrom: "mind-1",
   ...more,
 });
 
@@ -158,7 +159,7 @@ describe("the Question put into the note", () => {
     ]);
   });
 
-  test("carries the Mind's model, the Search scope and the Skill, as Questions always stored them", () => {
+  test("carries the Mind's model, the Search scope and the Skill, as Questions always stored them, and the Mind it was asked from", () => {
     const scope = { folderIds: ["f1"], tagIds: [], documentIds: ["d1", "d2"] };
     const toAsk = asked("Why?", {
       model: { providerId: "p1", modelId: "m1" },
@@ -173,6 +174,7 @@ describe("the Question put into the note", () => {
       scopeTagIds: null,
       scopeDocumentIds: ["d1", "d2"],
       forcedSkill: "tide-tables",
+      askedFrom: "mind-1",
     });
     const editor = editorWith([paragraph("")]);
     placeQuestion(editor, toAsk, questionPlace(editor.state.doc, null));

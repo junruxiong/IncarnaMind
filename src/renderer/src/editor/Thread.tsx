@@ -1,5 +1,5 @@
 import "katex/dist/katex.min.css";
-import { type Editor, isMacOS } from "@tiptap/core";
+import { type Editor, getTextBetween, getTextSerializersFromSchema, isMacOS } from "@tiptap/core";
 import Collaboration from "@tiptap/extension-collaboration";
 import {
   EditorContent,
@@ -41,6 +41,7 @@ import {
   searchScopeOf,
 } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
+import { ResizeRod } from "../components/ResizeRod";
 import { core } from "../core";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -63,7 +64,6 @@ import { type ThreadActions, ThreadContext, useThread } from "./ThreadAnswerActi
 
 const CLOSED: ThreadView = { chatId: null, open: false, fresh: false, focusAnswer: null };
 
-/** The chat the thread shows: the one chosen if it is still there, else the newest; none for a new chat. */
 export function shownChatId(chats: readonly ChatSummary[], view: ThreadView): string | null {
   if (view.fresh) return null;
   if (view.chatId && chats.some((chat) => chat.id === view.chatId)) return view.chatId;
@@ -133,11 +133,6 @@ const FoldIcon = ({ open }: { open: boolean }) => (
   </svg>
 );
 
-/**
- * A Question in the thread: the User's words in a bubble at the right (board
- * Chat-B1), with the Skill chosen for it; under it, why it couldn't be asked
- * again, with the one thing that fixes it.
- */
 function ThreadQuestionView({ node, updateAttributes }: ReactNodeViewProps) {
   const t = useT();
   const thread = useThread();
@@ -177,7 +172,6 @@ function ThreadQuestionView({ node, updateAttributes }: ReactNodeViewProps) {
         <NodeViewContent<"span"> as="span" className="thread-question-text" />
       </div>
       {hasSearchScope(scope) && (
-        // Its Search scope, on hover or focus, as a note's Question shows it: × takes one out.
         <div contentEditable={false} data-testid="question-meta" className="thread-question-meta">
           <ScopeChips
             scope={scope}
@@ -271,14 +265,12 @@ export const ThreadLog = memo(function ThreadLog({
   );
 });
 
-/** The Answer in the thread that holds the focus, if any. */
 function focusedAnswer(): string | null {
   const active = document.activeElement;
   const answer = active instanceof Element ? active.closest("[data-answer-id]") : null;
   return answer?.getAttribute("data-answer-id") ?? null;
 }
 
-/** The newest Answer in the thread. */
 function lastAnswer(editor: Editor | null): string | null {
   if (!editor || editor.isDestroyed) return null;
   let found: string | null = null;
@@ -292,6 +284,39 @@ function lastAnswer(editor: Editor | null): string | null {
 
 const isCommand = (event: { metaKey: boolean; ctrlKey: boolean }) =>
   isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+
+interface Room {
+  /** The Mind's height: by default the thread opens at no more than a third of it (D136). */
+  mind: number;
+  /** The tallest the thread can be: from the top of the Mind down to the composer. */
+  most: number;
+  /** The thread's header: the shortest it can be. */
+  least: number;
+  height: number;
+}
+
+const sameRoom = (a: Room | null, b: Room) =>
+  a !== null &&
+  a.mind === b.mind &&
+  a.most === b.most &&
+  a.least === b.least &&
+  a.height === b.height;
+
+/**
+ * How tall the thread's log is: up to a third of the Mind (with its header)
+ * as it fills, or the height the User dragged it to (`threadHeight`), within
+ * the room there is.
+ */
+function logSize(room: Room, chosen: number | null): { height?: number; maxHeight: number } {
+  const most = Math.max(room.least, room.most);
+  if (chosen !== null) {
+    const height = Math.min(Math.max(chosen, room.least), most) - room.least;
+    return { height, maxHeight: height };
+  }
+  return {
+    maxHeight: Math.min(Math.max(Math.round(room.mind / 3), room.least), most) - room.least,
+  };
+}
 
 interface Picking {
   answerId: string;
@@ -334,7 +359,6 @@ export function ThreadPanel({
   dock?: "bottom";
   /** More buttons for the header, before history and fold: e.g. a ⋯ menu. */
   headerActions?: ReactNode;
-  /** The composer, under the thread, as one card with it. */
   children: ReactNode;
 }) {
   const t = useT();
@@ -352,6 +376,10 @@ export function ThreadPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyButton = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
+  const head = useRef<HTMLElement>(null);
+  const noteScroller = useRef<HTMLElement | null>(null);
+  const [room, setRoom] = useState<Room | null>(null);
+  const chosenHeight = useAppStore((state) => state.settings?.device.threadHeight ?? null);
   const bodyId = useId();
   const titleId = useId();
   const mindTitle = useAppStore(
@@ -370,9 +398,25 @@ export function ThreadPanel({
     const element = panel.current;
     const dock = element?.closest<HTMLElement>(".composer-dock");
     const scroller = dock?.previousElementSibling;
-    if (!element || !dock || !(scroller instanceof HTMLElement)) return;
-    const fit = () => {
+    const composer = dock?.querySelector<HTMLElement>(".composer");
+    const pane = dock?.parentElement;
+    if (!element || !dock || !composer || !pane || !(scroller instanceof HTMLElement)) return;
+    noteScroller.current = scroller;
+    const place = () => {
       const height = Math.round(element.offsetHeight);
+      // The thread's foot sits 8px into the dock, on the composer's top edge.
+      const next: Room = {
+        mind: pane.clientHeight,
+        most: pane.clientHeight - dock.offsetHeight + 8,
+        least: Math.round((head.current?.offsetHeight ?? 0) + element.clientTop),
+        height,
+      };
+      setRoom((was) => (sameRoom(was, next) ? was : next));
+      // As wide as the composer and over it, however the dock lays it out (a narrow Mind, a
+      // scrollbar's gutter beside it).
+      dock.style.setProperty("--thread-left", `${composer.offsetLeft}px`);
+      dock.style.setProperty("--thread-width", `${composer.offsetWidth}px`);
+      dock.style.setProperty("--thread-gutter", getComputedStyle(dock).paddingRight);
       dock.style.setProperty("--thread-height", `${height}px`);
       scroller.style.setProperty("--thread-room", `${height}px`);
       if (note.isDestroyed) return;
@@ -381,18 +425,25 @@ export function ThreadPanel({
         scrollThreshold: { top: 0, left: 0, right: 0, bottom: height + 16 },
       });
     };
-    const observer = new ResizeObserver(fit);
-    observer.observe(element);
+    place();
+    const observer = new ResizeObserver(place);
+    for (const each of [element, composer, dock, pane]) observer.observe(each);
     return () => {
       observer.disconnect();
-      dock.style.removeProperty("--thread-height");
+      for (const name of [
+        "--thread-left",
+        "--thread-width",
+        "--thread-gutter",
+        "--thread-height",
+      ]) {
+        dock.style.removeProperty(name);
+      }
       scroller.style.removeProperty("--thread-room");
       // ProseMirror's own defaults.
       if (!note.isDestroyed) note.view.setProps({ scrollMargin: 5, scrollThreshold: 0 });
     };
   }, [visible, note]);
 
-  // A link back from a Note: the chat with that Answer, up, the Answer in view and focused.
   const focusAnswer = view.focusAnswer;
   useEffect(() => {
     if (!focusAnswer) return;
@@ -432,7 +483,6 @@ export function ThreadPanel({
     return () => cancelAnimationFrame(frame);
   }, [focusAnswer, doc, shownId, view.open, log, mindId]);
 
-  /** The chat's first Question, which names it in a Note's link back and a new Mind's title. */
   const chatTitle = shown?.title ?? "";
 
   const origin = (answerId: string): BlockOrigin => ({
@@ -464,7 +514,6 @@ export function ThreadPanel({
     if (element instanceof HTMLElement) element.scrollIntoView({ block: "nearest" });
   };
 
-  /** Into another Mind, at its end, through the core; a new one is made first. */
   const addThere = async (
     answerId: string,
     blocks: NonNullable<ReturnType<typeof answerBlocks>>,
@@ -495,8 +544,15 @@ export function ThreadPanel({
       const editor = logRef.current;
       const found = editor && !editor.isDestroyed ? findBlock(editor.state.doc, answerId) : null;
       if (!editor || !found) return false;
-      const slice = editor.state.doc.slice(found.pos + 1, found.pos + found.node.nodeSize - 1);
-      const { dom, text } = editor.view.serializeForClipboard(slice);
+      const range = { from: found.pos + 1, to: found.pos + found.node.nodeSize - 1 };
+      // HTML that pastes back as Notes with Citations; text with each Citation's source in it.
+      const { dom } = editor.view.serializeForClipboard(
+        editor.state.doc.slice(range.from, range.to),
+      );
+      const text = getTextBetween(editor.state.doc, range, {
+        blockSeparator: "\n\n",
+        textSerializers: getTextSerializersFromSchema(editor.schema),
+      });
       try {
         await navigator.clipboard.write([
           new ClipboardItem({
@@ -588,11 +644,21 @@ export function ThreadPanel({
   };
 
   const historyLabel = t("thread.history");
+  const resize = (height: number | null) =>
+    useAppStore.getState().previewLayout({ threadHeight: height });
+  const keepHeight = (height: number | null) =>
+    void useAppStore.getState().updateSettings({ device: { threadHeight: height } });
   return (
     <div data-dock={dock} className={`thread-dock thread-dock--${dock}`}>
       {visible && (
         <ThreadContext.Provider value={actions}>
-          {/* The card's popover depth, drawn once under the thread and the composer together. */}
+          {/* The Mind's margins beside the thread are covered too: no bullet, handle or check of
+              the Blocks under it shows past its edges. The wheel there still scrolls the Mind. */}
+          <div
+            aria-hidden="true"
+            className="thread-backdrop"
+            onWheel={(event) => noteScroller.current?.scrollBy({ top: event.deltaY })}
+          />
           <div aria-hidden="true" className="thread-shadow" />
           <section
             ref={panel}
@@ -602,7 +668,25 @@ export function ThreadPanel({
             onKeyDown={onKeyDown}
             className={open ? "thread-panel thread-panel--open" : "thread-panel"}
           >
-            <header className="thread-head">
+            {open && room && (
+              <ResizeRod
+                axis="y"
+                direction={-1}
+                testId="thread-resize"
+                label={t("thread.resize")}
+                size={chosenHeight === null ? room.height : Math.min(chosenHeight, room.most)}
+                min={room.least}
+                max={room.most}
+                onPreview={resize}
+                onCommit={keepHeight}
+                onReset={() => {
+                  resize(null);
+                  keepHeight(null);
+                }}
+                className="thread-resize"
+              />
+            )}
+            <header ref={head} className="thread-head">
               <SparkIcon />
               <h2 id={titleId} className="thread-title">
                 {t("thread.title")}
@@ -645,7 +729,11 @@ export function ThreadPanel({
             </header>
             <div id={bodyId} hidden={!open} className="thread-body">
               {open && fragment && (
-                <div className="thread-scroller" data-testid="thread-scroller">
+                <div
+                  className="thread-scroller"
+                  data-testid="thread-scroller"
+                  style={room ? logSize(room, chosenHeight) : undefined}
+                >
                   <ThreadLog
                     key={shownId}
                     mindId={mindId}
@@ -704,7 +792,6 @@ export function ThreadPanel({
   );
 }
 
-/** The thread's history (its header's clock): New chat, then the Mind's chats, newest first. */
 function ChatHistory({
   anchor,
   chats,

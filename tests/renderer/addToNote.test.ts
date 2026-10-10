@@ -11,7 +11,6 @@ const paragraph = (text: string, id: string = crypto.randomUUID()): JSONContent 
   content: text ? [{ type: "text", text }] : [],
 });
 
-/** A headless editor holding these top-level Blocks. */
 function editorWith(blocks: JSONContent[]): Editor {
   const editor = new Editor({
     element: null,
@@ -41,7 +40,6 @@ const cited: JSONContent = {
 describe("Add to note, in the open Mind (#201)", () => {
   test("at the cursor, an Answer takes the empty line's place; Undo puts the line back", () => {
     const editor = editorWith([paragraph("Intro"), paragraph("", "empty-line"), paragraph("End")]);
-    // The cursor on the empty line.
     let at = -1;
     editor.state.doc.forEach((node, pos) => {
       if (node.attrs.id === "empty-line") at = pos + 1;
@@ -57,7 +55,6 @@ describe("Add to note, in the open Mind (#201)", () => {
       "paragraph: That is all.",
       "paragraph: End",
     ]);
-    // The Citation came along.
     let citations = 0;
     editor.state.doc.descendants((node) => {
       if (node.type.name === "citation") citations++;

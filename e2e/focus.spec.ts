@@ -122,7 +122,6 @@ test("every Tab stop in a Mind, its thread, the sidebar and Settings shows the b
   await expect(window.getByTestId("composer-model")).toBeVisible();
   const checks = window.getByTestId("mind-pane").getByTestId("margin-check");
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
-  // A Question of one's own, answered in the thread above the composer (#201).
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Where does tea come from?");
   await window.keyboard.press("Enter");
@@ -135,7 +134,6 @@ test("every Tab stop in a Mind, its thread, the sidebar and Settings shows the b
   const stops = await tabRound(window, 160);
   expect(stops.filter((stop) => stop.where === "sidebar").length).toBeGreaterThan(5);
   expect(stops.filter((stop) => stop.where === "mind").length).toBeGreaterThan(5);
-  // The thread's header, its Answer's Citations and its actions.
   expect(stops.filter((stop) => stop.where === "thread").length).toBeGreaterThan(5);
   expect(stops.filter((stop) => !stop.shows).map((stop) => stop.what)).toEqual([]);
 

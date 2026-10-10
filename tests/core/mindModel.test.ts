@@ -167,6 +167,7 @@ describe("Minds written before the composer", () => {
       model: null,
       scope: { folderIds: [], tagIds: [], documentIds: [] },
       skill: null,
+      askedFrom: null,
     });
     expect(Object.keys(fromComposer).sort()).toEqual(Object.keys(read.child(1).attrs).sort());
 

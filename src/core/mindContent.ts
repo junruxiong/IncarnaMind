@@ -142,7 +142,6 @@ export function createMindContent(
     }
   };
 
-  /** See `peekDoc` below. */
   const peekDoc = <T>(mindId: string, look: (doc: Y.Doc) => T): T => {
     const mind = loaded.get(mindId);
     if (mind) return look(mind.doc);
@@ -154,7 +153,6 @@ export function createMindContent(
     }
   };
 
-  /** See `editDoc` below. */
   const editDoc = <T>(mindId: string, change: (doc: Y.Doc) => T): T => {
     const mind = load(mindId);
     requireWritable(mind);
