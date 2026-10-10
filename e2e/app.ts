@@ -7,12 +7,20 @@ import {
   expect,
   type Locator,
   type Page,
+  test,
 } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
 const appDir = resolve(__dirname, "..");
+
+/**
+ * The apps this test launched that are still open, by the data folder each
+ * runs on: `removeDataFolder` closes them, keeping a picture of the window if
+ * the test failed.
+ */
+const openApps = new Map<ElectronApplication, string>();
 
 export interface RunningApp {
   app: ElectronApplication;
@@ -38,15 +46,31 @@ export interface LaunchOptions {
   examples?: boolean;
   /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
   home?: string;
+  /**
+   * Leaves the window at the size and place it opened at, instead of making
+   * it `WINDOW_SIZE`: for a test of how the window opens.
+   */
+  keepWindow?: boolean;
 }
 
 /**
+ * The window size the specs are written for: the app's default. The app opens
+ * no bigger than the screen, and a test machine's can be smaller (GitHub's
+ * macOS runners have a 1024 × 768 one), where the Mind is narrow enough to fold
+ * its margins away; so every launch makes the window this size. macOS can keep
+ * a window no taller than the screen (wider is allowed), so on a short screen
+ * the height is what the screen allows: only the width is waited for.
+ */
+export const WINDOW_SIZE = { width: 1280, height: 800 };
+
+/**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
- * and the fake embedding model, which needs no download.
+ * and the fake embedding model, which needs no download, in a window of
+ * `WINDOW_SIZE` whatever the screen's.
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false, sentryDsn, examples = false, home }: LaunchOptions = {},
+  { fakeChat = false, sentryDsn, examples = false, home, keepWindow = false }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -64,8 +88,16 @@ export async function launchApp(
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
+  openApps.set(app, dataDir);
+  app.on("close", () => openApps.delete(app));
   const window = await app.firstWindow();
   await window.getByTestId("new-mind").waitFor();
+  if (!keepWindow) {
+    await app.evaluate(({ BrowserWindow }, size) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
+    }, WINDOW_SIZE);
+    await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(WINDOW_SIZE.width);
+  }
   return { app, window };
 }
 
@@ -456,10 +488,39 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  */
 export async function clickEmptyLine(line: Locator): Promise<void> {
   await line.click({ position: { x: 4, y: 14 } });
+  // What is typed next goes where the caret is: wait until it is on the line.
+  await expect
+    .poll(() =>
+      line.evaluate((element) => {
+        const caret = element.ownerDocument.getSelection()?.anchorNode;
+        const focused = element.ownerDocument.activeElement;
+        return !!caret && element.contains(caret) && !!focused && focused.contains(element);
+      }),
+    )
+    .toBe(true);
 }
 
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
-export const removeDataFolder = (dataDir: string) =>
-  rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
+/**
+ * Removes a data folder, after closing an app the test left open on it. If
+ * the test failed, a screenshot of that app's window as the test left it is
+ * kept first, as app-window.png with the test's results, which CI uploads
+ * (Playwright's own screenshots and traces leave an Electron app's window out).
+ */
+export async function removeDataFolder(dataDir: string): Promise<void> {
+  const info = test.info();
+  for (const [app, folder] of [...openApps]) {
+    if (folder !== dataDir) continue;
+    openApps.delete(app);
+    const window = app.windows()[0];
+    if (info.status !== info.expectedStatus && window) {
+      const path = info.outputPath("app-window.png");
+      const shot = await window.screenshot({ path }).catch(() => undefined);
+      if (shot) await info.attach("app-window", { path, contentType: "image/png" });
+    }
+    await app.close().catch(() => undefined);
+  }
+  await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
+}
