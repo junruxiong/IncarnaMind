@@ -11,9 +11,6 @@
  * compared with vectors of its own size, so vectors from different models are
  * never mixed, even while Documents are being embedded again after a switch.
  *
- * The same vectors give each Document's mean, the vector Documents are
- * grouped into Topics by (R2 in docs/designs/library-structure-view.md).
- *
  * While embeddings are off (the default), search never runs a vector search,
  * so nothing is loaded; vectors stored from before stay unused.
  */
@@ -45,19 +42,6 @@ function decodeVector(blob: Uint8Array): Float32Array {
   return new Float32Array(bytes.buffer, 0, bytes.byteLength / 4);
 }
 
-/** Each Document's vector for grouping Documents into Topics (R2 in docs/designs/library-structure-view.md). */
-export interface DocumentMeans {
-  /** The Documents, in the order of their means. */
-  ids: string[];
-  dimensions: number;
-  /**
-   * One L2-normalised mean per Document, one after another
-   * (`ids.length * dimensions` numbers), in a buffer of their own, ready to
-   * transfer to a worker.
-   */
-  data: Float32Array;
-}
-
 export interface VectorIndex {
   /** A Passage was embedded with the current model. */
   add(documentId: string, seq: number, vector: Float32Array): void;
@@ -70,14 +54,6 @@ export interface VectorIndex {
    * vectors of its size. Optionally only some Documents' Passages.
    */
   search(query: Float32Array, limit: number, documentIds?: readonly string[]): VectorHit[];
-  /**
-   * Each Document's mean Passage vector, L2-normalised, from the current
-   * model's vectors only. Loads the index first, as a first search does, if
-   * it isn't loaded yet. Only Documents whose vectors have `dimensions`
-   * numbers are included (by default, the size most Documents have);
-   * Documents with no vectors yet are left out.
-   */
-  documentMeans(dimensions?: number): DocumentMeans;
 }
 
 /** `model.id` is read at each load, so it can change (see `reset`). */
@@ -166,54 +142,5 @@ export function createVectorIndex(db: Database, model: { readonly id: string }):
       }
       return top;
     },
-
-    documentMeans(dimensions) {
-      documents ??= load();
-      const size = dimensions ?? commonSize(documents);
-      const ids: string[] = [];
-      for (const [id, entry] of documents) {
-        if (entry.dimensions === size && entry.count > 0) ids.push(id);
-      }
-      const data = new Float32Array(ids.length * size);
-      const sum = new Float64Array(size);
-      let kept = 0;
-      for (const id of ids) {
-        const entry = documents.get(id) as DocumentVectors;
-        sum.fill(0);
-        for (let index = 0; index < entry.count; index++) {
-          const offset = index * size;
-          for (let d = 0; d < size; d++) {
-            sum[d] = (sum[d] as number) + (entry.data[offset + d] as number);
-          }
-        }
-        let norm = 0;
-        for (let d = 0; d < size; d++) norm += (sum[d] as number) * (sum[d] as number);
-        norm = Math.sqrt(norm);
-        // Vectors that cancel out have no direction to group by.
-        if (!(norm > 0)) continue;
-        const offset = kept * size;
-        for (let d = 0; d < size; d++) data[offset + d] = (sum[d] as number) / norm;
-        ids[kept++] = id;
-      }
-      ids.length = kept;
-      return { ids, dimensions: size, data: data.slice(0, kept * size) };
-    },
   };
-}
-
-/** The vector size most Documents have (the first seen on a tie), or 0 with none. */
-function commonSize(documents: ReadonlyMap<string, DocumentVectors>): number {
-  const counts = new Map<number, number>();
-  for (const entry of documents.values()) {
-    if (entry.count > 0) counts.set(entry.dimensions, (counts.get(entry.dimensions) ?? 0) + 1);
-  }
-  let best = 0;
-  let bestCount = 0;
-  for (const [size, count] of counts) {
-    if (count > bestCount) {
-      best = size;
-      bestCount = count;
-    }
-  }
-  return best;
 }
