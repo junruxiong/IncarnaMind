@@ -27,6 +27,8 @@
   <img src="docs/images/hero-zh.png" width="880" alt="中文界面的笔记本，里面有两个问题和它们的回答，旁边是一份 PDF。第一个回答带编号引用和绿色勾号，引用的引文在 PDF 页面上高亮显示。第二个回答的引用标成橙色，展开的卡片写着“未在第 1 页找到引文”。">
 </p>
 
+<p align="center"><sub>第二条引文是特意改动过的，用来演示引文不在所引页面上时会怎样。</sub></p>
+
 > [!NOTE]
 > **IncarnaMind 还没有正式发布。** 桌面版正在开发。想在第一个版本发布时收到通知，可以点本页右上角的 **Watch → Custom → Releases**。在找 2023 年的命令行版本？它在 [`v1-python-cli`](https://github.com/junruxiong/IncarnaMind/tree/v1-python-cli) 标签下。
 
