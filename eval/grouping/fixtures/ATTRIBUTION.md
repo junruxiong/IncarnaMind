@@ -1,6 +1,6 @@
-# Grouping check fixtures: sources and licences
+# Grouping fixtures: sources and licences
 
-The grouping check (`eval/grouping/README.md`) adds these files to the evaluation's existing Documents: the seven sample PDFs in `data/`, the five Chinese Wikipedia PDFs in `eval/retrieval/fixtures/` and the two tea examples in `resources/examples/`. Each file's subject, language and set are listed in `eval/grouping/set.json`.
+These files were made for the grouping check, removed on 2026-10-10 (`eval/grouping/README.md`), beside the evaluation's existing Documents: the seven sample PDFs in `data/`, the five Chinese Wikipedia PDFs in `eval/retrieval/fixtures/` and the two tea examples in `resources/examples/`. Each file's subject and language are listed in `eval/grouping/set.json`, which the local classification comparison (`eval/classification/`) reads.
 
 Everything here was made or downloaded on 2026-10-07 and 2026-10-08.
 
@@ -40,7 +40,7 @@ The Chinese files are named like the retrieval fixtures ("维基百科-…"), so
 
 ## Decks (CC BY-SA 4.0)
 
-Six short decks, written for this check and generated with python-pptx 1.0.2 from its default template. Their facts come from the Wikipedia articles on the same subjects (Transformer, Tea processing, Environmental, social, and governance, Photosynthesis, Gradient descent, Sustainable Development Goals, in English and Chinese), so they are shared under the same licence, CC BY-SA 4.0. Some slides have speaker notes.
+Six short decks, written for the grouping check and generated with python-pptx 1.0.2 from its default template. Their facts come from the Wikipedia articles on the same subjects (Transformer, Tea processing, Environmental, social, and governance, Photosynthesis, Gradient descent, Sustainable Development Goals, in English and Chinese), so they are shared under the same licence, CC BY-SA 4.0. Some slides have speaker notes.
 
 | File | Language | Subject |
 |---|---|---|
