@@ -9,7 +9,7 @@ import {
   dismissChatSetup,
   launchApp,
   removeDataFolder,
-  setLibraryBeside,
+  setGroupBeside,
   useLocalChatModel,
 } from "./app";
 
@@ -126,7 +126,7 @@ for (const language of ["en", "zh-CN"] as const) {
       [1000, true],
     ] as const) {
       await resize(app, window, width, 900);
-      await setLibraryBeside(window, viewer);
+      await setGroupBeside(window, viewer);
       await pointAndClick(window, input);
       await window.keyboard.press("ControlOrMeta+a");
       await window.keyboard.press("Backspace");

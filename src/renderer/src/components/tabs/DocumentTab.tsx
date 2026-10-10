@@ -77,6 +77,8 @@ function DocumentView({ document, target }: { document: Document; target: Viewer
 
 /** Keys that scroll a page, not type in it. */
 const SCROLL_KEYS = ["PageDown", "PageUp", "ArrowDown", "ArrowUp", "Home", "End", " "];
+/** How far in from a scroller's right edge a press is on its scrollbar, overlaid or not. */
+const SCROLLBAR_PX = 16;
 
 /**
  * A preview is kept once the User reads it (VS Code's preview tabs): a scroll
@@ -100,8 +102,11 @@ function useKeepOnReading(section: HTMLElement | null, tabId: string, preview: b
     const onKey = (event: KeyboardEvent) => {
       if (SCROLL_KEYS.includes(event.key)) moves();
     };
-    const onDown = () => {
-      intent = Number.POSITIVE_INFINITY;
+    // A press on a scrollbar (a scroller's edge), not on a button that moves the page.
+    const onDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || target.scrollHeight <= target.clientHeight) return;
+      if (event.offsetX >= target.clientWidth - SCROLLBAR_PX) intent = Number.POSITIVE_INFINITY;
     };
     const onUp = () => {
       if (intent === Number.POSITIVE_INFINITY) intent = Date.now();

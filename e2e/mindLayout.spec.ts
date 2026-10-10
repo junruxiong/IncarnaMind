@@ -12,7 +12,7 @@ import {
   enterContent,
   launchApp,
   removeDataFolder,
-  setLibraryBeside,
+  setGroupBeside,
   useLocalChatModel,
 } from "./app";
 
@@ -227,7 +227,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await markers.nth(0).click();
   await expect(card.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
   await expect(markers.nth(0)).toHaveAttribute("aria-expanded", "true");
-  await setLibraryBeside(window, false);
+  await setGroupBeside(window, false);
   await expect(window.getByTestId("viewer")).toHaveCount(0);
   await expect(marks.nth(0)).toHaveAttribute("data-open", "true");
   expectNear((await box(card.locator(".citation-card"))).width, 340, 1, "the card's width");
@@ -245,7 +245,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(card).toHaveCount(0);
 
   // Under 900px (here, the viewer open beside it) the margins fold away: the markers show the checks.
-  await setLibraryBeside(window, true);
+  await setGroupBeside(window, true);
   await expect(window.getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
   expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
@@ -262,7 +262,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
     "narrow: the Answer's edge",
   );
   await screenshot(window, "mind-narrow.png");
-  await setLibraryBeside(window, false);
+  await setGroupBeside(window, false);
   await expect(window.getByTestId("margin-checks")).toBeVisible();
 
   // Two markers on one line: their marks stack, the first level with the line.

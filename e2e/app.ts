@@ -378,25 +378,24 @@ export async function openLinkedFolderMenu(row: Locator): Promise<Locator> {
 
 /**
  * Opens the Library in a group beside the Mind, the focus staying in the
- * Mind, or closes it, through the core's bridge: the Mind then has half the
- * card, as beside a Document.
+ * Mind, or closes every group but the Mind's, through the core's bridge: the
+ * Mind then has half the card, as beside a Document, or all of it.
  */
-export async function setLibraryBeside(window: Page, open: boolean): Promise<void> {
+export async function setGroupBeside(window: Page, open: boolean): Promise<void> {
   await window.evaluate(async (show) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const layout = await bridge.getLayout("main");
-    const tab = layout.groups
-      .flatMap((group) => group.tabs)
-      .find((each) => each.item.kind === "library");
-    if (show && !tab) {
+    if (show && layout.groups.length === 1) {
       await bridge.changeLayout("main", {
         type: "open",
         item: { kind: "library" },
         where: { in: "side" },
         focus: false,
       });
-    } else if (!show && tab) {
-      await bridge.changeLayout("main", { type: "close", tabId: tab.id });
+    } else if (!show) {
+      for (const group of layout.groups.slice(1)) {
+        await bridge.changeLayout("main", { type: "closeGroup", groupId: group.id });
+      }
     }
   }, open);
   await expect(window.getByTestId("tab-group")).toHaveCount(open ? 2 : 1);
@@ -404,7 +403,8 @@ export async function setLibraryBeside(window: Page, open: boolean): Promise<voi
 
 /**
  * Opens a Document at a location as a Citation does, through the test hook: as a
- * preview in the group right of the one the User is in (made if needed).
+ * preview in the group right of the Mind the User is in (made if needed); with
+ * no Mind in front, as from the sidebar.
  */
 export async function openDocumentAt(window: Page, location: DocumentLocation): Promise<void> {
   await window.evaluate((at) => {

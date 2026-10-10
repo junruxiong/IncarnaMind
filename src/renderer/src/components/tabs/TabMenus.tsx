@@ -164,6 +164,8 @@ export function TabMenu({
         role="menu"
         aria-label={t("tabs.tabMenu", { title })}
         data-testid="tab-menu-items"
+        // Not the tab's tooltip over its menu: the menu sits in the tab.
+        title=""
         className={menuClass}
         onKeyDown={(event) => {
           menu.menuProps.onKeyDown(event);

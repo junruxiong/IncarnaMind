@@ -309,6 +309,21 @@ describe("Tabs and groups", () => {
     expect(layout.reopenable).toBe(0);
   });
 
+  test("a tab whose group went with it reopens in a new group where that one was", async () => {
+    const { mind, change, shown, report } = await setUp();
+    const draft = await mind("Draft");
+    let layout = await change({ type: "open", item: draft });
+    layout = await change({ type: "open", item: report, where: { in: "side" }, focus: false });
+    expect(shown(layout)).toEqual(["*Draft", "*Report"]);
+
+    layout = await change({ type: "close", tabId: tabOf(layout, draft).tab.id });
+    expect(shown(layout)).toEqual(["*Report"]);
+    layout = await change({ type: "reopen" });
+
+    expect(shown(layout)).toEqual(["*Draft", "*Report"]);
+    expect(focusedIndex(layout)).toBe(0);
+  });
+
   test("a deleted Mind's tab closes in every window, with an event", async () => {
     const { core, mind } = await setUp();
     const alpha = await mind("Alpha");

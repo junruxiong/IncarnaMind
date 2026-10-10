@@ -83,8 +83,8 @@ _Avoid_: category, label, class
 The earlier design for a generated two-level subject tree. The current Library uses flat Folders instead (direction revised 2026-10-08), and the dormant Topic code was removed on 2026-10-10 (ADR-0012).
 _Avoid_: cluster, category, collection, group
 
-**Group**:
-The former name for an in-app Folder. Users now see Folders throughout document organisation.
+**Group** (of Documents):
+The former name for an in-app Folder. Users now see Folders throughout document organisation; a group is now a group of tabs (see Window).
 
 **Library**:
 The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.
@@ -199,6 +199,16 @@ _Avoid_: export folder, downloads, save path
 **Usage data**:
 Anonymous events about using IncarnaMind, such as "a Question was asked with a local model", sent only while the User agrees, under a random install ID. It never holds a Document's content or name, a Question, an Answer or anything the User typed.
 _Avoid_: telemetry, tracking
+
+### Window
+
+**Tab**:
+What a Mind, the Library or a Document is open in. A preview tab, its title in italics, is replaced by the next Document opened in its group until the User keeps it; a pinned tab stays at the left of its group.
+_Avoid_: pane, page, view
+
+**Group**:
+One of up to three columns of tabs side by side in a window, each with its own tab strip; in Chinese, 栏. A narrow window shows its groups merged into one.
+_Avoid_: pane, split, column
 
 ### People
 
