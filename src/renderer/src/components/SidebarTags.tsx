@@ -3,7 +3,7 @@ import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
-import { BrowseGroup } from "./LibraryFolders";
+import { BrowseGroup } from "./BrowseGroup";
 import { ReviewRing, TagDot } from "./TagColour";
 
 const NONE: readonly Document[] = [];
