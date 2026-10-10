@@ -34,6 +34,7 @@ test("the Privacy page lists the data flows and the update check, and offers no 
 
   const privacy = await openPrivacySettings(window);
   await expect(privacy).toContainText("collects no usage data");
+  await expect(privacy).toContainText("asks it not to store your requests");
 
   // Every registered flow, with what it sends and where.
   const chat = privacy.locator('[data-testid="data-flow"][data-flow-id="chat"]');
