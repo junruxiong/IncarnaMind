@@ -6,9 +6,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
+import { LIBRARY_TAB, libraryTitle, showTab, tabStrip } from "../tabs";
 import {
   CloseLineIcon,
   ExportLineIcon,
@@ -25,11 +27,6 @@ import { SidebarToggle } from "./SidebarToggle";
  * look can change there alone.
  */
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** The new-tab shortcut as this system writes it, for tooltips and menus. */
-export const NEW_MIND_SHORTCUT = isMac ? "⌘T" : "Ctrl+T";
-
 /** Drag type for a tab, so file drops and sidebar drags ignore it. */
 const TAB_DRAG_TYPE = "application/x-incarnamind-tab";
 
@@ -44,7 +41,8 @@ const sideOf = (event: DragEvent<HTMLDivElement>): "before" | "after" => {
  * Mind, then Export at the right end. The Library, once opened, is a tab in
  * front of them (#119). Clicking a tab shows its Mind; its ✕ or
  * a middle click closes it; dragging moves it. The arrow keys move between
- * tabs, and the window's shortcuts work too (see `useTabShortcuts`).
+ * tabs, and the window's shortcuts work too, as in a browser: ⌘T, ⌘W, ⌘1–⌘9
+ * and Ctrl+Tab (see commands/app.ts).
  */
 export function MindTabs({ onExport }: { onExport(): void }) {
   const t = useT();
@@ -52,13 +50,11 @@ export function MindTabs({ onExport }: { onExport(): void }) {
   const openMindId = useAppStore((state) => state.openMindId);
   const libraryTab = useAppStore((state) => state.libraryTab);
   const libraryOpen = useAppStore((state) => state.libraryOpen);
-  const openMind = useAppStore((state) => state.openMind);
   const moveTab = useAppStore((state) => state.moveTab);
   const createMind = useAppStore((state) => state.createMind);
   const list = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<{ id: string; side: "before" | "after" } | null>(null);
-  useTabShortcuts();
 
   const overflow = useOverflow(list);
 
@@ -76,10 +72,8 @@ export function MindTabs({ onExport }: { onExport(): void }) {
 
   /** Arrow keys, Home and End move to another tab and show it, as in any tab list. */
   const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
-    // The Library's tab, if open, is the first stop.
-    const order = libraryTab ? [LIBRARY_TAB, ...tabs] : tabs;
-    const current = libraryOpen ? LIBRARY_TAB : openMindId;
-    const index = current === null ? -1 : order.indexOf(current);
+    const { order, shown } = tabStrip();
+    const index = shown === null ? -1 : order.indexOf(shown);
     const next =
       event.key === "ArrowRight"
         ? order[(index + 1) % order.length]
@@ -92,8 +86,7 @@ export function MindTabs({ onExport }: { onExport(): void }) {
               : undefined;
     if (next === undefined) return;
     event.preventDefault();
-    if (next === LIBRARY_TAB) useAppStore.getState().showLibrary();
-    else openMind(next);
+    showTab(next);
     list.current
       ?.querySelector<HTMLElement>(
         next === LIBRARY_TAB ? "[data-library-tab]" : `[data-mind-id="${CSS.escape(next)}"]`,
@@ -173,8 +166,8 @@ export function MindTabs({ onExport }: { onExport(): void }) {
       <button
         type="button"
         data-testid="new-tab"
-        aria-label={t("tabs.new", { shortcut: NEW_MIND_SHORTCUT })}
-        title={t("tabs.new", { shortcut: NEW_MIND_SHORTCUT })}
+        aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
+        title={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
         onClick={() => void createMind()}
         className="mind-tabs-new"
       >
@@ -198,18 +191,9 @@ export function MindTabs({ onExport }: { onExport(): void }) {
   );
 }
 
-/** The Library's place in the tab order, which no Mind's ID is. */
-const LIBRARY_TAB = "\u0000library";
-
-/** What the Library tab is named after: the Folder it shows, or "All Documents". */
 function useLibraryTitle(): string {
   const t = useT();
-  return useAppStore((state) => {
-    const filter = state.libraryFilter;
-    if (filter === "unsorted") return t("library.unsorted");
-    const folder = state.library?.groups.find((group) => group.id === filter);
-    return folder?.name ?? t("library.all");
-  });
+  return useAppStore((state) => libraryTitle(state, t));
 }
 
 /** The Library's tab: it opens and closes like a Mind's, and is first in the strip. */
@@ -372,56 +356,6 @@ function MindTab(props: MindTabProps) {
       <span aria-hidden="true" data-side="right" className="mind-tab-foot" />
     </div>
   );
-}
-
-/**
- * The window's tab shortcuts, as in a browser: ⌘T (Ctrl+T) a new Mind in a
- * new tab, ⌘W closes the tab, ⌘1–⌘8 go to that tab and ⌘9 to the last, and
- * Ctrl+Tab or Ctrl+Shift+Tab move to the next or previous tab. Not while a
- * dialog is open, and not when something else already used the key.
- */
-function useTabShortcuts() {
-  useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey) return;
-      const cycle = event.key === "Tab" && event.ctrlKey && !event.metaKey;
-      const command = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-      // Typed keys leave here, before the search for an open dialog through the whole page.
-      if (!cycle && (!command || event.shiftKey)) return;
-      if (document.querySelector("dialog[open]")) return;
-      const { tabs, openMindId, openMind, closeTab, createMind, libraryTab, libraryOpen } =
-        useAppStore.getState();
-      // The Library's tab, if open, comes first in the strip.
-      const order = libraryTab ? [LIBRARY_TAB, ...tabs] : tabs;
-      const shown = libraryOpen ? LIBRARY_TAB : openMindId;
-      const current = shown === null ? -1 : order.indexOf(shown);
-
-      if (cycle) {
-        event.preventDefault();
-        if (order.length === 0) return;
-        const step = event.shiftKey ? -1 : 1;
-        const next = order[(current + step + order.length) % order.length];
-        if (next === LIBRARY_TAB) useAppStore.getState().showLibrary();
-        else if (next) openMind(next);
-        return;
-      }
-      if (event.code === "KeyT") {
-        event.preventDefault();
-        void createMind();
-      } else if (event.code === "KeyW") {
-        event.preventDefault();
-        if (libraryOpen) useAppStore.getState().closeLibrary();
-        else if (openMindId) closeTab(openMindId);
-      } else if (/^Digit[1-9]$/.test(event.code)) {
-        event.preventDefault();
-        const digit = Number(event.code.slice("Digit".length));
-        const target = digit === 9 ? tabs.at(-1) : tabs[digit - 1];
-        if (target) openMind(target);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 }
 
 /**
