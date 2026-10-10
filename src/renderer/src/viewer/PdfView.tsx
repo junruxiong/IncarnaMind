@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import type { Document } from "../../../core/api";
-import { findQuoteInPages, type TextPiece } from "../../../shared/quoteMatch";
+import { findQuoteInPages, lostLigatures, type TextPiece } from "../../../shared/quoteMatch";
 import { useT } from "../i18n";
 import type { ViewerTarget } from "../store";
 import {
@@ -173,6 +173,26 @@ interface PdfPagesProps {
   pdf: PDFDocumentProxy;
   firstPage: PageSize;
   target: ViewerTarget;
+}
+
+/** Whether each PDF's text lost its f-ligatures, read once per PDF, all its pages (see `lostLigatures`). */
+const ligaturesLost = new WeakMap<PDFDocumentProxy, Promise<boolean>>();
+
+/** As the Citation check reads the Document's stored text: whether a quote's ligatures may be a lone "f". */
+function lostLigaturesOf(pdf: PDFDocumentProxy): Promise<boolean> {
+  let known = ligaturesLost.get(pdf);
+  if (!known) {
+    known = (async () => {
+      const texts: string[] = [];
+      for (let page = 1; page <= pdf.numPages; page++) {
+        const content = await (await pdf.getPage(page)).getTextContent();
+        for (const entry of content.items) if ("str" in entry) texts.push(entry.str);
+      }
+      return lostLigatures(texts.join("\n"));
+    })();
+    ligaturesLost.set(pdf, known);
+  }
+  return known;
 }
 
 function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
@@ -423,9 +443,14 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
         pages.push(pieces);
       }
       if (cancelled) return;
-      // Across a page break, running headers and footers may sit inside the quote.
-      const found = findQuoteInPages(pages, quote);
-      if (!found) return;
+      // Across a page break, running headers and footers may sit inside the quote. A PDF whose
+      // text lost its f-ligatures is matched as the check matched it, only when needed.
+      const found =
+        findQuoteInPages(pages, quote) ??
+        ((await lostLigaturesOf(pdf))
+          ? findQuoteInPages(pages, quote, undefined, { lostLigatures: true })
+          : null);
+      if (cancelled || !found) return;
       const byPage = new Map<number, RunHighlight[]>();
       for (const part of found) {
         const page = from + part.page;

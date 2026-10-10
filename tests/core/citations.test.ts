@@ -592,6 +592,45 @@ describe("The Citation check", { timeout: 30_000 }, () => {
     expect(first(shown).text).not.toMatch(/[⼤⾔]/);
   });
 
+  test("in a Document whose text lost its f-ligatures, a quote of it as it shows is found; elsewhere a lone f stays an f", async () => {
+    const lost = `# Report\n\nThe goal is to fnance and facilitate growth. ${"The frm's fnancial eforts beneft its ofce. ".repeat(50)}\n`;
+    const kept = `# Log\n\nThe fight was delayed by fog. ${"The first financial effort of the office was flawed. ".repeat(50)}\n`;
+    const model = citingModel({
+      query: "goal",
+      records: (passages) => {
+        const of = (document: string) =>
+          passages.find((passage) => passage.document === document)?.id ?? "none";
+        return [
+          {
+            marker: 1,
+            passage: of("Report"),
+            quote: "The goal is to finance and facilitate growth.",
+          },
+          { marker: 2, passage: of("Log"), quote: "The flight was delayed by fog." },
+        ];
+      },
+      answer: "Growth [^1]. A delay [^2].",
+    });
+    const { core, client, mind } = await setUpWithDocuments(model, [
+      { name: "Report.md", contents: lost },
+      { name: "Log.md", contents: kept },
+    ]);
+
+    const { answerId } = await askAndFinish(
+      core,
+      client,
+      mind.id,
+      "What is the goal, and what was delayed?",
+    );
+
+    expect(
+      citationsIn(client, answerId).map(({ documentName, check }) => [documentName, check]),
+    ).toEqual([
+      ["Report", "found"],
+      ["Log", "not-found"],
+    ]);
+  });
+
   test("a Citation of a page with no text, such as a scan, 'can't be checked'", async () => {
     const model = citingModel({
       query: "harbour survey",
