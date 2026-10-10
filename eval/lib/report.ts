@@ -15,6 +15,7 @@ import {
   type CitationRun,
   type GroupSummary,
   pagesLabel,
+  rejectedLine,
   shortQuote,
 } from "./citations";
 import type { FormatsReport } from "./formats";
@@ -304,11 +305,11 @@ function whyNotFound(run: CitationRun, unit: "p." | "Unit", heading = "###"): st
   if (uncited.length === 0) lines.push("None.", "");
   else {
     lines.push(
-      "| Question | Round | Status | Citing | Markers removed | Records dropped | Searched for | Begins |",
-      "|---|---|---|---|---|---|---|---|",
+      "| Question | Round | Status | Citing | Markers removed | Records dropped | Records rejected | Searched for | Begins |",
+      "|---|---|---|---|---|---|---|---|---|",
       ...uncited.map(
         (answer) =>
-          `| ${answer.questionId} | ${answer.round} | ${answer.status}${answer.error ? ` (${answer.error.kind})` : ""} | ${answer.citationSupport ?? "unknown"} | ${answer.droppedMarkers} | ${answer.droppedRecords} | ${cell(answer.searches.join("; "))} | ${cell(shortQuote(answer.sentences[0]?.text ?? "", 120))} |`,
+          `| ${answer.questionId} | ${answer.round} | ${answer.status}${answer.error ? ` (${answer.error.kind})` : ""} | ${answer.citationSupport ?? "unknown"} | ${answer.droppedMarkers} | ${answer.droppedRecords} | ${cell(rejectedLine(answer.rejectedRecords ?? []))} | ${cell(answer.searches.join("; "))} | ${cell(shortQuote(answer.sentences[0]?.text ?? "", 120))} |`,
       ),
       "",
     );
