@@ -61,13 +61,13 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
   await expect(items).toHaveCount(4);
   await closeSettings(window);
 
-  // In a Question, "/" offers them like any other Skill.
+  // In the composer, "/" offers them like any other Skill.
   await window.getByTestId("new-mind").click();
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("/");
-  const menu = window.getByTestId("slash-menu");
+  const menu = window.getByTestId("composer-skill-picker");
   for (const name of BUILT_IN) {
     await expect(menu.getByTestId(`slash-item-skill-${name}`)).toBeVisible();
   }
@@ -77,14 +77,15 @@ test("a fresh data folder has the three built-in Skills: labelled in Settings, a
     "true",
   );
   await window.keyboard.press("Enter");
-  const question = editor.getByTestId("question");
-  const chip = question.getByTestId("question-skill");
-  await expect(chip).toHaveText("literature-review");
-  await expect(chip).toHaveAttribute("data-state", "enabled");
+  const composerChip = window.getByTestId("composer").getByTestId("composer-skill");
+  await expect(composerChip).toHaveText("literature-review");
+  await expect(composerChip).toHaveAttribute("data-state", "enabled");
 
-  // Asked, the Answer follows it, as with any forced Skill.
+  // Asked, the Question carries it and the Answer follows it, as with any forced Skill.
   await window.keyboard.type("What do my Documents say about tides?");
   await window.keyboard.press("Enter");
+  const chip = editor.getByTestId("question").getByTestId("question-skill");
+  await expect(chip).toHaveText("literature-review");
   const answer = editor.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   const card = answer.getByTestId("answer-skill");

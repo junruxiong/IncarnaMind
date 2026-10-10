@@ -187,7 +187,7 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
     window.locator('[data-testid="get-started-step"][data-step="documents"] [data-done]'),
   ).toBeVisible();
 
-  // The empty Mind's hint starts a Question where it is.
+  // The empty Mind's hint focuses the composer, for a Question to go where the hint is.
   await useLocalChatModel(window);
   const hint = window.getByTestId("end-hint");
   await expect(hint).toHaveAttribute("data-place", "empty");
@@ -195,11 +195,12 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   await pointAndClick(window, hint, { atX: 12, through: true });
   await expect(hint).toHaveAttribute("data-armed", "true");
   await pointAndClick(window, hint.getByTestId("end-hint-ask"));
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("When are the tide tables published?");
+  await window.keyboard.press("Enter");
   const editor = window.getByTestId("mind-editor");
   await expect(editor.getByTestId("question")).toHaveCount(1);
   await expect(guide).toBeHidden();
-  await window.keyboard.type("When are the tide tables published?");
-  await window.keyboard.press("Enter");
   await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
@@ -228,8 +229,8 @@ test("Get started can be hidden, and stays hidden", async () => {
   await again.app.close();
 });
 
-test("the hint at the end of a Mind starts a Question when its link is clicked once the cursor is on its line, and is otherwise the line to write on", async () => {
-  const { window } = await launchApp(dataDir, { examples: true });
+test("the hint at the end of a Mind focuses the composer when its link is clicked once the cursor is on its line, and is otherwise the line to write on", async () => {
+  const { window } = await launchApp(dataDir, { examples: true, fakeChat: true });
   const editor = window.getByTestId("mind-editor");
   const hint = window.getByTestId("end-hint");
   await expect(hint).toHaveAttribute("data-place", "afterAnswer");
@@ -269,11 +270,37 @@ test("the hint at the end of a Mind starts a Question when its link is clicked o
   // An empty line after an Answer, not at the end, shows the hint while it is written in.
   await expect(hint).toHaveAttribute("data-place", "afterAnswer");
 
-  // Its link turns that line into a Question, with the cursor in it.
+  // Its link focuses the composer; the Question asked there goes on that line.
   await pointAndClick(window, hint.getByTestId("end-hint-ask"));
-  await expect(editor.getByTestId("question")).toHaveCount(2);
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await useLocalChatModel(window);
   await window.keyboard.type("Which tea is drunk most in Britain?");
+  await window.keyboard.press("Enter");
+  await expect(editor.getByTestId("question")).toHaveCount(2);
   await expect(editor.getByTestId("question").nth(1)).toContainText(
     "Which tea is drunk most in Britain?",
   );
+  // Right after the example's Answer, before the Note, with a line under its Answer to write on.
+  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
+  const order = await editor
+    .locator(":scope > *")
+    .evaluateAll((all) =>
+      all.map((block) =>
+        block.matches(".node-question")
+          ? "question"
+          : block.matches(".node-answer")
+            ? "answer"
+            : (block.textContent ?? "").trim(),
+      ),
+    );
+  expect(order.slice(-6)).toEqual([
+    "question",
+    "answer",
+    "question",
+    "answer",
+    "",
+    "Green and black tea come from the same plant.",
+  ]);
 });
