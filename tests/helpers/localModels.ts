@@ -74,7 +74,7 @@ export const TIDES = [
 export async function setUpLocalModel(
   ollama: { baseUrl: string },
   model: string,
-  { memory = 32 * GIB, documents = [] as { name: string; contents: string }[] } = {},
+  { memory = 32 * GIB, documents = [] as { name: string; contents: string | Uint8Array }[] } = {},
 ) {
   const core = startCore(await createTempDataFolder(), {
     // The real model factory and lookups, against the stub.

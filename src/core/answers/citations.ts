@@ -49,7 +49,7 @@ import type { CitationSource } from "../documents";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
 import type { NodeJSON } from "./blocks";
-import type { AnswerTools, CitationRecordInput, SearchResultForModel } from "./engine";
+import type { AnswerTools, CitationRecordInput, CiteOptions, SearchResultForModel } from "./engine";
 
 /** How many times one Answer may search; later searches are refused, so the model answers. */
 const MAX_SEARCHES_PER_ANSWER = 5;
@@ -568,8 +568,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     return locationOf(units, usable ? quoteInUnits(usable, record.quote) : null, record.requested);
   };
 
+  /** A Passage named by its number alone, "1" or "[1]", as structured output may: "P1". */
+  const numbered = (name: string) => name.replace(/^\s*\[?\s*(\d{1,4})\s*\]?\s*$/, "P$1");
+
   /** Takes records; returns what to tell the model about them. */
-  function cite(inputs: readonly CitationRecordInput[]): string {
+  function cite(inputs: readonly CitationRecordInput[], options: CiteOptions = {}): string {
     const recorded: number[] = [];
     const problems: string[] = [];
     for (const input of inputs) {
@@ -580,7 +583,11 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         continue;
       }
       const label = `[^${marker}]`;
-      const found = typeof input.passage === "string" ? resolve(input.passage) : null;
+      const named =
+        typeof input.passage === "string" && options.structured
+          ? numbered(input.passage)
+          : input.passage;
+      const found = typeof named === "string" ? resolve(named) : null;
       const source = found && documents.citationSource(found.passageId);
       if (!found || !source) {
         invalidRecords++;
@@ -611,13 +618,22 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         quote,
         result: null,
       };
-      const record: Accepted = { ...taken, location: locationFor(taken) };
+      let record: Accepted = { ...taken, location: locationFor(taken) };
+      // Structured output can't be told to fix a record (see `CiteOptions`): a quote that isn't where
+      // it names is cited where it is in its Passage, never outside it, and the check still reads it there.
+      if (options.structured && quote && check(record).check === "not-found") {
+        const placedAt = locateQuote(passageUnits, quote);
+        if (placedAt) {
+          const placed = { ...taken, range: placedAt, requested: null, unresolved: false };
+          record = { ...placed, location: locationFor(placed) };
+        }
+      }
       records.set(marker, record);
       recorded.push(marker);
       events.onRecord(marker, toCitation(record, null));
 
       // Tell the model now what the check will find, so it can fix the record.
-      const problem = pageRangeProblem(range, source, unresolved);
+      const problem = pageRangeProblem(record.range, source, record.unresolved);
       const where = passageUnits.length > 0 ? passageLocation(passageUnits) : null;
       if (problem) {
         problems.push(
@@ -631,7 +647,7 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         problems.push(
           where
             ? `${label}: the quote isn't word for word at ${cutLocation(record) ?? where} in ${found.handle}; copy it exactly, and check where it is.`
-            : `${label}: the quote isn't word for word${range.pageFrom === null ? "" : ` on p. ${pagesLabel(range)}`} in ${found.handle}; copy it exactly, and check its page.`,
+            : `${label}: the quote isn't word for word${record.range.pageFrom === null ? "" : ` on p. ${pagesLabel(record.range)}`} in ${found.handle}; copy it exactly, and check its page.`,
         );
       }
     }

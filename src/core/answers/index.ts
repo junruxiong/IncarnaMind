@@ -773,7 +773,7 @@ export function createAnswers(options: AnswersOptions) {
         // So the model can search again in the Documents' language (see the search Tool).
         documentLanguages: options.documents.searchableLanguages(documentIds),
         searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
-        cite: (records) => session.tools.cite(records),
+        cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
       };
       // Scripts can run when a Skill has some, unless the User turned them off.

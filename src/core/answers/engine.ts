@@ -90,6 +90,18 @@ export interface CitationRecordInput {
   quote: string;
 }
 
+/** How records came, for `AnswerTools.cite`. */
+export interface CiteOptions {
+  /**
+   * In structured output, which gets no word back to fix its records with
+   * (see `structured`): a Passage named by its number alone ("1") is "P1",
+   * and a quote that isn't on the pages its record names, but is word for
+   * word on a page of the Passage it names, or on two consecutive ones, is
+   * cited there, as `cite`'s feedback lets a model in the Tool loop do.
+   */
+  structured?: boolean;
+}
+
 /** What a search gives the model. */
 export interface SearchResultForModel {
   /** The Passages, formatted for the model, or a sentence saying there are none. */
@@ -120,7 +132,7 @@ export interface AnswerTools {
   /** The document-search Tool. */
   searchDocuments(query: string, signal?: AbortSignal): Promise<SearchResultForModel>;
   /** Takes Citation records; returns what to tell the model about them. */
-  cite(records: readonly CitationRecordInput[]): string;
+  cite(records: readonly CitationRecordInput[], options?: CiteOptions): string;
   /** Whether a valid record was taken for this marker: the engine places its marker if the model left it out. */
   hasRecord?(marker: number): boolean;
 }
@@ -1053,7 +1065,8 @@ async function* structured(
   }
   const records = parseRecords((value as { citations?: unknown } | undefined)?.citations);
   try {
-    request.documents.cite(records);
+    // The answer is written: what `cite` would tell the model can't reach it. It places the records instead.
+    request.documents.cite(records, { structured: true });
   } catch (error) {
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
