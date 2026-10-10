@@ -1,8 +1,9 @@
 /**
  * The one ZIP module (src/core/documents/formats/zip.ts, #77): the archives
- * IncarnaMind writes (the container of a .docx export), and entries copied
- * from one package into another as they are. Reading Office files through it
- * is tested with the formats (formats.test.ts).
+ * IncarnaMind writes (the container of a .docx export), entries copied from
+ * one package into another as they are, and the limits a package is read
+ * within. Reading Office files through it is tested with the formats
+ * (formats.test.ts).
  */
 import { readFileSync } from "node:fs";
 import { deflateRawSync, crc32 as zlibCrc32 } from "node:zlib";
@@ -117,6 +118,29 @@ describe("Copying", () => {
 });
 
 describe("Reading", () => {
+  test("a package of more than 20,000 parts is refused, as before", () => {
+    const parts = (count: number) =>
+      writeZip(
+        Array.from({ length: count }, (_, index) => ({ name: `p${index}.xml`, data: "" })),
+        deflateRawSync,
+      );
+
+    expect(openPackage(parts(20_000)).names()).toHaveLength(20_000);
+    expect(() => openPackage(parts(20_001))).toThrow("The package has too many parts (20001).");
+  });
+
+  test("a ZIP64 package is refused, as before", () => {
+    const bytes = writeZip(ENTRIES, deflateRawSync);
+    const end = bytes.length - 22;
+    // A ZIP64 end locator just before the end record.
+    const locator = new Uint8Array(20);
+    new DataView(locator.buffer).setUint32(0, 0x07064b50, true);
+    const zip64 = Buffer.concat([bytes.subarray(0, end), locator, bytes.subarray(end)]);
+
+    expect(openPackage(bytes).names()).toHaveLength(ENTRIES.length);
+    expect(() => openPackage(zip64)).toThrow("ZIP64 packages aren't supported.");
+  });
+
   test("parts read whole and parts read as streams count together towards the 1 GB a package's parts may inflate to", {
     timeout: 60_000,
   }, async () => {
