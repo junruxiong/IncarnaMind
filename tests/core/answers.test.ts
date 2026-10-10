@@ -36,6 +36,7 @@ const NO_CITATIONS = {
   rejectedRecords: [],
   placedMarkers: 0,
   citationSupport: null,
+  quoteRetry: null,
 };
 
 /** A core with a local chat model set up (so no consent is needed), and a Mind with two clients. */
