@@ -93,6 +93,8 @@ const cited = (outcome: CitationRecord["outcome"]): CitationRecord => ({
   check: outcome === "found" ? "found" : "not-found",
   checkReason: outcome === "found" ? null : "quote-not-on-pages",
   outcome,
+  passagePages: [1, 1],
+  quoteOn: outcome === "not-in-document" ? null : [1, 1],
 });
 
 const answer = (questionId: string, citations: CitationRecord[]): AnswerRecord => {

@@ -14,6 +14,8 @@ import {
   type CitationOutcome,
   type CitationRun,
   type GroupSummary,
+  pagesLabel,
+  shortQuote,
 } from "./citations";
 import type { FormatsReport } from "./formats";
 import {
@@ -262,6 +264,58 @@ function citationTable(
   ];
 }
 
+/** Text for a cell of a Markdown table. */
+const cell = (text: string) => text.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+
+/**
+ * Each Citation the check didn't find, and each Answer without a Citation,
+ * with why: so a short run shows what went wrong. `unit` names what the
+ * pages are: "p." for PDFs, "Unit" for any format.
+ */
+function whyNotFound(run: CitationRun, unit: "p." | "Unit", heading = "###"): string[] {
+  const missed = run.answers.flatMap((answer) =>
+    answer.citations
+      .filter((citation) => citation.outcome !== "found")
+      .map((citation) => ({ answer, citation })),
+  );
+  const uncited = run.answers.filter((answer) => answer.citations.length === 0);
+  const lines = [
+    `${heading} Citations not found`,
+    "",
+    `Each Citation the check didn't find: the ${unit === "p." ? "pages" : "Units"} it cites, its Passage's, and where its quote is in the Document under the looser normalisation ("–": nowhere, e.g. paraphrased, or written in other characters).`,
+    "",
+  ];
+  if (missed.length === 0) lines.push("None.", "");
+  else {
+    lines.push(
+      "| Question | Round | Outcome | Check | Document | Cites | Passage | Quote is on | Quote |",
+      "|---|---|---|---|---|---|---|---|---|",
+      ...missed.map(({ answer, citation }) => {
+        const cites =
+          citation.pageFrom === null
+            ? "–"
+            : pagesLabel([citation.pageFrom, citation.pageTo ?? citation.pageFrom], unit);
+        return `| ${answer.questionId} | ${answer.round} | ${OUTCOME_LABELS[citation.outcome]} | ${citation.checkReason ?? ""} | ${cell(citation.documentName)} | ${cites} | ${pagesLabel(citation.passagePages, unit)} | ${pagesLabel(citation.quoteOn, unit)} | ${cell(shortQuote(citation.quote))} |`;
+      }),
+      "",
+    );
+  }
+  lines.push(`${heading} Answers without a Citation`, "");
+  if (uncited.length === 0) lines.push("None.", "");
+  else {
+    lines.push(
+      "| Question | Round | Status | Citing | Markers removed | Records dropped | Searched for | Begins |",
+      "|---|---|---|---|---|---|---|---|",
+      ...uncited.map(
+        (answer) =>
+          `| ${answer.questionId} | ${answer.round} | ${answer.status}${answer.error ? ` (${answer.error.kind})` : ""} | ${answer.citationSupport ?? "unknown"} | ${answer.droppedMarkers} | ${answer.droppedRecords} | ${cell(answer.searches.join("; "))} | ${cell(shortQuote(answer.sentences[0]?.text ?? "", 120))} |`,
+      ),
+      "",
+    );
+  }
+  return lines;
+}
+
 /** The every-format set (#70): per format, per hard place and per Question. Never gating. */
 function formatsSection(formats: FormatsReport): string[] {
   const { retrieval } = formats;
@@ -326,6 +380,7 @@ function formatsSection(formats: FormatsReport): string[] {
       "",
       ...citationTable(columns, null),
       "",
+      ...whyNotFound(citations, "Unit", "####"),
     );
   }
   lines.push(
@@ -411,6 +466,7 @@ function markdownReport(report: EvalReport, reportDir: string, root: string): st
         citations.minCitations,
       ),
       "",
+      ...whyNotFound(citations, "p."),
     );
   }
   if (report.formats && "skipped" in report.formats) {

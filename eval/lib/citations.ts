@@ -83,6 +83,14 @@ export interface CitationRecord {
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
   outcome: CitationOutcome;
+  /** The pages (Units) of the Passage the Citation names; null when unknown. */
+  passagePages: [number, number] | null;
+  /**
+   * Where the quote is in its Document under the looser normalisation: the
+   * first page (Unit) that holds it, or two consecutive ones; null when it
+   * isn't there, e.g. paraphrased (see `quotePages`).
+   */
+  quoteOn: [number, number] | null;
 }
 
 export interface AnswerRecord {
@@ -261,6 +269,88 @@ export function outcomeOf(
   return onPages(pages) ? "wrong-page" : "not-in-document";
 }
 
+/** Each Document's pages under the looser normalisation, by the array `pageTexts` gave. */
+const loosePagesOf = new WeakMap<readonly PageText[], { page: number | null; text: string }[]>();
+
+/**
+ * Where a quote is in its Document's stored pages under the looser
+ * normalisation: the first page (Unit) that holds it, or else the first two
+ * consecutive ones; null when it isn't there, e.g. paraphrased.
+ */
+export function quotePages(quote: string, pages: readonly PageText[]): [number, number] | null {
+  const needle = looseText(quote);
+  if (!needle) return null;
+  let loose = loosePagesOf.get(pages);
+  if (!loose) {
+    loose = pages.map(({ page, text }) => ({ page, text: looseText(text) }));
+    loosePagesOf.set(pages, loose);
+  }
+  for (const { page, text } of loose) {
+    if (page !== null && text.includes(needle)) return [page, page];
+  }
+  for (let index = 0; index + 1 < loose.length; index++) {
+    const first = loose[index] as PageText;
+    const second = loose[index + 1] as PageText;
+    if (first.page === null || second.page !== first.page + 1) continue;
+    if (`${first.text}${second.text}`.includes(needle)) return [first.page, second.page];
+  }
+  return null;
+}
+
+const OUTCOME_WORDS: Record<CitationOutcome, string> = {
+  found: "found",
+  "false-not-found": 'false "not found"',
+  "wrong-page": "wrong page",
+  "not-in-document": "not in the Document",
+  "page-range": "breaks the page-range rule",
+  "cant-check": "can't check",
+};
+
+/** "p. 4" or "pp. 4–5" ("Unit 4", "Units 4–5" for any format); "–" for none. */
+export function pagesLabel(range: readonly [number, number] | null, unit: "p." | "Unit"): string {
+  if (!range) return "–";
+  const [from, to] = range;
+  const plural = from !== to;
+  const span = plural ? `${from}–${to}` : `${from}`;
+  return unit === "p."
+    ? `${plural ? "pp." : "p."} ${span}`
+    : `${plural ? "Units" : "Unit"} ${span}`;
+}
+
+/** A quote on one line, cut short. */
+export const shortQuote = (quote: string, length = 160) => {
+  const line = quote.replace(/\s+/g, " ").trim();
+  return line.length > length ? `${line.slice(0, length - 1)}…` : line;
+};
+
+/**
+ * Why a Citation isn't "found", in a line: what the check said, the pages it
+ * cites and its Passage's, where the quote is, and the quote. `unit` names
+ * what the pages are: "p." for PDFs, "Unit" for any format.
+ */
+export function citationLine(citation: CitationRecord, unit: "p." | "Unit" = "p."): string {
+  const cited =
+    citation.pageFrom === null
+      ? "the whole Document"
+      : pagesLabel([citation.pageFrom, citation.pageTo ?? citation.pageFrom], unit);
+  const reason = citation.checkReason ? ` (${citation.checkReason})` : "";
+  const on = citation.quoteOn
+    ? `the quote is on ${pagesLabel(citation.quoteOn, unit)}`
+    : "the quote isn't in the Document";
+  return `${OUTCOME_WORDS[citation.outcome]}${reason}: ${citation.documentName}, cites ${cited} of a Passage on ${pagesLabel(citation.passagePages, unit)}; ${on}: "${shortQuote(citation.quote)}"`;
+}
+
+/** Why an Answer has no Citation, in a line: how it cited, what was dropped, and how it begins. */
+export function uncitedLine(answer: AnswerRecord): string {
+  const begins = answer.sentences[0]?.text;
+  return [
+    `${answer.status}, ${answer.citationSupport ?? "unknown"}`,
+    `${answer.droppedMarkers} markers without records removed, ${answer.droppedRecords} records dropped`,
+    ...(answer.error ? [`${answer.error.kind}: ${answer.error.message}`] : []),
+    begins ? `begins "${shortQuote(begins, 120)}"` : "no text",
+  ].join("; ");
+}
+
 /**
  * "ollama" only: the app's lookup of models in Ollama, with the window and
  * the citing mode the run asks for (`ChatSettings.numCtx` and `citing`)
@@ -392,6 +482,8 @@ async function askOne(
         documentName: citation.documentName ?? "",
         ...checked,
         outcome: outcomeOf(checked, pages),
+        passagePages: citation.passageId ? library.passagePages(citation.passageId) : null,
+        quoteOn: quotePages(checked.quote, pages),
       };
     }),
   );
@@ -535,6 +627,8 @@ export async function runCitations(
   config: Pick<EvalConfig, "minCitations" | "maxRounds" | "answerTimeoutMs"> &
     Partial<Pick<EvalConfig, "questionIds">>,
   log: Log,
+  /** What the set's pages are, in the log: "p." for PDFs, "Unit" for any format. */
+  unit: "p." | "Unit" = "p.",
 ): Promise<CitationRun> {
   const subset = config.questionIds ?? null;
   const asked = questionsToAsk(questions, subset);
@@ -589,6 +683,11 @@ export async function runCitations(
         log(
           `${question.id} (round ${round}): ${answer.status}, ${answer.citationSupport ?? "unknown"}, ${answer.citations.length} Citations, ${found} found, ${answer.seconds.toFixed(0)} s`,
         );
+        // Why, as it happens, so a run stopped before its report still says.
+        if (answer.citations.length === 0) log(`  no Citation: ${uncitedLine(answer)}`);
+        for (const citation of answer.citations) {
+          if (citation.outcome !== "found") log(`  ${citationLine(citation, unit)}`);
+        }
       }
     }
 

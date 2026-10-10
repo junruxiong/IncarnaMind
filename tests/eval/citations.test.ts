@@ -42,6 +42,14 @@ const libraryOf = (core: Library["core"], dataDir: string): Library => ({
       "SELECT page, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page",
       [documentId],
     ),
+  passagePages: (passageId) => {
+    const [row] = queryDatabase<{ page_from: number | null; page_to: number | null }>(
+      dataDir,
+      "SELECT page_from, page_to FROM passages WHERE id = ?",
+      [passageId],
+    );
+    return row?.page_from && row.page_to ? [row.page_from, row.page_to] : null;
+  },
   close: async () => {},
 });
 
@@ -69,6 +77,7 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
     const { core, dataDir } = await setUpWithDocuments(model, [
       { name: "Tides.pdf", contents: TIDES },
     ]);
+    const logged: string[] = [];
 
     const run = await runCitations(
       libraryOf(core, dataDir),
@@ -82,7 +91,7 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
         citing: null,
       },
       { minCitations: 4, maxRounds: 2, answerTimeoutMs: 30_000 },
-      () => {},
+      (line) => logged.push(line),
     );
 
     // Three Citations in round 1 are fewer than 4, so the Question was asked again.
@@ -114,6 +123,25 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
       ["And at full moon .", "false-not-found"],
       ["They are the largest.", "wrong-page"],
     ]);
+    // Where each quote is, and the pages of the Passage cited: one Passage covers both short pages.
+    expect(answer?.citations.map(({ passagePages, quoteOn }) => [passagePages, quoteOn])).toEqual([
+      [
+        [1, 2],
+        [2, 2],
+      ],
+      [
+        [1, 2],
+        [2, 2],
+      ],
+      [
+        [1, 2],
+        [2, 2],
+      ],
+    ]);
+    // The log says why, as each Answer ends.
+    expect(logged).toContain(
+      `  wrong page (quote-not-on-pages): Tides, cites p. 1 of a Passage on pp. 1–2; the quote is on p. 2: "${SPRING}"`,
+    );
     expect(run.summary.en).toMatchObject({
       answers: 2,
       citedAnswers: 2,

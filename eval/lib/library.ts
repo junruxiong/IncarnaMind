@@ -75,6 +75,8 @@ export interface Library {
   passageCount: number;
   /** The stored text of a Document's pages, as the Citation check reads them. */
   pageTexts(documentId: string): { page: number | null; text: string }[];
+  /** The pages (Units) a Passage covers; null when it has none or is unknown. */
+  passagePages(passageId: string): [number, number] | null;
   /** Closes the core, and deletes the data folder unless it is kept. */
   close(): Promise<void>;
 }
@@ -313,6 +315,14 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
           pages.set(documentId, found);
         }
         return found;
+      },
+      passagePages(passageId) {
+        const row = db.get<{ page_from: number | null; page_to: number | null }>(
+          "SELECT page_from, page_to FROM passages WHERE id = ?",
+          [passageId],
+        );
+        if (!row || row.page_from === null || row.page_to === null) return null;
+        return [row.page_from, row.page_to];
       },
       async close() {
         db.close();
