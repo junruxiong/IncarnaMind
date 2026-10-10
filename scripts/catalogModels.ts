@@ -14,14 +14,21 @@
  * the difference and changes nothing: ./src/core/providers/catalog/overrides.ts
  * is where a person corrects a fact.
  *
+ * `npm run catalog:update` is this script. After writing, it prints what
+ * changed since the file it replaced: new and removed models, changed prices,
+ * limits and abilities, and a provider's default (./providers.ts roles) whose
+ * model changed or disappeared. `--diff-file <file>` also writes that diff
+ * as Markdown, for the weekly pull request (.github/workflows/catalog-update.yml).
+ * Overrides are never touched: they live in their own file.
+ *
  * Both sources' licences ask for their notice to go with the data: it is
  * written to resources/notices/model-catalog.txt, which ships in the app's
  * resources folder (electron-builder.yml).
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   CatalogModel,
   GeneratedProviderModels,
@@ -209,6 +216,141 @@ export function generateModels(
   return { providers, disagreements: found };
 }
 
+/** Provider id to role to the model id a person chose for it (providers.ts). */
+export type Roles = Record<string, Partial<Record<string, string>>>;
+
+export interface CatalogDiff {
+  added: string[];
+  removed: string[];
+  /** One line per changed fact, such as "openai/gpt-6: input price $2 -> $3". */
+  changed: string[];
+  /** A provider role that points at a model that changed or is gone. */
+  defaults: string[];
+}
+
+type Generated = Record<string, GeneratedProviderModels>;
+
+const money = (value: number | undefined, currency = "USD") =>
+  value === undefined ? "none" : `${currency === "USD" ? "$" : `${currency} `}${value}`;
+const tokens = (value: number | undefined) => (value === undefined ? "none" : String(value));
+const list = (value: readonly string[] | undefined) => (value?.length ? value.join(", ") : "none");
+
+/** The differences between two entries of one model, one phrase each. */
+function changesOf(before: CatalogModel, after: CatalogModel): string[] {
+  const phrases: string[] = [];
+  const differ = (what: string, was: string, now: string) => {
+    if (was !== now) phrases.push(`${what} ${was} -> ${now}`);
+  };
+  const was = before.price;
+  const now = after.price;
+  const per = (field: "input" | "output" | "cacheRead", label: string) =>
+    differ(`${label} price`, money(was?.[field], was?.currency), money(now?.[field], now?.currency));
+  if (was && now) differ("price currency", was.currency, now.currency);
+  per("input", "input");
+  per("output", "output");
+  per("cacheRead", "cached input");
+  differ("context", tokens(before.context), tokens(after.context));
+  differ("input limit", tokens(before.maxInput), tokens(after.maxInput));
+  differ("output limit", tokens(before.maxOutput), tokens(after.maxOutput));
+  differ("reads", list(before.input), list(after.input));
+  differ("Tools", String(before.tools), String(after.tools));
+  differ(
+    "structured output",
+    before.structuredOutput ?? "unknown",
+    after.structuredOutput ?? "unknown",
+  );
+  differ("reasoning", String(before.reasoning), String(after.reasoning));
+  differ(
+    "temperature",
+    String(before.temperature ?? "unknown"),
+    String(after.temperature ?? "unknown"),
+  );
+  differ("status", before.status ?? "current", after.status ?? "current");
+  return phrases;
+}
+
+/**
+ * What changed between the catalog's facts as they were and as they would be:
+ * new and removed models, changed facts, and the defaults (the roles in
+ * providers.ts) that point at a model that changed or is gone.
+ */
+export function diffModels(before: Generated, after: Generated, roles: Roles = {}): CatalogDiff {
+  const diff: CatalogDiff = { added: [], removed: [], changed: [], defaults: [] };
+  const changedBy = new Map<string, string[]>();
+  const gone = new Set<string>();
+  for (const providerId of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+    const was = new Map((before[providerId]?.models ?? []).map((each) => [each.id, each]));
+    const now = new Map((after[providerId]?.models ?? []).map((each) => [each.id, each]));
+    for (const [id, model] of now) {
+      const old = was.get(id);
+      if (!old) {
+        const price = model.price
+          ? `, ${money(model.price.input, model.price.currency)} in / ${money(model.price.output, model.price.currency)} out per million tokens`
+          : "";
+        diff.added.push(`${providerId}/${id} (${model.name}${price}, context ${model.context})`);
+        continue;
+      }
+      const phrases = changesOf(old, model);
+      if (phrases.length === 0) continue;
+      changedBy.set(`${providerId}/${id}`, phrases);
+      for (const phrase of phrases) diff.changed.push(`${providerId}/${id}: ${phrase}`);
+    }
+    for (const id of was.keys()) {
+      if (now.has(id)) continue;
+      gone.add(`${providerId}/${id}`);
+      diff.removed.push(`${providerId}/${id}`);
+    }
+  }
+  for (const [providerId, own] of Object.entries(roles)) {
+    for (const [role, id] of Object.entries(own)) {
+      if (!id) continue;
+      const key = `${providerId}/${id}`;
+      if (gone.has(key)) {
+        diff.defaults.push(`${providerId} ${role}: ${id} is no longer in the sources`);
+      } else if (changedBy.has(key)) {
+        diff.defaults.push(`${providerId} ${role}: ${id} changed (${changedBy.get(key)?.join("; ")})`);
+      }
+    }
+  }
+  return diff;
+}
+
+export const isEmpty = (diff: CatalogDiff) =>
+  diff.added.length + diff.removed.length + diff.changed.length + diff.defaults.length === 0;
+
+/** The diff as Markdown, which reads as text in a terminal too. */
+export function formatDiff(diff: CatalogDiff): string {
+  if (isEmpty(diff)) return "No changes to the catalog's model facts.\n";
+  const section = (title: string, lines: string[]) =>
+    lines.length === 0
+      ? []
+      : [`### ${title} (${lines.length})`, "", ...lines.map((l) => `- ${l}`), ""];
+  return [
+    ...(diff.defaults.length > 0
+      ? [
+          "### A default changed",
+          "",
+          ...diff.defaults.map((l) => `- ${l}`),
+          "",
+          "A changed default needs the evaluation that cites it before this is merged.",
+          "",
+        ]
+      : []),
+    ...section("New models", diff.added),
+    ...section("Removed models", diff.removed),
+    ...section("Changed prices, limits and abilities", diff.changed),
+  ].join("\n");
+}
+
+/** Provider roles from providers.ts, which holds only types and data. */
+async function loadRoles(): Promise<Roles> {
+  const file = join(root, "src/core/providers/catalog/providers.ts");
+  const { CATALOG_PROVIDERS } = (await import(pathToFileURL(file).href)) as {
+    CATALOG_PROVIDERS: readonly { id: string; roles: Roles[string] }[];
+  };
+  return Object.fromEntries(CATALOG_PROVIDERS.map((each) => [each.id, each.roles]));
+}
+
 async function load(flag: string, url: string): Promise<unknown> {
   const at = process.argv.indexOf(flag);
   const file = at === -1 ? undefined : process.argv[at + 1];
@@ -224,6 +366,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   >[0];
   const litellm = (await load("--litellm", LITELLM_URL)) as Record<string, LiteLlmEntry>;
   const { providers, disagreements: found } = generateModels(modelsDev, litellm);
+  const before: Generated = existsSync(OUTPUT)
+    ? (JSON.parse(readFileSync(OUTPUT, "utf8")) as { providers: Generated }).providers
+    : {};
   writeFileSync(OUTPUT, `${JSON.stringify({ providers }, null, 2)}\n`);
   execFileSync("npx", ["biome", "format", "--write", OUTPUT], { cwd: root, stdio: "inherit" });
   mkdirSync(dirname(NOTICE_FILE), { recursive: true });
@@ -231,6 +376,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const [id, { models, nonChat }] of Object.entries(providers)) {
     console.log(`${id}: ${models.length} chat models, ${nonChat.length} others`);
   }
+  const diff = diffModels(before, providers, await loadRoles());
+  const text = formatDiff(diff);
+  console.log(`\n${text}`);
+  const at = process.argv.indexOf("--diff-file");
+  const diffFile = at === -1 ? undefined : process.argv[at + 1];
+  if (diffFile) writeFileSync(diffFile, text);
   if (found.length > 0) {
     console.log("\nLiteLLM disagrees (nothing changed; correct a fact in overrides.ts):");
     for (const line of found) console.log(`  ${line}`);
