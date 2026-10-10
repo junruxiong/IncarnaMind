@@ -15,6 +15,7 @@ import {
   type CitationRun,
   type GroupSummary,
   pagesLabel,
+  quoteRetryLine,
   rejectedLine,
   shortQuote,
 } from "./citations";
@@ -80,6 +81,7 @@ export interface EvalReport {
 
 const fraction = ({ hits, total }: Tally) => `${hits}/${total}`;
 const percent = (value: number | null) => (value === null ? "–" : `${(value * 100).toFixed(1)}%`);
+const seconds = (value: number | null) => (value === null ? "–" : `${value.toFixed(1)} s`);
 const pages = (from: number | null, to: number | null) =>
   from === null ? "" : to !== null && to !== from ? `${from}–${to}` : `${from}`;
 
@@ -387,6 +389,29 @@ function citationTable(
     row(
       "Records without markers (dropped)",
       (summary) => String(summary.droppedRecords),
+      "reported",
+    ),
+    row(
+      "Answers that asked again for quotes",
+      ({ quoteRetries, answers }) => `${quoteRetries.answers}/${answers}`,
+      "reported",
+    ),
+    row(
+      "Records asked again: recovered",
+      ({ quoteRetries }) => `${quoteRetries.recovered}/${quoteRetries.records}`,
+      "reported",
+    ),
+    row(
+      "Time the request added: median, most",
+      ({ quoteRetries }) =>
+        quoteRetries.answers === 0
+          ? "–"
+          : `${seconds(quoteRetries.medianSeconds)}, ${seconds(quoteRetries.maxSeconds)}`,
+      "reported",
+    ),
+    row(
+      "Time the requests added per Answer",
+      ({ quoteRetries }) => seconds(quoteRetries.secondsPerAnswer),
       "reported",
     ),
     ...(gating
@@ -760,6 +785,11 @@ export function terminalSummary(report: EvalReport, reportDir: string, root: str
       lines.push(
         `  ${label.padEnd(14)} ${percent(summary.citedAnswerShare)} of ${summary.answers} Answers cited, ${String(summary.citations).padStart(3)} Citations, found ${percent(summary.foundShare)}, false "not found" ${percent(summary.falseNotFoundShare)}, coverage ${percent(summary.coverage)}, dropped ${summary.droppedMarkers} markers and ${summary.droppedRecords} records, median ${summary.medianSeconds === null ? "–" : `${summary.medianSeconds.toFixed(1)} s`} an Answer`,
       );
+      if (summary.quoteRetries.answers > 0) {
+        lines.push(
+          `  ${"".padEnd(14)} quotes asked again: ${quoteRetryLine(summary.quoteRetries)}`,
+        );
+      }
     }
   }
   if (report.formats && "skipped" in report.formats) {
