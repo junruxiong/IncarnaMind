@@ -307,13 +307,18 @@ test("⌘J focuses the composer from the note; the Question goes at the cursor; 
   await app.close();
 });
 
-/** An Ollama server that lists two models, for the model chip's menu. It answers nothing else. */
-async function ollamaListing(models: string[]) {
+/**
+ * An Ollama server that lists models, for the model chip's menu, after
+ * `delayMs` as a slow provider does. It answers nothing else.
+ */
+async function ollamaListing(models: string[], { delayMs = 0 }: { delayMs?: number } = {}) {
   const server: Server = createServer((request, response) => {
     request.resume();
     if (request.url === "/api/tags") {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
+      setTimeout(() => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ models: models.map((name) => ({ name, model: name })) }));
+      }, delayMs);
       return;
     }
     response.writeHead(404);
@@ -325,7 +330,9 @@ async function ollamaListing(models: string[]) {
 }
 
 test("the model chip chooses the model for one Mind, which remembers it after a restart, while new Minds take the default", async () => {
-  const ollama = await ollamaListing(["fake-model", "other-model"]);
+  // Listed a second late, so the menu opens before its models are there, as on a slow machine
+  // or with a provider far away: the current one still takes the focus once it is listed.
+  const ollama = await ollamaListing(["fake-model", "other-model"], { delayMs: 1000 });
   try {
     const first = await launchApp(dataDir, { fakeChat: true });
     let { window } = first;
