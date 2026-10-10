@@ -246,8 +246,8 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
         asked.push(`fused ${limit}`);
         return Array.from({ length: limit }, (_, index) => candidate(index));
       },
-      rerankCandidates: async (_query, perList) => {
-        asked.push(`each list's ${perList}`);
+      rerankCandidates: async (_query, { perList, keywordAlone }) => {
+        asked.push(`each list's ${perList}, or keyword search's ${keywordAlone} alone`);
         return [3, 7, 40].map(candidate);
       },
       window: () => [],
@@ -261,14 +261,21 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
     await searchDocumentsTool(sources, "lighthouse", { rerank: reranker });
 
     expect(SEARCH_TOOL_PARAMETERS.rerankPerList).toBe(10);
-    expect(asked).toEqual([`fused ${SEARCH_TOOL_PARAMETERS.candidates}`, "each list's 10"]);
+    expect(SEARCH_TOOL_PARAMETERS.keywordRerankCandidates).toBe(60);
+    expect(asked).toEqual([
+      `fused ${SEARCH_TOOL_PARAMETERS.candidates}`,
+      "each list's 10, or keyword search's 60 alone",
+    ]);
     expect(reranked).toEqual([["p3", "p7", "p40"]]);
   });
 });
 
 describe("The candidates a reranker sees, through the core", { timeout: 30_000 }, () => {
   /** Two Documents, and a reranker that records what it was handed, in the order given. */
-  async function setUp(query: string, options: { embeddings?: boolean } = {}) {
+  async function setUp(
+    query: string,
+    options: { embeddings?: boolean; coastSections?: number } = {},
+  ) {
     const seen: { passageId: string; score: number }[][] = [];
     const reranker: Reranker = async (_query, candidates) => {
       seen.push(candidates.map(({ passageId, score }) => ({ passageId, score })));
@@ -278,29 +285,31 @@ describe("The candidates a reranker sees, through the core", { timeout: 30_000 }
     const setup = await setUpWithDocuments(
       model,
       [
-        { name: "Coast.md", contents: sections(24, 12, "red") },
+        { name: "Coast.md", contents: sections(options.coastSections ?? 24, 12, "red") },
         { name: "Weather.md", contents: sections(6, 0, "") },
       ],
       { reranker },
-      options,
+      { embeddings: options.embeddings },
     );
     return { ...setup, seen };
   }
 
-  test("with embeddings off, the default, are keyword search's top 20, in its order", async () => {
+  test("with embeddings off, the default, are keyword search's top 60, in its order", async () => {
     const query = "ordinary coastal weather lighthouse";
-    const { core, client, mind, seen } = await setUp(query);
+    // Enough Passages for more than 60 to match.
+    const { core, client, mind, seen } = await setUp(query, { coastSections: 70 });
 
     await askAndFinish(core, client, mind.id, "Where is the lighthouse?");
 
-    const keyword = await core.searchPassages(query, { mode: "keyword", limit: 20 });
-    expect(keyword).toHaveLength(20);
+    const keyword = await core.searchPassages(query, { mode: "keyword", limit: 60 });
+    expect(keyword).toHaveLength(60);
+    expect(await core.searchPassages(query, { mode: "keyword", limit: 61 })).toHaveLength(61);
     expect(seen).toHaveLength(1);
     expect((seen[0] ?? []).map((each) => each.passageId)).toEqual(
       keyword.map((passage) => passage.passageId),
     );
     // Hybrid search is keyword search, and vector search is refused: nothing is embedded.
-    expect(await core.searchPassages(query, { limit: 20 })).toEqual(keyword);
+    expect(await core.searchPassages(query, { limit: 20 })).toEqual(keyword.slice(0, 20));
     await expect(core.searchPassages(query, { mode: "vector" })).rejects.toThrow(
       /embeddings, which are off/,
     );

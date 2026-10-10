@@ -47,18 +47,24 @@ import {
 } from "../../eval/lib/report";
 import type { OpenReranker, RerankerInfo } from "../../eval/lib/rerank";
 import {
+  type CandidateRecord,
   candidateCounts,
   checkPassage,
+  coreSource,
   GATING_LABEL,
   GATING_MODE,
+  GATING_SEARCH,
   HYBRID_RERANK_LABEL,
   HYBRID_RERANK_MODE,
   isHit,
   keywordRerankCandidates,
   modesOf,
+  OTHER_SEARCHES,
   type QuestionResult,
+  RERANKED_SEARCHES,
   type RetrievalRun,
   rerankCandidates,
+  rerankedLabel,
   rerankedSearchOf,
   rerankMode,
   retrievalFailures,
@@ -67,6 +73,7 @@ import {
   summarise,
 } from "../../eval/lib/retrieval";
 import { BUILT_IN_RERANKING_MODEL, type Core, RERANKING_MODEL_CANDIDATES } from "../../src/core";
+import { SEARCH_TOOL_PARAMETERS } from "../../src/core/documents/searchTool";
 
 const MARK = "\uE000";
 
@@ -285,29 +292,41 @@ describe("What the reranked modes rerank", () => {
     ]);
   });
 
-  test("the report counts candidates per reranked search, the translated queries' too", () => {
-    const result = (rerank?: QuestionResult["rerankCandidates"]): QuestionResult => ({
+  test("the report counts candidates per reranked search, the translated queries' too, and how often they held the expected Passage", () => {
+    const result = (
+      hybrid?: CandidateRecord,
+      extra: Partial<QuestionResult> = {},
+    ): QuestionResult => ({
       id: "x",
       language: "en",
       crossLingual: false,
       question: "x",
       modes: {},
-      ...(rerank && { rerankCandidates: rerank }),
+      ...(hybrid && { candidates: { hybrid } }),
+      ...extra,
     });
 
     expect(candidateCounts([result()])).toBeNull();
     expect(
       candidateCounts([
-        result({ question: 12 }),
-        result({ question: 20, translated: 16 }),
+        result({ question: 12, reached: 3 }),
+        result({ question: 20, translated: 16, reached: null }, { crossLingual: true }),
+        result({ question: 18, reached: 18 }, { paraphrase: true }),
         result(),
       ]),
-    ).toEqual({ search: "hybrid", perList: 10, searches: 3, mean: 16, min: 12, max: 20 });
+    ).toEqual({
+      search: "hybrid",
+      searches: 4,
+      mean: 16.5,
+      min: 12,
+      max: 20,
+      reached: { gating: { hits: 1, total: 1 }, paraphrase: { hits: 1, total: 1 } },
+    });
     // Keyword + rerank's counts are its own.
-    expect(candidateCounts([result({ question: 12 })], "keyword")).toBeNull();
+    expect(candidateCounts([result({ question: 12, reached: null })], "keyword")).toBeNull();
   });
 
-  test("keyword + rerank reranks keyword search's top 20 alone, with no vector search", async () => {
+  test("the gate reranks keyword search's top 60 alone, with no vector search, as the search Tool does with embeddings off", async () => {
     const asked: string[] = [];
     const core = {
       searchPassages: async (_query: string, options: { mode: string; limit: number }) => {
@@ -318,13 +337,16 @@ describe("What the reranked modes rerank", () => {
 
     const candidates = await keywordRerankCandidates(core, "tides");
 
-    expect(asked).toEqual(["keyword 20"]);
+    expect(SEARCH_TOOL_PARAMETERS.keywordRerankCandidates).toBe(60);
+    expect(asked).toEqual(["keyword 60"]);
     expect(candidates.map((each) => each.passageId)).toEqual(
-      Array.from({ length: 20 }, (_, index) => `k${index}`),
+      Array.from({ length: 60 }, (_, index) => `k${index}`),
     );
+    const gate = await coreSource(core, GATING_SEARCH)?.("tides", {} as EvalQuestion);
+    expect(gate?.candidates).toHaveLength(60);
   });
 
-  test("a keyword + rerank mode reranks keyword search's candidates and records their counts apart", async () => {
+  test("keyword top 20 + rerank, the gate before, reranks keyword search's candidates and records their counts apart", async () => {
     const asked: string[] = [];
     // Keyword search finds 14 Passages; the expected one is its last.
     const keyword = Array.from({ length: 14 }, (_, index) => ({
@@ -363,20 +385,29 @@ describe("What the reranked modes rerank", () => {
     ];
     const ids = new Map([["tides", "doc-1"]]);
 
-    await runReranked(core, [question], ids, reversing("keyword-rerank:fake"), results);
+    const found = await runReranked(
+      core,
+      [question],
+      ids,
+      reversing("keyword-rerank:fake"),
+      results,
+    );
 
     expect(asked).toEqual(["大潮什么时候出现？: keyword 20", "When are spring tides?: keyword 20"]);
     expect(results[0]?.modes["keyword-rerank:fake"]).toMatchObject({ hit: true, rank: 1 });
     expect(results[0]?.translated?.["keyword-rerank:fake"]).toMatchObject({ hit: true, rank: 1 });
-    expect(results[0]).toMatchObject({ keywordRerankCandidates: { question: 14, translated: 14 } });
-    expect(results[0]?.rerankCandidates).toBeUndefined();
+    // The expected Passage was the 14th candidate, before the reranker put it first.
+    expect(results[0]?.candidates).toEqual({
+      keyword: { question: 14, translated: 14, reached: 14 },
+    });
+    expect(found.queries).toBe(2);
     expect(candidateCounts(results, "keyword")).toEqual({
       search: "keyword",
-      perList: 20,
       searches: 2,
       mean: 14,
       min: 14,
       max: 14,
+      reached: { gating: { hits: 0, total: 0 }, paraphrase: { hits: 0, total: 0 } },
     });
     expect(summarise(results)["keyword-rerank:fake"]?.crossLingualTranslated).toEqual({
       hits: 1,
@@ -386,18 +417,32 @@ describe("What the reranked modes rerank", () => {
 });
 
 describe("The reranked modes", () => {
-  test("keyword + rerank with the built-in model is the gate; hybrid + rerank, as with embeddings on, is reported", () => {
-    expect(GATING_MODE).toBe(`keyword-rerank:${BUILT_IN_RERANKING_MODEL.id}`);
-    expect(GATING_LABEL).toBe(`keyword + ${BUILT_IN_RERANKING_MODEL.name}`);
+  test("keyword top 60 + rerank with the built-in model is the gate; hybrid + rerank, as with embeddings on, and keyword top 20, the gate before, are reported", () => {
+    expect(GATING_MODE).toBe(`keyword-60-rerank:${BUILT_IN_RERANKING_MODEL.id}`);
+    expect(GATING_LABEL).toBe(`keyword top 60 + ${BUILT_IN_RERANKING_MODEL.name}`);
     expect(HYBRID_RERANK_MODE).toBe(`rerank:${BUILT_IN_RERANKING_MODEL.id}`);
     expect(HYBRID_RERANK_LABEL).toBe(`hybrid + ${BUILT_IN_RERANKING_MODEL.name}`);
-    expect(rerankMode(BUILT_IN_RERANKING_MODEL, "keyword")).toBe(GATING_MODE);
+    expect(rerankMode(BUILT_IN_RERANKING_MODEL, "keyword-60")).toBe(GATING_MODE);
     expect(rerankMode(BUILT_IN_RERANKING_MODEL)).toBe(HYBRID_RERANK_MODE);
     expect([GATING_MODE, HYBRID_RERANK_MODE, "hybrid"].map(rerankedSearchOf)).toEqual([
-      "keyword",
+      "keyword-60",
       "hybrid",
       null,
     ]);
+    // Every reranking model runs the gate's search and hybrid's; the other seven, the built-in one.
+    expect(RERANKED_SEARCHES).toEqual(["keyword-60", "hybrid"]);
+    expect(OTHER_SEARCHES).toEqual([
+      "keyword",
+      "keyword-40",
+      "feedback",
+      "rewrites",
+      "sub-questions",
+      "small-to-big",
+      "document-first",
+    ]);
+    expect(rerankedLabel("keyword", BUILT_IN_RERANKING_MODEL.name)).toBe(
+      `keyword top 20 + ${BUILT_IN_RERANKING_MODEL.name}`,
+    );
   });
 });
 
@@ -420,10 +465,10 @@ describe("The retrieval gate", () => {
   test("is what the search Tool does by default: keyword search reranked by the built-in model", () => {
     expect(retrievalFailures(summary(16, 20))).toEqual([]);
     expect(retrievalFailures(summary(13, 19))).toEqual([
-      `Retrieval (keyword + ${BUILT_IN_RERANKING_MODEL.name}, the built-in reranking model), English: 13 of 20, needs 16.`,
+      `Retrieval (keyword top 60 + ${BUILT_IN_RERANKING_MODEL.name}, the built-in reranking model), English: 13 of 20, needs 16.`,
     ]);
     expect(retrievalFailures(undefined)).toEqual([
-      `No keyword + ${BUILT_IN_RERANKING_MODEL.name} results.`,
+      `No keyword top 60 + ${BUILT_IN_RERANKING_MODEL.name} results.`,
     ]);
   });
 
@@ -465,7 +510,7 @@ describe("The retrieval gate", () => {
     const lines = terminalSummary(report, "/repo/eval/results/x", "/repo").split("\n");
 
     expect(lines.find((line) => line.includes("(gating)"))).toContain(
-      `keyword + ${BUILT_IN_RERANKING_MODEL.name} (gating) English 16/20`,
+      `keyword top 60 + ${BUILT_IN_RERANKING_MODEL.name} (gating) English 16/20`,
     );
     expect(lines.find((line) => line.trim().startsWith("hybrid "))).toContain("English 13/20");
   });
@@ -478,6 +523,11 @@ describe("The retrieval gate", () => {
       downloadBytes: 136e6,
       loadSeconds: 1.5,
       latency: { queries: 74, mean: 700, median: 690, p95: 900, max: 950 },
+      candidates: { queries: 75, mean: 3, median: 2, p95: 6, max: 9 },
+    });
+    const reached = (gating: number, paraphrase: number) => ({
+      gating: { hits: gating, total: 40 },
+      paraphrase: { hits: paraphrase, total: 15 },
     });
     const run = {
       embedding: "multilingual-e5-small (built-in)",
@@ -492,15 +542,17 @@ describe("The retrieval gate", () => {
         [HYBRID_RERANK_MODE]: summary(15, 20, [4, 3]),
       },
       rerankers: [reranker(GATING_MODE), reranker(HYBRID_RERANK_MODE)],
-      rerankCandidates: { search: "hybrid", perList: 10, searches: 75, mean: 16, min: 12, max: 20 },
-      keywordRerankCandidates: {
-        search: "keyword",
-        perList: 20,
-        searches: 75,
-        mean: 19.5,
-        min: 9,
-        max: 20,
-      },
+      candidates: [
+        {
+          search: "keyword-60",
+          searches: 75,
+          mean: 57.5,
+          min: 9,
+          max: 60,
+          reached: reached(39, 13),
+        },
+        { search: "hybrid", searches: 75, mean: 16, min: 12, max: 20, reached: reached(38, 13) },
+      ],
     } satisfies RetrievalRun;
     const failures = retrievalFailures(run.summary[GATING_MODE]);
     const report = {
@@ -529,7 +581,7 @@ describe("The retrieval gate", () => {
     expect(lines.find((line) => line.trim().startsWith("hybrid + "))).toMatch(
       /English 15\/20 .*; paraphrase 7\/15$/,
     );
-    expect(lines.some((line) => line.includes("keyword + rerank search"))).toBe(true);
+    expect(lines.some((line) => line.includes("keyword top 60 + rerank search"))).toBe(true);
     expect(lines.some((line) => line.includes("hybrid + rerank search"))).toBe(true);
 
     const results = await mkdtemp(join(tmpdir(), "retrieval-report-"));
@@ -542,21 +594,25 @@ describe("The retrieval gate", () => {
         "- Evaluation set: `eval/retrieval/questions.json`, 20 English and 20 Chinese gating Questions, 10 cross-lingual, 15 paraphrase",
       );
       expect(markdown).toContain(
-        `| multilingual-e5-small (built-in) | **keyword + ${model} (gating)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 | 11/15 (6 + 5) |`,
+        `| multilingual-e5-small (built-in) | **keyword top 60 + ${model} (gating)** | **16/20** | **20/20** | **36/40** | 2/10 | 7/10 | 11/15 (6 + 5) |`,
       );
       expect(markdown).toContain(
         `| multilingual-e5-small (built-in) | hybrid + ${model} | 15/20 | 20/20 | 35/40 | 2/10 | 7/10 | 7/15 (4 + 3) |`,
       );
       expect(markdown).toContain(
-        "Candidates per keyword + rerank search (keyword search's top 20, no vector search): 19.5 on average, from 9 to 20, over 75 searches.",
+        "Candidates per keyword top 60 + rerank search (keyword search's top 60, no vector search): 57.5 on average, from 9 to 60, over 75 searches; the expected Passage among them for 39/40 gating and 13/15 paraphrase Questions.",
       );
       expect(markdown).toContain(
-        "Candidates per hybrid + rerank search (keyword search's top 10 and vector search's top 10, each Passage once): 16.0 on average, from 12 to 20, over 75 searches.",
+        "Candidates per hybrid + rerank search (keyword search's top 10 and vector search's top 10, each Passage once): 16.0 on average, from 12 to 20, over 75 searches; the expected Passage among them for 38/40 gating and 13/15 paraphrase Questions.",
       );
-      expect(markdown.filter((line) => line.includes("| Apache-2.0 | 136 MB | 700 ms"))).toEqual([
-        `| keyword + ${model} | Apache-2.0 | 136 MB | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
-        `| hybrid + ${model} | Apache-2.0 | 136 MB | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
+      expect(markdown.filter((line) => line.includes("| Apache-2.0 | 136 MB | 3 ms"))).toEqual([
+        `| keyword top 60 + ${model} | Apache-2.0 | 136 MB | 3 ms | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
+        `| hybrid + ${model} | Apache-2.0 | 136 MB | 3 ms | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
       ]);
+      // The other searches didn't run: no section for them.
+      expect(markdown.some((line) => line.includes("Other ways to find the candidates"))).toBe(
+        false,
+      );
     } finally {
       await rm(results, { recursive: true, force: true });
     }

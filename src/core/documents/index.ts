@@ -1215,16 +1215,18 @@ export function createDocuments(options: DocumentsOptions) {
    * the Passages in keyword search's that have no vector, for fusion (see
    * `fuseRankingScores`). Vector search's is empty while embeddings are off,
    * while the embedding model can't embed the query, and until any Passage
-   * in the Search scope has a vector.
+   * in the Search scope has a vector. Keyword search's is `keywordListed`
+   * long, when given.
    */
   async function rankings(
     query: string,
     listed: number,
     documentIds: readonly string[] | undefined,
+    keywordListed = listed,
   ): Promise<{ lists: number[][]; keywordOnly: Set<number> }> {
     const scope = searchScope(documentIds);
     const vector = await queryVector(query, "hybrid");
-    const keyword = keywordSearch(db, query, listed, scope);
+    const keyword = keywordSearch(db, query, keywordListed, scope);
     const similar = vector ? vectors.search(vector, listed, scope).map((hit) => hit.seq) : [];
     const lists = distinctPassages(db, [keyword, similar]);
     const keywordOnly =
@@ -1261,23 +1263,30 @@ export function createDocuments(options: DocumentsOptions) {
    * vector search's, each Passage once, in fused order with fused scores, so
    * a reranker that fails leaves search's own order. Without vector search's
    * (embeddings off, the default, or no vectors yet), keyword search's best
-   * twice `perList`: the reranker sees as many candidates at most.
+   * `keywordAlone`, in its order.
    */
   async function rerankCandidates(
     query: string,
-    perList: number,
+    counts: { perList: number; keywordAlone: number },
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]> {
     if (query.trim() === "") return [];
+    const listed = Math.max(2 * counts.perList, HYBRID_CANDIDATES);
     const { lists, keywordOnly } = await rankings(
       query,
-      Math.max(2 * perList, HYBRID_CANDIDATES),
+      listed,
       documentIds,
+      Math.max(listed, counts.keywordAlone),
     );
-    const keywordAlone = (lists[1] ?? []).length === 0;
-    const chosen = new Set(topsOfEach(lists, keywordAlone ? 2 * perList : perList));
+    const [keyword = [], similar = []] = lists;
+    if (similar.length === 0) {
+      return scored(fuseRankingScores([keyword], counts.keywordAlone));
+    }
+    // With vector search, keyword search's list is fused as long as vector search's.
+    const fused = [keyword.slice(0, listed), similar];
+    const chosen = new Set(topsOfEach(fused, counts.perList));
     return scored(
-      fuseRankingScores(lists, Number.POSITIVE_INFINITY, keywordOnly).filter((hit) =>
+      fuseRankingScores(fused, Number.POSITIVE_INFINITY, keywordOnly).filter((hit) =>
         chosen.has(hit.seq),
       ),
     );
