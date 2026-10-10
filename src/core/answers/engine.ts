@@ -107,6 +107,12 @@ export interface SearchResultForModel {
   /** The Passages, formatted for the model, or a sentence saying there are none. */
   text: string;
   passageCount: number;
+  /**
+   * Each Passage's relevance, in the order `text` has them (reading order):
+   * 0 the most relevant. A window too small for all of them keeps the most
+   * relevant (see ./window). Absent: their order is their relevance.
+   */
+  ranks?: number[];
 }
 
 /** A language the Documents to search are in, and how many of them are. */
@@ -555,10 +561,10 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
        * structured output, or a plain Answer. Within a window, the Passages
        * that fit beside the Question, then the Question context that fits beside them.
        */
-      const onePass = (mode: CitationSupport | "no-documents", passages?: string) =>
+      const onePass = (mode: CitationSupport | "no-documents", found?: SearchResultForModel) =>
         fitted(async function* () {
           if (!budget) {
-            const instructions = request.instructions(mode, { passages });
+            const instructions = request.instructions(mode, { passages: found?.text });
             yield* tempered((sent) =>
               mode === "structured-output"
                 ? structured(request, instructions, sent)
@@ -567,12 +573,13 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
             return;
           }
           const kept =
-            passages === undefined
+            found === undefined
               ? undefined
               : budget.fitPassages(
-                  passages,
+                  found.text,
                   request.instructions(mode, { passages: "" }),
                   request.question,
+                  found.ranks,
                 );
           const instructions = request.instructions(mode, { passages: kept });
           const fit = budget.fit({
@@ -621,8 +628,8 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
 
       // A model without Tools searches once, for the Question rewritten to stand on its own;
       // the result is kept for the next way of answering if the provider refuses this one.
-      let searched: string | undefined;
-      async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, string> {
+      let searched: SearchResultForModel | undefined;
+      async function* searchOnce(): AsyncGenerator<AnswerEngineEvent, SearchResultForModel> {
         if (searched !== undefined) return searched;
         const query = await searchQuery(request, temperature());
         signal.throwIfAborted();
@@ -638,12 +645,12 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         try {
           const result = await request.documents.searchDocuments(query, signal);
           yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
-          searched = result.text;
+          searched = result;
         } catch (error) {
           if (signal.aborted) throw error;
           console.error(error);
           yield { type: "tool-call-finished", id, ok: false, resultCount: null };
-          searched = "The search of the User's Documents failed.";
+          searched = { text: "The search of the User's Documents failed.", passageCount: 0 };
         }
         yield { type: "phase", phase: "writing" };
         return searched;
@@ -659,9 +666,9 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
               tempered((sent) => toolLoop(request, engine, maxSteps, "tools", sent, budget)),
             );
           } else {
-            const passages: string = yield* searchOnce();
+            const found: SearchResultForModel = yield* searchOnce();
             if (signal.aborted) return;
-            attempt = onePass(support, passages);
+            attempt = onePass(support, found);
           }
         } catch (error) {
           if (signal.aborted) return;
@@ -811,7 +818,8 @@ async function* toolLoop(
   const documents =
     mode === "tools"
       ? documentTools(request.documents, {
-          fit: (found) => (loop ? loop.passages(found.text, found.passageCount) : found),
+          fit: (found) =>
+            loop ? loop.passages(found.text, found.passageCount, found.ranks) : found,
           searched: (toolCallId, count) => results.set(toolCallId, count),
           cited: (records) => cited.push(...records),
         })
