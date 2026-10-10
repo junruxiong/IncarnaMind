@@ -20,7 +20,9 @@
  *   on its own (see `searchQuery`). When some of the Documents are in another
  *   language than the Question, the query is also translated into theirs and
  *   searched again, as the search Tool tells a model in the loop to do (see
- *   `searchLanguage`).
+ *   `searchLanguage`). A local model whose quotes the check doesn't find is
+ *   asked for them once more, as `cite`'s feedback lets a model in the loop
+ *   fix them (see ./quoteRetry).
  * - "none": for a model that can do neither, the same search, and a plain Answer.
  * The engine starts where it is told (or with Tools), and steps down when the
  * provider refuses Tools or structured output. A model may give records but
@@ -72,6 +74,7 @@ import {
   TRANSLATE_QUERY_INSTRUCTIONS,
   translateQueryPrompt,
 } from "./prompt";
+import { retryQuotes } from "./quoteRetry";
 import { createWindowBudget, SEARCH_RESERVE_TOKENS, type WindowBudget } from "./window";
 
 /** One message of Question context. */
@@ -724,9 +727,10 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
             estimated: fit.estimated,
             learn: (actual) => budget.learn(actual, fit.estimated),
           };
+          // A local model's quotes the check doesn't find are asked for once more (see ./quoteRetry).
           yield* tempered((sent) =>
             mode === "structured-output"
-              ? structured(sized, instructions, sent, window)
+              ? structured(sized, instructions, sent, window, budget)
               : plain(sized, instructions, sent, window),
           );
         });
@@ -1147,12 +1151,18 @@ interface Sized {
   learn(actual: number): void;
 }
 
-/** The Answer and its records as one JSON object, streamed: its `answer` text as it grows. */
+/**
+ * The Answer and its records as one JSON object, streamed: its `answer` text
+ * as it grows. With a local model's window (`budget`), the quotes the check
+ * doesn't find are then asked for once more (see ./quoteRetry); never for a
+ * cloud model.
+ */
 async function* structured(
   request: AnswerRequest,
   instructions: string,
   temperature: number | undefined,
   sized?: Sized,
+  budget?: WindowBudget,
 ): Attempt {
   const { signal } = request;
   const result = streamText({
@@ -1225,8 +1235,12 @@ async function* structured(
     console.error(`The Citations couldn't be recorded: ${messageOf(error)}`);
   }
   yield* emit(answer);
-  // A small model often gives the records but leaves their markers out.
-  if (typeof answer === "string") yield* missingMarkerEvents(emitted, records, request.documents);
+  if (typeof answer === "string") {
+    // A small model often gives the records but leaves their markers out.
+    const placed = yield* missingMarkerEvents(emitted, records, request.documents);
+    if (budget) yield* retryQuotes(request, placed, temperature, budget);
+    if (signal.aborted) return;
+  }
   yield { type: "finished" };
 }
 

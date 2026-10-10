@@ -6,7 +6,9 @@
  * blocks of rows or lines, the Units of src/shared/units.ts), and the quote,
  * copied word for word. The core turns each marker with a record into an
  * inline Citation node; a marker without a record is removed, and a record
- * without a marker dropped.
+ * without a marker dropped. A local model in structured output is asked once
+ * more for the quotes the check doesn't find (see ./quoteRetry): a new quote
+ * replaces a record's only when the check finds it (`correctQuote`).
  *
  * When the Answer finishes, each Citation is checked once, and the result
  * stored with it: the cited Units must lie within the Passage's Units and be

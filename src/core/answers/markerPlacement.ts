@@ -304,19 +304,48 @@ export function* textEdits(from: string, to: string): Generator<AnswerEngineEven
 /**
  * Where the engine handles a finished Answer's records: the edits that put in
  * the markers the model left out of `text` for records the core took (see
- * `AnswerTools.hasRecord`), and how many it put in.
+ * `AnswerTools.hasRecord`), and how many it put in. Returns the text with them.
  */
 export function* missingMarkerEvents(
   text: string,
   records: readonly MarkerRecord[],
   tools: Pick<AnswerTools, "hasRecord">,
-): Generator<AnswerEngineEvent> {
+): Generator<AnswerEngineEvent, string> {
   const { text: placed, placed: markers } = withMissingMarkers(
     text,
     records,
     (marker) => tools.hasRecord?.(marker) ?? false,
   );
-  if (markers.length === 0) return;
+  if (markers.length === 0) return text;
   yield* textEdits(text, placed);
   yield { type: "markers-placed", count: markers.length };
+  return placed;
+}
+
+/**
+ * The sentence of `text` a marker ("[^2]") is in, without its markers: the
+ * first place it is, outside code, headings and math. A marker that starts a
+ * sentence ("A claim. [^2]") belongs to the one before. Null when it isn't there.
+ */
+export function markedSentence(text: string, marker: number): string | null {
+  const label = `[^${marker}]`;
+  for (const paragraph of paragraphsOf(text)) {
+    const at = text.slice(paragraph.start, paragraph.end).indexOf(label);
+    if (at === -1) continue;
+    const offset = paragraph.start + at;
+    const index = paragraph.sentences.findIndex(
+      (span) => offset >= span.start && offset < span.end,
+    );
+    if (index === -1) continue;
+    const span = paragraph.sentences[index] as Span;
+    const leading = text.slice(span.start, offset).replace(MARKER, "").trim() === "";
+    const own = leading && index > 0 ? (paragraph.sentences[index - 1] as Span) : span;
+    const sentence = text
+      .slice(own.start, own.end)
+      .replace(/\s*\[\^\d{1,4}\]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return sentence || null;
+  }
+  return null;
 }
