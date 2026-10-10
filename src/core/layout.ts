@@ -553,7 +553,14 @@ class WindowState {
     let closed = this.closed.pop();
     while (closed && !valid(closed.tab.item)) closed = this.closed.pop();
     if (!closed) return;
-    const { groupId, groupIndex } = closed;
+    const { tab, index, groupId, groupIndex } = closed;
+    // Opened again since it closed: that tab is shown, not a second one. The
+    // Library has one tab per window; anything else one per group.
+    const library = tab.item.kind === "library" ? findOpen(layout, tab.item) : null;
+    if (library) {
+      show(layout, library.group, library.tab, true);
+      return;
+    }
     const last = layout.groups.at(-1) as LayoutGroup;
     const only = layout.groups.length === 1 && last.tabs.length === 0 ? last : undefined;
     // Its group, if it is still there; else a new one where it was, if there is room.
@@ -565,8 +572,13 @@ class WindowState {
       (layout.groups.length < MAX_TAB_GROUPS
         ? addGroup(layout, at, neighbour, this.newId)
         : neighbour);
-    insert(group, closed.tab, closed.index);
-    show(layout, group, closed.tab, true);
+    const twin = group.tabs.find((each) => sameItem(each.item, tab.item));
+    if (twin) {
+      show(layout, group, twin, true);
+      return;
+    }
+    insert(group, tab, index);
+    show(layout, group, tab, true);
   }
 
   private move(tabId: string, groupId: string, wanted: string | null): void {

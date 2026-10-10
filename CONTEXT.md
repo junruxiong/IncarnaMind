@@ -70,7 +70,7 @@ _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
 A project inside IncarnaMind: a named place for Documents and Minds, with a description of what belongs there. Each Document and each Mind belongs to one Folder or is Not in a Folder; this does not change where a Document's original file is stored. A Mind in a Folder searches the Folder by default; deleting a Folder moves its Documents and Minds to Not in a Folder.
-_Avoid_: project (in the interface), group, collection, category
+_Avoid_: project (in the interface), group (a Folder's former name; a Group is now a column of tabs), collection, category
 
 **Not in a Folder**:
 The one place for every Document and Mind in no Folder. A Mind there searches all Documents.
@@ -86,9 +86,6 @@ _Avoid_: category, label, class
 **Topic**:
 The earlier design for a generated two-level subject tree. The current Library uses flat Folders instead (direction revised 2026-10-08), and the dormant Topic code was removed on 2026-10-10 (ADR-0012).
 _Avoid_: cluster, category, collection, group
-
-**Group** (of Documents):
-The former name for an in-app Folder. Users now see Folders throughout document organisation; a group is now a group of tabs (see Window).
 
 **Library**:
 The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.

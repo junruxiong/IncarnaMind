@@ -192,15 +192,15 @@ export const zhCN = {
 
   "tabs.group": "第 {n} 栏",
   "tabs.new": "新建 Mind（{shortcut}）",
-  "tabs.close": "关闭 {title}",
-  "tabs.unpin": "取消固定 {title}",
+  "tabs.close": "关闭“{title}”",
+  "tabs.unpin": "取消固定“{title}”",
   "tabs.writing": "正在生成回答",
   "tabs.preview":
     "{title} · 预览：在这一栏打开的下一个文档会替换它。双击标签页，或在其中滚动、选择文字，即可保留它。",
   "tabs.pinned": "{title} · 已固定在这一栏的左侧",
   "tabs.split": "向右拆分（{shortcut}）",
   "tabs.groupMenu": "这一栏的更多操作",
-  "tabs.tabMenu": "{title}的更多操作",
+  "tabs.tabMenu": "“{title}”的更多操作",
   "tabs.resize": "调整各栏宽度：← 和 → 也可移动；双击可让各栏等宽",
   "tabs.menu.keep": "保持打开",
   "tabs.menu.pin": "固定",

@@ -718,7 +718,7 @@ export type LayoutChange =
   | { type: "move"; tabId: string; groupId: string; before: string | null }
   /**
    * Puts a tab in a new group to the `side` of `groupId` (its own group by
-   * default): a copy of it (⌘\), or the tab itself (a drag). Nothing happens
+   * default): a copy of it (⌥⌘\), or the tab itself (a drag). Nothing happens
    * with `MAX_TAB_GROUPS` groups already.
    */
   | { type: "split"; tabId: string; side: "left" | "right"; copy: boolean; groupId?: string }

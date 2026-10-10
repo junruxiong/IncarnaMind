@@ -590,9 +590,12 @@ export async function dragTabTo(
   await window.mouse.move(x - 20, y + 30);
   await window.mouse.move(x, y, { steps: 5 });
   await window.mouse.down();
-  await window.mouse.move(to.x, to.y, { steps: 16 });
-  await whileHeld?.();
-  await window.mouse.up();
+  try {
+    await window.mouse.move(to.x, to.y, { steps: 16 });
+    await whileHeld?.();
+  } finally {
+    await window.mouse.up();
+  }
 }
 
 /**
