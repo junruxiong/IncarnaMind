@@ -14,6 +14,7 @@ export const EDIT_TOUCH_INTERVAL_MS = 10_000;
 interface MindRow {
   id: string;
   title: string;
+  auto_title: string;
   kind: string;
   created_at: string;
   updated_at: string;
@@ -22,6 +23,7 @@ interface MindRow {
 const toMind = (row: MindRow): Mind => ({
   id: row.id,
   title: row.title,
+  autoTitle: row.auto_title,
   kind: row.kind,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -57,7 +59,7 @@ export function createMinds(db: Database, now: () => string) {
 
   const get = (mindId: unknown): Mind => {
     const row = db.get<MindRow>(
-      "SELECT id, title, kind, created_at, updated_at FROM minds WHERE id = ? AND deleted_at IS NULL",
+      "SELECT id, title, auto_title, kind, created_at, updated_at FROM minds WHERE id = ? AND deleted_at IS NULL",
       [parseMindId(mindId)],
     );
     if (!row) throw new NotFoundError("That Mind doesn't exist or has been deleted.");
@@ -79,13 +81,13 @@ export function createMinds(db: Database, now: () => string) {
         at,
       ]);
       touched(id, at);
-      return { id, title, kind, createdAt: at, updatedAt: at };
+      return { id, title, autoTitle: "", kind, createdAt: at, updatedAt: at };
     },
 
     list(): Mind[] {
       return db
         .all<MindRow>(
-          `SELECT id, title, kind, created_at, updated_at FROM minds
+          `SELECT id, title, auto_title, kind, created_at, updated_at FROM minds
            WHERE deleted_at IS NULL
            ORDER BY updated_at DESC, rowid DESC`,
         )
@@ -99,6 +101,17 @@ export function createMinds(db: Database, now: () => string) {
       db.run("UPDATE minds SET title = ?, updated_at = ? WHERE id = ?", [newTitle, at, mind.id]);
       touched(mind.id, at);
       return { ...mind, title: newTitle, updatedAt: at };
+    },
+
+    /** Sets the name taken from the Mind's text. Returns whether it changed; `updatedAt` stays. */
+    setAutoTitle(mindId: string, autoTitle: string): boolean {
+      const row = db.get<{ auto_title: string }>(
+        "SELECT auto_title FROM minds WHERE id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
+      if (!row || row.auto_title === autoTitle) return false;
+      db.run("UPDATE minds SET auto_title = ? WHERE id = ?", [autoTitle, mindId]);
+      return true;
     },
 
     /** Marks the Mind deleted at `at`. Its content rows are the caller's to mark. */

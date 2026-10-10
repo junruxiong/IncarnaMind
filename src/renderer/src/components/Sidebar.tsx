@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
+import { mindName } from "../../../shared/naming";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
@@ -266,9 +267,9 @@ function MindRow({ mind, onDelete }: { mind: Mind; onDelete(): void }) {
         <MindLineIcon className={rowIconClass(isOpen)} />
         <span
           data-testid="row-text"
-          className={`min-w-0 flex-1 truncate ${mind.title ? "" : "text-ink-meta"}`}
+          className={`min-w-0 flex-1 truncate ${mindName(mind) ? "" : "text-ink-meta"}`}
         >
-          {mind.title || t("mind.untitled")}
+          {mindName(mind) || t("mind.untitled")}
         </span>
         {isExample && <ExampleChip />}
         {waiting && (
@@ -332,8 +333,8 @@ function RenameMind({ mind, onDone }: { mind: Mind; onDone(): void }) {
       ref={field}
       value={value}
       data-testid="mind-rename"
-      aria-label={t("mind.renameLabel", { title: mind.title || t("mind.untitled") })}
-      placeholder={t("mind.untitled")}
+      aria-label={t("mind.renameLabel", { title: mindName(mind) || t("mind.untitled") })}
+      placeholder={mindName(mind) || t("mind.untitled")}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
