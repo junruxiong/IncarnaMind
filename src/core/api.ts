@@ -1231,6 +1231,14 @@ export const chatProviderKinds = [
   "openai",
   "anthropic",
   "google",
+  "deepseek",
+  "qwen",
+  "kimi",
+  "glm",
+  "siliconflow",
+  "mistral",
+  "xai",
+  "openrouter",
   "openai-compatible",
   "ollama",
   "chatgpt",
@@ -1267,6 +1275,12 @@ export interface ChatProvider {
 
 export interface SaveChatProviderInput {
   kind: ChatProviderKind;
+  /**
+   * A hosted provider's endpoint (its region), by its id in the catalog, e.g.
+   * "intl" for Qwen. Left out: its first. Each endpoint is its own provider
+   * with its own key, as keys and model lists differ by region.
+   */
+  endpoint?: string;
   /** Required for "openai-compatible"; optional for "ollama" (Ollama's local port); not allowed otherwise. */
   baseUrl?: string;
   /** A new API key. Leave it out to keep the stored one; null removes it. */
@@ -1277,6 +1291,8 @@ export interface SaveChatProviderInput {
 
 export interface TestChatConnectionInput {
   kind: ChatProviderKind;
+  /** The endpoint to test (see `SaveChatProviderInput`). */
+  endpoint?: string;
   baseUrl?: string;
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
