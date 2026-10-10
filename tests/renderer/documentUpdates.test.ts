@@ -18,6 +18,7 @@ const assignment = (
   documentId,
   groupId: null,
   source: "automatic",
+  suggested: false,
   status,
   error: null,
   model: null,

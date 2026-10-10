@@ -57,6 +57,7 @@ const assignment = (
   documentId,
   groupId,
   source: "automatic",
+  suggested: false,
   status,
   error: null,
   model: null,

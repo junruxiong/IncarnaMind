@@ -72,6 +72,10 @@ _Avoid_: page (for anything that isn't a PDF), position, anchor
 A named place for Documents inside IncarnaMind, with a description of what belongs there. Each Document belongs to one Folder or is Unsorted; this does not change where its original file is stored.
 _Avoid_: group, collection, category
 
+**Suggested Folder**:
+A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Unsorted and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
+_Avoid_: automatic Folder, proposed Folder
+
 **Source location**:
 The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.
 
