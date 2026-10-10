@@ -1,6 +1,13 @@
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, dismissChatSetup, launchApp, openViewer, removeDataFolder } from "./app";
+import {
+  createDataFolder,
+  dismissChatSetup,
+  launchApp,
+  newMind as newMindFromMenu,
+  openViewer,
+  removeDataFolder,
+} from "./app";
 
 /*
  * The Mind tabs (DESIGN.md, Components: Mind tabs): several Minds open at
@@ -145,8 +152,9 @@ test("tabs close, move and switch by mouse and keyboard; a deleted Mind's tab cl
   // Deleting a Mind closes its tab.
   await sidebarMind(window, "Gamma").click({ modifiers: ["ControlOrMeta"] });
   await expect(titlesOf(window)).toHaveText(["Alpha", "Gamma"]);
-  const gammaRow = window.getByRole("listitem").filter({ hasText: "Gamma" });
+  const gammaRow = window.getByTestId("mind-row").filter({ hasText: "Gamma" });
   await gammaRow.hover();
+  await gammaRow.getByTestId("mind-menu").click();
   await gammaRow.getByTestId("delete-mind").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(titlesOf(window)).toHaveText(["Alpha"]);
@@ -254,13 +262,15 @@ test("a new Mind's title has the focus, so typing names it instead of making mor
   await dismissChatSetup(window);
   const minds = window.getByTestId("mind-list-item");
 
-  // Clicked, the sidebar's New Mind keeps no focus: a space typed next is part of the title.
-  const button = await boxOf(window.getByTestId("new-mind"));
-  await window.mouse.move(button.x + button.width / 2, button.y + button.height / 2, {
-    steps: 5,
-  });
-  await window.mouse.down();
-  await window.mouse.up();
+  // Clicked, the "+" menu's New Mind keeps no focus: a space typed next is part of the title.
+  for (const testId of ["plus-menu", "plus-new-mind"]) {
+    const button = await boxOf(window.getByTestId(testId));
+    await window.mouse.move(button.x + button.width / 2, button.y + button.height / 2, {
+      steps: 5,
+    });
+    await window.mouse.down();
+    await window.mouse.up();
+  }
   const title = window.getByTestId("mind-title");
   await expect(title).toBeFocused();
   await window.keyboard.type("Hello world");
@@ -285,7 +295,7 @@ test("tabs are 220px while there is room, and a mouse wheel scrolls the strip to
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 800));
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
   for (const name of ["Alpha notes", "Beta research", "Gamma draft"]) {
-    await window.getByTestId("new-mind").click();
+    await newMindFromMenu(window);
     await expect(window.getByTestId("mind-title")).toBeFocused();
     await window.keyboard.type(name);
   }
@@ -357,11 +367,11 @@ test("the application menu makes a new Mind, opens Settings and closes the tab, 
   await app.close();
 });
 
-test("a Mind is renamed from its sidebar row, and the Minds fold away", async () => {
+test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds away", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const name of ["Alpha notes", "Beta research"]) {
-    await window.getByTestId("new-mind").click();
+    await newMindFromMenu(window);
     await expect(window.getByTestId("mind-title")).toBeFocused();
     await window.keyboard.type(name);
   }
@@ -377,19 +387,33 @@ test("a Mind is renamed from its sidebar row, and the Minds fold away", async ()
   await expect(rows.filter({ hasText: "Alpha, revised" })).toHaveCount(1);
   await expect(titlesOf(window)).toContainText(["Alpha, revised"]);
 
-  // From the row's pencil, Esc changes nothing.
-  const beta = window.locator("li", { has: rows.filter({ hasText: "Beta research" }) });
+  // From the row's menu, Esc changes nothing.
+  const beta = window
+    .getByTestId("mind-row")
+    .filter({ has: rows.filter({ hasText: "Beta research" }) });
   await beta.hover();
+  await beta.getByTestId("mind-menu").click();
   await beta.getByTestId("rename-mind").click();
   await field.fill("Not this");
   await field.press("Escape");
   await expect(rows.filter({ hasText: "Beta research" })).toHaveCount(1);
 
-  // Folded, the Minds give their room to the Documents, and the label counts them.
-  const toggle = window.getByRole("button", { name: /^Minds/ });
+  // By keyboard: Enter on the open Mind's row (selected) types its title in place, as F2 does.
+  const betaRow = rows.filter({ hasText: "Beta research" });
+  await betaRow.click();
+  await betaRow.focus();
+  await window.keyboard.press("Enter");
+  await expect(field).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(betaRow).toBeFocused();
+  await window.keyboard.press("F2");
+  await expect(field).toBeFocused();
+  await window.keyboard.press("Escape");
+
+  // Folded, Not in a Folder gives its room to the rest.
+  const toggle = window.getByTestId("not-in-a-folder-toggle");
   await toggle.click();
   await expect(rows).toHaveCount(0);
-  await expect(toggle).toHaveText("Minds (2)");
   await toggle.click();
   await expect(rows).toHaveCount(2);
   await app.close();
@@ -399,7 +423,7 @@ test("the card's band runs unbroken: tabs start at the card's edge, the viewer's
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   for (const name of ["First", "Second"]) {
-    await window.getByTestId("new-mind").click();
+    await newMindFromMenu(window);
     await expect(window.getByTestId("mind-title")).toBeFocused();
     await window.keyboard.type(name);
   }

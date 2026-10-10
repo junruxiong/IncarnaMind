@@ -87,7 +87,8 @@ async function pointAndClick(window: Page, target: Locator): Promise<void> {
 }
 
 async function newMind(window: Page, title: string) {
-  await pointAndClick(window, window.getByTestId("new-mind"));
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
   await window.getByTestId("mind-title").fill(title);
   await window.getByTestId("mind-title").press("Enter");
   await window.keyboard.type("Notes.");
