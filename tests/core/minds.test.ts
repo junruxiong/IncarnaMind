@@ -33,6 +33,7 @@ describe("Minds", () => {
     expect(mind).toEqual({
       id: expect.stringMatching(UUID_V4),
       title: "Reading list",
+      kind: "mind",
       createdAt: "2026-10-06T12:00:00.000Z",
       updatedAt: "2026-10-06T12:00:00.000Z",
     });

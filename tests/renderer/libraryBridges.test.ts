@@ -58,7 +58,13 @@ describe("what a Question from the Library searches", () => {
 });
 
 describe("the Mind a Question from the Library goes in", () => {
-  const mind = (id: string): Mind => ({ id, title: id, createdAt: "", updatedAt: "" });
+  const mind = (id: string): Mind => ({
+    id,
+    title: id,
+    kind: "mind",
+    createdAt: "",
+    updatedAt: "",
+  });
   // Most recently edited first, as the sidebar lists them.
   const minds = [mind("edited"), mind("older"), mind("example")];
 
