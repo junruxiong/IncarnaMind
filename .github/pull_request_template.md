@@ -10,18 +10,20 @@
 
 Delete this section if the change has no UI. Otherwise check each line against [the interaction rules](https://github.com/junruxiong/IncarnaMind/blob/main/docs/agents/interaction.md):
 
-- [ ] Names shown can be renamed in place (double-click or Enter; Enter saves, Esc cancels)
-- [ ] Every drag has a menu or keyboard way to do the same thing
-- [ ] Nothing replaces the Mind the User is in; no "Back to…" button
-- [ ] Reversible actions offer Undo instead of a confirmation
-- [ ] Objects have the right-click menu, in the shared order
-- [ ] Selection works the same way as elsewhere (click, Shift, ⌘/Ctrl)
+- [ ] Each gesture follows a named app's convention (Claude, ChatGPT, Finder, Notion, Granola, or a Chinese app), or this says why none fits
+- [ ] Names shown rename in place (double-click, Enter or F2; Enter saves, Esc cancels; safe with a Chinese input method)
+- [ ] Every drag has a menu and a keyboard way to do the same thing; targets highlight only while they accept
+- [ ] Nothing replaces the Mind the User is in; no "Back to…" label
+- [ ] Reversible actions offer Undo (⌘Z and the undo line) instead of a confirmation; deleting goes to Recently deleted
+- [ ] Objects have the shared right-click and ⋯ menu, in the shared order
+- [ ] Selection works as everywhere: click opens, ⌘/Ctrl-click and Shift-click select, ⌘A, Esc
 - [ ] Every action works by keyboard and is in ⌘K; focus is visible; Esc closes the innermost thing
-- [ ] Responds within 100 ms; anything over a second shows progress
-- [ ] One primary action; no new setting without a reason given here
-- [ ] Words from `CONTEXT.md`, in English and Chinese
+- [ ] Responds within 100 ms; anything over a second shows progress where it happens
+- [ ] One primary action and one visible way to do it; no new setting without a reason given here
+- [ ] Problems show in place as one line with one action; words from `CONTEXT.md`, in English and Chinese
 - [ ] Layout holds at a narrow and a wide window, with and without the viewer; text never breaks by letter
-- [ ] Uses the shared building blocks where they exist
+- [ ] Uses the shared building blocks where they exist, and no one-off where they don't
+- [ ] Tested like a person in the built app, with the mouse and the keyboard
 - [ ] Before and after screenshots attached (narrow and wide)
 - [ ] A screenshot of the built screen beside its design board, with every difference listed and explained
 
