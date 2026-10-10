@@ -1429,11 +1429,11 @@ export const zhCN = {
   "restore.error.expired": "“{name}”已删除超过 {days} 天，无法恢复。",
   "restore.error.unlinked": "“{name}”所在的同步文件夹已移除，无法恢复。",
   "restore.error.documentBack": "“{name}”已重新加入资料库，无法恢复。",
-  "restore.error.documentGone": "该文档已删除，请先恢复。",
+  "restore.error.documentGone": "这个文档已删除，请先恢复。",
   "restore.error.tagGone": "标签“{name}”已删除，请先恢复。",
   "restore.error.folderGone": "文件夹“{name}”已删除，请先恢复。",
   "restore.error.tagNameTaken": "已有同名标签“{name}”，请先将其重命名，再恢复。",
   "restore.error.folderNameTaken": "已有同名文件夹“{name}”，请先将其重命名，再恢复。",
   "restore.error.folderLimit": "资料库最多可有 100 个文件夹，请先删除一个，再恢复。",
-  "deletePermanently.error.notDeleted": "“{name}”未被删除，无法彻底删除。",
+  "deletePermanently.error.notDeleted": "“{name}”尚未删除，无法彻底删除。",
 } satisfies Dictionary;
