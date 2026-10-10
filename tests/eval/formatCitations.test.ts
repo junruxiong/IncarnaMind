@@ -9,10 +9,11 @@
  * rows of workbooks and CSV files, and blocks of lines of plain text.
  *
  * The Citations are in tests/fixtures/eval-format-citations.json, written as
- * models write them before any model was asked the set. Its "false-not-found"
- * ones are quotes on their cited Unit that today's check doesn't find: a
- * table row written with pipes on a slide, a chart's value written with a
- * thousands separator, and a Markdown table row without its pipes.
+ * models write them before any model was asked the set. Three of them were
+ * quotes on their cited Unit that the check didn't find, false "not found",
+ * until #76: a table row written with pipes on a slide, a chart's value
+ * written with a thousands separator, and a Markdown table row without its
+ * pipes. They are found now.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

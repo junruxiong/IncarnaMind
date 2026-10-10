@@ -84,6 +84,7 @@ const files: FilesBridge = {
       ipcRenderer.removeListener(FILES_CHANNELS.menuCommand, receive);
     };
   },
+  setSidebarHidden: (hidden) => ipcRenderer.send(FILES_CHANNELS.sidebarHidden, hidden),
   titleBar: titleBarOf(process.platform),
   onFullScreenChange: (listener) => {
     const receive = (_event: unknown, fullScreen: boolean) => listener(fullScreen);

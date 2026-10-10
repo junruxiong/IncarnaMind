@@ -7,12 +7,20 @@ import {
   expect,
   type Locator,
   type Page,
+  test,
 } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
 const appDir = resolve(__dirname, "..");
+
+/**
+ * The apps this test launched that are still open, by the data folder each
+ * runs on: `removeDataFolder` closes them, keeping a picture of the window if
+ * the test failed.
+ */
+const openApps = new Map<ElectronApplication, string>();
 
 export interface RunningApp {
   app: ElectronApplication;
@@ -32,21 +40,52 @@ export interface LaunchOptions {
    */
   sentryDsn?: string;
   /**
+   * Where usage data goes: a test build sends it only with this, to a local
+   * server standing in for PostHog, and ignores the project a real build is
+   * made with. `testerBuild`: as a test build (the alpha) would, on until the
+   * User turns it off.
+   */
+  usageData?: { host: string; testerBuild?: boolean };
+  /**
    * The app ships its examples (`resources/examples`), so a first run opens
    * on the example Mind with "Get started". Without, a test build ships none.
    */
   examples?: boolean;
   /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
   home?: string;
+  /**
+   * Leaves the window at the size and place it opened at, instead of making
+   * it `WINDOW_SIZE`: for a test of how the window opens.
+   */
+  keepWindow?: boolean;
 }
 
 /**
+ * The window every spec runs in, the same on every machine: the app's default
+ * width, and a height that fits the smallest screen the specs run on. The app
+ * opens no bigger than the screen, and GitHub's macOS runners have a
+ * 1024 × 768 one (677px high once the menu bar and the Dock are off it), where
+ * a window opened 1024 wide folds the Mind's margins away. macOS lets a window
+ * be wider than its screen, but not taller, so each launch sets this size and
+ * checks the page got it, and says so if a screen is too short for it.
+ */
+export const WINDOW_SIZE = { width: 1280, height: 660 };
+
+/**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
- * and the fake embedding model, which needs no download.
+ * and the fake embedding model, which needs no download, in a window of
+ * `WINDOW_SIZE` whatever the screen's.
  */
 export async function launchApp(
   dataDir: string,
-  { fakeChat = false, sentryDsn, examples = false, home }: LaunchOptions = {},
+  {
+    fakeChat = false,
+    sentryDsn,
+    usageData,
+    examples = false,
+    home,
+    keepWindow = false,
+  }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
@@ -55,8 +94,17 @@ export async function launchApp(
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.INCARNAMIND_TEST_SENTRY_DSN;
   delete env.INCARNAMIND_TEST_EXAMPLES;
+  delete env.INCARNAMIND_TEST_POSTHOG_KEY;
+  delete env.INCARNAMIND_TEST_POSTHOG_HOST;
+  delete env.INCARNAMIND_TEST_TESTER_BUILD;
+  delete env.POSTHOG_CAPTURE_MODE;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
+  if (usageData) {
+    env.INCARNAMIND_TEST_POSTHOG_KEY = "test-project-key";
+    env.INCARNAMIND_TEST_POSTHOG_HOST = usageData.host;
+    if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
+  }
   if (home) env.HOME = home;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
@@ -64,8 +112,20 @@ export async function launchApp(
   env.INCARNAMIND_TEST_EMBEDDER = "fake";
 
   const app = await electron.launch({ args: [appDir], env });
+  openApps.set(app, dataDir);
+  app.on("close", () => openApps.delete(app));
   const window = await app.firstWindow();
   await window.getByTestId("new-mind").waitFor();
+  if (!keepWindow) {
+    await app.evaluate(({ BrowserWindow }, size) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
+    }, WINDOW_SIZE);
+    await expect
+      .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]), {
+        message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
+      })
+      .toEqual([WINDOW_SIZE.width, WINDOW_SIZE.height]);
+  }
   return { app, window };
 }
 
@@ -362,6 +422,20 @@ export async function addDocuments(window: Page, paths: string[]): Promise<void>
   }
 }
 
+/** Sizes the app's window, e.g. to its narrowest (900px wide, the minimum) or a wide one. */
+export async function setWindowSize(
+  app: ElectronApplication,
+  window: Page,
+  width: number,
+  height: number,
+): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
+    { width, height },
+  );
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+}
+
 /** The id of the Document listed in the sidebar under `name`. */
 export async function documentIdOf(window: Page, name: string): Promise<string> {
   const id = await window
@@ -456,10 +530,49 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
  */
 export async function clickEmptyLine(line: Locator): Promise<void> {
   await line.click({ position: { x: 4, y: 14 } });
+  // What is typed next goes where the caret is: wait until it is on the line.
+  await expect
+    .poll(() =>
+      line.evaluate((element) => {
+        const caret = element.ownerDocument.getSelection()?.anchorNode;
+        const focused = element.ownerDocument.activeElement;
+        return !!caret && element.contains(caret) && !!focused && focused.contains(element);
+      }),
+    )
+    .toBe(true);
+}
+
+/**
+ * Enter in a Mind's title, which takes the cursor into the Mind's text, and
+ * waits until it is there: a new Mind's text comes a moment after its title,
+ * and until then what is typed still goes into the title.
+ */
+export async function enterContent(window: Page): Promise<void> {
+  await window.getByTestId("mind-title").press("Enter");
+  await expect(window.getByTestId("mind-editor")).toBeFocused();
 }
 
 /** A fresh, empty data folder. Remove it with `removeDataFolder`. */
 export const createDataFolder = () => mkdtemp(join(tmpdir(), "incarnamind-smoke-"));
 
-export const removeDataFolder = (dataDir: string) =>
-  rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
+/**
+ * Removes a data folder, after closing an app the test left open on it. If
+ * the test failed, a screenshot of that app's window as the test left it is
+ * kept first, as app-window.png with the test's results, which CI uploads
+ * (Playwright's own screenshots and traces leave an Electron app's window out).
+ */
+export async function removeDataFolder(dataDir: string): Promise<void> {
+  const info = test.info();
+  for (const [app, folder] of [...openApps]) {
+    if (folder !== dataDir) continue;
+    openApps.delete(app);
+    const window = app.windows()[0];
+    if (info.status !== info.expectedStatus && window) {
+      const path = info.outputPath("app-window.png");
+      const shot = await window.screenshot({ path }).catch(() => undefined);
+      if (shot) await info.attach("app-window", { path, contentType: "image/png" });
+    }
+    await app.close().catch(() => undefined);
+  }
+  await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
+}

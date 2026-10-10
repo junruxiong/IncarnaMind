@@ -27,6 +27,8 @@ export type {
   RerankingModelFiles,
   ScriptRuntimes,
   SpawnOptions,
+  UsageDataSender,
+  UsageEventMessage,
 } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
@@ -39,6 +41,7 @@ export {
   ConsentDeclinedError,
   EmbeddingModelNotReadyError,
   InvalidInputError,
+  MindReadOnlyError,
   NotFoundError,
   SecretStorageError,
 } from "./errors";
@@ -59,6 +62,7 @@ export {
   type OllamaModels,
 } from "./providers/ollamaModels";
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
+export { blockReference, parseReference } from "./references";
 export {
   BUILT_IN_RERANKING_MODEL,
   downloadSize,
@@ -66,3 +70,14 @@ export {
   type RerankingModelDefinition,
 } from "./reranking";
 export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";
+export {
+  COMMON_FIELDS,
+  SENDER_FIELDS,
+  UI_USAGE_EVENTS,
+  type UiUsageEvent,
+  USAGE_EVENTS,
+  type UsageEvent,
+  type UsageEventFields,
+  type UsageEventName,
+  type UsageValue,
+} from "./usageEvents";

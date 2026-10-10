@@ -65,19 +65,30 @@ async function boxOf(locator: Locator) {
   return box;
 }
 
-/** Each row's icon and text, from the sidebar's left edge. */
+/**
+ * Each row's icon and text, from the sidebar's left edge, and its depth: all
+ * read at one moment, as rows come in while a folder is indexed, and a row
+ * read a piece at a time could be another row by its next piece.
+ */
 async function rowEdges(sidebar: Locator, rows: Locator) {
   const left = (await boxOf(sidebar)).x;
-  const edges: { icon: number; text: number; depth: number }[] = [];
-  for (const row of await rows.all()) {
-    const icon = await boxOf(row.locator("svg").first());
-    edges.push({
-      icon: icon.x - left,
-      text: (await textLeft(row.getByTestId("row-text"))) - left,
-      depth: Number((await row.getAttribute("data-depth")) ?? "0"),
-    });
-  }
-  return edges;
+  return rows.evaluateAll(
+    (elements, from) =>
+      elements.map((row) => {
+        const icon = row.querySelector("svg");
+        const text = row.querySelector('[data-testid="row-text"]');
+        const range = document.createRange();
+        if (text) range.selectNodeContents(text);
+        const first = text ? range.getClientRects()[0] : undefined;
+        if (!icon || !first) throw new Error("A row has no icon or no text.");
+        return {
+          icon: icon.getBoundingClientRect().x - from,
+          text: first.left - from,
+          depth: Number(row.getAttribute("data-depth") ?? "0"),
+        };
+      }),
+    left,
+  );
 }
 
 /** Links a folder through the core's bridge, as "Add folder…" does once the User picked it. */
@@ -301,7 +312,9 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await confirmLink(dialog);
   const papers = linkedFolderRow(window, "Papers");
   await expect(papers).toHaveAttribute("data-state", "indexing");
-  expect(await expectRowsAligned(window)).toBeGreaterThanOrEqual(10);
+  // Its rows come in as its files are found and read: measured once ten rows are there.
+  await expect.poll(() => treeRows(window).count()).toBeGreaterThanOrEqual(10);
+  await expectRowsAligned(window);
   await screenshot(window, "linked-folders-indexing", sidebar());
 
   // Paused, here with the bar held where it stopped; in a narrow sidebar too.

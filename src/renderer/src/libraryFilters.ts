@@ -78,23 +78,33 @@ export function filterLibrary<T>(
   const chosen = facets.map((facet) => new Set(selection[facet.id] ?? []));
   const counts = facets.map(() => new Map<string, number>());
   const shown: T[] = [];
+  // Plain loops, with nothing made per item but its values: the Library runs this on
+  // thousands of Documents each time one changes, as Organize goes through them (#156).
+  const values: (readonly string[])[] = [];
+  const matches: boolean[] = [];
   for (const item of items) {
-    const values = facets.map((facet) => facet.values(item));
-    const matches = values.map(
-      (each, index) =>
-        (chosen[index] as Set<string>).size === 0 ||
-        each.some((value) => (chosen[index] as Set<string>).has(value)),
-    );
-    const misses = matches.filter((match) => !match).length;
+    let misses = 0;
+    for (let index = 0; index < facets.length; index++) {
+      const each = (facets[index] as LibraryFacet<T>).values(item);
+      const wanted = chosen[index] as Set<string>;
+      const match = wanted.size === 0 || each.some((value) => wanted.has(value));
+      values[index] = each;
+      matches[index] = match;
+      if (!match) misses++;
+    }
     if (misses === 0) shown.push(item);
-    values.forEach((each, index) => {
+    for (let index = 0; index < facets.length; index++) {
       // Counted under this filter's options if every other filter keeps it.
       const others = misses - (matches[index] ? 0 : 1);
       const count = counts[index] as Map<string, number>;
-      for (const value of new Set(each)) {
+      const each = values[index] as readonly string[];
+      for (let at = 0; at < each.length; at++) {
+        const value = each[at] as string;
+        // An option an item falls under twice counts once.
+        if (each.indexOf(value) !== at) continue;
         count.set(value, (count.get(value) ?? 0) + (others === 0 ? 1 : 0));
       }
-    });
+    }
   }
   const options = new Map<string, FacetOption[]>();
   facets.forEach((facet, index) => {

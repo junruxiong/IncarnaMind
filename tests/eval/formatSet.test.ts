@@ -3,9 +3,10 @@
  * checked against what processing stores, without the models: each quote is
  * on its expected Units and on no other Unit of its Document, those Units can
  * be cited together, and a Passage that covers them holds the quote, so a hit
- * and a "found" Citation are both possible. A known gap's quote is in none of
- * its Document's Units. Every format has at least 3 Questions per hard place
- * in each language.
+ * and a "found" Citation are both possible: a Word comment's too, read into
+ * the section its mark is in since #76. A known gap's quote, a scanned
+ * page's, is in none of its Document's Units. Every format has at least 3
+ * Questions per hard place in each language.
  */
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -84,9 +85,11 @@ describe("The every-format evaluation set", () => {
     },
   );
 
-  test("a known gap's quote is in none of its Document's Units: a scan has no text, a comment isn't read", () => {
+  test("a known gap's quote is in none of its Document's Units: a scan has no text", () => {
     const gaps = SET.questions.filter((question) => question.knownGap);
     expect(gaps.length).toBeGreaterThan(0);
+    // Word comments are read since #76: their Questions are checked as the others are, above.
+    expect(gaps.filter((question) => question.place === "comment")).toEqual([]);
     for (const question of gaps) {
       const { outcome, units } = stored.get(question.expected.document) as Stored;
       if (question.place === "scanned") expect(outcome, question.id).toBe("no-text");

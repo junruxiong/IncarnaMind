@@ -232,7 +232,7 @@ describe("Providers saved before the catalog", () => {
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     migrate(
       db,
-      migrations.filter((migration) => migration.version < 29),
+      migrations.filter((migration) => migration.version < 31),
     );
     const rows: [string, string, string | null][] = [
       [ids.openai, "openai", null],

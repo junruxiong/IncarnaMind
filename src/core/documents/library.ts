@@ -14,7 +14,8 @@
  * - a new file is hashed: if a Document with that hash lost its file (missing
  *   since, gone in this pass, or a copy left in the data folder by the old
  *   layout), it is that Document, moved, keeping its id, Tags and Citations;
- *   otherwise it is a new Document. New files are indexed newest first;
+ *   otherwise it is a new Document. New files are indexed newest first, and
+ *   those modified at the same moment in the order of their paths;
  * - a known file that is gone makes its Document missing, or unavailable if
  *   what it was in can't be reached (an unplugged drive).
  *
@@ -963,8 +964,12 @@ export function createLibrary(options: LibraryOptions) {
       if (!file || !(await checkKnown(row, file, changes))) removed.push(row);
     }
 
-    // New files, newest first.
-    const fresh = [...found.values()].sort((a, b) => b.mtimeMs - a.mtimeMs);
+    // New files, newest first. Files modified at the same moment (a file system
+    // that keeps times coarsely, or files copied in together) go in the order of
+    // their paths, not in the order the file system happens to list them.
+    const fresh = [...found.values()].sort(
+      (a, b) => b.mtimeMs - a.mtimeMs || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    );
     for (const file of fresh) {
       if (file.owner) pendingNew.set(file.owner.id, (pendingNew.get(file.owner.id) ?? 0) + 1);
     }
