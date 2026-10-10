@@ -12,16 +12,14 @@ import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
 
-/** A page that couldn't be saved, or fetched again. */
 export interface WebPageProblem {
-  /** The address, or for "Fetch again", the Document's id. */
+  /** The address, or "document:<id>" for "Fetch again". */
   key: string;
   address: string;
   reason: WebPageFailureReason;
   message: string;
-  /** The Folder it was to be saved in. */
   folderId: string | null;
-  /** The Document fetched again. */
+  /** Set for "Fetch again". */
   document: { id: string; name: string } | null;
 }
 
@@ -32,11 +30,10 @@ interface WebPagesState {
    * why one couldn't be added, where the sidebar's status would otherwise.
    */
   dialogAddresses: readonly string[];
-  /** The addresses being saved and the Documents being fetched again, by key. */
+  /** Keys, as `WebPageProblem.key`. */
   fetching: readonly string[];
   problems: readonly WebPageProblem[];
   openDialog(): void;
-  /** Saves the addresses typed in the dialog, which shows how each goes. */
   submitDialog(addresses: readonly string[]): Promise<void>;
   closeDialog(): void;
   add(addresses: readonly string[], folderId?: string | null): Promise<void>;
@@ -45,14 +42,13 @@ interface WebPagesState {
   dismiss(problem: WebPageProblem): void;
 }
 
-/** What the sidebar's status shows: the pages being saved or that failed outside the dialog. */
+/** The dialog says how its own addresses go; the sidebar's status says the rest. */
 export const outsideDialog = (state: Pick<WebPagesState, "dialogAddresses">, key: string) =>
   !state.dialogAddresses.includes(key);
 
-/** Fetched at most this many at once: a paste of many links doesn't open them all together. */
+/** A paste of many links doesn't fetch them all at once. */
 const AT_ONCE = 4;
 
-/** Reasons a page wasn't saved because of what it is, rather than because it couldn't be fetched. */
 const REFUSED: ReadonlySet<WebPageFailureReason> = new Set([
   "invalid-address",
   "not-a-page",
@@ -60,13 +56,12 @@ const REFUSED: ReadonlySet<WebPageFailureReason> = new Set([
   "not-text",
 ]);
 
-/** Whether trying again may help: the page couldn't be fetched, rather than being refused. */
 export const canTryAgain = (problem: Pick<WebPageProblem, "reason">) =>
   !REFUSED.has(problem.reason);
 
 export const reasonKey = (reason: WebPageFailureReason): MessageKey => `webPages.reason.${reason}`;
 
-/** The web addresses a paste or a drop carries, if it carries only those (see `pastedAddresses`). */
+/** Only when the paste or drop is nothing but addresses (see `pastedAddresses`). */
 export function linksIn(data: DataTransfer): string[] {
   const list = data
     .getData("text/uri-list")
@@ -76,7 +71,7 @@ export function linksIn(data: DataTransfer): string[] {
   return pastedAddresses(list || data.getData("text/plain"));
 }
 
-/** A date as the page or the fetch gives it, as "10 Oct 2026" or "2026年10月10日"; a bare year stays. */
+/** "10 Oct 2026", "2026年10月10日"; a date that isn't ISO 8601 stays as the page gives it. */
 export function pageDate(value: string, language: Language): string {
   if (!/^\d{4}-\d{2}/.test(value)) return value;
   const time = Date.parse(value);

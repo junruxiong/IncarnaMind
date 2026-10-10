@@ -1,10 +1,8 @@
 /**
- * A web page's snapshot (#261): its readable article, found by Mozilla's
- * Readability (Apache-2.0) in a linkedom DOM, written as our own XHTML (read
- * by ../formats/web). Only a few kinds of block and inline element are
- * kept, and of attributes only a link's http(s) address, a picture's
- * description and a table cell's span: no script, style, frame, form, event
- * handler or picture address survives, so nothing in it runs or loads.
+ * A web page's readable article (Readability, in a linkedom DOM) written as
+ * our own XHTML (#261). Only a few elements are kept, and of attributes only
+ * a link's http(s) address, a picture's description and a cell's span, so
+ * nothing in a snapshot runs or loads.
  */
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
@@ -13,7 +11,7 @@ import { escapeXml } from "../../exports/wordml";
 import { BLOCK_ELEMENTS, readWebPage } from "../formats/web";
 import { WebPageError } from "./errors";
 
-/** The DOM, as far as this module reads linkedom's. */
+/** As much of the DOM as this reads: core code doesn't build against the DOM's types. */
 interface DomNode {
   readonly nodeType: number;
   readonly nodeValue: string | null;
@@ -36,7 +34,6 @@ interface DomDocument {
 }
 
 export interface Snapshot {
-  /** The snapshot file's text. */
   xhtml: string;
   title: string;
   siteName: string;
@@ -47,7 +44,6 @@ export interface Snapshot {
 const ELEMENT = 1;
 const TEXT = 3;
 
-/** Left out with everything in them. */
 const DROPPED = new Set([
   "area",
   "audio",
@@ -99,13 +95,13 @@ const INLINE_TAGS: Readonly<Record<string, string>> = {
   mark: "mark",
 };
 
-/** Containers kept as they are; any other container is unwrapped. */
+/** Any other container is unwrapped. */
 const KEPT_CONTAINERS = new Set(["blockquote", "figure", "dl"]);
 const LEAF_BLOCKS = new Set(["p", "dt", "dd", "figcaption", "caption", "address"]);
 
-/** Letters and digits a page needs to be worth reading; a CJK character counts as three. */
+/** Letters and digits, a CJK character counted as three, as it holds about a word. */
 const MIN_READABLE = 300;
-/** A page with a password field and less than this is a sign-in page. */
+/** A page with a password field and less than this is a sign-in page, not an article with a sign-in box. */
 const MIN_BEHIND_SIGN_IN = 1500;
 
 const CJK_CHARACTER = new RegExp(`[${CJK}\\u3000-\\u303f\\uff00-\\uffef]`, "u");
@@ -122,7 +118,6 @@ function hasBlocks(element: DomElement): boolean {
   return false;
 }
 
-/** The first block with text in an element, if no text comes before it. */
 function firstBlock(element: DomNode): DomElement | null {
   for (const child of Array.from(element.childNodes)) {
     if (child.nodeType === TEXT) {
@@ -137,7 +132,7 @@ function firstBlock(element: DomNode): DomElement | null {
   return null;
 }
 
-/** A footnote or reference mark ("[3]", "[citation needed]"): the quote a model gives leaves it out. */
+/** "[3]", "[citation needed]": left out, as the quotes models give leave them out. */
 function isReferenceMark(sup: DomElement): boolean {
   const text = (sup.textContent ?? "").trim();
   if (/^\[[^\]]{1,40}\]$/.test(text)) return true;
@@ -149,14 +144,12 @@ function isReferenceMark(sup: DomElement): boolean {
   );
 }
 
-/** Inline content as XHTML, its whitespace collapsed as a browser shows it. */
 class InlineWriter {
   private parts: string[] = [];
   private pendingSpace = false;
   private last = "";
-  /** Where the tags opened since the last text start: a space owed goes before them, not inside. */
+  /** A space owed goes before the tags opened since the last text, not inside a link's underline. */
   private openedAt: number | null = null;
-  /** Letters and digits written. */
   text = 0;
   images = 0;
 
@@ -194,7 +187,6 @@ class InlineWriter {
     this.last = "\n";
   }
 
-  /** The address of a link, resolved, if it is a web page's. */
   private href(element: DomElement): string | null {
     const raw = element.getAttribute("href");
     if (!raw) return null;
@@ -243,7 +235,6 @@ class InlineWriter {
   }
 }
 
-/** The article's blocks as XHTML, in the shapes ../formats/web reads. */
 class BlockWriter {
   readonly parts: string[] = [];
 
@@ -380,7 +371,6 @@ const meta = (document: DomDocument, key: string): string | null => {
   return element?.getAttribute("content")?.trim() || null;
 };
 
-/** Letters and digits, a CJK character counted as three: what there is to read. */
 function readable(text: string): number {
   let count = 0;
   for (const character of text.match(/[\p{L}\p{N}]/gu) ?? []) {
@@ -408,7 +398,7 @@ function siteInTitle(pageTitle: string | null, title: string): string | null {
   return site && site.length <= 60 ? site : null;
 }
 
-/** A date as ISO 8601: as given when it is, its offset kept; else read as a date, if it reads. */
+/** An ISO 8601 date stays as given, so its offset and its year are kept. */
 function publishedDate(value: string | null): string | null {
   if (!value || /^\d{4}-\d{2}/.test(value)) return value;
   const time = Date.parse(value);
@@ -416,9 +406,9 @@ function publishedDate(value: string | null): string | null {
 }
 
 /**
- * Makes a page's snapshot from its HTML. `url` is where the page was (after
- * redirects), for its links; `address` the one it is saved under. Throws
- * `WebPageError` for a page behind a sign-in, or one that is mostly not text.
+ * `url` is where the page was, after redirects, for its links; `address` the
+ * one it is saved under. Throws `WebPageError` for a page behind a sign-in,
+ * or one that is mostly not text.
  */
 export function snapshotOf(html: string, url: string, address: string): Snapshot {
   const page = parseHTML(html).document;

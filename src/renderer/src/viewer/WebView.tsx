@@ -15,7 +15,7 @@ import { ViewerHeader } from "./ViewerHeader";
 
 const read = (bytes: Uint8Array): WebPage => readWebPage(new TextDecoder().decode(bytes));
 
-/** The elements a snapshot is drawn with; any other is drawn as its content alone. */
+/** Any other element is drawn as its content alone. */
 const DRAWN = new Set([
   "h1",
   "h2",
@@ -120,11 +120,7 @@ function draw(
   }
 }
 
-/**
- * A saved web page (#261): its snapshot as a clean reading page, under its
- * title and byline. Opened at a Citation, the quote is highlighted in the
- * cited section, else anywhere on the page, with the Citation's mark beside it.
- */
+/** Opened at a Citation, the quote is highlighted in the cited section, else anywhere on the page. */
 export function WebView({ document, target }: { document: Document; target: ViewerTarget }) {
   const loaded = useDocumentFile(document.id, read);
   return (
@@ -175,7 +171,6 @@ function WebPageContent({
     .filter(Boolean)
     .join(" · ");
 
-  // Drawn once per snapshot read.
   useLayoutEffect(() => {
     const body = host.current;
     if (!body || !page.article) return;
@@ -183,7 +178,6 @@ function WebPageContent({
     return () => body.replaceChildren();
   }, [page, blocks, t]);
 
-  // Each open request highlights its quote: in the cited section first, then anywhere.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
   useLayoutEffect(() => {
     const body = host.current;
@@ -218,7 +212,6 @@ function WebPageContent({
     container.scrollTop = Math.max(0, top - (marks ? container.clientHeight / 3 : 24));
   }, [page, target.request, target.quote, target.pageFrom, target.pageTo]);
 
-  // The Citation's mark sits beside the quote's first line, wherever the text wraps it.
   useLayoutEffect(() => {
     const element = column.current;
     if (!element || !mark || highlighted === 0) {

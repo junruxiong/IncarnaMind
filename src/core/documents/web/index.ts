@@ -1,9 +1,7 @@
 /**
- * Web pages saved as Documents (#261). A page's snapshot (./snapshot) is the
- * Document's file, in the data folder's "Web pages", and is indexed like any
- * file: its text is the Units Citations point at and the check reads. "Fetch
- * again" writes the page as it is now over the snapshot, and a page that
- * changed is a new version, as a changed file is (ADR-0010).
+ * Web pages saved as Documents (#261): the snapshot, in the data folder's
+ * "Web pages", is the Document's file and is indexed like any file. "Fetch
+ * again" writes over it, so a changed page is a new version (ADR-0010).
  */
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -20,7 +18,6 @@ import { documentAtAddress, recordVersion, type WebPageVersion, webPageInfo } fr
 
 export { WebPageError } from "./errors";
 
-/** A snapshot written to its file. */
 export interface SnapshotFile {
   path: string;
   contentHash: string;
@@ -34,12 +31,10 @@ export interface WebPagesOptions {
   now: () => string;
   documents: {
     get(id: string): Document;
-    /** Adds a snapshot as a new Document, queued, running `record` in the same transaction. */
     addSnapshot(id: string, name: string, file: SnapshotFile, record: () => void): Document;
-    /** Looks at a Document's file again: a new version is processed. */
     check(path: string): Promise<void>;
   };
-  /** The languages a page is asked for in, most preferred first. */
+  /** Most preferred first, as Accept-Language lists them. */
   languages(): readonly string[];
   fetch?: typeof fetch;
   limits?: FetchLimits;
@@ -62,7 +57,7 @@ function parseSaveInput(input: unknown): SaveWebPageInput {
 export function createWebPages(options: WebPagesOptions) {
   const { db, now, documents } = options;
   const folder = join(options.dataDir, "Web pages");
-  /** Saves and fetches under way, by address or Document: asked twice, they are done once. */
+  /** Asked twice at once, a save or a fetch is done once. */
   const underWay = new Map<string, Promise<WebPageResult>>();
 
   const once = (key: string, task: () => Promise<WebPageResult>): Promise<WebPageResult> => {
@@ -123,7 +118,7 @@ export function createWebPages(options: WebPagesOptions) {
   });
 
   return {
-    /** See `CoreApi.saveWebPage`. Returns the new Document, unfiled. */
+    /** See `CoreApi.saveWebPage`; the caller files it in its Folder. */
     save(input: unknown): Promise<WebPageResult> {
       const { address: typed, html } = parseSaveInput(input);
       const address = normaliseAddress(typed);

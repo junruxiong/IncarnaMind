@@ -1,8 +1,4 @@
-/**
- * Web page addresses (#261), as the User types, pastes or drops them. Pure:
- * the core saves pages by them, and the renderer tells pasted and dropped
- * links from other text with them.
- */
+/** Web page addresses (#261), as the User types, pastes or drops them: the core and the renderer read them alike. */
 
 const SCHEME = /^[a-z][a-z\d+.-]*:\/\//i;
 

@@ -1,54 +1,39 @@
 /**
- * A saved web page (#261) → Units. The snapshot is our own XHTML, written
- * when the page is saved (../web/snapshot): the page's title, address, site
- * and author in its head, and the readable article in its body, in a few
- * kinds of block (headings, paragraphs, list items, quotes, code, tables).
- *
- * A web page is cited by the section a quote sits under and its paragraph
- * ("§ History, ¶ 3"): one Unit per heading section, as for Markdown, a long
- * one split into parts at paragraph ends. Each paragraph of a section is
- * anchored "p1", "p2"…, counted from its heading across its parts, and the
- * label says so (`UnitLabel.paragraphs`).
- *
- * Pure, with no Node or DOM imports: the processing worker reads snapshots
- * with it, and the viewer reads them with the same code, so the blocks it
- * draws are the blocks that were indexed.
+ * A web page's snapshot (../web/snapshot, #261) → Units: one per heading
+ * section, as for Markdown, its paragraphs anchored "p1", "p2"… from the
+ * heading so a Location can name them ("§ History, ¶ 3"). Pure: the worker
+ * indexes with it and the viewer draws with it, so both see the same blocks.
  */
 import type { Anchor, TextUnit } from "../../../shared/units";
 import { MAX_SECTION_CHARS } from "./docx";
 import { ExtractionError } from "./errors";
 import { elements, parseXml, textOf, type XmlElement, type XmlNode } from "./xml";
 
-/** What a snapshot's head says of the page. */
 export interface WebPageMeta {
   title: string | null;
-  /** The address it was saved from. */
   address: string | null;
   siteName: string | null;
   author: string | null;
   /** When the page says it was published, as it gives it (ISO 8601 when it can be read). */
   published: string | null;
-  /** The page's language, as its `lang` gives it. */
   language: string | null;
 }
 
-/** A block of the article: a heading, or a paragraph a Citation can point at. */
 export interface WebBlock {
   element: XmlElement;
-  /** A heading's level, 1 to 6; null for a paragraph. */
+  /** Null for a paragraph. */
   level: number | null;
-  /** The block's text, as it is indexed: a table's rows on lines, their cells separated by tabs. */
+  /** As indexed: a table's rows on lines, their cells separated by tabs. */
   text: string;
 }
 
-/** A Unit of a web page, with the blocks it holds (`first` to `last`, indexes into `blocks`). */
+/** `blocks`: the indexes of its first and last block. */
 export interface WebUnit extends TextUnit {
   blocks: { first: number; last: number };
 }
 
 export interface WebPage {
   meta: WebPageMeta;
-  /** The page's readable content; null if the snapshot has none. */
   article: XmlElement | null;
   blocks: WebBlock[];
   units: WebUnit[];
@@ -56,7 +41,6 @@ export interface WebPage {
 
 const HEADING = /^h([1-6])$/;
 
-/** Elements whose content is block content: their children are read as blocks. */
 const CONTAINERS = new Set([
   "article",
   "aside",
@@ -75,10 +59,9 @@ const CONTAINERS = new Set([
   "ul",
 ]);
 
-/** Elements read as one paragraph each, unless they hold blocks of their own. */
+/** One paragraph each, unless they hold blocks of their own. */
 const PARAGRAPHS = new Set(["p", "dt", "dd", "figcaption", "caption"]);
 
-/** Every element that starts a block, for telling inline content from block content. */
 export const BLOCK_ELEMENTS = new Set([
   ...CONTAINERS,
   ...PARAGRAPHS,
@@ -99,10 +82,9 @@ const nameOf = (element: XmlElement) => element.name.toLowerCase();
 const isBlock = (node: XmlNode): node is XmlElement =>
   typeof node !== "string" && BLOCK_ELEMENTS.has(nameOf(node));
 
-/** Whitespace as HTML collapses it: runs of spaces, tabs and line breaks. */
 const SPACES = /[ \t\n\r\f]+/g;
 
-/** The text of inline content, as a browser shows it: spaces collapsed, a line break at each `br`. */
+/** As a browser shows it: spaces collapsed, a line break at each `br`. */
 function inlineText(nodes: readonly XmlNode[]): string {
   const lines: string[] = [""];
   const walk = (list: readonly XmlNode[]) => {
@@ -119,7 +101,6 @@ function inlineText(nodes: readonly XmlNode[]): string {
     .trim();
 }
 
-/** A table's text: each row on a line, its cells separated by tabs. */
 function tableText(table: XmlElement): string {
   const rows: string[] = [];
   const walk = (element: XmlElement) => {
@@ -137,13 +118,12 @@ function tableText(table: XmlElement): string {
   return rows.join("\n");
 }
 
-/** A `pre` block's text, as written: the line break that may open it isn't part of it. */
+/** The line break that may open a `pre` isn't part of its text, as in HTML. */
 const preText = (pre: XmlElement) =>
   textOf(pre)
     .replace(/^\r?\n/, "")
     .trimEnd();
 
-/** The article's blocks, in reading order. */
 function collectBlocks(container: XmlElement, out: WebBlock[]): void {
   for (const element of elements(container)) {
     const name = nameOf(element);
@@ -158,7 +138,6 @@ function collectBlocks(container: XmlElement, out: WebBlock[]): void {
       const text = tableText(element);
       if (text) out.push({ element, level: null, text });
     } else if (name === "li") {
-      // Its own words, then any list or block inside it.
       const text = inlineText(element.children.filter((node) => !isBlock(node)));
       if (text) out.push({ element, level: null, text });
       collectBlocks(element, out);
@@ -202,7 +181,6 @@ function readMeta(root: XmlElement): WebPageMeta {
   };
 }
 
-/** The Units of the blocks: one per heading section, split into parts past `MAX_SECTION_CHARS`. */
 function unitsOf(blocks: readonly WebBlock[]): WebUnit[] {
   const units: WebUnit[] = [];
   const path: string[] = [];
@@ -250,7 +228,7 @@ function unitsOf(blocks: readonly WebBlock[]): WebUnit[] {
   return units;
 }
 
-/** Reads a snapshot. Throws `ExtractionError` if it isn't one. */
+/** Throws `ExtractionError` for anything that isn't a snapshot. */
 export function readWebPage(source: string): WebPage {
   const root = parseXml(source);
   if (nameOf(root) !== "html") {
@@ -263,7 +241,6 @@ export function readWebPage(source: string): WebPage {
   return { meta: readMeta(root), article, blocks, units: unitsOf(blocks) };
 }
 
-/** A web page's Units, as they are stored. */
 export function webUnits(source: string): TextUnit[] {
   return readWebPage(source).units.map(({ blocks: _blocks, ...unit }) => unit);
 }

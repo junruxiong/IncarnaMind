@@ -1,12 +1,12 @@
 /**
- * Fetching a web page from this computer (#261): http(s) only, within a time
- * and a size limit, anonymously (no cookies), and only the page itself:
- * nothing it links to or embeds.
+ * Fetches a web page from this computer (#261): http(s) only, within a time
+ * and a size limit, without cookies, and only the page itself, nothing it
+ * embeds.
  */
 import { WebPageError } from "./errors";
 
 export interface FetchLimits {
-  /** For the whole page, headers and body. */
+  /** Headers and body together. */
   timeoutMs: number;
   maxBytes: number;
 }
@@ -15,7 +15,7 @@ export const FETCH_LIMITS: FetchLimits = { timeoutMs: 20_000, maxBytes: 10 * 102
 
 export interface FetchedPage {
   html: string;
-  /** Where the page was in the end, after any redirects. */
+  /** After any redirects. */
   url: string;
 }
 
@@ -36,13 +36,12 @@ const messageOf = (error: unknown): string => {
 const timedOut = (error: unknown, signal: AbortSignal) =>
   signal.aborted || (error instanceof Error && error.name === "TimeoutError");
 
-/** The charset a page's own markup declares, in its first bytes. */
 function declaredCharset(bytes: Uint8Array): string | null {
   const head = new TextDecoder("latin1").decode(bytes.subarray(0, 4096));
   return /<meta[^>]+charset\s*=\s*["']?\s*([\w-]+)/i.exec(head)?.[1] ?? null;
 }
 
-/** Decodes a page: by its byte-order mark, its Content-Type's charset, its markup's, else UTF-8. */
+/** By its byte-order mark, its Content-Type's charset, its markup's, else UTF-8. */
 export function decodePage(bytes: Uint8Array, contentType: string | null): string {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return new TextDecoder("utf-8").decode(bytes);
@@ -80,7 +79,7 @@ async function readBody(response: Response, maxBytes: number): Promise<Uint8Arra
   return bytes;
 }
 
-/** Fetches a page's HTML. Throws `WebPageError` when it can't, saying why. */
+/** Throws `WebPageError` when it can't, saying why. */
 export async function fetchPage(
   address: string,
   options: { limits?: FetchLimits; fetch?: typeof fetch; languages?: readonly string[] } = {},

@@ -1,6 +1,5 @@
 import type { WebPageFailure, WebPageFailureReason } from "../../api";
 
-/** Why a web page couldn't be saved or fetched again. */
 export class WebPageError extends Error {
   override name = "WebPageError";
   constructor(
