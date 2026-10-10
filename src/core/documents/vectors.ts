@@ -87,7 +87,6 @@ export function createVectorIndex(db: Database, model: { readonly id: string }):
     entry.count++;
   }
 
-  /** Reads the current model's vectors of every live Document, or of one. */
   function load(
     map = new Map<string, DocumentVectors>(),
     documentId?: string,
