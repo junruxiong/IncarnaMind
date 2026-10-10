@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { mindName } from "../../../shared/naming";
 import { useT } from "../i18n";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
@@ -291,9 +292,10 @@ interface MindTabProps {
 function MindTab(props: MindTabProps) {
   const { mindId, selected, divider, dragging, dropSide } = props;
   const t = useT();
-  const title = useAppStore(
-    (state) => state.minds.find((mind) => mind.id === mindId)?.title || t("mind.untitled"),
-  );
+  const title = useAppStore((state) => {
+    const mind = state.minds.find((each) => each.id === mindId);
+    return (mind && mindName(mind)) || t("mind.untitled");
+  });
   const openMind = useAppStore((state) => state.openMind);
   const closeTab = useAppStore((state) => state.closeTab);
   const status = useMindStatus(mindId);
