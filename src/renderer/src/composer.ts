@@ -8,11 +8,27 @@ export interface Draft {
   scope: SearchScope;
   /** The Skill chosen with "/" for the next Question only. */
   skill: string | null;
+  /** Long pastes, each a chip above the text until it is put back, saved as a Document, or asked with. */
+  pastes: Paste[];
 }
+
+/** Text pasted into the composer that was too long to leave in it (DESIGN.md, Composer › Height). */
+export interface Paste {
+  id: string;
+  text: string;
+}
+
+/** A paste over this many characters, or lines, becomes a chip. */
+export const LONG_PASTE_CHARS = 2000;
+export const LONG_PASTE_LINES = 30;
+
+export const linesOf = (text: string) => text.split("\n").length;
+export const isLongPaste = (text: string) =>
+  text.length > LONG_PASTE_CHARS || linesOf(text) > LONG_PASTE_LINES;
 
 export const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
-const EMPTY_DRAFT: Draft = { text: "", scope: NO_SCOPE, skill: null };
+const EMPTY_DRAFT: Draft = { text: "", scope: NO_SCOPE, skill: null, pastes: [] };
 
 interface ComposerState {
   /** By Mind id: switching tabs keeps what was typed in each Mind's composer. */
