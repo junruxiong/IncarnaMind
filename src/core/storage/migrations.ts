@@ -529,7 +529,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 23 is reserved for Topics (docs/designs/library-structure-view.md, T4).
+    // 23 was reserved for Topics, which Folders and Tags replaced (ADR-0012); it stays unused.
     version: 24,
     description: "Each Document's creation date, read without processing it again (#53)",
     sql: `
