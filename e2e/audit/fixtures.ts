@@ -24,7 +24,7 @@ const random = () => {
 };
 const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)] as T;
 
-const TOPICS = {
+const SUBJECTS = {
   "Coastal ecology": [
     "tide",
     "estuary",
@@ -182,7 +182,7 @@ const escapeXml = (text: string) =>
 
 /** A .docx with headings, paragraphs and `images` inline figures. */
 function docxWithImages(title: string, sections: number, images: number): Buffer {
-  const words = TOPICS["Coastal ecology"];
+  const words = SUBJECTS["Coastal ecology"];
   const body: string[] = [];
   const p = (text: string, style?: string) =>
     `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ""}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
@@ -281,7 +281,7 @@ export function writeFixtures(root: string, scaleCount = 0): Fixtures {
     copyFileSync(join(examples, name), join(formats, name));
   }
 
-  const words = TOPICS["Coastal ecology"];
+  const words = SUBJECTS["Coastal ecology"];
   writeFileSync(
     join(formats, "Tide report.pdf"),
     buildPdf([
@@ -385,15 +385,15 @@ export function writeFixtures(root: string, scaleCount = 0): Fixtures {
   let written = 0;
   const scale = join(root, "scale");
   if (scaleCount > 0) {
-    const topics = Object.entries(TOPICS);
+    const subjects = Object.entries(SUBJECTS);
     const years = ["2023", "2024", "2025", "2026"];
     for (let i = 0; i < scaleCount; i++) {
-      const [topic, topicWords] = topics[i % topics.length] as [string, readonly string[]];
+      const [subject, subjectWords] = subjects[i % subjects.length] as [string, readonly string[]];
       const year = pick(years);
-      const dir = join(scale, topic, year, i % 3 === 0 ? "Drafts" : "");
+      const dir = join(scale, subject, year, i % 3 === 0 ? "Drafts" : "");
       mkdirSync(dir, { recursive: true });
       const kind = i % 40 === 0 ? "pdf" : i % 12 === 0 ? "csv" : i % 3 === 0 ? "txt" : "md";
-      const title = `${year}-${String((i % 12) + 1).padStart(2, "0")} ${pick(["Notes on", "Review of", "Memo:", "Draft:", "Summary of", "Minutes —"])} ${pick(topicWords)} ${pick(topicWords)} ${i}`;
+      const title = `${year}-${String((i % 12) + 1).padStart(2, "0")} ${pick(["Notes on", "Review of", "Memo:", "Draft:", "Summary of", "Minutes —"])} ${pick(subjectWords)} ${pick(subjectWords)} ${i}`;
       const name =
         i % 97 === 0
           ? `${title} ${LONG_NAME.slice(0, 80)}`
@@ -408,10 +408,10 @@ export function writeFixtures(root: string, scaleCount = 0): Fixtures {
             {
               lines: [
                 title.replace(/[^\x20-\xff]/g, "-"),
-                ...Array.from({ length: 12 }, () => sentence(topicWords).slice(0, 90)),
+                ...Array.from({ length: 12 }, () => sentence(subjectWords).slice(0, 90)),
               ],
             },
-            { lines: Array.from({ length: 12 }, () => sentence(topicWords).slice(0, 90)) },
+            { lines: Array.from({ length: 12 }, () => sentence(subjectWords).slice(0, 90)) },
           ]),
         );
       } else if (kind === "csv") {
@@ -421,12 +421,12 @@ export function writeFixtures(root: string, scaleCount = 0): Fixtures {
             "Item,Value,Note",
             ...Array.from(
               { length: 40 },
-              (_, r) => `${pick(topicWords)} ${r},${Math.round(random() * 1000)},${pick(FILLER)}`,
+              (_, r) => `${pick(subjectWords)} ${r},${Math.round(random() * 1000)},${pick(FILLER)}`,
             ),
           ].join("\n"),
         );
       } else {
-        const body = Array.from({ length: 3 + (i % 5) }, () => paragraph(topicWords, 4)).join(
+        const body = Array.from({ length: 3 + (i % 5) }, () => paragraph(subjectWords, 4)).join(
           "\n\n",
         );
         writeFileSync(file, kind === "md" ? `# ${title}\n\n${body}\n` : `${title}\n\n${body}\n`);
