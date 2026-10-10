@@ -32,7 +32,7 @@ test("embeddings are off by default; turning them on with a cloud provider warns
   await dismissChatSetup(window);
   await addDocuments(window, [path]);
 
-  // Settings → Document search: off, searching by words, on this computer.
+  // Settings → Search: off, searching by words, on this computer.
   await openSettings(window, "search");
   const section = window.getByTestId("embedding-settings");
   const current = section.getByTestId("embedding-current");

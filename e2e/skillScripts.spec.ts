@@ -160,9 +160,9 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await expect(second).toContainText("scripts/hello.js said: Hello, Dover!");
   await expect(second.getByTestId("approval-card")).toHaveCount(0);
 
-  // Settings: the policy is listed under Approvals and can be revoked; the switch, under
+  // Settings: the policy is listed under Tools and can be revoked; the switch, under
   // Skills, is on.
-  await openSettings(window, "approvals");
+  await openSettings(window, "tools");
   const policy = window.getByTestId("approvals-settings").getByTestId("approval-policy");
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Scripts of greeter");
