@@ -215,6 +215,7 @@ test("a selection of an Answer goes to another Mind through the ▾ picker, with
   await pointAndClick(window, answer.getByTestId("answer-add-to"));
   const picker = window.getByTestId("add-to-picker");
   await expect(picker).toBeVisible();
+  await expect(picker).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(picker.getByTestId("add-to-search")).toBeFocused();
   const options = picker.getByTestId("add-to-option");
   await expect(options.first()).toContainText("This Mind");

@@ -74,6 +74,9 @@ const order = (editor: Locator) =>
 const opacityOf = (locator: Locator) =>
   locator.evaluate((element) => Number(getComputedStyle(element).opacity));
 
+const fontSizeOf = (locator: Locator) =>
+  locator.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+
 const bridge = (window: Page) => ({
   language: (language: "en" | "zh-CN") =>
     window.evaluate(
@@ -130,7 +133,9 @@ test("typing in the composer and pressing Enter asks in the thread above it: the
   await expect(question).toHaveCount(1);
   const words = question.locator(".thread-question-text");
   await expect(words).toHaveText("When do spring tides happen?");
-  await expect(question.locator(".thread-question-bubble")).toHaveCSS("font-size", "16px");
+  // The thread is compact beside the note (DESIGN.md D136): the note's text stays the largest.
+  const noteSize = await fontSizeOf(editor.locator(":scope > p").first());
+  expect(await fontSizeOf(question.locator(".thread-question-bubble"))).toBeLessThan(noteSize);
   const answer = thread.getByTestId("answer");
   await expect(answer).toHaveAttribute("data-status", "streaming");
   // While it is written: the pulsing dot and Stop show; it is read out in a polite live region.
@@ -141,6 +146,7 @@ test("typing in the composer and pressing Enter asks in the thread above it: the
   await expect(live).toHaveText(/Writing the Answer…|Your Documents answer this/);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(live).toHaveText("Your Documents answer this. That is all. The Answer is done.");
+  expect(await fontSizeOf(answer.locator(".answer-content p").first())).toBeLessThan(noteSize);
   await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
 
   // The Citation is checked: found on page 2.
