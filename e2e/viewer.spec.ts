@@ -61,9 +61,6 @@ async function expectMarkBeside(mark: Locator, highlight: Locator, page: Locator
   expect(Math.abs(markBox.y + markBox.height / 2 - line.middle)).toBeLessThanOrEqual(1.5);
 }
 
-const backgroundOf = (locator: Locator) =>
-  locator.evaluate((element) => getComputedStyle(element).backgroundColor);
-
 /** success-wash and warning-wash, as computed. */
 const FOUND_WASH = "rgb(220, 243, 228)";
 const NOT_FOUND_WASH = "rgb(254, 243, 226)";
@@ -294,8 +291,10 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await expect(window.getByTestId("pdf-fit-width")).toHaveAttribute("aria-pressed", "true");
   const scroller = window.getByTestId("pdf-scroller");
   await expect.poll(() => fitsAcross(scroller, page1)).toBe(true);
-  // The page fills the width beside the outline, less the backdrop's margins.
-  expect(await widthOf(page1)).toBeGreaterThan((await widthOf(scroller)) - 2 * 24 - 2);
+  // The page fills the width beside the outline, less the backdrop's margins, and less the
+  // scrollbar where the system always shows one (with a mouse and no trackpad, as on CI).
+  const room = await scroller.evaluate((element) => element.clientWidth);
+  expect(await widthOf(page1)).toBeGreaterThan(room - 2 * 24 - 2);
   await screenshot(viewer, "viewer-fit-width-outline");
 
   // A Word file's pages fit beside its outline too.
@@ -856,7 +855,7 @@ test("a Citation's quote is washed in its check's colour, with its mark beside t
   const page2 = viewer.locator('[data-page-number="2"]');
   const highlights = page2.locator("[data-quote-highlight]");
   await expect(highlights).toHaveCount(2);
-  expect(await backgroundOf(highlights.first())).toBe(FOUND_WASH);
+  await expect(highlights.first()).toHaveCSS("background-color", FOUND_WASH);
   await expect(mark).toHaveText("3");
   await expect(mark).toHaveAttribute("aria-label", "Citation 3: quote found");
   await expect(mark).toHaveAttribute("data-check", "found");
@@ -878,7 +877,7 @@ test("a Citation's quote is washed in its check's colour, with its mark beside t
     "led by exports.",
     "Costs stayed flat.",
   ]);
-  expect(await backgroundOf(highlights.first())).toBe(NOT_FOUND_WASH);
+  await expect(highlights.first()).toHaveCSS("background-color", NOT_FOUND_WASH);
   await expect(mark).toHaveAttribute("data-check", "not-found");
   await expect(mark).toHaveText("2");
   await expect(async () => expectMarkBeside(mark, highlights.first(), page2)).toPass();
@@ -890,7 +889,7 @@ test("a Citation's quote is washed in its check's colour, with its mark beside t
     quote: "Costs stayed flat.",
   });
   await expect(highlights).toHaveText(["Costs stayed flat."]);
-  expect(await backgroundOf(highlights.first())).toBe(FOUND_WASH);
+  await expect(highlights.first()).toHaveCSS("background-color", FOUND_WASH);
   await expect(mark).toHaveCount(0);
 
   // Markdown, in the Mind's serif on a page: each part of an ellipsis quote is washed,
@@ -906,7 +905,7 @@ test("a Citation's quote is washed in its check's colour, with its mark beside t
     "Observation 119: nothing unusual today.",
     "Observation 120: nothing unusual today.",
   ]);
-  expect(await backgroundOf(washed.first())).toBe(FOUND_WASH);
+  await expect(washed.first()).toHaveCSS("background-color", FOUND_WASH);
   await expect(mark).toHaveText("1");
   await expect(async () =>
     expectMarkBeside(mark, washed.first(), text.locator("article")),
