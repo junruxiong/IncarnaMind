@@ -1,0 +1,40 @@
+# Contributing to IncarnaMind
+
+Thank you for helping. Code, testing with your own documents, translations and ideas are all welcome.
+
+## Issues and questions
+
+- Found a bug, or want a feature? [Open an issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose). For a bug, say what you did, what you expected and what happened, and your operating system.
+- Questions and ideas: [Discussions](https://github.com/junruxiong/IncarnaMind/discussions).
+- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) or [help wanted](https://github.com/junruxiong/IncarnaMind/labels/help%20wanted) are a good start. Say in the issue that you're taking it.
+
+## Labels
+
+New issues are triaged with five labels:
+
+| Label | Meaning |
+| --- | --- |
+| `needs-triage` | The maintainer needs to evaluate it |
+| `needs-info` | Waiting on the reporter for more information |
+| `ready-for-agent` | Fully specified, so a coding agent can pick it up without further questions |
+| `ready-for-human` | Needs a person to implement it |
+| `wontfix` | Won't be actioned |
+
+A person is welcome to take any issue that is fully specified, whichever of the two `ready-for-` labels it carries. `docs/agents/` holds the conventions for working on issues, for people and coding agents alike: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)) and how to use the domain docs ([`domain.md`](docs/agents/domain.md)).
+
+## Setting up
+
+You need Node.js 24 or newer. Clone the repository, then run `npm install` and `npm run dev`. [docs/development.md](docs/development.md) covers the scripts, the tests, the evaluation and how the code fits together.
+
+## When you change code
+
+- Use the words defined in [`CONTEXT.md`](CONTEXT.md) (a Passage, not a chunk; a Connector, not a plugin), and say so when a change goes against an ADR in [`docs/adr/`](docs/adr/).
+- Test through the core's public interface, as the UI uses it, and assert what a User would see. The core tests need no API keys and no network.
+- Keep `src/core` free of Electron imports; Biome enforces it.
+- Run `npm run typecheck`, `npm run lint` and `npm test` before opening a pull request. CI runs them, and the smoke tests, on every push.
+- The interface is in English and Simplified Chinese: a new string goes into both dictionaries in `src/shared/i18n/`.
+- Keep pull requests small and say what they change and why.
+
+## Licence
+
+By contributing, you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), like the rest of the project.
