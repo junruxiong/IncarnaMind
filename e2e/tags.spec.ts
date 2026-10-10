@@ -144,11 +144,11 @@ test("without a model, Documents are ready to search, and one notice, not one pe
     await window.keyboard.press("Escape");
   }
 
-  // Its button opens Settings on its Chat model page, where a chat model or a Jev key can be set up.
+  // Its button opens Settings on its Models page, where a chat model or a Jev key can be set up.
   await notice.getByTestId("tagging-waiting-setup").click();
   const settings = window.getByTestId("settings");
   await expect(settings).toBeVisible();
-  await expect(settings).toHaveAttribute("data-page", "chat-model");
+  await expect(settings).toHaveAttribute("data-page", "models");
   await expect(settings.getByTestId("chat-model-settings")).toBeVisible();
   await expect(settings.getByTestId("jev-settings")).toBeVisible();
   await closeSettings(window);

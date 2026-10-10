@@ -104,7 +104,7 @@ function ChatSetup() {
               data-testid="chat-setup-chatgpt"
               onClick={() => {
                 later();
-                openSettings("chat-model");
+                openSettings("models");
               }}
               className={buttonStyle("primary", "lg")}
             >

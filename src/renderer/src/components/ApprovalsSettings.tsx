@@ -14,7 +14,7 @@ import {
 } from "./ui";
 
 /**
- * Settings → Approvals: every policy that replaces a default, so the User
+ * Settings → Tools: every policy that replaces a default, so the User
  * can tighten permissions later. Each Tool always allowed, each Tool set to
  * ask every time (even one its Connector says only reads), and (#41) each
  * Skill whose scripts always run; each can be revoked, back to the default.

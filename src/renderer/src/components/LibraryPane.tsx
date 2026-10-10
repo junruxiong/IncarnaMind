@@ -119,7 +119,7 @@ export function LibraryPane() {
   });
   const organize = () => {
     if (!snapshot?.settings.classifier) {
-      useAppStore.getState().openSettings("organization");
+      useAppStore.getState().openSettings("models");
       return;
     }
     void act(() =>
@@ -214,7 +214,7 @@ export function LibraryPane() {
               className={`${buttonStyle("ghost", "sm")} ml-auto`}
               aria-label={t("library.settingsTitle")}
               title={t("library.settingsTitle")}
-              onClick={() => useAppStore.getState().openSettings("organization")}
+              onClick={() => useAppStore.getState().openSettings("models")}
             >
               <SettingsLineIcon className="size-4" />
             </button>

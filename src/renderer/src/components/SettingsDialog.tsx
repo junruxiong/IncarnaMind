@@ -4,7 +4,8 @@ import type { MessageKey } from "../../../shared/i18n";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
-import { type SettingsPage, settingsPages, useAppStore } from "../store";
+import { type SettingsPage, settingsPages } from "../settingsPages";
+import { useAppStore } from "../store";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
@@ -36,12 +37,11 @@ const languageOptions: readonly { value: LanguagePreference; label: MessageKey }
 /** Each page's name, in the list and as its title. */
 const pageLabels: Record<SettingsPage, MessageKey> = {
   general: "privacy.tabs.general",
-  "chat-model": "providers.settings.title",
-  search: "embeddingProviders.settings.title",
-  organization: "library.settingsTitle",
+  models: "settings.pages.models",
+  search: "settings.pages.search",
+  tools: "settings.pages.tools",
   connectors: "connectors.settings.title",
   skills: "skills.settings.title",
-  approvals: "approvals.settings.title",
   privacy: "privacy.tabs.privacy",
 };
 
@@ -49,8 +49,7 @@ const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
 
 /**
  * Settings, in a native modal <dialog>: a list of pages on the frame on the
- * left (General, Chat model, Document search, Connectors, Skills, Approvals,
- * Privacy), and the chosen page on the right under its serif title.
+ * left (General, Models, Search, Tools, Connectors, Skills, Privacy), and the chosen page on the right under its serif title.
  */
 export function SettingsDialog() {
   const t = useT();
@@ -150,23 +149,36 @@ function PageContent({ page }: { page: SettingsPage }) {
           <AboutSettings />
         </Page>
       );
-    case "chat-model":
+    case "models":
       return (
         <Page>
-          <ChatModelSettings />
+          <Titled title="providers.settings.title">
+            <ChatModelSettings />
+          </Titled>
           <JevSettingsSection />
           <ChatGptPlanSettings />
+          <Titled title="library.settingsTitle" testId="organization-settings">
+            <OrganizationSettings />
+          </Titled>
         </Page>
       );
     case "search":
       return (
         <Page>
-          <EmbeddingSettingsSection />
+          <Titled title="embeddingProviders.settings.title">
+            <EmbeddingSettingsSection />
+          </Titled>
           <RerankSettingsSection />
         </Page>
       );
-    case "organization":
-      return <OrganizationSettings />;
+    case "tools":
+      return (
+        <Page>
+          <Titled title="approvals.settings.title">
+            <ApprovalsSettings />
+          </Titled>
+        </Page>
+      );
     case "connectors":
       return (
         <Page>
@@ -180,12 +192,6 @@ function PageContent({ page }: { page: SettingsPage }) {
           <SkillScriptsSettings />
         </Page>
       );
-    case "approvals":
-      return (
-        <Page>
-          <ApprovalsSettings />
-        </Page>
-      );
     case "privacy":
       return (
         <Page>
@@ -193,6 +199,25 @@ function PageContent({ page }: { page: SettingsPage }) {
         </Page>
       );
   }
+}
+
+/** A section under its title, for a part of a page that has none of its own. */
+function Titled({
+  title,
+  testId,
+  children,
+}: {
+  title: MessageKey;
+  testId?: string;
+  children: ReactNode;
+}) {
+  const t = useT();
+  return (
+    <section data-testid={testId}>
+      <h4 className={`mb-2 ${sectionTitleClass}`}>{t(title)}</h4>
+      {children}
+    </section>
+  );
 }
 
 /** A page's sections, 28px apart. */
