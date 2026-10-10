@@ -56,6 +56,7 @@ describe("Recording a Meeting", () => {
   test("a Meeting starts in a new Mind named for the day, in the interface language", async () => {
     const dataDir = await createTempDataFolder();
     const { core } = await meetingCore(dataDir);
+    expect((await core.getSettings()).meetingAudio).toBe("both");
 
     const meeting = await core.createMeeting();
     const mind = (await core.listMinds()).find((each) => each.id === meeting.mindId);
@@ -281,6 +282,7 @@ describe("The computer's sound", () => {
   test("a computer that can't record its own sound records the microphone", async () => {
     const dataDir = await createTempDataFolder();
     const { core, record } = await meetingCore(dataDir, manualClock(), { systemAudio: false });
+    expect((await core.getSettings()).meetingAudio).toBe("microphone");
     const { id } = await core.createMeeting();
     const started = await core.startMeeting({ meetingId: id });
     expect(started.sources).toEqual({ microphone: "recording", system: "unavailable" });

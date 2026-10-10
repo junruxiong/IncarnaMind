@@ -2,7 +2,8 @@ import { isMacOS } from "@tiptap/core";
 import { useEffect, useId, useState } from "react";
 import type { Meeting } from "../../../core/api";
 import { useLanguage, useT } from "../i18n";
-import { clockTime, useMeetingOf, useMeetings } from "../meetings";
+import { useMeetingOf, useMeetings } from "../meetings";
+import { clockTime } from "../meetingTime";
 import { useAppStore } from "../store";
 import { CloseLineIcon, RecordingLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
@@ -10,12 +11,14 @@ import { buttonStyle, fieldLabelClass, inputClass } from "./ui";
 
 /**
  * A Meeting's place in its Mind, under the title: the start block while it is
- * ready, then a line about its audio, with "Delete audio now".
+ * ready; once it is paused or stopped, a line about its audio, with "Delete
+ * audio now". While it records, the meeting bar is all there is.
  */
 export function MeetingInMind({ mindId }: { mindId: string }) {
   const meeting = useMeetingOf(mindId);
   if (!meeting) return null;
   if (meeting.status === "ready") return <MeetingStart meeting={meeting} />;
+  if (meeting.status === "recording") return null;
   return <MeetingAudioLine meeting={meeting} />;
 }
 
@@ -131,10 +134,7 @@ function MeetingStart({ meeting }: { meeting: Meeting }) {
   );
 }
 
-/**
- * Under the title once recording has started: how long was recorded, how
- * long the audio stays on this computer, and "Delete audio now".
- */
+/** How long was recorded, how long the audio stays on this computer, and "Delete audio now". */
 function MeetingAudioLine({ meeting }: { meeting: Meeting }) {
   const t = useT();
   const language = useLanguage();
