@@ -12,6 +12,11 @@
  *   and queued again at the front. Such a server serves one request at a
  *   time, so the Answer would otherwise wait behind it. A call to a cloud
  *   provider finishes: aborting it would waste paid tokens, for no gain.
+ *
+ * A Meeting being recorded comes first in the same way (#135): while its
+ * audio is captured no job starts, and a local call in flight gives way, so
+ * the computer's attention stays on the live capture. Jobs go on once the
+ * recording pauses or stops.
  */
 
 /** One piece of background work: as a rule, one model call. */
@@ -51,6 +56,8 @@ export interface BackgroundQueue {
    * is, no job starts; when one starts, a local call in flight gives way.
    */
   setAnswering(answering: boolean): void;
+  /** Whether a Meeting's audio is being captured, each time that changes: held back in the same way. */
+  setRecording(recording: boolean): void;
   /** Stops for good: the job in flight is aborted, and those waiting are dropped. */
   close(): void;
 }
@@ -69,7 +76,9 @@ export function createBackgroundQueue(options: {
   const waiting: BackgroundJob[] = [];
   let running: Running | null = null;
   let answering = false;
+  let recording = false;
   let closed = false;
+  const held = () => answering || recording;
 
   const giveWay = (run: Running) => {
     if (run.gaveWay) return;
@@ -79,7 +88,7 @@ export function createBackgroundQueue(options: {
 
   /** Starts the next job, unless one is in flight, an Answer is being written, or none waits. */
   function next(): void {
-    if (closed || answering || running) return;
+    if (closed || held() || running) return;
     const job = waiting.shift();
     if (!job) return;
     const run: Running = { job, controller: new AbortController(), local: false, gaveWay: false };
@@ -91,7 +100,7 @@ export function createBackgroundQueue(options: {
       },
       runsLocally() {
         run.local = true;
-        if (answering && running === run) giveWay(run);
+        if (held() && running === run) giveWay(run);
       },
     };
     let done: Promise<void>;
@@ -113,6 +122,15 @@ export function createBackgroundQueue(options: {
       });
   }
 
+  function changedHold(): void {
+    if (held()) {
+      if (running?.local) giveWay(running);
+    } else {
+      // Not from inside the code that ended the Answer or the recording: on a later turn.
+      queueMicrotask(next);
+    }
+  }
+
   return {
     add(job) {
       if (closed) return;
@@ -123,12 +141,13 @@ export function createBackgroundQueue(options: {
     setAnswering(value) {
       if (closed || value === answering) return;
       answering = value;
-      if (answering) {
-        if (running?.local) giveWay(running);
-      } else {
-        // Not from inside the code that ended the Answer: on a later turn.
-        queueMicrotask(next);
-      }
+      changedHold();
+    },
+
+    setRecording(value) {
+      if (closed || value === recording) return;
+      recording = value;
+      changedHold();
     },
 
     close() {

@@ -7,7 +7,7 @@
  */
 import type { ChildProcess } from "node:child_process";
 import type { AnswerEngine } from "./answers/engine";
-import type { ExternalService, SandboxLevel, SecretProtection } from "./api";
+import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { WatchFolder } from "./documents/watcher";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
@@ -369,6 +369,52 @@ export interface UsageDataSender {
   capture(message: UsageEventMessage): void;
 }
 
+/** Meetings record 16 kHz mono, as 16-bit samples: what speech-to-text reads, at a third of the size of 48 kHz. */
+export const MEETING_SAMPLE_RATE = 16_000;
+
+/**
+ * What a capture says about one source (see `AudioCapture`):
+ * - "recording": its audio is coming in, again after a device change too;
+ * - "denied": the OS or the User doesn't allow it;
+ * - "unavailable": there is no such device, or this computer can't record it;
+ * - "ended": it stopped and couldn't be started again.
+ */
+export type CaptureState = "recording" | "denied" | "unavailable" | "ended";
+
+/** Where a capture delivers what it hears. */
+export interface AudioSink {
+  /** Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit. */
+  audio(source: AudioSource, samples: Int16Array): void;
+  /** A source started, couldn't start, or stopped. */
+  state(source: AudioSource, state: CaptureState): void;
+}
+
+/** One recording in progress, from `AudioCapture.start`. */
+export interface CaptureSession {
+  /** Stops capturing. Resolves once the last samples have reached the sink. */
+  stop(): Promise<void>;
+}
+
+/**
+ * Records a Meeting's audio: the microphone, and the computer's own sound (the
+ * other people on a call) where the OS lets an app hear it. The desktop app
+ * captures in a hidden window of its own (src/main/meetings, ADR-0015); tests
+ * pass a fake that makes a tone or silence. The core keeps the recording's
+ * state and writes what comes in to disk.
+ */
+export interface AudioCapture {
+  /** Whether this computer can record its own sound at all: not on Linux, for now. */
+  readonly systemAudio: boolean;
+  /**
+   * Starts capturing the microphone, and the computer's sound when
+   * `systemAudio` is true. Never throws: each source's state reaches the sink,
+   * including a source that can't start.
+   */
+  start(request: { systemAudio: boolean }, sink: AudioSink): CaptureSession;
+  /** Opens the system's settings where the User allows IncarnaMind to record this source. */
+  openSettings(source: AudioSource): Promise<void>;
+}
+
 export interface CoreAdapters {
   paths: Paths;
   /** The OS's preferred languages, most preferred first, as BCP 47 tags such as "zh-Hans-CN". */
@@ -476,6 +522,11 @@ export interface CoreAdapters {
    * says IncarnaMind collects no usage data.
    */
   usageData?: UsageDataSender;
+  /**
+   * Records Meetings (see `AudioCapture`). Absent (tests that aren't about
+   * Meetings): Meetings can't start.
+   */
+  audioCapture?: AudioCapture;
   /** Where the core logs what happens (see `Logger`). None by default. */
   log?: Logger;
 }

@@ -1509,4 +1509,5 @@ export const en = {
     "Every claim gets a mark in the margin: {mark} when the quote is found in your Document. Click it to open the page.",
   "startGuide.example.lead": "Want to see it first?",
   "startGuide.example.open": "Open the example Mind",
+  "meetings.mindTitle": "Meeting, {date}",
 } as const satisfies Record<string, string>;
