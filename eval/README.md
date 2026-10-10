@@ -78,6 +78,7 @@ Keyword search's top 20 reranked, the gate until keyword search's top 60, missed
 - **Small-to-big's index:** built in memory, in a database of the evaluation's own, so the app's schema doesn't change. The report gives its size and build time, next to the Passages' own keyword index built the same way. It also counts how often scoring a Passage by its best sub-chunk, and by the sum of its sub-chunks' scores, put the expected Passage among the 20 candidates: only the best sub-chunk is reranked.
 - **BM25 in memory:** keyword + feedback terms and document first score with BM25 computed in memory (`lib/corpus.ts`), as FTS5's `bm25()` computes it (k1 1.2, b 0.75), since FTS5 can't weigh one query term more than another, or score Passages by one Document's own term statistics. A unit test checks that it ranks and scores as FTS5 does.
 - **Changing the default:** none of these changes the app's search. They were measured to choose what the search Tool does; keyword search's top 60, then one of them, was chosen (see the results of 2026-10-10).
+
 ### Citation quality
 
 Citation quality needs a chat model. Give one with environment variables:
@@ -102,7 +103,7 @@ npm run eval
   npm run eval
   ```
 
-  These ten are the gating Questions whose Citations the long PDFs made hardest to get found (`tests/eval/smallModelCitations.test.ts`), each now handled by the engine or the check: an answer on the second page of a two-page Passage (en-02, en-08, zh-02), or across a page break (en-17), which structured output now places; JP Morgan's report, whose stored text lost its f-ligatures (en-07, en-19); pages in traditional characters (zh-02, zh-04, zh-14, zh-17); and a Passage over four pages (zh-08, zh-14). In this library of English and Chinese Documents, each Answer also makes one short call to translate its query and a second search. Such a run should take 10 to 15 minutes on an Apple M2 Max: about 5 to process and search the Documents, as always, then the ten Answers, while the model also tags the 12 Documents.
+  These ten are the gating Questions whose Citations the long PDFs made hardest to get found (`tests/eval/smallModelCitations.test.ts`), each now handled by the engine or the check: an answer on the second page of a two-page Passage (en-02, en-08, zh-02), or across a page break (en-17), which structured output now places; JP Morgan's report, whose stored text lost its f-ligatures (en-07, en-19); pages in traditional characters (zh-02, zh-04, zh-14, zh-17); and a Passage over four pages (zh-08, zh-14). In this library of English and Chinese Documents, each Answer also makes one short call to translate its query and a second search. Such a run should take about 20 minutes on an Apple M2 Max: about 12 to process and search the Documents, as always, seven of them for the other ways to find the candidates, then the ten Answers, while the model also tags the 12 Documents.
 
 ### Cloud embeddings
 
