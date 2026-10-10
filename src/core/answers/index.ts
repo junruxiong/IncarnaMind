@@ -780,6 +780,8 @@ export function createAnswers(options: AnswersOptions) {
         searchDocuments: (query, signal) => session.tools.searchDocuments(query, signal),
         cite: (records, citeOptions) => session.tools.cite(records, citeOptions),
         hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
+        unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
+        correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
       const scripts = opened.hasScripts && options.scripts.enabled();
