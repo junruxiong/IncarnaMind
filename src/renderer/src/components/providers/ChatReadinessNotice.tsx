@@ -1,13 +1,14 @@
 import type { ChatReadiness } from "../../../../core/api";
 import { useT } from "../../i18n";
-import { type SettingsPage, useAppStore } from "../../store";
+import type { SettingsPage } from "../../settingsPages";
+import { useAppStore } from "../../store";
 import { buttonStyle } from "../ui";
 import { readinessKey, serviceName } from "./shared";
 
-/** Where to fix it: a declined data flow is allowed again on the Privacy page, the rest under Chat model. */
+/** Where to fix it: a declined data flow is allowed again on the Privacy page, the rest under Models. */
 export const settingsPageFor = (
   readiness: Extract<ChatReadiness, { ready: false }>,
-): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "chat-model");
+): SettingsPage => (readiness.reason === "consent-declined" ? "privacy" : "models");
 
 /** What to configure before Questions can be asked. */
 export function ReadinessExplanation({

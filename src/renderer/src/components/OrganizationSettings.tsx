@@ -5,7 +5,7 @@ import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
+import { buttonStyle, errorTextClass, fieldLabelClass, inputClass, pageIntroClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
 
@@ -33,7 +33,7 @@ export function OrganizationSettings() {
   };
   return (
     <section>
-      <p className="text-ink-secondary">{t("library.settingsIntro")}</p>
+      <p className={pageIntroClass}>{t("library.settingsIntro")}</p>
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}
@@ -237,13 +237,6 @@ function ClassifierForm({
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="submit" disabled={busy} className={buttonStyle("primary")}>
           {t("library.saveModel")}
-        </button>
-        <button
-          type="button"
-          className={buttonStyle("ghost")}
-          onClick={() => useAppStore.getState().openSettings("chat-model")}
-        >
-          {t("library.connectModel")}
         </button>
       </div>
     </form>

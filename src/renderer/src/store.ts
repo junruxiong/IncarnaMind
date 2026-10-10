@@ -25,25 +25,9 @@ import type { DocumentLocation } from "../../shared/documentViewer";
 import { core, files } from "./core";
 import { type LibraryBridge, mindToAskIn } from "./libraryBridges";
 import { matchesTags, NEEDS_REVIEW } from "./libraryFilters";
+import { isSettingsPage, type SettingsPage } from "./settingsPages";
 
 type Status = { kind: "loading" } | { kind: "ready" } | { kind: "failed"; message: string };
-
-/** The pages of the Settings dialog, in the order its list shows them. */
-export const settingsPages = [
-  "general",
-  "chat-model",
-  "search",
-  "organization",
-  "connectors",
-  "skills",
-  "approvals",
-  "privacy",
-] as const;
-
-export type SettingsPage = (typeof settingsPages)[number];
-
-const isSettingsPage = (page: unknown): page is SettingsPage =>
-  settingsPages.some((each) => each === page);
 
 /**
  * A folder the User picked to link, while the link dialog shows what linking
@@ -194,7 +178,7 @@ interface AppState {
   toggleViewer(): void;
   /**
    * Opens Settings at a page: the general one unless asked otherwise, e.g.
-   * Chat model to set one up, or Privacy to allow a declined flow.
+   * Models to set one up, or Privacy to allow a declined flow.
    */
   openSettings(page?: SettingsPage): void;
   closeSettings(): void;
