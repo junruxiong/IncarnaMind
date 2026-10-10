@@ -298,6 +298,75 @@
   }
 
   /*
+   * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
+   * is a flex item as before). Hidden, it is out to the left of the window,
+   * and slides over the content (peeking) when the pointer touches the left
+   * edge or keyboard focus is in it; with reduced motion it fades instead.
+   */
+  .sidebar-panel {
+    display: contents;
+  }
+  .sidebar-panel[data-hidden] {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    z-index: 30;
+    display: flex;
+    width: var(--sidebar-width);
+    background: var(--color-frame);
+    transform: translateX(-100%);
+    transition:
+      transform 160ms ease-out,
+      box-shadow 160ms ease-out;
+
+    &[data-open] {
+      transform: none;
+      box-shadow: var(--shadow-popover);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-panel[data-hidden] {
+      transform: none;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 80ms linear;
+
+      &[data-open] {
+        opacity: 1;
+        pointer-events: auto;
+      }
+    }
+  }
+  /* The pointer's hot strip along the window's left edge while the sidebar is hidden. */
+  .sidebar-edge {
+    position: absolute;
+    inset-block: 44px 0;
+    left: 0;
+    z-index: 25;
+    width: 6px;
+  }
+  /* Hidden, the card goes to the window's left, 8px in like its other edges. */
+  .app-card[data-sidebar-hidden] {
+    margin-left: 8px;
+  }
+  /*
+   * The sidebar button in the card's tab band (src/renderer/src/components/SidebarToggle.tsx):
+   * on macOS, hidden, the traffic lights are over the band's left end, so it
+   * starts after them (84px from the window's edge, where the button is in the sidebar's
+   * header); elsewhere it opens the strip.
+   */
+  .mind-tabs > .sidebar-toggle {
+    align-self: center;
+    margin: 0 6px 0 8px;
+  }
+  :root[data-title-bar="inset"]:not([data-full-screen]) .app-card[data-sidebar-hidden] .mind-tabs {
+    padding-left: calc(var(--window-buttons-left) - 8px);
+  }
+  :root[data-title-bar="inset"] .app-card[data-sidebar-hidden] .mind-tabs > .sidebar-toggle {
+    margin-left: 0;
+  }
+
+  /*
    * The card (DESIGN.md, Layout): everything right of the sidebar, 8px from
    * the sidebar and from the window's top, right and bottom edges, radius 10
    * with a 1px rule edge drawn over its content, no shadow. Its 36px band
