@@ -232,17 +232,29 @@ function answerSentences(
   return sentences;
 }
 
+/** An f-ligature's letters: "ffi", "ffl", "ff", "fi" or "fl". */
+const F_LIGATURE = /f(?:f[il]?|[il])/g;
+
 /**
  * The looser normalisation: the shared one, then accents dropped, lower case,
  * and only letters and digits kept, so punctuation, spacing, hyphens and
- * quote marks can't stop a match.
+ * quote marks can't stop a match. An f-ligature's letters are read as one
+ * "f" too: some PDFs' text lost the letters after it, so a page shows
+ * "finance" where its stored text reads "fnance" (JP Morgan's ESG report),
+ * and a quote of the page as it shows is still on it.
  */
 function looseText(text: string): string {
-  return normaliseText(text)
+  let loose = normaliseText(text)
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]/gu, "");
+  // Until nothing changes: "fifty" reads "ffty", then "fty", as a lost ligature's "ffty" does.
+  for (let before = ""; before !== loose; ) {
+    before = loose;
+    loose = loose.replace(F_LIGATURE, "f");
+  }
+  return loose;
 }
 
 type PageText = { page: number | null; text: string };
