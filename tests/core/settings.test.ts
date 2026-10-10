@@ -10,6 +10,7 @@ describe("Settings", () => {
       user: { language: "system", chatModel: null },
       device: {
         sidebarWidth: 248,
+        sidebarHidden: false,
         viewerWidth: null,
         openMinds: [],
         activeMind: null,
@@ -90,6 +91,7 @@ describe("Settings", () => {
     expect(settings.user).toEqual({ language: "zh-CN", chatModel: null });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
+      sidebarHidden: false,
       viewerWidth: null,
       openMinds: [],
       activeMind: null,
@@ -126,6 +128,7 @@ describe("Settings", () => {
     const before = startCore(dataDir);
     const device = {
       sidebarWidth: 300,
+      sidebarHidden: true,
       viewerWidth: 500,
       openMinds: ["mind-b", "mind-a"],
       activeMind: "mind-a",
