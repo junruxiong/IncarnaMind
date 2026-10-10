@@ -23,6 +23,8 @@
  *   an Answer is told to search again. A hit in either top 5 counts: the
  *   model sees both searches' Passages. The translation is written by hand,
  *   so this is the most the approach can bring.
+ * - Paraphrase Questions: asked in words that avoid their passage's own, as a
+ *   group of their own, out of the gating counts.
  */
 import {
   BUILT_IN_RERANKING_MODEL,
@@ -33,7 +35,12 @@ import {
 } from "../../src/core";
 import { SEARCH_TOOL_PARAMETERS, topsOfEach } from "../../src/core/documents/searchTool";
 import { findQuote } from "../../src/shared/quoteMatch";
-import type { EvalLanguage, EvalQuestion, ExpectedPassage } from "./evaluationSet";
+import {
+  type EvalLanguage,
+  type EvalQuestion,
+  type ExpectedPassage,
+  isGating,
+} from "./evaluationSet";
 import type { OpenReranker, RerankerInfo } from "./rerank";
 
 export const TOP_K = 5;
@@ -128,6 +135,8 @@ export interface QuestionResult {
   id: string;
   language: EvalLanguage;
   crossLingual: boolean;
+  /** A paraphrase Question: reported apart, never gating. */
+  paraphrase?: boolean;
   question: string;
   modes: Partial<Record<RetrievalMode, ModeResult>>;
   /** The hand-written translation searched as a second query, if the Question has one. */
@@ -161,7 +170,17 @@ export interface Tally {
   total: number;
 }
 
-/** A mode's hits: per language and overall over the gating Questions, and over the cross-lingual ones. */
+/** Hits in each language, and in both. */
+export interface LanguageTallies {
+  en: Tally;
+  zh: Tally;
+  all: Tally;
+}
+
+/**
+ * A mode's hits: per language and overall over the gating Questions, over
+ * the cross-lingual ones, and over the paraphrase ones.
+ */
 export interface ModeSummary {
   en: Tally;
   zh: Tally;
@@ -173,6 +192,8 @@ export interface ModeSummary {
    * query isn't searched in (keyword, vector).
    */
   crossLingualTranslated: Tally | null;
+  /** The paraphrase Questions, per language: out of `en`, `zh` and `core`, so the gating counts stay comparable. */
+  paraphrase: LanguageTallies;
 }
 
 export interface RetrievalRun {
@@ -323,6 +344,7 @@ export async function runRetrieval(
       id: question.id,
       language: question.language,
       crossLingual: question.crossLingual,
+      ...(question.paraphrase && { paraphrase: true }),
       question: question.question,
       modes: {},
     };
@@ -395,6 +417,18 @@ const tally = (results: readonly QuestionResult[], mode: RetrievalMode): Tally =
   total: results.length,
 });
 
+const byLanguage = (results: readonly QuestionResult[], mode: RetrievalMode): LanguageTallies => ({
+  en: tally(
+    results.filter((result) => result.language === "en"),
+    mode,
+  ),
+  zh: tally(
+    results.filter((result) => result.language === "zh"),
+    mode,
+  ),
+  all: tally(results, mode),
+});
+
 /** The modes the results have, the core's search modes first, in the order they were run. */
 export function modesOf(results: readonly QuestionResult[]): RetrievalMode[] {
   const modes = new Set<RetrievalMode>();
@@ -408,23 +442,20 @@ export function summarise(
   results: readonly QuestionResult[],
   modes: readonly RetrievalMode[] = modesOf(results),
 ): Partial<Record<RetrievalMode, ModeSummary>> {
-  const core = results.filter((result) => !result.crossLingual);
+  const core = results.filter(isGating);
   const crossLingual = results.filter((result) => result.crossLingual);
+  const paraphrase = results.filter((result) => result.paraphrase && !result.crossLingual);
   const withTranslation = crossLingual.filter((result) => result.translated);
   const summary: Partial<Record<RetrievalMode, ModeSummary>> = {};
   for (const mode of modes) {
     const translatedSearched = withTranslation.some((result) => result.translated?.[mode]);
+    const gating = byLanguage(core, mode);
     summary[mode] = {
-      en: tally(
-        core.filter((result) => result.language === "en"),
-        mode,
-      ),
-      zh: tally(
-        core.filter((result) => result.language === "zh"),
-        mode,
-      ),
-      core: tally(core, mode),
+      en: gating.en,
+      zh: gating.zh,
+      core: gating.all,
       crossLingual: tally(crossLingual, mode),
+      paraphrase: byLanguage(paraphrase, mode),
       crossLingualTranslated: translatedSearched
         ? {
             hits: withTranslation.filter(

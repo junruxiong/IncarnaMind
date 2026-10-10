@@ -225,7 +225,7 @@ describe("The every-format set's report", () => {
       evaluationSet: {
         source: "",
         hitRule: "",
-        questions: { gating: { en: 0, zh: 0 }, crossLingual: 0 },
+        questions: { gating: { en: 0, zh: 0 }, crossLingual: 0, paraphrase: 0 },
       },
       documents: [],
       retrieval: { topK: 5, gatingMode: GATING_MODE, runs: [{ ...RETRIEVAL, gating: true }] },
