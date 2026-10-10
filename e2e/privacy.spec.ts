@@ -76,7 +76,20 @@ test("the Privacy page lists the data flows and the update check, and offers no 
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       return bridge.getPrivacySettings();
     }),
-  ).toEqual({ crashReports: { available: false, enabled: false }, automaticUpdateChecks: false });
+  ).toEqual({
+    crashReports: { available: false, enabled: false },
+    automaticUpdateChecks: false,
+    // Nor usage data: a copy built without an analytics project neither sends it nor asks.
+    usageData: {
+      available: false,
+      enabled: false,
+      testerBuild: false,
+      asked: false,
+      localMode: false,
+    },
+  });
+  await expect(privacy.locator('[data-traffic-id="usage-data"]')).toHaveCount(0);
+  await expect(window.getByTestId("usage-data-dialog")).toBeHidden();
   await app.close();
 
   // The choice about update checks is kept.

@@ -10,6 +10,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { USAGE_DATA_DETAILS_URL } from "./UsageDataDialog";
 import {
   buttonStyle,
   pageIntroClass,
@@ -30,14 +31,18 @@ const reportError = (failure: unknown) =>
  * Settings → Privacy: everything IncarnaMind sends from this computer, in one
  * place, as rows split by rules with each status on the right. Every
  * registered data flow with its consent (revoke, allow), network traffic that
- * carries nothing of the User's (with the update-check switch), what Skill
- * scripts can do, and crash reports when this copy can send them.
+ * carries nothing of the User's (with the switches for update checks and,
+ * when this copy can send it, usage data), what Skill scripts can do, and
+ * crash reports when this copy can send them.
  */
 export function PrivacySettings() {
   const t = useT();
   const [flows, setFlows] = useState<RegisteredDataFlow[] | null>(null);
   const [traffic, setTraffic] = useState<NetworkTraffic[] | null>(null);
-  const [choices, setChoices] = useState<PrivacyChoices | null>(null);
+  // As loaded with the app, until the core's answer below.
+  const [choices, setChoices] = useState<PrivacyChoices | null>(
+    () => useAppStore.getState().privacy,
+  );
 
   const refreshFlows = useCallback(() => {
     core.listRegisteredDataFlows().then(setFlows, reportError);
@@ -90,6 +95,10 @@ export function PrivacySettings() {
             enabled: patch.crashReports ?? current.crashReports.enabled,
           },
           automaticUpdateChecks: patch.automaticUpdateChecks ?? current.automaticUpdateChecks,
+          usageData: {
+            ...current.usageData,
+            enabled: patch.usageData ?? current.usageData.enabled,
+          },
         },
     );
     try {
@@ -103,7 +112,9 @@ export function PrivacySettings() {
 
   return (
     <div data-testid="privacy-settings" className="flex flex-col gap-7">
-      <p className={pageIntroClass}>{t("privacy.intro")}</p>
+      <p className={pageIntroClass}>
+        {t(choices?.usageData.available ? "privacy.intro.usageData" : "privacy.intro")}
+      </p>
 
       <section data-testid="consent-settings" className="flex flex-col">
         <h4 className={sectionTitleClass}>{t("consent.settings.title")}</h4>
@@ -119,14 +130,23 @@ export function PrivacySettings() {
         <h4 className={sectionTitleClass}>{t("privacy.traffic.title")}</h4>
         <p className={sectionNoteClass}>{t("privacy.traffic.intro")}</p>
         <ul className={ruledListClass}>
-          {traffic?.map((item) => (
-            <TrafficItem
-              key={`${item.id} ${item.service.id}`}
-              traffic={item}
-              choices={choices}
-              onChange={(patch) => void update(patch)}
-            />
-          ))}
+          {traffic?.map((item) =>
+            item.id === "usage-data" && choices ? (
+              <UsageDataItem
+                key={`${item.id} ${item.service.id}`}
+                traffic={item}
+                usageData={choices.usageData}
+                onChange={(enabled) => void update({ usageData: enabled })}
+              />
+            ) : (
+              <TrafficItem
+                key={`${item.id} ${item.service.id}`}
+                traffic={item}
+                choices={choices}
+                onChange={(patch) => void update(patch)}
+              />
+            ),
+          )}
         </ul>
       </section>
 
@@ -296,6 +316,94 @@ function ServiceDecision({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Usage data, listed with the other traffic: where it goes, what it is, and
+ * its switch, which local mode keeps off; the install ID's reset; and a link
+ * to every event and field.
+ */
+function UsageDataItem({
+  traffic,
+  usageData,
+  onChange,
+}: {
+  traffic: NetworkTraffic;
+  usageData: PrivacyChoices["usageData"];
+  onChange(enabled: boolean): void;
+}) {
+  const t = useT();
+  const id = useId();
+  const [reset, setReset] = useState(false);
+  const resetId = async () => {
+    try {
+      await core.resetUsageInstallId();
+      setReset(true);
+    } catch (failure) {
+      reportError(failure);
+    }
+  };
+  return (
+    <li
+      data-testid="network-traffic-item"
+      data-traffic-id={traffic.id}
+      data-enabled={usageData.enabled}
+      className={ruledRowClass}
+    >
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-ui break-words text-ink">
+          <label htmlFor={`${id}-switch`} className="font-semibold">
+            {t("privacy.traffic.usage-data")}
+          </label>
+          <span className="text-ink-meta"> · {traffic.service.name}</span>
+        </p>
+        <p id={`${id}-description`} className={rowTextClass}>
+          {t("privacy.traffic.usage-data.description")}
+          {usageData.testerBuild && ` ${t("privacy.usageData.tester")}`}
+        </p>
+        {usageData.localMode && (
+          <p data-testid="usage-data-local-mode" className={rowTextClass}>
+            {t("privacy.usageData.localMode")}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+          <a
+            href={USAGE_DATA_DETAILS_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[13px] leading-5 text-accent underline-offset-2 hover:text-accent-strong hover:underline"
+          >
+            {t("privacy.usageData.details")}
+          </a>
+          <button
+            type="button"
+            data-testid="usage-data-reset-id"
+            onClick={() => void resetId()}
+            className={buttonStyle("secondary", "sm")}
+          >
+            {t("privacy.usageData.resetId")}
+          </button>
+          {reset && (
+            <span role="status" className={rowStatusClass}>
+              {t("privacy.usageData.resetDone")}
+            </span>
+          )}
+        </div>
+      </div>
+      <input
+        id={`${id}-switch`}
+        type="checkbox"
+        role="switch"
+        data-testid="usage-data-switch"
+        aria-describedby={`${id}-description`}
+        disabled={usageData.localMode}
+        checked={usageData.enabled}
+        aria-checked={usageData.enabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="switch"
+      />
+    </li>
   );
 }
 

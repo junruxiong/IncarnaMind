@@ -5,6 +5,7 @@ import type {
   LibrarySettings,
   LibrarySnapshot,
 } from "./library/types";
+import type { UiUsageEvent } from "./usageEvents";
 
 export type {
   ClassificationStatus,
@@ -1760,6 +1761,9 @@ export interface RegisteredDataFlow {
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
  *   carry the User's content, are the "connectors" data flow.
+ * - "usage-data": anonymous product events (src/core/usageEvents.ts), only
+ *   while the User agrees, and only from a copy built with an analytics
+ *   project (see `PrivacySettings.usageData`).
  */
 export const networkTrafficIds = [
   "update-check",
@@ -1768,6 +1772,7 @@ export const networkTrafficIds = [
   "ollama-pull",
   "chatgpt-sign-in",
   "remote-connectors",
+  "usage-data",
 ] as const;
 
 export type NetworkTrafficId = (typeof networkTrafficIds)[number];
@@ -1780,7 +1785,34 @@ export interface NetworkTraffic {
   enabled: boolean;
 }
 
-/** The privacy choices on this device. IncarnaMind collects no usage data, whatever they are. */
+/**
+ * Usage data (#187): anonymous product events, such as "a Question was asked
+ * with a local model", never the User's files, Questions or Answers. Every
+ * event and field is listed in src/core/usageEvents.ts.
+ */
+export interface UsageDataSettings {
+  /**
+   * Whether this copy of IncarnaMind can send usage data: only a build made
+   * with an analytics project can. Without one, nothing is sent or asked.
+   */
+  available: boolean;
+  /** Usage data is being sent now. */
+  enabled: boolean;
+  /**
+   * A test build (the alpha): usage data is on until the User turns it off,
+   * and the first run says so. Otherwise it is off until the User agrees.
+   */
+  testerBuild: boolean;
+  /**
+   * The User has answered the first run's question about usage data (in a
+   * test build, closed its notice), or chosen on the Privacy page.
+   */
+  asked: boolean;
+  /** Local mode ("Keep everything on this computer") is on, which keeps usage data off. */
+  localMode: boolean;
+}
+
+/** The privacy choices on this device. */
 export interface PrivacySettings {
   crashReports: {
     /**
@@ -1794,12 +1826,19 @@ export interface PrivacySettings {
   };
   /** IncarnaMind checks GitHub Releases for a new version when it starts. On by default. */
   automaticUpdateChecks: boolean;
+  usageData: UsageDataSettings;
 }
 
 /** The choices to change; the others are kept. */
 export interface PrivacySettingsPatch {
   crashReports?: boolean;
   automaticUpdateChecks?: boolean;
+  /**
+   * Sends usage data, or stops at once, dropping what is queued. Either
+   * answers the first run's question. Refused if this copy can't send usage
+   * data, and turning it on while local mode is on.
+   */
+  usageData?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -2604,6 +2643,15 @@ export interface CoreApi {
    */
   updatePrivacySettings(patch: PrivacySettingsPatch): Promise<PrivacySettings>;
   /**
+   * Usage data from the interface, such as a Citation opened: sent only while
+   * the User agrees. Checked against src/core/usageEvents.ts either way:
+   * throws InvalidInputError for an event the interface doesn't send, or a
+   * field that isn't declared or doesn't fit.
+   */
+  recordUsage(event: UiUsageEvent): Promise<void>;
+  /** Gives this install a new random ID: events from now on carry it instead of the old one. */
+  resetUsageInstallId(): Promise<void>;
+  /**
    * The Folders of every Linked folder, as a flat list in name order (ignoring
    * case). Build the tree from each Folder's `parentId`; siblings keep the
    * list's order. Each Linked folder's own Folder has no parent.
@@ -3022,6 +3070,8 @@ const methods: Record<CoreApiMethod, true> = {
   listNetworkTraffic: true,
   getPrivacySettings: true,
   updatePrivacySettings: true,
+  recordUsage: true,
+  resetUsageInstallId: true,
   listFolders: true,
   getLibrary: true,
   createLibraryGroup: true,
