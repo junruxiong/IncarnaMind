@@ -328,19 +328,27 @@ export const MAX_CITED_PAGES = 2;
  * Where in a Document a Citation points, as its short label shows it
  * (ADR-0011), stored with it so the label still reads after the Document is
  * gone. Language-neutral: the label is worded when shown ("p. 4", "slide 4",
- * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "lines 120–134").
+ * "Revenue, rows 12–14", "§ 2.1 Sensitivity", "§ 2 Costs, comment by
+ * Reviewer", "lines 120–134").
  * - "page", "slide": the cited pages or slides.
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
  *   the first heading. `notes`: a Word file's footnotes and endnotes.
+ *   `comment`: the quote is in a Word comment anchored in that section, by
+ *   its author (null when the file names none) (#76).
  * - "lines": the lines the quote covers, or the cited block's.
  */
 export type CitationLocation =
   | { kind: "page" | "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
-  | { kind: "section"; heading: string | null; notes?: boolean };
+  | {
+      kind: "section";
+      heading: string | null;
+      notes?: boolean;
+      comment?: { author: string | null };
+    };
 
 /**
  * A Citation's attributes, as stored on its node in the Mind's Yjs document.

@@ -10,7 +10,8 @@
  * A Citation names one Unit, or two consecutive ones in the same sheet or
  * Document, and its quote is checked against their stored text. Anchors map
  * spans of a Unit's text back to what a preview can highlight (a cell, a
- * paragraph, a slide's notes); only the viewer and a Citation's label need them.
+ * paragraph, a slide's notes, a Word comment); only the viewer, a Citation's
+ * label and the marks in the Passages a model reads need them.
  *
  * Pure, with no Node or DOM imports: the processing worker, the core and the
  * renderer all use it.
@@ -39,6 +40,11 @@ export interface UnitLabel {
   part?: number;
   /** section: the Word file's footnotes and endnotes, gathered at the end. */
   notes?: boolean;
+  /**
+   * section: the Word comments anchored in it, in order, read after its own
+   * text: each one's anchor and its author.
+   */
+  comments?: UnitComment[];
   /** slide: its title, if it has one. */
   title?: string;
   /** slide: hidden in a slide show. */
@@ -56,6 +62,13 @@ export interface UnitLabel {
   header?: boolean;
 }
 
+/** A Word comment in a section's text: the target of its anchor ("comment3") and who wrote it. */
+export interface UnitComment {
+  target: string;
+  /** Null when the file names no author. */
+  author: string | null;
+}
+
 /** A span of a Unit's text and what it stands for in the file, e.g. the cell "B12". */
 export interface Anchor {
   /** UTF-16 offsets into the Unit's text; `end` is exclusive. */
@@ -63,7 +76,8 @@ export interface Anchor {
   end: number;
   /**
    * slide: "title", "shape2", "table1.row3", "chart1", "image1" or "notes";
-   * section: "p12" (the 12th paragraph read); rows: a cell, "B12".
+   * section: "p12" (the 12th paragraph read), or "comment3" (a Word comment,
+   * by its id); rows: a cell, "B12".
    */
   target: string;
 }
