@@ -142,7 +142,6 @@ export function AddWebPageDialog() {
   );
 }
 
-/** One address added: fetching, added, or why it couldn't be, with "Try again" where that may help. */
 function AddressResult({
   address,
   fetching,

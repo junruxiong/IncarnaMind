@@ -1,4 +1,4 @@
-/** What is stored of saved web pages, one `web_pages` row per version (migration 37). */
+/** One `web_pages` row per version of a web page (migration 37). */
 import { randomUUID } from "node:crypto";
 import type { WebPageInfo } from "../../api";
 import type { Database } from "../../storage";
@@ -22,7 +22,7 @@ export interface WebPageVersion {
   fetchedAt: string;
 }
 
-/** A web page Document's address and metadata, as last fetched; null if it has none. */
+/** As last fetched; null for a Document that isn't a web page. */
 export function webPageInfo(db: Database, documentId: string): WebPageInfo | null {
   const rows = db.all<WebPageRow>(
     `SELECT content_hash, address, site_name, author, published, fetched_at FROM web_pages
@@ -41,7 +41,6 @@ export function webPageInfo(db: Database, documentId: string): WebPageInfo | nul
   };
 }
 
-/** The live Document saved from this address, if there is one. */
 export function documentAtAddress(db: Database, address: string): string | null {
   return (
     db.get<{ document_id: string }>(
@@ -53,7 +52,7 @@ export function documentAtAddress(db: Database, address: string): string | null 
   );
 }
 
-/** Records a fetch of a version: a new row for a new version, else the same one fetched again. */
+/** A new row for a new version; the same version fetched again updates its row. */
 export function recordVersion(db: Database, version: WebPageVersion, at: string): void {
   const updated = db.get<{ id: string }>(
     `UPDATE web_pages SET address = ?, site_name = ?, author = ?, published = ?, fetched_at = ?,
