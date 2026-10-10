@@ -209,8 +209,6 @@ const insideRange = (prefix: string) => {
   return [folder, `${folder.slice(0, -1)}${next}`] as const;
 };
 
-export type Library = ReturnType<typeof createLibrary>;
-
 export function createLibrary(options: LibraryOptions) {
   const { db, now, folders, hooks } = options;
   const legacyFolder = join(options.dataDir, "documents");
