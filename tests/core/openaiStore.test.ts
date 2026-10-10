@@ -5,12 +5,7 @@
  * for `fetch` that records each request body.
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type {
-  AnswerEngineEvent,
-  AnswerRequest,
-  AnswerTools,
-  Tool,
-} from "../../src/core/answers/engine";
+import type { AnswerEngineEvent, AnswerRequest, AnswerTools } from "../../src/core/answers/engine";
 import { createAiSdkAnswerEngine } from "../../src/core/answers/engine";
 import { chatGroupClassifier } from "../../src/core/library/classifier";
 import { createAiSdkChatModel } from "../../src/core/providers/models";
@@ -139,7 +134,7 @@ function request(overrides: Partial<AnswerRequest> = {}): AnswerRequest {
     question: "What is a Mind?",
     model: openai(),
     documents: documents(),
-    tools: [] as readonly Tool[],
+    tools: [],
     signal: new AbortController().signal,
     ...overrides,
   };
