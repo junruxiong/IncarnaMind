@@ -7,7 +7,16 @@ import { createFakeEmbedder } from "../../src/core/embedding/fake";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
-import { sha256, storedFile, waitForDocuments, waitForProcessing } from "../helpers/documents";
+import {
+  addAndProcess,
+  createSourceFolder,
+  sha256,
+  storedFile,
+  unfoldedKeywords,
+  waitForDocuments,
+  waitForProcessing,
+  writeSourceFile,
+} from "../helpers/documents";
 import { createControlledEmbedder, turnOnEmbeddings } from "../helpers/embedding";
 
 const NOTES = `# Transformers
@@ -15,7 +24,39 @@ const NOTES = `# Transformers
 The Transformer architecture relies entirely on self-attention to draw global
 dependencies between input and output.`;
 
+/** In traditional characters. */
+const GOALS = `# 永續發展
+
+可持續發展目標是聯合國制定的十七個全球發展目標，以綜合方式解決社會和環境的發展問題。`;
+
 const OLD_ID = "6f1c1c55-8a0e-4f43-9b5e-1d1b7c8b6a01";
+
+/**
+ * Takes a data folder back to what processing version 5 left: every Document
+ * marked as of version 5, and the keyword index holding each Passage's words
+ * and its Document's name as written, traditional characters and all.
+ */
+function asVersion5(dataDir: string): void {
+  const db = openDatabase(join(dataDir, DATABASE_FILE));
+  try {
+    db.transaction(() => {
+      db.run("UPDATE documents SET processing_version = 5");
+      const passages = db.all<{ seq: number; text: string; name: string }>(
+        `SELECT p.seq, p.text, d.name FROM passages p JOIN documents d ON d.id = p.document_id
+         WHERE p.deleted_at IS NULL`,
+      );
+      for (const { seq, text, name } of passages) {
+        db.run("DELETE FROM passages_fts WHERE rowid = ?", [BigInt(seq)]);
+        db.run("INSERT INTO passages_fts (rowid, text) VALUES (?, ?)", [
+          BigInt(seq),
+          `${unfoldedKeywords(name)} ${unfoldedKeywords(text)}`,
+        ]);
+      }
+    });
+  } finally {
+    db.close();
+  }
+}
 
 /**
  * A data folder as #25 left it: the schema before migration 10, and one ready
@@ -113,6 +154,84 @@ describe("Re-processing", { timeout: 30_000 }, () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(statuses).toEqual([]);
     expect(await second.searchPassages("Transformer", { mode: "keyword" })).toEqual(passages);
+  });
+
+  test("for the keyword index's folding, only Documents with Han characters in their text or name are processed again", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const embedder = createControlledEmbedder();
+    const first = startCore(dataDir, { embedder });
+    await turnOnEmbeddings(first);
+    const [goals, report, notes] = (await addAndProcess(first, [
+      await writeSourceFile(sources, "目標.md", GOALS),
+      await writeSourceFile(sources, "季度報告.md", "Quarterly figures rose by four per cent."),
+      await writeSourceFile(sources, "Transformers.md", NOTES),
+    ])) as [Document, Document, Document];
+    first.close();
+    asVersion5(dataDir);
+    const passages = (documentId: string) =>
+      queryDatabase<{ id: string; text: string; embedding: Uint8Array | null }>(
+        dataDir,
+        `SELECT id, text, embedding FROM passages
+         WHERE document_id = ? AND deleted_at IS NULL ORDER BY position`,
+        [documentId],
+      );
+    const before = { goals: passages(goals.id), notes: passages(notes.id) };
+    const matching = (word: string) =>
+      queryDatabase(dataDir, "SELECT rowid FROM passages_fts WHERE passages_fts MATCH ?", [
+        `"${word}"`,
+      ]).length;
+    // As version 5 left it, the index has the traditional words only.
+    expect(matching("目標")).toBeGreaterThan(0);
+    expect(matching("目标")).toBe(0);
+    const embeddedBefore = embedder.texts.length;
+
+    const second = startCore(dataDir, { embedder });
+    const statuses: [string, Document["status"]][] = [];
+    second.on("document.status", (document) => statuses.push([document.id, document.status]));
+    // Queued at startup: the traditional Document, and the English one by its name alone.
+    expect(
+      Object.fromEntries(
+        (await second.listDocuments()).map((document) => [document.id, document.status]),
+      ),
+    ).toEqual({ [goals.id]: "queued", [report.id]: "queued", [notes.id]: "ready" });
+    await waitForProcessing(second, [goals.id, report.id]);
+
+    // The other was left as it was: no status, and the Passages and vectors it had.
+    expect(statuses.filter(([id]) => id === notes.id)).toEqual([]);
+    expect(passages(notes.id)).toEqual(before.notes);
+    const embeddedAgain = embedder.texts.slice(embeddedBefore);
+    expect(embeddedAgain).toHaveLength(passages(goals.id).length + passages(report.id).length);
+    expect(embeddedAgain.some((text) => text.includes("self-attention"))).toBe(false);
+    // All three are as of this version, and the next start won't look through their text again.
+    expect(queryDatabase(dataDir, "SELECT processing_version FROM documents")).toEqual(
+      Array(3).fill({ processing_version: PROCESSING_VERSION }),
+    );
+
+    // Processed again, the traditional Document's Passages have the text they had; its
+    // index has the simplified words, which a simplified query finds.
+    expect(passages(goals.id).map((passage) => passage.text)).toEqual(
+      before.goals.map((passage) => passage.text),
+    );
+    expect(matching("目标")).toBeGreaterThan(0);
+    expect(matching("目標")).toBe(0);
+    const found = await second.searchPassages("可持续发展目标", { mode: "keyword" });
+    expect(found.map((result) => result.documentId)).toEqual([goals.id]);
+    expect(found[0]?.text).toContain("可持續發展目標");
+    const byName = await second.searchPassages("季度报告", { mode: "keyword" });
+    expect(byName.map((result) => result.documentId)).toEqual([report.id]);
+    second.close();
+
+    // The next start has nothing to do.
+    const third = startCore(dataDir, { embedder });
+    const later: string[] = [];
+    third.on("document.status", (document) => later.push(document.id));
+    expect((await third.listDocuments()).map((document) => document.status)).toEqual(
+      Array(3).fill("ready"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(later).toEqual([]);
+    third.close();
   });
 
   test("embedding interrupted by quitting carries on after a restart, keeping the vectors it made", async () => {

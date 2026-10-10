@@ -52,6 +52,7 @@ import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
+  HAN_CURRENT_SINCE,
   METADATA_VERSION,
   PROCESSING_VERSION,
   type ProcessedPassage,
@@ -89,6 +90,13 @@ const LANGUAGE_SAMPLE_PASSAGES = 4;
 const LANGUAGE_SAMPLE_CHARACTERS = 1000;
 const MAX_NAME_LENGTH = 500;
 const SEARCH_MODES: readonly SearchMode[] = ["hybrid", "keyword", "vector"];
+
+/**
+ * A GLOB for text with a Han character in it: CJK Unified Ideographs and
+ * Extension A, where every traditional character the keyword index folds is,
+ * and the radicals and compatibility ideographs normalisation turns into them.
+ */
+const HAS_HAN = "*[\u2e80-\u2fdf\u3400-\u9fff\uf900-\ufaff]*";
 
 interface DocumentRow {
   id: string;
@@ -976,14 +984,34 @@ export function createDocuments(options: DocumentsOptions) {
   };
 
   // Documents processed by an older pipeline are processed again, through the usual
-  // statuses: those whose kind it changed for (see `CURRENT_SINCE`).
-  db.run(
-    `UPDATE documents SET status = 'queued', updated_at = ?
-     WHERE deleted_at IS NULL
-       AND processing_version < coalesce(json_extract(?, '$.' || kind), ?)
-       AND status IN ('ready', 'embedding', 'waiting-for-model')`,
-    [now(), JSON.stringify(CURRENT_SINCE), BigInt(PROCESSING_VERSION)],
-  );
+  // statuses: those whose kind it changed for (see `CURRENT_SINCE`), and those with Han
+  // characters in their text or name, whose keyword index now folds them (see
+  // `HAN_CURRENT_SINCE`). The others are already what this pipeline builds: their version
+  // says so, so their text isn't looked through again at the next start.
+  db.transaction(() => {
+    db.run(
+      `UPDATE documents SET status = 'queued', updated_at = ?
+       WHERE deleted_at IS NULL
+         AND processing_version < coalesce(json_extract(?, '$.' || kind), ?)
+         AND status IN ('ready', 'embedding', 'waiting-for-model')`,
+      [now(), JSON.stringify(CURRENT_SINCE), BigInt(PROCESSING_VERSION)],
+    );
+    db.run(
+      `UPDATE documents SET status = 'queued', updated_at = ?
+       WHERE deleted_at IS NULL AND processing_version < ?
+         AND status IN ('ready', 'embedding', 'waiting-for-model')
+         AND (name GLOB ? OR EXISTS (SELECT 1 FROM passages p
+                                     WHERE p.document_id = documents.id
+                                       AND p.deleted_at IS NULL AND p.text GLOB ?))`,
+      [now(), BigInt(HAN_CURRENT_SINCE), HAS_HAN, HAS_HAN],
+    );
+    db.run(
+      `UPDATE documents SET processing_version = ?
+       WHERE deleted_at IS NULL AND processing_version < ?
+         AND status IN ('ready', 'embedding', 'waiting-for-model')`,
+      [BigInt(HAN_CURRENT_SINCE), BigInt(HAN_CURRENT_SINCE)],
+    );
+  });
   // Pick up work a quit interrupted, in the order it was queued (newest files first).
   const unfinished = db.all<DocumentRow>(
     `SELECT ${COLUMNS} FROM documents
