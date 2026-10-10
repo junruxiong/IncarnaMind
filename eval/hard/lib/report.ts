@@ -72,13 +72,21 @@ export interface HardReport {
   indexing: {
     passages: number;
     embeddedPassages: number;
-    /** From adding the files until keyword search covers every Document. */
+    /**
+     * The first pass, with embeddings off as by default: from adding the files
+     * until every Document is ready (text extracted, Passages built, keyword
+     * index written). What a User with embeddings off waits for.
+     */
     keywordSeconds: number;
-    /** From adding the files until every Document is embedded. */
-    readySeconds: number;
-    /** Time the embedding model spent embedding Passages. */
+    /** The second pass: from turning embeddings on until every Passage has a vector. */
     embeddingSeconds: number;
-    /** The process's peak resident memory while indexing, and over the whole run (worker threads included). */
+    /** Time the embedding model itself spent embedding Passages, in the second pass. */
+    embeddingModelSeconds: number;
+    /**
+     * The process's peak resident memory (worker threads included): after the
+     * first pass, after the second, and over the whole run.
+     */
+    peakRssBytesKeyword: number;
     peakRssBytes: number;
     peakRssBytesRun: number;
   };
@@ -394,9 +402,10 @@ export function markdownReport(report: HardReport): string {
     "## Indexing",
     "",
     `- ${indexing.passages} Passages, ${indexing.embeddedPassages} of them embedded.`,
-    `- Keyword search covered every Document after ${indexing.keywordSeconds.toFixed(0)} s (text extraction, Passages and the keyword index); every Document was embedded after ${indexing.readySeconds.toFixed(0)} s.`,
-    `- The embedding model spent ${indexing.embeddingSeconds.toFixed(0)} s embedding Passages${indexing.embeddingSeconds > 0 ? `: ${(indexing.embeddedPassages / indexing.embeddingSeconds).toFixed(1)} a second` : ""}.`,
-    `- Peak memory (resident, worker threads included): ${gb(indexing.peakRssBytes)} while indexing, ${gb(indexing.peakRssBytesRun)} over the run.`,
+    "- Indexed in two passes: first with embeddings off, as the app does by default, then with them turned on, as a User does in Settings.",
+    `- **With embeddings off,** every Document was ready after ${indexing.keywordSeconds.toFixed(0)} s: text extracted, Passages built and keyword-indexed. This is what a User with embeddings off waits for.`,
+    `- **Turning embeddings on** then took ${indexing.embeddingSeconds.toFixed(0)} s until every Passage had a vector, ${indexing.embeddingModelSeconds.toFixed(0)} s of it in the embedding model${indexing.embeddingModelSeconds > 0 ? ` (${(indexing.embeddedPassages / indexing.embeddingModelSeconds).toFixed(1)} Passages a second)` : ""}. With embeddings on from the start, a User waits for both.`,
+    `- Peak memory (resident, worker threads included): ${gb(indexing.peakRssBytesKeyword)} with embeddings off, ${gb(indexing.peakRssBytes)} once embedded, ${gb(indexing.peakRssBytesRun)} over the run.`,
     "",
     "## Questions",
     "",
@@ -444,7 +453,7 @@ export function hardSummary(report: HardReport, reportDir: string, root: string)
   const { indexing } = report;
   lines.push(
     "",
-    `  ${report.library.added} Documents, ${indexing.passages} Passages; keyword search ready after ${indexing.keywordSeconds.toFixed(0)} s, embedded after ${indexing.readySeconds.toFixed(0)} s; peak memory ${gb(indexing.peakRssBytesRun)}`,
+    `  ${report.library.added} Documents, ${indexing.passages} Passages; ready with embeddings off after ${indexing.keywordSeconds.toFixed(0)} s, embedding took ${indexing.embeddingSeconds.toFixed(0)} s more; peak memory ${gb(indexing.peakRssBytesRun)}`,
   );
   const { citations } = report;
   if (!("skipped" in citations)) {

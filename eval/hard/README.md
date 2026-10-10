@@ -11,7 +11,7 @@ npm run eval:hard
 ```
 
 1. **Fetch.** The library's files are fetched into the evaluation's cache, `~/.cache/incarnamind-eval/hard/` (or `$INCARNAMIND_EVAL_CACHE/hard/`), and each is checked against the SHA-256 in `library.json`. A later run fetches nothing that's already there and unchanged. A file that has changed at its source, or can't be fetched, is left out and listed in the report, with the Questions that need it; the run goes on.
-2. **Index.** A new temporary data folder, never the User's, gets every Document with `addDocuments`, processed by the core. As in `npm run eval`, the library turns embeddings on with the built-in model before adding them, as a User can in Settings, so the dense modes can be compared: the run stops with a message if no Passage was embedded.
+2. **Index, in two passes** (`lib/indexing.ts`). A new temporary data folder, never the User's, gets every Document with `addDocuments`, processed by the core with embeddings off, as by default: each Document is ready once its text is extracted, its Passages built and its keyword index written, and the time until every Document is ready is what a User with embeddings off waits for. Then embeddings are turned on with the built-in model, as a User can in Settings, and the run waits until every Passage has a vector, timed apart, so the dense modes can be compared. It stops with a message if no Passage was embedded.
 3. **Check.** Each Question is checked against the text the app stored (`textProblems` in `lib/questions.ts`): each quote on its expected Units, on no other Unit of its Document, inside a Passage that covers them, and, for a near-duplicate, in no other version. A Question that fails is left out and listed.
 4. **Search.** Each Question is searched with keyword, vector and hybrid search, then reranked by the built-in reranking model over keyword search's top 60 (what the search Tool does by default, with the app's own parameter, and the gating set's gate), over keyword search's top 20 (the default before), and over hybrid search's candidates (what it does with embeddings on: the mode to compare the default with). A cross-lingual Question is searched again with its hand-written translation.
 5. **Time keyword search.** Each Question's query (and translation) runs again on the run's data folder with the app's own keyword SQL, keeping the top 60 the search Tool asks for, ordered by `bm25(passages_fts)` as `keywordSearch` orders it, and ordered by FTS5's `rank` column (bm25() with the same weights), each timed once after a warm-up pass (`lib/keywordTiming.ts`). FTS5 has no top-k pruning, so this is the cost that grows with the library. Measurement only, at this library's size (about 48,000 Passages; the tier doesn't reach 100,000).
@@ -30,7 +30,7 @@ npm run eval:hard
 **Cost and time, roughly, on an Apple silicon Mac:**
 
 - **Download:** 0.71 GB the first time (the manifest's total is checked to stay under 3 GB), a few minutes; arXiv's 50 papers come one every 3 seconds, as its terms ask.
-- **Indexing:** about 48,000 Passages, every one embedded. Embedding takes most of the time, at the built-in model's 20 to 28 Passages a second: about 30 to 40 minutes. Keyword search alone would have every Document ready within a few minutes; the report gives both times.
+- **Indexing:** about 48,000 Passages. With embeddings off, every Document should be ready within minutes; embedding them all then takes most of the run, at the built-in model's 20 to 28 Passages a second: about 30 to 40 minutes. The report gives both times.
 - **Searching and reranking:** about 10 minutes.
 - **Memory:** the run reports its peak; expect a few GB (the embedding and reranking models are about 1 GB each while loaded; the vectors about 75 MB).
 - **Without a chat model:** about an hour all told, with nothing sent anywhere once the models are cached.
@@ -121,12 +121,31 @@ Per domain: contracts 33, filings 46, papers 32, reports 57, manuals 16, medical
 - **Hit:** every Passage a Question needs is among the top 5 of a search, each by the gating set's rule (the expected Document, covering the expected Units, holding the quote). Multi-page and cross-document Questions also report how many were found in part.
 - **Cross-lingual:** a Passage found by either the Question's own search or its translation's counts, as an Answer is told to search again in the Documents' language; the Question's own query alone is reported too.
 - **Modes:** keyword; keyword top 20 + rerank; keyword top 60 + rerank (the search Tool's default, with embeddings off); hybrid; hybrid + rerank (the search Tool with embeddings on, the one to compare the default with); vector.
-- **Reported:** per difficulty, per domain, per language, and per domain × difficulty in each mode; ranks per Question; indexing time (keyword search ready, every Document embedded, the embedding model's own time), Passages and peak memory; keyword search's time per query (median, 95th percentile) beside the reranker's.
+- **Reported:** per difficulty, per domain, per language, and per domain × difficulty in each mode; ranks per Question; indexing time in two passes (every Document ready with embeddings off; then embedding every Passage, and the embedding model's own time), Passages and peak memory after each; keyword search's time per query (median, 95th percentile) beside the reranker's.
 - **Citations,** with a chat model, per difficulty: the gating set's figures, how many Answers cite a Document the Question needs (for a near-duplicate, the right version, and how many cite another), and, for unanswerable Questions, how many are answered without a Citation.
 
 ## Results
 
-None yet: the first run is pending.
+### 2026-10-10: the first run
+
+At commit `0d10635`, on an Apple M2 Max (12 cores, 32 GB), with no chat model. All 400 Documents were fetched (710 MB in 528 s) and added, and none of the 205 Questions was left out. The run took 55 minutes, with 47,897 Passages and a peak of 2.29 GB. The reranked keyword mode then was keyword search's top 20, the default of its time; keyword search's top 60 wasn't run.
+
+The 180 Questions with something to find, top 5 (unanswerable Questions are scored only with a chat model):
+
+| | keyword | keyword top 20 + rerank | hybrid | hybrid + rerank | vector |
+|---|---|---|---|---|---|
+| Easy | 21/29 | 22/29 | 21/29 | 24/29 | 21/29 |
+| Paraphrase | 14/32 | 21/32 | 22/32 | 23/32 | 20/32 |
+| Table number | 17/26 | 18/26 | 18/26 | 19/26 | 13/26 |
+| Multi-page | 3/23 | 11/23 | 6/23 | 12/23 | 8/23 |
+| Cross-document | 2/20 | 4/20 | 6/20 | 4/20 | 4/20 |
+| Cross-lingual, with the translation | 20/26 | 24/26 | 22/26 | 25/26 | 21/26 |
+| Cross-lingual, its own query only | 1/26 | 2/26 | 1/26 | 2/26 | 0/26 |
+| Near-duplicate | 18/24 | 19/24 | 17/24 | 19/24 | 13/24 |
+| **All** | **95/180 (53%)** | **119/180 (66%)** | **112/180 (62%)** | **126/180 (70%)** | **100/180 (56%)** |
+
+- **Keyword search's time,** at 47,897 Passages keeping the top 20: 31 ms median and 72 ms at the 95th percentile, the same ordered by `rank`, with the same Passages for all 231 queries. Reranking took 664 ms (median) a search over keyword search's top 20, and 511 ms over hybrid search's candidates.
+- **Indexing,** as that run measured it, can't be read apart: it gave 2,450 s both for keyword search covering every Document and for every Document embedded, because it timed them from Documents' statuses with embeddings on. The embedding model itself spent 2,408 s (19.9 Passages a second). The run now indexes in two passes (see Running it).
 
 ## Files
 

@@ -64,8 +64,12 @@ export interface LibraryOptions {
    * counted in the log, and skipped files are left out of `documents`.
    */
   allowUnprocessed?: boolean;
-  /** Called with the core as soon as it is created, before any Document is added: to watch its events. */
-  watch?: (core: Core) => void;
+  /**
+   * False: add the Documents with embeddings off, as the app does by default,
+   * so they are ready once their keyword index is; the caller can turn
+   * embeddings on afterwards. True by default.
+   */
+  embeddings?: boolean;
 }
 
 export interface Library {
@@ -104,7 +108,7 @@ function memoryKeychain(): Keychain {
 const FINISHED: ReadonlySet<DocumentStatus> = new Set(["ready", "failed", "no-text"]);
 
 /** Resolves once the built-in model is ready; rejects if its download fails. */
-function modelReady(core: Core, log: Log): Promise<void> {
+export function modelReady(core: Core, log: Log): Promise<void> {
   return new Promise((resolve, reject) => {
     let lastLogged = 0;
     const settle = (status: EmbeddingModelStatus) => {
@@ -231,7 +235,6 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
         }),
   };
   const core = createCore(adapters);
-  options.watch?.(core);
   const close = async () => {
     core.close();
     if (options.keep) {
@@ -253,7 +256,7 @@ export async function openLibrary(options: LibraryOptions): Promise<Library> {
       });
       const saved = await core.saveEmbeddingProvider(provider);
       log(`Embedding with ${saved.provider.kind}/${saved.provider.modelId}`);
-    } else {
+    } else if (options.embeddings !== false) {
       // Embeddings are off by default: on, as a User turns them on in Settings, the vector
       // and hybrid modes can be measured next to keyword search.
       await core.saveEmbeddingProvider({ kind: "built-in" });

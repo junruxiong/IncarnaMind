@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { asEvalQuestion, summariseDifficulty } from "../../eval/hard/lib/citations";
+import { embedEveryPassage } from "../../eval/hard/lib/indexing";
 import { BM25_SQL, timeKeywordSearch, timingOf } from "../../eval/hard/lib/keywordTiming";
 import type { HardDocument } from "../../eval/hard/lib/manifest";
 import { type HardQuestion, textProblems } from "../../eval/hard/lib/questions";
@@ -293,6 +294,67 @@ describe("The hard tier's searches through a core", { timeout: 60_000 }, () => {
   });
 });
 
+describe("The hard tier's two indexing passes", { timeout: 60_000 }, () => {
+  test("Documents are ready with embeddings off; turning them on then embeds every Passage", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const core = startCore(dataDir);
+    const path = await writeSourceFile(
+      sources,
+      "Tide Tables.pdf",
+      buildPdf([
+        { lines: ["Spring tides", "Spring tides come at new moon and at full moon."] },
+        { lines: ["Neap tides", "Neap tides come at the quarter moons."] },
+      ]),
+    );
+    // First pass: embeddings off, the default, so the Document is ready on its keyword index alone.
+    const [document] = await addAndProcess(core, [path]);
+    expect(document?.status).toBe("ready");
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      const unembedded = () =>
+        db.get<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM passages WHERE deleted_at IS NULL AND embedding IS NULL",
+        )?.count ?? 0;
+      expect(unembedded()).toBeGreaterThan(0);
+      // Second pass: embeddings on, waited for until every Passage has a vector.
+      const pass = await embedEveryPassage(core, db, () => {}, { pollMs: 20 });
+      expect(pass.passages).toBeGreaterThan(0);
+      expect(pass.embedded).toBe(pass.passages);
+      expect(unembedded()).toBe(0);
+      expect(pass.seconds).toBeGreaterThanOrEqual(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("gives up, saying so, when embedding stalls", async () => {
+    const dataDir = await createTempDataFolder();
+    const sources = await createSourceFolder();
+    const core = startCore(dataDir);
+    await addAndProcess(core, [
+      await writeSourceFile(sources, "Notes.pdf", buildPdf([{ lines: ["Notes", "A line."] }])),
+    ]);
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      // A data folder that never changes stands for a stalled embedding queue.
+      const frozen = {
+        get: <Row>(sql: string) =>
+          ({ count: sql.includes("IS NOT NULL") ? 0 : 3 }) as unknown as Row,
+      } as unknown as typeof db;
+      const log: string[] = [];
+      const pass = await embedEveryPassage(core, frozen, (line) => log.push(line), {
+        pollMs: 1,
+        stallMs: 5,
+      });
+      expect(pass).toMatchObject({ passages: 3, embedded: 0 });
+      expect(log.at(-1)).toBe("Embedding stalled at 0 of 3 Passages; going on");
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe("The hard tier's tallies", () => {
   const summary = summariseHard(RESULTS);
 
@@ -358,8 +420,9 @@ const REPORT: HardReport = {
     passages: 1000,
     embeddedPassages: 900,
     keywordSeconds: 120,
-    readySeconds: 1500,
-    embeddingSeconds: 1200,
+    embeddingSeconds: 1500,
+    embeddingModelSeconds: 1200,
+    peakRssBytesKeyword: 1e9,
     peakRssBytes: 3e9,
     peakRssBytesRun: 3.5e9,
   },
@@ -408,7 +471,10 @@ describe("The hard tier's report", () => {
     expect(markdown).toContain("| Company reports and filings | 0 | 1 | docx |");
     expect(markdown).toContain("- gone (unavailable): HTTP 404");
     expect(markdown).toContain(
-      "- Keyword search covered every Document after 120 s (text extraction, Passages and the keyword index); every Document was embedded after 1500 s.",
+      "- **With embeddings off,** every Document was ready after 120 s: text extracted, Passages built and keyword-indexed. This is what a User with embeddings off waits for.",
+    );
+    expect(markdown).toContain(
+      "- **Turning embeddings on** then took 1500 s until every Passage had a vector, 1200 s of it in the embedding model (0.8 Passages a second). With embeddings on from the start, a User waits for both.",
     );
     expect(markdown).toContain("- q9: gone isn't in the library.");
     expect(markdown).toContain("| | keyword | keyword top 60 + reranker | hybrid |");
@@ -443,7 +509,7 @@ describe("The hard tier's report", () => {
         /paraphrase +0\/1 \(0%\) +0\/1 \(0%\) +1\/1 \(100%\)/,
       );
       expect(lines.find((line) => line.includes("Passages"))).toContain(
-        "2 Documents, 1000 Passages; keyword search ready after 120 s, embedded after 1500 s; peak memory 3.50 GB",
+        "2 Documents, 1000 Passages; ready with embeddings off after 120 s, embedding took 1500 s more; peak memory 3.50 GB",
       );
     } finally {
       await rm(results, { recursive: true, force: true });
