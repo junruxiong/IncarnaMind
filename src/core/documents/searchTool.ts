@@ -8,11 +8,11 @@
  * 2. Rerank, unless the User turned reranking off: with the built-in reranking
  *    model by default, or a Cohere or Voyage key (see ../providers/rerank),
  *    which the retrieval evaluation gates on (#31). With embeddings off, the
- *    reranker sees keyword search's top 20. With them on, it sees keyword
+ *    reranker sees keyword search's top 60. With them on, it sees keyword
  *    search's top 10 and vector search's top 10, each Passage once, instead
  *    of the fused list: fusion can push a hit that only one of them found
  *    below others that both found middlingly (#31: en-03, en-12, en-14 and
- *    zh-03); until vector search finds anything, keyword search's top 20
+ *    zh-03); until vector search finds anything, keyword search's top 60
  *    again. Those are then all the hits.
  * 3. Group the hits by Document.
  * 4. The old backend's sliding-window clustering (its `find_overlaps`), ported:
@@ -35,13 +35,19 @@ export interface SearchToolParameters {
   /** How many fused hits hybrid search hands on to the clustering, without a reranker. */
   candidates: number;
   /**
-   * With a reranker: how many of keyword search's best, and of vector
-   * search's, it sees (each Passage once, so 10 to 20 with 10), and then
-   * the clustering; without vector search (embeddings off), twice as many of
-   * keyword search's (20). Each costs the built-in reranking model tens of
-   * milliseconds.
+   * With a reranker and vector search (embeddings on): how many of keyword
+   * search's best, and of vector search's, it sees (each Passage once, so 10
+   * to 20 with 10), and then the clustering. Each costs the built-in
+   * reranking model tens of milliseconds.
    */
   rerankPerList: number;
+  /**
+   * With a reranker and no vector search (embeddings off, the default, or no
+   * vectors yet in the Search scope): how many of keyword search's best it
+   * sees. More than with vector search, since keyword search alone ranks
+   * Passages worded unlike the Question lower (ADR-0009, 2026-10-10).
+   */
+  keywordRerankCandidates: number;
   /** The most Documents one search returns Passages from. */
   maxDocuments: number;
   /** The most windows (clusters) one search returns from a Document. */
@@ -51,12 +57,18 @@ export interface SearchToolParameters {
 }
 
 /**
- * Untuned starting values: 8 Passages of about 500 tokens is about 4,000
- * tokens a search, so a few searches fit an Answer's context.
+ * 8 Passages of about 500 tokens is about 4,000 tokens a search, so a few
+ * searches fit an Answer's context. The reranker's candidates are the
+ * evaluation's (#31): with embeddings off, keyword search's top 60 found as
+ * many Questions as keyword and vector search's top 10 each with them on,
+ * where its top 20 found two fewer, for about 1.6 s a search with the
+ * built-in reranking model against 0.8 s (ADR-0009, 2026-10-10). The other
+ * counts are untuned starting values.
  */
 export const SEARCH_TOOL_PARAMETERS: SearchToolParameters = {
   candidates: 30,
   rerankPerList: 10,
+  keywordRerankCandidates: 60,
   maxDocuments: 4,
   maxWindowsPerDocument: 2,
   maxPassages: 8,
@@ -216,12 +228,12 @@ export interface SearchToolSources {
   /**
    * For a reranker: keyword search's best `perList` live Passages and vector
    * search's, each once (see `topsOfEach`), with their fused scores, in
-   * fused order; keyword search's best twice `perList` while vector search
+   * fused order; keyword search's best `keywordAlone` while vector search
    * has none (embeddings off, or no vectors yet).
    */
   rerankCandidates(
     query: string,
-    perList: number,
+    counts: { perList: number; keywordAlone: number },
     documentIds: readonly string[] | undefined,
   ): Promise<SearchCandidate[]>;
   /** The live Passages of a Document's window, in reading order. */
@@ -248,7 +260,11 @@ export async function searchDocumentsTool(
 ): Promise<WindowedPassage[]> {
   const parameters = { ...SEARCH_TOOL_PARAMETERS, ...options.parameters };
   let candidates = options.rerank
-    ? await sources.rerankCandidates(query, parameters.rerankPerList, options.documentIds)
+    ? await sources.rerankCandidates(
+        query,
+        { perList: parameters.rerankPerList, keywordAlone: parameters.keywordRerankCandidates },
+        options.documentIds,
+      )
     : await sources.candidates(query, parameters.candidates, options.documentIds);
   if (options.rerank && candidates.length > 0) {
     candidates = await options.rerank(query, candidates, options.signal);
