@@ -1,4 +1,5 @@
 import type {
+  DocumentGroupAssignment,
   LibraryGroup,
   LibraryGroupInput,
   LibrarySettings,
@@ -2863,8 +2864,18 @@ export interface CoreEvents {
   "keptCitationTexts.changed": KeptCitationText[];
   /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
-  /** Library definitions, settings or assignments changed; read the current snapshot. */
+  /**
+   * The Library's Folders or settings changed, or a deleted Folder left its
+   * Documents Unsorted: read the current snapshot.
+   */
   "library.changed": null;
+  /**
+   * Documents' Library assignments changed: Organize queued, started,
+   * finished or failed on them, or the User put one in a Folder. Carries each
+   * one's assignment whole, as `getLibrary` lists it, so the snapshot needn't
+   * be read again.
+   */
+  "library.assignments": DocumentGroupAssignment[];
   /**
    * Documents' Tags changed, or where automatic tagging is for them: the User
    * added or removed a Tag, automatic tagging started, waited, finished or

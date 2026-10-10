@@ -134,6 +134,22 @@ function useFilterName(): (value: string) => string {
       : (tags.find((tag) => tag.id === value)?.name ?? value);
 }
 
+/** Each list of Documents looked at, and whether any of them has a Tag awaiting review. */
+const reviewingIn = new WeakMap<readonly Document[], boolean>();
+
+/**
+ * Whether any Document has a Tag awaiting review: worked out once per list,
+ * not at every change to the store (#156).
+ */
+function anyAwaitsReview(documents: readonly Document[]): boolean {
+  let reviewing = reviewingIn.get(documents);
+  if (reviewing === undefined) {
+    reviewing = documents.some((item) => item.tags.some((link) => link.needsReview));
+    reviewingIn.set(documents, reviewing);
+  }
+  return reviewing;
+}
+
 /**
  * The Documents label's Tags button: a menu to show only the Documents with
  * any of the Tags chosen (choosing one again takes it out), and "Manage
@@ -143,9 +159,7 @@ export function TagFilterMenu() {
   const t = useT();
   const tags = useAppStore((state) => state.tags);
   const tagFilter = useAppStore((state) => state.tagFilter);
-  const reviewing = useAppStore((state) =>
-    state.documents.some((item) => item.tags.some((link) => link.needsReview)),
-  );
+  const reviewing = useAppStore((state) => anyAwaitsReview(state.documents));
   const menu = usePopoverMenu();
   const values = [...(reviewing || tagFilter.includes(NEEDS_REVIEW) ? [NEEDS_REVIEW] : [])];
   const name = useFilterName();
