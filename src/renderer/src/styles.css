@@ -2173,6 +2173,8 @@
     .question-ask {
       left: auto;
       right: 14px;
+      /* Over the Question's row, which now reaches under it, so the pointer gets the button. */
+      z-index: 1;
     }
     .question-row {
       padding-right: 36px;

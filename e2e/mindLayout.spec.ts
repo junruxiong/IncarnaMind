@@ -260,6 +260,19 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
     1,
     "narrow: the Answer's edge",
   );
+  // The Ask button moves to the Question's right end, over its row, and the pointer still
+  // reaches it there.
+  const ask = editor.getByTestId("question-ask");
+  const askBox = await box(ask);
+  expect(
+    await ask.evaluate(
+      (button, point) => {
+        const under = document.elementFromPoint(point.x, point.y);
+        return under !== null && button.contains(under);
+      },
+      { x: askBox.x + askBox.width / 2, y: askBox.y + askBox.height / 2 },
+    ),
+  ).toBe(true);
   await screenshot(window, "mind-narrow.png");
   await setViewer(window, false);
   await expect(window.getByTestId("margin-checks")).toBeVisible();
