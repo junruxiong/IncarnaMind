@@ -21,7 +21,8 @@ interface Stop {
  * Presses Tab, as a person does, and reads where the focus went. It shows when
  * the control has DESIGN.md's focus ring (a solid accent outline, 2px; 1px
  * around a text field, whose edge turns blue too), or, in the Mind's text and
- * title, the caret. A pane divider turns blue instead.
+ * title, the caret. A pane divider turns blue instead, and the gap before the
+ * card shows the ring's line.
  */
 async function pressTab(window: Page): Promise<Stop | null> {
   await window.keyboard.press("Tab");
@@ -54,8 +55,13 @@ async function pressTab(window: Page): Promise<Stop | null> {
       ringOn(element, field ? 1 : 2) ||
       // A Mind tab draws its ring on its inner shape.
       (element.matches(".mind-tab") && ringOn(element.querySelector(".mind-tab-inner"), 2)) ||
-      // A pane's divider, a 1px rule, turns blue and shows its grip.
-      (element.matches(".pane-divider") && getComputedStyle(element).backgroundColor === accent);
+      // A pane's divider, a 1px rule, turns blue and shows its grip; the 8px gap before the
+      // card draws the ring's 2px line down its middle instead.
+      (element.matches(".pane-divider") &&
+        (getComputedStyle(element).backgroundColor === accent ||
+          (element.matches(".pane-divider--gap") &&
+            getComputedStyle(element).backgroundImage.includes(accent) &&
+            getComputedStyle(element).backgroundSize.startsWith("2px"))));
     const label =
       element.getAttribute("aria-label") ||
       element.getAttribute("title") ||
