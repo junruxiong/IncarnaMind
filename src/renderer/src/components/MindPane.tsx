@@ -7,6 +7,7 @@ import { ExportDialog } from "./ExportDialog";
 import { ExampleBanner, useIsExample } from "./GettingStarted";
 import { LibraryPane } from "./LibraryPane";
 import { PlusLineIcon } from "./lineIcons";
+import { MeetingInMind } from "./MeetingInMind";
 import { MindEditor } from "./MindEditor";
 import { MindTabs } from "./MindTabs";
 import { ChatReadinessNotice } from "./providers/ChatReadinessNotice";
@@ -67,6 +68,7 @@ export function MindPane() {
                   <div className="mind-measure">
                     {isExample && <ExampleBanner />}
                     <MindTitle mind={mind} />
+                    <MeetingInMind mindId={mind.id} />
                     {/* The example works without a chat model: it says so in its Answer instead. */}
                     {!isExample && <ChatReadinessNotice />}
                     <ComposerDockContext.Provider value={dock}>

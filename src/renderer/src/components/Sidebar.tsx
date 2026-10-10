@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { useT } from "../i18n";
+import { useMeetings } from "../meetings";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { DeleteMindDialog } from "./DeleteMindDialog";
@@ -12,6 +13,7 @@ import {
   MindLineIcon,
   PencilLineIcon,
   PlusLineIcon,
+  RecordingLineIcon,
   SettingsLineIcon,
   TrashLineIcon,
 } from "./lineIcons";
@@ -151,8 +153,9 @@ export function PlusMenuPlaceholder() {
 }
 
 /**
- * The one "+" menu: New Mind, Add Documents… and Link a folder…. Opened by
- * keyboard or mouse, its items are menu items reached with the arrow keys.
+ * The one "+" menu: New Mind, Record a meeting (once Meetings are turned on),
+ * Add Documents… and Link a folder…. Opened by keyboard or mouse, its items
+ * are menu items reached with the arrow keys.
  */
 function PlusMenu() {
   const t = useT();
@@ -161,6 +164,10 @@ function PlusMenu() {
   const pickDocuments = useAppStore((state) => state.pickDocuments);
   const picking = useAppStore((state) => state.pickingDocuments);
   const addLinkedFolder = useAppStore((state) => state.addLinkedFolder);
+  const meetingsOn = useAppStore(
+    (state) => state.settings?.device.meetingsEnabled && state.settings.meetingAudio !== "none",
+  );
+  const recordMeeting = useMeetings((state) => state.record);
 
   /** Closes the menu, then does it. */
   const choose = (action: () => void) => () => {
@@ -198,6 +205,18 @@ function PlusMenu() {
           <span className="flex-1">{t("sidebar.newMind")}</span>
           <span className="pl-4 text-[13px] text-ink-meta">{NEW_MIND_SHORTCUT}</span>
         </button>
+        {meetingsOn && (
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="plus-record-meeting"
+            onClick={choose(() => void recordMeeting())}
+            className={`${menuItemClass} pl-2`}
+          >
+            <RecordingLineIcon className="size-4 shrink-0 text-ink-meta" />
+            <span className="flex-1">{t("meetings.record")}</span>
+          </button>
+        )}
         <button
           type="button"
           role="menuitem"

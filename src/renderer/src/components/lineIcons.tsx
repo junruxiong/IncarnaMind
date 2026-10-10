@@ -236,3 +236,47 @@ export function SidebarLineIcon(props: IconProps) {
     </LineIcon>
   );
 }
+
+/**
+ * A Meeting recording (DESIGN.md, While recording): a ring and a dot, in ink,
+ * never red. `live`: the dot pulses slowly, unless motion is reduced.
+ */
+export function RecordingLineIcon({ live = false, ...props }: IconProps & { live?: boolean }) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="8.25" />
+      <circle
+        cx="12"
+        cy="12"
+        r="3.75"
+        fill="currentColor"
+        stroke="none"
+        className={live ? "motion-safe:animate-pulse" : undefined}
+      />
+    </LineIcon>
+  );
+}
+
+export function PauseLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2.25} {...props}>
+      <path d="M9 6.5v11M15 6.5v11" />
+    </LineIcon>
+  );
+}
+
+export function ResumeLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" />
+    </LineIcon>
+  );
+}
+
+export function StopLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" />
+    </LineIcon>
+  );
+}

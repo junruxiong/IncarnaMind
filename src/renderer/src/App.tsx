@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
+import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { MindPane } from "./components/MindPane";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
@@ -325,6 +326,7 @@ function Workspace() {
         <UsageDataDialog />
         {/* Opens after the dialog that triggered the request, so it shows on top of it. */}
         <ConsentDialog />
+        <MeetingNoticeDialog />
         <ActionError />
         {fileDrop.active && <DropOverlay />}
         <p role="status" data-testid="sidebar-announcement" className="sr-only">

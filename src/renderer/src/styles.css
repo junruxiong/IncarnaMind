@@ -1086,6 +1086,77 @@
     height: 28px;
     margin-left: auto;
   }
+  /*
+   * Starting a meeting, inline in its Mind under the title (the canvas board
+   * Final-03-MeetingStart): on the frame, reaching 16px into the margins so
+   * its words keep the Mind's edge.
+   */
+  .meeting-start {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0 -16px 24px;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--color-frame);
+    font-family: var(--font-sans);
+  }
+  .meeting-start-note {
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+  }
+  /*
+   * The meeting bar (DESIGN.md, While recording): on the composer's second row,
+   * at its left, the recording's state, Pause or Resume, and Stop; the model,
+   * the scope and Ask stay at the right.
+   */
+  .meeting-controls {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 2px;
+    height: 28px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+  }
+  .meeting-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 0 4px;
+    white-space: nowrap;
+  }
+  .meeting-time {
+    min-width: 2.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-secondary);
+  }
+  .meeting-button {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    color: var(--color-ink-secondary);
+    transition:
+      background-color 80ms ease-out,
+      color 80ms ease-out;
+
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .meeting-button--icon {
+    justify-content: center;
+    width: 24px;
+    padding: 0;
+  }
   /* A quiet 22px chip: no fill until pointed at (the model, "All Documents"). */
   .composer-chip {
     display: inline-flex;
