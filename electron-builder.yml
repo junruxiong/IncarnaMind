@@ -36,6 +36,11 @@ extraResources:
     to: examples
     filter:
       - "**/*"
+  # The licence notices of what the model catalog is generated from (scripts/catalogModels.ts).
+  - from: resources/notices
+    to: notices
+    filter:
+      - "**/*"
 
 # onnxruntime-node, which runs the built-in embedding model in a utility process, loads
 # native libraries with dlopen, which can't read inside app.asar. Each platform below
