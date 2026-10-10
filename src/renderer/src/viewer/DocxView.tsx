@@ -32,6 +32,8 @@ const PADDING = 24;
 const MARK_GAP = 12;
 /** Room the mark, without its label, keeps from the page's right edge. */
 const MARK_ROOM = 40;
+/** The gap a mark keeps from a comment's note in the margin. */
+const NOTE_MARK_GAP = 4;
 
 interface Loaded {
   bytes: Uint8Array;
@@ -60,8 +62,9 @@ const read = async (bytes: Uint8Array): Promise<Loaded> => ({
  * its pages split only where the file breaks them, so they are not Word's
  * pages: a Citation points at the section a quote sits under, which the
  * outline lists. Opened at a Citation, it goes to the cited section and
- * highlights the quote in it (anywhere in the Document if it isn't there),
- * with the Citation's mark in the page's margin beside it. Images come as
+ * highlights the quote in it, else in a comment anchored there, in its note
+ * in the margin (#76), else anywhere in the Document, with the Citation's
+ * mark in the page's margin beside it. Images come as
  * `data:` URLs, so the app's Content-Security-Policy stays as it is.
  */
 export function DocxView({ document, target }: { document: Document; target: ViewerTarget }) {
@@ -218,19 +221,33 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     return { range, heading };
   }, [docx, headingElements, target.pageFrom, target.pageTo]);
 
-  // Each open request highlights its quote: in the cited section first, then anywhere.
+  // Each open request highlights its quote: in the cited section first, then in the comments
+  // anchored there, in their notes in the margin (#76), then anywhere.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
   useEffect(() => {
     const body = host.current;
     if (!body || rendered !== "yes") return;
     unmarkQuote(body);
+    for (const comment of comments.current) unmarkQuote(comment.note);
     const quote = target.quote;
     const section = citedSection();
     let found: HTMLElement[] | null = null;
     if (quote) {
+      const inNotes = (list: readonly DocxComment[]) => {
+        for (const comment of list) {
+          const marked = markQuote(textNodes(comment.note), quote);
+          if (marked) return marked;
+        }
+        return null;
+      };
+      const anchoredInSection = section
+        ? comments.current.filter((comment) => section.range.intersectsNode(comment.anchor))
+        : [];
       const find = () =>
         (section && markQuote(textNodes(body, section.range), quote)) ??
-        markQuote(textNodes(body), quote);
+        inNotes(anchoredInSection) ??
+        markQuote(textNodes(body), quote) ??
+        inNotes(comments.current);
       found = find();
       if (!found) {
         // A footnote's number in the text isn't in the text a quote is checked
@@ -258,7 +275,8 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     } else container.scrollTop = 0;
   }, [rendered, citedSection, target.request, target.quote]);
 
-  // The Citation's mark: in the page's right margin, level with the quote's first line.
+  // The Citation's mark: in the page's right margin, level with the quote's first line; for a
+  // quote in a comment's note, in the margin between the page's text and the note (#76).
   // biome-ignore lint/correctness/useExhaustiveDependencies: placed again when the pages zoom
   useLayoutEffect(() => {
     const first = marks[0];
@@ -270,6 +288,20 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
     const placeMark = () => {
       const origin = box.getBoundingClientRect();
       const line = first.getClientRects()[0] ?? first.getBoundingClientRect();
+      const note = first.closest<HTMLElement>(".docx-note");
+      if (note) {
+        const limit = note.getBoundingClientRect().left - NOTE_MARK_GAP;
+        const commented = comments.current.find((comment) => comment.note === note);
+        const page = commented?.anchor.closest(`section.${CLASS_NAME}`);
+        const text = (page?.querySelector(":scope > article") ?? page)?.getBoundingClientRect();
+        const left = Math.min((text?.right ?? limit) + MARK_GAP, limit - MARK_ROOM);
+        setPlace({
+          top: line.top - origin.top + line.height / 2 - 9,
+          left: left - origin.left,
+          room: limit - left,
+        });
+        return;
+      }
       const page = first.closest(`section.${CLASS_NAME}`)?.getBoundingClientRect();
       const paragraph = first.closest("p, td, li")?.getBoundingClientRect() ?? line;
       const pageRight = page?.right ?? paragraph.right + MARK_GAP + MARK_ROOM;
