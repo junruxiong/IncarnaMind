@@ -47,6 +47,7 @@ import {
 } from "../../eval/lib/report";
 import type { OpenReranker, RerankerInfo } from "../../eval/lib/rerank";
 import {
+  type CandidateRecord,
   candidateCounts,
   checkPassage,
   GATING_LABEL,
@@ -285,26 +286,38 @@ describe("What the reranked modes rerank", () => {
     ]);
   });
 
-  test("the report counts candidates per reranked search, the translated queries' too", () => {
-    const result = (rerank?: QuestionResult["rerankCandidates"]): QuestionResult => ({
+  test("the report counts candidates per reranked search, the translated queries' too, and how often they held the expected Passage", () => {
+    const result = (
+      hybrid?: CandidateRecord,
+      extra: Partial<QuestionResult> = {},
+    ): QuestionResult => ({
       id: "x",
       language: "en",
       crossLingual: false,
       question: "x",
       modes: {},
-      ...(rerank && { rerankCandidates: rerank }),
+      ...(hybrid && { candidates: { hybrid } }),
+      ...extra,
     });
 
     expect(candidateCounts([result()])).toBeNull();
     expect(
       candidateCounts([
-        result({ question: 12 }),
-        result({ question: 20, translated: 16 }),
+        result({ question: 12, reached: 3 }),
+        result({ question: 20, translated: 16, reached: null }, { crossLingual: true }),
+        result({ question: 18, reached: 18 }, { paraphrase: true }),
         result(),
       ]),
-    ).toEqual({ search: "hybrid", perList: 10, searches: 3, mean: 16, min: 12, max: 20 });
+    ).toEqual({
+      search: "hybrid",
+      searches: 4,
+      mean: 16.5,
+      min: 12,
+      max: 20,
+      reached: { gating: { hits: 1, total: 1 }, paraphrase: { hits: 1, total: 1 } },
+    });
     // Keyword + rerank's counts are its own.
-    expect(candidateCounts([result({ question: 12 })], "keyword")).toBeNull();
+    expect(candidateCounts([result({ question: 12, reached: null })], "keyword")).toBeNull();
   });
 
   test("keyword + rerank reranks keyword search's top 20 alone, with no vector search", async () => {
@@ -363,20 +376,29 @@ describe("What the reranked modes rerank", () => {
     ];
     const ids = new Map([["tides", "doc-1"]]);
 
-    await runReranked(core, [question], ids, reversing("keyword-rerank:fake"), results);
+    const found = await runReranked(
+      core,
+      [question],
+      ids,
+      reversing("keyword-rerank:fake"),
+      results,
+    );
 
     expect(asked).toEqual(["大潮什么时候出现？: keyword 20", "When are spring tides?: keyword 20"]);
     expect(results[0]?.modes["keyword-rerank:fake"]).toMatchObject({ hit: true, rank: 1 });
     expect(results[0]?.translated?.["keyword-rerank:fake"]).toMatchObject({ hit: true, rank: 1 });
-    expect(results[0]).toMatchObject({ keywordRerankCandidates: { question: 14, translated: 14 } });
-    expect(results[0]?.rerankCandidates).toBeUndefined();
+    // The expected Passage was the 14th candidate, before the reranker put it first.
+    expect(results[0]?.candidates).toEqual({
+      keyword: { question: 14, translated: 14, reached: 14 },
+    });
+    expect(found.queries).toBe(2);
     expect(candidateCounts(results, "keyword")).toEqual({
       search: "keyword",
-      perList: 20,
       searches: 2,
       mean: 14,
       min: 14,
       max: 14,
+      reached: { gating: { hits: 0, total: 0 }, paraphrase: { hits: 0, total: 0 } },
     });
     expect(summarise(results)["keyword-rerank:fake"]?.crossLingualTranslated).toEqual({
       hits: 1,
@@ -478,6 +500,11 @@ describe("The retrieval gate", () => {
       downloadBytes: 136e6,
       loadSeconds: 1.5,
       latency: { queries: 74, mean: 700, median: 690, p95: 900, max: 950 },
+      candidates: { queries: 75, mean: 3, median: 2, p95: 6, max: 9 },
+    });
+    const reached = (gating: number, paraphrase: number) => ({
+      gating: { hits: gating, total: 40 },
+      paraphrase: { hits: paraphrase, total: 15 },
     });
     const run = {
       embedding: "multilingual-e5-small (built-in)",
@@ -492,15 +519,10 @@ describe("The retrieval gate", () => {
         [HYBRID_RERANK_MODE]: summary(15, 20, [4, 3]),
       },
       rerankers: [reranker(GATING_MODE), reranker(HYBRID_RERANK_MODE)],
-      rerankCandidates: { search: "hybrid", perList: 10, searches: 75, mean: 16, min: 12, max: 20 },
-      keywordRerankCandidates: {
-        search: "keyword",
-        perList: 20,
-        searches: 75,
-        mean: 19.5,
-        min: 9,
-        max: 20,
-      },
+      candidates: [
+        { search: "keyword", searches: 75, mean: 19.5, min: 9, max: 20, reached: reached(37, 12) },
+        { search: "hybrid", searches: 75, mean: 16, min: 12, max: 20, reached: reached(38, 13) },
+      ],
     } satisfies RetrievalRun;
     const failures = retrievalFailures(run.summary[GATING_MODE]);
     const report = {
@@ -548,15 +570,19 @@ describe("The retrieval gate", () => {
         `| multilingual-e5-small (built-in) | hybrid + ${model} | 15/20 | 20/20 | 35/40 | 2/10 | 7/10 | 7/15 (4 + 3) |`,
       );
       expect(markdown).toContain(
-        "Candidates per keyword + rerank search (keyword search's top 20, no vector search): 19.5 on average, from 9 to 20, over 75 searches.",
+        "Candidates per keyword + rerank search (keyword search's top 20, no vector search): 19.5 on average, from 9 to 20, over 75 searches; the expected Passage among them for 37/40 gating and 12/15 paraphrase Questions.",
       );
       expect(markdown).toContain(
-        "Candidates per hybrid + rerank search (keyword search's top 10 and vector search's top 10, each Passage once): 16.0 on average, from 12 to 20, over 75 searches.",
+        "Candidates per hybrid + rerank search (keyword search's top 10 and vector search's top 10, each Passage once): 16.0 on average, from 12 to 20, over 75 searches; the expected Passage among them for 38/40 gating and 13/15 paraphrase Questions.",
       );
-      expect(markdown.filter((line) => line.includes("| Apache-2.0 | 136 MB | 700 ms"))).toEqual([
-        `| keyword + ${model} | Apache-2.0 | 136 MB | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
-        `| hybrid + ${model} | Apache-2.0 | 136 MB | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
+      expect(markdown.filter((line) => line.includes("| Apache-2.0 | 136 MB | 3 ms"))).toEqual([
+        `| keyword + ${model} | Apache-2.0 | 136 MB | 3 ms | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
+        `| hybrid + ${model} | Apache-2.0 | 136 MB | 3 ms | 700 ms | 690 ms | 900 ms | 950 ms | 1.5 s |`,
       ]);
+      // The other searches didn't run: no section for them.
+      expect(markdown.some((line) => line.includes("Other ways to find the candidates"))).toBe(
+        false,
+      );
     } finally {
       await rm(results, { recursive: true, force: true });
     }

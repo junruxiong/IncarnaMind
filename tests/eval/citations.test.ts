@@ -75,6 +75,7 @@ describe("The evaluation's Citation part", { timeout: 60_000 }, () => {
           "SELECT page, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page",
           [documentId],
         ),
+      passages: () => [],
       close: async () => {},
     };
 
