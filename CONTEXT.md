@@ -31,7 +31,7 @@ What an Answer is generated from: every Block above its Question in the Mind, ex
 _Avoid_: prompt, history
 
 **Search scope**:
-The Folders, Tags and individual Documents that a Question's Document search is limited to. A Question with no Search scope searches all Documents.
+The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope, which the User can remove; a Question with no Search scope searches all Documents.
 _Avoid_: filter, context
 
 ### Documents
@@ -69,8 +69,12 @@ Where in a Document a Citation points, in the unit the Document's own readers us
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
-A named place for Documents inside IncarnaMind, with a description of what belongs there. Each Document belongs to one Folder or is Unsorted; this does not change where its original file is stored.
-_Avoid_: group, collection, category
+A project inside IncarnaMind: a named place for Documents and Minds, with a description of what belongs there. Each Document and each Mind belongs to one Folder or is Not in a Folder; this does not change where a Document's original file is stored. A Mind in a Folder searches the Folder by default; deleting a Folder moves its Documents and Minds to Not in a Folder.
+_Avoid_: project (in the interface), group, collection, category
+
+**Not in a Folder**:
+The one place for every Document and Mind in no Folder. A Mind there searches all Documents.
+_Avoid_: Unsorted, Uncategorised, Inbox
 
 **Source location**:
 The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.

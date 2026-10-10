@@ -13,6 +13,7 @@ import {
   interceptOpenPath,
   interceptShowItemInFolder,
   launchApp,
+  newMind,
   openSettings,
   pathsOpened,
   pathsShown,
@@ -70,7 +71,7 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first; 
   await addDocuments(window, [join(sources, "Tides.pdf")]);
 
   // A Note, then a Question whose Answer misquotes its Document.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
@@ -141,7 +142,7 @@ test("a Mind exports to .docx: the dialog counts the unverified Citation first; 
 test("maths exports to .docx as Word equations, which a Word viewer shows as equations", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Gravity");
   const editor = window.getByTestId("mind-editor");
   await editor.click();
@@ -208,7 +209,7 @@ test("saving inside a Linked folder asks once; Settings › General shows where 
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await bridge(window).link(papers);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");
