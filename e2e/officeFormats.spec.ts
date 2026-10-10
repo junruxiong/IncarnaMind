@@ -57,17 +57,14 @@ async function screenshot(window: Page, name: string) {
 }
 
 /**
- * A wide window, the sidebar hidden, so a Document's group beside the Mind is
- * wide: room for each page's margin, where the mark and its label go.
+ * A window wide enough that a Document's group beside the Mind is over 860px:
+ * room for each page's margin, where the mark and its label go.
  */
 async function widen(app: ElectronApplication, window: Page) {
   await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(1720, 1000);
+    BrowserWindow.getAllWindows()[0]?.setSize(2000, 1000);
   });
-  await window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.updateSettings({ device: { sidebarHidden: true } });
-  });
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(2000);
 }
 
 /** An element's box; it must be shown. */
