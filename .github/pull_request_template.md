@@ -6,6 +6,10 @@
 
 <!-- Commands run, and what you checked by hand in the built app. -->
 
+- [ ] `npm run typecheck`, `npm run lint` and `npm test` pass
+- [ ] The smoke tests that touch this change pass (`npm run test:smoke`), and tests for changed or removed UI are updated
+- [ ] CI is green on this pull request: <!-- link the run -->
+
 ## If this changes UI
 
 Delete this section if the change has no UI. Otherwise check each line against [the interaction rules](https://github.com/junruxiong/IncarnaMind/blob/main/docs/agents/interaction.md):
