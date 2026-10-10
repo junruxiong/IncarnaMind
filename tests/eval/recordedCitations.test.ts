@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { type CitationOutcome, outcomeOf } from "../../eval/lib/citations";
-import { checkCitation } from "../../src/core/answers/citations";
+import { checkCitation, matchingOf } from "../../src/core/answers/citations";
 import type { PageText } from "../../src/core/documents/passages";
 import { processFile } from "../../src/core/documents/processing";
 
@@ -73,6 +73,7 @@ async function recheck(): Promise<Rechecked[]> {
       pages: all.filter(
         ({ page }) => page !== null && page >= citation.pageFrom && page <= citation.pageTo,
       ),
+      ...matchingOf(all),
     });
     const outcome = outcomeOf({ ...citation, check, checkReason }, all);
     return { ...citation, now: { check, outcome } };
@@ -109,5 +110,31 @@ describe("The Citations recorded on 2026-10-07, checked again", { timeout: 120_0
       }
     }
     expect([count(english, "found"), count(chinese, "found")]).toEqual([8, 1]);
+  });
+});
+
+describe("The evaluation's PDFs whose stored text lost its f-ligatures", {
+  timeout: 120_000,
+}, () => {
+  test("are JP Morgan's report alone, of a short paper and a long code of practice too", async () => {
+    const lost = async (name: string) => matchingOf(await storedPages(name)).lostLigatures;
+
+    expect(await lost("JP Morgan 2022 Environmental Social Governance Report")).toBe(true);
+    expect(await lost("Attention Is All You Need")).toBe(false);
+    expect(await lost("ABPI Code of Practice for the Pharmaceutical Industry 2021")).toBe(false);
+  });
+
+  test("so JP Morgan's quote of p. 8 as the page shows it is found there", async () => {
+    const pages = await storedPages("JP Morgan 2022 Environmental Social Governance Report");
+    const range = { pageFrom: 8, pageTo: 8 };
+    const result = checkCitation({
+      quote: "with the goal to finance and facilitate more than $2.5 trillion over 10 years",
+      range,
+      passage: range,
+      documentDeleted: false,
+      pages: pages.filter(({ page }) => page === 8),
+      ...matchingOf(pages),
+    });
+    expect(result).toEqual({ check: "found", checkReason: null });
   });
 });

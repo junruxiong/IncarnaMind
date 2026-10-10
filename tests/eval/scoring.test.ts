@@ -148,7 +148,7 @@ describe("What became of a Citation", () => {
     );
   });
 
-  test("a quote of a page whose stored text lost its f-ligatures is the check's miss: a false 'not found'", () => {
+  test("a quote of a page whose stored text lost its f-ligatures is found, told so; not told, it is the check's miss", () => {
     // JP Morgan 2022 Environmental Social Governance Report, p. 8, as stored: pdf.js reads its
     // "fi" ligature as "f", so the page shows "finance" where its text reads "fnance".
     const stored = [
@@ -159,16 +159,20 @@ describe("What became of a Citation", () => {
     ];
     const asShown = "with the goal to finance and facilitate more than $2.5 trillion over 10 years";
     const range = { pageFrom: 8, pageTo: 8 };
-    const check = (quote: string) =>
+    const check = (quote: string, lostLigatures = false) =>
       checkCitation({
         quote,
         range,
         passage: { pageFrom: 7, pageTo: 8 },
         documentDeleted: false,
         pages: stored,
+        lostLigatures,
       });
 
-    // The check finds the quote as the stored text reads it, not as the page shows it.
+    // Told the Document's text lost its ligatures, as the core tells it from the whole text, the
+    // check finds the quote as the page shows it (ADR-0009's amendment).
+    expect(check(asShown, true)).toEqual({ check: "found", checkReason: null });
+    // Not told, it finds it only as the stored text reads it; the evaluation calls that its miss.
     expect(check(asShown.replace("finance", "fnance")).check).toBe("found");
     const checked = check(asShown);
     expect(checked).toEqual({ check: "not-found", checkReason: "quote-not-on-pages" });

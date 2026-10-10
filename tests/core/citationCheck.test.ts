@@ -66,9 +66,15 @@ interface Case {
   /** The cited Passage's pages. */
   passage: [number, number];
   quote: string;
+  /** The Document's text lost its f-ligatures (see `lostLigatures`, worked out from all its text). */
+  lostLigatures?: boolean;
   /** "found", or why not. */
   expected: "found" | CitationCheckReason;
 }
+
+/** JP Morgan 2022 Environmental Social Governance Report, p. 8, as stored: its text lost its f-ligatures. */
+const TARGET =
+  "set our Sustainable Development Target (the “Target”) with the goal to fnance and\nfacilitate more than $2.5 trillion over 10 years—from 2021 through the end of 2030—";
 
 const cases: Case[] = [
   // Hyphenation at line ends
@@ -470,6 +476,50 @@ const cases: Case[] = [
     expected: "quote-not-on-pages",
   },
 
+  // Lost f-ligatures: pdf.js reads some PDFs' "fi" as "f", so the page shows "finance" where its text has "fnance"
+  {
+    language: "en",
+    topic: "lost ligatures",
+    name: "a quote of the page as it shows, in a Document whose text lost its f-ligatures (JP Morgan, p. 8)",
+    pages: [TARGET],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "with the goal to finance and facilitate more than $2.5 trillion over 10 years",
+    lostLigatures: true,
+    expected: "found",
+  },
+  {
+    language: "en",
+    topic: "lost ligatures",
+    name: "where the Document's text keeps them, a lone f is an f: 'flight' isn't 'fight'",
+    pages: ["The fight was delayed by fog."],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "The flight was delayed by fog.",
+    expected: "quote-not-on-pages",
+  },
+  {
+    language: "zh",
+    topic: "lost ligatures",
+    name: "an English term in Chinese text whose Document lost its f-ligatures",
+    pages: ["该公司的 fnancial report 显示收入增长。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "该公司的financial report显示收入增长",
+    lostLigatures: true,
+    expected: "found",
+  },
+  {
+    language: "zh",
+    topic: "lost ligatures",
+    name: "the same term where the Document's text keeps its ligatures",
+    pages: ["该公司的 fnancial report 显示收入增长。"],
+    cited: [1, 1],
+    passage: [1, 1],
+    quote: "该公司的financial report显示收入增长",
+    expected: "quote-not-on-pages",
+  },
+
   // Quotes across a page break
   {
     language: "en",
@@ -613,7 +663,7 @@ const cases: Case[] = [
 ];
 
 /** The check as the core runs it: on the stored text of the cited pages only. */
-function check({ pages, cited, passage, quote }: Case): CheckResult {
+function check({ pages, cited, passage, quote, lostLigatures }: Case): CheckResult {
   const [from, to] = cited;
   return checkCitation({
     quote,
@@ -623,6 +673,7 @@ function check({ pages, cited, passage, quote }: Case): CheckResult {
     pages: pages
       .map((text, index) => ({ page: index + 1, text }))
       .filter(({ page }) => page >= from && page <= to),
+    lostLigatures,
   });
 }
 

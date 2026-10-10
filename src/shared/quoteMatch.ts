@@ -43,6 +43,13 @@
  *   page. Each part is returned, for the viewer to highlight. An ellipsis at
  *   the start or the end of a quote leaves nothing out of it.
  *
+ * - In a Document whose text lost its f-ligatures (see `lostLigatures`), a
+ *   quote's "fi", "fl", "ff", "ffi" or "ffl" may be the lone "f" the text
+ *   kept: pdf.js reads some PDFs' ligatures as their first letter only, so a
+ *   page that shows "finance" has "fnance" for text. Only there: in other
+ *   text, 4% of words would then match another ("of" an "off", "food" a
+ *   "flood", "four" a "flour"), which is a word changed (ADR-0009).
+ *
  * Nothing else is forgiven: a quote with a word changed, added or dropped
  * isn't found.
  *
@@ -122,6 +129,49 @@ function fold(char: string): string {
 export interface MatchOptions {
   /** Normalise number formatting in the quote and the text: for spreadsheets. */
   numbers?: boolean;
+  /**
+   * The Document's text lost its f-ligatures (see `lostLigatures`): a quote
+   * not found as it is is looked for with each ligature's letters read as
+   * the lone "f" the text kept.
+   */
+  lostLigatures?: boolean;
+}
+
+/** At least this many "f"s before a letter, for a text's lost ligatures to show. */
+const MIN_F_BEFORE_LETTER = 200;
+
+/**
+ * Below this share of them followed by "f", "i" or "l", a text lost its
+ * f-ligatures. In the evaluation's Documents that keep them, with enough
+ * "f"s to tell, it is 24 to 39%; JP Morgan's ESG report, whose text lost
+ * them, has 1.3% (#67).
+ */
+const MAX_LIGATURE_SHARE = 0.05;
+
+/**
+ * Whether a Document's text shows that it lost its f-ligatures: it has many
+ * "f"s before a letter, and hardly any are followed by "f", "i" or "l", as
+ * in English text a fifth or more are. Read the whole Document's text: a
+ * page alone can have too few, or a table of names with none.
+ */
+export function lostLigatures(text: string): boolean {
+  const before = text.match(/f(?=[a-z])/g)?.length ?? 0;
+  if (before < MIN_F_BEFORE_LETTER) return false;
+  const ligatures = text.match(/f(?=[fil])/g)?.length ?? 0;
+  return ligatures / before < MAX_LIGATURE_SHARE;
+}
+
+/** An f-ligature's letters, in a normalised, lower-case needle. */
+const LIGATURE_LETTERS = /f(?:f[il]?|[il])/g;
+
+/** A needle with each f-ligature's letters read as one "f", until none is left ("fifty" reads "fty"). */
+function withoutLigatures(needle: string): string {
+  let folded = needle;
+  for (let before = ""; before !== folded; ) {
+    before = folded;
+    folded = folded.replace(LIGATURE_LETTERS, "f");
+  }
+  return folded;
 }
 
 /**
@@ -368,13 +418,25 @@ export function findQuote(
   quote: string,
   options: MatchOptions = {},
 ): TextRange[] | null {
-  if (!options.numbers) return findNeedle(matchUnits(text), needleOf(quote));
+  const found = findShaped(text, quote, options, (needle) => needle);
+  if (found || !options.lostLigatures) return found;
+  return findShaped(text, quote, options, withoutLigatures);
+}
+
+/** `findQuote` with the quote's needles passed through `shape`. */
+function findShaped(
+  text: string,
+  quote: string,
+  options: MatchOptions,
+  shape: (needle: string) => string,
+): TextRange[] | null {
+  if (!options.numbers) return findNeedle(matchUnits(text), shape(needleOf(quote)));
   const units = matchUnits(text, "text");
   const accept = wholeNumbers(units);
-  const grouped = needleOf(quote, "all");
+  const grouped = shape(needleOf(quote, "all"));
   const found = findNeedle(units, grouped, accept);
   if (found) return found;
-  const spaced = needleOf(quote, "none");
+  const spaced = shape(needleOf(quote, "none"));
   return spaced === grouped ? null : findNeedle(units, spaced, accept);
 }
 
@@ -430,6 +492,7 @@ export function findQuoteInPages(
   pages: readonly (readonly TextPiece[])[],
   quote: string,
   edgeLines = 4,
+  options: Pick<MatchOptions, "lostLigatures"> = {},
 ): PagePieceRange[] | null {
   // The line each piece is on, counted from the top and from the bottom of its page.
   const lines = pages.map((pieces) => {
@@ -466,7 +529,7 @@ export function findQuoteInPages(
       if (last && origin.at(-1)?.page === page)
         kept[kept.length - 1] = { ...last, breakAfter: true };
     });
-    const found = findQuoteInPieces(kept, quote);
+    const found = findQuoteInPieces(kept, quote, options);
     if (found) {
       return found.map((part) => {
         const { page, piece } = origin[part.piece] as { page: number; piece: number };
