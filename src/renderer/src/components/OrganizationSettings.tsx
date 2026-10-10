@@ -5,7 +5,7 @@ import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
-import { buttonStyle, errorTextClass, fieldLabelClass, inputClass, pageIntroClass } from "./ui";
+import { buttonStyle, errorTextClass, fieldLabelClass, inputClass, sectionNoteClass } from "./ui";
 
 type Action = (work: () => Promise<unknown>) => Promise<boolean>;
 
@@ -33,7 +33,7 @@ export function OrganizationSettings() {
   };
   return (
     <section>
-      <p className={pageIntroClass}>{t("library.settingsIntro")}</p>
+      <p className={sectionNoteClass}>{t("library.settingsIntro")}</p>
       {error && (
         <p role="alert" className={errorTextClass}>
           {error}
