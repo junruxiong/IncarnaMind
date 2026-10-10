@@ -1246,37 +1246,6 @@
       color: var(--color-ink);
     }
   }
-  /* Why it can't be asked yet: a ruled line in the band, with what to do. */
-  .question-notice {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 6px;
-    padding-top: 8px;
-    border-top: 1px solid var(--color-rule);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--color-ink-secondary);
-    user-select: none;
-  }
-  .question-notice-text {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .question-notice:not(.question-notice--error) > .question-notice-text::before {
-    content: "";
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    margin-right: 8px;
-    border-radius: 9999px;
-    background: var(--color-attention);
-    vertical-align: 1px;
-  }
-  .question-notice--error {
-    color: var(--color-danger);
-  }
-  .question-notice-action,
   .answer-notice-action {
     flex-shrink: 0;
     height: 28px;
@@ -1526,7 +1495,7 @@
     padding: 0;
     list-style: none;
   }
-  /* A model that can't cite, an edited Answer about to be replaced, and errors. */
+  /* A model that can't cite, and an edited Answer about to be replaced. */
   .answer-info {
     font-family: var(--font-sans);
     font-size: 13px;
@@ -1549,35 +1518,6 @@
   .answer-notice-text {
     flex: 1 1 16rem;
     min-width: 0;
-  }
-  .answer-error {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-family: var(--font-sans);
-    font-size: var(--text-ui);
-    line-height: var(--text-ui--line-height);
-    color: var(--color-danger);
-    user-select: none;
-  }
-  .answer-error-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .answer-error-details {
-    font-size: var(--text-meta);
-    color: var(--color-ink-meta);
-    user-select: text;
-
-    summary {
-      cursor: pointer;
-    }
-    p {
-      margin-top: 4px;
-      overflow-wrap: anywhere;
-    }
   }
 
   /*

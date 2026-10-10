@@ -1,8 +1,14 @@
-import { type ReactNode, useContext } from "react";
+import { type ReactNode, useContext, useState } from "react";
+import { ProblemLine } from "../components/ProblemLine";
+import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { useAppStore } from "../store";
 import { ViewerFrameContext } from "./ViewerHeader";
 
-/** A short message filling the viewer under its header: loading, empty, or a failure. */
+/**
+ * A short message under the viewer's header. Loading and empty fill the view
+ * in the middle; a failure is a problem line at the top, where the page would be.
+ */
 export function ViewerMessage({
   children,
   testId,
@@ -12,15 +18,20 @@ export function ViewerMessage({
   testId?: string;
   tone?: "muted" | "error";
 }) {
+  if (tone === "error") {
+    return (
+      <div data-testid={testId} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <ProblemLine testId="viewer-problem">{children}</ProblemLine>
+      </div>
+    );
+  }
   return (
     <div
       data-testid={testId}
-      role={tone === "error" ? "alert" : "status"}
+      role="status"
       className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-ui"
     >
-      <p className={`max-w-sm break-words ${tone === "error" ? "text-danger" : "text-ink-meta"}`}>
-        {children}
-      </p>
+      <p className="max-w-sm break-words text-ink-meta">{children}</p>
     </div>
   );
 }
@@ -33,10 +44,10 @@ export function ViewerMessage({
 type GoneReason = "deleted" | "unlinked" | "missing" | "unavailable";
 
 const GONE_TEXT = {
-  deleted: { title: "viewer.removed.title", body: "viewer.removed.body" },
-  unlinked: { title: "viewer.removed.title", body: "viewer.removed.unlinked" },
-  missing: { title: "viewer.file.missing.title", body: "viewer.file.missing" },
-  unavailable: { title: "viewer.file.unavailable.title", body: "viewer.file.unavailable" },
+  deleted: "viewer.removed.body",
+  unlinked: "viewer.removed.unlinked",
+  missing: "viewer.file.missing",
+  unavailable: "viewer.file.unavailable",
 } as const;
 
 /**
@@ -70,20 +81,59 @@ export function FileGone({ quote }: { quote?: string | undefined }) {
   );
 }
 
+/** What came of "Locate file…", when it didn't bring the file back. */
+type Located = { kind: "other" } | { kind: "failed"; reason: string };
+
 function DocumentGone({ quote, reason }: { quote?: string | undefined; reason: GoneReason }) {
   const t = useT();
-  const text = GONE_TEXT[reason];
+  const { document } = useContext(ViewerFrameContext);
+  const locate = useAppStore((state) => state.locateDocumentFile);
+  const [located, setLocated] = useState<Located | null>(null);
+  const [locating, setLocating] = useState(false);
+  const name = document?.name ?? "";
+
+  const locateFile = async () => {
+    if (!document) return;
+    setLocating(true);
+    try {
+      const outcome = await locate(document.id);
+      setLocated(outcome === "other" ? { kind: "other" } : null);
+    } catch (failure) {
+      setLocated({ kind: "failed", reason: errorMessage(failure) });
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  // A file that moved can be pointed to; one that can't be reached comes back by itself.
+  const action =
+    reason === "missing" && document
+      ? {
+          label: t("viewer.file.locate"),
+          onClick: () => void locateFile(),
+          testId: "viewer-locate-file",
+          disabled: locating,
+        }
+      : undefined;
+
   return (
     <div
       data-testid="viewer-removed"
       data-reason={reason}
-      role="status"
-      className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 text-center"
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3"
     >
-      <h2 className="text-ui font-semibold text-ink">{t(text.title)}</h2>
-      <p className="mt-1 max-w-sm text-ui text-ink-meta">{t(text.body)}</p>
+      <ProblemLine role="status" testId="viewer-problem" action={action}>
+        {t(GONE_TEXT[reason], { name })}
+      </ProblemLine>
+      {located && (
+        <ProblemLine testId="viewer-locate-result">
+          {located.kind === "other"
+            ? t("viewer.file.notThis", { name })
+            : t("viewer.file.locateFailed", { reason: located.reason })}
+        </ProblemLine>
+      )}
       {quote && (
-        <figure className="mt-6 w-full max-w-sm text-left">
+        <figure className="w-full max-w-sm">
           <figcaption className="text-label text-ink-meta">{t("viewer.removed.quote")}</figcaption>
           <blockquote className="mt-2 rounded-lg bg-frame px-4 py-3 font-serif text-[15px] leading-6 break-words whitespace-pre-wrap text-ink-answer">
             {quote}
