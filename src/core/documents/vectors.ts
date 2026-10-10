@@ -13,8 +13,35 @@
  *
  * The same vectors give each Document's mean, the vector Documents are
  * grouped into Topics by (R2 in docs/designs/library-structure-view.md).
+ *
+ * Documents of the kinds in `KEYWORD_ONLY_KINDS` get no vectors: keyword
+ * search alone finds their Passages (ADR-0009, 2026-10-10).
  */
+import type { DocumentKind } from "../api";
 import type { Database } from "../storage";
+
+/**
+ * The Document kinds whose Passages get no vectors, while keyword search
+ * alone is measured for them (ADR-0009, 2026-10-10): Excel, CSV and
+ * PowerPoint. Their Documents go through the usual statuses, and the
+ * embedding queue makes each ready at its turn without embedding anything;
+ * and vector search holds none of their vectors (any stored before stay
+ * unused). The one place to widen it, up to every kind. To take a kind out
+ * again, raise its `CURRENT_SINCE` too, so its Documents are processed, and
+ * embedded, again.
+ */
+export const KEYWORD_ONLY_KINDS: ReadonlySet<DocumentKind> = new Set<DocumentKind>([
+  "xlsx",
+  "csv",
+  "pptx",
+]);
+
+/** Whether a Document of this kind has its Passages embedded (see `KEYWORD_ONLY_KINDS`). */
+export const embedsPassages = (kind: string): boolean =>
+  !KEYWORD_ONLY_KINDS.has(kind as DocumentKind);
+
+/** `KEYWORD_ONLY_KINDS` as a parameter for SQL's `json_each`. */
+export const keywordOnlyKindsParam = (): string => JSON.stringify([...KEYWORD_ONLY_KINDS]);
 
 /** Vectors are L2-normalised, so their dot product is their cosine similarity. */
 export interface VectorHit {
@@ -108,13 +135,14 @@ export function createVectorIndex(db: Database, model: { readonly id: string }):
 
   function load(): Map<string, DocumentVectors> {
     const map = new Map<string, DocumentVectors>();
+    // Vectors a keyword-only kind's Documents had from before stay stored, unused.
     const rows = db.all<{ seq: number; document_id: string; embedding: Uint8Array }>(
       `SELECT p.seq, p.document_id, p.embedding
        FROM passages p JOIN documents d ON d.id = p.document_id
        WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL AND p.embedding IS NOT NULL
-         AND d.embedding_model = ?
+         AND d.embedding_model = ? AND d.kind NOT IN (SELECT value FROM json_each(?))
        ORDER BY p.document_id, p.position`,
-      [model.id],
+      [model.id, keywordOnlyKindsParam()],
     );
     for (const row of rows) append(map, row.document_id, row.seq, decodeVector(row.embedding));
     return map;
