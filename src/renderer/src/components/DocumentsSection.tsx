@@ -1,4 +1,12 @@
-import { type ChangeEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  memo,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentFailureReason, DocumentStatus, Tag } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
@@ -131,13 +139,14 @@ export function DocumentsSection() {
     "sources",
   ];
   const view = views.includes(chosenView) ? chosenView : "sources";
+  // Each row is drawn again only when its Document, depth or the Tags change (#156).
   const renderDocument = (item: Document, depth: number): ReactNode => (
     <DocumentRow
       key={item.id}
       item={item}
       depth={depth}
       tagsById={tagsById}
-      onDelete={() => setDeleting(item)}
+      onDelete={setDeleting}
     />
   );
 
@@ -299,9 +308,10 @@ export function DocumentsSection() {
  * be reached (then muted too; clicking still opens what IncarnaMind kept of
  * it). The name gives way first; the row stays one 28px line. Pointed at, it
  * offers its Tags and a menu for the rest. It is in the Folder its file is
- * in, so there is no moving it here.
+ * in, so there is no moving it here. Memoised: a sidebar of thousands of
+ * Documents draws again only the rows whose Document changed.
  */
-function DocumentRow({
+const DocumentRow = memo(function DocumentRow({
   item,
   depth,
   tagsById,
@@ -310,7 +320,8 @@ function DocumentRow({
   item: Document;
   depth: number;
   tagsById: ReadonlyMap<string, Tag>;
-  onDelete(): void;
+  /** Asks before deleting this Document. */
+  onDelete(item: Document): void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
@@ -375,13 +386,13 @@ function DocumentRow({
             item={item}
             buttonClassName={rowActionButtonClass}
             onRename={() => setRenaming(true)}
-            onDelete={onDelete}
+            onDelete={() => onDelete(item)}
           />
         </div>
       )}
     </li>
   );
-}
+});
 
 /**
  * The status at a row's end: "Missing" or "Unavailable" when its file isn't
