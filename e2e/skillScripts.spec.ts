@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   openSettings,
   removeDataFolder,
   showSettingsPage,
@@ -75,7 +76,7 @@ test("a Skill script asks first with an approval card: Allow once runs it, and t
   await useLocalChatModel(window);
   await importSkill(window, folder);
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await ask(window, "Run greeter scripts/hello.js for Dover");
@@ -126,7 +127,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
   await useLocalChatModel(window);
   await importSkill(window, folder);
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await ask(window, "Run greeter scripts/hello.js for Calais");
