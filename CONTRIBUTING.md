@@ -35,6 +35,14 @@ You need Node.js 24 or newer. Clone the repository, then run `npm install` and `
 - The interface is in English and Simplified Chinese: a new string goes into both dictionaries in `src/shared/i18n/`.
 - Keep pull requests small and say what they change and why.
 
-## Licence
+## Licence and sign-off
 
 By contributing, you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), like the rest of the project.
+
+Each commit in a pull request carries a sign-off line, which says you wrote the change or have the right to submit it under this licence, as the [Developer Certificate of Origin](https://developercertificate.org/) describes. Add it with `git commit -s`; it looks like this:
+
+```
+Signed-off-by: Your Name <you@example.com>
+```
+
+To add it to commits you've already made, run `git rebase --signoff main` and push again. A check on every pull request looks for it. There's no contributor licence agreement to sign.
