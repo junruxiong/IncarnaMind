@@ -281,6 +281,25 @@ const sourceProvidersUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
 
 /**
+ * Test-only launch flag: a local server standing in for OpenAI (#122), at
+ * this origin, where the ChatGPT plan signs in and asks, so the smoke tests
+ * can sign in and reach neither OpenAI's sign-in nor its API. Only a test
+ * build honours it.
+ */
+function chatGptStandIn(): CoreAdapters["chatGptPlan"] {
+  const origin = import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_CHATGPT : undefined;
+  if (!origin) return undefined;
+  return {
+    issuer: origin,
+    authorizeUrl: `${origin}/api/accounts/authorize`,
+    tokenUrl: `${origin}/api/accounts/oauth/token`,
+    revokeUrl: `${origin}/api/accounts/oauth/revoke`,
+    jwksUrl: `${origin}/.well-known/jwks.json`,
+    apiBaseUrl: `${origin}/v1`,
+  };
+}
+
+/**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
@@ -327,8 +346,10 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   const crashReporter = createCrashReporter(dataDir);
   const usageData = createUsageDataSender();
   const chatGptStore = chatGptTestProfile(log);
+  const chatGptPlan = chatGptStandIn();
   return {
     ...(chatGptStore && { chatGptStore }),
+    ...(chatGptPlan && { chatGptPlan }),
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {

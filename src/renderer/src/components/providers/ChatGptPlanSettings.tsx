@@ -7,9 +7,7 @@ import { useAppStore } from "../../store";
 import {
   buttonClass,
   errorTextClass,
-  fieldLabelClass,
   ghostButtonClass,
-  inputClass,
   noticeClass,
   primaryButtonClass,
   rowTextClass,
@@ -21,31 +19,34 @@ import {
   ContinueWithChatGptButton,
   ManageUsageLink,
   useChatGptPlan,
+  useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { TestResult } from "./ProviderForm";
 
 /**
  * Settings → Models → ChatGPT plan: "Continue with ChatGPT" (Sign in with
- * ChatGPT), then the plan's model for Questions, a test, and Sign out. Signing
- * in here doesn't change the default model unless there is none yet.
+ * ChatGPT), then the account, whether Questions use the plan, a test, and
+ * Sign out. The plan's model is chosen in Chat model above, the one place the
+ * default model is chosen. Signing in here doesn't change the default model
+ * unless there is none yet.
  */
 export function ChatGptPlanSettings() {
   const t = useT();
   const [status, setStatus] = useChatGptPlan();
   const readiness = useAppStore((state) => state.chatReadiness);
   const chatModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
-  const [model, setModel] = useState("");
   const [busy, setBusy] = useState<"testing" | "saving" | "signing-out" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const sign = useContinueWithChatGpt({ keepDefault: true });
+  const storage = useChatGptStorage();
 
   const inUse =
     readiness !== null && "provider" in readiness && readiness.provider.kind === "chatgpt";
-  const models = status?.models ?? [];
-  const chosen = model || (inUse && chatModel ? chatModel.modelId : "") || (models[0]?.id ?? "");
+  // The model Questions use with the plan: the one chosen in Chat model, else the plan's default.
+  const planModel = (inUse && chatModel?.modelId) || (status?.models[0]?.id ?? "");
   const signedIn = status?.account.state === "signed-in";
   const waiting = sign.waiting || status?.signingIn === true;
 
@@ -78,12 +79,12 @@ export function ChatGptPlanSettings() {
   const testConnection = () =>
     run("testing", async () => {
       setTest(null);
-      setTest(await core.testChatConnection({ kind: "chatgpt", modelId: chosen }));
+      setTest(await core.testChatConnection({ kind: "chatgpt", modelId: planModel }));
     });
 
   const use = () =>
     run("saving", async () => {
-      await core.saveChatProvider({ kind: "chatgpt", modelId: chosen });
+      await core.saveChatProvider({ kind: "chatgpt", modelId: planModel });
     });
 
   return (
@@ -103,30 +104,15 @@ export function ChatGptPlanSettings() {
         <ChatGptSignInState sign={sign} />
       ) : !signedIn ? (
         <div className="flex flex-col items-start gap-2">
-          <ChatGptStorageNotice />
-          <ContinueWithChatGptButton onClick={signIn} disabled={status === null} />
+          <ChatGptStorageNotice storage={storage} />
+          <ContinueWithChatGptButton
+            onClick={signIn}
+            disabled={status === null || !storage.canSave}
+          />
           <ChatGptSignInState sign={sign} />
         </div>
       ) : (
         <>
-          <label className={fieldLabelClass}>
-            {t("chatgpt.model")}
-            <select
-              data-testid="chatgpt-model"
-              value={chosen}
-              onChange={(event) => {
-                setModel(event.target.value);
-                setTest(null);
-              }}
-              className={inputClass}
-            >
-              {models.map((each) => (
-                <option key={each.id} value={each.id}>
-                  {each.name}
-                </option>
-              ))}
-            </select>
-          </label>
           {inUse && (
             <p data-testid="chatgpt-in-use" className="text-[13px] leading-5 text-ink-secondary">
               {t("chatgpt.inUse")}
@@ -135,18 +121,21 @@ export function ChatGptPlanSettings() {
             </p>
           )}
           <div className="flex flex-wrap gap-2">
+            {!inUse && (
+              <button
+                type="button"
+                data-testid="chatgpt-use"
+                disabled={busy !== null || planModel === ""}
+                onClick={() => void use()}
+                className={primaryButtonClass}
+              >
+                {t("chatgpt.use")}
+              </button>
+            )}
             <button
               type="button"
-              data-testid="chatgpt-use"
-              disabled={busy !== null || chosen === "" || (inUse && chosen === chatModel?.modelId)}
-              onClick={() => void use()}
-              className={primaryButtonClass}
-            >
-              {t("chatgpt.use")}
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null || chosen === ""}
+              data-testid="chatgpt-test"
+              disabled={busy !== null || planModel === ""}
               onClick={() => void testConnection()}
               className={buttonClass}
             >

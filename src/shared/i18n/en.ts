@@ -1091,7 +1091,6 @@ export const en = {
   "chatgpt.anotherAccount": "Use another account",
   "chatgpt.signInAgain": "Sign in again",
   "chatgpt.details": "Details",
-  "chatgpt.model": "Model",
   "chatgpt.use": "Use for Questions",
   "chatgpt.inUse": "Using ChatGPT plan",
   "chatgpt.manageUsage": "Manage usage",

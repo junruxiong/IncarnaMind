@@ -64,6 +64,11 @@ export interface LaunchOptions {
    */
   sources?: string;
   /**
+   * Where the ChatGPT plan signs in and asks: the origin of a local server
+   * standing in for OpenAI (tests/helpers/fakeOpenAI.ts). A test build honours it.
+   */
+  chatGpt?: string;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -113,6 +118,7 @@ export async function launchApp(
     home,
     referenceLookup,
     sources,
+    chatGpt,
     keepWindow = false,
     computerSound = "allowed",
   }: LaunchOptions = {},
@@ -130,6 +136,7 @@ export async function launchApp(
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   delete env.INCARNAMIND_TEST_SOURCES;
+  delete env.INCARNAMIND_TEST_CHATGPT;
   // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
   delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
@@ -144,6 +151,7 @@ export async function launchApp(
   if (home) env.HOME = home;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
+  if (chatGpt) env.INCARNAMIND_TEST_CHATGPT = chatGpt;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";

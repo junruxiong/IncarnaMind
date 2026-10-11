@@ -1037,7 +1037,6 @@ export const zhCN = {
   "chatgpt.anotherAccount": "使用其他账号",
   "chatgpt.signInAgain": "重新登录",
   "chatgpt.details": "详细信息",
-  "chatgpt.model": "模型",
   "chatgpt.use": "用于提问",
   "chatgpt.inUse": "正在使用 ChatGPT 订阅",
   "chatgpt.manageUsage": "管理用量",
