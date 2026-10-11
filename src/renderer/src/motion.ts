@@ -676,6 +676,24 @@ export function useExitToward(
 }
 
 /**
+ * Fades in when the component holding `ref` shows, and out when it goes, in
+ * place (DESIGN.md: status lines and the undo line). A new one shown as the old
+ * one goes cross-fades with it.
+ */
+export function useFade(ref: RefObject<HTMLElement | null>): void {
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element) enter(element, {});
+    return () => {
+      if (!element) return;
+      const play = leaving(element, { to: {} });
+      // Only once it's gone: React runs effects twice in development, and the element stays.
+      if (play) queueMicrotask(() => element.isConnected || play());
+    };
+  }, [ref]);
+}
+
+/**
  * Moves from the box it had to the one it has (both measured, the new one
  * once laid out there), by transform. A panel's box scales too, its content
  * counter-scaled so it keeps its size, anchored top left; clip it with the

@@ -109,12 +109,18 @@ describe("every command", () => {
 describe("shortcuts", () => {
   test.each(SYSTEMS)("no keys are bound twice where both commands can act, on $name", ({ mac }) => {
     const bound = all.filter((command) => command.shortcut);
+    const formsOf = (command: Command) => {
+      const shortcut = command.shortcut;
+      if (!shortcut) return [];
+      const keys = [
+        keysOn(shortcut.keys, mac),
+        ...(!mac && shortcut.alsoOther ? [shortcut.alsoOther] : []),
+      ];
+      return keys.map((each) => keysForm(each, mac));
+    };
     for (const [index, one] of bound.entries()) {
       for (const other of bound.slice(index + 1)) {
-        if (!one.shortcut || !other.shortcut) continue;
-        const sameKeys =
-          keysForm(keysOn(one.shortcut.keys, mac), mac) ===
-          keysForm(keysOn(other.shortcut.keys, mac), mac);
+        const sameKeys = formsOf(one).some((form) => formsOf(other).includes(form));
         // Commands for different kinds of object never act on the same focus.
         const overlap =
           !one.appliesTo ||
@@ -134,6 +140,11 @@ describe("shortcuts", () => {
         const form = keysForm(keysOn(command.shortcut.keys, mac), mac);
         // A plain key, or one with Shift, types.
         expect(/(meta|ctrl|alt)\+/.test(form), command.id).toBe(true);
+        // Undo and Redo take the keys of text only where the focus isn't in text.
+        if (command.shortcut.outsideText) {
+          expect(command.appliesTo, command.id).toBeUndefined();
+          continue;
+        }
         // A key of text is taken only on a Block, where the command says it applies.
         if (command.shortcut.inText) {
           expect(command.appliesTo, command.id).toEqual(["block"]);

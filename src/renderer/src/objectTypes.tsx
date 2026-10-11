@@ -1,5 +1,6 @@
 import { displayName } from "../../shared/documentNames";
 import { conversationName } from "../../shared/naming";
+import { deleted, renamed } from "./changes";
 import { GripIcon } from "./components/icons";
 import {
   ConversationLineIcon,
@@ -18,8 +19,15 @@ import { folderName } from "./linkedFolders";
 import type { ObjectKind, ObjectType, Translate } from "./objects";
 import { useAppStore } from "./store";
 import { findTab, tabTitle } from "./tabs";
+import { type Undoable, useUndo } from "./undo";
 
 const state = () => useAppStore.getState();
+
+/** A change made here goes on the undo stack, and back to whoever asked for it. */
+const offered = (change: Undoable): Undoable => {
+  useUndo.getState().push(change);
+  return change;
+};
 const ICON = "size-4 shrink-0 text-ink-meta";
 
 /** A conversation's name, as History shows it: "New chat" when it has none. */
@@ -42,29 +50,34 @@ export const objectTypes: Partial<Record<ObjectKind, ObjectType>> = {
     icon: () => <ConversationLineIcon className={ICON} />,
     async rename(ref, name) {
       const before = conversationById(ref.id)?.title ?? "";
-      const renamed = await core.renameConversation(ref.id, name);
-      return {
-        message: translateNow("object.renamed", {
-          name: conversationName(renamed) || translateNow("conversation.untitled"),
-        }),
-        undo: async () => {
-          await core.renameConversation(ref.id, before);
-        },
-      };
+      const conversation = await core.renameConversation(ref.id, name);
+      const shown = conversationName(conversation) || translateNow("conversation.untitled");
+      const rename = (title: string) => core.renameConversation(ref.id, title);
+      return offered(renamed(translateNow, shown, rename, { before, after: conversation.title }));
     },
     async remove(refs) {
-      const message =
-        refs.length === 1
-          ? translateNow("object.deleted", {
-              name: conversationLabel(refs[0]?.id ?? "", translateNow),
-            })
-          : translateNow("object.deleted.conversations", { count: refs.length });
-      for (const ref of refs) await core.deleteConversation(ref.id);
-      return {
-        message,
-        // Recently deleted gives them back, with every message.
-        undo: () => core.restore(refs.map((ref) => ({ kind: "conversation", id: ref.id }))),
+      const [only] = refs;
+      const shown = only ? conversationLabel(only.id, translateNow) : "";
+      const remove = async () => {
+        for (const ref of refs) await core.deleteConversation(ref.id);
       };
+      await remove();
+      // Recently deleted gives them back, with every message.
+      const change = deleted(
+        translateNow,
+        shown,
+        refs.map((ref) => ({ kind: "conversation", id: ref.id })),
+        remove,
+      );
+      return offered(
+        refs.length === 1
+          ? change
+          : {
+              ...change,
+              message: translateNow("object.deleted.conversations", { count: refs.length }),
+              name: translateNow("undo.name.delete.conversations", { count: refs.length }),
+            },
+      );
     },
   },
   document: {
