@@ -445,11 +445,11 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     return deps.documentsIn(folderIds);
   };
 
-  /** A live Passage in the pairing's Folders, or a refusal that tells nothing of the others. */
-  const passageInScope = (pairing: AdmittedPairing, passageId: unknown): WindowedPassage => {
+  /** A live Passage of these Documents, or a refusal that tells nothing of the others. */
+  const passageInScope = (inScope: ReadonlySet<string>, passageId: unknown): WindowedPassage => {
     const id = text(passageId, "passageId", 200);
     const passage = deps.passage(id);
-    if (!passage || !scopeOf(pairing, undefined).includes(passage.documentId)) {
+    if (!passage || !inScope.has(passage.documentId)) {
       throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
     }
     return passage;
@@ -491,9 +491,9 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     search(input, signal) {
       const query = typeof input?.query === "string" ? input.query : "";
       return call("search", query, [READ_DOCUMENTS], async (pairing) => {
-        const words = text(input.query, "query", MAX_QUERY_CHARS);
-        const page = whole(input.page, "page", 1, MAX_SEARCH_PAGE, 1);
-        const documentIds = scopeOf(pairing, input.folderIds);
+        const words = text(input?.query, "query", MAX_QUERY_CHARS);
+        const page = whole(input?.page, "page", 1, MAX_SEARCH_PAGE, 1);
+        const documentIds = scopeOf(pairing, input?.folderIds);
         if (documentIds.length === 0) {
           return { result: { passages: [], page, more: false }, count: 0, documentIds: [] };
         }
@@ -527,7 +527,7 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
         let from: number;
         let to: number;
         if (input?.passageId !== undefined) {
-          const passage = passageInScope(pairing, input.passageId);
+          const passage = passageInScope(new Set(scopeOf(pairing, undefined)), input.passageId);
           documentId = passage.documentId;
           from = Math.max(0, passage.position - before);
           to = passage.position + after;
@@ -579,12 +579,15 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
             `citations must list 1 to ${MAX_CITES} quotes, each with its passageId.`,
           );
         }
+        const inScope = new Set(scopeOf(pairing, undefined));
+        const read: string[] = [];
         const citations: AgentCited[] = list.map((entry) => {
           const record = (typeof entry === "object" && entry !== null ? entry : {}) as Record<
             string,
             unknown
           >;
-          const passage = passageInScope(pairing, record.passageId);
+          const passage = passageInScope(inScope, record.passageId);
+          read.push(passage.documentId);
           const quote = text(record.quote, "quote", MAX_QUOTE_CHARS);
           const citation = deps.citing.citeQuote(passage.passageId, quote);
           if (!citation) throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
@@ -606,10 +609,7 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
         return {
           result: { citations },
           count: citations.filter((each) => each.check === "found").length,
-          documentIds: citations.flatMap((each) => {
-            const passage = deps.passage(each.passageId);
-            return passage ? [passage.documentId] : [];
-          }),
+          documentIds: read,
         };
       });
     },
@@ -653,7 +653,9 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
             changed: now.contentHash !== null && now.contentHash !== kept.contentHash,
           });
         }
-        const uncited = sentencesOf(draft.replace(/^#{1,6}\s.*$/gm, ""))
+        // Headings and table rows aren't sentences that make claims of their own.
+        const prose = draft.replace(/^#{1,6}\s.*$/gm, "").replace(/^\s*\|.*$/gm, "");
+        const uncited = sentencesOf(prose)
           .filter((sentence) => !sentence.match(CITATION_TOKEN) && makesAClaim(sentence))
           .slice(0, MAX_UNCITED)
           .map((sentence) => clip(sentence, 200));
@@ -749,8 +751,8 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     ask(input, signal) {
       const question = typeof input?.question === "string" ? input.question : "";
       return call("ask", question, [READ_DOCUMENTS], async (pairing) => {
-        const asked = text(input.question, "question", MAX_QUERY_CHARS * 4);
-        const documentIds = scopeOf(pairing, input.folderIds);
+        const asked = text(input?.question, "question", MAX_QUERY_CHARS * 4);
+        const documentIds = scopeOf(pairing, input?.folderIds);
         const controller = new AbortController();
         const stop = () => controller.abort();
         signal?.addEventListener("abort", stop, { once: true });

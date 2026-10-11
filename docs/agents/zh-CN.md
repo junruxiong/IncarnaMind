@@ -75,6 +75,7 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Skill | 技能 | As Kimi, Doubao, Yuanbao, Feishu, Notion and Cherry Studio. |
 | Skill script | 技能脚本 | |
 | Built-in Skill | 内置技能 | |
+| Outside agent | 智能体 | The User's own AI agent: "连接智能体", "设置 → 智能体". As Kimi, Doubao, Yuanbao and Coze call an agent. |
 | Proposal | 修订 | Accept: 接受; Reject: 拒绝; Accept all: 全部接受; Reject all: 全部拒绝. As WPS and Feishu (接受修订, 拒绝修订). |
 | Checkpoint | 检查点 | |
 | Citation check | 核对 | "正在核对引文…", "无法核对". |
