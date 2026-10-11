@@ -108,10 +108,9 @@ const appCommands: readonly Command[] = [
     },
   },
   {
-    // The keyboard's twin of clicking the Block handle.
     id: "block.menu",
     label: "editor.block.menu",
-    shortcut: { keys: "CmdOrCtrl+Alt+M" },
+    shortcut: { keys: "Shift+F10" },
     group: "main",
     appliesTo: ["block"],
     reversible: true,
