@@ -285,7 +285,7 @@ describe("The record of AI use", () => {
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     migrate(
       db,
-      migrations.filter((migration) => migration.version < 45),
+      migrations.filter((migration) => migration.version < 46),
     );
     const at = "2026-10-01T09:00:00.000Z";
     const mindId = randomUUID();
