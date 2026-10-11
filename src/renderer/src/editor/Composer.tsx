@@ -22,7 +22,7 @@ import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
+import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
 import {
   chosenScope,
   composerKey,
@@ -133,7 +133,6 @@ export function Composer({
   );
   const scope = composerScope(draft, folderId);
   const problem = useAnswers((state) => state.blocked[composerKey(mindId)]);
-  const openSettings = useAppStore((state) => state.openSettings);
   const skills = useAppStore((state) => state.skills);
   const field = useRef<HTMLTextAreaElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -484,7 +483,6 @@ export function Composer({
       {problem && (
         <ComposerProblem
           problem={problem}
-          onSetUp={(page) => openSettings(page)}
           onAskWithoutSkill={() => {
             update({ skill: null });
             void ask();
@@ -707,27 +705,21 @@ type AskProblem = NonNullable<ReturnType<typeof useAnswers.getState>["blocked"][
 /** Why the last Question couldn't be asked: one line with the one thing that fixes it. */
 function ComposerProblem({
   problem,
-  onSetUp,
   onAskWithoutSkill,
 }: {
   problem: AskProblem;
-  onSetUp(page: ReturnType<typeof settingsPageFor>): void;
   onAskWithoutSkill(): void;
 }) {
   const t = useT();
   if (problem.kind === "not-ready") {
     return (
-      <ProblemLine
-        role="status"
+      <ReadinessLine
+        readiness={problem.readiness}
         testId="composer-not-ready"
         className="composer-problem"
-        action={{
-          label: t("question.setUp"),
-          onClick: () => onSetUp(settingsPageFor(problem.readiness)),
-        }}
-      >
-        <ReadinessExplanation readiness={problem.readiness} inLine />
-      </ProblemLine>
+        setUpLabel={t("question.setUp")}
+        refused
+      />
     );
   }
   if (problem.kind === "skill-unavailable") {

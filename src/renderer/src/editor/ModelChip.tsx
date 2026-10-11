@@ -80,6 +80,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const readiness = useAppStore((state) => state.chatReadiness);
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
   const openSettings = useAppStore((state) => state.openSettings);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
@@ -186,16 +187,22 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                       models.map((modelId) => {
                         const choice = { providerId: each.id, modelId };
                         const checked = same(choice, current);
+                        // Local mode: only a model on this computer can be asked.
+                        const unavailable = localMode && group !== "local";
                         return (
                           <button
                             key={`${each.id}\n${modelId}`}
                             type="button"
                             role="menuitemradio"
                             aria-checked={checked}
+                            aria-disabled={unavailable || undefined}
                             data-testid="composer-model-option"
                             data-model={modelId}
                             data-provider={each.id}
-                            onClick={() => choose(choice)}
+                            data-unavailable={unavailable || undefined}
+                            onClick={() => {
+                              if (!unavailable) choose(choice);
+                            }}
                             className="model-menu-item"
                           >
                             <CheckLineIcon
@@ -204,7 +211,9 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                             />
                             <span className="model-menu-name">
                               <span className="truncate">{modelId}</span>
-                              <span className="model-menu-hint">{t(HINTS[group])}</span>
+                              <span className="model-menu-hint">
+                                {unavailable ? t("composer.model.localModeOff") : t(HINTS[group])}
+                              </span>
                             </span>
                             <span className="model-menu-provider">{providerName(each, t)}</span>
                           </button>
