@@ -6,7 +6,7 @@
  */
 import type { Document } from "../../core/api";
 import { displayName } from "../../shared/documentNames";
-import { countedByChoice, leftOutOfEvidence } from "../../shared/evidence";
+import { leftOutOfEvidence } from "../../shared/evidence";
 import { core } from "./core";
 import { translateNow } from "./i18n";
 import type { Undoable } from "./objects";
@@ -17,13 +17,6 @@ import { useUndo } from "./undo";
 export function useLeftOutOfEvidence(document: Document | undefined): boolean {
   return useAppStore((state) =>
     document ? leftOutOfEvidence(document, state.settings, state.library) : false,
-  );
-}
-
-/** Whether the Document counts only by the User's choice (see `countedByChoice`), kept up to date. */
-export function useCountedByChoice(document: Document | undefined): boolean {
-  return useAppStore((state) =>
-    document ? countedByChoice(document, state.settings, state.library) : false,
   );
 }
 

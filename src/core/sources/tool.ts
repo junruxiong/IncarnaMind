@@ -9,7 +9,12 @@
  * flow doesn't count them as "tool-results" (../core: `sendsToolResults`).
  */
 import { formatName } from "../../shared/references";
-import type { FindSourcesInput, FindSourcesResult, FoundSource } from "../api";
+import {
+  type FindSourcesInput,
+  type FindSourcesResult,
+  type FoundSource,
+  SOURCE_KIND_PROVIDERS,
+} from "../api";
 import { InvalidInputError } from "../errors";
 import { SOURCE_TOOLS, type Tool, type ToolProviderInfo } from "../tools";
 import type { SourceProvider } from "./types";
@@ -26,6 +31,8 @@ const yearOf = (value: unknown, what: string): number | null => {
   }
   return value;
 };
+
+const KINDS = SOURCE_KIND_PROVIDERS;
 
 const list = (names: readonly string[]) =>
   names.length <= 1
@@ -53,6 +60,7 @@ function describe(work: FoundSource, index: number): string {
         }${work.access.licence?.commercial === false ? ", non-commercial use only" : ""}).`
       : "No open full text: it can be added as a reference only.",
     work.citedBy !== null ? `Cited by ${work.citedBy}.` : "",
+    work.notice ? `The source says: ${work.notice}` : "",
     work.inLibrary
       ? work.inLibrary.documentId
         ? "Already in the User's Library as a Document."
@@ -92,11 +100,25 @@ export function sourcesTool(
   search: (input: FindSourcesInput, signal: AbortSignal) => Promise<FindSourcesResult>,
   searching: readonly SourceProvider[],
 ): Tool {
+  const names = (ids: readonly string[]) =>
+    list(searching.filter((each) => ids.includes(each.id)).map((each) => each.name));
+  const kinds = Object.keys(KINDS).filter((kind) => names(KINDS[kind] ?? []) !== "");
+  const papers = searching.filter((each) => each.searchedByDefault !== false);
   return {
     name: SOURCE_TOOLS.find,
     description: [
-      `Searches ${list(searching.map((each) => each.name))} for published papers and preprints, outside the User's Documents.`,
-      'Call it only when the User asks to find papers, articles, studies or other published sources (for example "find papers since 2021 on …"), not to answer from the User\'s Documents.',
+      `Searches ${list(papers.map((each) => each.name))} for published papers and preprints, outside the User's Documents.`,
+      ...(kinds.includes("drug_labels")
+        ? [
+            `Set kind to "drug_labels" to search ${names(KINDS.drug_labels ?? [])} for drug labels (give a drug name).`,
+          ]
+        : []),
+      ...(kinds.includes("clinical_trials")
+        ? [
+            `Set kind to "clinical_trials" to search ${names(KINDS.clinical_trials ?? [])} for clinical trials (give a condition, a drug or an NCT number).`,
+          ]
+        : []),
+      'Call it only when the User asks to find papers, articles, studies, drug labels, clinical trials or other published sources (for example "find papers since 2021 on …"), not to answer from the User\'s Documents.',
       "Write the query as the key words of the topic (a title, a DOI or an arXiv ID also works), in the language the field publishes in, usually English.",
     ].join(" "),
     inputSchema: {
@@ -112,6 +134,13 @@ export function sourcesTool(
           type: "boolean",
           description: "Only works whose full text is openly available.",
         },
+        ...(kinds.length > 0 && {
+          kind: {
+            type: "string",
+            enum: ["papers", ...kinds],
+            description: "What to search for; papers when left out.",
+          },
+        }),
       },
       required: ["query"],
       additionalProperties: false,
@@ -131,6 +160,7 @@ export function sourcesTool(
       ...(input.from_year !== undefined && { from_year: input.from_year }),
       ...(input.to_year !== undefined && { to_year: input.to_year }),
       ...(input.open_access_only !== undefined && { open_access_only: input.open_access_only }),
+      ...(input.kind !== undefined && { kind: input.kind }),
     }),
     async call(input, context) {
       if (typeof input.query !== "string") throw new InvalidInputError("query must be text.");
@@ -140,6 +170,8 @@ export function sourcesTool(
           fromYear: yearOf(input.from_year, "from_year"),
           toYear: yearOf(input.to_year, "to_year"),
           openAccessOnly: input.open_access_only === true,
+          ...(typeof input.kind === "string" &&
+            KINDS[input.kind] && { providers: [...(KINDS[input.kind] ?? [])] }),
         },
         context.signal,
       );

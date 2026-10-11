@@ -1,6 +1,3 @@
-import type { ReactNode } from "react";
-import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
-
 /*
  * The sidebar's rows (DESIGN.md, Sidebar): 28px, inset 8px by the sidebar's
  * padding and padded 8px, so every icon sits at x 16 and every text at x 40.
@@ -62,49 +59,3 @@ export const rowActionsClass =
 /** A 24px icon button among a row's actions. */
 export const rowActionButtonClass =
   "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-ink-meta hover:bg-rule hover:text-ink focus-visible:outline-offset-0 aria-expanded:bg-rule aria-expanded:text-ink";
-
-/**
- * A section's label ("Minds", "Documents"): 12/16 semibold, in the icon
- * column. With `onToggle`, it folds the section away and back.
- */
-export function SectionLabel({
-  id,
-  children,
-  folded,
-  onToggle,
-  toggleLabel,
-}: {
-  id?: string;
-  children: ReactNode;
-  folded?: boolean;
-  onToggle?(): void;
-  /** What the toggle does, for its tooltip and screen readers. */
-  toggleLabel?: string;
-}) {
-  const label = "mt-3 flex h-7 shrink-0 items-end px-2 pb-1 text-label font-semibold text-ink-meta";
-  if (!onToggle) {
-    return (
-      <h2 id={id} className={label}>
-        {children}
-      </h2>
-    );
-  }
-  return (
-    <h2 id={id} className={label}>
-      <button
-        type="button"
-        aria-expanded={!folded}
-        title={toggleLabel}
-        onClick={onToggle}
-        className="flex items-center gap-1 rounded-sm hover:text-ink-secondary"
-      >
-        {children}
-        {folded ? (
-          <ChevronRightLineIcon className="size-3" />
-        ) : (
-          <ChevronDownLineIcon className="size-3" />
-        )}
-      </button>
-    </h2>
-  );
-}
