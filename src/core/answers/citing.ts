@@ -53,6 +53,11 @@ export interface FoundPassage {
   location: CitationLocation | null;
   text: string;
   /**
+   * How relevant the reranker found it, when search reranked it (see
+   * `WindowedPassage.relevance`), or null.
+   */
+  relevance: number | null;
+  /**
    * The words of the text searched for (as keyword search reads them, without
    * stopwords) that the Passage holds, each once, in the text's order: how
    * closely it matches, and what a list of results shows in bold.
@@ -146,6 +151,7 @@ export function createCiting(documents: CitingDocuments): Citing {
           pageTo: passage.pageTo,
           location: passageLocation(passage),
           text: passage.text,
+          relevance: passage.relevance ?? null,
           matches: matchingTerms(terms, passage.text),
         }));
     },

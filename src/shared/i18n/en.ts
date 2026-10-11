@@ -1443,6 +1443,8 @@ export const en = {
   "command.group.close": "Close Group",
   "command.group.equalize": "Make Groups Equal Width",
   "command.composer.focus": "Ask a Question",
+  "command.suggestions.on": "Turn On Suggestions as I Write",
+  "command.suggestions.off": "Turn Off Suggestions as I Write",
 
   "update.available.message": "IncarnaMind {version} is available",
   "update.available.detail":

@@ -1,8 +1,15 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
-import type { ConsentRequest, Core, SuggestionOutcome, SuggestionRequest } from "../../src/core";
+import type {
+  ConsentRequest,
+  Core,
+  CoreAdapters,
+  Reranker,
+  SuggestionOutcome,
+  SuggestionRequest,
+} from "../../src/core";
 import { isStrongMatch, queryOf } from "../../src/core/suggestions";
-import { continuationOf, readReply } from "../../src/core/suggestions/prompt";
+import { continuationOf, numbersBacked, readReply } from "../../src/core/suggestions/prompt";
 import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -115,8 +122,12 @@ const requestFor = (
 ): SuggestionRequest => ({ requestId: `request-${++requests}`, mindId, paragraph, scope });
 
 /** A core with a local model (no consent needed), the files as Documents, suggestions on, and a Mind. */
-async function setUp(model: MockLanguageModelV4, files = [TIDES, BREAD]) {
-  const set = await setUpWithDocuments(model, files);
+async function setUp(
+  model: MockLanguageModelV4,
+  files = [TIDES, BREAD],
+  overrides: Partial<CoreAdapters> = {},
+) {
+  const set = await setUpWithDocuments(model, files, overrides);
   await set.core.updateSettings({ user: { suggestWhileWriting: true } });
   return set;
 }
@@ -191,6 +202,31 @@ describe("suggestions as the User writes", () => {
     expect(suggestion.citation).toMatchObject({ documentName: "潮汐", check: "found" });
   });
 
+  test("with a reranker, its score says whether the Documents support the paragraph, whatever words they share", async () => {
+    // Scores like the built-in model's: the tides Passage answers what is being written; bread doesn't.
+    const reranker: Reranker = async (query, candidates) =>
+      candidates.map((candidate) => ({
+        ...candidate,
+        score: /tides/.test(query) && candidate.text.includes("Spring tides") ? 0.9 : 0.02,
+      }));
+    const model = suggestingModel(SPRING);
+    const { core, mind } = await setUp(model, [TIDES, BREAD], { reranker });
+
+    expect(suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES))).text).toBe(
+      SPRING.text,
+    );
+    // Many words in common, but the reranker finds it no answer: nothing is asked.
+    expect(
+      await core.suggestNext(
+        requestFor(
+          mind.id,
+          "Sourdough bread needs a starter fed with flour and water, every day, by",
+        ),
+      ),
+    ).toEqual({ kind: "none" });
+    expect(suggestionCalls(model)).toHaveLength(1);
+  });
+
   test("weak or no support sends nothing to the model", async () => {
     const model = suggestingModel(SPRING);
     const { core, mind } = await setUp(model);
@@ -229,6 +265,27 @@ describe("suggestions as the User writes", () => {
     expect(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES))).toEqual({ kind: "none" });
     expect(suggestionCalls(model)).toHaveLength(4);
     expect((await core.getSuggestionStatus()).today.shown).toBe(0);
+  });
+
+  test("a quote from another Passage than the one named is cited where it is found", async () => {
+    const HARBOUR = {
+      name: "Harbour.md",
+      contents: "# Harbour\n\nThe harbour survey records the height of high water every day.",
+    };
+    let shown = 0;
+    const model = suggestingModel((prompt) => {
+      // Names a Passage the quote isn't in.
+      const passages = [...prompt.matchAll(/<passage id="(P\d)"[^>]*>\n([\s\S]*?)\n<\/passage>/g)];
+      shown = passages.length;
+      const other = passages.find((match) => !match[2]?.includes("Spring tides"));
+      return { ...SPRING, passage: other?.[1] ?? "P1" };
+    });
+    const { core, mind } = await setUp(model, [TIDES, HARBOUR]);
+
+    const suggestion = suggestionOf(await core.suggestNext(requestFor(mind.id, ABOUT_TIDES)));
+
+    expect(shown).toBeGreaterThan(1);
+    expect(suggestion.citation).toMatchObject({ documentName: "Tides", check: "found" });
   });
 
   test("a cancelled request, or one a newer request replaced, never gives a suggestion", async () => {
@@ -399,15 +456,37 @@ describe("what a suggestion rests on", () => {
     expect(queryOf("第一句。第二句。第三句")).toBe("第二句。 第三句");
   });
 
-  test("a strong match holds two of the words searched and a third of them, three at most", () => {
+  test("a strong match is one the reranker scores high, whatever words it shares", () => {
     const query = "the spring tides are highest at the moon";
-    expect(isStrongMatch(query, { matches: ["spring", "tides"] })).toBe(true);
-    expect(isStrongMatch(query, { matches: ["moon"] })).toBe(false);
+    expect(isStrongMatch(query, { matches: [], relevance: 0.9 })).toBe(true);
+    expect(isStrongMatch(query, { matches: ["spring", "tides", "moon"], relevance: 0.03 })).toBe(
+      false,
+    );
+  });
+
+  test("without a reranker, it holds two of the words searched and a third of them, three at most", () => {
+    const query = "the spring tides are highest at the moon";
+    const words = (matches: string[]) => ({ matches, relevance: null });
+    expect(isStrongMatch(query, words(["spring", "tides"]))).toBe(true);
+    expect(isStrongMatch(query, words(["moon"]))).toBe(false);
     const long = "survey harbour tides spring highest moon month twice records gauges levels";
-    expect(isStrongMatch(long, { matches: ["tides", "moon"] })).toBe(false);
-    expect(isStrongMatch(long, { matches: ["tides", "moon", "harbour"] })).toBe(true);
+    expect(isStrongMatch(long, words(["tides", "moon"]))).toBe(false);
+    expect(isStrongMatch(long, words(["tides", "moon", "harbour"]))).toBe(true);
     // Single letters and characters say nothing.
-    expect(isStrongMatch("城市 绿地 多 少 降温", { matches: ["多", "少", "城市"] })).toBe(false);
+    expect(isStrongMatch("城市 绿地 多 少 降温", words(["多", "少", "城市"]))).toBe(false);
+  });
+
+  test("every number in a suggestion is in its quote or the User's paragraph", () => {
+    const quote = "Roof and insulation\tHartley Building Ltd\t£1,240,000\tJune 2027";
+    expect(numbersBacked("was £1,240,000, due in June 2027.", quote, "the budget")).toBe(true);
+    expect(numbersBacked("was £1240000.", quote, "the budget")).toBe(true);
+    expect(numbersBacked("was £1,240,000, with 10 per cent kept back.", quote, "the budget")).toBe(
+      false,
+    );
+    expect(numbersBacked("the other 3 rooms too.", quote, "Of the 3 rooms, the roof")).toBe(true);
+    expect(
+      numbersBacked("为41%，是最高的。", "西湖区绿地率最高，达到38%", "而西湖区的绿地率"),
+    ).toBe(false);
   });
 
   test("a reply that starts by repeating the paragraph's end goes on from there", () => {
