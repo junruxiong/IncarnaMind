@@ -14,6 +14,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  motionSettled,
   newMind,
   removeDataFolder,
   setGroupBeside,
@@ -94,25 +95,24 @@ function expectNear(actual: number, expected: number, tolerance: number, what: s
 
 /** Opens or closes the Document viewer through the test hook, as a Citation would. */
 /**
- * Adds a sentence with two more Citations after the first Note that holds
- * one (an Answer's, added to the note), as copies of that Citation: one
- * found, and one whose quote wasn't found, on a later line. Like an Answer
- * that cited three times.
+ * Adds a sentence with two more Citations at the end of the Notes added from
+ * an Answer, keeping them one run with one link back, as copies of the first
+ * Citation: one found, and one whose quote wasn't found, on a later line.
+ * Like an Answer that cited three times.
  */
 async function citeMore(editor: Locator) {
   await editor.evaluate((dom) => {
     const { view, commands } = (dom as unknown as { editor: Editor }).editor;
-    let at = -1;
+    const added = dom.querySelectorAll(':scope > [data-origin="conversation"]');
+    const last = added[added.length - 1];
     let cited: Record<string, unknown> | null = null;
-    view.state.doc.forEach((node, offset) => {
-      if (at >= 0) return;
-      node.descendants((child) => {
-        if (!cited && child.type.name === "citation") cited = { ...child.attrs };
-        return cited === null;
-      });
-      if (cited) at = offset + node.nodeSize;
+    view.state.doc.descendants((child) => {
+      if (!cited && child.type.name === "citation") cited = { ...child.attrs };
+      return cited === null;
     });
-    if (at < 0 || !cited) throw new Error("No Note with a Citation.");
+    if (!last || !cited) throw new Error("No Note added from an Answer, with a Citation.");
+    const $last = view.state.doc.resolve(view.posAtDOM(last, 0));
+    const at = $last.after(1);
     const citation = (check: string, checkReason: string | null) => ({
       type: "citation",
       attrs: { ...(cited as Record<string, unknown>), check, checkReason },
@@ -243,6 +243,8 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await setGroupBeside(window, false);
   await expect(window.getByTestId("viewer")).toHaveCount(0);
   await expect(marks.nth(0)).toHaveAttribute("data-open", "true");
+  // Measured once it has grown from its marker.
+  await motionSettled(window);
   expectNear((await box(card.locator(".citation-card"))).width, 360, 1, "the card's width");
   await screenshot(window, "mind-card-found.png");
   await window.mouse.click(away.x, away.y);

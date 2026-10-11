@@ -6,6 +6,7 @@ import type { CoreBridge, LinkedFolder } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   askInAssistant,
+  clickNow,
   confirmLink,
   createDataFolder,
   dismissChatSetup,
@@ -242,7 +243,8 @@ test("pausing a Linked folder holds its indexing until it is resumed", async () 
   await expect(row).toHaveAttribute("data-state", "indexing");
 
   let menu = await openLinkedFolderMenu(row);
-  await menu.getByTestId("linked-folder-pause").click();
+  // At once, while the menu still grows in: indexing goes on meanwhile.
+  await clickNow(window, menu.getByTestId("linked-folder-pause"));
   await expect(row).toHaveAttribute("data-state", "paused");
   await expect(row.getByTestId("folder-status")).toHaveText(/^Paused/);
   const paused = await linkedAt(window, library);

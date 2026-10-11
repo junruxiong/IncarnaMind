@@ -6,6 +6,7 @@ import type { TestHooks } from "../src/shared/testHooks";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  clickNow,
   createDataFolder,
   dismissChatSetup,
   filterByTag,
@@ -125,7 +126,8 @@ test("a Document that failed offers Retry, which processes it again", async () =
   await writeFile(report, buildPdf([{ lines: ["Quarterly report"] }]));
   await openDocumentMenu(item);
   await screenshot(window, "document-failed-menu");
-  await item.getByTestId("retry-document").click();
+  // At once, while the menu still grows in, before the file's change is noticed on its own.
+  await clickNow(window, item.getByTestId("retry-document"));
   await expect(item).toHaveAttribute("data-status", "ready");
   // A ready Document has nothing to retry.
   await openDocumentMenu(item);

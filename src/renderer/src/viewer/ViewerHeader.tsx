@@ -1,11 +1,13 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 import type { Document } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
+import { CountItLine } from "../components/CountItLine";
 import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { DocumentTagChips } from "../components/TagChips";
 import { files } from "../core";
 import { errorMessage } from "../errors";
+import { useLeftOutOfEvidence } from "../evidence";
 import { useLanguage, useT } from "../i18n";
 import { pageDate } from "../webPages";
 import { OpenExternallyIcon } from "./icons";
@@ -35,7 +37,8 @@ export function HeaderDivider() {
  * toggle (`leading`), the Document's kind and name, its Tags, the view's own
  * controls (`children`: where it is, page navigation and zoom for a PDF),
  * then Keep open for a preview, and "Open in default app" (for a web page,
- * when it was fetched and "Open the live page").
+ * when it was fetched and "Open the live page"). Under it, for a file
+ * IncarnaMind wrote, that checks don't count it as evidence, with Count it (#80).
  */
 export function ViewerHeader({
   leading,
@@ -55,6 +58,7 @@ export function ViewerHeader({
   const { document, preview, keep } = useContext(ViewerFrameContext);
   /** Why the Document's own app couldn't open it, until it is tried again. */
   const [problem, setProblem] = useState<string | null>(null);
+  const leftOut = useLeftOutOfEvidence(document);
 
   // A copy named after the Document opens, as from the sidebar's file menu.
   const openExternally = () => {
@@ -128,6 +132,11 @@ ${sourceOf(document)}`
         <ProblemLine testId="viewer-open-problem" className="shrink-0 px-4 py-2">
           {problem}
         </ProblemLine>
+      )}
+      {document && leftOut && (
+        <CountItLine document={document} testId="viewer-own-file" className="shrink-0 px-4 py-2">
+          {t("evidence.ownFile")}
+        </CountItLine>
       )}
     </>
   );

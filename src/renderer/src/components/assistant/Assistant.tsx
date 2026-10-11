@@ -120,10 +120,17 @@ export function Assistant({
   // Esc with the focus in it and nothing in it open: it folds, the focus on what unfolds it; then
   // Esc goes back to the Mind. Heard on the window, after everything in it (the composer is drawn
   // here from its Mind, so React's own bubbling never reaches here): a picker, a menu or History
-  // closes first, by its own Esc, which marks the key handled.
+  // closes first, by its own Esc. Whether one was open is seen before anything handles the key,
+  // as a native menu closes itself on Esc without marking the key handled.
   useEffect(() => {
+    let openInside = false;
+    const before = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      openInside = aside.current?.querySelector(':popover-open, [role="listbox"]') != null;
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      if (openInside) return;
       const element = aside.current;
       if (!element || !(event.target instanceof Node) || !element.contains(event.target)) return;
       event.preventDefault();
@@ -139,8 +146,12 @@ export function Assistant({
       }
       readMindHandle.current?.returnToNote();
     };
+    window.addEventListener("keydown", before, true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", before, true);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [folded]);
 
   const newChatButton = (
