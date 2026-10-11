@@ -43,7 +43,7 @@ export interface NoteSchemaOptions {
 }
 
 /**
- * What a Mind can hold, and how it is stored. Notes: headings, bold, italic,
+ * What a Mind can hold, and how it is stored. Notes: headings, bold, italic, underline, links,
  * strikethrough, highlight, lists, code blocks highlighted by lowlight, and
  * inline and block math rendered by KaTeX, each with an "include in Question
  * context" flag. Questions and Answers, top-level only. Citations, inline in
