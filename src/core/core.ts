@@ -78,6 +78,7 @@ import {
   parseMindId,
 } from "./minds";
 import { firstLineOf } from "./mindText";
+import { createNoteAdding } from "./noteAdding";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -775,6 +776,15 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // "Add to note" into a Mind that isn't open (#201), with its Citations checked where they land.
+  const noteAdding = createNoteAdding({
+    content,
+    requireMind: (mindId) => writableMind(mindId).id,
+    recheck: (input) => recheckCitation(documents, input),
+    recordAiUse: (inputs) => void aiUse.record(inputs),
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
@@ -1284,6 +1294,8 @@ export function createCore(adapters: CoreAdapters): Core {
         ? { status: "available", reference, name: found.name }
         : { status: "deleted", reference, name: found.name, deletedAt: found.deletedAt };
     },
+    addToNote: (input) => noteAdding.add(input),
+    undoAddToNote: async (input) => noteAdding.undo(input),
     getSettings: async () => settings.get(),
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),

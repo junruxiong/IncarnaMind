@@ -6,7 +6,10 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
-  clickEmptyLine,
+  addToNote,
+  askInAssistant,
+  assistantAnswers,
+  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   enterContent,
@@ -91,9 +94,10 @@ function expectNear(actual: number, expected: number, tolerance: number, what: s
 
 /** Opens or closes the Document viewer through the test hook, as a Citation would. */
 /**
- * Adds a sentence with two more Citations to the Answer, after its first
- * paragraph, as copies of its own Citation: one found, and one whose quote
- * wasn't found, on a later line. Like an Answer that cited three times.
+ * Adds a sentence with two more Citations after the first Note that holds
+ * one (an Answer's, added to the note), as copies of that Citation: one
+ * found, and one whose quote wasn't found, on a later line. Like an Answer
+ * that cited three times.
  */
 async function citeMore(editor: Locator) {
   await editor.evaluate((dom) => {
@@ -101,14 +105,14 @@ async function citeMore(editor: Locator) {
     let at = -1;
     let cited: Record<string, unknown> | null = null;
     view.state.doc.forEach((node, offset) => {
-      if (node.type.name !== "answer" || at >= 0 || !node.firstChild) return;
-      at = offset + 1 + node.firstChild.nodeSize;
+      if (at >= 0) return;
       node.descendants((child) => {
         if (!cited && child.type.name === "citation") cited = { ...child.attrs };
         return cited === null;
       });
+      if (cited) at = offset + node.nodeSize;
     });
-    if (at < 0 || !cited) throw new Error("No Answer with a Citation.");
+    if (at < 0 || !cited) throw new Error("No Note with a Citation.");
     const citation = (check: string, checkReason: string | null) => ({
       type: "citation",
       attrs: { ...(cited as Record<string, unknown>), check, checkReason },
@@ -129,6 +133,8 @@ async function citeMore(editor: Locator) {
 }
 
 test("every text in a Mind starts at one edge, its controls sit in the left margin, and each Citation's check is level with its marker in the right margin", async () => {
+  // Notes added from an Answer (#201) are Notes: they keep the edge, their link back sits in
+  // the left margin, and their Citations' checks in the right one.
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -136,7 +142,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await useMockupSize(app, window);
 
-  // A title, a Note, a heading, a list, then a Question.
+  // A title, a Note, a heading, a list, then an Answer added to the note.
   await newMind(window);
   const title = window.getByTestId("mind-title");
   await title.fill("Reading notes: tides");
@@ -153,26 +159,28 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await window.keyboard.type("Neap tides fall in between");
   await window.keyboard.press("Enter");
   await window.keyboard.press("Enter");
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen, and what makes them stronger?");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await addToNote(
+    window,
+    await askInAssistant(window, "When do spring tides happen, and what makes them stronger?"),
+  );
   await citeMore(editor);
-  await clickEmptyLine(editor.locator(":scope > p").last());
+  await clickEndOf(window, editor.locator(":scope > p").last());
+  await window.keyboard.press("Enter");
   await window.keyboard.type(
     "So spring tides follow the Moon. Check whether the tables put numbers on how much higher they are.",
   );
 
-  // One text edge: the title, a Note, a heading, a list item, a Question's text and an Answer's text.
+  // One text edge: the title, a Note, a heading, a list item, and a Note added from an Answer.
   const edge = (await textColumn(editor)).x;
   const texts = {
     title: title,
     note: editor.locator(":scope > p").first(),
     heading: editor.locator(":scope > h2"),
     "list item": editor.locator(":scope > ul > li").first(),
-    question: editor.getByTestId("question").locator(".question-text"),
-    answer: answer.locator(".answer-content p").first(),
+    added: editor
+      .locator(":scope > p")
+      .filter({ has: window.getByTestId("citation") })
+      .first(),
   };
   for (const [name, locator] of Object.entries(texts)) {
     expectNear((await box(locator)).x, edge, 1, `the ${name} starts at the text edge`);
@@ -180,7 +188,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   // The measure is 680px, with its margins inside the pane.
   expectNear((await textColumn(editor)).width, MEASURE, 1, "the measure");
 
-  // A Question's spark and fold chevron and the block handle sit in the left margin.
+  // The link back of a Note added from an Answer, and the block handle, sit in the left margin.
   const inLeftMargin = async (locator: Locator, name: string) => {
     const rect = await box(locator);
     expect
@@ -188,11 +196,11 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
       .toBeGreaterThanOrEqual(edge - LEFT_MARGIN - 1);
     expect.soft(rect.x + rect.width, `${name} is left of the text`).toBeLessThanOrEqual(edge + 1);
   };
-  await inLeftMargin(editor.getByTestId("question-fold"), "the Question's fold chevron");
-  // It is level with the Question's one 20px line; the Answer has no label.
-  const foldMiddle = middle(await box(editor.getByTestId("question-fold")));
-  expectNear(foldMiddle, (await box(texts.question)).y + 10, 1, "the fold chevron's middle");
-  await expect(answer.locator(".answer-label")).toHaveCount(0);
+  const link = window.getByTestId("conversation-link");
+  await expect(link).toHaveCount(1);
+  await inLeftMargin(link, "the link back to the conversation");
+  // It is level with the added Note's first 28px line.
+  expectNear(middle(await box(link)), (await box(texts.added)).y + 14, 1, "the link's middle");
   // The composer is the assistant's, beside the Mind (#253), not in its column.
   const composer = await box(window.getByTestId("composer"));
   expect
@@ -203,14 +211,14 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(handle).toBeVisible();
   await inLeftMargin(handle, "the block handle");
 
-  // The Citations are numbered within their Answer; the not-found one is amber in the text.
+  // The Citations are numbered through the Mind; the not-found one is amber in the text.
   const markers = editor.getByTestId("citation-chip");
   await expect(markers).toHaveText(["1", "2", "3"]);
   await expect(markers.nth(0)).toHaveAttribute("aria-label", /Tides, p\. 2\. Quote found on p\. 2/);
   await expect(markers.nth(2)).toHaveAttribute("data-check", "not-found");
 
   // A mark for each in the right margin, with its state, level with its marker's line.
-  const marks = window.getByTestId("margin-check");
+  const marks = window.locator(".mind-editor-frame").getByTestId("margin-check");
   await expect(marks).toHaveCount(3);
   await expect(marks).toHaveText(["1", "2", "3"]);
   for (const [index, check] of ["found", "found", "not-found"].entries()) {
@@ -251,18 +259,18 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
 
   // Under 900px (here, the viewer open beside it) the margins fold away: the markers show the checks.
   await setGroupBeside(window, true);
-  await expect(window.getByTestId("margin-checks")).toBeHidden();
+  await expect(window.locator(".mind-editor-frame").getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
   expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
   expectNear(
-    (await box(texts.answer)).x,
+    (await box(texts.added)).x,
     (await textColumn(editor)).x,
     1,
-    "narrow: the Answer's edge",
+    "narrow: the added Note's edge",
   );
   await screenshot(window, "mind-narrow.png");
   await setGroupBeside(window, false);
-  await expect(window.getByTestId("margin-checks")).toBeVisible();
+  await expect(window.locator(".mind-editor-frame").getByTestId("margin-checks")).toBeVisible();
 
   // Two markers on one line: their marks stack, the first level with the line.
   await editor.evaluate((dom) => {
@@ -276,7 +284,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
     commands.insertContentAt(view.state.doc.content.size, {
       type: "paragraph",
       content: [
-        { type: "text", text: "Copied from the Answer:" },
+        { type: "text", text: "Copied from the Note:" },
         { type: "citation", attrs: cited },
         { type: "citation", attrs: cited },
       ],
@@ -397,35 +405,36 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   const title = window.getByTestId("mind-title");
   await title.fill("Boat trips");
   await enterContent(window);
-  const editor = window.getByTestId("mind-editor");
   await window.keyboard.type("Book the morning boat from Dover, and greet the harbour master.");
   await window.keyboard.press("Enter");
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Please book_boat from Dover");
   await window.keyboard.press("Enter");
 
-  const answer = editor.getByTestId("answer").first();
+  // In the assistant, under its Answer.
+  const answer = assistantAnswers(window).first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(answer.getByTestId("answer-writing")).toHaveText("Waiting for your approval");
   await expect(card.locator(".approval-title")).toHaveText("Tides wants to run book_boat");
   await expect(card.locator(".approval-title code")).toHaveText("book_boat");
   await expectOneTextEdge(card);
-  // Deny is pushed to the right.
+  // Deny is pushed to the right, to the card's edge.
   const deny = await box(card.getByTestId("approval-deny"));
   const always = await box(card.getByTestId("approval-always-allow"));
-  expect(deny.x - (always.x + always.width)).toBeGreaterThan(100);
+  const cardBox = await box(card);
+  expect(deny.x - (always.x + always.width)).toBeGreaterThan(8);
+  expect(cardBox.x + cardBox.width - (deny.x + deny.width)).toBeLessThan(24);
   await screenshot(window, "approval.png");
   await screenshot(answer, "approval-card.png");
   await card.getByTestId("approval-deny").click();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
   // A Skill script: the same three sections; "Always run" warns in the last one.
-  await clickEmptyLine(editor.locator(":scope > p").last());
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Run greeter scripts/hello.js for Calais");
   await window.keyboard.press("Enter");
-  const second = editor.getByTestId("answer").nth(1);
+  const second = assistantAnswers(window).nth(1);
   const scriptCard = second.getByTestId("approval-card");
   await expect(scriptCard).toBeVisible({ timeout: 15_000 });
   await expect(scriptCard.locator(".approval-title code")).toHaveText("scripts/hello.js");

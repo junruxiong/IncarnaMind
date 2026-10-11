@@ -52,7 +52,8 @@ export function UndoLine() {
       data-testid="undo-line"
       className="pointer-events-none absolute inset-x-2 bottom-2 z-10"
     >
-      {last && (
+      {/* One shown where the User acted (under an Answer in the assistant) isn't shown twice. */}
+      {last && !last.shownAt && (
         <div className="pointer-events-auto flex min-h-8 items-center gap-2 rounded-lg bg-sheet py-1 pr-1 pl-3 text-[13px] leading-5 text-ink-secondary shadow-popover">
           <span data-testid="undo-message" className="min-w-0 flex-1 break-words">
             {last.message}

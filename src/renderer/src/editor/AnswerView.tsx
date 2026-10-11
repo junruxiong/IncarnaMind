@@ -44,10 +44,11 @@ function toolCallsOf(value: unknown): AnswerToolCall[] {
 }
 
 const RUN_SCRIPT = "run_skill_script";
-const SEARCH = "search_documents";
+/** The Tool an Answer searches the Documents with: its calls are summed up on the meta line. */
+export const SEARCH = "search_documents";
 
 /** Items of the meta line, with a dot between each two. */
-function Dotted({ items }: { items: ReactNode[] }) {
+export function Dotted({ items }: { items: ReactNode[] }) {
   return items.map((item, index) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: the items are fixed slots of the meta line.
     <Fragment key={index}>
@@ -224,7 +225,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
 }
 
 /** A failed Answer, under what was written of it: one line, and the one thing that can fix it. */
-function AnswerError({
+export function AnswerError({
   kind,
   modelId,
   details,
@@ -264,7 +265,13 @@ function AnswerError({
  * rows, Skills first. A call waiting for the User's approval has no row: its
  * approval card shows instead, after the Answer's text.
  */
-function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: ApprovalRequest[] }) {
+export function CallRows({
+  calls,
+  approvals,
+}: {
+  calls: AnswerToolCall[];
+  approvals: ApprovalRequest[];
+}) {
   const waitingIds = new Set(approvals.map((request) => request.toolCallId));
   const rows = calls
     .filter(
@@ -292,7 +299,7 @@ function CallRows({ calls, approvals }: { calls: AnswerToolCall[]; approvals: Ap
 }
 
 /** The approval card for a request: a Connector's Tool, or a Skill script. */
-function ApprovalCard({ request }: { request: ApprovalRequest }) {
+export function ApprovalCard({ request }: { request: ApprovalRequest }) {
   return request.subject.kind === "skill-script" ? (
     <ScriptApprovalCard request={request as SkillScriptApprovalRequest} />
   ) : (
@@ -771,7 +778,7 @@ function SkillRow({ name, use, reads }: SkillUse) {
 }
 
 /** The searches an Answer ran, summed up on its meta line; it opens the list. */
-function SearchesSummary({
+export function SearchesSummary({
   searches,
   open,
   onToggle,
@@ -803,7 +810,7 @@ function SearchesSummary({
 }
 
 /** What each search was for, and what it found. */
-function SearchList({ searches }: { searches: AnswerToolCall[] }) {
+export function SearchList({ searches }: { searches: AnswerToolCall[] }) {
   const t = useT();
   const results = (call: AnswerToolCall) =>
     call.status === "failed"

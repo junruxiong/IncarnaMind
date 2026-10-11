@@ -1,11 +1,12 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -74,25 +75,10 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // An Answer with a checked Citation, whose sentence is copied into a Note.
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen?");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await editor.evaluate((dom) => {
-    const { view, commands } = (dom as unknown as { editor: Editor }).editor;
-    let at = -1;
-    view.state.doc.descendants((node, pos) => {
-      if (at < 0 && node.type.name === "citation") at = pos;
-    });
-    const sentence = view.state.doc.resolve(at);
-    commands.setTextSelection({ from: sentence.start(), to: sentence.end() });
-    const { dom: copied } = view.serializeForClipboard(view.state.selection.content());
-    commands.setTextSelection(view.state.doc.content.size - 1);
-    view.pasteHTML(copied.innerHTML);
-  });
-  const note = editor.locator(":scope > p").last();
+  // An Answer with a checked Citation, added to the note.
+  const answer = await askInAssistant(window, "When do spring tides happen?");
+  await addToNote(window, answer);
+  const note = editor.locator(":scope > p").first();
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
   await slideSelect(window, note, "Your Documents answer this");
   await window.keyboard.type("The tides here are very strong and really regular");

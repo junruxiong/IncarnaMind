@@ -19,7 +19,7 @@ import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
-import { InFootnoteContext, useMindId } from "./mindContext";
+import { InFootnoteContext, MindIdContext, RegenerateAnswerContext } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek } from "./peek";
 
@@ -70,7 +70,9 @@ export function CitationView({
   decorations,
 }: ReactNodeViewProps) {
   const t = useT();
-  const mindId = useMindId();
+  // None in the assistant, whose Answers are read only and say how they are written again.
+  const mindId = useContext(MindIdContext);
+  const regenerateHere = useContext(RegenerateAnswerContext);
   const attributes = node.attrs as CitationAttributes;
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
@@ -243,18 +245,29 @@ export function CitationView({
                 dismiss();
                 if (!groupsMerged()) editor.view.focus();
               }}
-              onRemove={() => {
-                dismiss();
-                deleteNode();
-              }}
+              onRemove={
+                editor.isEditable
+                  ? () => {
+                      dismiss();
+                      deleteNode();
+                    }
+                  : null
+              }
               onRegenerate={() => {
-                const answer = answerAround(editor, getPos());
                 dismiss();
-                if (answer) {
+                if (regenerateHere) {
+                  regenerateHere();
+                  return;
+                }
+                const answer = answerAround(editor, getPos());
+                if (answer && mindId) {
                   void useAnswers.getState().regenerate(mindId, answer.answerId, answer.questionId);
                 }
               }}
-              inAnswer={answerAround(editor, getPos()) !== null}
+              inAnswer={
+                regenerateHere !== null ||
+                (mindId !== null && answerAround(editor, getPos()) !== null)
+              }
             />
           </Popover>,
           document.body,
@@ -283,7 +296,8 @@ function CitationCard({
   badgeText: string;
   inAnswer: boolean;
   onOpen(withQuote: boolean): void;
-  onRemove(): void;
+  /** Null where the text can't be changed, such as an Answer in the assistant. */
+  onRemove: (() => void) | null;
   onRegenerate(): void;
 }) {
   const t = useT();
@@ -360,14 +374,16 @@ function CitationCard({
             >
               {t(`citation.openAnyway.${opens}`)}
             </button>
-            <button
-              type="button"
-              data-testid="citation-remove"
-              className="citation-card-action"
-              onClick={onRemove}
-            >
-              {t("citation.remove")}
-            </button>
+            {onRemove && (
+              <button
+                type="button"
+                data-testid="citation-remove"
+                className="citation-card-action"
+                onClick={onRemove}
+              >
+                {t("citation.remove")}
+              </button>
+            )}
             {inAnswer && (
               <button
                 type="button"

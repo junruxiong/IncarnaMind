@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import {
+  addToNote,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -189,7 +191,7 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
     window.locator('[data-testid="get-started-step"][data-step="documents"] [data-done]'),
   ).toBeVisible();
 
-  // The empty Mind's hint focuses the composer, for a Question to go where the hint is.
+  // The empty Mind's hint focuses the composer, for a Question about one's Documents.
   await useLocalChatModel(window);
   const hint = window.getByTestId("end-hint");
   await expect(hint).toHaveAttribute("data-place", "empty");
@@ -200,13 +202,18 @@ test("an empty Mind of one's own shows the three steps; Get started ticks itself
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.type("When are the tide tables published?");
   await window.keyboard.press("Enter");
-  const editor = window.getByTestId("mind-editor");
-  await expect(editor.getByTestId("question")).toHaveCount(1);
-  await expect(guide).toBeHidden();
-  await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+  // It is asked in the assistant, and answered there: the Mind is left as it was, the steps
+  // still under its line for the one left to do.
+  await expect(window.getByTestId("assistant-question")).toContainText(
+    "When are the tide tables published?",
+  );
+  await expect(assistantAnswers(window)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
   await expect(progress(window)).toHaveText("· 2 of 3");
+  const editor = window.getByTestId("mind-editor");
+  await expect(editor.getByTestId("question")).toHaveCount(0);
+  await expect(guide).toBeVisible();
 
   // The last step, from the card: the example Mind opens, and checking a Citation there ends it.
   await pointAndClick(
@@ -272,20 +279,19 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
   // An empty line after an Answer, not at the end, shows the hint while it is written in.
   await expect(hint).toHaveAttribute("data-place", "afterAnswer");
 
-  // Its link focuses the composer; the Question asked there goes on that line.
+  // Its link focuses the composer; the Question asked there is answered in the assistant, the
+  // Mind left as it was.
   await pointAndClick(window, hint.getByTestId("end-hint-ask"));
   await expect(window.getByTestId("composer-input")).toBeFocused();
   await useLocalChatModel(window);
   await window.keyboard.type("Which tea is drunk most in Britain?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("question")).toHaveCount(2);
-  await expect(editor.getByTestId("question").nth(1)).toContainText(
-    "Which tea is drunk most in Britain?",
-  );
-  // Right after the example's Answer, before the Note, with a line under its Answer to write on.
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
-    timeout: 15_000,
-  });
+  const answer = assistantAnswers(window).last();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(editor.getByTestId("question")).toHaveCount(1);
+  await expect(editor.locator('[data-origin="conversation"]')).toHaveCount(0);
+  // Added to the note, it goes on the hint's line: right after the example's Answer, before the Note.
+  await addToNote(window, answer);
   const order = await editor
     .locator(":scope > *")
     .evaluateAll((all) =>
@@ -294,15 +300,13 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
           ? "question"
           : block.matches(".node-answer")
             ? "answer"
-            : (block.textContent ?? "").trim(),
+            : block.matches('[data-origin="conversation"]')
+              ? "added"
+              : (block.textContent ?? "").trim(),
       ),
     );
-  expect(order.slice(-6)).toEqual([
-    "question",
-    "answer",
-    "question",
-    "answer",
-    "",
-    "Green and black tea come from the same plant.",
-  ]);
+  const at = order.lastIndexOf("answer");
+  expect(order.slice(at - 1, at + 2)).toEqual(["question", "answer", "added"]);
+  expect(order.at(-1)).toBe("Green and black tea come from the same plant.");
+  expect(order.slice(at + 1, -1).every((block) => block === "added")).toBe(true);
 });

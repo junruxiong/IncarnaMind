@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -200,7 +201,7 @@ test("an Answer cites a web page by section and paragraph; its card says the sit
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("Who first brought tea to Amsterdam?");
   await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).last();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
 
   const citation = answer.getByTestId("citation");

@@ -30,6 +30,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { withCitations } from "../../shared/blockJson";
 import { searchScopeOf } from "../../shared/searchScope";
 import {
   ANSWER_BLOCK,
@@ -93,7 +94,6 @@ import {
 import {
   type AnswerDocuments,
   createCitationSession,
-  withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
 import { buildQuestionContext, conversationContext, type QuestionContext } from "./context";

@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
-  clickEmptyLine,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -39,7 +39,7 @@ async function addTideConnector(window: Page): Promise<void> {
   );
 }
 
-/** Writes a Question on a new line of the Mind and asks it. */
+/** Asks a Question in the assistant, beside the Mind. */
 async function ask(window: Page, text: string): Promise<void> {
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type(text);
@@ -58,7 +58,7 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   await ask(window, "Please book_boat from Dover");
 
   // The fake model calls book_boat: the Answer waits, showing the Tool, its Connector and the arguments.
-  const answer = editor.getByTestId("answer").first();
+  const answer = assistantAnswers(window).first();
   const card = answer.getByTestId("approval-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveAttribute("data-tool", "book_boat");
@@ -86,11 +86,10 @@ test("a Tool that may change something pauses the Answer with an approval card: 
   // The card shows the arguments that were sent.
   await expect(call).toContainText('{"place":"Dover"}');
 
-  // A second Question, on the empty line after the Answer: Deny. The call isn't made, and the
-  // Answer still finishes.
-  await clickEmptyLine(editor.locator(":scope > p").last());
+  // A second Question, in the same conversation: Deny. The call isn't made, and the Answer
+  // still finishes.
   await ask(window, "Now book_boat from Calais");
-  const second = editor.getByTestId("answer").nth(1);
+  const second = assistantAnswers(window).nth(1);
   const secondCard = second.getByTestId("approval-card");
   await expect(secondCard).toBeVisible({ timeout: 15_000 });
   await expect(secondCard.getByTestId("approval-argument")).toContainText("Calais");
