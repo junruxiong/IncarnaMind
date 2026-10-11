@@ -11,10 +11,6 @@ describe("Settings", () => {
       device: {
         sidebarWidth: 248,
         sidebarHidden: false,
-        viewerWidth: null,
-        openMinds: [],
-        activeMind: null,
-        libraryTab: "closed",
         chatSetupDismissed: false,
         gettingStarted: {
           started: false,
@@ -97,10 +93,6 @@ describe("Settings", () => {
     expect(settings.device).toEqual({
       sidebarWidth: 320,
       sidebarHidden: false,
-      viewerWidth: null,
-      openMinds: [],
-      activeMind: null,
-      libraryTab: "closed",
       chatSetupDismissed: false,
       gettingStarted: {
         started: false,
@@ -117,15 +109,9 @@ describe("Settings", () => {
     });
   });
 
-  test("the viewer's width is unset until the User resizes it, so it opens at half the room beside the sidebar", async () => {
+  test("a width must be a number", async () => {
     const core = startCore(await createTempDataFolder());
 
-    expect((await core.updateSettings({ device: { viewerWidth: 500 } })).device.viewerWidth).toBe(
-      500,
-    );
-    expect((await core.updateSettings({ device: { viewerWidth: null } })).device.viewerWidth).toBe(
-      null,
-    );
     await expect(
       core.updateSettings({ device: { sidebarWidth: null as unknown as number } }),
     ).rejects.toThrow(InvalidInputError);
@@ -137,10 +123,6 @@ describe("Settings", () => {
     const device = {
       sidebarWidth: 300,
       sidebarHidden: true,
-      viewerWidth: 500,
-      openMinds: ["mind-b", "mind-a"],
-      activeMind: "mind-a",
-      libraryTab: "shown" as const,
       chatSetupDismissed: true,
       gettingStarted: {
         started: true,
@@ -175,15 +157,12 @@ describe("Settings", () => {
     { name: "a setting in the wrong group", patch: { device: { language: "en" } } },
     { name: "an unknown group", patch: { secrets: { apiKey: "sk-…" } } },
     { name: "a negative width", patch: { device: { sidebarWidth: -1 } } },
-    { name: "a width that isn't a number", patch: { device: { viewerWidth: "wide" } } },
-    { name: "open Minds that aren't a list", patch: { device: { openMinds: "mind-a" } } },
-    { name: "an open Mind that isn't an ID", patch: { device: { openMinds: ["mind-a", 7] } } },
-    { name: "a Mind open twice", patch: { device: { openMinds: ["mind-a", "mind-a"] } } },
+    { name: "a width that isn't a number", patch: { device: { sidebarWidth: "wide" } } },
+    { name: "the tabs the app kept before groups", patch: { device: { openMinds: ["mind-a"] } } },
     {
       name: "a checklist with a step missing",
       patch: { device: { gettingStarted: { started: true, hidden: false } } },
     },
-    { name: "an active Mind that isn't an ID", patch: { device: { activeMind: "  " } } },
     {
       name: "a script switch that isn't true or false",
       patch: { device: { skillScriptsEnabled: 1 } },

@@ -247,6 +247,16 @@ export function RecordingLineIcon(props: IconProps) {
   );
 }
 
+/** Split to the right: a window cut in two halves, as in VS Code. */
+export function SplitLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M12 4.5v15" />
+    </LineIcon>
+  );
+}
+
 export function PauseLineIcon(props: IconProps) {
   return (
     <LineIcon strokeWidth={2.25} {...props}>
@@ -267,6 +277,16 @@ export function StopLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
       <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" />
+    </LineIcon>
+  );
+}
+
+/** A pinned tab, and Keep open: a pushpin. */
+export function PinLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M9.5 3.5h5l-.8 5.3 3.3 3.2v1.5H7v-1.5l3.3-3.2z" />
+      <path d="M12 13.5v7" />
     </LineIcon>
   );
 }

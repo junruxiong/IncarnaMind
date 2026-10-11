@@ -1,17 +1,13 @@
 import { createContext, useContext, useEffect, useRef } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { files } from "../core";
 import { useT } from "../i18n";
 import { SidebarLineIcon } from "./lineIcons";
 import { iconButtonClass } from "./ui";
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** The shortcut as this system writes it. */
-export const SIDEBAR_SHORTCUT = isMac ? "⌘\\" : "Ctrl+\\";
-
 /** What the window tells the sidebar's toggle buttons (see `Workspace` in App.tsx). */
 export interface SidebarControl {
-  /** The sidebar is out of the way (the User's choice, or a window too narrow). */
+  /** The sidebar is out of the way: the User hid it. */
   hidden: boolean;
   /** Hidden, but slid out over the content for now. */
   peeking: boolean;
@@ -52,7 +48,7 @@ export function SidebarToggle({ place }: { place: "header" | "band" }) {
       aria-label={label}
       aria-expanded={!control.hidden}
       aria-controls="sidebar"
-      title={`${label} (${SIDEBAR_SHORTCUT})`}
+      title={`${label} (${shortcutLabel("sidebar.toggle")})`}
       onClick={control.toggle}
       className={`${iconButtonClass} sidebar-toggle text-ink-secondary`}
     >

@@ -43,6 +43,7 @@ import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { safeFileName } from "./fileNames";
 import { createFolders } from "./folders";
+import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
@@ -854,6 +855,20 @@ export function createCore(adapters: CoreAdapters): Core {
   };
   // Connectors that are on start with the app.
   connectors.startAll();
+  const layouts = createLayouts({
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    mindExists: (mindId) => {
+      try {
+        minds.get(mindId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    documentExists: (documentId) => documents.getMany([documentId]).length > 0,
+    changed: (windowId, layout) => events.emit("layout.changed", { windowId, layout }),
+  });
   // The example Mind: its Citations are checked once its Documents have been read.
   const examples = createExamples({
     source: adapters.paths.examples,
@@ -874,6 +889,7 @@ export function createCore(adapters: CoreAdapters): Core {
         content.remove(mind.id, at);
       });
       mindsChanged();
+      layouts.forgetDeletedMinds();
     },
     editMind: (mindId, change) => content.edit(mindId, change),
     linkFolder: (path) => documents.linkedFolders.add(path),
@@ -949,6 +965,7 @@ export function createCore(adapters: CoreAdapters): Core {
       });
       meetings.mindDeleted(deleted.id);
       mindsChanged();
+      layouts.forgetDeletedMinds();
     },
     openMind: async (mindId) => {
       const mind = minds.get(mindId);
@@ -969,6 +986,8 @@ export function createCore(adapters: CoreAdapters): Core {
       content.close(parseMindId(mindId));
     },
     getSettings: async () => settings.get(),
+    getLayout: async (windowId) => layouts.get(windowId),
+    changeLayout: async (windowId, change) => layouts.change(windowId, change),
     updateSettings: async (patch) => {
       // The default chat model must be on a saved provider.
       const chatModel = isRecord(patch) && isRecord(patch.user) ? patch.user.chatModel : undefined;
