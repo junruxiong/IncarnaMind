@@ -83,6 +83,8 @@ const keysOf = (ids: WorkIds): string[] => [
   ...(ids.arxiv ? [`arxiv:${ids.arxiv}`] : []),
   ...(ids.pmid ? [`pmid:${ids.pmid}`] : []),
   ...(ids.openalex ? [`openalex:${ids.openalex}`] : []),
+  ...(ids.setid ? [`setid:${ids.setid}`] : []),
+  ...(ids.nct ? [`nct:${ids.nct}`] : []),
 ];
 
 /** The DOIs a work's records could carry: its own, and arXiv's for its preprint. */

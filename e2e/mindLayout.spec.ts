@@ -13,9 +13,11 @@ import {
   launchApp,
   motionSettled,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setGroupBeside,
   setWindowSize,
+  slideToHandle,
   useLocalChatModel,
 } from "./app";
 
@@ -443,3 +445,92 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await app.close();
 });
+
+/** Sizes the window until the Mind's column is `width` wide: the sidebar and the assistant take the rest. */
+async function sizeMind(app: ElectronApplication, window: Page, width: number) {
+  const column = window.locator(".mind-column");
+  let windowWidth = width + 400;
+  for (let tries = 0; tries < 3; tries++) {
+    await setWindowSize(app, window, windowWidth, 900);
+    const have = (await box(column)).width;
+    if (Math.abs(have - width) <= 1) return;
+    windowWidth += Math.round(width - have);
+  }
+  await expect.poll(async () => Math.abs((await box(column)).width - width)).toBeLessThanOrEqual(1);
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  for (const mindWidth of [650, 800, 1440]) {
+    test(`a Question's fold chevron and the Block handle share the 40px left margin without covering each other, in a ${mindWidth}px Mind (${language})`, async () => {
+      const { app, window } = await launchApp(dataDir, { fakeChat: true });
+      await dismissChatSetup(window);
+      await useLocalChatModel(window);
+      await window.evaluate(async (chosen) => {
+        const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        await bridge.updateSettings({ user: { language: chosen } });
+      }, language);
+      await newMind(window);
+      await window.getByTestId("mind-title").fill("Tides");
+      await enterContent(window);
+      const editor = window.getByTestId("mind-editor");
+      await window.keyboard.type("Spring tides follow the Moon.");
+      await window.keyboard.press("Enter");
+      await window.keyboard.press("ControlOrMeta+j");
+      await window.keyboard.type("When do spring tides happen?");
+      await window.keyboard.press("Enter");
+      const answer = editor.getByTestId("answer");
+      await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+      await sizeMind(app, window, mindWidth);
+
+      const question = editor.getByTestId("question");
+      const fold = question.getByTestId("question-fold");
+      const handle = window.getByTestId("block-handle");
+      const edge = (await textColumn(editor)).x;
+
+      // Hover the Question: the handle shows, in the outer half of the margin, and the
+      // chevron stays in the inner half. Neither covers the other, and both are in the margin.
+      await slideToHandle(window, question);
+      const [foldBox, handleBox] = [await box(fold), await box(handle)];
+      expect(
+        handleBox.x + handleBox.width,
+        "the handle is left of the chevron",
+      ).toBeLessThanOrEqual(foldBox.x + 0.5);
+      expect(handleBox.x, "the handle is inside the margin").toBeGreaterThanOrEqual(edge - 40 - 1);
+      expect(foldBox.x + foldBox.width, "the chevron is left of the text").toBeLessThanOrEqual(
+        edge + 1,
+      );
+      // The spark gives its place to the handle, so nothing sits under it.
+      await expect(question.locator(".question-spark")).toHaveCSS("opacity", "0");
+      await screenshot(window, `question-margin-${language}-${mindWidth}.png`);
+
+      // The mouse: the chevron folds the Answer and unfolds it again.
+      await pointAndClick(window, fold);
+      await expect(fold).toHaveAttribute("aria-expanded", "false");
+      await expect(answer).toBeHidden();
+      await pointAndClick(window, fold);
+      await expect(answer).toBeVisible();
+      await expect(fold).toHaveAttribute("aria-expanded", "true");
+
+      // The mouse: the handle opens its menu.
+      await (await slideToHandle(window, question)).click();
+      await expect(window.getByTestId("block-menu")).toBeVisible();
+      await window.keyboard.press("Escape");
+      await expect(window.getByTestId("block-menu")).toHaveCount(0);
+      await expect(editor).toBeFocused();
+
+      // The keyboard: the chevron takes Enter, and Shift+F10 opens the Block's menu.
+      await fold.focus();
+      await window.keyboard.press("Enter");
+      await expect(fold).toHaveAttribute("aria-expanded", "false");
+      await expect(fold).toBeFocused();
+      await window.keyboard.press("Enter");
+      await expect(fold).toHaveAttribute("aria-expanded", "true");
+      await question.locator(".question-text").click();
+      await window.keyboard.press("Shift+F10");
+      await expect(window.getByTestId("block-menu")).toBeVisible();
+      await window.keyboard.press("Escape");
+      await expect(window.getByTestId("block-menu")).toHaveCount(0);
+      await app.close();
+    });
+  }
+}

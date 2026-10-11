@@ -152,6 +152,7 @@ export function createPubmed(baseUrl: string = PUBMED_URL): SourceProvider {
 
   return {
     id: "pubmed",
+    resolves: ["pmid"],
     name: "PubMed",
     service: { id: "https://eutils.ncbi.nlm.nih.gov", name: "PubMed" },
     terms,

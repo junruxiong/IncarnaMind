@@ -1,6 +1,7 @@
 /** Small readers the providers share for what their services answer. */
 import { decodeEntities } from "../../documents/formats/xml";
 import { SourceError } from "../http";
+import type { TextSection } from "../types";
 
 /** A value as text: "" for anything that isn't text. */
 export const text = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
@@ -40,4 +41,47 @@ export function jsonObject(body: string, service: string): Record<string, unknow
     throw new SourceError("service-error", `${service}'s answer is empty.`);
   }
   return answer as Record<string, unknown>;
+}
+
+/** A name some services keep in capitals ("SITAGLIPTIN AND METFORMIN") as a sentence; mixed case is left as written. */
+export function sentenceCase(name: string): string {
+  const plain = name.replace(/\s+/g, " ").trim();
+  if (plain === "" || /[a-z]/.test(plain)) return plain;
+  const lower = plain.toLowerCase();
+  return `${lower.slice(0, 1).toUpperCase()}${lower.slice(1)}`;
+}
+
+/** A company's name some services keep in capitals ("ZYDUS LIFESCIENCES LIMITED") with each word capitalised; short words (LLC, INC) stay. */
+export function companyName(name: string): string {
+  const plain = name.replace(/\s+/g, " ").trim();
+  if (/[a-z]/.test(plain)) return plain;
+  return plain
+    .split(" ")
+    .map((word) =>
+      word.replace(/[A-Z]{4,}/g, (long) => `${long.slice(0, 1)}${long.slice(1).toLowerCase()}`),
+    )
+    .join(" ");
+}
+
+/** "20260812" as "2026-08-12"; null for anything else. */
+export function compactDate(value: string): string | null {
+  const match = /^(\d{4})(\d{2})(\d{2})$/.exec(value);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+/** Runs of spaces and line breaks as single spaces. */
+export const tidy = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+/** What a label says of itself, as its first section, with the source's own notice when it has one. */
+export function aboutLabel(info: {
+  source: string;
+  setId: string;
+  version: string;
+  effective: string | null;
+  notice: string | null;
+}): TextSection {
+  const effective = info.effective ? `, effective ${info.effective}` : "";
+  const lines = [`${info.source}. Set ID ${info.setId}, version ${info.version}${effective}.`];
+  if (info.notice) lines.push(info.notice);
+  return { heading: "About this label", level: 1, paragraphs: lines };
 }
