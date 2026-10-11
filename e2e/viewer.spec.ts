@@ -856,7 +856,8 @@ test("below 560 px a Document tab's toolbar hides its Tag chips and keeps the Ta
   await writeFile(notes, "Notes on the quarter.\n");
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await setWindowSize(app, window, 1500, 800);
+  // As wide as 1,500px was, beside the assistant docked on the right (#253).
+  await setWindowSize(app, window, 1868, 800);
   await addDocuments(window, [notes]);
   await (await coreOf(window)).evaluate(async (core) => {
     const [first] = await core.listDocuments();
