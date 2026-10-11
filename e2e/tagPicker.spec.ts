@@ -10,6 +10,7 @@ import {
   dismissChatSetup,
   launchApp,
   removeDataFolder,
+  setWindowSize,
 } from "./app";
 
 /*
@@ -325,7 +326,9 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     );
     await screenshot(window, "library-review");
 
-    // The viewer's header shows the open Document's Tags too.
+    // The viewer's header shows the open Document's Tags too, in a viewer wide enough for chips.
+    // As wide as 1,500px was, beside the assistant docked on the right (#253).
+    await setWindowSize(app, window, 1868, 800);
     await slideAndClick(window, march.getByRole("button", { name: "March invoice", exact: true }));
     const viewer = window.getByTestId("viewer");
     // Its text, once its view has loaded: until then a stand-in header shows, which the view's

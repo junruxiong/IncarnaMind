@@ -9,7 +9,9 @@ import {
   dismissChatSetup,
   launchApp,
   newMind,
+  placeAssistant,
   removeDataFolder,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -148,5 +150,166 @@ test("a quote that isn't on its page says so, and the page can still be opened, 
   await answer.hover();
   await answer.getByTestId("answer-regenerate").click();
   await expect(answer.getByTestId("answer-confirm")).toBeVisible();
+  await app.close();
+});
+
+for (const [width, side] of [
+  [1440, true],
+  [1000, true],
+  // Below 1,000px the groups merge, so the Document comes to the front.
+  [960, false],
+] as const) {
+  test(`at ${width}px a Citation's card opens on hover and on focus, and Open shows the page beside the Mind`, async () => {
+    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await setWindowSize(app, window, width, 800);
+    // At 1,000px the page opens beside the Mind with the assistant at the bottom (#253).
+    if (side && width < 1400) await placeAssistant(window, { dock: "bottom" });
+
+    const answer = await ask(window, "When do spring tides happen?");
+    const chip = answer.getByTestId("citation-chip");
+    const card = window.getByTestId("citation-card");
+
+    // Hovering shows the card, and nothing else opens.
+    await chip.hover();
+    await expect(card).toBeVisible();
+    await expect(card.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
+    await expect(card).toContainText("Tides");
+    await expect(card).toContainText("Spring tides happen at new moon and at full moon.");
+    await expect(window.getByTestId("viewer")).toHaveCount(0);
+    // Esc closes it, wherever the focus is.
+    await window.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+
+    // So does focusing it with the keyboard.
+    await window.mouse.move(0, 0);
+    await chip.focus();
+    await expect(card).toBeVisible();
+    await window.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+
+    // Open, in the card, shows the cited page with the quote washed.
+    await chip.hover();
+    await card.getByTestId("citation-open").click();
+    await expect(card).toHaveCount(0);
+    await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
+    await expect(
+      window.getByTestId("viewer").locator('[data-page-number="2"] [data-quote-highlight]'),
+    ).toHaveText(["Spring tides happen at new moon and at full moon."]);
+    const groups = window.getByTestId("tab-group");
+    if (side) {
+      // A preview tab in the group to the right; the focus stays in the Mind's group.
+      await expect(groups).toHaveCount(2);
+      await expect(groups.nth(1).getByTestId("document-tab")).toHaveAttribute(
+        "data-preview",
+        "true",
+      );
+      await expect(groups.first()).toHaveAttribute("data-focused", "true");
+    } else {
+      await expect(window.getByTestId("document-tab")).toHaveAttribute("aria-selected", "true");
+    }
+    await app.close();
+  });
+}
+
+test("a Citation's mark in the margin opens the same card, and every state has its word", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  // The Mind as wide as a 1440px window gave it, beside the assistant (#253): its margin shows.
+  await setWindowSize(app, window, 1600, 800);
+
+  const answer = await ask(window, "When do spring tides happen?");
+  const mark = window.getByTestId("margin-check");
+  const card = window.getByTestId("citation-card");
+  await expect(mark).toHaveAttribute("aria-label", /Quote found/);
+  await mark.hover();
+  await expect(card.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+
+  // #96 will produce these for real; here the Citation is given each state.
+  const states = [
+    ["not-found", "Quote not found", ""],
+    ["unsupported", "Unsupported by your Documents", ""],
+    [
+      "contradicted",
+      "Contradicted",
+      "The agreement says spring tides happen at new moon only, p. 2",
+    ],
+  ] as const;
+  for (const [check, word, verdict] of states) {
+    await window.getByTestId("mind-editor").evaluate(
+      (dom, patch) => {
+        const { view } = (dom as unknown as { editor: Editor }).editor;
+        view.state.doc.descendants((node, pos) => {
+          if (node.type.name !== "citation") return true;
+          view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...patch }));
+          return false;
+        });
+      },
+      { check, verdict: verdict || null },
+    );
+    await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", check);
+    await expect(mark).toHaveAttribute("data-check", check);
+    await expect(mark).toHaveAttribute("aria-label", new RegExp(word));
+    await mark.focus();
+    await expect(card.getByTestId("citation-badge")).toContainText(word);
+    if (verdict) await expect(card.getByTestId("citation-verdict")).toHaveText(verdict);
+    if (check === "not-found") {
+      // One amber line, not the quote.
+      await expect(card).not.toContainText("Spring tides happen at new moon");
+    } else {
+      await expect(card.getByTestId("citation-open")).toBeVisible();
+    }
+    await window.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+  }
+  await app.close();
+});
+
+test("a contradicted Citation's words are outlined in red on the page, never washed green, with the ≠ mark", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await setWindowSize(app, window, 1440, 800);
+  const answer = await ask(window, "When do spring tides happen?");
+
+  // #96 will produce this for real; here the Citation is given the state.
+  await window.getByTestId("mind-editor").evaluate((dom) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "citation") return true;
+      view.dispatch(
+        view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, check: "contradicted" }),
+      );
+      return false;
+    });
+  });
+  await answer.getByTestId("citation-chip").click();
+  await window.getByTestId("citation-card").getByTestId("citation-open").click();
+
+  const highlight = window
+    .getByTestId("viewer")
+    .locator('[data-page-number="2"] [data-quote-highlight]')
+    .first();
+  await expect(highlight).toBeVisible();
+  const look = await highlight.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, shadow: style.boxShadow };
+  });
+  // No fill, and an outline in red.
+  expect(look.background).toBe("rgba(0, 0, 0, 0)");
+  expect(look.shadow).toContain("rgb(180, 35, 24)");
+  const mark = window.getByTestId("viewer-quote-mark");
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
+  await expect(mark).toHaveAttribute("aria-label", /contradicted/);
   await app.close();
 });

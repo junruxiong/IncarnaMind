@@ -888,13 +888,34 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
     },
   };
 
+  /** A marker's Citation while the Answer streams, "checking": its record's, or null before one is given. */
+  const streamingCitation = (marker: number): Citation | null => {
+    const record = records.get(marker);
+    return record ? toCitation(record, null) : null;
+  };
+
+  /**
+   * A marker's Citation once the Answer has finished (after `check`), or null:
+   * a marker with no record is removed. Call it (or `finalNode`) for each marker
+   * in the final text, in order: it counts them for `summary`.
+   */
+  const finalCitation = (marker: number): Citation | null => {
+    const record = records.get(marker);
+    if (!finalMarkers.includes(marker)) {
+      finalMarkers.push(marker);
+      if (!record) removedMarkers++;
+    }
+    return record ? toCitation(record, record.result) : null;
+  };
+
   return {
     tools,
 
+    streamingCitation,
+
     /** A marker's node while the Answer streams: its record's details, if given yet, "checking". */
     streamingNode(marker: number): NodeJSON {
-      const record = records.get(marker);
-      return citationNode(record ? toCitation(record, null) : null);
+      return citationNode(streamingCitation(marker));
     },
 
     /** Checks every record, once, when the Answer finishes. */
@@ -902,18 +923,12 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
       for (const record of records.values()) record.result ??= check(record);
     },
 
-    /**
-     * A marker's node once the Answer has finished (after `check`), or null:
-     * a marker with no record is removed. Call it for each marker in the final
-     * text, in order: it counts them for `summary`.
-     */
+    finalCitation,
+
+    /** A marker's node once the Answer has finished: `finalCitation`'s, or null to remove the marker. */
     finalNode(marker: number): NodeJSON | null {
-      const record = records.get(marker);
-      if (!finalMarkers.includes(marker)) {
-        finalMarkers.push(marker);
-        if (!record) removedMarkers++;
-      }
-      return record ? citationNode(toCitation(record, record.result)) : null;
+      const citation = finalCitation(marker);
+      return citation ? citationNode(citation) : null;
     },
 
     /** The Answer's Citations and the counts the evaluation reads, after the final nodes. */

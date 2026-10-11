@@ -1,30 +1,71 @@
 import { displayName } from "../../shared/documentNames";
+import { conversationName } from "../../shared/naming";
 import { GripIcon } from "./components/icons";
 import {
+  ConversationLineIcon,
   DocumentLineIcon,
   FolderLineIcon,
   LooseDocumentsLineIcon,
   MindLineIcon,
   TagLineIcon,
 } from "./components/lineIcons";
+import { conversationById } from "./conversations";
+import { core } from "./core";
 import { findBlock } from "./editor/blockCommands";
 import { noteHolding } from "./editor/noteKeymap";
+import { translateNow } from "./i18n";
 import { folderName } from "./linkedFolders";
-import type { ObjectKind, ObjectType } from "./objects";
+import type { ObjectKind, ObjectType, Translate } from "./objects";
 import { useAppStore } from "./store";
 import { findTab, tabTitle } from "./tabs";
 
 const state = () => useAppStore.getState();
 const ICON = "size-4 shrink-0 text-ink-meta";
 
+/** A conversation's name, as History shows it: "New chat" when it has none. */
+const conversationLabel = (id: string, t: Translate) => {
+  const conversation = conversationById(id);
+  return conversation ? conversationName(conversation) || t("conversation.untitled") : "";
+};
+
 /**
- * How each kind is named and shown. Chats join when they exist (#203), and
- * Citations once their menus give them an identity (#223).
+ * How each kind is named and shown. Citations join once their menus give them
+ * an identity (#223).
  */
 export const objectTypes: Partial<Record<ObjectKind, ObjectType>> = {
   mind: {
     label: (ref, t) => tabTitle(state(), { kind: "mind", mindId: ref.id }, t),
     icon: () => <MindLineIcon className={ICON} />,
+  },
+  conversation: {
+    label: (ref, t) => conversationLabel(ref.id, t),
+    icon: () => <ConversationLineIcon className={ICON} />,
+    async rename(ref, name) {
+      const before = conversationById(ref.id)?.title ?? "";
+      const renamed = await core.renameConversation(ref.id, name);
+      return {
+        message: translateNow("object.renamed", {
+          name: conversationName(renamed) || translateNow("conversation.untitled"),
+        }),
+        undo: async () => {
+          await core.renameConversation(ref.id, before);
+        },
+      };
+    },
+    async remove(refs) {
+      const message =
+        refs.length === 1
+          ? translateNow("object.deleted", {
+              name: conversationLabel(refs[0]?.id ?? "", translateNow),
+            })
+          : translateNow("object.deleted.conversations", { count: refs.length });
+      for (const ref of refs) await core.deleteConversation(ref.id);
+      return {
+        message,
+        // Recently deleted gives them back, with every message.
+        undo: () => core.restore(refs.map((ref) => ({ kind: "conversation", id: ref.id }))),
+      };
+    },
   },
   document: {
     label: (ref) => {

@@ -17,6 +17,7 @@ import {
   openDocumentMenu,
   pathsOpened,
   removeDataFolder,
+  setWindowSize,
   widthOf,
 } from "./app";
 
@@ -845,6 +846,61 @@ test("a Document's tab has one 36px toolbar under its group's strip, holding eve
   await app.close();
   // The app would remove the copy a day later; the test doesn't leave it behind.
   if (opened) await rm(dirname(opened), { recursive: true, force: true });
+});
+
+const coreOf = (window: Page) =>
+  window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);
+
+test("below 560 px a Document tab's toolbar hides its Tag chips and keeps the Tags button, in English and Chinese", async () => {
+  const notes = join(sources, "Notes.txt");
+  await writeFile(notes, "Notes on the quarter.\n");
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  // As wide as 1,500px was, beside the assistant docked on the right (#253).
+  await setWindowSize(app, window, 1868, 800);
+  await addDocuments(window, [notes]);
+  await (await coreOf(window)).evaluate(async (core) => {
+    const [first] = await core.listDocuments();
+    if (!first) throw new Error("The Document isn't there.");
+    for (const name of ["Alpha", "Beta", "Gamma"]) {
+      const tag = await core.createTag({ name });
+      await core.addDocumentTag(first.id, tag.id);
+    }
+  });
+  await newMind(window);
+  await window.getByTestId("open-document").click();
+  const viewer = window.getByTestId("viewer");
+  const header = viewer.getByTestId("viewer-header");
+  const chips = header.getByTestId("tag-chip");
+  const more = header.getByTestId("tag-chip-more");
+  const tagsButton = header.getByTestId("document-tags-menu");
+
+  for (const language of ["en", "zh-CN"] as const) {
+    await (await coreOf(window)).evaluate(
+      (core, chosen) => core.updateSettings({ user: { language: chosen } }),
+      language,
+    );
+    // Wide: the first two Tags show as chips, with "+1" for the rest.
+    await setViewerWidth(window, 900);
+    await expect(chips).toHaveCount(2);
+    await expect(chips.first()).toBeVisible();
+    await expect(more).toBeVisible();
+    await expect(tagsButton).toBeVisible();
+
+    // Narrow: no chips, the button still there, and the toolbar keeps its one line.
+    await setViewerWidth(window, 540);
+    await expect(chips.first()).toBeHidden();
+    await expect(more).toBeHidden();
+    await expect(tagsButton).toBeVisible();
+    expect((await boxOf(header)).height).toBe(36);
+    await tagsButton.click();
+    const picker = header.getByTestId("document-tags-popover");
+    await expect(picker.getByTestId("tag-picker-input")).toBeFocused();
+    await expect(picker.getByTestId("tag-token")).toHaveCount(3);
+    await window.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+  }
+  await app.close();
 });
 
 test("a Citation's quote is washed in its check's colour, with its mark beside the first highlighted line", async () => {
