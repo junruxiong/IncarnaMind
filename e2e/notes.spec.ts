@@ -245,10 +245,13 @@ test("text highlighted with the keyboard stays highlighted after reopening the a
   await window.keyboard.press("Enter");
   await window.keyboard.type("Spring tides are the strongest");
   for (const _ of "strongest") await window.keyboard.press("Shift+ArrowLeft");
-  await expect(window.getByTestId("format-menu")).toBeVisible();
+  await expect(window.getByTestId("selection-menu")).toBeVisible();
+  await expect
+    .poll(() => window.evaluate(() => globalThis.getSelection()?.toString()))
+    .toBe("strongest");
   await window.keyboard.press("ControlOrMeta+Shift+H");
   await expect(editor.locator("p mark")).toHaveText("strongest");
-  await expect(window.getByTestId("format-highlight")).toHaveAttribute("aria-pressed", "true");
+  await expect(window.getByTestId("format-highlight")).toHaveAttribute("aria-checked", "true");
   await first.app.close();
 
   const second = await launchApp(dataDir);
