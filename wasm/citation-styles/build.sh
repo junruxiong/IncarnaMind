@@ -46,15 +46,26 @@ fi
   --enable-mutable-globals --enable-reference-types --enable-multivalue \
   -o "$WORK/engine.wasm" "$WORK/target/wasm32-unknown-unknown/release/citation_styles.wasm"
 
-SUM=$(node -e 'const { createHash } = require("node:crypto");
-process.stdout.write(createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"));' \
-  "$WORK/engine.wasm")
+sha256() {
+  node -e 'const { createHash } = require("node:crypto");
+process.stdout.write(createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"));' "$1"
+}
+RAW="$WORK/target/wasm32-unknown-unknown/release/citation_styles.wasm"
+# Printed so two machines' builds can be compared before wasm-opt too.
+echo "cargo built a module with SHA-256 $(sha256 "$RAW")"
+SUM=$(sha256 "$WORK/engine.wasm")
 
 if [ "$MODE" = check ]; then
   EXPECTED=$(cut -d' ' -f1 "$OUT.sha256")
   if [ "$SUM" != "$EXPECTED" ]; then
     echo "This source builds an engine with SHA-256 $SUM, but the committed one is $EXPECTED." >&2
     echo "Run sh wasm/citation-styles/build.sh, and commit resources/citation-styles/engine.wasm and its .sha256." >&2
+    # CHECK_OUT keeps what was built, for comparing it with the committed file.
+    if [ -n "${CHECK_OUT:-}" ]; then
+      mkdir -p "$CHECK_OUT"
+      cp "$RAW" "$CHECK_OUT/citation_styles.wasm"
+      cp "$WORK/engine.wasm" "$CHECK_OUT/engine.wasm"
+    fi
     exit 1
   fi
   echo "The committed engine is what this source builds to: $SUM"
