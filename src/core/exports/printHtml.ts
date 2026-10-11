@@ -1,0 +1,236 @@
+/**
+ * A Mind as HTML to print as a PDF (#100): the body, and its footnotes apart, which the print
+ * page puts at the foot of the page each marker lands on. Citations and the User's own
+ * footnotes are numbered together in the order they appear, as in the other exports; a
+ * citation style's notes take their numbers too, and its in-text Citations and Bibliography
+ * are in the body. Maths is typeset (MathML); what KaTeX can't read stays LaTeX. Everything
+ * from the Mind is escaped: the page shows text, never markup it was given.
+ */
+import type { StyledRun } from "../api";
+import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
+import type { MarkdownLabels } from "./markdown";
+import { latexToMathMl } from "./math";
+
+export type PrintLabels = MarkdownLabels;
+
+export interface PrintHtml {
+  body: string;
+  notes: string[];
+}
+
+const ESCAPES: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
+
+/** Only links a PDF reader can follow without running anything. */
+const safeLink = (href: string | null | undefined): href is string =>
+  typeof href === "string" && /^(https?:|mailto:)/i.test(href);
+
+export function renderPrintHtml(
+  title: string,
+  blocks: readonly Block[],
+  labels: PrintLabels,
+): PrintHtml {
+  const notes: string[] = [];
+  const writer = new PrintWriter(labels, (note) => {
+    notes.push(note);
+    return notes.length;
+  });
+  const parts: string[] = [];
+  if (title) parts.push(`<h1 class="mind-title">${escapeHtml(title)}</h1>`);
+  parts.push(writer.blocks(blocks));
+  return { body: parts.join(""), notes };
+}
+
+/** A style's formatted runs: italics, bold, small capitals, underlining, raised text and links. */
+function runsHtml(runs: readonly StyledRun[]): string {
+  return runs
+    .map((run) => {
+      if (run.text === "") return "";
+      let html = escapeHtml(run.text);
+      if (run.script) html = `<${run.script}>${html}</${run.script}>`;
+      if (run.smallCaps) html = `<span class="small-caps">${html}</span>`;
+      if (run.underline) html = `<u>${html}</u>`;
+      if (run.bold) html = `<b>${html}</b>`;
+      if (run.italic) html = `<i>${html}</i>`;
+      if (safeLink(run.link)) html = `<a href="${escapeHtml(run.link)}">${html}</a>`;
+      return html;
+    })
+    .join("");
+}
+
+/** The words of an unverified Citation's marker, after its source. */
+const unverifiedHtml = (labels: PrintLabels) =>
+  ` <span class="unverified">${escapeHtml(labels.unverified)}</span>`;
+
+/** A Citation's source, as its footnote says it; a web page's address is a link. */
+function sourceHtml(footnote: Footnote, labels: PrintLabels): string {
+  const link = footnote.link;
+  let html = escapeHtml(footnote.source);
+  if (safeLink(link) && footnote.source.includes(link)) {
+    const at = footnote.source.lastIndexOf(link);
+    html =
+      escapeHtml(footnote.source.slice(0, at)) +
+      `<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>` +
+      escapeHtml(footnote.source.slice(at + link.length));
+  }
+  return footnote.unverified ? html + unverifiedHtml(labels) : html;
+}
+
+function mathHtml(latex: string, display: boolean): string {
+  const mathml = latexToMathMl(latex, display);
+  if (mathml) return display ? `<div class="math-display">${mathml}</div>` : mathml;
+  const source = display ? latex : `$${latex}$`;
+  return display
+    ? `<pre class="math-source">${escapeHtml(source)}</pre>`
+    : `<code class="math-source">${escapeHtml(source)}</code>`;
+}
+
+function imageHtml(src: string, alt: string): string {
+  // Only pictures held in the Mind: the print page fetches nothing.
+  if (src.startsWith("data:image/"))
+    return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}">`;
+  return alt ? `<span class="image-missing">[${escapeHtml(alt)}]</span>` : "";
+}
+
+/** Marks as HTML, outermost first. */
+function wrap(text: string, marks: Marks): string {
+  let html = escapeHtml(text);
+  if (marks.code) html = `<code>${html}</code>`;
+  if (marks.highlight) html = `<mark>${html}</mark>`;
+  if (marks.underline) html = `<u>${html}</u>`;
+  if (marks.strike) html = `<s>${html}</s>`;
+  if (marks.italic) html = `<em>${html}</em>`;
+  if (marks.bold) html = `<strong>${html}</strong>`;
+  if (safeLink(marks.link)) html = `<a href="${escapeHtml(marks.link)}">${html}</a>`;
+  return html;
+}
+
+class PrintWriter {
+  constructor(
+    private readonly labels: PrintLabels,
+    /** Numbers a footnote, given as HTML: 1, 2, 3… in the order they are written. */
+    private readonly number: (note: string) => number,
+  ) {}
+
+  blocks(blocks: readonly Block[]): string {
+    return blocks.map((block) => this.block(block)).join("");
+  }
+
+  private marker(note: string): string {
+    const number = this.number(note);
+    return `<sup class="note-ref" data-note="${number}">${number}</sup>`;
+  }
+
+  private block(block: Block): string {
+    switch (block.kind) {
+      case "paragraph":
+        return `<p>${this.inline(block.content)}</p>`;
+      case "heading": {
+        const level = Math.min(block.level + 1, 6);
+        return `<h${level}>${this.inline(block.content)}</h${level}>`;
+      }
+      case "question":
+        return `<p class="question"><span class="question-label">${escapeHtml(this.labels.question)}</span> ${this.inline(block.content)}</p>`;
+      case "code":
+        return `<pre><code>${escapeHtml(block.code)}</code></pre>`;
+      case "math":
+        return mathHtml(block.latex, true);
+      case "list": {
+        const tag = block.ordered ? "ol" : "ul";
+        const start = block.ordered && block.start !== 1 ? ` start="${block.start}"` : "";
+        const items = block.items.map((item) => `<li>${this.blocks(item)}</li>`).join("");
+        return `<${tag}${start}>${items}</${tag}>`;
+      }
+      case "quote":
+        return `<blockquote>${this.blocks(block.content)}</blockquote>`;
+      case "rule":
+        return "<hr>";
+      case "table":
+        return this.table(block.rows);
+      case "image": {
+        const html = imageHtml(block.image.src, block.image.alt);
+        return html ? `<p class="image">${html}</p>` : "";
+      }
+      case "bibliography": {
+        const entries = block.items
+          .map((item) => {
+            const label = item.label ? `<span class="label">${runsHtml(item.label)}</span> ` : "";
+            return `<p class="entry">${label}${runsHtml(item.runs)}</p>`;
+          })
+          .join("");
+        const hanging = block.hangingIndent ? " hanging" : "";
+        return `<section class="bibliography${hanging}"><h2>${escapeHtml(block.heading)}</h2>${entries}</section>`;
+      }
+    }
+  }
+
+  /** A table as laid out for Word and Markdown, its cells spanning as in the Mind. */
+  private table(rows: Extract<Block, { kind: "table" }>["rows"]): string {
+    const layout = tableLayout(rows);
+    const body = layout.rows
+      .map((row) => {
+        const cells = row
+          .filter((slot) => slot.cell && !slot.continued)
+          .map(({ cell }) => {
+            if (!cell) return "";
+            const tag = cell.header ? "th" : "td";
+            const spans =
+              (cell.colspan > 1 ? ` colspan="${cell.colspan}"` : "") +
+              (cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : "");
+            const align = cell.align ? ` class="align-${cell.align}"` : "";
+            return `<${tag}${spans}${align}>${this.blocks(cell.content)}</${tag}>`;
+          })
+          .join("");
+        return `<tr>${cells}</tr>`;
+      })
+      .join("");
+    return `<table>${body}</table>`;
+  }
+
+  /** Inline content: text with its marks, maths, footnote markers and breaks. */
+  inline(content: readonly Inline[], inNote = false): string {
+    let html = "";
+    for (const item of content) {
+      switch (item.kind) {
+        case "text":
+          html += wrap(item.text, item.marks);
+          break;
+        case "break":
+          html += "<br>";
+          break;
+        case "math":
+          html += mathHtml(item.latex, false);
+          break;
+        case "image":
+          html += imageHtml(item.image.src, item.image.alt);
+          break;
+        case "citation":
+          // In the User's footnote, a Citation is its source, a word of the note's text.
+          if (inNote) {
+            if (/\S$/.test(html)) html += " ";
+            html += sourceHtml(item.footnote, this.labels);
+          } else {
+            html += this.marker(sourceHtml(item.footnote, this.labels));
+          }
+          break;
+        case "footnote":
+          html += this.marker(this.inline(item.content, true));
+          break;
+        case "cite": {
+          const marker = item.unverified ? unverifiedHtml(this.labels) : "";
+          if (item.note && !inNote) html += this.marker(runsHtml(item.runs) + marker);
+          else html += runsHtml(item.runs) + marker;
+          break;
+        }
+      }
+    }
+    return html;
+  }
+}

@@ -27,6 +27,7 @@ export type {
   LogValue,
   ModelFile,
   Paths,
+  Printer,
   ProcessLauncher,
   RerankingModelFiles,
   ScriptRuntimes,

@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
 import { shortcutLabel } from "../../commands/keymap";
+import { exportMind, FORMAT_LABELS, useExports } from "../../exports";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -38,13 +39,11 @@ export function TabStrip({
   index,
   merged,
   drag,
-  onExport,
 }: {
   group: LayoutGroup;
   index: number;
   merged: boolean;
   drag: TabDrag;
-  onExport(mindId: string): void;
 }) {
   const t = useT();
   const layout = useAppStore((state) => state.layout);
@@ -138,9 +137,7 @@ export function TabStrip({
         <PlusLineIcon />
       </button>
       <span className="tab-strip-spacer" />
-      {shown?.item.kind === "mind" && (
-        <ExportButton mindId={shown.item.mindId} onExport={onExport} />
-      )}
+      {shown?.item.kind === "mind" && <ExportButton mindId={shown.item.mindId} />}
       {!merged && (
         <span className="tab-split">
           <StripButton
@@ -157,15 +154,26 @@ export function TabStrip({
   );
 }
 
-function ExportButton({ mindId, onExport }: { mindId: string; onExport(mindId: string): void }) {
+/** Export: one click exports the Mind in the last format, as ⇧⌘E does (#100). */
+function ExportButton({ mindId }: { mindId: string }) {
   const t = useT();
+  const format = useAppStore((state) => state.settings?.user.exportOptions.format ?? "docx");
+  const saving = useExports(
+    (state) => state.result?.mindId === mindId && state.result.state === "saving",
+  );
+  const label = t("export.action.title", {
+    format: t(FORMAT_LABELS[format]),
+    shortcut: shortcutLabel("mind.export"),
+  });
   return (
     <button
       type="button"
       data-testid="export-mind"
-      aria-label={t("export.action.label")}
-      title={t("export.action.label")}
-      onClick={() => onExport(mindId)}
+      data-format={format}
+      aria-label={label}
+      aria-busy={saving || undefined}
+      title={label}
+      onClick={() => void exportMind(mindId)}
       className="tab-export"
     >
       <ExportLineIcon />
