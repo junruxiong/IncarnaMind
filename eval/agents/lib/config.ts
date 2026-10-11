@@ -24,7 +24,7 @@ export const ARM_LABELS: Record<Arm, string> = {
   C: "CLI + Agent Skill (Codex)",
   H: "ACP host, headless (codex-acp)",
   CC: "MCP, fine-grained Tools (Claude Code, Haiku 5.5)",
-  MQ: "MCP, fine-grained Tools and ask (Codex)",
+  MQ: "MCP, every Tool + an Agent Skill (Codex, round 2)",
 };
 
 export interface AgentsConfig {

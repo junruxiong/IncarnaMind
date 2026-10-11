@@ -26,6 +26,25 @@ export function instructionsFor(wording: Wording): string {
   return [...general, wording === "ask" ? (askSentence ?? workflow) : fineSentence].join("\n");
 }
 
+/**
+ * The Agent Skill a plugin would ship beside the MCP server (round 2, MQ): the
+ * same server instructions, naming the MCP Tools, with the same description
+ * as arm C's, so an agent loads it for the same questions.
+ */
+export function mcpSkillMarkdown(): string {
+  return `---
+name: incarnamind
+description: Search the User's IncarnaMind Library (their own Documents) and cite it with Citations IncarnaMind checks. Use for any question about the User's documents, files, reports or notes.
+---
+
+# IncarnaMind
+
+${lines.join("\n\n")}
+
+The Tools are on the \`incarnamind\` MCP server: \`ask\`, \`search\`, \`read_passages\`, \`cite\` and \`check_citations\`.
+`;
+}
+
 /** Arm C's Agent Skill: the same instructions, the CLI's verbs for the Tools, and its help. */
 export function skillMarkdown(cliHelp: string): string {
   const verbs = fineSentence

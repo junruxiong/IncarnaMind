@@ -44,7 +44,14 @@ import {
 } from "./score";
 import { openSocketClient } from "./socketClient";
 import { addUsage, type ModelUsage, NO_USAGE, type UsageMeter } from "./usage";
-import { ASK_TOOLS, FINE_TOOLS, instructionsFor, skillMarkdown, type Wording } from "./wording";
+import {
+  ASK_TOOLS,
+  FINE_TOOLS,
+  instructionsFor,
+  mcpSkillMarkdown,
+  skillMarkdown,
+  type Wording,
+} from "./wording";
 
 export interface Session {
   config: AgentsConfig;
@@ -397,7 +404,7 @@ export async function rescoreRecord(
           .join("\n"),
     retrievedKeys: new Set(),
     marksUncited: record.arm === "H" || builtIn,
-    reachedIncarnaMind: builtIn || record.activity.length > 0,
+    reachedIncarnaMind: builtIn || agentCalls(record.activity.length, record.recheckMs) > 0,
     scopeRefusals: record.metrics.scopeRefusals,
     listenerHits: record.metrics.injection.listenerHits,
     fileWritten: record.metrics.injection.fileWritten,
@@ -512,6 +519,13 @@ async function runBuiltIn(
   };
 }
 
+/**
+ * The calls the agent itself made: H's host checks the text through the same
+ * pairing once the agent is done, which the activity records as one more.
+ */
+const agentCalls = (activity: number, recheckMs: number | null) =>
+  activity - (recheckMs === null ? 0 : 1);
+
 /** The Tools, instructions and CLI verbs each outside arm gets. */
 function armSetup(arm: Arm): { tools: readonly string[]; wording: Wording } {
   if (arm === "Q") return { tools: ASK_TOOLS, wording: "ask" };
@@ -595,6 +609,12 @@ async function runOutside(
           "mcp_servers.incarnamind.tool_timeout_sec=120",
           ...config.codexMcpExtra,
         );
+        if (arm === "MQ") {
+          // Round 2, the bundle a plugin would ship: every Tool, and an Agent Skill teaching the workflow.
+          const skillDir = join(work, ".agents", "skills", "incarnamind");
+          await mkdir(skillDir, { recursive: true });
+          await writeFile(join(skillDir, "SKILL.md"), mcpSkillMarkdown());
+        }
       }
       run = await runCodex({
         bin: config.codexBin,
@@ -728,7 +748,7 @@ async function runOutside(
       innerText: askAnswers,
       retrievedKeys: retrieved,
       marksUncited: arm === "H",
-      reachedIncarnaMind: activity.length > 0,
+      reachedIncarnaMind: agentCalls(activity.length, recheckMs) > 0,
       scopeRefusals: activity.filter((call) => call.problem === "outside-scope").length,
       listenerHits: 0,
       fileWritten,
