@@ -4,9 +4,11 @@ import type { MessageKey } from "../../../shared/i18n";
 import { core, files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { folderName } from "../linkedFolders";
+import { chooseOutputLocation } from "../outputFiles";
 import { saveFailureReason } from "../problems";
 import { QuoteNotFoundIcon } from "./icons";
-import { ProblemLine } from "./ProblemLine";
+import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import {
   buttonClass,
   choiceListClass,
@@ -31,8 +33,8 @@ const FORMATS: readonly { value: ExportFormat; label: MessageKey; hint: MessageK
 
 /**
  * Exports a Mind: the format, whether a .docx includes the Questions, and how
- * many Citations are unverified, before the system save dialog asks where.
- * Open while `mind` is set.
+ * many Citations are unverified, before it is saved in the Output location
+ * (the first save asks where that is). Open while `mind` is set.
  */
 export function ExportDialog({ mind, onClose }: { mind: Mind | null; onClose(): void }) {
   const t = useT();
@@ -61,10 +63,15 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const [format, setFormat] = useState<ExportFormat>("docx");
   const [questionsWanted, setQuestionsWanted] = useState(false);
   const [preview, setPreview] = useState<MindExportPreview | null>(null);
-  /** What went wrong, where: counting the Citations, or writing the file. */
-  const [problem, setProblem] = useState<{ step: "preview" | "save"; message: string } | null>(
-    null,
-  );
+  /**
+   * What went wrong, where: counting the Citations, writing the file, or the
+   * Output location being in a Linked folder the User said no to.
+   */
+  const [problem, setProblem] = useState<
+    | { step: "preview" | "save"; message: string }
+    | { step: "not-allowed"; linkedFolderId: string; folder: string }
+    | null
+  >(null);
   const [saving, setSaving] = useState(false);
   /** Where the export was saved, once it is. */
   const [saved, setSaved] = useState<string | null>(null);
@@ -88,18 +95,54 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
     };
   }, [mind.id, format, includeQuestions]);
 
-  const save = async () => {
+  /** Saves, after `first` (a fix to what stopped the last try), unless it returns false. */
+  const save = async (first?: () => Promise<boolean>) => {
     setSaving(true);
-    setProblem(null);
     try {
-      const path = await files.saveMindExport(mind.id, { format, includeQuestions });
-      // Null: the User cancelled the save dialog, so this one stays open.
-      if (path) setSaved(path);
+      if (first && !(await first())) return;
+      setProblem(null);
+      const result = await core.saveMindExport(mind.id, { format, includeQuestions });
+      if (result.status === "saved") setSaved(result.file.path);
+      if (result.status === "not-allowed") {
+        setProblem({
+          step: "not-allowed",
+          linkedFolderId: result.linkedFolderId,
+          folder: folderName(result.linkedFolderPath),
+        });
+      }
+      // "cancelled": the User didn't choose where new files go, so this dialog stays as it was.
     } catch (failure) {
       setProblem({ step: "save", message: errorMessage(failure) });
     } finally {
       setSaving(false);
     }
+  };
+
+  /** The problem line's one action: fix what stopped the save, then save. */
+  const fix = (): ProblemAction | undefined => {
+    if (problem?.step === "save") {
+      return {
+        label: t("export.changeLocation"),
+        onClick: () => void save(async () => (await chooseOutputLocation()) !== null),
+        testId: "export-change-location",
+        disabled: saving,
+      };
+    }
+    if (problem?.step === "not-allowed") {
+      const { linkedFolderId } = problem;
+      return {
+        label: t("export.allow"),
+        onClick: () =>
+          void save(async () => {
+            await core.setLinkedFolderWriting(linkedFolderId, true);
+            return true;
+          }),
+        testId: "export-allow",
+        disabled: saving,
+      };
+    }
+    // A count that failed has no other way.
+    return undefined;
   };
 
   const leftOut = preview && !includeQuestions ? preview.questions : 0;
@@ -156,23 +199,14 @@ function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
       <CitationSummary preview={preview} />
 
       {problem && (
-        <ProblemLine
-          testId="export-problem"
-          // A file that can't be written goes somewhere else; a count that failed has no other way.
-          action={
-            problem.step === "save"
-              ? {
-                  label: t("export.chooseAnother"),
-                  onClick: () => void save(),
-                  testId: "export-choose-another",
-                  disabled: saving,
-                }
-              : undefined
-          }
-        >
+        <ProblemLine testId="export-problem" action={fix()}>
           {problem.step === "save"
             ? t("export.failed.save", { reason: reasonOf(problem.message, t) })
-            : t("export.failed.preview", { reason: problem.message })}
+            : problem.step === "not-allowed"
+              ? t("export.failed.save", {
+                  reason: t("export.failed.notAllowed", { folder: problem.folder }),
+                })
+              : t("export.failed.preview", { reason: problem.message })}
         </ProblemLine>
       )}
 
@@ -205,7 +239,7 @@ function Exported({ path, onDone }: { path: string; onDone(): void }) {
   const show = async () => {
     setError(null);
     try {
-      await files.showExportInFolder(path);
+      await files.showSavedFile(path);
       onDone();
     } catch (failure) {
       setError(errorMessage(failure));
