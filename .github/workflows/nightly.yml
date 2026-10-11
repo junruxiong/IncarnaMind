@@ -8,10 +8,6 @@ on:
   schedule:
     - cron: "23 2 * * *"
   workflow_dispatch:
-  # TODO: a follow-up drops pull_request once branch protection on main requires
-  # "Electron smoke test (Linux)" (ci.yml) instead of "Electron smoke test (macOS)". Until
-  # then a pull request can't merge without this job, so it still runs on each one.
-  pull_request:
 
 permissions:
   contents: read
@@ -23,8 +19,8 @@ env:
 
 concurrency:
   group: nightly-${{ github.ref }}
-  # A newer push replaces a pull request's run; a night's run on main always finishes.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A night's run on main always finishes.
+  cancel-in-progress: false
 
 jobs:
   # The whole smoke suite on macOS, including the specs only macOS has, such as the traffic
