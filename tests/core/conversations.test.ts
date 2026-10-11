@@ -755,7 +755,7 @@ describe("The migration", () => {
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     migrate(
       db,
-      migrations.filter((migration) => migration.version < 43),
+      migrations.filter((migration) => migration.version < 45),
     );
     db.run(
       "INSERT INTO minds (id, title, kind, created_at, updated_at) VALUES (?, ?, 'chat', ?, ?)",
