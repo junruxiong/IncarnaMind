@@ -67,6 +67,8 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Cited by {count} | 被引 {count} 次 | As CNKI and Google Scholar show it. |
 | Import references | 导入引用信息… | From a CSL JSON, BibTeX or RIS file. Counted with 条: "导入了 3 条". |
 | Reference without a Document | 还没有文档 | Its list: "添加 PDF…" links it. |
+| Citation style | 引用格式 | "引用格式…", "引用格式已改为 APA 第 7 版". A style keeps its own name; its variant goes in full-width brackets, in the standard's words: "GB/T 7714—2015（顺序编码制）", "（著者-出版年制）". |
+| Bibliography | 参考文献 | Its heading in the Mind and in Chinese styles' exports. |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |

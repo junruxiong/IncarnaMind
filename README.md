@@ -105,4 +105,4 @@ IncarnaMind began in 2023 as a Python command-line tool for chatting with your P
 
 ## Licence
 
-[Apache License 2.0](LICENSE). The fonts that ship with the app (Source Serif 4, Source Sans 3 and JetBrains Mono) are under the [SIL Open Font License 1.1](https://openfontlicense.org).
+[Apache License 2.0](LICENSE). The fonts that ship with the app (Source Serif 4, Source Sans 3 and JetBrains Mono) are under the [SIL Open Font License 1.1](https://openfontlicense.org). The citation styles and locales come unmodified from the [Citation Style Language](https://citationstyles.org/) project, under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/); they are formatted by [Hayagriva](https://github.com/typst/hayagriva) (MIT or Apache-2.0). Their notices are in [`resources/notices`](resources/notices).
