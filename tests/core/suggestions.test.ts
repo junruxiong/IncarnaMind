@@ -2,7 +2,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test, vi } from "vitest";
 import type { ConsentRequest, Core, SuggestionOutcome, SuggestionRequest } from "../../src/core";
 import { isStrongMatch, queryOf } from "../../src/core/suggestions";
-import { readReply } from "../../src/core/suggestions/prompt";
+import { continuationOf, readReply } from "../../src/core/suggestions/prompt";
 import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -399,12 +399,22 @@ describe("what a suggestion rests on", () => {
     expect(queryOf("第一句。第二句。第三句")).toBe("第二句。 第三句");
   });
 
-  test("a strong match holds two of the words searched, and a third of them", () => {
+  test("a strong match holds two of the words searched and a third of them, three at most", () => {
     const query = "the spring tides are highest at the moon";
     expect(isStrongMatch(query, { matches: ["spring", "tides"] })).toBe(true);
     expect(isStrongMatch(query, { matches: ["moon"] })).toBe(false);
     const long = "survey harbour tides spring highest moon month twice records gauges levels";
     expect(isStrongMatch(long, { matches: ["tides", "moon"] })).toBe(false);
+    expect(isStrongMatch(long, { matches: ["tides", "moon", "harbour"] })).toBe(true);
+    // Single letters and characters say nothing.
+    expect(isStrongMatch("城市 绿地 多 少 降温", { matches: ["多", "少", "城市"] })).toBe(false);
+  });
+
+  test("a reply that starts by repeating the paragraph's end goes on from there", () => {
+    expect(
+      continuationOf("and the survey found that", "the survey found that trees cool it."),
+    ).toBe("trees cool it.");
+    expect(continuationOf("The tides rise.", "They fall again.")).toBe("They fall again.");
   });
 
   test("the reply is one short sentence on a Passage it was given", () => {

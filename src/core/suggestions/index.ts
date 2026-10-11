@@ -45,7 +45,13 @@ import type { createEventHub } from "../events";
 import { parseIds, parseMindId } from "../minds";
 import { givesStructuredOutput } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
-import { readReply, SUGGESTION_INSTRUCTIONS, suggestionPrompt, suggestionSchema } from "./prompt";
+import {
+  continuationOf,
+  readReply,
+  SUGGESTION_INSTRUCTIONS,
+  suggestionPrompt,
+  suggestionSchema,
+} from "./prompt";
 
 /** What the "suggestions" flow sends: the paragraph being written, and Passages that match it. */
 export const SUGGESTIONS_FLOW_SENDS = ["writing", "writing-passages"] as const;
@@ -60,11 +66,16 @@ const MAX_QUERY_CHARACTERS = 400;
 export const MAX_PASSAGES = 8;
 /**
  * A strong match: the best Passage holds at least this many of the searched
- * words (not stopwords), and at least this share of them. Below it, the
- * Documents don't clearly speak to what is being written, and nothing is asked.
+ * words (not stopwords, nor single letters or characters), and this share of
+ * them, though never more than `MATCHED_WORDS_ENOUGH` are needed: a long
+ * sentence says much that no Passage repeats. Below it, the Documents don't
+ * clearly speak to what is being written, and nothing is asked. (The model is
+ * told to give nothing when no Passage supports a way on, and the quote check
+ * comes after it.)
  */
-export const MIN_MATCHED_WORDS = 2;
-export const MIN_MATCHED_SHARE = 1 / 3;
+const MIN_MATCHED_WORDS = 2;
+const MIN_MATCHED_SHARE = 1 / 3;
+const MATCHED_WORDS_ENOUGH = 3;
 /** The reply's cap: one short sentence and a quote, as JSON. */
 const OUTPUT_TOKENS = 400;
 /** A request that takes longer than this (a local model loading) gives nothing. */
@@ -89,11 +100,23 @@ export function queryOf(paragraph: string): string {
   return end.length > MAX_QUERY_CHARACTERS ? end.slice(-MAX_QUERY_CHARACTERS) : end;
 }
 
-/** Whether the best Passage found for `query` holds enough of its words (see `MIN_MATCHED_WORDS`). */
+/** A word that says something: two Chinese characters or more, or three letters or more. */
+const telling = (term: string) =>
+  /\p{Script=Han}/u.test(term) ? term.replaceAll(" ", "").length >= 2 : term.length >= 3;
+
+/**
+ * Whether the best Passage found for `query` holds enough of its telling
+ * words: `MIN_MATCHED_WORDS`, and a third of them for a short query, up to
+ * `MATCHED_WORDS_ENOUGH`.
+ */
 export function isStrongMatch(query: string, best: Pick<FoundPassage, "matches">): boolean {
-  const terms = keywordTerms(query).length;
-  const matched = best.matches.length;
-  return matched >= MIN_MATCHED_WORDS && matched >= terms * MIN_MATCHED_SHARE;
+  const terms = keywordTerms(query).filter(telling).length;
+  const matched = best.matches.filter(telling).length;
+  const needed = Math.min(
+    MATCHED_WORDS_ENOUGH,
+    Math.max(MIN_MATCHED_WORDS, Math.ceil(terms * MIN_MATCHED_SHARE)),
+  );
+  return matched >= needed;
 }
 
 interface Counts {
@@ -290,8 +313,10 @@ export function createSuggestions(options: SuggestionsOptions) {
     const passages = fitted(prepared, paragraph, found.slice(0, MAX_PASSAGES));
     if (passages.length === 0 || signal.aborted) return NONE;
     const reply = await ask(prepared, paragraph, passages, signal);
-    // A reply that repeats what the paragraph says already is no way on.
-    if (!reply || signal.aborted || paragraph.includes(reply.text)) return NONE;
+    if (!reply || signal.aborted) return NONE;
+    // A reply that only repeats what the paragraph says already is no way on.
+    const text = continuationOf(paragraph, reply.text);
+    if (text === "" || paragraph.includes(text)) return NONE;
     const passage = passages[reply.passage];
     const citation = passage && citing.citeQuote(passage.passageId, reply.quote);
     if (citation?.check !== "found") return NONE;
@@ -299,7 +324,7 @@ export function createSuggestions(options: SuggestionsOptions) {
     const suggestion: Suggestion = {
       suggestionId: randomUUID(),
       requestId: request.requestId,
-      text: reply.text,
+      text,
       citation,
       providerId: prepared.provider.id,
       modelId: prepared.modelId,
