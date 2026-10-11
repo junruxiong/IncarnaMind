@@ -93,7 +93,8 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
-import { createOllamaModels, isCloudModelName } from "./providers/ollamaModels";
+import { isCloudModelName } from "./providers/ollamaCloud";
+import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
 import {

@@ -11,7 +11,7 @@ import type { ExternalService, OllamaPullProgress, OllamaStatus } from "../api";
 import { isRecord } from "../errors";
 import { LOCAL_MODELS } from "./catalog/local";
 import { catalogProvider } from "./catalog/providers";
-import { isCloudModelName, isRemoteEntry } from "./ollamaModels";
+import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 /** Where Ollama downloads the models it pulls from: its registry, not this app. */
 export const OLLAMA_REGISTRY: Readonly<ExternalService> = {

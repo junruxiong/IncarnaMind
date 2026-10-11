@@ -43,10 +43,9 @@ import {
 } from "./kinds";
 import { type ListedModel, listProviderModels } from "./modelLists";
 import type { ChatLanguageModel, ChatModelFactory, ChatModelSpec, ContextWindow } from "./models";
+import { isCloudModelName, OLLAMA_CLOUD } from "./ollamaCloud";
 import {
   DEFAULT_OLLAMA_SETTINGS,
-  isCloudModelName,
-  OLLAMA_CLOUD,
   type OllamaModelProfile,
   type OllamaModels,
 } from "./ollamaModels";

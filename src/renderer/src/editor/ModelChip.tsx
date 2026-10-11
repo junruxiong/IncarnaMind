@@ -2,6 +2,7 @@ import { isMacOS } from "@tiptap/core";
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { ChatModelChoice, ChatProvider } from "../../../core/api";
+import { isCloudModelName } from "../../../core/providers/ollamaCloud";
 import type { MessageKey } from "../../../shared/i18n";
 import { mindModelOf, observeMindModel, setMindModel } from "../../../shared/mindModel";
 import { useAnswers } from "../answers";
@@ -98,9 +99,13 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
       ? readiness.provider
       : null);
   const provider = providerOf(current.providerId);
-  const isCloud = (providerId: string, modelId: string) =>
-    groups?.find((group) => group.provider.id === providerId)?.cloud.includes(modelId) ??
-    (provider?.kind === "ollama" && provider.service !== null);
+  const isCloud = (providerId: string, modelId: string) => {
+    const group = groups?.find((each) => each.provider.id === providerId);
+    // A model the provider doesn't list (a Mind's own choice) is cloud by its name, or as the provider says of its default.
+    return group?.models.includes(modelId)
+      ? group.cloud.includes(modelId)
+      : isCloudModelName(modelId) || (provider?.kind === "ollama" && provider.service !== null);
+  };
   const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
   const title = via ? `${current.modelId} · ${via}` : current.modelId;
   const label = via
@@ -116,7 +121,12 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   // Each provider's models; the one in use is listed even if its provider didn't list it.
   const offered = (groups ?? []).map((group) => ({
     provider: group.provider,
-    cloud: group.cloud,
+    cloud:
+      group.provider.id === current.providerId &&
+      !group.models.includes(current.modelId) &&
+      isCloud(group.provider.id, current.modelId)
+        ? [current.modelId, ...group.cloud]
+        : group.cloud,
     models:
       group.provider.id === current.providerId && !group.models.includes(current.modelId)
         ? [current.modelId, ...group.models]
