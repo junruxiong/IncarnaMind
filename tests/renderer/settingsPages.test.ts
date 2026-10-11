@@ -8,7 +8,7 @@ import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 describe("Settings pages", () => {
-  test("are General, Models, Search, Meetings, Connectors, Skills and Privacy, in that order", () => {
+  test("are General, Models, Search, Meetings, Connectors, Skills, Agents and Privacy, in that order", () => {
     expect(settingsPages).toEqual([
       "general",
       "models",
@@ -16,6 +16,7 @@ describe("Settings pages", () => {
       "meetings",
       "connectors",
       "skills",
+      "agents",
       "privacy",
     ]);
   });

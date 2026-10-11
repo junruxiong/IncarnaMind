@@ -34,6 +34,7 @@ const PAGES = [
   { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },
   { page: "connectors", name: "Connectors", sections: ["connectors-settings"] },
   { page: "skills", name: "Skills", sections: ["skills-settings", "skill-scripts-settings"] },
+  { page: "agents", name: "Agents", sections: ["agents-settings"] },
   {
     page: "privacy",
     name: "Privacy",
@@ -55,7 +56,7 @@ async function shot(window: Page, name: string) {
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-test("Settings lists seven pages, and each holds its settings", async () => {
+test("Settings lists eight pages, and each holds its settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -140,9 +141,19 @@ test("the pages are named in Chinese too", async () => {
       "会议",
       "连接器",
       "技能",
+      "智能体",
       "隐私",
     ]);
-    const names = ["general", "models", "search", "meetings", "connectors", "skills", "privacy"];
+    const names = [
+      "general",
+      "models",
+      "search",
+      "meetings",
+      "connectors",
+      "skills",
+      "agents",
+      "privacy",
+    ];
     for (const page of names) {
       await window.getByTestId(`settings-nav-${page}`).click();
       await expect(window.getByTestId("settings")).toHaveAttribute("data-page", page);
