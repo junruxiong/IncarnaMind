@@ -11,6 +11,7 @@ import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
+import { ChatGptWelcomeDialog } from "./components/providers/ChatGptSignIn";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { RequestedDialogs } from "./components/RequestedDialogs";
 import { ResizeRod } from "./components/ResizeRod";
@@ -258,6 +259,7 @@ function Workspace() {
         <RequestedDialogs />
         <AddWebPageDialog />
         <ChatSetupDialog />
+        <ChatGptWelcomeDialog />
         <UsageDataDialog />
         <CitationStylePickerHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}

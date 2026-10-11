@@ -103,7 +103,10 @@ export function AgentsSettings() {
         <span className="self-start rounded-full bg-chip px-2 text-label leading-5 font-semibold text-ink-secondary">
           {t("agents.settings.experimental")}
         </span>
-        <p className={pageIntroClass}>{t("agents.settings.intro")}</p>
+        <p className={pageIntroClass}>
+          <span className="block font-semibold text-ink">{t("agents.settings.lead")}</span>
+          {t("agents.settings.intro")}
+        </p>
       </div>
 
       <div className={ruledListClass}>
