@@ -268,3 +268,44 @@ test("a Citation's mark in the margin opens the same card, and every state has i
   }
   await app.close();
 });
+
+test("a contradicted Citation's words are outlined in red on the page, never washed green, with the ≠ mark", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await setWindowSize(app, window, 1440, 800);
+  const answer = await ask(window, "When do spring tides happen?");
+
+  // #96 will produce this for real; here the Citation is given the state.
+  await window.getByTestId("mind-editor").evaluate((dom) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "citation") return true;
+      view.dispatch(
+        view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, check: "contradicted" }),
+      );
+      return false;
+    });
+  });
+  await answer.getByTestId("citation-chip").click();
+  await window.getByTestId("citation-card").getByTestId("citation-open").click();
+
+  const highlight = window
+    .getByTestId("viewer")
+    .locator('[data-page-number="2"] [data-quote-highlight]')
+    .first();
+  await expect(highlight).toBeVisible();
+  const look = await highlight.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, shadow: style.boxShadow };
+  });
+  // No fill, and an outline in red.
+  expect(look.background).toBe("rgba(0, 0, 0, 0)");
+  expect(look.shadow).toContain("rgb(180, 35, 24)");
+  const mark = window.getByTestId("viewer-quote-mark");
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
+  await expect(mark).toHaveAttribute("aria-label", /contradicted/);
+  await app.close();
+});
