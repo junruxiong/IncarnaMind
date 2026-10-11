@@ -11,13 +11,7 @@ import {
 } from "../editor/tableCommands";
 import type { Command, CommandContext } from "./registry";
 
-/*
- * The table menu's actions as commands (#92): in ⌘K, with their keys in the
- * one keymap, while the cursor is in a table. The note's keymap gives them
- * the Block at the cursor as the focus.
- */
-
-/** The note the cursor is in a table in, through the Block at its cursor. */
+/** The note's keymap gives a command the Block at the cursor as its focus. */
 function tableNote(ctx: CommandContext): Editor | null {
   const editor = ctx.focus?.kind === "block" ? noteHolding(ctx.focus.id) : null;
   return editor && !editor.isDestroyed && isInTable(editor.state) ? editor : null;

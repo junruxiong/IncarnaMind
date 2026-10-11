@@ -5,7 +5,6 @@ import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type { CommandId, Keys } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
 
-/** What the table menu can do to the table the cursor is in. */
 export type TableActionId =
   | "rowAbove"
   | "rowBelow"
@@ -18,18 +17,14 @@ export type TableActionId =
 
 export interface TableAction {
   id: TableActionId;
-  /** Its command in the command list (../commands/tables), which binds its keys and is in ⌘K. */
+  /** Registered in ../commands/tables, which binds the keys and puts it in ⌘K. */
   command: CommandId;
   label: MessageKey;
-  /** Its keys, as an accelerator, when it has some. */
   keys?: Keys;
   run(editor: Editor): boolean;
 }
 
-/**
- * The table menu's actions, in its order: adding rows and columns (with
- * their keys, as in Confluence), the heading row, then deleting, last.
- */
+/** In the menu's order, deleting last (interaction rule 5); the keys are Confluence's. */
 export const TABLE_ACTIONS: readonly TableAction[] = [
   {
     id: "rowAbove",
@@ -85,10 +80,10 @@ export const TABLE_ACTIONS: readonly TableAction[] = [
   },
 ];
 
-/** The keys that open the table menu, as ⌘/ opens the menu over selected text. */
+/** As ⌘/ opens the menu over selected text (#91). */
 export const TABLE_MENU_KEYS: Keys = "CmdOrCtrl+/";
 
-/** Runs a change as an Undo step of its own, rather than merged with the typing just before or after it. */
+/** Collaboration's undo merges changes made close together: this one stays an Undo step of its own. */
 export function asOwnUndoStep<T>(editor: Editor, run: () => T): T {
   const undo = yUndoPluginKey.getState(editor.state)?.undoManager;
   undo?.stopCapturing();
@@ -97,34 +92,26 @@ export function asOwnUndoStep<T>(editor: Editor, run: () => T): T {
   return result;
 }
 
-/**
- * Runs a table action as its own Undo step, unless an input method is
- * composing (what it is writing isn't in the cell yet), and puts the focus
- * back in the table. Whether it could be done.
- */
+/** Not while an input method composes: what it is writing isn't in the cell yet. */
 export function runTableAction(editor: Editor, action: TableAction): boolean {
   if (editor.view.composing) return false;
   const done = asOwnUndoStep(editor, () => action.run(editor));
-  // Back in the cell, from the menu: the next key goes there.
   editor.commands.focus();
   return done;
 }
 
-/** The table the cursor is in, as its menu needs it. */
 export interface TableSpot {
-  /** The position just before the cell the menu sits on: the cursor's, or a cell selection's head. */
+  /** Before the cell the menu sits on: the cursor's, or a cell selection's head. */
   cell: number;
-  /** How many rows and columns the selection covers. */
+  /** Selected. */
   rows: number;
   columns: number;
-  /** Whether the table's first row is its heading row. */
   headerRow: boolean;
-  /** Whether the selected rows, or columns, are not all the table has: the last one can't go. */
+  /** A table keeps at least one row and one column. */
   canDeleteRows: boolean;
   canDeleteColumns: boolean;
 }
 
-/** Where the cursor is in a table, or null when it isn't in one. */
 export function tableSpot(state: EditorState): TableSpot | null {
   if (!isInTable(state)) return null;
   const { selection } = state;
@@ -153,20 +140,18 @@ export const sameSpot = (a: TableSpot | null, b: TableSpot | null) =>
     a.canDeleteRows === b.canDeleteRows &&
     a.canDeleteColumns === b.canDeleteColumns);
 
-/** Why a table action can't be done here now, or null. */
 export function unavailable(id: TableActionId, spot: TableSpot): MessageKey | null {
   if (id === "deleteRow" && !spot.canDeleteRows) return "editor.table.lastRow";
   if (id === "deleteColumn" && !spot.canDeleteColumns) return "editor.table.lastColumn";
   return null;
 }
 
-/** Whether the table menu opens on ⌘/: the cursor is in a table, with no text selected (that's the selection menu's). */
+/** With text selected, ⌘/ is the selection menu's. */
 export function menuKeyApplies(state: EditorState): boolean {
   const { selection } = state;
   return isInTable(state) && (selection.empty || selection instanceof CellSelection);
 }
 
-/** A new table: a heading row over empty rows, each cell an empty paragraph. */
 export function emptyTable(rows = 3, columns = 3): JSONContent {
   const row = (type: "tableHeader" | "tableCell"): JSONContent => ({
     type: "tableRow",
@@ -193,12 +178,9 @@ declare module "@tiptap/core" {
 }
 
 /**
- * The table's own keys in the editor, and its right-click. Tiptap's Table
- * moves between cells with Tab and Shift-Tab, and adds a row at the last
- * cell; here they also never take the focus out of the Mind (at the first
- * cell, say). A right-click in a cell puts the cursor there, unless it is on
- * the selection, and opens the table menu. The menu's own keys are commands
- * (../commands/tables), in the one keymap.
+ * Tab and Shift-Tab never take the focus out of the Mind from a table (as
+ * Shift-Tab at its first cell would), and a right-click in a cell opens the
+ * table menu there. The menu's keys are commands, in ../commands/tables.
  */
 export const TableKeys = Extension.create<Record<string, never>, TableKeysStorage>({
   name: "tableKeys",
