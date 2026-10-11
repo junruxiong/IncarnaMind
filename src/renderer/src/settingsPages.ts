@@ -3,6 +3,7 @@ export const settingsPages = [
   "general",
   "models",
   "search",
+  "meetings",
   "tools",
   "connectors",
   "skills",
