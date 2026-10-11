@@ -161,7 +161,8 @@ export function SelectionMenu({
       link: current.isActive("link"),
       turnable: canTurnInto(current),
       turn: currentTurnInto(current).label,
-      oneLine: inOneTextblock(current),
+      // A formula replaces text in a Note only: not in a Question or an Answer.
+      oneLine: inOneTextblock(current) && canTurnInto(current),
     }),
   });
 
@@ -287,13 +288,13 @@ export function SelectionMenu({
 
   const applyLink = (typed: string) => {
     setLinking(false);
-    const chain = editor.chain().focus();
-    if (typed.trim() === "") chain.extendMarkRange("link").unsetLink().run();
-    else {
+    asOwnUndoStep(editor, () => {
+      const chain = editor.chain().focus();
+      if (typed.trim() === "") return chain.extendMarkRange("link").unsetLink().run();
       // Editing a link changes all of it, not just the part selected.
       if (editor.isActive("link")) chain.extendMarkRange("link");
-      chain.setLink({ href: linkTarget(typed) }).run();
-    }
+      return chain.setLink({ href: linkTarget(typed) }).run();
+    });
   };
 
   const keepSelection = (event: { preventDefault(): void }) => event.preventDefault();
