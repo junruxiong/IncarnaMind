@@ -9,6 +9,9 @@ export interface Handle<T> {
 
 export const composerHandle: Handle<{ focus(): void }> = { current: null };
 
+/** The Citation whose card is open: what "Open cited page" opens. */
+export const citationHandle: Handle<{ open(): void }> = { current: null };
+
 export const sidebarHandle: Handle<{ hidden: boolean; toggle(): void }> = { current: null };
 
 /** The Mind the User last wrote in: its editor and its document, for the commands on its text. */
