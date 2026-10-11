@@ -6,6 +6,7 @@
  * imports Electron (ADR-0004, ADR-0006).
  */
 import type { ChildProcess } from "node:child_process";
+import type { PrintDocument } from "../shared/printDocument";
 import type { AgentLauncher } from "./agents";
 import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
@@ -120,6 +121,15 @@ export interface FileShell {
   openPath(path: string): Promise<void>;
   /** Shows a file selected in the system's file manager (Finder, Explorer). */
   showItemInFolder(path: string): void;
+}
+
+/**
+ * Prints a document as a PDF, laid out in pages with each footnote at the foot of the page its
+ * marker is on. The desktop app prints with Chromium in a hidden window that reaches nothing
+ * outside the app (src/main/printPdf.ts).
+ */
+export interface Printer {
+  print(document: PrintDocument): Promise<Uint8Array>;
 }
 
 /** How Linked folders are watched and checked (see ./documents/library). The defaults suit the app. */
@@ -441,6 +451,8 @@ export interface CoreAdapters {
    * Absent (tests that don't need it): both are refused.
    */
   shell?: FileShell;
+  /** Prints PDF exports. Absent (tests that don't export PDFs): a PDF export is refused. */
+  printer?: Printer;
   /** How Linked folders are watched (see `LinkedFolderOptions`). */
   linkedFolders?: LinkedFolderOptions;
   /**

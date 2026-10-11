@@ -8,6 +8,7 @@ import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
 import { evidenceCommands } from "./evidence";
+import { exportCommands } from "./exports";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
@@ -40,6 +41,7 @@ const appCommands: readonly Command[] = [
   ...meetingCommands,
   ...webPageCommands,
   ...evidenceCommands,
+  ...exportCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",

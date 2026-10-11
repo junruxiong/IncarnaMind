@@ -178,6 +178,11 @@ export interface Core extends CoreApi, CoreEventSource {
    */
   showSavedFile(path: string): Promise<void>;
   /**
+   * Opens a file IncarnaMind saved since it started in the default app for its
+   * type, through the `shell` adapter. Throws NotFoundError for any other path.
+   */
+  openSavedFile(path: string): Promise<void>;
+  /**
    * Reconciles every Linked folder and single file with the disk now, and
    * resolves once that, and any change already reported, has been taken in.
    */
@@ -908,6 +913,7 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     citationStyle: (mindId) => mindCitationStyle(mindId).style,
     formatCitations: (request) => citationStyles.format(request),
+    printer: adapters.printer ?? null,
     now,
   });
   /** Usage data: which format, and whether Questions went with it. */
@@ -1978,11 +1984,11 @@ export function createCore(adapters: CoreAdapters): Core {
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data } = await mindExports.export(mindId, options);
+      const { fileName, data, ...counts } = await mindExports.export(mindId, options);
       try {
         const file = await outputs.save({ name: fileName, data, ownFile: "export" });
         recordExport(options);
-        return { status: "saved", file };
+        return { status: "saved", file, ...counts };
       } catch (error) {
         if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
         if (error instanceof LinkedFolderWritesDeclinedError) {
@@ -2055,6 +2061,13 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new NotFoundError("Only a file IncarnaMind saved can be shown.");
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
+    },
+    openSavedFile: async (path) => {
+      if (!outputs.saved(path))
+        throw new NotFoundError("Only a file IncarnaMind saved can be opened.");
+      if (!adapters.shell)
+        throw new Error("This copy of IncarnaMind can't open files in other apps.");
+      await adapters.shell.openPath(path);
     },
     getAgents: async () => agents.settings(),
     setAgentsEnabled: (enabled) => agents.setEnabled(enabled),

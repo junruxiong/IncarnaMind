@@ -201,15 +201,18 @@ test("a Mind citing a paper offers a citation style; chosen, its Citations and R
   await expect(dialog.getByTestId("export-citation-style")).toHaveText(
     "Chicago (notes and bibliography)",
   );
-  // The dialog's own style button switches it back to APA 7 for this export, and for the Mind.
+  // The options sheet's own style button switches it back to APA 7, for the Mind and so its
+  // exports; Save options keeps Word, and Export makes the file.
   await pointAndClick(window, dialog.getByTestId("export-citation-style"));
   await chooseStyle(window, "apa", "APA 7");
   await expect(dialog.getByTestId("export-citation-style")).toHaveText("APA 7");
   await screenshot(window, "export-dialog-style-en");
   await pointAndClick(window, dialog.getByTestId("export-save"));
-  await expect(dialog.getByTestId("export-done")).toBeVisible();
-  const saved = (await dialog.getByTestId("export-done").getAttribute("title")) ?? target;
-  await pointAndClick(window, dialog.getByTestId("export-close"));
+  await expect(dialog).toBeHidden();
+  await pointAndClick(window, window.getByTestId("export-mind"));
+  const done = window.getByTestId("export-result").getByTestId("export-done");
+  await expect(done).toHaveText(/^Saved .+\.docx$/);
+  const saved = (await done.getAttribute("title")) ?? target;
   const text = paragraphsOf(part(unzip(await readFile(saved)), "word/document.xml")).map(
     (each) => each.text,
   );

@@ -61,6 +61,11 @@ export function serveFileActions(
     await core.showSavedFile(path as string);
   });
 
+  ipcMain.handle(FILES_CHANNELS.openSavedFile, async (event, path: unknown) => {
+    refuseUnknown(event);
+    await core.openSavedFile(path as string);
+  });
+
   ipcMain.handle(FILES_CHANNELS.pickOutputLocation, async (event): Promise<string | null> => {
     refuseUnknown(event);
     const [{ language }, { location }] = await Promise.all([

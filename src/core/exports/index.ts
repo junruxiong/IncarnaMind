@@ -1,7 +1,8 @@
 /**
- * Exporting a Mind to Markdown or .docx (see `CoreApi.exportMind`). The core
+ * Exporting a Mind to Markdown, .docx or PDF (see `CoreApi.exportMind`). The core
  * makes the file's bytes; the host decides where they go (the desktop app asks
- * with the system save dialog), so nothing here touches the file system.
+ * with the system save dialog), so nothing here touches the file system. A PDF
+ * is printed by the host's `Printer`, from the HTML made here.
  */
 import type * as Y from "yjs";
 import {
@@ -11,7 +12,9 @@ import {
 } from "../../shared/citationStyles";
 import { citationState, citedLocation } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
+import type { Translate } from "../../shared/locations";
 import { mindName } from "../../shared/naming";
+import type { Printer } from "../adapters";
 import type {
   CitationAttributes,
   CitationFormatRequest,
@@ -31,6 +34,11 @@ import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } fr
 import { styleCitations } from "./citations";
 import { renderDocx } from "./docx";
 import { renderMarkdown } from "./markdown";
+import { unifyIdeographs } from "./pdfUnicode";
+import { renderPrintHtml } from "./printHtml";
+
+/** What a footnote needs of a live Document: a web page's site, address and fetch dates. */
+type LiveDocument = Pick<Document, "id" | "contentHash" | "web">;
 
 export interface ExportsDependencies {
   /** The Mind; throws if it doesn't exist or was deleted. */
@@ -38,7 +46,7 @@ export interface ExportsDependencies {
   /** Reads the Mind's Blocks (see `MindContent.read`). */
   read<T>(mindId: string, look: (blocks: Y.XmlFragment) => T): T;
   /** The live Documents: a Citation whose Document was deleted can't be checked. */
-  liveDocuments(): Pick<Document, "id" | "contentHash">[];
+  liveDocuments(): LiveDocument[];
   /** The text kept of Documents unlinked with their Linked folder: Citations quoting it still check. */
   keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
@@ -47,10 +55,16 @@ export interface ExportsDependencies {
   citationStyle(mindId: string): CitationStyleId;
   /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
+  /** Prints a PDF; null where this copy can't. */
+  printer: Printer | null;
   now(): string;
 }
 
-const EXTENSIONS: Readonly<Record<ExportFormat, string>> = { markdown: "md", docx: "docx" };
+const EXTENSIONS: Readonly<Record<ExportFormat, string>> = {
+  markdown: "md",
+  docx: "docx",
+  pdf: "pdf",
+};
 
 /** What an export holds, read once for both its preview and its file. */
 interface Prepared {
@@ -103,6 +117,9 @@ export function createExports(deps: ExportsDependencies) {
     async export(mindId: unknown, options: unknown): Promise<MindExport> {
       const prepared = prepare(mindId, options);
       const { title, preview, language, format, style } = prepared;
+      if (format === "pdf" && !deps.printer) {
+        throw new Error("This copy of IncarnaMind can't make PDFs.");
+      }
       const blocks =
         style.form === "numbered"
           ? prepared.blocks
@@ -111,16 +128,29 @@ export function createExports(deps: ExportsDependencies) {
         question: translate(language, "export.question"),
         unverified: translate(language, "export.unverified"),
       };
-      const data =
-        format === "markdown"
-          ? new TextEncoder().encode(renderMarkdown(title, blocks, labels))
-          : renderDocx(blocks, {
-              title,
-              labels,
-              language: language === "zh-CN" ? "zh-CN" : "en-US",
-              paper: language === "en" ? "letter" : "a4",
-              created: deps.now(),
-            });
+      const paper = language === "en" ? "letter" : "a4";
+      let data: Uint8Array;
+      if (format === "markdown") {
+        data = new TextEncoder().encode(renderMarkdown(title, blocks, labels));
+      } else if (format === "docx") {
+        data = renderDocx(blocks, {
+          title,
+          labels,
+          language: language === "zh-CN" ? "zh-CN" : "en-US",
+          paper,
+          created: deps.now(),
+        });
+      } else {
+        const { body, notes } = renderPrintHtml(title, blocks, labels);
+        const printed = await (deps.printer as Printer).print({
+          language,
+          paper,
+          title: preview.fileName.slice(0, -".pdf".length),
+          body,
+          notes,
+        });
+        data = unifyIdeographs(printed);
+      }
       return { ...preview, data };
     },
   };
@@ -129,33 +159,63 @@ export function createExports(deps: ExportsDependencies) {
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
   const { format, includeQuestions } = input;
-  if (format !== "markdown" && format !== "docx") {
-    throw new InvalidInputError('The export format must be "markdown" or "docx".');
+  if (format !== "markdown" && format !== "docx" && format !== "pdf") {
+    throw new InvalidInputError('The export format must be "markdown", "docx" or "pdf".');
   }
   if (includeQuestions !== undefined && typeof includeQuestions !== "boolean") {
     throw new InvalidInputError("includeQuestions must be true or false.");
   }
-  // Markdown is an archive, so it keeps Questions; the .docx is the deliverable, so it doesn't.
+  // Markdown is an archive, so it keeps Questions; a .docx or PDF is the deliverable, so it doesn't.
   return { format, includeQuestions: includeQuestions ?? format === "markdown" };
+}
+
+/** The day a web page's version was fetched, as the interface language writes a date. */
+function dayOf(at: string, language: Language): string {
+  return new Intl.DateTimeFormat(language === "zh-CN" ? "zh-CN" : "en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(at));
 }
 
 /**
  * A Citation's footnote: its Document's name and its Location's short label,
  * e.g. "Tides, p. 12–13", "Deck, slide 4" or "Model, Revenue, rows 12–14",
- * unverified unless its badge says "Quote found".
+ * unverified unless its badge says "Quote found". A live web page's also names
+ * its site, its address and the day the quoted version was fetched, as the
+ * "accessed" date citation styles read: "Tides, Tide Wiki, § History, ¶ 3,
+ * https://tides.example/history, accessed 3 October 2026".
  */
 function footnoteOf(
   attributes: Partial<CitationAttributes>,
-  documents: readonly Pick<Document, "id" | "contentHash">[],
+  documents: readonly LiveDocument[],
   kept: readonly KeptCitationText[],
   language: Language,
 ): Footnote {
-  const document = attributes.documentName || translate(language, "export.unnamedDocument");
-  const location = citedLocation(attributes, (key, params) => translate(language, key, params));
+  const t: Translate = (key, params) => translate(language, key, params);
+  const document = attributes.documentName || t("export.unnamedDocument");
+  const location = citedLocation(attributes, t);
+  const state = citationState(attributes, documents, kept);
+  const unverified = state.check !== "found";
+  const web = documents.find((each) => each.id === state.documentId)?.web;
+  if (!web) {
+    return {
+      source: location
+        ? t("export.citation.location", { document, location })
+        : t("export.citation.document", { document }),
+      unverified,
+    };
+  }
+  const version = web.versions.find((each) => each.contentHash === attributes.contentHash);
+  const parts = [document];
+  if (web.siteName && web.siteName !== document) parts.push(web.siteName);
+  if (location) parts.push(location);
+  parts.push(web.address);
+  if (version)
+    parts.push(t("export.citation.accessed", { date: dayOf(version.fetchedAt, language) }));
   return {
-    source: location
-      ? translate(language, "export.citation.location", { document, location })
-      : translate(language, "export.citation.document", { document }),
-    unverified: citationState(attributes, documents, kept).check !== "found",
+    source: parts.join(t("export.citation.separator")),
+    unverified,
+    link: web.address,
   };
 }

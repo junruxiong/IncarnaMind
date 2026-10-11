@@ -2,6 +2,19 @@ import { describe, expect, test } from "vitest";
 import { type Executor, InvalidInputError } from "../../src/core";
 import { createTempDataFolder, startCore } from "../helpers/core";
 
+/** Export uses Word until the User saves other options, and the deliverables leave Questions out. */
+const DEFAULT_EXPORT = {
+  format: "docx",
+  docx: { includeQuestions: false },
+  pdf: { includeQuestions: false },
+} as const;
+
+const PDF_EXPORT = {
+  format: "pdf",
+  docx: { includeQuestions: false },
+  pdf: { includeQuestions: true },
+} as const;
+
 describe("Settings", () => {
   test("a new data folder starts with the defaults", async () => {
     const core = startCore(await createTempDataFolder());
@@ -12,6 +25,7 @@ describe("Settings", () => {
         chatModel: null,
         suggestWhileWriting: false,
         leaveOutOwnFiles: true,
+        exportOptions: DEFAULT_EXPORT,
       },
       device: {
         sidebarWidth: 248,
@@ -101,6 +115,7 @@ describe("Settings", () => {
       chatModel: null,
       suggestWhileWriting: false,
       leaveOutOwnFiles: true,
+      exportOptions: DEFAULT_EXPORT,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -154,7 +169,12 @@ describe("Settings", () => {
       motion: "reduced" as const,
     };
     await before.updateSettings({
-      user: { language: "zh-CN", suggestWhileWriting: true, leaveOutOwnFiles: false },
+      user: {
+        language: "zh-CN",
+        suggestWhileWriting: true,
+        leaveOutOwnFiles: false,
+        exportOptions: PDF_EXPORT,
+      },
       device,
     });
     before.close();
@@ -167,6 +187,7 @@ describe("Settings", () => {
         chatModel: null,
         suggestWhileWriting: true,
         leaveOutOwnFiles: false,
+        exportOptions: PDF_EXPORT,
       },
       device,
       language: "zh-CN",
@@ -201,6 +222,18 @@ describe("Settings", () => {
       patch: { device: { skillScriptTimeoutSeconds: 1.5 } },
     },
     { name: "an unknown motion choice", patch: { device: { motion: "slow" } } },
+    {
+      name: "an export format the app can't write",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, format: "odt" } } },
+    },
+    {
+      name: "export options with a format's options missing",
+      patch: { user: { exportOptions: { format: "pdf", docx: { includeQuestions: false } } } },
+    },
+    {
+      name: "export options whose Questions switch isn't true or false",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, pdf: { includeQuestions: "yes" } } } },
+    },
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },

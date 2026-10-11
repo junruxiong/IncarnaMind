@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
+import { EXPORT_FORMATS, type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
 import type { CommandId } from "../../../../shared/commands";
 import { shortcutLabel } from "../../commands/keymap";
 import { type CommandContext, commands, isEnabled, offered } from "../../commands/registry";
+import { FORMAT_LABELS } from "../../exports";
 import { useT } from "../../i18n";
 import { groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -151,9 +152,27 @@ export function GroupMenu({ groupId, merged }: { groupId: string; merged: boolea
   const layout = useAppStore((state) => state.layout);
   const group = layout?.groups.find((each) => each.id === groupId);
   const full = (layout?.groups.length ?? 0) >= MAX_TAB_GROUPS;
+  const last = useAppStore((state) => state.settings?.user.exportOptions.format ?? "docx");
+  const mindShown = group?.tabs.find((tab) => tab.id === group.activeTabId)?.item.kind === "mind";
+  // The shown Mind's exports first, as the design's "More for this Mind" has them: each format,
+  // the last one with ⇧⌘E, then the options sheet.
+  const exports: Item[] = mindShown
+    ? [
+        ...EXPORT_FORMATS.map(
+          (format): Item => ({
+            id: `export-${format}`,
+            command: format === last ? "mind.export" : `mind.exportAs.${format}`,
+            label: t("export.as", { format: t(FORMAT_LABELS[format]) }),
+          }),
+        ),
+        { id: "export-options", command: "mind.exportOptions", label: t("export.options") },
+        "rule",
+      ]
+    : [];
   const items: (Item | false)[] =
     menu.open && group
       ? [
+          ...exports,
           {
             id: "split",
             command: "tab.split",

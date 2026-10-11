@@ -533,7 +533,8 @@ test("A3 a working session: a Linked folder, Answers with Citations, the viewer,
     });
 
     await step(T, "export dialog", async () => {
-      await click(window, window.getByTestId("export-mind"));
+      await click(window, window.getByTestId("group-menu"));
+      await click(window, window.getByTestId("tab-menu-export-options"));
       const dialog = window.getByTestId("export-dialog");
       await expect(dialog).toBeVisible();
       await window.waitForTimeout(500);

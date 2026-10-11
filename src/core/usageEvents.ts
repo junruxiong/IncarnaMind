@@ -80,7 +80,7 @@ const CITATION_CHECKS = [
   "unsupported",
   "contradicted",
 ] as const;
-const EXPORT_FORMATS = ["markdown", "docx"] as const;
+const EXPORT_FORMATS = ["markdown", "docx", "pdf"] as const;
 
 /** The Settings pages (src/renderer/src/settingsPages.ts; a test keeps them the same). */
 export const SETTINGS_PAGES = [

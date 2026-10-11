@@ -13,10 +13,10 @@ import { missingDetails } from "../../../shared/references";
 import { retryFormatting, useMindFormatting } from "../citationFormatting";
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
 import { CiteAsPanel } from "../components/CiteAsPanel";
-import { useExportDialog } from "../components/ExportDialog";
 import { ChevronDownLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { errorMessage } from "../errors";
+import { useExportOptions } from "../exports";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { citationClusters } from "./citationClusters";
@@ -120,7 +120,7 @@ export function ReferencesBlock({
         <button
           type="button"
           data-testid="references-export"
-          onClick={() => useExportDialog.getState().open(mindId)}
+          onClick={() => useExportOptions.getState().open(mindId)}
           className="references-button"
         >
           {t("references.export")}

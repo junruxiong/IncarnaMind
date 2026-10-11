@@ -3,7 +3,17 @@ import type { DocumentGroupAssignment, LibraryGroup, OwnFile, Settings } from ".
 import { countedByChoice, leftOutOfEvidence } from "../../src/shared/evidence";
 
 const settings = (leaveOutOwnFiles: boolean): Pick<Settings, "user"> => ({
-  user: { language: "en", chatModel: null, suggestWhileWriting: false, leaveOutOwnFiles },
+  user: {
+    language: "en",
+    chatModel: null,
+    suggestWhileWriting: false,
+    leaveOutOwnFiles,
+    exportOptions: {
+      format: "docx",
+      docx: { includeQuestions: false },
+      pdf: { includeQuestions: false },
+    },
+  },
 });
 
 const folder = (countsOwnFiles: boolean): LibraryGroup => ({

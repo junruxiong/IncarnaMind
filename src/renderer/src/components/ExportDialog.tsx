@@ -1,54 +1,48 @@
-import { useEffect, useRef, useState } from "react";
-import { create } from "zustand";
-import type { ExportFormat, Mind, MindCitationStyle, MindExportPreview } from "../../../core/api";
+import { type FormEvent, useEffect, useId, useState } from "react";
+import {
+  EXPORT_FORMATS,
+  type ExportFormat,
+  type ExportPreferences,
+  type Mind,
+  type MindCitationStyle,
+  type OutputSettings,
+} from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { styleLabel, useCitationStylePicker } from "../citationStylePicker";
-import { core, files } from "../core";
+import { shortcutLabel } from "../commands/keymap";
+import { core } from "../core";
 import { errorMessage } from "../errors";
+import { exportPreferences, FORMAT_LABELS } from "../exports";
 import { useT } from "../i18n";
 import { folderName } from "../linkedFolders";
 import { chooseOutputLocation } from "../outputFiles";
-import { saveFailureReason } from "../problems";
 import { useAppStore } from "../store";
-import { QuoteNotFoundIcon } from "./icons";
-import { ChevronDownLineIcon } from "./lineIcons";
-import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { ChevronDownLineIcon, CloseLineIcon } from "./lineIcons";
+import { ProblemLine } from "./ProblemLine";
 import {
   buttonClass,
-  choiceListClass,
-  choiceRadioClass,
-  choiceRowClass,
-  choiceTextClass,
-  choiceTitleClass,
   dialogActionsClass,
-  dialogBodyClass,
-  dialogClass,
+  dialogFrameClass,
   dialogTitleClass,
-  fieldLabelClass,
   hintClass,
   primaryButtonClass,
+  ruledListClass,
 } from "./ui";
 import { useModal } from "./useModal";
 
-const FORMATS: readonly { value: ExportFormat; label: MessageKey; hint: MessageKey }[] = [
-  { value: "docx", label: "export.format.docx", hint: "export.format.docx.hint" },
-  { value: "markdown", label: "export.format.markdown", hint: "export.format.markdown.hint" },
-];
+/** What each format does with Citations and Questions, under the format. */
+const FORMAT_NOTES: Readonly<Record<ExportFormat, MessageKey>> = {
+  docx: "export.options.docx",
+  pdf: "export.options.pdf",
+  markdown: "export.options.markdown",
+};
 
-/** The Mind whose export dialog is open, wherever Export was pressed: its tab strip, its References. */
-export const useExportDialog = create<{
-  mindId: string | null;
-  open(mindId: string): void;
-  close(): void;
-}>()((set) => ({
-  mindId: null,
-  open: (mindId) => set({ mindId }),
-  close: () => set({ mindId: null }),
-}));
+/** A ruled row of the sheet: its words on the left, its control on the right. */
+const rowClass = "flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2";
 
 /**
  * The Mind's citation style (#289), which its export is written in, with the button that
- * changes it: the same picker as the References block's.
+ * changes it: the same picker as the References block's. It changes at once, not on Save.
  */
 function CitationStyleRow({ mindId }: { mindId: string }) {
   const t = useT();
@@ -69,8 +63,8 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
     };
   }, [mindId, picking]);
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span id="export-citation-style" className={fieldLabelClass}>
+    <div className={rowClass}>
+      <span id="export-citation-style" className="text-ui text-ink">
         {t("export.citationStyle")}
       </span>
       <button
@@ -79,22 +73,85 @@ function CitationStyleRow({ mindId }: { mindId: string }) {
         aria-labelledby="export-citation-style export-citation-style-value"
         aria-haspopup="dialog"
         onClick={(event) => useCitationStylePicker.getState().show(mindId, event.currentTarget)}
-        className={`${buttonClass} gap-1`}
+        className={`${buttonClass} min-w-0 gap-1`}
       >
-        <span id="export-citation-style-value">{style ? styleLabel(style.style, t) : "…"}</span>
+        <span id="export-citation-style-value" className="truncate">
+          {style ? styleLabel(style.style, t) : "…"}
+        </span>
         <ChevronDownLineIcon className="size-3.5 shrink-0 text-ink-meta" />
       </button>
     </div>
   );
 }
 
+/** Where exports go: the Output location, which the first export asks for, and how to change it. */
+function SaveToRow() {
+  const t = useT();
+  const [output, setOutput] = useState<OutputSettings | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    core.getOutputSettings().then(
+      (found) => {
+        if (current) setOutput(found);
+      },
+      (error: unknown) => useAppStore.getState().reportError(error),
+    );
+    return () => {
+      current = false;
+    };
+  }, []);
+  const change = async () => {
+    setProblem(null);
+    try {
+      const next = await chooseOutputLocation();
+      if (next) setOutput(next);
+    } catch (failure) {
+      setProblem(errorMessage(failure));
+    }
+  };
+  const location = output?.location ?? null;
+  return (
+    <div className="flex flex-col gap-1 py-2">
+      <div className={rowClass}>
+        <div className="flex min-w-0 flex-col">
+          <span className="text-ui text-ink">{t("export.saveTo")}</span>
+          <span
+            data-testid="export-save-to"
+            title={location ?? undefined}
+            className="truncate text-[13px] leading-5 text-ink-meta"
+          >
+            {output === null
+              ? "…"
+              : location
+                ? folderName(location)
+                : t("outputLocation.notChosen")}
+          </span>
+        </div>
+        <button
+          type="button"
+          data-testid="export-save-to-change"
+          onClick={() => void change()}
+          className={buttonClass}
+        >
+          {t(location ? "outputLocation.change" : "outputLocation.choose")}
+        </button>
+      </div>
+      {problem && (
+        <ProblemLine testId="export-save-to-problem">
+          {t("outputLocation.failed", { reason: problem })}
+        </ProblemLine>
+      )}
+    </div>
+  );
+}
+
 /**
- * Exports a Mind: the format, whether a .docx includes the Questions, and how
- * many Citations are unverified, before it is saved in the Output location
- * (the first save asks where that is). Open while `mind` is set.
+ * The Export options sheet (#100): the format Export and ⇧⌘E use, each format's own options,
+ * the Mind's citation style and where exports go. It remembers what was last saved; Cancel,
+ * Esc and ✕ leave the options as they were. Open while `mind` is set.
  */
 export function ExportDialog({ mind, onClose }: { mind: Mind | null; onClose(): void }) {
-  const t = useT();
   const dialog = useModal(mind !== null);
   return (
     <dialog
@@ -102,285 +159,163 @@ export function ExportDialog({ mind, onClose }: { mind: Mind | null; onClose(): 
       onClose={onClose}
       data-testid="export-dialog"
       aria-labelledby="export-title"
-      className={`${dialogClass} w-[30rem]`}
+      // A sheet hanging from the tab strip, as the design has it, rather than a dialog in the middle.
+      className={`${dialogFrameClass} mt-11 mb-auto max-h-[calc(100vh-68px)] w-[min(520px,calc(100vw-48px))] overflow-y-auto rounded-t-none`}
     >
-      <div className={dialogBodyClass}>
-        <h2 id="export-title" className={dialogTitleClass}>
-          {t("export.title")}
-        </h2>
-        {/* Mounted only while open, so each export starts from the defaults and counts afresh. */}
-        {mind && <ExportForm mind={mind} onDone={onClose} />}
-      </div>
+      {/* Mounted only while open, so each opening starts from the options last saved. */}
+      {mind && <ExportOptionsForm mind={mind} onDone={onClose} />}
     </dialog>
   );
 }
 
-function ExportForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
+function ExportOptionsForm({ mind, onDone }: { mind: Mind; onDone(): void }) {
   const t = useT();
-  const [format, setFormat] = useState<ExportFormat>("docx");
-  const [questionsWanted, setQuestionsWanted] = useState(false);
-  const [preview, setPreview] = useState<MindExportPreview | null>(null);
-  /**
-   * What went wrong, where: counting the Citations, writing the file, or the
-   * Output location being in a Linked folder the User said no to.
-   */
-  const [problem, setProblem] = useState<
-    | { step: "preview" | "save"; message: string }
-    | { step: "not-allowed"; linkedFolderId: string; folder: string }
-    | null
-  >(null);
+  const formatId = useId();
+  const questionsId = useId();
+  const hintId = useId();
+  const hint = t("export.options.saveHint", { shortcut: shortcutLabel("mind.export") });
+  const [draft, setDraft] = useState<ExportPreferences>(exportPreferences);
+  const [questions, setQuestions] = useState(0);
   const [saving, setSaving] = useState(false);
-  /** Where the export was saved, once it is. */
-  const [saved, setSaved] = useState<string | null>(null);
-  // Markdown is the archive, so it always keeps the Questions.
-  const includeQuestions = format === "markdown" || questionsWanted;
+  const [problem, setProblem] = useState<string | null>(null);
+  const { format } = draft;
 
+  // How many Questions the Mind has, which a deliverable leaves out unless asked: said under its switch.
   useEffect(() => {
     let current = true;
-    setPreview(null);
-    setProblem(null);
-    core.previewMindExport(mind.id, { format, includeQuestions }).then(
-      (next) => {
-        if (current) setPreview(next);
+    core.previewMindExport(mind.id, { format: "markdown" }).then(
+      (preview) => {
+        if (current) setQuestions(preview.questions);
       },
-      (failure: unknown) => {
-        if (current) setProblem({ step: "preview", message: errorMessage(failure) });
-      },
+      (error: unknown) => useAppStore.getState().reportError(error),
     );
     return () => {
       current = false;
     };
-  }, [mind.id, format, includeQuestions]);
+  }, [mind.id]);
 
-  /** Saves, after `first` (a fix to what stopped the last try), unless it returns false. */
-  const save = async (first?: () => Promise<boolean>) => {
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
     setSaving(true);
+    setProblem(null);
     try {
-      if (first && !(await first())) return;
-      setProblem(null);
-      const result = await core.saveMindExport(mind.id, { format, includeQuestions });
-      if (result.status === "saved") setSaved(result.file.path);
-      if (result.status === "not-allowed") {
-        setProblem({
-          step: "not-allowed",
-          linkedFolderId: result.linkedFolderId,
-          folder: folderName(result.linkedFolderPath),
-        });
-      }
-      // "cancelled": the User didn't choose where new files go, so this dialog stays as it was.
+      const settings = await core.updateSettings({ user: { exportOptions: draft } });
+      useAppStore.setState({ settings });
+      onDone();
     } catch (failure) {
-      setProblem({ step: "save", message: errorMessage(failure) });
+      setProblem(errorMessage(failure));
     } finally {
       setSaving(false);
     }
   };
 
-  /** The problem line's one action: fix what stopped the save, then save. */
-  const fix = (): ProblemAction | undefined => {
-    if (problem?.step === "save") {
-      return {
-        label: t("export.changeLocation"),
-        onClick: () => void save(async () => (await chooseOutputLocation()) !== null),
-        testId: "export-change-location",
-        disabled: saving,
-      };
-    }
-    if (problem?.step === "not-allowed") {
-      const { linkedFolderId } = problem;
-      return {
-        label: t("export.allow"),
-        onClick: () =>
-          void save(async () => {
-            await core.setLinkedFolderWriting(linkedFolderId, true);
-            return true;
-          }),
-        testId: "export-allow",
-        disabled: saving,
-      };
-    }
-    // A count that failed has no other way.
-    return undefined;
-  };
-
-  const leftOut = preview && !includeQuestions ? preview.questions : 0;
-
-  if (saved) return <Exported path={saved} onDone={onDone} />;
+  const includeQuestions = format === "markdown" || draft[format].includeQuestions;
+  const leftOut = includeQuestions ? 0 : questions;
 
   return (
-    <div className="flex flex-col gap-4">
-      <fieldset>
-        <legend className={`mb-1.5 ${fieldLabelClass}`}>{t("export.format")}</legend>
-        <div className={choiceListClass}>
-          {FORMATS.map((option) => (
-            <label key={option.value} className={choiceRowClass}>
-              <input
-                type="radio"
-                name="export-format"
-                value={option.value}
-                data-testid={`export-format-${option.value}`}
-                checked={format === option.value}
-                onChange={() => setFormat(option.value)}
-                className={choiceRadioClass}
-              />
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className={choiceTitleClass}>{t(option.label)}</span>
-                <span className={choiceTextClass}>{t(option.hint)}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+    <form onSubmit={(event) => void save(event)} className="flex flex-col">
+      <header className="flex items-center justify-between gap-3 pt-4 pr-4 pb-2.5 pl-6">
+        <h2 id="export-title" className={dialogTitleClass}>
+          {t("export.options.title")}
+        </h2>
+        <button
+          type="button"
+          data-testid="export-options-close"
+          aria-label={t("export.options.close")}
+          title={t("export.options.close")}
+          onClick={onDone}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink"
+        >
+          <CloseLineIcon className="size-4" />
+        </button>
+      </header>
 
-      <CitationStyleRow mindId={mind.id} />
-
-      {format === "docx" && (
-        <div>
-          <label className="flex items-center gap-2 text-ui text-ink">
-            <input
-              type="checkbox"
-              data-testid="export-include-questions"
-              checked={questionsWanted}
-              onChange={(event) => setQuestionsWanted(event.target.checked)}
-              className="size-4 shrink-0 accent-ink"
-            />
-            {t("export.includeQuestions")}
+      <div className={`mx-6 ${ruledListClass}`}>
+        <div className={rowClass}>
+          <label htmlFor={formatId} className="text-ui text-ink">
+            {t("export.format")}
           </label>
-          {leftOut > 0 && (
-            <p className={`ml-6 ${hintClass}`}>
-              {leftOut === 1
-                ? t("export.questionsLeftOut.one")
-                : t("export.questionsLeftOut.other", { count: leftOut })}
-            </p>
-          )}
+          <span className="relative flex shrink-0">
+            <select
+              id={formatId}
+              data-testid="export-format"
+              value={format}
+              onChange={(event) =>
+                setDraft({ ...draft, format: event.target.value as ExportFormat })
+              }
+              className="h-8 w-52 max-w-full appearance-none rounded-sm border border-rule-strong bg-sheet pr-8 pl-2.5 text-ui text-ink focus:border-accent"
+            >
+              {EXPORT_FORMATS.map((each) => (
+                <option key={each} value={each}>
+                  {t(FORMAT_LABELS[each])}
+                </option>
+              ))}
+            </select>
+            <ChevronDownLineIcon className="pointer-events-none absolute top-2.5 right-2.5 size-3.5 text-ink-meta" />
+          </span>
         </div>
-      )}
 
-      <CitationSummary preview={preview} />
+        <p data-testid="export-format-note" className="py-3 text-[13px] leading-5 text-ink-meta">
+          {t(FORMAT_NOTES[format])}
+        </p>
+
+        {format !== "markdown" && (
+          <div>
+            <div className={rowClass}>
+              <label htmlFor={questionsId} className="text-ui text-ink">
+                {t("export.includeQuestions")}
+              </label>
+              <input
+                id={questionsId}
+                type="checkbox"
+                role="switch"
+                data-testid="export-include-questions"
+                checked={draft[format].includeQuestions}
+                aria-checked={draft[format].includeQuestions}
+                onChange={(event) =>
+                  setDraft({ ...draft, [format]: { includeQuestions: event.target.checked } })
+                }
+                className="switch"
+              />
+            </div>
+            {leftOut > 0 && (
+              <p className={`-mt-2 pb-2 ${hintClass}`}>
+                {leftOut === 1
+                  ? t("export.questionsLeftOut.one")
+                  : t("export.questionsLeftOut.other", { count: leftOut })}
+              </p>
+            )}
+          </div>
+        )}
+
+        <CitationStyleRow mindId={mind.id} />
+        <SaveToRow />
+      </div>
 
       {problem && (
-        <ProblemLine testId="export-problem" action={fix()}>
-          {problem.step === "save"
-            ? t("export.failed.save", { reason: reasonOf(problem.message, t) })
-            : problem.step === "not-allowed"
-              ? t("export.failed.save", {
-                  reason: t("export.failed.notAllowed", { folder: problem.folder }),
-                })
-              : t("export.failed.preview", { reason: problem.message })}
+        <ProblemLine testId="export-problem" className="mx-6 mt-3">
+          {t("export.failed.options", { reason: problem })}
         </ProblemLine>
       )}
 
-      <div className={dialogActionsClass}>
+      <div className={`${dialogActionsClass} px-6 pt-5 pb-6`}>
         <button type="button" onClick={onDone} className={buttonClass}>
           {t("export.cancel")}
         </button>
         <button
-          type="button"
+          type="submit"
           data-testid="export-save"
-          disabled={saving || preview === null}
-          onClick={() => void save()}
+          disabled={saving}
+          aria-describedby={hintId}
+          title={hint}
           className={primaryButtonClass}
         >
-          {saving ? t("export.saving") : t("export.save")}
+          {t("export.options.save")}
         </button>
       </div>
-    </div>
-  );
-}
-
-/** Where the export went, with a way to see it there. */
-function Exported({ path, onDone }: { path: string; onDone(): void }) {
-  const t = useT();
-  const [error, setError] = useState<string | null>(null);
-  const done = useRef<HTMLButtonElement>(null);
-  // The Export button that had the focus is gone: Done takes it.
-  useEffect(() => done.current?.focus(), []);
-  const name = path.split(/[\\/]/).at(-1) ?? path;
-  const show = async () => {
-    setError(null);
-    try {
-      await files.showSavedFile(path);
-      onDone();
-    } catch (failure) {
-      setError(errorMessage(failure));
-    }
-  };
-  return (
-    <div className="flex flex-col gap-4">
-      <ProblemLine
-        role="status"
-        testId="export-done"
-        title={path}
-        action={{
-          label: navigator.userAgent.includes("Mac")
-            ? t("export.showInFinder")
-            : t("export.showInFolder"),
-          onClick: () => void show(),
-          testId: "export-show",
-        }}
-      >
-        {t("export.done", { name })}
-      </ProblemLine>
-      {error && (
-        <ProblemLine testId="export-problem">
-          {t("export.failed.show", { reason: error })}
-        </ProblemLine>
-      )}
-      <div className={dialogActionsClass}>
-        <button
-          type="button"
-          ref={done}
-          data-testid="export-close"
-          onClick={onDone}
-          className={primaryButtonClass}
-        >
-          {t("export.close")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Why a file couldn't be written, in a few words: ours when we know, else the system's. */
-function reasonOf(message: string, t: ReturnType<typeof useT>): string {
-  const key = saveFailureReason(message);
-  return key ? t(key) : message;
-}
-
-/** How many of the exported Citations are unverified, with a warning when any are. */
-function CitationSummary({ preview }: { preview: MindExportPreview | null }) {
-  const t = useT();
-  if (!preview) {
-    return <p className="text-[13px] leading-5 text-ink-meta">{t("export.checking")}</p>;
-  }
-  const { citations: total, unverifiedCitations: count } = preview;
-  if (count > 0) {
-    // Not found is a Citation check, so it takes the not-found colours.
-    return (
-      <p
-        data-testid="export-citations"
-        data-unverified={count}
-        className="flex items-start gap-2 rounded-lg bg-warning-wash px-3 py-2 text-[13px] leading-5 text-warning"
-      >
-        <QuoteNotFoundIcon className="mt-[2px] size-4 shrink-0" />
-        <span>
-          {count === 1
-            ? t("export.unverifiedCitations.one")
-            : t("export.unverifiedCitations.other", { count, total })}
-        </span>
-      </p>
-    );
-  }
-  return (
-    <p
-      data-testid="export-citations"
-      data-unverified={0}
-      className="text-[13px] leading-5 text-ink-secondary"
-    >
-      {total === 0
-        ? t("export.noCitations")
-        : total === 1
-          ? t("export.allFound.one")
-          : t("export.allFound.other", { count: total })}
-    </p>
+      <span id={hintId} className="sr-only">
+        {hint}
+      </span>
+    </form>
   );
 }
