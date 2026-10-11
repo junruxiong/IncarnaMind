@@ -180,11 +180,16 @@ export const en = {
   "move.done.minds": "Moved {count} Minds to {folder}",
   "move.done.documents": "Moved {count} Documents to {folder}",
   "move.done.items": "Moved {count} items to {folder}",
+  "move.done.conversations": "Moved {count} conversations to {folder}",
   "move.undo": "Undo",
   "move.undoLabel": "Undo: {message}",
   "move.dismiss": "Dismiss",
 
   "mind.untitled": "Untitled",
+  "conversation.untitled": "New chat",
+  "object.renamed": "Renamed to “{name}”",
+  "object.deleted": "Deleted “{name}”",
+  "object.deleted.conversations": "Deleted {count} conversations",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
@@ -1350,7 +1355,7 @@ export const en = {
   "export.unnamedDocument": "Untitled Document",
   "export.dataFolder.title": "Data folder",
   "export.dataFolder.body":
-    "Your Minds, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
+    "Your Minds, conversations, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
   "export.dataFolder.open": "Open data folder",
   "export.dataFolder.openLogs": "Open logs folder",
   "export.dataFolder.logs":

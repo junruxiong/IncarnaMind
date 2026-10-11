@@ -1,0 +1,43 @@
+# Conversations are the assistant's own history, kept in SQLite
+
+Questions are asked in the assistant, one per window (#253), not in a Mind. Its history has to follow the User from one Mind to the next, be listed per Folder, be searched across every Folder, and be linked to from the Notes an Answer was added to (#300). So the core keeps **conversations** itself, in two SQLite tables beside the Minds (ADR-0008): `conversations`, one row each, and `conversation_messages`, one row per Question and per Answer, in order. A conversation is not a Mind: it is never in the sidebar, a tab or `listMinds`. The assistant's History is the only place that lists conversations.
+
+- **What a conversation holds.** A title (the one the User typed, kept apart from the one it names itself by), the Folder it belongs to or none, and its messages. Each Question keeps its text, the Mind in focus when it was asked (or none), its Search scope, the model picked and the Skill forced on it. Each Answer keeps its text and Citations, its model, its status, how the model cited, and its Tool calls (its searches).
+- **Which Folder.** The Folder of the Mind its first Question was asked from; none when it was asked from Home or with no Mind in focus. Asking later from a Mind in another Folder, or moving a Mind, doesn't move it. Move to… moves it, through `moveToFolder` with Minds and Documents. Deleting a Folder sends its conversations to Not in a Folder, and restoring the Folder brings them back, as for Minds.
+- **No empty conversations.** One is made with its first Question, in the same transaction, never before.
+- **Names.** The first Question, cut by the one naming rule (`src/shared/naming.ts`), is its name at once. A short title from the model after the first Answer (#235) replaces only that name, never a title the User typed.
+- **Search.** Titles and messages have their own FTS5 keyword indexes, built the way Passages' are (ADR-0009: `Intl.Segmenter`, traditional Chinese read as simplified), so English and Chinese words match. A conversation matches when every word of the search is in its title or its messages, in any Folder; the result lists the conversations newest first, each with the messages that match and the words to mark in them.
+
+## Answers are kept as text and a list of Citations
+
+The issue left open whether an Answer is stored as rich Blocks, as in a Mind, or as text plus its Citations. We chose text plus Citations: the Markdown the model wrote, with a marker such as `[^2]` where each Citation goes, and a JSON list of the Citations, each with its marker, Passage, Document, version, Units, Location, quote and check.
+
+- **It keeps Citations editor-independent** (ADR-0003's amendment). Nothing the editor's schema adds or drops can touch a conversation, so conversations need no content schema version and no read-only guard, and a phone or a hosted version can show one without the editor.
+- **It is what a Mind's Answer is made from.** The core already turns this Markdown and these Citations into an Answer's Blocks (`markdownToBlocks`, `withCitations`). Shown in the assistant, or added to a Note, an Answer gets the same Blocks and the same Citation attributes as one written in a Mind, so its Citations are checked again where they land as any others are.
+- **It is what search and Question context read.** Both need the text; rich Blocks would have to be walked to get it.
+- **Its check holds after a restart.** Every Citation keeps the version of the Document it quotes, as in a Mind. The text of an old version stays for as long as a Citation in a Mind, or in a conversation (one in Recently deleted too), quotes it, so the Citation stays checkable.
+
+Rich Blocks were rejected: they would tie the history to the editor's schema, and an Answer in the assistant is never edited in place. The User edits it once it is in a Note.
+
+## Why not in a Mind's document, or as Minds of kind `chat`
+
+- **Not in a Mind's Yjs document** (a `chats` map beside its Blocks, as #268 built it). A conversation would belong to one Mind, so it couldn't follow the User to the next one without being moved between documents. Listing a Folder's conversations or searching them would mean opening every Mind's document. Deleting or exporting a Mind would take its conversations with it.
+- **Not as Minds of kind `chat`** (ADR-0003's amendment, #199). Every list of Minds, the sidebar, tabs, ⌘K and Recently deleted would have to tell the two apart. A conversation would carry editor-shaped content and a content schema version. And a CRDT buys nothing here: its messages are never edited by two people at once.
+- **Rows sync without a CRDT.** A Question is never changed once asked. An Answer is written by the one computer generating it and doesn't change once it ends; regenerating it writes it again in place. So a row's newest write (`updated_at`) wins. The tables follow ADR-0003's rules: random UUIDs, ISO 8601 UTC timestamps, soft deletes with `deleted_at`, and no foreign keys, as a sync may bring a message before its conversation. A message's `position` is given on the computer that adds it. If a sync ever brings two at one position, `created_at` and then `id` order them. Message kinds and statuses are checked in code, not by the table, so a kind a newer version writes is skipped, not refused.
+
+## Consequences
+
+- **This amends ADR-0003.** The `chat` kind of Mind is retired. `MIND_KINDS` is `mind` alone, and `kind` stays for sheets, decks and boards; nothing made a `chat` Mind, but migration 43 turns any that exists into a plain Mind rather than one that can't be opened. A reference from one artifact to another names its artifact's kind: `{ artifactKind, artifactId, anchor }`, where a Mind's anchor is a Block (`{ kind: "block", blockId }`) and a conversation's a message (`{ kind: "message", messageId }`). One stored without `artifactKind` is a Mind's.
+- **Links back.** A Note added from an Answer keeps a reference to its conversation and that Answer. `resolveReference` says whether it is there, in Recently deleted (with its name), or gone. Restored, the link works again.
+- **Delete and restore.** Deleting a conversation sends it to Recently deleted for 30 days with the other kinds; restoring brings it back with every message. Deleting it permanently, by the User or 30 days later at start-up, drops its messages, their index and its titles, and keeps the row's id and `deleted_at` so a later sync can pass the deletion on. Deleting a Mind leaves its conversations alone; their Questions name the Mind as deleted.
+- **Privacy.** Conversations stay on this computer. Asking sends what a Question in a Mind sends, through the same chat data flow and consent (ADR-0014); nothing new leaves the computer. They live in the data folder's database, so backing up the data folder keeps them, and they are never in usage data or the log.
+- **Question context in a conversation** is its earlier Questions and Answers, the oldest left out first within the same budget as in a Mind. Each Answer's Citations show the model as plain references, as in a Mind. Adding the focused Mind's note to it is #258's.
+- **Answers stream into the conversation** through the same Answer code as in a Mind, which writes to one of two homes: a Mind's document, or a conversation's rows (at most every 50 ms, as in a Mind). The Answer events and approval requests carry `conversationId`, with `mindId` null, for an Answer in a conversation. Each write is pushed to every window as `"conversation.message"`.
+- **Not built here:** the assistant itself and how it shows Answers (#253, #201), History (#258), the short title (#235), proposals across Minds (#202) and ⌘K (#230).
+
+## Considered options
+
+- **A Mind's Yjs document, or Minds of kind `chat`:** rejected, as above.
+- **Answers as rich Blocks:** rejected, as above.
+- **One FTS5 index for titles and messages:** a contentless index can't say which kind of row a match came from, so each has its own.
+- **Searching with `LIKE`:** it matches inside words, can't fold traditional and simplified Chinese, and can't use the Library's word rules; FTS5 with the same segmenting as Passages does all three.

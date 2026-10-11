@@ -28,7 +28,8 @@ core.on("answer.failed", ({ answerId }) => setWriting(answerId, null));
 core.on("answer.phase", ({ answerId, mindId, phase }) =>
   useWritingAnswers.setState((state) => {
     const consenting = { ...state.consenting };
-    if (phase === "waiting-for-consent") consenting[answerId] = mindId;
+    // An Answer in a conversation (no Mind) is the assistant's to show, not a Mind's.
+    if (phase === "waiting-for-consent" && mindId !== null) consenting[answerId] = mindId;
     else delete consenting[answerId];
     return { consenting };
   }),
