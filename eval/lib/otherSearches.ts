@@ -40,7 +40,13 @@ const megabytes = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
 export async function openOtherSearches(
   library: Library,
   questions: readonly EvalQuestion[],
-  options: { chat: ChatSettings | null; resultsDir: string; generate?: Generate },
+  options: {
+    chat: ChatSettings | null;
+    resultsDir: string;
+    /** Run the chat-model modes with a local model too. */
+    localQueryModes?: boolean;
+    generate?: Generate;
+  },
   log: Log,
 ): Promise<OtherSearches> {
   const { core } = library;
@@ -65,7 +71,24 @@ export async function openOtherSearches(
   const skipped: OtherSearchesReport["skipped"] = {};
   const queryModel: OtherSearchesReport["queryModel"] = [];
   const { chat } = options;
+  // The rule runCitations gates on: a model that sends to no service runs on this computer.
+  const local =
+    chat !== null &&
+    !options.localQueryModes &&
+    (
+      await core.saveChatProvider({
+        kind: chat.kind,
+        modelId: chat.modelId,
+        ...(chat.apiKey !== null && { apiKey: chat.apiKey }),
+        ...(chat.baseUrl !== null && { baseUrl: chat.baseUrl }),
+      })
+    ).service === null;
   for (const search of QUERY_MODEL_SEARCHES) {
+    if (local && chat) {
+      skipped[search] =
+        `the chat model, \`${chat.kind}/${chat.modelId}\`, runs on this computer, and a call per Question is slow with a local model (INCARNAMIND_EVAL_LOCAL_QUERY_MODES=on runs it).`;
+      continue;
+    }
     if (!chat) {
       skipped[search] =
         "no chat model was given (INCARNAMIND_EVAL_CHAT_KIND, INCARNAMIND_EVAL_CHAT_MODEL and INCARNAMIND_EVAL_CHAT_KEY).";
