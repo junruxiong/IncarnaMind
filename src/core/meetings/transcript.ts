@@ -84,6 +84,8 @@ interface Saved {
   /** Stretches to transcribe once the Meeting stops. */
   pending: Range[];
   savedPath: string | null;
+  /** Stopped with nothing transcribed. */
+  empty?: boolean;
 }
 
 interface Live {
@@ -153,6 +155,9 @@ export interface TranscriptsOptions {
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+/** The engine couldn't start, or stopped, while what was left was being transcribed. */
+class EngineError extends Error {}
+
 /** Adds a stretch to a list of stretches, merging those it touches. */
 function addRange(ranges: Range[], range: Range): Range[] {
   if (range.toMs <= range.fromMs) return ranges;
@@ -208,7 +213,13 @@ export function createTranscripts(options: TranscriptsOptions) {
       meetingId,
       cues,
       gaps,
-      state: saved.savedPath ? "saved" : cues.length > 0 ? "behind" : "waiting",
+      state: saved.savedPath
+        ? "saved"
+        : saved.empty
+          ? "empty"
+          : cues.length > 0
+            ? "behind"
+            : "waiting",
       problem: null,
       partial: null,
       live: null,
@@ -242,6 +253,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       doneMs: state.doneMs,
       pending: state.pending,
       savedPath: state.savedPath,
+      ...(state.state === "empty" && { empty: true }),
     };
     try {
       writeWhole(jsonPath(state.meetingId), JSON.stringify(saved));
@@ -266,6 +278,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       return;
     }
     state.written = true;
+    persist(state);
     if (!state.documentId) {
       const id = randomUUID();
       try {
@@ -452,6 +465,7 @@ export function createTranscripts(options: TranscriptsOptions) {
   /** Live text stops; the rest is transcribed after Stop. */
   function fallBehind(state: State, live: Live): void {
     transcriber.drop(live.stream);
+    live.stream = `${state.meetingId}:${++streams}`;
     live.started = false;
     live.pendingFrom = live.doneMs;
     state.state = "behind";
@@ -532,7 +546,9 @@ export function createTranscripts(options: TranscriptsOptions) {
         const audio = mixer.flush();
         if (audio) transcriber.push(stream, audio.samples);
       }
-      await transcriber.finish(stream);
+      await transcriber.finish(stream).catch((error: unknown) => {
+        throw new EngineError(messageOf(error));
+      });
     } finally {
       state.catchUps.delete(stream);
     }
@@ -596,19 +612,13 @@ export function createTranscripts(options: TranscriptsOptions) {
     const name = document?.name ?? options.name(state.meetingId);
     const data = new TextEncoder().encode(transcriptOf(state));
     const saved = await options.saveFile({ name: `${name}.vtt`, data, ownFile: null });
-    if (document) {
-      // The data folder's copy, the same bytes, is what the Document points at until now.
-      writeLines(state, { now: true });
-      await documents.moveFile(document.id, saved.path);
-    }
+    if (document) await documents.moveFile(document.id, saved.path);
     rmSync(vttPath(state.meetingId), { force: true });
     state.savedPath = saved.path;
     state.state = "saved";
     state.problem = null;
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
   }
-
-  class EngineError extends Error {}
 
   function endLive(state: State, endMs: number): void {
     const live = state.live;
@@ -734,7 +744,8 @@ export function createTranscripts(options: TranscriptsOptions) {
     recovered(meetingId: string, recordedMs: number): void {
       const state = load(meetingId);
       if (state.savedPath) return;
-      state.pending = addRange(state.pending, { fromMs: state.doneMs, toMs: recordedMs });
+      const fromMs = Math.max(state.doneMs, state.cues.at(-1)?.endMs ?? 0);
+      state.pending = addRange(state.pending, { fromMs, toMs: recordedMs });
       if (state.cues.length > 0 || state.pending.length > 0) state.state = "behind";
       persist(state);
     },
@@ -754,8 +765,19 @@ export function createTranscripts(options: TranscriptsOptions) {
       if (status.state === "failed") model.retry();
       state.problem = null;
       state.restarts = [];
-      if (state.live && !state.live.started) {
-        state.live.pendingFrom = null;
+      const live = state.live;
+      if (live && !live.started) {
+        if (live.pendingFrom !== null) {
+          state.pending = addRange(state.pending, {
+            fromMs: live.pendingFrom,
+            toMs: live.mixer.atMs,
+          });
+          live.stream = `${meetingId}:${++streams}`;
+          live.baseMs = live.mixer.atMs;
+          live.pushedMs = live.mixer.atMs;
+          live.doneMs = live.mixer.atMs;
+          live.pendingFrom = null;
+        }
         startEngine(state);
       } else if ((state.state === "failed" || state.state === "finishing") && !state.finishing) {
         state.state = "finishing";
