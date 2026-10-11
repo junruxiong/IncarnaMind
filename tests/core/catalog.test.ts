@@ -389,7 +389,16 @@ describe("The providers of #178", () => {
       supportsStructuredOutputs: true,
     });
     // Every one that thinks by default says how a small call turns it off.
-    for (const id of ["deepseek", "qwen", "kimi", "glm", "siliconflow", "openrouter", "xai"]) {
+    for (const id of [
+      "anthropic",
+      "deepseek",
+      "qwen",
+      "kimi",
+      "glm",
+      "siliconflow",
+      "openrouter",
+      "xai",
+    ]) {
       expect(catalogProvider(id)?.request?.thinkingOff, id).toBeDefined();
     }
     expect(catalogProvider("glm")?.request?.thinkingOff?.unless).toEqual(["glm-5.3"]);

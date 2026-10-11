@@ -10,6 +10,12 @@ export const MindIdContext = createContext<string | null>(null);
 export const ComposerDockContext = createContext<HTMLElement | null>(null);
 
 /**
+ * Where the open Mind's word count is drawn: right under its title, above any
+ * notice (see `MindPane`). Null until it is there.
+ */
+export const CountSlotContext = createContext<HTMLElement | null>(null);
+
+/**
  * Whether a node view is drawn in a footnote's text (`FootnoteText`), where a
  * Citation is part of the footnote and has no number of its own.
  */
