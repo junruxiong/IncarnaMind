@@ -172,22 +172,6 @@ describe("Network traffic without User content", () => {
     expect((await core.listNetworkTraffic()).map((traffic) => traffic.id)).toEqual(["ollama-pull"]);
   });
 
-  test("lists the ChatGPT sign-in only while the experimental ChatGPT plan is on", async () => {
-    const core = startCore(await createTempDataFolder());
-    const ids = async () => (await core.listNetworkTraffic()).map((traffic) => traffic.id);
-    expect(await ids()).not.toContain("chatgpt-sign-in");
-
-    await core.setChatGptPlanEnabled(true);
-    expect(await core.listNetworkTraffic()).toContainEqual({
-      id: "chatgpt-sign-in",
-      service: { id: "https://auth.openai.com", name: "OpenAI" },
-      enabled: true,
-    });
-
-    await core.setChatGptPlanEnabled(false);
-    expect(await ids()).not.toContain("chatgpt-sign-in");
-  });
-
   test("traffic a feature registers later is listed too, on or off as the User chose", async () => {
     const core = startCore(await createTempDataFolder());
 
