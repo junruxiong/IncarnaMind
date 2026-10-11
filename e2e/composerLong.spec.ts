@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  pointAndClick,
   removeDataFolder,
   setGroupBeside,
   useLocalChatModel,
@@ -68,14 +69,6 @@ const bridge = (window: Page) => ({
       language,
     ),
 });
-
-async function pointAndClick(window: Page, target: Locator): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 8 });
-  await window.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-}
 
 async function newMind(window: Page, title: string) {
   await pointAndClick(window, window.getByTestId("plus-menu"));
