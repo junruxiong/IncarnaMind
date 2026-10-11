@@ -929,7 +929,7 @@ export interface AssistantPlace {
 export const DEFAULT_ASSISTANT: AssistantPlace = {
   dock: "right",
   folded: false,
-  width: 360,
+  width: 320,
   height: 300,
   float: { width: 380, height: 520, corner: "top-right", x: 24, y: 56 },
 };
