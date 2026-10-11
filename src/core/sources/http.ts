@@ -57,6 +57,8 @@ export interface SourceRequest {
   userAgent?: string;
   /** Defaults to 20 MB, far more than any API answer. */
   maxBytes?: number;
+  /** Extra headers, for a key: never written to an error. */
+  headers?: Record<string, string>;
 }
 
 export interface SourceResponse {
@@ -124,6 +126,7 @@ export function createSourceHttp(pace: Pace, timers: PaceTimers = realTimers): S
         credentials: "omit",
         signal: AbortSignal.any([request.signal, timeout]),
         headers: {
+          ...request.headers,
           Accept: request.accept,
           "User-Agent": request.userAgent ?? SOURCE_USER_AGENT,
         },

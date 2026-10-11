@@ -28,8 +28,10 @@ interface FindSourcesState extends SourceSearch {
   open: boolean;
   /** The providers that search, with the User's consent decisions; empty until first opened. */
   providers: SourceProviderInfo[];
-  /** Providers the User turned off for searches here, by id. */
+  /** Providers turned off for searches here, by id: by the User, and at first those searched only when chosen. */
   off: string[];
+  /** The providers an Answer's search used, until the list of providers is here; null for the default ones. */
+  focus: readonly string[] | null;
   /** Where added works go: a Folder, or null for Not in a Folder. */
   folderId: string | null;
   searching: boolean;
@@ -43,12 +45,14 @@ interface FindSourcesState extends SourceSearch {
    * Opens Find sources in the Library, adding to the Folder shown there; with
    * a search (an Answer's), fills it in and runs it.
    */
-  show(search?: Partial<SourceSearch>): void;
+  show(search?: Partial<SourceSearch> & { providers?: readonly string[] }): void;
   close(): void;
   edit(change: Partial<SourceSearch & { folderId: string | null }>): void;
   toggleProvider(id: string): void;
   search(): Promise<void>;
   add(work: FoundSource): Promise<void>;
+  /** Keeps (or with null removes) the User's own key for a provider; the problem in words, or null. */
+  setKey(providerId: string, key: string | null): Promise<string | null>;
 }
 
 /** Counts searches, so only the latest one's answer is shown. */
@@ -68,6 +72,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
   openAccessOnly: false,
   providers: [],
   off: [],
+  focus: null,
   folderId: null,
   searching: false,
   result: null,
@@ -77,11 +82,23 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
   show(search) {
     const app = useAppStore.getState();
     const folderId = get().open ? get().folderId : shownFolder();
-    set({ open: true, folderId, ...search });
+    const { providers: used, ...fields } = search ?? {};
+    const focus = used ?? null;
+    set({ open: true, folderId, focus, ...fields });
     // The Library, as a tab, as it was: the User's Mind stays where it is.
     app.openLibrary(app.libraryFilter === "new" ? "all" : app.libraryFilter);
+    // Drug labels and trials start off: they are asked only when chosen, never with a search for papers.
+    const startOff = (providers: SourceProviderInfo[]) =>
+      providers
+        .filter((each) => (focus ? !focus.includes(each.id) : !each.searchedByDefault))
+        .map((each) => each.id);
+    if (focus && get().providers.length > 0) set({ off: startOff(get().providers) });
     core.listSourceProviders().then(
-      (providers) => set({ providers }),
+      (providers) =>
+        set((state) => ({
+          providers,
+          off: state.providers.length === 0 || focus ? startOff(providers) : state.off,
+        })),
       (error: unknown) => app.reportError(error),
     );
     if (search?.query) void get().search();
@@ -101,7 +118,7 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
   },
 
   async search() {
-    const { query, fromYear, toYear, openAccessOnly, providers, off } = get();
+    const { query, fromYear, toYear, openAccessOnly, providers, off, focus } = get();
     if (query.trim() === "") return;
     const ticket = ++searchTicket;
     set({ searching: true, error: null });
@@ -112,7 +129,9 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
         fromYear,
         toYear,
         openAccessOnly,
-        ...(providers.length > 0 && { providers: searching.filter((id) => !off.includes(id)) }),
+        ...(providers.length > 0
+          ? { providers: searching.filter((id) => !off.includes(id)) }
+          : focus && { providers: [...focus] }),
       });
       // A search started since has the last word.
       if (ticket === searchTicket) set({ result, adds: {} });
@@ -126,6 +145,16 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
         (providers) => set({ providers }),
         () => undefined,
       );
+    }
+  },
+
+  async setKey(providerId, key) {
+    try {
+      await core.setSourceProviderKey(providerId, key);
+      set({ providers: await core.listSourceProviders() });
+      return null;
+    } catch (error) {
+      return errorMessage(error);
     }
   },
 
