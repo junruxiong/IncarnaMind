@@ -24,7 +24,10 @@ function ccFromAddress(text: string): string | null {
 export function licenceOf(written: string | null | undefined): SourceLicence | null {
   const text = written?.trim() ?? "";
   if (text === "") return null;
-  const id = (ccFromAddress(text) ?? text).toLowerCase();
+  const address = ccFromAddress(text);
+  // Anything but an id or a licence's address (a sentence about reuse) names no licence.
+  if (!address && /\s/.test(text)) return null;
+  const id = (address ?? text).toLowerCase();
   if (id === "cc0" || id === "public-domain") {
     return { id, label: id === "cc0" ? "CC0" : id, commercial: true };
   }
