@@ -6,6 +6,7 @@ import { useAppStore } from "../store";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
+import { proposalCommands } from "./proposals";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
@@ -123,6 +124,7 @@ const appCommands: readonly Command[] = [
   },
   ...footnoteCommands,
   ...tableCommands,
+  ...proposalCommands,
 ];
 
 for (const command of appCommands) commands.register(command);

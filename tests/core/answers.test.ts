@@ -301,40 +301,42 @@ describe("Streaming Answers into the Mind", () => {
     expect(answerIn(reader, answerId).toJSON().content).toEqual([
       {
         type: "heading",
-        attrs: { id: expect.any(String), level: 2, includeInContext: null },
+        attrs: { id: expect.any(String), level: 2, includeInContext: null, proposal: null },
         content: [{ type: "text", text: "Tidal forces" }],
       },
       {
         type: "paragraph",
-        attrs: { id: expect.any(String), includeInContext: null },
+        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
         content: [
           { type: "text", text: "The " },
           { type: "text", text: "Moon", marks: [{ type: "bold" }] },
           { type: "text", text: " pulls hardest on the near side, where " },
-          { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}" } },
+          { type: "inlineMath", attrs: { latex: "F = G\\frac{m_1 m_2}{r^2}", proposal: null } },
           { type: "text", text: " is largest." },
         ],
       },
       {
         type: "bulletList",
-        attrs: { id: expect.any(String), includeInContext: null },
+        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
         content: [
           {
             type: "listItem",
+            attrs: { proposal: null },
             content: [
               {
                 type: "paragraph",
-                attrs: { id: expect.any(String), includeInContext: null },
+                attrs: { id: expect.any(String), includeInContext: null, proposal: null },
                 content: [{ type: "text", text: "High tide faces the Moon" }],
               },
             ],
           },
           {
             type: "listItem",
+            attrs: { proposal: null },
             content: [
               {
                 type: "paragraph",
-                attrs: { id: expect.any(String), includeInContext: null },
+                attrs: { id: expect.any(String), includeInContext: null, proposal: null },
                 content: [
                   { type: "text", text: "Another", marks: [{ type: "italic" }] },
                   { type: "text", text: " one is opposite" },
@@ -346,7 +348,12 @@ describe("Streaming Answers into the Mind", () => {
       },
       {
         type: "codeBlock",
-        attrs: { id: expect.any(String), language: "python", includeInContext: null },
+        attrs: {
+          id: expect.any(String),
+          language: "python",
+          includeInContext: null,
+          proposal: null,
+        },
         content: [{ type: "text", text: "print('tide')" }],
       },
       {
@@ -355,11 +362,12 @@ describe("Streaming Answers into the Mind", () => {
           id: expect.any(String),
           latex: "h(t) = A \\cos(\\omega t)",
           includeInContext: null,
+          proposal: null,
         },
       },
       {
         type: "paragraph",
-        attrs: { id: expect.any(String), includeInContext: null },
+        attrs: { id: expect.any(String), includeInContext: null, proposal: null },
         content: [
           { type: "text", text: "See " },
           {
@@ -421,7 +429,7 @@ describe("Streaming Answers into the Mind", () => {
     expect(answer.child(5).toJSON().content).toEqual([
       { type: "text", text: "Line " },
       { type: "text", text: "one", marks: [{ type: "italic" }] },
-      { type: "hardBreak" },
+      { type: "hardBreak", attrs: { proposal: null } },
       { type: "text", text: "Line " },
       { type: "text", text: "two", marks: [{ type: "strike" }] },
       { type: "text", text: " " },

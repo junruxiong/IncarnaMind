@@ -221,7 +221,7 @@ describe("smart typography", () => {
     const content = editor.getJSON().content?.[0]?.content;
     expect(content).toEqual([
       { type: "text", text: "Area " },
-      { type: "inlineMath", attrs: { latex: "r^2 -> \\pi r^2" } },
+      { type: "inlineMath", attrs: { latex: "r^2 -> \\pi r^2", proposal: null } },
       { type: "text", text: " grows → fast" },
     ]);
   });
