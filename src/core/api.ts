@@ -4033,10 +4033,94 @@ export const AGENT_TOOLS = [
   "read_passages",
   "cite",
   "check_citations",
+  "show_citation",
   "list_minds",
   "read_mind",
   "ask",
 ] as const;
+
+/** The agents Settings → Agents can set IncarnaMind up in (see src/core/agents/clients.ts). */
+export const AGENT_CLIENT_IDS = [
+  "claude-desktop",
+  "claude-code",
+  "codex",
+  "cursor",
+  "vscode",
+  "gemini-cli",
+  "kimi-code",
+  "qwen-code",
+  "codebuddy",
+  "minimax-code",
+  "trae",
+  "qoder",
+  "comate",
+  "cherry-studio",
+  "chatbox",
+  "deepchat",
+  "goose",
+  "opencode",
+  "cline",
+  "kilo",
+  "openclaw",
+  "pi",
+  "other",
+] as const;
+
+export type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
+
+/**
+ * How an agent takes IncarnaMind: "bundle", a file its app installs when
+ * opened (Claude); "link", a link its app installs from (Cursor, VS Code);
+ * "file", IncarnaMind adds itself to the agent's settings file; "command", one
+ * line to paste into a terminal (Claude Code); "manual", settings to paste
+ * into the agent's own screen.
+ */
+export type AgentSetupKind = "bundle" | "link" | "file" | "command" | "manual";
+
+export interface AgentClient {
+  id: AgentClientId;
+  /** Its own name; empty for "other", which the interface names. */
+  name: string;
+  /** It looks installed on this computer: such agents are listed first. */
+  installed: boolean;
+  setup: AgentSetupKind;
+}
+
+/** What setting an agent up will change in its settings file, the pairing's key hidden. */
+export interface AgentSetupPreview {
+  path: string;
+  /** The lines IncarnaMind adds (or puts in place of its own earlier ones). */
+  change: string;
+}
+
+/**
+ * How setting an agent up went:
+ * - "opened": its app opened to finish (Install, in its own dialog);
+ * - "wrote": IncarnaMind added itself to its settings file at `path`;
+ * - "copy": something for the User to paste (`text`, which holds the key;
+ *   `shown` hides it): a command line, or settings for the agent's screen, or
+ *   for its settings file at `path` when IncarnaMind couldn't read that file.
+ */
+export type AgentSetupResult =
+  | { kind: "opened"; how: "bundle" | "link" }
+  | { kind: "wrote"; path: string }
+  | { kind: "copy"; how: "command" | "settings"; text: string; shown: string; path?: string };
+
+export interface SetUpAgentInput {
+  client: AgentClientId;
+  /** The Folders it may read; the User picks at least one. */
+  folderIds: string[];
+}
+
+export interface SetUpAgent {
+  pairing: AgentPairing;
+  result: AgentSetupResult;
+}
+
+/** An outside agent asked IncarnaMind to show one of its Citations (`show_citation`). */
+export interface AgentCitationShown extends DocumentPlace {
+  documentId: string;
+}
 
 export type AgentToolName = (typeof AGENT_TOOLS)[number];
 
@@ -4998,6 +5082,20 @@ export interface CoreApi {
   getAgentLaunch(pairingId: string): Promise<AgentLaunch>;
   /** The calls a paired agent made, newest first: the most recent 500. */
   listAgentActivity(pairingId: string): Promise<AgentActivity[]>;
+  /** The agents IncarnaMind can be set up in, those on this computer first. */
+  listAgentClients(): Promise<AgentClient[]>;
+  /** What setting up an agent will change in its settings file; null for one that has none. */
+  previewAgentSetup(client: AgentClientId): Promise<AgentSetupPreview | null>;
+  /**
+   * Pairs an agent and sets IncarnaMind up in it, as `connectAgent` does,
+   * once the User has confirmed: opens its app to finish, writes its settings
+   * file, or gives what to paste. A setup that fails leaves no pairing.
+   */
+  setUpAgent(input: SetUpAgentInput): Promise<SetUpAgent>;
+  /** Takes a setup just made back: its settings file as it was, and the pairing gone. */
+  undoAgentSetup(pairingId: string): Promise<void>;
+  /** A paired agent's settings to paste again, e.g. into a second copy of it. */
+  copyAgentSetup(pairingId: string): Promise<Extract<AgentSetupResult, { kind: "copy" }>>;
 }
 
 /**
@@ -5174,6 +5272,8 @@ export interface CoreEvents {
   "agents.changed": AgentSettings;
   /** An outside agent made a call (see `listAgentActivity`). */
   "agents.activity": AgentActivity;
+  /** An outside agent asked to show one of its Citations: open it in the viewer, in front. */
+  "agents.citationShown": AgentCitationShown;
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -5384,6 +5484,11 @@ const methods: Record<CoreApiMethod, true> = {
   disconnectAgent: true,
   getAgentLaunch: true,
   listAgentActivity: true,
+  listAgentClients: true,
+  previewAgentSetup: true,
+  setUpAgent: true,
+  undoAgentSetup: true,
+  copyAgentSetup: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

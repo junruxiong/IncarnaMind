@@ -296,6 +296,7 @@ describe("outside agents", () => {
         "read_mind",
         "read_passages",
         "search",
+        "show_citation",
       ]);
       const found = await agent.callTool({ name: "search", arguments: { query: "spring tides" } });
       expect((found.structuredContent as SearchOut).passages[0]?.cite).toMatch(/^\[cite:/);
