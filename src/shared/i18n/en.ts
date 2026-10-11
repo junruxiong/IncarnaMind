@@ -1009,10 +1009,7 @@ export const en = {
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
     "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the Passages found for it are sent to that service.",
-  "providers.choice.chatgpt.body":
-    "Uses your ChatGPT plan instead of an API key. You turn it on in Settings, under Chat model.",
-  "providers.choice.experimental": "Experimental",
-  "providers.choice.continue": "Continue in Settings",
+  "providers.choice.chatgpt.body": "Sign in with your ChatGPT Plus or Pro account. No key needed.",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -1027,8 +1024,7 @@ export const en = {
   "providers.kind.siliconflow": "SiliconFlow",
   "providers.kind.openai-compatible": "OpenAI-compatible server",
   "providers.kind.ollama": "Ollama",
-  "providers.kind.chatgpt": "Sign in with ChatGPT",
-  "providers.chatgpt.unavailable": "Not available yet",
+  "providers.kind.chatgpt": "ChatGPT plan",
 
   "providers.form.label": "Chat provider",
   "providers.form.apiKey": "API key",
@@ -1038,6 +1034,7 @@ export const en = {
   "providers.region.cn": "China",
   "providers.region.intl": "International",
   "providers.form.getKey": "Get a key",
+  "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "What it does with your data.",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":
@@ -1105,45 +1102,54 @@ export const en = {
   "providers.settings.cancel": "Cancel",
   "providers.settings.remove": "Remove",
 
-  "codex.experimental.title": "Experimental",
-  "codex.provider.name": "ChatGPT plan (via Codex sign-in)",
-  "codex.switch.description":
-    "Answer Questions with your ChatGPT Plus or Pro plan instead of an API key.",
-  "codex.warning.title": "This isn't an official OpenAI integration",
-  "codex.warning.body":
-    "It signs in the way OpenAI's Codex CLI does. OpenAI hasn't approved this for other apps and may block it at any time. Questions you ask count against your ChatGPT plan's usage limits. Turning this off signs you out.",
-  "codex.account.signedOut": "Not signed in.",
-  "codex.account.expired":
-    "Your ChatGPT sign-in has expired. Sign in again to keep using your plan.",
-  "codex.account.signedIn": "Signed in as {account}.",
-  "codex.account.unknown": "your ChatGPT account",
-  "codex.account.plan": "Plan: {plan}",
-  "codex.signIn": "Sign in with ChatGPT",
-  "codex.signInAgain": "Sign in again",
-  "codex.signingIn": "Finish signing in in your browser…",
-  "codex.cancel": "Cancel",
-  "codex.signOut": "Sign out",
-  "codex.model": "Model",
-  "codex.use": "Use for Questions",
-  "codex.inUse": "Questions use your ChatGPT plan.",
-  "codex.signIn.error.port-in-use":
-    "The local port the ChatGPT sign-in needs is in use by another program, for example the Codex CLI signing in. Finish or cancel that sign-in, then try again.",
-  "codex.signIn.error.timed-out": "The sign-in took too long. Try again.",
-  "codex.signIn.error.cancelled": "The sign-in was cancelled.",
-  "codex.signIn.error.denied": "OpenAI didn't complete the sign-in. Try again.",
-  "codex.signIn.error.secret-storage":
+  "chatgpt.title": "ChatGPT plan",
+  "chatgpt.description":
+    "Use your ChatGPT Plus or Pro plan instead of an API key. Questions go to OpenAI under your ChatGPT account and count against your plan's limits.",
+  "chatgpt.continue": "Continue with ChatGPT",
+  "chatgpt.account.signedOut": "Not signed in.",
+  "chatgpt.account.expired":
+    "Your ChatGPT sign-in has ended. Sign in again to keep using your plan.",
+  "chatgpt.account.signedIn": "Signed in as {account}.",
+  "chatgpt.account.unknown": "your ChatGPT account",
+  "chatgpt.signingIn": "Finish signing in in your browser…",
+  "chatgpt.cancel": "Cancel",
+  "chatgpt.signOut": "Sign out",
+  "chatgpt.anotherAccount": "Use another account",
+  "chatgpt.signInAgain": "Sign in again",
+  "chatgpt.details": "Details",
+  "chatgpt.use": "Use for Questions",
+  "chatgpt.inUse": "Using ChatGPT plan",
+  "chatgpt.manageUsage": "Manage usage",
+  "chatgpt.signedOut.unconfirmed":
+    "Signed out on this computer, but OpenAI didn't confirm it. You can disconnect IncarnaMind in ChatGPT's settings.",
+  "chatgpt.signIn.error.timed-out": "The sign-in took too long. Try again.",
+  "chatgpt.signIn.error.cancelled": "The sign-in was cancelled.",
+  "chatgpt.signIn.error.denied": "The sign-in wasn't completed. Try again.",
+  "chatgpt.signIn.error.secret-storage":
     "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
-  "codex.signIn.error.failed": "The sign-in didn't work.",
-  "codex.test.not-signed-in": "You're not signed in to ChatGPT. Sign in, then try again.",
-  "codex.test.plan-limit": "Your ChatGPT plan's usage limit is reached. Try again once it resets.",
-  "codex.test.blocked":
-    "OpenAI refused the request although you're signed in. It may have blocked this integration; an API key still works.",
-  "codex.readiness.sign-in-required":
-    "Sign in to ChatGPT again in Settings, under Experimental, to ask Questions with your plan.",
-  "codex.page.success.title": "Signed in to ChatGPT",
-  "codex.page.success.body": "You can close this tab and go back to IncarnaMind.",
-  "codex.page.failure.title": "The ChatGPT sign-in didn't work",
-  "codex.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "chatgpt.signIn.error.plan-not-allowed":
+    "IncarnaMind needs your permission to use your ChatGPT plan. Sign in again and allow it.",
+  "chatgpt.signIn.error.other-account":
+    "That's another ChatGPT account than this computer used before. Sign in with the same one, or use another account.",
+  "chatgpt.signIn.error.failed": "The sign-in didn't work. Try again.",
+  "chatgpt.test.not-signed-in":
+    "You're not signed in to ChatGPT. Continue with ChatGPT, then try again.",
+  "chatgpt.test.plan-limit":
+    "The usage limit of your ChatGPT plan, or the one you set for IncarnaMind, is reached.",
+  "chatgpt.test.blocked":
+    "OpenAI didn't let IncarnaMind use your ChatGPT plan. Choose another model, or check your plan in ChatGPT.",
+  "chatgpt.readiness.sign-in-required": "You're signed out of ChatGPT.",
+  "chatgpt.page.success.title": "Signed in with ChatGPT",
+  "chatgpt.page.success.body": "You can close this tab and go back to IncarnaMind.",
+  "chatgpt.page.failure.title": "The ChatGPT sign-in didn't work",
+  "chatgpt.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "chatgpt.welcome.title": "You're using your ChatGPT plan",
+  "chatgpt.welcome.body":
+    "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
+  "chatgpt.welcome.ok": "Got it",
+  "chatgpt.consent.note":
+    "It goes to OpenAI under your ChatGPT account, and counts against your plan's limits.",
+  "chatgpt.menu.hint": "Use your Plus or Pro plan",
 
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
@@ -1339,9 +1345,9 @@ export const en = {
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",
-  "privacy.traffic.chatgpt-sign-in": "ChatGPT sign-in",
+  "privacy.traffic.chatgpt-sign-in": "Sign in with ChatGPT",
   "privacy.traffic.chatgpt-sign-in.description":
-    "The experimental ChatGPT plan signs you in with OpenAI and renews the sign-in. Questions asked with it are the chat flow above.",
+    "When you continue with ChatGPT, IncarnaMind signs you in with OpenAI, renews and ends the sign-in, and reads OpenAI's signing keys and the models your plan offers. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
@@ -1425,11 +1431,10 @@ export const en = {
   "composer.model.intro": "For this Mind’s next Questions. It’s remembered for the Mind.",
   "composer.model.group.keys": "Your keys",
   "composer.model.group.plan": "ChatGPT plan",
-  "composer.model.group.planNote": "experimental",
   "composer.model.group.local": "On this computer",
   "composer.model.group.cloud": "Ollama cloud",
   "composer.model.hint.keys": "Uses your API key",
-  "composer.model.hint.plan": "Counts against your plan, not a key",
+  "composer.model.hint.plan": "Uses your ChatGPT plan, not a key",
   "composer.model.hint.local": "Stays on this computer",
   "composer.model.hint.localMac": "Stays on this Mac",
   "composer.model.hint.cloud": "Cloud: sent to ollama.com",
@@ -1499,12 +1504,12 @@ export const en = {
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
-  "answer.error.blocked": "OpenAI refused the request, though you're signed in",
+  "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
   "answer.error.checkKey": "Check the key",
   "answer.error.chooseModel": "Choose another model",
   "answer.error.allow": "Allow it",
-  "answer.error.signIn": "Sign in",
-  "answer.error.useKey": "Use an API key",
+  "answer.error.signIn": "Sign in again",
+  "answer.error.manageUsage": "Manage usage",
   "answer.error.retry": "Try again",
 
   "citation.label": "Citation {number}: {document}. {badge}",
@@ -2308,8 +2313,9 @@ export const en = {
   // Settings → Agents (#351): plain words for people who never edit a settings file.
   "settings.pages.agents": "Agents",
   "agents.settings.experimental": "Experimental",
+  "agents.settings.lead": "Ask Claude, Codex or Cursor about your Documents.",
   "agents.settings.intro":
-    "Let an AI agent you already use, such as Claude, Codex or Cursor, search the folders you choose and cite them. IncarnaMind checks every quote it gives.",
+    "Connect the AI tool you already use and choose which folders it may read. Its answers will cite those Documents, and IncarnaMind checks every quote.",
   "agents.settings.switch": "Connect AI agents",
   "agents.settings.switch.off": "Off: no agent can reach your Documents.",
   "agents.settings.switch.on":

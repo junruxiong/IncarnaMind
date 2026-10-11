@@ -74,6 +74,7 @@ import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
 import { renderMarkdown } from "./exports/markdown";
+import { createFileLock } from "./fileLock";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { createLayouts } from "./layout";
@@ -581,13 +582,24 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Sign-in changes can happen in the middle of a request (a refresh that fails), so they report through events.
   let chatGptChanged = () => {};
+  const chatGptStore = adapters.chatGptStore;
   const chatGpt = createChatGptPlan({
     endpoints: { ...CHATGPT_PLAN_ENDPOINTS, ...adapters.chatGptPlan },
     secrets,
+    ...(chatGptStore && {
+      sharedStore: {
+        secrets: createSecrets(chatGptStore.keychain, settings),
+        refreshLock: createFileLock(chatGptStore.lockFile),
+      },
+    }),
     settings,
     browser: adapters.browser,
     now: () => (adapters.now?.() ?? new Date()).getTime(),
     onChange: () => chatGptChanged(),
+  });
+  // What the experimental ChatGPT provider left on this device goes (see migration 53).
+  chatGpt.forgetCodexSignIn().catch((error: unknown) => {
+    console.error("The experimental ChatGPT provider's sign-in couldn't be removed.", error);
   });
   const chat = createChat({
     db,
@@ -1319,7 +1331,7 @@ export function createCore(adapters: CoreAdapters): Core {
   privacy.traffic.register({
     id: "chatgpt-sign-in",
     service: { id: chatGptSignIn.origin, name: "OpenAI" },
-    listed: () => chatGpt.enabled(),
+    listed: () => chatGpt.used(),
   });
   privacy.traffic.register({
     id: "remote-connectors",
@@ -1856,17 +1868,8 @@ export function createCore(adapters: CoreAdapters): Core {
     },
 
     getChatGptPlan: () => chatGpt.status(),
-    setChatGptPlanEnabled: async (enabled) => {
-      await chatGpt.setEnabled(enabled);
-      if (!enabled) {
-        // Off means nothing of it is left: no tokens (signed out above) and no provider.
-        await chat.deleteKind("chatgpt");
-        settingsChanged();
-        await readinessChanged();
-      }
-      return chatGpt.status();
-    },
-    signInToChatGpt: () => chatGpt.signIn(),
+    signInToChatGpt: (input) =>
+      chatGpt.signIn({ anotherAccount: isRecord(input) && input.anotherAccount === true }),
     cancelChatGptSignIn: () => chatGpt.cancelSignIn(),
     signOutOfChatGpt: () => chatGpt.signOut(),
 
