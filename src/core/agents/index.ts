@@ -429,6 +429,9 @@ export function createAgents(options: AgentsOptions) {
     /** The core interface for a token (see ./access); for transports other than the socket. */
     open,
 
+    /** How the server starts with this token (see `AgentLaunch`). */
+    launchFor,
+
     async setEnabled(value: unknown): Promise<AgentSettings> {
       if (typeof value !== "boolean") throw new InvalidInputError("enabled must be true or false.");
       options.writeValue(ENABLED_KEY, value);
