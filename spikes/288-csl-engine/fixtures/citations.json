@@ -1,0 +1,301 @@
+[
+ {
+  "items": [
+   {
+    "id": "en-shannon-1940"
+   }
+  ],
+  "noteIndex": 1
+ },
+ {
+  "items": [
+   {
+    "id": "en-kahneman-1979",
+    "locator": "265",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 2
+ },
+ {
+  "items": [
+   {
+    "id": "en-jumper-2021",
+    "locator": "585",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 3
+ },
+ {
+  "items": [
+   {
+    "id": "en-vaswani-2017"
+   }
+  ],
+  "noteIndex": 4
+ },
+ {
+  "items": [
+   {
+    "id": "en-vandermaaten-2008"
+   }
+  ],
+  "noteIndex": 5
+ },
+ {
+  "items": [
+   {
+    "id": "en-zhou-2018"
+   }
+  ],
+  "noteIndex": 6
+ },
+ {
+  "items": [
+   {
+    "id": "en-kuhn-2012",
+    "locator": "52",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 7
+ },
+ {
+  "items": [
+   {
+    "id": "en-tversky-1982",
+    "locator": "11-12",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 8
+ },
+ {
+  "items": [
+   {
+    "id": "en-who-2023"
+   }
+  ],
+  "noteIndex": 9
+ },
+ {
+  "items": [
+   {
+    "id": "en-csl-nd"
+   }
+  ],
+  "noteIndex": 10
+ },
+ {
+  "items": [
+   {
+    "id": "en-ipcc-2023"
+   }
+  ],
+  "noteIndex": 11
+ },
+ {
+  "items": [
+   {
+    "id": "en-iso-690"
+   }
+  ],
+  "noteIndex": 12
+ },
+ {
+  "items": [
+   {
+    "id": "en-gdpr-2016"
+   }
+  ],
+  "noteIndex": 13
+ },
+ {
+  "items": [
+   {
+    "id": "en-nature-2023"
+   }
+  ],
+  "noteIndex": 14
+ },
+ {
+  "items": [
+   {
+    "id": "en-oecd-2019a"
+   }
+  ],
+  "noteIndex": 15
+ },
+ {
+  "items": [
+   {
+    "id": "en-oecd-2019b"
+   }
+  ],
+  "noteIndex": 16
+ },
+ {
+  "items": [
+   {
+    "id": "zh-qian-1990",
+    "locator": "5",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 17
+ },
+ {
+  "items": [
+   {
+    "id": "zh-liu-2016"
+   }
+  ],
+  "noteIndex": 18
+ },
+ {
+  "items": [
+   {
+    "id": "zh-fei-2012",
+    "locator": "23",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 19
+ },
+ {
+  "items": [
+   {
+    "id": "zh-zhou-2016",
+    "locator": "12-15",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 20
+ },
+ {
+  "items": [
+   {
+    "id": "zh-bai-1998"
+   }
+  ],
+  "noteIndex": 21
+ },
+ {
+  "items": [
+   {
+    "id": "zh-wu-2003"
+   }
+  ],
+  "noteIndex": 22
+ },
+ {
+  "items": [
+   {
+    "id": "zh-jia-2011"
+   }
+  ],
+  "noteIndex": 23
+ },
+ {
+  "items": [
+   {
+    "id": "zh-cnnic-2012"
+   }
+  ],
+  "noteIndex": 24
+ },
+ {
+  "items": [
+   {
+    "id": "zh-gbt7714-2015"
+   }
+  ],
+  "noteIndex": 25
+ },
+ {
+  "items": [
+   {
+    "id": "zh-pipl-2021"
+   }
+  ],
+  "noteIndex": 26
+ },
+ {
+  "items": [
+   {
+    "id": "zh-xiao-2001"
+   }
+  ],
+  "noteIndex": 27
+ },
+ {
+  "items": [
+   {
+    "id": "zh-ding-2000"
+   }
+  ],
+  "noteIndex": 28
+ },
+ {
+  "items": [
+   {
+    "id": "zh-unwin-1988"
+   }
+  ],
+  "noteIndex": 29
+ },
+ {
+  "items": [
+   {
+    "id": "zh-mechanics-1990"
+   }
+  ],
+  "noteIndex": 30
+ },
+ {
+  "items": [
+   {
+    "id": "en-vaswani-2017"
+   },
+   {
+    "id": "en-kahneman-1979"
+   },
+   {
+    "id": "zh-liu-2016"
+   }
+  ],
+  "noteIndex": 31
+ },
+ {
+  "items": [
+   {
+    "id": "en-kuhn-2012",
+    "locator": "60",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 32
+ },
+ {
+  "items": [
+   {
+    "id": "en-kuhn-2012",
+    "locator": "61",
+    "label": "page"
+   }
+  ],
+  "noteIndex": 33
+ },
+ {
+  "items": [
+   {
+    "id": "en-oecd-2019a"
+   },
+   {
+    "id": "en-oecd-2019b"
+   }
+  ],
+  "noteIndex": 34
+ }
+]
