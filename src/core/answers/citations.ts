@@ -883,6 +883,10 @@ export function createCitationSession(documents: AnswerDocuments, events: Citati
         text: formatPassages(formatted),
         passageCount: found.length,
         ranks: found.map((passage, index) => passage.rank ?? index),
+        // Someone else wrote a saved web page: reading it makes the Run third-party (#78).
+        ...(found.some((passage) => passage.documentKind === "web") && {
+          thirdParty: ["web-page"] as const,
+        }),
       };
     },
 

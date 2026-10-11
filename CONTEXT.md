@@ -95,7 +95,7 @@ Every Document a Mind cites, once each, in its citation style: the References at
 _Avoid_: works cited (except as a style's own heading), sources list
 
 **Source provider**:
-A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); later, services for laws, regulations, filings and drug labels. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
+A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); openFDA and DailyMed for drug labels and ClinicalTrials.gov for trials, which are asked only when the User chooses them; later, services for laws, regulations and filings. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
 _Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
 
 **Location**:
@@ -138,6 +138,10 @@ _Avoid_: function, action
 **Effect**:
 What a Tool call can do beyond the conversation it is part of: read data, write (change something), run code on a computer, or send data over the network, and where (some of the User's folders, a web host, a Connector's service, the Documents, a Mind). Whether a call asks the User first depends on its Effects.
 _Avoid_: permission, capability, side effect
+
+**Third-party text**:
+Text someone other than the User wrote that a Run reads: a saved Web page, the document being checked, or text in a Mind or Conversation that came from them (imported from someone else's file, a quote added from a Web page, or an Answer written from such text). Once a Run has read some, a call that writes or sends data asks even where the User chose "always". The User's other Documents don't count, though their text is untrusted too, and neither does text pasted from other apps, which can't be traced.
+_Avoid_: external content, untrusted content (which also covers the User's own Documents)
 
 **Connector**:
 An external service the User has connected, through which Answers can look things up or make changes.

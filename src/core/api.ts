@@ -293,6 +293,41 @@ export const ANSWER_BLOCK = "answer";
 export const INCLUDE_IN_CONTEXT_ATTRIBUTE = "includeInContext";
 
 /**
+ * Where text someone other than the User wrote came from (third-party text,
+ * CONTEXT.md; ADR-0013, #78):
+ * - "imported": imported from a file someone else wrote, such as a .docx
+ *   carrying their tracked changes (#104);
+ * - "web-page": a saved web page (#261): Passages a search found in one, or a
+ *   quote added from one (#101);
+ * - "checked-document": the document a check reads to check it (#97, #110).
+ */
+export type ThirdPartySource = "imported" | "web-page" | "checked-document";
+
+/** Third-party text a Run reads itself: a saved web page a search found, or the document a check checks. */
+export type ReadThirdPartySource = Exclude<ThirdPartySource, "imported">;
+
+/**
+ * Why a Run counts as having read third-party text: it read some itself, or
+ * its Question context holds some (a Block or an Answer with a third-party
+ * origin). Such a Run asks before a write or a send that a Tool-level
+ * "always" would otherwise let through (see `ApprovalRequest.thirdParty`).
+ */
+export type ThirdPartyReason =
+  | { via: "read"; source: ReadThirdPartySource }
+  | { via: "context"; source: ThirdPartySource };
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says which Blocks hold
+ * third-party text: a `ThirdPartySource` by Block id (`BLOCK_ID_ATTRIBUTE`),
+ * for top-level Blocks and Blocks nested in them alike. An Answer written in
+ * a Run that had read third-party text is in it too. Kept beside the Blocks,
+ * not in their attributes, so an older version's editor, which strips
+ * attributes it doesn't know, leaves it as it is (see `src/shared/textOrigins.ts`).
+ * A Block deleted since leaves its entry unused.
+ */
+export const MIND_TEXT_ORIGINS_FIELD = "textOrigins";
+
+/**
  * A Question's Search scope (CONTEXT.md): the Folders, Tags and individual
  * Documents its Document search is limited to. It covers every Document in
  * one of the Folders or their sub-Folders (at any depth), every Document with
@@ -1448,11 +1483,25 @@ export interface SourceProviderInfo {
   consent: DataFlowStatus["consent"];
   /** Where its operator states its terms and limits. */
   termsUrl: string;
+  /** Searched when a search names no providers: false for drug labels and trials, which are asked only when chosen. */
+  searchedByDefault: boolean;
+  /** An optional key of the User's: "none" for a provider that takes none, else whether one is set. The key itself is never given out. */
+  key: "none" | "unset" | "set";
 }
+
+/**
+ * What an Answer's search can ask for besides papers (`find_sources`' `kind`),
+ * and the providers each is looked up in. Drug labels and trials aren't
+ * searched with a search for papers.
+ */
+export const SOURCE_KIND_PROVIDERS: Readonly<Record<string, readonly string[]>> = {
+  drug_labels: ["openfda", "dailymed"],
+  clinical_trials: ["clinicaltrials"],
+};
 
 /** What Find sources looks for. */
 export interface FindSourcesInput {
-  /** Words, a title, or an identifier: a DOI, an arXiv ID or a PubMed ID. */
+  /** Words, a title, or an identifier: a DOI, an arXiv ID, a PubMed ID, a label's set id or an NCT number. */
   query: string;
   /** Only works published in or after this year. */
   fromYear?: number | null;
@@ -1460,7 +1509,7 @@ export interface FindSourcesInput {
   toYear?: number | null;
   /** Only works whose full text is open. */
   openAccessOnly?: boolean;
-  /** The providers to ask, by id; every one that searches, when left out. */
+  /** The providers to ask, by id; every one that searches by default (not drug labels or trials), when left out. */
   providers?: string[];
 }
 
@@ -1534,6 +1583,8 @@ export interface FoundSource {
   access: SourceAccess;
   /** Its page at its publisher or registry, for "Get the PDF…" in the User's browser. */
   landingUrl: string | null;
+  /** What the source says about relying on it, when it says (openFDA's disclaimer); shown with the result. */
+  notice: string | null;
   /** Already in the Library: as a Document, or as a reference record without one. */
   inLibrary: { documentId: string | null; recordId: string } | null;
 }
@@ -2140,8 +2191,8 @@ export interface TestRerankConnectionInput {
 /**
  * Where Answers can come from. "ollama" is an OpenAI-compatible server run by
  * Ollama, normally on this computer; it also offers one-click model downloads.
- * "chatgpt" is the User's ChatGPT plan, used through a browser sign-in instead
- * of an API key; it is experimental (see `ChatGptPlanStatus`).
+ * "chatgpt" is the User's ChatGPT plan, used through Sign in with ChatGPT
+ * instead of an API key (see `ChatGptPlanStatus`).
  */
 export const chatProviderKinds = [
   "openai",
@@ -2227,9 +2278,12 @@ export type ProviderErrorKind =
   | "local-mode"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
-  /** ChatGPT plan: the plan's usage limit is reached, or the plan doesn't include this use. */
+  /** ChatGPT plan: the plan's usage limit, or the one the User set for IncarnaMind, is reached. */
   | "plan-limit"
-  /** ChatGPT plan: OpenAI refused a valid sign-in (401 or 403), e.g. it blocked this integration. */
+  /**
+   * ChatGPT plan: OpenAI refused a valid sign-in, e.g. the plan isn't one that
+   * can be used in other apps, or the request came from a region it doesn't serve.
+   */
   | "blocked"
   /**
    * A local model: the request doesn't fit its context window, even with the
@@ -2688,6 +2742,12 @@ export interface ConversationAnswer {
   citationSupport: CitationSupport | null;
   /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
   toolCalls: AnswerToolCall[];
+  /**
+   * Written in a Run that had read third-party text (#78): where that text
+   * came from, so a later Question in the conversation counts as having read
+   * it too, and so does a Mind it is added to. Null: none.
+   */
+  textOrigin: ThirdPartySource | null;
   /** ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -2905,49 +2965,44 @@ export const SKILL_LIMITS = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// ChatGPT plan (experimental)
+// ChatGPT plan
 
-/**
- * A model the ChatGPT plan's endpoint accepts. The list is fixed in the app
- * and follows the Codex CLI's own model catalog.
- */
+/** A model the User's ChatGPT plan can be used with. */
 export interface ChatGptPlanModel {
   id: string;
-  /** What the User sees, e.g. "GPT-5.5". */
+  /** What the User sees, e.g. "GPT-6.1 Sol". */
   name: string;
 }
 
 /** The ChatGPT sign-in on this device. */
 export type ChatGptAccount =
   | { state: "signed-out" }
-  /** Refreshing the sign-in failed, so it was removed: the User has to sign in again. */
+  /** Refreshing the sign-in failed (or the User disconnected IncarnaMind in ChatGPT): sign in again. */
   | { state: "expired" }
   | {
       state: "signed-in";
       /** From the sign-in's ID token, when it carries one. */
       email: string | null;
-      /** The ChatGPT plan, e.g. "plus" or "pro", when the ID token says. */
-      plan: string | null;
     };
 
 /**
- * The experimental "ChatGPT plan (via Codex sign-in)" provider. It signs in
- * with the sign-in OpenAI's Codex CLI uses, which OpenAI hasn't approved for
- * other apps and may block. It is off until the User turns it on in Settings.
+ * The ChatGPT plan provider, "Continue with ChatGPT": Sign in with ChatGPT,
+ * OpenAI's way for an open-source app on the User's computer to use their
+ * Plus or Pro plan instead of an API key. What it sends goes to OpenAI under
+ * the User's ChatGPT account and counts against the plan's limits.
  */
 export interface ChatGptPlanStatus {
-  /** The User turned the experimental provider on, on this device. Off by default. */
-  enabled: boolean;
   account: ChatGptAccount;
   /** A browser sign-in is waiting for the User. */
   signingIn: boolean;
-  /** The models Questions can use with the plan, the default first. */
+  /**
+   * The models Questions can use with the plan, the default first: the
+   * account's own list once signed in, else the ones OpenAI usually offers.
+   */
   models: ChatGptPlanModel[];
 }
 
 export type ChatGptSignInErrorKind =
-  /** The sign-in's fixed local port is taken, e.g. the Codex CLI is signing in at the same time. */
-  | "port-in-use"
   /** The User didn't finish in the browser within a few minutes. */
   | "timed-out"
   /** The User cancelled in IncarnaMind. */
@@ -2956,11 +3011,30 @@ export type ChatGptSignInErrorKind =
   | "denied"
   /** This device can't store the sign-in securely (see `getSecretStorage`). */
   | "secret-storage"
+  /** The User signed in but didn't allow IncarnaMind to use their plan; signing in again asks again. */
+  | "plan-not-allowed"
+  /** The User signed in to another ChatGPT account than the one this device uses; `anotherAccount` switches. */
+  | "other-account"
   | "failed";
 
 export type ChatGptSignInResult =
-  | { ok: true; status: ChatGptPlanStatus }
+  | {
+      ok: true;
+      /** The first sign-in on this device: the UI says once that Questions now use the plan. */
+      firstTime: boolean;
+      status: ChatGptPlanStatus;
+    }
   | { ok: false; error: { kind: ChatGptSignInErrorKind; message: string } };
+
+export interface ChatGptSignOutResult {
+  /**
+   * Whether OpenAI confirmed the session ended. When it couldn't be reached,
+   * the tokens are gone from this device anyway, and the User can disconnect
+   * IncarnaMind in ChatGPT's settings.
+   */
+  revoked: boolean;
+  status: ChatGptPlanStatus;
+}
 
 // ---------------------------------------------------------------------------
 // Secrets
@@ -3149,7 +3223,8 @@ export interface RegisteredDataFlow {
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
- * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
+ * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
+ *   reading OpenAI's signing keys; listed once the User has signed in.
  * - "remote-connectors": connecting to each remote Connector that is on, and
  *   signing in to it: its server, and the authorization server it names
  *   (discovery, registration, tokens). One entry per server. Tool calls, which
@@ -3646,8 +3721,9 @@ export interface SetApprovalPolicyInput {
   policy: ApprovalPolicyValue | null;
   /**
    * "Always run" a Skill's scripts only: the User has seen the warning that
-   * its scripts will then run on this computer without asking, with no
-   * sandbox, and confirmed it. Without it, that policy is refused.
+   * its scripts will then run on this computer without asking (in the OS
+   * sandbox where `Settings.scriptSandbox` is "os", with none otherwise), and
+   * confirmed it. Without it, that policy is refused.
    */
   riskAccepted?: boolean;
 }
@@ -3656,9 +3732,11 @@ export interface SetApprovalPolicyInput {
  * What the User decides about a Tool call that asks first:
  * - "allow-once": this call runs;
  * - "always-allow": this call runs, and so will every later call of the Tool
- *   without asking (the policy becomes "always"). For a Skill script this is
- *   "always run": every script of the Skill runs from now on without asking,
- *   which needs `ApprovalResponseOptions.riskAccepted`;
+ *   without asking (the policy becomes "always"), except a call that writes
+ *   or sends data in a Run that has read third-party text
+ *   (`ApprovalRequest.thirdParty`). For a Skill script this is "always run":
+ *   every script of the Skill runs from now on without asking, with the same
+ *   exception, which needs `ApprovalResponseOptions.riskAccepted`;
  * - "deny": the call doesn't run; the model is told the User denied it, and
  *   the Answer carries on without it.
  */
@@ -3668,8 +3746,9 @@ export interface ApprovalResponseOptions {
   /**
    * "always-allow" of a Skill script ("always run") only: the User has seen
    * the warning that the Skill's scripts will then run on this computer
-   * without asking, with no sandbox, and confirmed it. Without it, that
-   * decision is refused and the request keeps waiting.
+   * without asking (in the OS sandbox where `Settings.scriptSandbox` is "os",
+   * with none otherwise), and confirmed it. Without it, that decision is
+   * refused and the request keeps waiting.
    */
   riskAccepted?: boolean;
 }
@@ -3691,10 +3770,18 @@ interface ApprovalRequestBase extends AnswerPlace {
   /**
    * Its Answer had read content the User didn't write before this call, such
    * as Passages of their Documents or a Connector's reply
-   * (docs/designs/agent-extensibility.md §4.6). For now it doesn't change
-   * whether a call asks.
+   * (docs/designs/agent-extensibility.md §4.6). On its own it doesn't change
+   * whether a call asks: `thirdParty` does.
    */
   tainted: boolean;
+  /**
+   * Why its Answer counts as having read third-party text (#78, ADR-0013): it
+   * read a saved web page or the document being checked, or its Question
+   * context holds third-party text. Then a Tool-level "always" (always allow,
+   * always run) no longer covers a call that writes or sends data, so the
+   * call asks, and the card says why. Absent when there is none.
+   */
+  thirdParty?: ThirdPartyReason[];
 }
 
 /**
@@ -3723,8 +3810,9 @@ export type EffectScope =
 
 /**
  * A run of a Skill script waiting for the User's approval: which Skill, which
- * of its scripts, and its arguments. Scripts run on this computer with no
- * sandbox (v1): they can do whatever the User can.
+ * of its scripts, and its arguments. Scripts run on this computer: in the OS
+ * sandbox on macOS and Linux (#65, `Settings.scriptSandbox` "os"), and with
+ * none on Windows, where they can do whatever the User can (`effects` says which).
  */
 export interface SkillScriptApprovalRequest extends ApprovalRequestBase {
   subject: Extract<ApprovalSubject, { kind: "skill-script" }>;
@@ -4698,6 +4786,13 @@ export interface CoreApi {
   /** The Source providers Find sources can ask, each with the User's consent decision (#296). */
   listSourceProviders(): Promise<SourceProviderInfo[]>;
   /**
+   * Sets, or with null removes, the User's own key for a provider that takes
+   * one (openFDA's). It is kept only in the keychain, sent only to that
+   * provider in a header, and never given back. Throws InvalidInputError for
+   * a provider that takes none, and SecretStorageError when it can't be kept.
+   */
+  setSourceProviderKey(providerId: string, key: string | null): Promise<void>;
+  /**
    * Find sources (#296): searches the providers asked (every one that
    * searches, by default) for works, and merges what they find, best first.
    * An identifier (a DOI, an arXiv ID, a PubMed ID) is looked up instead.
@@ -4932,23 +5027,23 @@ export interface CoreApi {
    */
   selectOllama(input?: SelectOllamaInput): Promise<ChatProvider>;
 
-  /** The experimental ChatGPT plan provider: whether it's on, the sign-in, and its models. */
+  /** The ChatGPT plan provider: the sign-in and the account's models. */
   getChatGptPlan(): Promise<ChatGptPlanStatus>;
   /**
-   * Turns the experimental ChatGPT plan provider on or off on this device.
-   * Turning it off signs out (deleting the tokens) and removes the provider.
+   * "Continue with ChatGPT": opens Sign in with ChatGPT in the User's
+   * browser and waits, for a few minutes at most, until they finish.
+   * Starting again cancels a sign-in still waiting. `anotherAccount` signs in
+   * to a different ChatGPT account than the one this device used before.
+   * Signing in doesn't choose a model: `saveChatProvider` does.
    */
-  setChatGptPlanEnabled(enabled: boolean): Promise<ChatGptPlanStatus>;
-  /**
-   * Opens the ChatGPT sign-in in the User's browser and waits, for a few
-   * minutes at most, until they finish. Starting again cancels a sign-in
-   * still waiting. The provider must be turned on.
-   */
-  signInToChatGpt(): Promise<ChatGptSignInResult>;
+  signInToChatGpt(input?: { anotherAccount?: boolean }): Promise<ChatGptSignInResult>;
   /** Stops waiting for a browser sign-in. */
   cancelChatGptSignIn(): Promise<void>;
-  /** Deletes the ChatGPT tokens from this device. A saved ChatGPT provider then needs a new sign-in. */
-  signOutOfChatGpt(): Promise<ChatGptPlanStatus>;
+  /**
+   * Ends the ChatGPT sign-in at OpenAI and deletes its tokens from this
+   * device. A saved ChatGPT provider then needs a new sign-in.
+   */
+  signOutOfChatGpt(): Promise<ChatGptSignOutResult>;
 
   /**
    * Every registered external data flow, to each service it currently goes to
@@ -5453,7 +5548,7 @@ export interface CoreEvents {
   "references.changed": Document[];
   /** `importReferences` has matched `done` of `total` references. */
   "references.importProgress": { done: number; total: number };
-  /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
+  /** The ChatGPT sign-in changed: started, finished, signed out, or expired. */
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
   "jev.changed": JevSettings;
@@ -5568,6 +5663,7 @@ const methods: Record<CoreApiMethod, true> = {
   restoreReference: true,
   lookUpReference: true,
   listSourceProviders: true,
+  setSourceProviderKey: true,
   findSources: true,
   addFoundSource: true,
   importReferences: true,
@@ -5614,7 +5710,6 @@ const methods: Record<CoreApiMethod, true> = {
   detectOllama: true,
   selectOllama: true,
   getChatGptPlan: true,
-  setChatGptPlanEnabled: true,
   signInToChatGpt: true,
   cancelChatGptSignIn: true,
   signOutOfChatGpt: true,

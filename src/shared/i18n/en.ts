@@ -33,17 +33,14 @@ export const en = {
   "library.deleteNotice":
     "Its Documents and Minds move to Not in a Folder. Their original files and Tags are kept.",
   "library.cancel": "Cancel",
-  "library.modelSettings": "Organization settings",
   "library.search": "Find by name or tag",
   "library.classify": "Organize",
-  "library.reclassify": "Organize this folder",
   "library.progress": "Organizing {count} Documents…",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.failed": "{count} Documents need attention. Open their details, then retry Organize.",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
-  "library.manualHint": "Choose a folder and tags, or use Organize to suggest them.",
   "library.empty": "Add Documents from the sidebar to start organising them.",
   "library.noMatches": "No Documents here yet.",
   "library.manual": "Your choice",
@@ -197,9 +194,6 @@ export const en = {
 
   "mind.untitled": "Untitled",
   "conversation.untitled": "New chat",
-  "object.renamed": "Renamed to “{name}”",
-  "object.deleted": "Deleted “{name}”",
-  "object.deleted.conversations": "Deleted {count} conversations",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
@@ -326,7 +320,6 @@ export const en = {
   "editor.ai.improve": "Improve writing",
   "editor.ai.shorten": "Shorten",
   "editor.ai.translate": "Translate…",
-  "editor.ai.translateTo": "Translate into",
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
   "edit.pending.improve": "Improving the writing…",
@@ -456,7 +449,6 @@ export const en = {
   "viewer.markdown.imageWeb": "Images from the web aren't loaded",
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.docx.comment": "Comment by {author}",
-  "viewer.section.start": "Start",
 
   "location.page": "p. {range}",
   "location.slide.one": "slide {range}",
@@ -871,9 +863,7 @@ export const en = {
   "tags.chip.automatic": "{tag}: added automatically",
   "tags.chip.user": "{tag}: added by you",
   "tags.menu.open": "Tags of {name}",
-  "tags.menu.title": "Tags",
   "tags.menu.none": "No Tags yet.",
-  "tags.menu.confirm": "Confirm {tag}",
   "tags.menu.retag": "Re-tag automatically",
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
@@ -984,10 +974,7 @@ export const en = {
   "providers.choice.apiKey": "An API key",
   "providers.choice.apiKey.body":
     "OpenAI, Anthropic, Google, DeepSeek, Qwen, Kimi, GLM, Mistral, xAI, OpenRouter, SiliconFlow, or an OpenAI-compatible server. Your Question and the Passages found for it are sent to that service.",
-  "providers.choice.chatgpt.body":
-    "Uses your ChatGPT plan instead of an API key. You turn it on in Settings, under Chat model.",
-  "providers.choice.experimental": "Experimental",
-  "providers.choice.continue": "Continue in Settings",
+  "providers.choice.chatgpt.body": "Sign in with your ChatGPT Plus or Pro account. No key needed.",
 
   "providers.kind.openai": "OpenAI",
   "providers.kind.anthropic": "Anthropic",
@@ -1002,8 +989,7 @@ export const en = {
   "providers.kind.siliconflow": "SiliconFlow",
   "providers.kind.openai-compatible": "OpenAI-compatible server",
   "providers.kind.ollama": "Ollama",
-  "providers.kind.chatgpt": "Sign in with ChatGPT",
-  "providers.chatgpt.unavailable": "Not available yet",
+  "providers.kind.chatgpt": "ChatGPT plan",
 
   "providers.form.label": "Chat provider",
   "providers.form.apiKey": "API key",
@@ -1013,6 +999,7 @@ export const en = {
   "providers.region.cn": "China",
   "providers.region.intl": "International",
   "providers.form.getKey": "Get a key",
+  "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "What it does with your data.",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":
@@ -1080,45 +1067,54 @@ export const en = {
   "providers.settings.cancel": "Cancel",
   "providers.settings.remove": "Remove",
 
-  "codex.experimental.title": "Experimental",
-  "codex.provider.name": "ChatGPT plan (via Codex sign-in)",
-  "codex.switch.description":
-    "Answer Questions with your ChatGPT Plus or Pro plan instead of an API key.",
-  "codex.warning.title": "This isn't an official OpenAI integration",
-  "codex.warning.body":
-    "It signs in the way OpenAI's Codex CLI does. OpenAI hasn't approved this for other apps and may block it at any time. Questions you ask count against your ChatGPT plan's usage limits. Turning this off signs you out.",
-  "codex.account.signedOut": "Not signed in.",
-  "codex.account.expired":
-    "Your ChatGPT sign-in has expired. Sign in again to keep using your plan.",
-  "codex.account.signedIn": "Signed in as {account}.",
-  "codex.account.unknown": "your ChatGPT account",
-  "codex.account.plan": "Plan: {plan}",
-  "codex.signIn": "Sign in with ChatGPT",
-  "codex.signInAgain": "Sign in again",
-  "codex.signingIn": "Finish signing in in your browser…",
-  "codex.cancel": "Cancel",
-  "codex.signOut": "Sign out",
-  "codex.model": "Model",
-  "codex.use": "Use for Questions",
-  "codex.inUse": "Questions use your ChatGPT plan.",
-  "codex.signIn.error.port-in-use":
-    "The local port the ChatGPT sign-in needs is in use by another program, for example the Codex CLI signing in. Finish or cancel that sign-in, then try again.",
-  "codex.signIn.error.timed-out": "The sign-in took too long. Try again.",
-  "codex.signIn.error.cancelled": "The sign-in was cancelled.",
-  "codex.signIn.error.denied": "OpenAI didn't complete the sign-in. Try again.",
-  "codex.signIn.error.secret-storage":
+  "chatgpt.title": "ChatGPT plan",
+  "chatgpt.description":
+    "Use your ChatGPT Plus or Pro plan instead of an API key. Questions go to OpenAI under your ChatGPT account and count against your plan's limits.",
+  "chatgpt.continue": "Continue with ChatGPT",
+  "chatgpt.account.signedOut": "Not signed in.",
+  "chatgpt.account.expired":
+    "Your ChatGPT sign-in has ended. Sign in again to keep using your plan.",
+  "chatgpt.account.signedIn": "Signed in as {account}.",
+  "chatgpt.account.unknown": "your ChatGPT account",
+  "chatgpt.signingIn": "Finish signing in in your browser…",
+  "chatgpt.cancel": "Cancel",
+  "chatgpt.signOut": "Sign out",
+  "chatgpt.anotherAccount": "Use another account",
+  "chatgpt.signInAgain": "Sign in again",
+  "chatgpt.details": "Details",
+  "chatgpt.use": "Use for Questions",
+  "chatgpt.inUse": "Using ChatGPT plan",
+  "chatgpt.manageUsage": "Manage usage",
+  "chatgpt.signedOut.unconfirmed":
+    "Signed out on this computer, but OpenAI didn't confirm it. You can disconnect IncarnaMind in ChatGPT's settings.",
+  "chatgpt.signIn.error.timed-out": "The sign-in took too long. Try again.",
+  "chatgpt.signIn.error.cancelled": "The sign-in was cancelled.",
+  "chatgpt.signIn.error.denied": "The sign-in wasn't completed. Try again.",
+  "chatgpt.signIn.error.secret-storage":
     "IncarnaMind can't store your sign-in securely on this system, because no keyring is available.",
-  "codex.signIn.error.failed": "The sign-in didn't work.",
-  "codex.test.not-signed-in": "You're not signed in to ChatGPT. Sign in, then try again.",
-  "codex.test.plan-limit": "Your ChatGPT plan's usage limit is reached. Try again once it resets.",
-  "codex.test.blocked":
-    "OpenAI refused the request although you're signed in. It may have blocked this integration; an API key still works.",
-  "codex.readiness.sign-in-required":
-    "Sign in to ChatGPT again in Settings, under Experimental, to ask Questions with your plan.",
-  "codex.page.success.title": "Signed in to ChatGPT",
-  "codex.page.success.body": "You can close this tab and go back to IncarnaMind.",
-  "codex.page.failure.title": "The ChatGPT sign-in didn't work",
-  "codex.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "chatgpt.signIn.error.plan-not-allowed":
+    "IncarnaMind needs your permission to use your ChatGPT plan. Sign in again and allow it.",
+  "chatgpt.signIn.error.other-account":
+    "That's another ChatGPT account than this computer used before. Sign in with the same one, or use another account.",
+  "chatgpt.signIn.error.failed": "The sign-in didn't work. Try again.",
+  "chatgpt.test.not-signed-in":
+    "You're not signed in to ChatGPT. Continue with ChatGPT, then try again.",
+  "chatgpt.test.plan-limit":
+    "The usage limit of your ChatGPT plan, or the one you set for IncarnaMind, is reached.",
+  "chatgpt.test.blocked":
+    "OpenAI didn't let IncarnaMind use your ChatGPT plan. Choose another model, or check your plan in ChatGPT.",
+  "chatgpt.readiness.sign-in-required": "You're signed out of ChatGPT.",
+  "chatgpt.page.success.title": "Signed in with ChatGPT",
+  "chatgpt.page.success.body": "You can close this tab and go back to IncarnaMind.",
+  "chatgpt.page.failure.title": "The ChatGPT sign-in didn't work",
+  "chatgpt.page.failure.body": "Close this tab and try again in IncarnaMind.",
+  "chatgpt.welcome.title": "You're using your ChatGPT plan",
+  "chatgpt.welcome.body":
+    "Questions you ask in IncarnaMind with a ChatGPT model now use your ChatGPT plan. You can see and limit this in ChatGPT's settings.",
+  "chatgpt.welcome.ok": "Got it",
+  "chatgpt.consent.note":
+    "It goes to OpenAI under your ChatGPT account, and counts against your plan's limits.",
+  "chatgpt.menu.hint": "Use your Plus or Pro plan",
 
   "consent.dialog.title": "Send data to {service}?",
   "consent.dialog.body": "To {purpose}, IncarnaMind sends this to {service}:",
@@ -1162,7 +1158,8 @@ export const en = {
   "consent.flow.find-sources": "Find sources",
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
-  "consent.data.work-ids": "The DOI, arXiv ID or PubMed ID of each work you add",
+  "consent.data.work-ids":
+    "The DOI, arXiv ID, PubMed ID, label set ID or NCT number of each work you add",
   "consent.flow.edits": "Edit with AI",
   "consent.flow.edits.purpose": "change the text you select as you ask",
   "consent.data.selection": "The text you select, with the paragraphs it is in, each time you ask",
@@ -1283,7 +1280,6 @@ export const en = {
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
 
-  "privacy.tabs.label": "Settings pages",
   "privacy.tabs.general": "General",
   "privacy.tabs.privacy": "Privacy",
   "privacy.intro":
@@ -1317,9 +1313,9 @@ export const en = {
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",
-  "privacy.traffic.chatgpt-sign-in": "ChatGPT sign-in",
+  "privacy.traffic.chatgpt-sign-in": "Sign in with ChatGPT",
   "privacy.traffic.chatgpt-sign-in.description":
-    "The experimental ChatGPT plan signs you in with OpenAI and renews the sign-in. Questions asked with it are the chat flow above.",
+    "When you continue with ChatGPT, IncarnaMind signs you in with OpenAI, renews and ends the sign-in, and reads OpenAI's signing keys and the models your plan offers. Questions asked with your plan are the chat flow above.",
   "privacy.traffic.remote-connectors": "Remote Connectors and their sign-in",
   "privacy.traffic.remote-connectors.description":
     "IncarnaMind connects to your remote Connectors' servers to list their Tools, and to the sign-in services they name to sign you in and renew the sign-in. What their Tools are sent is the Connectors flow above.",
@@ -1403,11 +1399,10 @@ export const en = {
   "composer.model.intro": "For this Mind’s next Questions. It’s remembered for the Mind.",
   "composer.model.group.keys": "Your keys",
   "composer.model.group.plan": "ChatGPT plan",
-  "composer.model.group.planNote": "experimental",
   "composer.model.group.local": "On this computer",
   "composer.model.group.cloud": "Ollama cloud",
   "composer.model.hint.keys": "Uses your API key",
-  "composer.model.hint.plan": "Counts against your plan, not a key",
+  "composer.model.hint.plan": "Uses your ChatGPT plan, not a key",
   "composer.model.hint.local": "Stays on this computer",
   "composer.model.hint.localMac": "Stays on this Mac",
   "composer.model.hint.cloud": "Cloud: sent to ollama.com",
@@ -1431,7 +1426,6 @@ export const en = {
   "scope.picker.documents": "Documents",
   "scope.picker.empty": "No Folders, Tags or Documents match",
   "scope.picker.none": "Add Documents, Folders or Tags to choose what a Question searches.",
-  "scope.label": "Search only",
   "scope.chip.folder": "Folder “{name}”, with its sub-Folders",
   "scope.chip.tag": "Documents tagged “{name}”",
   "scope.chip.document": "Document “{name}”",
@@ -1477,12 +1471,12 @@ export const en = {
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
-  "answer.error.blocked": "OpenAI refused the request, though you're signed in",
+  "answer.error.blocked": "OpenAI didn't let IncarnaMind use your ChatGPT plan",
   "answer.error.checkKey": "Check the key",
   "answer.error.chooseModel": "Choose another model",
   "answer.error.allow": "Allow it",
-  "answer.error.signIn": "Sign in",
-  "answer.error.useKey": "Use an API key",
+  "answer.error.signIn": "Sign in again",
+  "answer.error.manageUsage": "Manage usage",
   "answer.error.retry": "Try again",
 
   "citation.label": "Citation {number}: {document}. {badge}",
@@ -1940,6 +1934,20 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
+  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
+  "approvals.thirdParty.read.checkedDocument":
+    "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
+  "approvals.thirdParty.mind.webPage":
+    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.mind.checkedDocument":
+    "This Mind contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.conversation.imported":
+    "This conversation contains imported text, so it asks you first.",
+  "approvals.thirdParty.conversation.webPage":
+    "This conversation contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "This conversation contains text from the document being checked, so it asks you first.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
@@ -2139,9 +2147,9 @@ export const en = {
 
   "sources.title": "Find sources",
   "sources.intro":
-    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references.",
+    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed or ClinicalTrials.gov below to find drug labels and clinical trials.",
   "sources.search.label": "Search for sources",
-  "sources.search.placeholder": "Topic, title, DOI or arXiv ID",
+  "sources.search.placeholder": "Topic, title, DOI, arXiv ID or NCT number",
   "sources.search": "Search",
   "sources.searching": "Searching…",
   "sources.close": "Close Find sources",
@@ -2199,6 +2207,22 @@ export const en = {
   "sources.provider.pubmed.about":
     "Biomedical and life-science papers, with open full text from PubMed Central.",
   "sources.provider.crossref.about": "Looks up a DOI you type.",
+  "sources.provider.openfda.about":
+    "FDA drug labels, section by section. Search by drug name or set id. Its records are CC0; it says not to rely on it for decisions about medical care. Asked only when you choose it.",
+  "sources.provider.dailymed.about":
+    "The full drug labels filed with the FDA, from the National Library of Medicine, with their section numbers. Search by drug name or set id. Asked only when you choose it.",
+  "sources.provider.clinicaltrials.about":
+    "Clinical trial records: arms, outcomes, eligibility criteria and posted results. Search by condition or drug, or type an NCT number. Asked only when you choose it.",
+  "sources.notice": "The source says: {notice}",
+  "sources.key.open": "{provider} key…",
+  "sources.key.title": "Your own {provider} key",
+  "sources.key.hint":
+    "Optional. A key gives {provider} a higher daily limit. It is kept in your keychain and sent only to {provider}.",
+  "sources.key.placeholder": "Paste your key",
+  "sources.key.save": "Save key",
+  "sources.key.remove": "Remove key",
+  "sources.key.set": "Key saved",
+  "sources.key.failed": "Couldn't save the key",
   "sources.call.running": "Finding sources for “{query}”…",
   "sources.call.done": "Found sources for “{query}”",
   "sources.call.found.one": "1 found",

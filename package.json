@@ -116,5 +116,11 @@
     "typescript": "7.0.2",
     "vite": "7.3.7",
     "vitest": "5.0.3"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "onnxruntime-node": true,
+    "electron-winstaller": false,
+    "fsevents": false
   }
 }
