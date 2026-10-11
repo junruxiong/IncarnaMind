@@ -34,13 +34,19 @@ export interface WorkIds {
   pmcid?: string;
   /** "W4362665266". */
   openalex?: string;
+  /** A drug label's set id, which DailyMed and openFDA share: lower case. */
+  setid?: string;
+  /** A trial's registry number: "NCT04368728". */
+  nct?: string;
 }
 
 /** An identifier the User typed, which providers look up instead of searching. */
 export type WorkIdentifier =
   | { kind: "doi"; id: string }
   | { kind: "arxiv"; id: string }
-  | { kind: "pmid"; id: string };
+  | { kind: "pmid"; id: string }
+  | { kind: "setid"; id: string }
+  | { kind: "nct"; id: string };
 
 /**
  * Where a work's full text can be had openly. "pdf": a PDF file at `url`.
@@ -76,6 +82,8 @@ export interface ProviderWork {
   fullText: FullTextLocation[];
   /** Its page at its publisher or registry. */
   landingUrl: string | null;
+  /** What the source itself says about relying on it (openFDA's disclaimer), shown with the result. */
+  notice?: string;
 }
 
 /** One section of a text a provider gives by section: a heading, as the work cites it, and its paragraphs. */
@@ -122,6 +130,12 @@ export interface SourceProvider {
   /** Where its requests go: consent is asked per service (the "find-sources" flow). */
   readonly service: ExternalService;
   readonly terms: SourceTerms;
+  /** The identifiers `resolve` looks up. */
+  readonly resolves?: readonly WorkIdentifier["kind"][];
+  /** False: a search asks it only when it is named (drug labels, trials), not with every search for papers. */
+  readonly searchedByDefault?: boolean;
+  /** It takes an optional key of the User's, kept through `secrets.ts` and sent in a header. */
+  readonly takesKey?: boolean;
   /** Searches by words; absent for one that only looks works up (Crossref). */
   search?(query: SourceQuery, context: ProviderContext): Promise<ProviderWork[]>;
   /** Looks a work up by an identifier it knows; null for one it doesn't hold. */

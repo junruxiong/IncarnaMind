@@ -1,0 +1,458 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT04368728",
+      "orgStudyIdInfo": {
+        "id": "C4591001"
+      },
+      "secondaryIdInfos": [
+        {
+          "id": "2020-002641-42",
+          "type": "EUDRACT_NUMBER"
+        }
+      ],
+      "organization": {
+        "fullName": "BioNTech SE",
+        "class": "INDUSTRY"
+      },
+      "briefTitle": "Study to Describe the Safety, Tolerability, Immunogenicity, and Efficacy of RNA Vaccine Candidates Against COVID-19 in Healthy Individuals",
+      "officialTitle": "A PHASE 1/2/3, PLACEBO-CONTROLLED, RANDOMIZED, OBSERVER-BLIND, DOSE-FINDING STUDY TO EVALUATE THE SAFETY, TOLERABILITY, IMMUNOGENICITY, AND EFFICACY OF SARS-COV-2 RNA VACCINE CANDIDATES AGAINST COVID-19 IN HEALTHY INDIVIDUALS"
+    },
+    "statusModule": {
+      "statusVerifiedDate": "2026-03",
+      "overallStatus": "COMPLETED",
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      },
+      "startDateStruct": {
+        "date": "2020-04-29",
+        "type": "ACTUAL"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2023-02-10",
+        "type": "ACTUAL"
+      },
+      "completionDateStruct": {
+        "date": "2023-02-10",
+        "type": "ACTUAL"
+      },
+      "studyFirstSubmitDate": "2020-04-27",
+      "studyFirstSubmitQcDate": "2020-04-29",
+      "studyFirstPostDateStruct": {
+        "date": "2020-04-30",
+        "type": "ACTUAL"
+      },
+      "resultsFirstSubmitDate": "2024-02-09",
+      "resultsFirstSubmitQcDate": "2026-03-03",
+      "resultsFirstPostDateStruct": {
+        "date": "2026-03-25",
+        "type": "ACTUAL"
+      },
+      "lastUpdateSubmitDate": "2026-03-03",
+      "lastUpdatePostDateStruct": {
+        "date": "2026-03-25",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "responsibleParty": {
+        "type": "SPONSOR"
+      },
+      "leadSponsor": {
+        "name": "BioNTech SE",
+        "class": "INDUSTRY"
+      },
+      "collaborators": [
+        {
+          "name": "Pfizer",
+          "class": "INDUSTRY"
+        }
+      ]
+    },
+    "oversightModule": {
+      "oversightHasDmc": true,
+      "isFdaRegulatedDrug": true,
+      "isFdaRegulatedDevice": false
+    },
+    "descriptionModule": {
+      "briefSummary": "This is a Phase 1/2/3, randomized, placebo-controlled, observer-blind, dose-finding, vaccine candidate-selection, and efficacy study in healthy individuals.\n\nThe study consists of 2 parts: Phase 1: to identify preferred vaccine candidate(s) and dose level(s); Phase 2/3: an expanded cohort and efficacy part.\n\nThe study will evaluate the safety, tolerability, and immunogenicity of 3 different SARS-CoV-2 RNA vaccine candidates against COVID-19 and the efficacy of 1 candidate:\n\n* As a 2-dose (separated by 21 days) schedule;\n* At various different dose levels in Phase 1;\n* As a booster;\n* In 3 age groups (Phase 1: 18 to 55 years of age, 65 to 85 years of age; Phase 2/3: ≥12 years of age \\[stratified as 12-15, 16-55 or \\>55 years of age\\]).\n\nThe candidate selected for efficacy evaluation in Phase 2/3 is BNT162b2 at a dose of 30 µg.\n\nParticipants who originally received placebo will be offered the opportunity to receive BNT162b2 at defined points as part of the study.\n\nIn order to describe the boostability of BNT162, and potential heterologous protection against emerging SARS-CoV-2 VOCs, an additional dose of BNT162b2 at 30 µg will be given to Phase 1 participants approximately 6 to 12 months after their second dose of BNT162b1 or BNT162b2. This will provide an early assessment of the safety of a third dose of BNT162, as well as its immunogenicity.\n\nThe assessment of boostability will be further expanded in a subset of Phase 3 participants at selected sites in the US who will receive a third dose of BNT162b2 at 30 µg or a third and potentially a fourth dose of prototype BNT162b2VOC at 30 µg (BNT162b2s01, based upon the South African variant and hereafter referred to as BNT162b2SA). A further subset of Phase 3 participants will receive a third, lower, dose of BNT162b2 at 5 or 10 µg.\n\nTo further describe potential homologous and heterologous protection against emerging SARS-CoV-2 VOCs, a new cohort of participants will be enrolled who are COVID-19 vaccine-naïve (ie, BNT162b2-naïve) and have not experienced COVID-19. They will receive BNT162b2SA given as a 2-dose series, separated by 21 days.\n\nTo reflect current and anticipated recommendations for COVID 19 vaccine boosters, participants in C4591001 who meet specified recommendations and have not already received one, will be offered a third dose of BNT162b2 after their second dose of BNT162."
+    },
+    "conditionsModule": {
+      "conditions": ["SARS-CoV-2 Infection", "COVID-19"],
+      "keywords": ["COVID-19", "Coronavirus", "Vaccine", "SARS-CoV-2", "RNA Vaccine"]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": ["PHASE2", "PHASE3"],
+      "designInfo": {
+        "allocation": "RANDOMIZED",
+        "interventionModel": "PARALLEL",
+        "primaryPurpose": "PREVENTION",
+        "maskingInfo": {
+          "masking": "TRIPLE",
+          "whoMasked": ["PARTICIPANT", "CARE_PROVIDER", "INVESTIGATOR"]
+        }
+      },
+      "enrollmentInfo": {
+        "count": 46969,
+        "type": "ACTUAL"
+      }
+    },
+    "armsInterventionsModule": {
+      "armGroups": [
+        {
+          "label": "10 µg dose, 18-55 years of age (2 doses)",
+          "type": "EXPERIMENTAL",
+          "interventionNames": ["Biological: BNT162b1", "Biological: BNT162b2"]
+        },
+        {
+          "label": "20 µg dose, 18-55 years of age (2 doses)",
+          "type": "EXPERIMENTAL",
+          "interventionNames": ["Biological: BNT162b1", "Biological: BNT162b2"]
+        },
+        {
+          "label": "30 µg dose, 18-55 years of age (2 doses)",
+          "type": "EXPERIMENTAL",
+          "interventionNames": ["Biological: BNT162b1", "Biological: BNT162b2"]
+        }
+      ],
+      "interventions": [
+        {
+          "type": "BIOLOGICAL",
+          "name": "BNT162b1",
+          "description": "Intramuscular injection",
+          "armGroupLabels": [
+            "10 µg dose, 18-55 years of age (2 doses)",
+            "10 µg dose, 65-85 years of age (2 doses)",
+            "100 µg dose, 18-55 years of age (2 doses)"
+          ]
+        },
+        {
+          "type": "BIOLOGICAL",
+          "name": "BNT162b2",
+          "description": "Intramuscular injection",
+          "armGroupLabels": [
+            "10 µg dose, 18-55 years of age (2 doses)",
+            "10 µg dose, 65-85 years of age (2 doses)",
+            "20 µg dose, 18-55 years of age (2 doses)"
+          ]
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Percentage of Participants With Local Reactions Within 7 Days After Dose 1: Phase 1",
+          "description": "Local reactions included redness, swelling and, pain at the injection site, recorded by participants in an electronic diary (e-diary). Redness and swelling were measured and recorded in measuring device units. 1 measuring device unit =0.5 centimeter (cm). Redness and swelling were graded as mild (greater than \\[\\>\\] 2.0 to 5.0 cm), moderate (\\> 5.0 to 10.0 cm), severe (\\>10.0 cm) and Grade 4 (necrosis or exfoliative dermatitis for redness and necrosis for swelling). Pain at injection site was graded as mild (does not interfere with activity), moderate (interferes with activity), severe (prevents daily activity) and Grade 4 (emergency room visit or hospitalization for severe pain).",
+          "timeFrame": "Within 7 days after Dose 1"
+        },
+        {
+          "measure": "Percentage of Participants With Local Reactions Within 7 Days After Dose 2: Phase 1",
+          "description": "Local reactions included redness, swelling and, pain at the injection site, recorded by participants in an e-diary. Redness and swelling were measured and recorded in measuring device units. 1 measuring device unit =0.5 cm. Redness and swelling were graded as mild (\\> 2.0 to 5.0 cm), moderate (\\> 5.0 to 10.0 cm), severe (\\>10.0 cm) and Grade 4 (necrosis or exfoliative dermatitis for redness and necrosis for swelling). Pain at injection site was graded as mild (does not interfere with activity), moderate (interferes with activity), severe (prevents daily activity) and Grade 4 (emergency room visit or hospitalization for severe pain).",
+          "timeFrame": "Within 7 days after Dose 2"
+        }
+      ],
+      "secondaryOutcomes": [
+        {
+          "measure": "Geometric Mean Titers (GMTs) of Severe Acute Respiratory Syndrome Coronavirus 2 Neutralizing Titers: Phase 1",
+          "description": "GMTs of severe acute respiratory syndrome coronavirus 2 neutralizing titers were reported in this outcome measure. SARS-CoV-2 neutralization assay - NT50 and SARS-CoV-2 neutralization assay - NT90 were evaluated and reported in this outcome measure.",
+          "timeFrame": "7, 21 days after Dose 1; 7, 14 days and 1, 6 months after Dose 2"
+        },
+        {
+          "measure": "Geometric Mean Concentrations (GMCs) of Severe Acute Respiratory Syndrome Coronavirus 2: S1-binding and RBD-binding IgG Level Assay: Phase 1",
+          "description": "GMCs of severe acute respiratory syndrome coronavirus S1-binding and RBD-binding IgG level were reported in this outcome measure.",
+          "timeFrame": "7, 21 days after Dose 1; 7, 14 days and 1, 6 months after Dose 2"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Inclusion Criteria:\n\n• Male or female participants between the ages of 18 and 55 years, inclusive, 65 and 85 years, inclusive, or ≥12 years, inclusive, at randomization (dependent upon study phase). For the boostability and protection-against-VOCs subset: Existing participants enrolled to receive a third dose of BNT162b2 at 30 µg or BNT162b2SA; male or female participants between the ages of 18 and 55 years, inclusive, at rerandomization.\n\nNewly enrolled participants enrolled to receive 2 doses of BNT162b2SA; male or female participants between the ages of 18 and 55 years, inclusive, at enrollment.\n\nExisting participants enrolled to receive a third dose of BNT162b2 at 5 or 10 µg; male or female participants ≥18 years at rerandomization.\n\nNote that participants \\<18 years of age cannot be enrolled in the EU.\n\n* Participants who are willing and able to comply with all scheduled visits, vaccination plan, laboratory tests, lifestyle considerations, and other study procedures.\n* Healthy participants who are determined by medical history, physical examination, and clinical judgment of the investigator to be eligible for inclusion in the study.\n* Participants who, in the judgment of the investigator, are at risk for acquiring COVID-19.\n* Boostability and protection-against-VOCs existing participant subset only: Participants who provided a serum sample at Visit 3, with Visit 3 occurring within the protocol-specified window.\n* Capable of giving personal signed informed consent\n\nExclusion Criteria:\n\n* Other medical or psychiatric condition including recent (within the past year) or active suicidal ideation/behavior or laboratory abnormality that may increase the risk of study participation or, in the investigator's judgment, make the participant inappropriate for the study.\n* Phases 1 and 2 only: Known infection with human immunodeficiency virus (HIV), hepatitis C virus (HCV), or hepatitis B virus (HBV).\n* History of severe adverse reaction associated with a vaccine and/or severe allergic reaction (eg, anaphylaxis) to any component of the study intervention(s).\n* Receipt of medications intended to prevent COVID 19.\n* Previous clinical (based on COVID-19 symptoms/signs alone, if a SARS-CoV-2 NAAT result was not available) or microbiological (based on COVID-19 symptoms/signs and a positive SARS-CoV-2 NAAT result) diagnosis of COVID 19\n* Phase 1 only: Individuals at high risk for severe COVID-19, including those with any of the following risk factors:\n\n  * Hypertension\n  * Diabetes mellitus\n  * Chronic pulmonary disease\n  * Asthma\n  * Current vaping or smoking\n  * History of chronic smoking within the prior year\n  * BMI \\>30 kg/m2\n  * Anticipating the need for immunosuppressive treatment within the next 6 months\n* Phase 1 only: Individuals currently working in occupations with high risk of exposure to SARS-CoV-2 (eg, healthcare worker, emergency response personnel).\n* Immunocompromised individuals with known or suspected immunodeficiency, as determined by history and/or laboratory/physical examination.\n* Phase 1 only: Individuals with a history of autoimmune disease or an active autoimmune disease requiring therapeutic intervention.\n* Bleeding diathesis or condition associated with prolonged bleeding that would, in the opinion of the investigator, contraindicate intramuscular injection.\n* Women who are pregnant or breastfeeding.\n* Previous vaccination with any coronavirus vaccine.\n* Individuals who receive treatment with immunosuppressive therapy, including cytotoxic agents or systemic corticosteroids, eg, for cancer or an autoimmune disease, or planned receipt throughout the study.\n* Phase 1 only: Regular receipt of inhaled/nebulized corticosteroids.\n* Receipt of blood/plasma products or immunoglobulin, from 60 days before study intervention administration or planned receipt throughout the study.\n* Participation in other studies involving study intervention within 28 days prior to study entry through and including 6 months after the last dose of study intervention, with the exception of non-Pfizer interventional studies for prevention of COVID 19, which are prohibited throughout study participation.\n* Previous participation in other studies involving study intervention containing lipid nanoparticles.\n* Phase 1 only: Positive serological test for SARS-CoV-2 IgM and/or IgG antibodies at the screening visit.\n* Phase 1 only: Any screening hematology and/or blood chemistry laboratory value that meets the definition of a ≥ Grade 1 abnormality.\n* Phase 1 only: Positive test for HIV, hepatitis B surface antigen (HBsAg), hepatitis B core antibodies (HBc Abs), or hepatitis C virus antibodies (HCV Abs) at the screening visit.\n* Phase 1 only: SARS-CoV-2 NAAT-positive nasal swab within 24 hours before receipt of study intervention.\n* Investigator site staff or Pfizer employees directly involved in the conduct of the study, site staff otherwise supervised by the investigator, and their respective family members.",
+      "healthyVolunteers": true,
+      "sex": "ALL",
+      "minimumAge": "12 Years",
+      "stdAges": ["CHILD", "ADULT", "OLDER_ADULT"]
+    },
+    "contactsLocationsModule": {},
+    "referencesModule": {},
+    "ipdSharingStatementModule": {
+      "ipdSharing": "NO"
+    }
+  },
+  "resultsSection": {
+    "participantFlowModule": {
+      "preAssignmentDetails": "A total of 46934 participants were randomized and assigned to the treatment. The study consisted of 2 parts. Phase 1: to identify preferred vaccine candidate and dose level of candidate vaccine; Phase 2/3: an expanded cohort and efficacy part.",
+      "groups": [
+        {
+          "id": "FG000",
+          "title": "Phase 1:BNT162b1 10 mcg Dose: 18-85 Years of Age",
+          "description": "Participants aged 18-85 years were randomized to receive 2 doses of 10 microgram BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study."
+        },
+        {
+          "id": "FG001",
+          "title": "Phase 1:BNT162b1 20 mcg Dose:18-85 Years of Age",
+          "description": "Participants aged 18-85 years were randomized to receive 2 doses of 20 microgram BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study."
+        },
+        {
+          "id": "FG002",
+          "title": "Phase 1:BNT162b1 30 mcg Dose:18-85 Years of Age",
+          "description": "Participants aged 18-85 years were randomized to receive 2 doses of 30 microgram BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study."
+        }
+      ],
+      "periods": [
+        {
+          "title": "Phase 1",
+          "milestones": [
+            {
+              "type": "STARTED",
+              "achievements": [
+                {
+                  "groupId": "FG000",
+                  "numSubjects": "24"
+                },
+                {
+                  "groupId": "FG001",
+                  "numSubjects": "24"
+                },
+                {
+                  "groupId": "FG002",
+                  "numSubjects": "24"
+                }
+              ]
+            },
+            {
+              "type": "COMPLETED",
+              "achievements": [
+                {
+                  "groupId": "FG000",
+                  "numSubjects": "14"
+                },
+                {
+                  "groupId": "FG001",
+                  "numSubjects": "18"
+                },
+                {
+                  "groupId": "FG002",
+                  "numSubjects": "13"
+                }
+              ]
+            },
+            {
+              "type": "NOT COMPLETED",
+              "achievements": [
+                {
+                  "groupId": "FG000",
+                  "numSubjects": "10"
+                },
+                {
+                  "groupId": "FG001",
+                  "numSubjects": "6"
+                },
+                {
+                  "groupId": "FG002",
+                  "numSubjects": "11"
+                }
+              ]
+            }
+          ],
+          "dropWithdraws": []
+        }
+      ]
+    },
+    "baselineCharacteristicsModule": {},
+    "outcomeMeasuresModule": {
+      "outcomeMeasures": [
+        {
+          "type": "PRIMARY",
+          "title": "Percentage of Participants With Local Reactions Within 7 Days After Dose 1: Phase 1",
+          "description": "Local reactions included redness, swelling and, pain at the injection site, recorded by participants in an electronic diary (e-diary). Redness and swelling were measured and recorded in measuring device units. 1 measuring device unit =0.5 centimeter (cm). Redness and swelling were graded as mild (greater than \\[\\>\\] 2.0 to 5.0 cm), moderate (\\> 5.0 to 10.0 cm), severe (\\>10.0 cm) and Grade 4 (necrosis or exfoliative dermatitis for redness and necrosis for swelling). Pain at injection site was graded as mild (does not interfere with activity), moderate (interferes with activity), severe (prevents daily activity) and Grade 4 (emergency room visit or hospitalization for severe pain).",
+          "populationDescription": "Safety population included all randomized participants who received at least 1 dose of the study intervention. Here, ''Number of Participants Analyzed'' (N) signifies the participant was in the safety population and had e-diary data after Dose 1.",
+          "reportingStatus": "POSTED",
+          "paramType": "NUMBER",
+          "dispersionType": "95% Confidence Interval",
+          "unitOfMeasure": "Percentage of participants",
+          "timeFrame": "Within 7 days after Dose 1",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "BNT162b1 10 mcg Dose: 18-55 Years of Age",
+              "description": "Participants aged 18-55 years were randomized to receive 2 doses of 10 mcg BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study."
+            },
+            {
+              "id": "OG001",
+              "title": "BNT162b1 20 mcg Dose: 18-55 Years of Age",
+              "description": "Participants aged 18-55 years were randomized to receive 20 microgram BNT162b1 vaccine 250 microgram/0.5 milliliter intramuscularly separated by 21 days interval as part of this study."
+            },
+            {
+              "id": "OG002",
+              "title": "BNT162b1 30 mcg Dose: 18-55 Years of Age",
+              "description": "Participants aged 18-55 years were randomized to receive 30 microgram BNT162b1 vaccine 250 microgram/0.5 milliliter intramuscularly separated by 21 days interval as part of this study."
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "title": "Redness: Mild",
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "0",
+                      "lowerLimit": "0.0",
+                      "upperLimit": "26.5"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "0",
+                      "lowerLimit": "0.0",
+                      "upperLimit": "26.5"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "8.3",
+                      "lowerLimit": "0.2",
+                      "upperLimit": "38.5"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": []
+        }
+      ]
+    },
+    "adverseEventsModule": {
+      "frequencyThreshold": "1",
+      "timeFrame": "AEs: From Dose 1 to 1 Month after each dose (up to a maximum of 2 years); SAEs: From Dose 1 to 6 Months after each dose (up to a maximum of 2 years); Local reactions/systemic events: Within 7 days after each dose",
+      "description": "Same event may appear as both AE and SAE but are distinct events. An event may be categorized as serious in 1 subject and non-serious in another, or a subject may have experienced both AE, non-SAE. For SSB, SSC, SSE, SSF: MedDRA version used is v25.1 and SSD v26.0 is used. The \"PC Fup Period\" was approx. 18 months for BNT162b2 group(approx.6 months of blinded Fup period + approx.12 months OL follow up period before first booster dose), approx. 6 months for Placebo group (before cross-over).",
+      "eventGroups": [
+        {
+          "id": "EG000",
+          "title": "PC Fup Period - Ph1 - BNT162b1 10 mcg",
+          "description": "Participants were randomized to receive 2 doses of 10 microgram BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study.",
+          "deathsNumAffected": 0,
+          "deathsNumAtRisk": 24,
+          "seriousNumAffected": 0,
+          "seriousNumAtRisk": 24,
+          "otherNumAffected": 23,
+          "otherNumAtRisk": 24
+        },
+        {
+          "id": "EG001",
+          "title": "PC Fup Period - Ph1 - BNT162b1 20 mcg",
+          "description": "Participants were randomized to receive 2 doses of 20 microgram BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study.",
+          "deathsNumAffected": 0,
+          "deathsNumAtRisk": 24,
+          "seriousNumAffected": 0,
+          "seriousNumAtRisk": 24,
+          "otherNumAffected": 23,
+          "otherNumAtRisk": 24
+        },
+        {
+          "id": "EG002",
+          "title": "PC Fup Period - Ph1 - BNT162b1 30 mcg",
+          "description": "Participants were randomized to receive 2 doses of 30 microgram BNT162b1 vaccine (250 microgram/0.5 milliliter) intramuscularly separated by 21 days interval as part of this study.",
+          "deathsNumAffected": 0,
+          "deathsNumAtRisk": 24,
+          "seriousNumAffected": 0,
+          "seriousNumAtRisk": 24,
+          "otherNumAffected": 23,
+          "otherNumAtRisk": 24
+        }
+      ],
+      "seriousEvents": [],
+      "otherEvents": [
+        {
+          "term": "Anaemia",
+          "organSystem": "Blood and lymphatic system disorders",
+          "sourceVocabulary": "MedDRA v25.1",
+          "assessmentType": "NON_SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 0,
+              "numAtRisk": 24
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 1,
+              "numAtRisk": 24
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 0,
+              "numAtRisk": 24
+            }
+          ]
+        },
+        {
+          "term": "Tachycardia",
+          "organSystem": "Cardiac disorders",
+          "sourceVocabulary": "MedDRA v25.1",
+          "assessmentType": "NON_SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 1,
+              "numAtRisk": 24
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 0,
+              "numAtRisk": 24
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 2,
+              "numAtRisk": 24
+            }
+          ]
+        },
+        {
+          "term": "Eye paraesthesia",
+          "organSystem": "Eye disorders",
+          "sourceVocabulary": "MedDRA v25.1",
+          "assessmentType": "NON_SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 1,
+              "numAtRisk": 24
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 0,
+              "numAtRisk": 24
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 0,
+              "numAtRisk": 24
+            }
+          ]
+        }
+      ]
+    },
+    "moreInfoModule": {}
+  },
+  "hasResults": true
+}

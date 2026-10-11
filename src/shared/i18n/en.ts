@@ -1161,7 +1161,8 @@ export const en = {
   "consent.flow.find-sources": "Find sources",
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
-  "consent.data.work-ids": "The DOI, arXiv ID or PubMed ID of each work you add",
+  "consent.data.work-ids":
+    "The DOI, arXiv ID, PubMed ID, label set ID or NCT number of each work you add",
   "consent.flow.edits": "Edit with AI",
   "consent.flow.edits.purpose": "change the text you select as you ask",
   "consent.data.selection": "The text you select, with the paragraphs it is in, each time you ask",
@@ -2093,9 +2094,9 @@ export const en = {
 
   "sources.title": "Find sources",
   "sources.intro":
-    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references.",
+    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed or ClinicalTrials.gov below to find drug labels and clinical trials.",
   "sources.search.label": "Search for sources",
-  "sources.search.placeholder": "Topic, title, DOI or arXiv ID",
+  "sources.search.placeholder": "Topic, title, DOI, arXiv ID or NCT number",
   "sources.search": "Search",
   "sources.searching": "Searching…",
   "sources.close": "Close Find sources",
@@ -2153,6 +2154,22 @@ export const en = {
   "sources.provider.pubmed.about":
     "Biomedical and life-science papers, with open full text from PubMed Central.",
   "sources.provider.crossref.about": "Looks up a DOI you type.",
+  "sources.provider.openfda.about":
+    "FDA drug labels, section by section. Search by drug name or set id. Its records are CC0; it says not to rely on it for decisions about medical care. Asked only when you choose it.",
+  "sources.provider.dailymed.about":
+    "The full drug labels filed with the FDA, from the National Library of Medicine, with their section numbers. Search by drug name or set id. Asked only when you choose it.",
+  "sources.provider.clinicaltrials.about":
+    "Clinical trial records: arms, outcomes, eligibility criteria and posted results. Search by condition or drug, or type an NCT number. Asked only when you choose it.",
+  "sources.notice": "The source says: {notice}",
+  "sources.key.open": "{provider} key…",
+  "sources.key.title": "Your own {provider} key",
+  "sources.key.hint":
+    "Optional. A key gives {provider} a higher daily limit. It is kept in your keychain and sent only to {provider}.",
+  "sources.key.placeholder": "Paste your key",
+  "sources.key.save": "Save key",
+  "sources.key.remove": "Remove key",
+  "sources.key.set": "Key saved",
+  "sources.key.failed": "Couldn't save the key",
   "sources.call.running": "Finding sources for “{query}”…",
   "sources.call.done": "Found sources for “{query}”",
   "sources.call.found.one": "1 found",

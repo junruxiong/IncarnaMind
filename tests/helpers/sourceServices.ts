@@ -2,8 +2,9 @@
  * A local stand-in for Find sources' providers (#296), answering from
  * answers recorded from the real services on 2026-10-11
  * (tests/fixtures/sources/), trimmed: OpenAlex at /openalex, arXiv (its API
- * and its PDFs) at /arxiv, NCBI's E-utilities at /pubmed and Crossref at
- * /crossref. Open copies a recorded answer points to (a publisher's PDF or
+ * and its PDFs) at /arxiv, NCBI's E-utilities at /pubmed, Crossref at
+ * /crossref, openFDA's drug labels at /openfda, DailyMed at /dailymed and
+ * ClinicalTrials.gov at /clinicaltrials. Open copies a recorded answer points to (a publisher's PDF or
  * web page) are served at /files; "paywall.pdf" answers with a sign-in page,
  * as a paywall does. It records every request, so a test can check what was sent, and to
  * whom. No test reaches the real services. Free of the test runner, so the
@@ -20,6 +21,8 @@ export interface SourceRequest {
   /** The path and query, as sent. */
   path: string;
   userAgent: string;
+  /** As sent: a test checks that a key goes in a header and never in the address. */
+  headers: Record<string, string | string[] | undefined>;
   bodyLength: number;
 }
 
@@ -27,7 +30,15 @@ export interface SourceServices {
   /** e.g. "http://127.0.0.1:51234". */
   readonly url: string;
   /** Where each provider is, for `CoreAdapters.sourceProviders`. */
-  readonly providers: { openalex: string; arxiv: string; pubmed: string; crossref: string };
+  readonly providers: {
+    openalex: string;
+    arxiv: string;
+    pubmed: string;
+    crossref: string;
+    openfda: string;
+    dailymed: string;
+    clinicaltrials: string;
+  };
   /** Every request, in order. */
   readonly requests: SourceRequest[];
   /** Answers every request to this provider ("openalex", "arxiv", "pubmed", "crossref", "files") with this status from now on; null answers again. */
@@ -93,6 +104,18 @@ const PMC: Readonly<Record<string, string>> = {
   PMC10257351: "pmc-no-body.xml",
 };
 
+/** DailyMed's labels, by set id. */
+const DAILYMED_LABELS: Readonly<Record<string, string>> = {
+  "e087ce3b-8d7f-43a3-8d20-54513da7617d": "dailymed-label-metformin.xml",
+  "0058175f-3474-40c3-a046-6cfaec86d84b": "dailymed-label-aspirin.xml",
+};
+
+/** ClinicalTrials.gov's study records, by NCT number. */
+const CLINICAL_TRIALS: Readonly<Record<string, string>> = {
+  NCT04368728: "clinicaltrials-study-results.json",
+  NCT04625985: "clinicaltrials-study-no-results.json",
+};
+
 const EMPTY_FEED =
   '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>';
 
@@ -121,6 +144,7 @@ export async function startSourceServices(): Promise<SourceServices> {
         method: request.method ?? "",
         path,
         userAgent: request.headers["user-agent"] ?? "",
+        headers: request.headers,
         bodyLength,
       });
       const url = new URL(path, "http://localhost");
@@ -175,6 +199,74 @@ export async function startSourceServices(): Promise<SourceServices> {
             ? send(response, 200, "application/json", fixture("crossref-frontiers.json"))
             : notFound();
         }
+        case "openfda": {
+          if (tail !== "drug/label.json") return notFound();
+          const search = url.searchParams.get("search") ?? "";
+          const answers = ["openfda-label-metformin.json", "openfda-label-aspirin.json"].map(
+            (file) =>
+              JSON.parse(fixture(file)) as {
+                meta: unknown;
+                results: { set_id: string; openfda: { generic_name?: string[] } }[];
+              },
+          );
+          const setId = /set_id:"([^"]+)"/.exec(search)?.[1];
+          const word = /aspirin/i.test(search)
+            ? "aspirin"
+            : /metformin/i.test(search)
+              ? "metformin"
+              : "";
+          const results = answers.flatMap((answer) =>
+            answer.results.filter((label) =>
+              setId
+                ? label.set_id === setId
+                : word !== "" &&
+                  label.openfda.generic_name?.some((name) => name.toLowerCase().includes(word)),
+            ),
+          );
+          if (results.length === 0) {
+            return send(
+              response,
+              404,
+              "application/json",
+              '{"error":{"code":"NOT_FOUND","message":"No matches found!"}}',
+            );
+          }
+          return send(
+            response,
+            200,
+            "application/json",
+            JSON.stringify({ meta: answers[0]?.meta, results }),
+          );
+        }
+        case "dailymed": {
+          if (tail === "spls.json") {
+            const setId = url.searchParams.get("setid");
+            const name = (url.searchParams.get("drug_name") ?? "").toLowerCase();
+            const data = ["dailymed-spls-metformin.json", "dailymed-spls-aspirin.json"]
+              .flatMap(
+                (file) =>
+                  (JSON.parse(fixture(file)) as { data: { setid: string; title: string }[] }).data,
+              )
+              .filter((entry) =>
+                setId ? entry.setid === setId : entry.title.toLowerCase().includes(name),
+              );
+            return send(response, 200, "application/json", JSON.stringify({ data, metadata: {} }));
+          }
+          // As the real service does: it turns away a request that accepts nothing but XML.
+          if (request.headers.accept === "application/xml") {
+            return send(response, 406, "text/plain", "Not acceptable.");
+          }
+          const label = /^spls\/([^/]+)\.xml$/.exec(tail)?.[1];
+          const file = label ? DAILYMED_LABELS[label] : undefined;
+          return file ? send(response, 200, "application/xml", fixture(file)) : notFound();
+        }
+        case "clinicaltrials": {
+          if (tail === "studies") {
+            return send(response, 200, "application/json", fixture("clinicaltrials-search.json"));
+          }
+          const file = CLINICAL_TRIALS[tail.replace(/^studies\//, "")];
+          return file ? send(response, 200, "application/json", fixture(file)) : notFound();
+        }
         case "files": {
           if (tail === "paywall.pdf") {
             return send(
@@ -204,6 +296,9 @@ export async function startSourceServices(): Promise<SourceServices> {
       arxiv: `${base}/arxiv`,
       pubmed: `${base}/pubmed`,
       crossref: `${base}/crossref`,
+      openfda: `${base}/openfda`,
+      dailymed: `${base}/dailymed`,
+      clinicaltrials: `${base}/clinicaltrials`,
     },
     requests,
     fail(provider, status) {
