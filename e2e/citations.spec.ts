@@ -81,12 +81,13 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
     "When do spring tides happen?",
   );
 
-  // The marker became a Citation whose quote was found on page 2: numbered 1 in the text,
-  // its label naming the Document, the page and the check.
+  // The marker became a Citation whose quote was found on page 2: in the Mind's citation style
+  // in the text (APA 7, the default; the Document has no author or date yet), its label naming
+  // its number, the Document, the page and the check.
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveCount(1);
   await expect(citation).toHaveAttribute("data-check", "found");
-  await expect(citation.getByTestId("citation-chip")).toHaveText("1");
+  await expect(citation.getByTestId("citation-chip")).toHaveText("(Tides, n.d., p. 2)");
   await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
     "aria-label",
     "Citation 1: Tides, p. 2. Quote found on p. 2",

@@ -1941,6 +1941,8 @@ export const en = {
   "citationStyle.keywords": "Bibliography, references, APA, MLA, Chicago, IEEE, GB/T 7714",
   "citationStyle.button": "Citation style: {style}",
   "citationStyle.search": "Search styles…",
+  "citationStyle.current": "The Mind's style now",
+  "citationStyle.credit": "Styles from the Citation Style Language project,",
   "citationStyle.noMatch": "No style matches “{query}”.",
   "citationStyle.changed": "Citation style changed to {style}",
   "citationStyle.failed": "Couldn't change the citation style: {reason}",

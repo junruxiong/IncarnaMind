@@ -44,6 +44,16 @@ It fetches models.dev and LiteLLM's model list (both MIT; their notice is `resou
 
 A weekly workflow (`.github/workflows/catalog-update.yml`, also runnable by hand) does this and opens one pull request, from the branch `automation/catalog-update`, with the diff in its description; the next run updates that pull request instead of opening another, and closes it if the sources match again. A person reviews and merges it. If a default changed, run the evaluation for that model and cite it in the pull request before merging. Pull requests opened with the workflow's token don't start CI by themselves: push an empty commit to the branch, or close and reopen the pull request, to run the checks.
 
+## Citation styles
+
+Citations and the Bibliography are formatted by Hayagriva, the CSL engine of the Typst project, built to WebAssembly with a small binding of our own (ADR-0016). The built module is committed as `resources/citation-styles/engine.wasm`, beside the CSL styles and locales the app ships unmodified, so nothing here needs Rust. Only a change to the binding (`wasm/citation-styles`) does: then run
+
+```
+sh wasm/citation-styles/build.sh
+```
+
+with rustup on the `PATH` (it installs the pinned toolchain), and commit `engine.wasm` and `engine.wasm.sha256`. `--check` builds and compares instead; CI's "Citation-style engine" workflow runs that on every change to either. A change to the engine's output shows in the golden files, `tests/fixtures/citation-styles/golden/`: review the diff, then update them with `npx vitest run tests/core/citationStyleGoldens.test.ts -u`. A new style goes in `resources/citation-styles/styles` exactly as the CSL repository has it, in `src/shared/citationStyles.ts`, and in `resources/notices/citation-styles.txt` with its authors and contributors.
+
 ## Architecture
 
 [`CONTEXT.md`](../CONTEXT.md) is the glossary, and [`docs/adr/`](adr/) records the decisions behind the design, from the local-first Electron app (ADR-0004, ADR-0006) to SQLite storage (ADR-0008) and retrieval (ADR-0009).

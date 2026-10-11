@@ -1,0 +1,32 @@
+name: Citation-style engine
+
+# The citation-style engine (ADR-0016) is built from wasm/citation-styles and committed as
+# resources/citation-styles/engine.wasm, so `npm ci` and the app's build need no Rust. When
+# either changes, this rebuilds it from source with the pinned toolchain and checks the result
+# is byte for byte the committed file.
+on:
+  pull_request:
+    paths:
+      - "wasm/citation-styles/**"
+      - "resources/citation-styles/engine.wasm*"
+      - ".github/workflows/citation-engine.yml"
+  push:
+    branches: [main]
+    paths:
+      - "wasm/citation-styles/**"
+      - "resources/citation-styles/engine.wasm*"
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    name: The committed engine is what its source builds to
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      # rustup comes with the runner; the script installs the pinned toolchain through it.
+      - run: sh wasm/citation-styles/build.sh --check

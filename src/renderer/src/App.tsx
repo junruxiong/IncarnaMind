@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sidebarHandle, useHandle } from "./commands/handles";
 import { useKeymap } from "./commands/keymap";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
+import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
@@ -238,6 +239,7 @@ function Workspace() {
         <TagsDialog />
         <ChatSetupDialog />
         <UsageDataDialog />
+        <CitationStylePickerHost />
         {/* Open after the dialog that triggered the request, so they show on top of it. */}
         <ConsentDialog />
         <MeetingNoticeDialog />
