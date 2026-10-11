@@ -31,6 +31,7 @@ import { FootnoteKeys } from "../editor/footnoteSchema";
 import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
+import { MindOutline } from "../editor/MindOutline";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
@@ -53,6 +54,7 @@ import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { useT } from "../i18n";
 import { useMeetingOf } from "../meetings";
 import { isWritingIn } from "../mindStatus";
+import { useMindTools } from "../mindTools";
 import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
@@ -406,6 +408,7 @@ function MindEditorView({
     editor,
     selector: ({ editor: current }) => isEmptyMind(current.state.doc),
   });
+  const outlineShown = useMindTools((state) => state.outlineMindId === mindId);
   const guide = useGettingStarted() !== null && empty && !isExample && !readOnly;
 
   return (
@@ -442,6 +445,9 @@ function MindEditorView({
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
       {!readOnly && <LinkBubble editor={editor} />}
+      {outlineShown && (
+        <MindOutline editor={editor} onClose={() => useMindTools.getState().hideOutline()} />
+      )}
       <FootnotePopover editor={editor} citationView={citationView} />
       {editingMath !== null && (
         <MathEditor
