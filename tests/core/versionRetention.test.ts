@@ -278,6 +278,35 @@ describe("Versions retained by features other than Citations", { timeout: 30_000
     expect(released()).toEqual([]);
   });
 
+  test("a Location a newer version wrote stays when the same version is retained again", async () => {
+    const dataDir = await createTempDataFolder();
+    startCore(dataDir).close();
+    // As a later sync might bring it: a Location of a kind this version doesn't know.
+    const transcript = JSON.stringify({ kind: "time", from: 120, to: 135 });
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO retained_versions (id, kind, owner_id, document_id, content_hash,
+           page_from, page_to, location, created_at, updated_at)
+         VALUES ('a8d3c6f0-5b1e-4c2a-9f7d-0e4b2a6c8d10', 'check-result', 'result-1',
+           'document-1', 'abc', 3, 3, ?, '2026-10-06T09:00:00.000Z', '2026-10-06T09:00:00.000Z')`,
+        [transcript],
+      );
+    } finally {
+      db.close();
+    }
+    const core = startCore(dataDir);
+    const version = { documentId: "document-1", contentHash: "abc", pageFrom: 3, pageTo: 3 };
+    // Read here, it has no Location; retained again as read, its row is left as it is.
+    expect(core.retention.retainedBy("check-result", "result-1")).toEqual([
+      { ...version, location: null },
+    ]);
+    core.retention.retain("check-result", "result-1", [version]);
+    expect(queryDatabase(dataDir, "SELECT location, deleted_at FROM retained_versions")).toEqual([
+      { location: transcript, deleted_at: null },
+    ]);
+  });
+
   test("what isn't a retained version is refused", async () => {
     const core = startCore(await createTempDataFolder());
     const version = { documentId: "document-1", contentHash: "abc" };
