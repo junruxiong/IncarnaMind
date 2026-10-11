@@ -1813,14 +1813,12 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Opens a live Document's file where it is. Missing and unreachable files
-     * are refused (NotFoundError), and so is a Word, PowerPoint or Excel file
-     * over the size limit (ExtractionError "too-large"), on its size alone:
-     * nothing is read, as in processing.
+     * are refused (NotFoundError), and an Office file over the size limit
+     * (ExtractionError "too-large") before any byte is read.
      */
     async openFile(idInput: unknown): Promise<DocumentFile> {
       const row = await openablePath(idInput);
       if (isPackageKind(row.kind as DocumentKind)) {
-        // A file that can't be looked at is left to `openFile` to refuse as missing.
         const size = await stat(row.path).then(
           (stats) => stats.size,
           () => null,

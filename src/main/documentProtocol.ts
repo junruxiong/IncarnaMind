@@ -4,8 +4,6 @@
  * `documentFileUrl(id)`, and the bytes stream straight from the file, where
  * the User keeps it. A Document whose file is missing or can't be reached is
  * a 404: the viewer then shows the text IncarnaMind kept (`readDocumentText`).
- * A Word, PowerPoint or Excel file over the size limit is a 413, without a
- * byte of it read.
  * A Markdown Document's pictures beside it are served under its URL
  * (`documentImageUrl`), only from its own folder, and only images.
  */
@@ -83,12 +81,8 @@ export function serveDocumentFiles(core: Core, devServerOrigin: string | null): 
       return new Response(stream, { status: 200, headers });
     } catch (error) {
       if (error instanceof NotFoundError) return new Response(null, { status: 404, headers });
-      // An Office file over the size limit: the viewer shows the reason processing gives.
       if (error instanceof ExtractionError && error.reason === "too-large") {
-        return new Response(error.message, {
-          status: 413,
-          headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" },
-        });
+        return new Response(null, { status: 413, headers });
       }
       console.error(error);
       return new Response(null, { status: 500, headers });

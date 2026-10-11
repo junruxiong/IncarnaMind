@@ -6,8 +6,6 @@ import { createTempDataFolder, startCore } from "../helpers/core";
 import { addAndProcess, createSourceFolder, writeSourceFile } from "../helpers/documents";
 import { docxOf } from "../helpers/office";
 
-// The adapter that reads a Document's file for the viewer, watched: an oversized
-// Office file must be refused without it being asked for.
 const reads = vi.hoisted(() => ({ openFile: vi.fn() }));
 vi.mock("../../src/core/documents/files", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/core/documents/files")>();
@@ -19,7 +17,7 @@ describe("opening an Office file for the viewer", { timeout: 30_000 }, () => {
   test("a Word, PowerPoint or Excel file over the limit is refused on its size, with nothing read; one under it opens", async () => {
     const sources = await createSourceFolder();
     const core = startCore(await createTempDataFolder());
-    // Sparse: the limit and a byte, with nothing written on disk.
+    // Sparse: nothing is written on disk.
     const huge = await writeSourceFile(sources, "Huge.docx", "");
     await truncate(huge, MAX_PACKAGE_BYTES + 1);
     const normal = await writeSourceFile(sources, "Review.docx", docxOf([{ text: "Hello" }]));
