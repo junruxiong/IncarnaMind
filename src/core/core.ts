@@ -89,6 +89,7 @@ import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
 import {
+  createReferenceImport,
   createReferences,
   REFERENCE_LOOKUP_SENDS,
   REFERENCE_SERVICE_URLS,
@@ -831,6 +832,16 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
   });
+  // Importing references (#287) reads a file the User chose and sends nothing.
+  const referenceImport = createReferenceImport({
+    db,
+    now,
+    documents: () => documents.list({}),
+    document: (id) => documents.get(id),
+    addDocuments: (paths) => addDocuments(paths),
+    changed: (list) => events.emit("references.changed", list),
+    progress: (done, total) => events.emit("references.importProgress", { done, total }),
+  });
   // Look up goes to Crossref or arXiv only when the User asks, so the flow goes nowhere until
   // then; the Privacy page lists each service once the User has decided on it.
   consent.registry.register({
@@ -1051,6 +1062,16 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
 
+  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+    const batchId = batches.begin(library.target(options));
+    const since = now();
+    const result = await documents
+      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .finally(() => batches.done(batchId));
+    usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
+    return { ...result, batchId };
+  };
+
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => {
@@ -1117,15 +1138,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
-    addDocuments: async (paths, options) => {
-      const batchId = batches.begin(library.target(options));
-      const since = now();
-      const result = await documents
-        .add(paths, (documentId) => batches.added(batchId, documentId))
-        .finally(() => batches.done(batchId));
-      usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
-      return { ...result, batchId };
-    },
+    addDocuments,
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
         throw new InvalidInputError("There is no text to save.");
@@ -1180,6 +1193,13 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    importReferences: (path) => referenceImport.run(path),
+    undoReferenceImport: async (importId) => {
+      referenceImport.undo(importId);
+    },
+    addImportedReferenceFiles: (importId) => referenceImport.addFiles(importId),
+    listUnmatchedReferences: async () => referenceImport.unmatched(),
+    addReferenceFile: (recordId, path) => referenceImport.addFile(recordId, path),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
     createExamples: async (group) => examples.create(group),
