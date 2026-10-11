@@ -842,7 +842,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 43,
+    version: 45,
     description: "The record of AI use: what the AI wrote into a Mind and what became of it (#292)",
     sql: `
       -- One row per AI insertion (or rejected proposal) in a Mind (src/core/aiUse).
