@@ -237,6 +237,20 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (status) => events.emit("aiUse.changed", status),
     reportError: (error) => console.error(error),
   });
+  // A writing suggestion the User accepted (#282). It holds no Block ids: the words went into
+  // the paragraph being written, so there is nothing to follow, only the use to record.
+  events.on("suggestion.accepted", (accepted) => {
+    aiUse.record([
+      {
+        mindId: accepted.mindId,
+        kind: "suggestion-accepted",
+        providerId: accepted.providerId,
+        modelId: accepted.modelId,
+        characters: accepted.characters,
+        occurredAt: accepted.acceptedAt,
+      },
+    ]);
+  });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
   const capture = adapters.audioCapture;
