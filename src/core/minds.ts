@@ -91,6 +91,19 @@ export function createMinds(db: Database, now: () => string) {
   return {
     get,
 
+    /**
+     * A Mind's name, and when it was deleted (null: it isn't), for what points at it, as
+     * `locate` gives a conversation's; null for one deleted permanently or not on this computer.
+     */
+    locate(mindId: string): { name: string; deletedAt: string | null } | null {
+      const row = db.get<{ name: string; deleted_at: string | null }>(
+        `SELECT CASE WHEN title <> '' THEN title ELSE auto_title END AS name, deleted_at
+         FROM minds WHERE id = ? AND purged_at IS NULL`,
+        [mindId],
+      );
+      return row ? { name: row.name, deletedAt: row.deleted_at } : null;
+    },
+
     /** Makes a Mind; its Folder, if any, is the caller's to have checked. */
     create(input: Required<CreateMindInput>): Mind {
       const { title, kind, folderId } = input;

@@ -1,10 +1,12 @@
 /**
- * Asking Questions (ADR-0007): the core builds the Question context from the
- * Mind's Yjs document, has the Answer engine stream an Answer, and writes it
- * into the document as it arrives, right after its Question, so every window
- * sees it grow: its text, its Citations (see ./citations), and the Tools it
- * called (searches, and the Skills it used). It also pushes the Answer event
- * stream for UI state and the evaluation.
+ * Asking Questions (ADR-0007): the core builds the Question context, has the
+ * Answer engine stream an Answer, and writes it as it arrives, right after its
+ * Question, so every window sees it grow: its text, its Citations (see
+ * ./citations), and the Tools it called (searches, and the Skills it used). An
+ * Answer has one of two homes: its Mind's Yjs document, or one of the
+ * assistant's conversations (../conversations, ADR-0017), whose rows keep its
+ * Markdown and Citations. It also pushes the Answer event stream for UI state
+ * and the evaluation.
  *
  * Skills: the instructions list the enabled Skills' names and descriptions,
  * and the model loads one with `use_skill` when it needs it. A Skill the
@@ -33,13 +35,17 @@ import {
   ANSWER_BLOCK,
   type AnswerAttributes,
   type AnswerPhase,
+  type AnswerPlace,
   type AnswerToolCall,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
   type ChatReadiness,
   type CitationSupport,
+  type ConversationAskResult,
+  type ConversationQuestion,
   type Effect,
+  type MarkedCitation,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -49,6 +55,7 @@ import {
   type ToolCallApproval,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
+import type { AnswerWrite, QuestionInput, Turn } from "../conversations";
 import type { WindowedPassage } from "../documents/search";
 import { ChatNotReadyError, InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { createEventHub } from "../events";
@@ -79,6 +86,7 @@ import {
   contentHash,
   createElement,
   findBlock,
+  type NodeJSON,
   syncContent,
   textAttribute,
   topLevelBlocks,
@@ -89,7 +97,7 @@ import {
   withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { buildQuestionContext, type QuestionContext } from "./context";
+import { buildQuestionContext, conversationContext, type QuestionContext } from "./context";
 import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
@@ -116,10 +124,51 @@ const ANSWER_WRITE_INTERVAL_MS = 50;
 type Outcome = { status: "done" | "stopped" } | { status: "failed"; error: ProviderError };
 
 interface Generation {
-  mindId: string;
+  home: AnswerHome;
   /** Writes what has arrived with the final status, now. Later calls do nothing. */
   finish(outcome: Outcome): void;
 }
+
+/**
+ * Where an Answer is written as it streams: into its Mind's Yjs document, or into
+ * a conversation's rows (ADR-0017). `place` is what its events and approval
+ * requests say.
+ */
+interface AnswerHome {
+  place: AnswerPlace;
+  /** Writes the Answer as it stands; false when it is gone (or its Mind or conversation is). */
+  write(answer: WrittenAnswer, outcome?: Outcome): boolean;
+}
+
+/** An Answer as it stands, for its home to write. */
+interface WrittenAnswer {
+  /** What the model wrote: Markdown, with Citation markers, its footnote definitions left out. */
+  markdown: string;
+  /** Its Blocks, each marker a Citation node: the final ones once it has ended. */
+  blocks(): NodeJSON[];
+  /** Its Citations, in the order of their markers in the text: the final ones once it has ended. */
+  citations(): MarkedCitation[];
+  toolCalls: AnswerToolCall[];
+  support: CitationSupport | null;
+}
+
+/** What Answers need of the assistant's conversations (see ../conversations). */
+export interface AnswerConversations {
+  /** Adds a Question, and its conversation with its first one, and its Answer, being written. */
+  add(input: QuestionInput, answerModel: ChatModelChoice | null): Turn;
+  /** The Question of an Answer, to write the Answer again. */
+  questionOf(input: unknown): { answerId: string; question: ConversationQuestion };
+  /** Empties an Answer, where it is, to write it again. */
+  restartAnswer(answerId: string, answerModel: ChatModelChoice | null): Turn;
+  /** Writes an Answer as it stands; false when it is gone: its conversation was deleted. */
+  writeAnswer(answerId: string, write: AnswerWrite): boolean;
+}
+
+/** Why a Question wasn't asked, before anything was kept or sent. */
+type NotAsked = Extract<AskResult, { reason: "not-ready" | "skill-unavailable" }>;
+
+/** No Search scope: every Document. */
+const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 export interface AnswersOptions {
   content: MindContent;
@@ -141,6 +190,8 @@ export interface AnswersOptions {
   emptyScopeAnswer(): string;
   /** The User's Skills. */
   skills: AnswerSkills;
+  /** The assistant's conversations, which Answers are written into too. */
+  conversations: AnswerConversations;
   /**
    * The Tool providers the core registers beside the Documents and the
    * Skills: the User's Connectors, offering the Tools of every Connector that
@@ -350,7 +401,7 @@ export function createAnswers(options: AnswersOptions) {
     `${model.providerId}\n${model.modelId}\n${prepared.revision ?? ""}`;
 
   function start(input: {
-    mindId: string;
+    home: AnswerHome;
     answerId: string;
     questionId: string;
     model: ChatModelChoice;
@@ -364,7 +415,8 @@ export function createAnswers(options: AnswersOptions) {
     /** The User has yet to allow the chat flow to the model's service: they are asked first. */
     consentNeeded: boolean;
   }): void {
-    const { mindId, answerId, model, context, documentIds, forcedSkill } = input;
+    const { home, answerId, model, context, documentIds, forcedSkill } = input;
+    const { place } = home;
     const controller = new AbortController();
     /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
@@ -379,41 +431,44 @@ export function createAnswers(options: AnswersOptions) {
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
       onRecord: (marker, citation) =>
-        events.emit("answer.citationAdded", { mindId, answerId, marker, citation }),
+        events.emit("answer.citationAdded", { ...place, answerId, marker, citation }),
     });
 
-    /** The Answer's Blocks: its Markdown, with each marker a Citation node. */
-    const blocksOf = (final: boolean) =>
-      withCitations(
-        markdownToBlocks(withoutFootnoteDefinitions(markdown), { streaming: !final }),
-        final ? (marker) => session.finalNode(marker) : (marker) => session.streamingNode(marker),
-      );
-
-    /** Writes the Answer as it stands; false if it is gone (deleted, or its Mind deleted). */
+    /** Writes the Answer as it stands into its home; false if it is gone. */
     const write = (outcome?: Outcome): boolean => {
-      if (!options.mindExists(mindId)) return false;
+      const final = outcome !== undefined;
+      const text = withoutFootnoteDefinitions(markdown);
+      // Final: a marker with no record is removed, and each is counted for the summary.
+      const citationOf = (marker: number) =>
+        final ? session.finalCitation(marker) : session.streamingCitation(marker);
       try {
-        return content.edit(mindId, (blocks) => {
-          const found = findBlock(blocks, ANSWER_BLOCK, answerId);
-          if (!found) return false;
-          const { element } = found;
-          syncContent(element, blocksOf(outcome !== undefined));
-          const calls = toolCalls.length > 0 ? JSON.stringify(toolCalls) : null;
-          if (textAttribute(element, "toolCalls") !== calls)
-            setAttributes(element, { toolCalls: calls });
-          if (support && textAttribute(element, "citationSupport") !== support) {
-            setAttributes(element, { citationSupport: support });
-          }
-          if (outcome) {
-            setAttributes(element, {
-              status: outcome.status,
-              errorKind: outcome.status === "failed" ? outcome.error.kind : null,
-              errorMessage: outcome.status === "failed" ? outcome.error.message : null,
-              generatedHash: contentHash(element),
-            });
-          }
-          return true;
-        });
+        return home.write(
+          {
+            markdown: text,
+            blocks: () =>
+              withCitations(
+                markdownToBlocks(text, { streaming: !final }),
+                final
+                  ? (marker) => session.finalNode(marker)
+                  : (marker) => session.streamingNode(marker),
+              ),
+            citations: () => {
+              const found: MarkedCitation[] = [];
+              // The markers the Blocks would show, so none in code is taken for one.
+              withCitations(markdownToBlocks(text, { streaming: !final }), (marker) => {
+                const citation = citationOf(marker);
+                if (citation && !found.some((each) => each.marker === marker)) {
+                  found.push({ marker, ...citation });
+                }
+                return null;
+              });
+              return found;
+            },
+            toolCalls,
+            support,
+          },
+          outcome,
+        );
       } catch (error) {
         options.reportError(error);
         return false;
@@ -442,10 +497,10 @@ export function createAnswers(options: AnswersOptions) {
       }
       const written = write(outcome);
       if (outcome.status === "failed") {
-        events.emit("answer.failed", { mindId, answerId, error: outcome.error });
+        events.emit("answer.failed", { ...place, answerId, error: outcome.error });
       } else {
         events.emit("answer.finished", {
-          mindId,
+          ...place,
           answerId,
           status: written ? outcome.status : "stopped",
           ...session.summary(),
@@ -464,16 +519,16 @@ export function createAnswers(options: AnswersOptions) {
       }, ANSWER_WRITE_INTERVAL_MS);
     };
 
-    active.set(answerId, { mindId, finish });
+    active.set(answerId, { home, finish });
     if (active.size === 1) options.onWritingChange?.(true);
-    events.emit("answer.started", { mindId, answerId, questionId: input.questionId, model });
+    events.emit("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions(context.question);
     const callStarted = (call: AnswerToolCall) => {
       // A call that asks the User first may already be there (see `ask`).
       if (toolCalls.some((each) => each.id === call.id)) return;
       toolCalls.push(call);
-      events.emit("answer.toolCallStarted", { mindId, answerId, call: { ...call } });
+      events.emit("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
     const callFinished = (id: string, ok: boolean, resultCount: number | null) => {
@@ -483,7 +538,7 @@ export function createAnswers(options: AnswersOptions) {
       const ran = call.script === undefined || call.script.exitCode === 0;
       call.status = ok && call.approval !== "denied" && ran ? "done" : "failed";
       call.resultCount = resultCount;
-      events.emit("answer.toolCallFinished", { mindId, answerId, call: { ...call } });
+      events.emit("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
     const setApproval = (id: string, approval: ToolCallApproval) => {
@@ -562,7 +617,7 @@ export function createAnswers(options: AnswersOptions) {
       }
       const denied = await ask(
         {
-          mindId,
+          ...place,
           answerId,
           toolCallId,
           subject: { kind: "skill-script", skillId: script.skillId },
@@ -595,7 +650,7 @@ export function createAnswers(options: AnswersOptions) {
         const effects = tool.effects(input);
         denied = await ask(
           {
-            mindId,
+            ...place,
             answerId,
             toolCallId: id,
             subject: { kind: "tool", connectorId: connector.id, tool: name },
@@ -701,7 +756,7 @@ export function createAnswers(options: AnswersOptions) {
         if (finished) return;
         const text = options.emptyScopeAnswer();
         markdown = text;
-        events.emit("answer.delta", { mindId, answerId, text });
+        events.emit("answer.delta", { ...place, answerId, text });
         finish({ status: "done" });
         return;
       }
@@ -724,7 +779,7 @@ export function createAnswers(options: AnswersOptions) {
               : "writing";
         if (finished || phase === shown) return;
         shown = phase;
-        events.emit("answer.phase", { mindId, answerId, phase });
+        events.emit("answer.phase", { ...place, answerId, phase });
       };
       // Nothing is sent before the User says: the Answer waits for them.
       if (consenting) showPhase();
@@ -892,7 +947,7 @@ export function createAnswers(options: AnswersOptions) {
             responded = true;
             showPhase();
             markdown += event.text;
-            events.emit("answer.delta", { mindId, answerId, text: event.text });
+            events.emit("answer.delta", { ...place, answerId, text: event.text });
             writeSoon();
             break;
           case "text-retracted":
@@ -934,6 +989,109 @@ export function createAnswers(options: AnswersOptions) {
     });
   }
 
+  /** An Answer in its Mind: a Block right after its Question in the Mind's Yjs document. */
+  const mindHome = (mindId: string, answerId: string): AnswerHome => ({
+    place: { mindId },
+    write(answer, outcome) {
+      if (!options.mindExists(mindId)) return false;
+      return content.edit(mindId, (blocks) => {
+        const found = findBlock(blocks, ANSWER_BLOCK, answerId);
+        if (!found) return false;
+        const { element } = found;
+        syncContent(element, answer.blocks());
+        const calls = answer.toolCalls.length > 0 ? JSON.stringify(answer.toolCalls) : null;
+        if (textAttribute(element, "toolCalls") !== calls)
+          setAttributes(element, { toolCalls: calls });
+        if (answer.support && textAttribute(element, "citationSupport") !== answer.support) {
+          setAttributes(element, { citationSupport: answer.support });
+        }
+        if (outcome) {
+          setAttributes(element, {
+            status: outcome.status,
+            errorKind: outcome.status === "failed" ? outcome.error.kind : null,
+            errorMessage: outcome.status === "failed" ? outcome.error.message : null,
+            generatedHash: contentHash(element),
+          });
+        }
+        return true;
+      });
+    },
+  });
+
+  /** An Answer in one of the assistant's conversations: its row, with its Markdown and Citations. */
+  const conversationHome = (conversationId: string, answerId: string): AnswerHome => ({
+    place: { mindId: null, conversationId },
+    write: (answer, outcome) =>
+      options.conversations.writeAnswer(answerId, {
+        text: answer.markdown,
+        citations: answer.citations(),
+        toolCalls: answer.toolCalls,
+        support: answer.support,
+        ...(outcome && {
+          outcome: {
+            status: outcome.status,
+            error: outcome.status === "failed" ? outcome.error : null,
+          },
+        }),
+      }),
+  });
+
+  /**
+   * The model a Question is answered with, and whether the User has yet to allow its
+   * data flow; or why it can't be asked now: Questions can't be asked yet, or the Skill
+   * it forces is off or gone. A model picked on a provider since removed falls back to
+   * the default.
+   */
+  async function readyModel(
+    picked: ChatModelChoice | null,
+    forcedSkill: string | null,
+  ): Promise<{ model: ChatModelChoice; consentNeeded: boolean } | NotAsked> {
+    const choice = picked && options.providerExists(picked.providerId) ? picked : undefined;
+    const readiness = await options.readiness(choice);
+    if (!readiness.ready) return { asked: false, reason: "not-ready", readiness };
+    // A forced Skill that is off or gone: say so rather than answer without it.
+    const skillState = forcedSkill ? options.skills.availability(forcedSkill) : "enabled";
+    if (forcedSkill && skillState !== "enabled") {
+      return { asked: false, reason: "skill-unavailable", skill: forcedSkill, state: skillState };
+    }
+    return {
+      model: { providerId: readiness.provider.id, modelId: readiness.modelId },
+      consentNeeded: readiness.consent === "needed",
+    };
+  }
+
+  /**
+   * Writes the Answer of a Question in a conversation, added or emptied in `turn`, from
+   * the messages before it and its Search scope as it is now.
+   */
+  function startInConversation(
+    turn: Turn,
+    ready: { model: ChatModelChoice; consentNeeded: boolean },
+    documentIds: string[] | null,
+    emptyScope: boolean,
+  ): ConversationAskResult {
+    const { conversation, question, answer } = turn;
+    start({
+      home: conversationHome(conversation.id, answer.id),
+      answerId: answer.id,
+      questionId: question.id,
+      model: ready.model,
+      context: conversationContext(turn.earlier, question.text),
+      documentIds,
+      emptyScope,
+      forcedSkill: question.forcedSkill,
+      consentNeeded: ready.consentNeeded,
+    });
+    return { asked: true, conversation, questionId: question.id, answerId: answer.id };
+  }
+
+  /** The Documents of a Search scope as it is now, and whether it covers none to search. */
+  const scopeNow = (scope: SearchScope | null) => {
+    const documentIds = options.resolveScope(scope ?? NO_SCOPE);
+    const emptyScope = documentIds !== null && options.documents.searchableCount(documentIds) === 0;
+    return { documentIds, emptyScope };
+  };
+
   /**
    * What an Answer to `question` is written from: its context, and its Search
    * scope as it is now, resolved to the Documents it covers now.
@@ -963,16 +1121,9 @@ export function createAnswers(options: AnswersOptions) {
       }
       return { picked: pickedModel(found.element), forcedSkill: forcedSkillOf(found.element) };
     });
-    // A model picked on a provider that has since been removed falls back to the default.
-    const choice = picked && options.providerExists(picked.providerId) ? picked : undefined;
-    const readiness = await options.readiness(choice);
-    if (!readiness.ready) return { asked: false, reason: "not-ready", readiness };
-    // A forced Skill that is off or gone: say so rather than answer without it.
-    const skillState = forcedSkill ? options.skills.availability(forcedSkill) : "enabled";
-    if (forcedSkill && skillState !== "enabled") {
-      return { asked: false, reason: "skill-unavailable", skill: forcedSkill, state: skillState };
-    }
-    const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
+    const ready = await readyModel(picked, forcedSkill);
+    if ("asked" in ready) return ready;
+    const { model } = ready;
 
     // From here on nothing awaits, so the Mind can't change underneath.
     const current = content.read(mindId, (blocks) => answerFor(blocks, questionId));
@@ -1026,8 +1177,15 @@ export function createAnswers(options: AnswersOptions) {
     );
     if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
-    const consentNeeded = readiness.consent === "needed";
-    start({ mindId, questionId, model, ...written, forcedSkill, consentNeeded });
+    const { consentNeeded } = ready;
+    start({
+      home: mindHome(mindId, written.answerId),
+      questionId,
+      model,
+      ...written,
+      forcedSkill,
+      consentNeeded,
+    });
     return { asked: true, answerId: written.answerId };
   }
 
@@ -1058,8 +1216,53 @@ export function createAnswers(options: AnswersOptions) {
       const mindId = options.requireMind(input.mindId);
       const answerId = parseId(input.answerId, "An Answer id");
       const generation = active.get(answerId);
-      if (generation?.mindId === mindId) generation.finish({ status: "stopped" });
+      if (generation?.home.place.mindId === mindId) generation.finish({ status: "stopped" });
       else settleOrphans(mindId);
+    },
+
+    /**
+     * Asks a Question in a conversation (see `CoreApi.askInConversation`): nothing is
+     * kept unless it can be asked.
+     */
+    async askInConversation(question: QuestionInput): Promise<ConversationAskResult> {
+      const ready = await readyModel(question.model, question.forcedSkill);
+      if ("asked" in ready) return ready;
+      // From here on nothing awaits, so the conversation can't change underneath.
+      const { documentIds, emptyScope } = scopeNow(question.scope);
+      // No model writes an Answer that says the Search scope is empty.
+      const turn = options.conversations.add(question, emptyScope ? null : ready.model);
+      return startInConversation(turn, ready, documentIds, emptyScope);
+    },
+
+    /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
+    async regenerateInConversation(input: unknown): Promise<ConversationAskResult> {
+      const { answerId, question } = options.conversations.questionOf(input);
+      const ready = await readyModel(question.model, question.forcedSkill);
+      if ("asked" in ready) return ready;
+      active.get(answerId)?.finish({ status: "stopped" });
+      const { documentIds, emptyScope } = scopeNow(question.scope);
+      const turn = options.conversations.restartAnswer(answerId, emptyScope ? null : ready.model);
+      return startInConversation(turn, ready, documentIds, emptyScope);
+    },
+
+    /** Stops an Answer of a conversation being written, keeping what it has. */
+    stopInConversation(input: unknown): void {
+      if (!isRecord(input))
+        throw new InvalidInputError("stopConversationAnswer expects an object.");
+      const conversationId = parseId(input.conversationId, "A conversation id");
+      const generation = active.get(parseId(input.answerId, "An Answer id"));
+      if (generation?.home.place.conversationId === conversationId) {
+        generation.finish({ status: "stopped" });
+      }
+    },
+
+    /** Stops every Answer being written in a conversation, e.g. before it is deleted. */
+    stopConversation(conversationId: string): void {
+      for (const generation of [...active.values()]) {
+        if (generation.home.place.conversationId === conversationId) {
+          generation.finish({ status: "stopped" });
+        }
+      }
     },
 
     /** Call before a Mind is opened: Answers a quit or crash left "streaming" become "stopped". */

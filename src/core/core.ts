@@ -5,6 +5,7 @@ import * as Y from "yjs";
 import { translate } from "../shared/i18n";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
+import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation } from "./answers/citations";
 import {
@@ -30,6 +31,7 @@ import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
+import { createConversations } from "./conversations";
 import {
   createDocuments,
   type DocumentFile,
@@ -96,6 +98,7 @@ import {
   REFERENCE_LOOKUP_SENDS,
   REFERENCE_SERVICE_URLS,
 } from "./referenceRecords";
+import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -225,10 +228,38 @@ export function createCore(adapters: CoreAdapters): Core {
     return mind;
   };
   const mindsChanged = () => events.emit("minds.changed", minds.list());
+  // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
+  const conversations = createConversations(db, now);
+  const conversationsChanged = () => events.emit("conversations.changed", null);
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
+    // Only notes the change; what became of AI text is worked out once the Mind is quiet.
+    aiUse.contentStored(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
+  });
+  // The record of AI use stays on this computer: it takes nothing from the network or the usage-data catalog.
+  const aiUse = createAiUse({
+    db,
+    now,
+    content,
+    requireMind: (mindId) => void minds.get(mindId),
+    changed: (status) => events.emit("aiUse.changed", status),
+    reportError: (error) => console.error(error),
+  });
+  // A writing suggestion the User accepted (#282). It holds no Block ids: the words went into
+  // the paragraph being written, so there is nothing to follow, only the use to record.
+  events.on("suggestion.accepted", (accepted) => {
+    aiUse.record([
+      {
+        mindId: accepted.mindId,
+        kind: "suggestion-accepted",
+        providerId: accepted.providerId,
+        modelId: accepted.modelId,
+        characters: accepted.characters,
+        occurredAt: accepted.acceptedAt,
+      },
+    ]);
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
@@ -323,13 +354,14 @@ export function createCore(adapters: CoreAdapters): Core {
         prepareRerank();
         documentReady(documentId);
       },
-      // Citations live in Minds, anywhere: in Answers, or copied into Notes.
+      // Citations live in Minds, anywhere: in Answers, or copied into Notes; and in conversations.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
         const cited: CitedUnits[] = [];
         for (const mind of minds.list()) {
           content.peek(mind.id, (fragment) => addCitedUnits(fragment, wanted, cited));
         }
+        conversations.addCitedUnits(wanted, cited);
         return cited;
       },
       // iCloud Drive before macOS 14 downloads a stub's file when asked by its command-line tool.
@@ -357,6 +389,7 @@ export function createCore(adapters: CoreAdapters): Core {
       for (const mind of minds.list()) {
         content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
       }
+      conversations.addCitedVersions(cited);
       const quoted = (documentId: string, contentHash: string) =>
         isCited(cited, documentId, contentHash);
       documents.collectOldVersions(quoted);
@@ -693,6 +726,27 @@ export function createCore(adapters: CoreAdapters): Core {
       availability: (name) => skills.availability(name),
       openSession: (forced) => skills.openSession(forced),
     },
+    // Every window hears of each message as it is added or written.
+    conversations: {
+      add: (input, answerModel) => {
+        const turn = conversations.add(input, answerModel);
+        events.emit("conversation.message", turn.question);
+        events.emit("conversation.message", turn.answer);
+        conversationsChanged();
+        return turn;
+      },
+      questionOf: (input) => conversations.questionOf(input),
+      restartAnswer: (answerId, answerModel) => {
+        const turn = conversations.restartAnswer(answerId, answerModel);
+        events.emit("conversation.message", turn.answer);
+        return turn;
+      },
+      writeAnswer: (answerId, write) => {
+        const answer = conversations.writeAnswer(answerId, write);
+        if (answer) events.emit("conversation.message", answer);
+        return answer !== null;
+      },
+    },
     resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => background.setAnswering(writing),
@@ -942,10 +996,12 @@ export function createCore(adapters: CoreAdapters): Core {
     say: (key, params) => translate(settings.get().language, key, params),
     minds,
     content,
+    conversations,
     documents,
     tags,
     library,
     mindsChanged,
+    conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
   });
@@ -1203,6 +1259,36 @@ export function createCore(adapters: CoreAdapters): Core {
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
+    askInConversation: async (input) =>
+      answers.askInConversation(conversations.parseQuestion(input)),
+    regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
+    stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    listConversations: async (options) => conversations.list(options),
+    getConversation: async (conversationId) => conversations.content(conversationId),
+    searchConversations: async (query) => conversations.search(query),
+    renameConversation: async (conversationId, title) => {
+      const conversation = conversations.rename(conversationId, title);
+      conversationsChanged();
+      return conversation;
+    },
+    deleteConversation: async (conversationId) => {
+      // What an Answer being written has is kept, before the conversation goes.
+      answers.stopConversation(conversations.get(conversationId).id);
+      conversations.delete(conversationId, now());
+      conversationsChanged();
+    },
+    resolveReference: async (input) => {
+      const reference = parseReference(input);
+      if (!reference) throw new InvalidInputError("That isn't a reference IncarnaMind can follow.");
+      const found =
+        reference.artifactKind === "mind"
+          ? minds.locate(reference.artifactId)
+          : conversations.locate(reference.artifactId, reference.anchor.messageId);
+      if (!found) return { status: "gone", reference };
+      return found.deletedAt === null
+        ? { status: "available", reference, name: found.name }
+        : { status: "deleted", reference, name: found.name, deletedAt: found.deletedAt };
+    },
     getSettings: async () => settings.get(),
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
@@ -1446,6 +1532,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     recordUsage: async (event) => usageData.recordFromUi(event),
     resetUsageInstallId: async () => usageData.resetInstallId(),
+    recordAiUse: async (inputs) => aiUse.record(inputs),
+    listAiUse: async (mindId) => aiUse.list(mindId),
+    getAiUseStatus: async () => aiUse.status(),
+    clearAiUse: async () => aiUse.clear(),
+    restoreAiUse: async (clearedAt) => aiUse.restore(clearedAt),
 
     listFolders: async () => folders.list(),
 
@@ -1456,13 +1547,17 @@ export function createCore(adapters: CoreAdapters): Core {
       const deletion = db.transaction(() => {
         const folder = library.folder(id);
         const left = minds.leaveFolder(folder.id);
-        const { assignments } = library.delete(
-          folder.id,
-          left.map((mind) => mind.id),
-        );
-        return { assignments, mindIds: left.filter((mind) => mind.live).map((mind) => mind.id) };
+        const leftConversations = conversations.leaveFolder(folder.id);
+        const { assignments } = library.delete(folder.id, {
+          minds: left.map((mind) => mind.id),
+          conversations: leftConversations.map((conversation) => conversation.id),
+        });
+        const live = (items: { id: string; live: boolean }[]) =>
+          items.filter((item) => item.live).map((item) => item.id);
+        return { assignments, mindIds: live(left), conversationIds: live(leftConversations) };
       });
       if (deletion.mindIds.length > 0) mindsChanged();
+      if (deletion.conversationIds.length > 0) conversationsChanged();
       return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
@@ -1493,16 +1588,20 @@ export function createCore(adapters: CoreAdapters): Core {
       const folderId = parseFolderChoice(input.folderId);
       const mindIds = parseIds(input.mindIds, "The Minds to move");
       const documentIds = parseIds(input.documentIds, "The Documents to move");
+      const conversationIds = parseIds(input.conversationIds, "The conversations to move");
       // All or none: every one is checked before anything moves.
       if (folderId !== null) library.folder(folderId);
       for (const id of mindIds) minds.get(id);
+      for (const id of conversationIds) conversations.get(id);
       const move = db.transaction(() => ({
         folderId,
         minds: minds.move(mindIds, folderId),
         documents: library.move(documentIds, folderId),
+        conversations: conversations.move(conversationIds, folderId),
       }));
       // Said once it is saved, so a move that rolled back says nothing.
       if (move.minds.some((item) => item.from !== folderId)) mindsChanged();
+      if (move.conversations.some((item) => item.from !== folderId)) conversationsChanged();
       library.moved(move.documents.map((item) => item.id));
       return move;
     },
@@ -1725,6 +1824,7 @@ export function createCore(adapters: CoreAdapters): Core {
       embeddingModel.close();
       rerankingModel.close();
       activity.stop();
+      aiUse.close();
       events.clear();
       content.closeAll();
       db.close();

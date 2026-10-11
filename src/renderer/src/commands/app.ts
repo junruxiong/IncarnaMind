@@ -2,9 +2,10 @@ import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
-import { composerHandle, sidebarHandle } from "./handles";
+import { citationHandle, composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
+import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 
 const appCommands: readonly Command[] = [
@@ -46,6 +47,16 @@ const appCommands: readonly Command[] = [
     reversible: true,
     when: () => composerHandle.current !== null,
     run: () => composerHandle.current?.focus(),
+  },
+  {
+    id: "citation.open",
+    label: "command.citation.open",
+    shortcut: { keys: "CmdOrCtrl+Alt+O" },
+    group: "open",
+    reversible: true,
+    // While a Citation's card shows (hovered, focused or clicked).
+    when: () => citationHandle.current !== null,
+    run: () => citationHandle.current?.open(),
   },
   {
     id: "references.import",
@@ -90,6 +101,7 @@ const appCommands: readonly Command[] = [
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },
   },
+  ...tableCommands,
 ];
 
 for (const command of appCommands) commands.register(command);
