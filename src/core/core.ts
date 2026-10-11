@@ -5,6 +5,7 @@ import * as Y from "yjs";
 import { translate } from "../shared/i18n";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
+import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation } from "./answers/citations";
 import {
@@ -238,8 +239,33 @@ export function createCore(adapters: CoreAdapters): Core {
   const conversationsChanged = () => events.emit("conversations.changed", null);
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
+    // Only notes the change; what became of AI text is worked out once the Mind is quiet.
+    aiUse.contentStored(mindId);
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
     if (minds.markEdited(mindId) || renamed) mindsChanged();
+  });
+  // The record of AI use stays on this computer: it takes nothing from the network or the usage-data catalog.
+  const aiUse = createAiUse({
+    db,
+    now,
+    content,
+    requireMind: (mindId) => void minds.get(mindId),
+    changed: (status) => events.emit("aiUse.changed", status),
+    reportError: (error) => console.error(error),
+  });
+  // A writing suggestion the User accepted (#282). It holds no Block ids: the words went into
+  // the paragraph being written, so there is nothing to follow, only the use to record.
+  events.on("suggestion.accepted", (accepted) => {
+    aiUse.record([
+      {
+        mindId: accepted.mindId,
+        kind: "suggestion-accepted",
+        providerId: accepted.providerId,
+        modelId: accepted.modelId,
+        characters: accepted.characters,
+        occurredAt: accepted.acceptedAt,
+      },
+    ]);
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
@@ -1470,6 +1496,11 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     recordUsage: async (event) => usageData.recordFromUi(event),
     resetUsageInstallId: async () => usageData.resetInstallId(),
+    recordAiUse: async (inputs) => aiUse.record(inputs),
+    listAiUse: async (mindId) => aiUse.list(mindId),
+    getAiUseStatus: async () => aiUse.status(),
+    clearAiUse: async () => aiUse.clear(),
+    restoreAiUse: async (clearedAt) => aiUse.restore(clearedAt),
 
     listFolders: async () => folders.list(),
 
@@ -1758,6 +1789,7 @@ export function createCore(adapters: CoreAdapters): Core {
       embeddingModel.close();
       rerankingModel.close();
       activity.stop();
+      aiUse.close();
       events.clear();
       content.closeAll();
       db.close();
