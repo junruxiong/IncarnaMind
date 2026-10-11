@@ -55,6 +55,7 @@ import {
   writeReports,
 } from "../../eval/lib/report";
 import type { OpenReranker, RerankerInfo } from "../../eval/lib/rerank";
+import { RERANKING_MODEL_CANDIDATES } from "../../eval/lib/rerankingModels";
 import {
   type CandidateRecord,
   candidateCounts,
@@ -86,7 +87,6 @@ import {
   type Core,
   type OllamaModelProfile,
   type OllamaModels,
-  RERANKING_MODEL_CANDIDATES,
 } from "../../src/core";
 import { SEARCH_TOOL_PARAMETERS } from "../../src/core/documents/searchTool";
 
