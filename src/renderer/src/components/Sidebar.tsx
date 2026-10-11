@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { useT } from "../i18n";
 import { useMeetings } from "../meetings";
 import { useAppStore } from "../store";
@@ -13,7 +14,6 @@ import {
   RecordingLineIcon,
   SettingsLineIcon,
 } from "./lineIcons";
-import { NEW_MIND_SHORTCUT } from "./MindTabs";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
 import { rowButtonClass, rowClass, rowIconClass } from "./sidebarRows";
@@ -37,6 +37,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
     <aside
       aria-label={t("sidebar.label")}
       id="sidebar"
+      data-surface="sidebar"
       data-testid="sidebar"
       className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
@@ -156,7 +157,7 @@ function PlusMenu() {
         >
           <MindLineIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.newMind")}</span>
-          <span className="pl-4 text-[13px] text-ink-meta">{NEW_MIND_SHORTCUT}</span>
+          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("tab.new")}</span>
         </button>
         {meetingsOn && (
           <button

@@ -203,19 +203,61 @@ describe("the filters' words", () => {
   });
 });
 
+/**
+ * Documents that count how often their fields are read. Work, not time, so the
+ * test holds on a slow or busy machine: a pass that grows faster than the
+ * Library reads more fields per Document as the Library grows.
+ */
+function counted<T extends object>(items: readonly T[]): { items: T[]; reads: () => number } {
+  let reads = 0;
+  const wrapped = items.map((item) => {
+    const copy = {} as T;
+    for (const key of Object.keys(item) as (keyof T)[]) {
+      Object.defineProperty(copy, key, {
+        enumerable: true,
+        get() {
+          reads += 1;
+          return item[key];
+        },
+      });
+    }
+    return copy;
+  });
+  return { items: wrapped, reads: () => reads };
+}
+
+/** Reads per Document at a size; the same at every size when the work is linear. */
+const readsPerDocument = (size: number, run: (size: number) => { reads: () => number }) =>
+  run(size).reads() / size;
+
 describe("a large Library", () => {
-  test("filters and counts 20,000 Documents in one pass, quickly", () => {
-    const many = Array.from({ length: 20_000 }, (_, index) =>
-      doc({
-        kind: (["pdf", "docx", "text"] as const)[index % 3],
-        creationDate: index % 5 === 0 ? null : String(2000 + (index % 20)),
-      }),
+  const library = (size: number) =>
+    counted(
+      Array.from({ length: size }, (_, index) =>
+        doc({
+          kind: (["pdf", "docx", "text"] as const)[index % 3],
+          creationDate: index % 5 === 0 ? null : String(2000 + (index % 20)),
+        }),
+      ),
     );
-    const started = performance.now();
-    const { shown, options: all } = filterLibrary(many, documentFacets, { format: ["pdf"] });
-    expect(performance.now() - started).toBeLessThan(250);
+
+  test("filters and counts 20,000 Documents in one pass", () => {
+    const many = library(20_000);
+    const { shown, options: all } = filterLibrary(many.items, documentFacets, { format: ["pdf"] });
     expect(shown).toHaveLength(6667);
     expect(all.get("year")?.reduce((sum, option) => sum + option.count, 0)).toBe(6667);
+  });
+
+  test("reads each Document as often in a big Library as in a small one", () => {
+    const perDocument = (size: number) =>
+      readsPerDocument(size, (n) => {
+        const many = library(n);
+        filterLibrary(many.items, documentFacets, { format: ["pdf"] });
+        return many;
+      });
+    // Linear work reads the same per Document at any size; quadratic work
+    // would read four times as much at four times the size.
+    expect(perDocument(4_000)).toBeLessThanOrEqual(perDocument(1_000) * 1.25);
   });
 });
 
@@ -276,14 +318,26 @@ describe("the Tags filter", () => {
     expect(byTag.has("t-unused")).toBe(false);
   });
 
-  test("lists 2,000 Documents' Tags quickly", () => {
+  test("lists 2,000 Documents' Tags in one pass", () => {
     const many = Array.from({ length: 2_000 }, (_, index) => ({
       tags: [link(`t-${index % 7}`), link(`t-${(index + 3) % 7}`, index % 50 === 0)],
     }));
-    const started = performance.now();
     const byTag = documentsByTag(many);
-    expect(performance.now() - started).toBeLessThan(50);
     expect(byTag.get("t-0")).toHaveLength(572);
     expect(byTag.get(NEEDS_REVIEW)).toHaveLength(40);
+  });
+
+  test("reads each Document's Tags as often in a big Library as in a small one", () => {
+    const perDocument = (size: number) =>
+      readsPerDocument(size, (n) => {
+        const many = counted(
+          Array.from({ length: n }, (_, index) => ({
+            tags: [link(`t-${index % 7}`), link(`t-${(index + 3) % 7}`, index % 50 === 0)],
+          })),
+        );
+        documentsByTag(many.items);
+        return many;
+      });
+    expect(perDocument(2_000)).toBeLessThanOrEqual(perDocument(500) * 1.25);
   });
 });

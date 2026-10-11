@@ -350,21 +350,11 @@
     margin-left: 8px;
   }
   /*
-   * The sidebar button in the card's tab band (src/renderer/src/components/SidebarToggle.tsx):
-   * on macOS, hidden, the traffic lights are over the band's left end, so it
+   * The sidebar button in the first group's tab strip (src/renderer/src/components/SidebarToggle.tsx):
+   * on macOS, hidden, the traffic lights are over the strip's left end, so it
    * starts after them (84px from the window's edge, where the button is in the sidebar's
-   * header); elsewhere it opens the strip.
+   * header); elsewhere it opens the strip. See `.tab-strip`.
    */
-  .mind-tabs > .sidebar-toggle {
-    align-self: center;
-    margin: 0 6px 0 8px;
-  }
-  :root[data-title-bar="inset"]:not([data-full-screen]) .app-card[data-sidebar-hidden] .mind-tabs {
-    padding-left: calc(var(--window-buttons-left) - 8px);
-  }
-  :root[data-title-bar="inset"] .app-card[data-sidebar-hidden] .mind-tabs > .sidebar-toggle {
-    margin-left: 0;
-  }
 
   /*
    * The card (DESIGN.md, Layout): everything right of the sidebar, 8px from
@@ -415,10 +405,6 @@
   .sidebar-header {
     padding-left: max(16px, var(--window-buttons-left));
   }
-  /* The band's right end, under Windows' buttons, is the viewer's toolbar while it's open. */
-  main:has(~ .viewer-pane) {
-    --window-buttons-right: 0px;
-  }
   /* The card is 8px from the window's edge, so Windows' buttons overlap it by 8px less. */
   .library-header {
     padding-right: max(16px, calc(8px + var(--window-buttons-right)));
@@ -467,35 +453,85 @@
   }
 
   /*
-   * The Mind tabs (DESIGN.md, Components: Mind tabs), the whole of their look:
-   * MindTabs.tsx only sets these classes and data-* attributes, so the look
-   * changes here alone. Chrome-style (option A): the card's 36px band in tab-strip,
-   * a step darker than the frame, with no bottom rule. 34px slots sit on its
-   * bottom edge, 220px wide, shrinking equally to 64px. The shown tab
-   * (aria-selected) is the sheet with radius 10 at the top and concave feet
-   * flaring into the Mind below; the others hold a 28px inner shape that
-   * takes tab-hover when pointed at.
+   * Tabs and groups (DESIGN.md, Components: Mind tabs), the whole of their
+   * look: components/tabs/ only sets these classes and data-* attributes, so
+   * the look changes here alone. Up to three groups sit side by side in the
+   * card, each a column with its own 36px strip and its shown tab, split by one
+   * 1px rule-strong divider that runs the card's full height, through the
+   * strips and the pages, so it is in the same place in both.
    */
-  .mind-tabs {
+  .tab-groups {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+  }
+  .tab-group {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    container: group / inline-size;
+  }
+  .tab-groups > .pane-divider {
+    background: var(--color-rule-strong);
+  }
+  .tab-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--color-sheet);
+  }
+
+  /*
+   * A group's strip, Chrome-style (option A): the 36px band in tab-strip, a
+   * step darker than the frame, with no bottom rule. 34px slots sit on its
+   * bottom edge, 220px wide, shrinking equally to 64px (the shown one to
+   * 132px). The shown tab (aria-selected) is the sheet with radius 10 at the
+   * top and concave feet flaring into the page below; the others hold a 28px
+   * inner shape that takes tab-hover when pointed at.
+   */
+  .tab-strip {
     display: flex;
     flex-shrink: 0;
     align-items: flex-end;
     height: 36px;
-    padding-right: max(8px, var(--window-buttons-right));
+    /* At the card's right end: clear of Windows' window buttons (see "The title bar"). */
+    padding-right: max(4px, var(--window-buttons-right));
     background: var(--color-tab-strip);
   }
+  /* Only the last group reaches the window's buttons. */
+  .tab-group:not(:last-of-type) {
+    --window-buttons-right: 0px;
+  }
+  .tab-strip > .sidebar-toggle {
+    align-self: center;
+    margin: 0 6px 0 8px;
+  }
+  :root[data-title-bar="inset"]:not([data-full-screen])
+    .app-card[data-sidebar-hidden]
+    .tab-strip[data-first-group] {
+    padding-left: calc(var(--window-buttons-left) - 8px);
+  }
+  :root[data-title-bar="inset"] .app-card[data-sidebar-hidden] .tab-strip > .sidebar-toggle {
+    margin-left: 0;
+  }
   /*
-   * The tabs start flush against the card's left edge: the shown first tab has no left
-   * foot and a square top-left corner (below). The 10px end padding is room
-   * for the last tab's right foot.
+   * The window's first group starts flush against the card's left edge: its
+   * shown first tab has no left foot and a rounded corner. A later group's
+   * tabs start 10px in from the divider, so its shown first tab keeps its
+   * left foot and the divider stays one line. The 10px end padding is room for
+   * the last tab's right foot.
    */
-  .mind-tabs-list {
+  .tab-list {
     display: flex;
     flex: 0 1 auto;
     align-items: flex-end;
     align-self: stretch;
     min-width: 0;
-    padding: 0 10px 0 0;
+    padding: 0 10px;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -504,14 +540,17 @@
       display: none;
     }
   }
+  .tab-strip[data-first-group] .tab-list {
+    padding-left: 0;
+  }
   /* Fades out on a side where tabs are scrolled out of sight. */
-  .mind-tabs-list[data-hidden-before] {
+  .tab-list[data-hidden-before] {
     mask-image: linear-gradient(to right, transparent, #000 32px);
   }
-  .mind-tabs-list[data-hidden-after] {
+  .tab-list[data-hidden-after] {
     mask-image: linear-gradient(to left, transparent, #000 32px);
   }
-  .mind-tabs-list[data-hidden-before][data-hidden-after] {
+  .tab-list[data-hidden-before][data-hidden-after] {
     mask-image: linear-gradient(
       to right,
       transparent,
@@ -520,7 +559,7 @@
       transparent
     );
   }
-  .mind-tab {
+  .tab {
     position: relative;
     display: flex;
     flex: 0 1 220px;
@@ -535,14 +574,20 @@
     cursor: default;
     outline: none;
     user-select: none;
+    touch-action: none;
 
     &[aria-selected="true"] {
       z-index: 1;
+      /* Its title stays readable while the others shrink. */
+      min-width: min(132px, 100%);
       height: 32px;
       border-radius: 10px 10px 0 0;
       background: var(--color-sheet);
-      color: var(--color-ink);
       font-weight: 600;
+    }
+    /* The group the User is in shows only through its shown tab's title, in ink. */
+    &[aria-selected="true"][data-focused-group] {
+      color: var(--color-ink);
     }
     /* A 1px divider on a tab's right edge; hidden by the tab pointed at, on both its sides. */
     &[data-divider]::after {
@@ -554,34 +599,18 @@
       width: 1px;
       background: var(--color-tab-divider);
     }
-    &[data-divider]:is(:hover, :has(+ .mind-tab:hover))::after {
+    &[data-divider]:is(:hover, :has(+ .tab:hover))::after {
       display: none;
     }
     &[data-dragging] {
-      opacity: 0.5;
-    }
-    /* Where a dragged tab will land. */
-    &[data-drop]::before {
-      content: "";
-      position: absolute;
-      top: 6px;
-      bottom: 6px;
-      width: 2px;
-      border-radius: 1px;
-      background: var(--color-accent);
-    }
-    &[data-drop="before"]::before {
-      left: -1px;
-    }
-    &[data-drop="after"]::before {
-      right: -1px;
+      opacity: 0.45;
     }
   }
   /*
    * The content of a tab: inset 4px at the sides and 3px from the bottom on
    * the tabs not shown (a 28px shape with radius 8), the whole tab on the shown one.
    */
-  .mind-tab-inner {
+  .tab-inner {
     display: flex;
     flex: 1 1 auto;
     align-items: center;
@@ -592,7 +621,7 @@
     padding: 0 4px 0 8px;
     border-radius: 8px;
   }
-  .mind-tab[aria-selected="true"] .mind-tab-inner {
+  .tab[aria-selected="true"] .tab-inner {
     align-self: stretch;
     height: auto;
     margin: 0;
@@ -600,15 +629,15 @@
     border-radius: 10px 10px 0 0;
   }
   /* The tab is the keyboard stop; its shape shows the focus. */
-  .mind-tab:focus-visible .mind-tab-inner {
+  .tab:focus-visible .tab-inner {
     outline: 2px solid var(--color-accent);
     outline-offset: -2px;
   }
-  .mind-tab:not([aria-selected="true"]):hover .mind-tab-inner {
+  .tab:not([aria-selected="true"]):hover .tab-inner {
     background: var(--color-tab-hover);
   }
   /* The shown tab's feet: 10px concave curves outside its bottom corners, in the sheet. */
-  .mind-tab-foot {
+  .tab-foot {
     display: none;
     position: absolute;
     bottom: 0;
@@ -624,24 +653,20 @@
       background: radial-gradient(circle at 100% 0, transparent 9.5px, var(--color-sheet) 10px);
     }
   }
-  .mind-tab[aria-selected="true"] .mind-tab-foot {
+  .tab[aria-selected="true"] .tab-foot {
     display: block;
   }
-  /* The first tab, shown, starts at the card's edge: no left foot, its content inset 16px. */
-  .mind-tab:first-child[aria-selected="true"] {
-    .mind-tab-inner {
+  /* The window's first tab, shown, starts at the card's edge: no left foot, its content inset 16px. */
+  .tab-strip[data-first-group] .tab:first-child[aria-selected="true"] {
+    .tab-inner {
       padding-left: 16px;
     }
-    .mind-tab-foot[data-side="left"] {
+    .tab-foot[data-side="left"] {
       display: none;
     }
   }
-  /* Before the first tab, the drop line stays inside the strip. */
-  .mind-tab:first-child[data-drop="before"]::before {
-    left: 0;
-  }
-  /* The Mind icon, or in its place what the Mind is busy with. */
-  .mind-tab-icon {
+  /* The tab's icon: its kind, or in a Mind's place what the Mind is busy with. */
+  .tab-icon {
     display: flex;
     flex-shrink: 0;
     justify-content: center;
@@ -653,14 +678,14 @@
       height: 14px;
     }
   }
-  .mind-tab-dot {
+  .tab-dot {
     width: 6px;
     height: 6px;
     border-radius: 9999px;
 
     &[data-status="writing"] {
       background: var(--color-accent);
-      animation: mind-tab-pulse 1.4s ease-in-out infinite;
+      animation: tab-pulse 1.4s ease-in-out infinite;
     }
     &[data-status="waiting-for-approval"] {
       background: var(--color-attention);
@@ -681,22 +706,40 @@
       background: var(--color-ink-meta);
     }
   }
-  .mind-tab-time {
+  .tab-time {
     flex-shrink: 0;
     font-size: 12px;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
     color: var(--color-ink-meta);
   }
-  .mind-tab-title {
+  .tab-title {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* ✕, round and 18px: always on the shown tab; on the others while pointed at or focused. */
-  .mind-tab-close {
+  /* A preview, replaced by the next Document opened in its group, until kept. */
+  .tab[data-preview] .tab-title {
+    font-style: italic;
+  }
+  .tab-rename {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 22px;
+    padding: 0 4px;
+    border: 1px solid var(--color-accent);
+    border-radius: 4px;
+    background: var(--color-sheet);
+    color: var(--color-ink);
+    font: inherit;
+    font-weight: 400;
+    outline: none;
+    user-select: text;
+  }
+  /* ✕ (or a pinned tab's pin), round and 18px: always on the shown tab; on the others while pointed at or focused. */
+  .tab-close {
     display: flex;
     flex-shrink: 0;
     align-items: center;
@@ -718,12 +761,24 @@
       color: var(--color-ink);
     }
   }
-  .mind-tab:is([aria-selected="true"], :hover, :focus-visible) .mind-tab-close {
+  .tab:is([aria-selected="true"], [data-pinned], :hover, :focus-visible) .tab-close {
     opacity: 1;
   }
-  /* "+" (28px, round) and Export: ghost buttons on the strip, "+" level with the tabs' inner shapes. */
-  .mind-tabs-new,
-  .mind-tabs-export {
+  /* The menu's button, out of sight at the tab's foot: a right-click opens the menu under the tab. */
+  .tab-menu-anchor {
+    position: absolute;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* "+" (28px, round), Export, Split and ⋯: ghost buttons on the strip, level with the tabs' inner shapes. */
+  .tab-new,
+  .tab-export,
+  .tab-strip-button {
     display: flex;
     flex-shrink: 0;
     align-items: center;
@@ -736,7 +791,8 @@
       width: 16px;
       height: 16px;
     }
-    &:hover {
+    &:hover,
+    &[aria-expanded="true"] {
       background: var(--color-tab-hover);
       color: var(--color-ink);
     }
@@ -746,30 +802,163 @@
     }
   }
   /* 6px from the last tab: the list's 10px end padding (room for a foot) less 4px. */
-  .mind-tabs-new {
+  .tab-new {
     width: 28px;
     margin: 0 0 3px -4px;
     border-radius: 9999px;
   }
-  .mind-tabs-spacer {
+  .tab-strip-spacer {
     flex: 1 1 auto;
   }
-  .mind-tabs-export {
+  .tab-export {
     gap: 6px;
-    margin-bottom: 4px;
-    padding: 0 10px;
+    margin: 0 2px 4px;
+    padding: 0 8px;
     border-radius: 6px;
     font-size: 13px;
     line-height: 20px;
   }
-  @keyframes mind-tab-pulse {
+  .tab-strip-button {
+    min-width: 28px;
+    margin: 0 2px 4px;
+    padding: 0 6px;
+    border-radius: 6px;
+  }
+  .tab-split {
+    display: contents;
+  }
+  /* A narrow group keeps Split in its ⋯ menu. */
+  @container group (width < 420px) {
+    .tab-split {
+      display: none;
+    }
+    .tab-export > span {
+      display: none;
+    }
+  }
+  @keyframes tab-pulse {
     50% {
       opacity: 0.35;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .mind-tab-dot[data-status="writing"] {
+    .tab-dot[data-status="writing"] {
       animation: none;
+    }
+  }
+
+  /* The tab, following the pointer. */
+  .tab-drag-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 260px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    color: var(--color-ink);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  /* Where a tab dropped on a strip will land. */
+  .tab-drop-line {
+    position: fixed;
+    z-index: 55;
+    width: 2px;
+    height: 28px;
+    border-radius: 1px;
+    background: var(--color-accent);
+    pointer-events: none;
+  }
+  /* The half a split will take, or the group a tab will move into, while it accepts the drop. */
+  .tab-drop-zone {
+    position: fixed;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--color-accent-wash) 78%, transparent);
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+    pointer-events: none;
+    transition:
+      left 80ms ease-out,
+      width 80ms ease-out;
+
+    > span {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--color-sheet);
+      box-shadow: var(--shadow-popover);
+      color: var(--color-accent);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 16px;
+      white-space: nowrap;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tab-drop-zone {
+      transition: none;
+    }
+  }
+
+  /* A line about the tabs, above the sidebar's foot (or the card's corner while the sidebar is hidden). */
+  .tab-notice {
+    position: absolute;
+    bottom: 52px;
+    left: 16px;
+    z-index: 35;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: max(200px, min(320px, calc(var(--sidebar-width) - 16px)));
+    padding: 6px 6px 6px 10px;
+    border-radius: 6px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    color: var(--color-ink-secondary);
+    font-size: 12px;
+    line-height: 16px;
+  }
+  .tab-notice-action {
+    flex-shrink: 0;
+    padding: 0 2px;
+    border-radius: 4px;
+    color: var(--color-accent);
+    font-weight: 600;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+  }
+  .tab-notice-close {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    color: var(--color-ink-meta);
+
+    > svg {
+      width: 10px;
+      height: 10px;
+      stroke-width: 2.5;
+    }
+    &:hover {
+      background: var(--color-hover);
+      color: var(--color-ink);
     }
   }
 
@@ -785,7 +974,7 @@
   /*
    * What scrolls the Mind: room is kept for a scrollbar where they always show,
    * so the column doesn't shift as a Mind grows past the window, and the
-   * composer under it keeps clear of the same width (MindPane).
+   * composer under it keeps clear of the same width (MindTab).
    */
   .mind-scroller {
     scrollbar-gutter: stable;
@@ -2885,4 +3074,11 @@
 /* macOS's traffic lights take the app mark's place in the sidebar's header (see "The title bar"). */
 :root[data-title-bar="inset"]:not([data-full-screen]) .app-mark {
   display: none;
+}
+
+/* While a tab is dragged: no text is selected, and the pointer says so (last, so it wins). */
+body.tab-dragging,
+body.tab-dragging * {
+  cursor: grabbing;
+  user-select: none;
 }

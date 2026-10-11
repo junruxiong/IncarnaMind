@@ -13,7 +13,7 @@ interface MeetingsState {
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
-  /** "Record a meeting": a new Mind, in a new tab, with the start block. */
+  /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
   record(): Promise<void>;
   /** Start recording, after the one-time notice if this device hasn't shown it. */
   start(meetingId: string, systemAudio: boolean): Promise<void>;
@@ -50,7 +50,12 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     async record() {
       try {
         const meeting = await core.createMeeting();
-        useAppStore.getState().openMind(meeting.mindId, { newTab: true });
+        // A tab of its own, as New Mind opens one: never in place of the Mind the User is in.
+        await useAppStore.getState().changeLayout({
+          type: "open",
+          item: { kind: "mind", mindId: meeting.mindId },
+          where: { in: "group" },
+        });
       } catch (error) {
         useAppStore.getState().reportError(error);
       }
