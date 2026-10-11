@@ -244,7 +244,7 @@ export const UI_USAGE_EVENTS = [
  * - `app_version`: this build's version, the only value accepted;
  * - `os` and `arch`: the operating system and processor family, "other"
  *   for any the app isn't built for;
- * - `build`: "tester" for a test build (the alpha), otherwise "release".
+ * - `build`: "tester" for a test build (for invited testers), otherwise "release".
  */
 export const COMMON_FIELDS = {
   app_version: { kind: "app-version" },

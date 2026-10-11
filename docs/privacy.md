@@ -16,7 +16,7 @@ Usage data is a small set of anonymous product events, such as "a Question was a
 
 - **Only from a build made with an analytics project.** A build without one (from source, by default) sends nothing, asks nothing, and doesn't load the analytics code.
 - **A release asks once, on the first run.** Nothing is sent unless you agree; the default is no.
-- **A test build (the alpha)** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, with the switch to turn it off.
+- **A test build, for invited testers,** sends usage data until you turn it off, as testers agree to when they join. Its first run says so, with the switch to turn it off.
 - **Local mode** ("Keep everything on this computer", in Settings → Search) turns usage data off, and it stays off.
 - **You can change it any time** in Settings → Privacy, under "Usage data". Turning it off stops sending at once and drops anything still waiting to be sent.
 
@@ -71,6 +71,6 @@ A build sends usage data only when it's built with both of these set (electron-v
 - `MAIN_VITE_POSTHOG_KEY`: the PostHog project's API key (`phc_…`), which can only send events.
 - `MAIN_VITE_POSTHOG_HOST`: the project's host, over https, e.g. `https://eu.i.posthog.com` or a self-hosted server.
 
-`MAIN_VITE_TESTER_BUILD=1` makes a test build, where usage data is on until the User turns it off. The release workflow sets it for tags with `-alpha` in them. See [releasing.md](releasing.md).
+`MAIN_VITE_TESTER_BUILD=1` makes a test build, where usage data is on until the User turns it off. The release workflow sets it only for tags with `-tester` in them (`v0.9.0-tester.1`); an `-alpha` or `-beta` tag makes a release build, which asks first. See [releasing.md](releasing.md).
 
 In the PostHog project, turn on **Discard client IP data** too (it's the default for organisations in the EU cloud).

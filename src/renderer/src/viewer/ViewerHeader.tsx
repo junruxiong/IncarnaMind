@@ -1,24 +1,28 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 import type { Document } from "../../../core/api";
 import { displayName, sourceOf } from "../../../shared/documentNames";
+import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { DocumentTagChips } from "../components/TagChips";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { pageDate } from "../webPages";
-import { CloseViewerIcon, OpenExternallyIcon } from "./icons";
+import { OpenExternallyIcon } from "./icons";
 
-/** What every view's header needs from the panel: the Document shown, and how to close. */
+/** What every view's toolbar needs from its tab: the Document shown, and whether it is a preview. */
 export interface ViewerFrame {
-  /** Undefined when the viewer is empty or its Document was deleted. */
+  /** Undefined when its Document was deleted. */
   document: Document | undefined;
-  onClose(): void;
+  /** The tab is a preview: the toolbar offers to keep it open. */
+  preview: boolean;
+  keep(): void;
 }
 
 export const ViewerFrameContext = createContext<ViewerFrame>({
   document: undefined,
-  onClose: () => undefined,
+  preview: false,
+  keep: () => undefined,
 });
 
 /** A thin vertical rule between groups of the header's controls. */
@@ -27,10 +31,11 @@ export function HeaderDivider() {
 }
 
 /**
- * The viewer's one header, the card's 36px band: the outline toggle
- * (`leading`), the Document's name, the view's own controls (`children`: page
- * navigation and zoom for a PDF), then "Open in default app" (for a web
- * page, when it was fetched and "Open the live page") and close.
+ * A Document tab's 36px toolbar, under its group's tab strip: the outline
+ * toggle (`leading`), the Document's kind and name, its Tags, the view's own
+ * controls (`children`: where it is, page navigation and zoom for a PDF),
+ * then Keep open for a preview, and "Open in default app" (for a web page,
+ * when it was fetched and "Open the live page").
  */
 export function ViewerHeader({
   leading,
@@ -47,7 +52,7 @@ export function ViewerHeader({
 }) {
   const t = useT();
   const language = useLanguage();
-  const { document, onClose } = useContext(ViewerFrameContext);
+  const { document, preview, keep } = useContext(ViewerFrameContext);
   /** Why the Document's own app couldn't open it, until it is tried again. */
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -64,8 +69,14 @@ export function ViewerHeader({
 
   return (
     <>
-      <header data-testid="viewer-header" className="viewer-header title-bar">
+      <header data-testid="viewer-header" className="viewer-header">
         {leading}
+        {document && (
+          <DocumentLineIcon
+            kind={document.kind}
+            className={`viewer-kind ${leading ? "ml-1" : "ml-1.5"}`}
+          />
+        )}
         {document ? (
           <span
             data-testid="viewer-title"
@@ -75,16 +86,26 @@ export function ViewerHeader({
                 : `${displayName(document)}
 ${sourceOf(document)}`
             }
-            className={`viewer-title ${leading ? "ml-1" : "pl-2"}`}
+            className="viewer-title"
           >
             {displayName(document)}
           </span>
-        ) : (
-          <span className="flex-1" />
-        )}
+        ) : null}
         {document && <DocumentTagChips document={document} variant="header" />}
+        <span className="flex-1" />
         {children}
-        {children && <HeaderDivider />}
+        {preview && (
+          <button
+            type="button"
+            data-testid="viewer-keep"
+            title={t("viewer.keepTip")}
+            onClick={keep}
+            className="viewer-keep"
+          >
+            <PinLineIcon className="size-[13px]" />
+            <span>{t("viewer.keep")}</span>
+          </button>
+        )}
         {document?.web && (
           <span data-testid="viewer-web-fetched" className="viewer-meta">
             {t("webPages.fetched", { date: pageDate(document.web.fetchedAt, language) })}
@@ -102,16 +123,6 @@ ${sourceOf(document)}`
             <OpenExternallyIcon className="size-4" />
           </button>
         )}
-        <button
-          type="button"
-          data-testid="viewer-close"
-          aria-label={t("viewer.close")}
-          title={t("viewer.close")}
-          onClick={onClose}
-          className="viewer-icon-button"
-        >
-          <CloseViewerIcon className="size-4" />
-        </button>
       </header>
       {problem && (
         <ProblemLine testId="viewer-open-problem" className="shrink-0 px-4 py-2">

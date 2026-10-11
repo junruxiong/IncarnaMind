@@ -10,7 +10,7 @@ export interface ViewPlace {
  * Keeps a view's place while its Document's file is read again (a new
  * version, or the file back after it went), so the view comes back where it
  * was rather than at the top. Only for the same open request: opening the
- * Document again, or another one, starts afresh. See `ViewerPanel`.
+ * Document again, or another one, starts afresh. See `DocumentTab`.
  */
 export interface PlaceMemory {
   /** The place kept for this open request, if any. */

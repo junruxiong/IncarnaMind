@@ -9,9 +9,11 @@ import {
   dismissChatSetup,
   launchApp,
   linkedFolderRow,
+  newMind,
   openLinkedFolderMenu,
   previewLink,
   removeDataFolder,
+  showSourceLocations,
   turnOnEmbeddings,
   useLocalChatModel,
 } from "./app";
@@ -166,7 +168,7 @@ async function expectRowsAligned(window: Page): Promise<number> {
   return measured.length;
 }
 
-test("sidebar rows share one text edge, a Folder's children are one step deeper, and pane headers are 44px", async () => {
+test("sidebar rows share one text edge, in the Folders view and on disk, a folder's children are one step deeper, and pane headers are 44px", async () => {
   // Two Linked folders, one with a folder inside, and a file added on its own.
   const papersPath = join(sources, "Papers");
   const reportsPath = join(sources, "Reports");
@@ -186,7 +188,7 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
     "Literature review, chapter 2",
     "Reading notes: LM scaling",
   ]) {
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.getByTestId("mind-title").fill(title);
     await expect(window.getByTestId("mind-list-item").first()).toHaveText(title);
   }
@@ -197,17 +199,32 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   const folderRow = (folderId: string) =>
     tree.locator(`[data-folder-id="${folderId}"][data-testid="folder-item"]`);
   const documents = window.getByTestId("document-list-item");
+
+  const sidebar = window.getByTestId("sidebar");
+  // The Folders view: the Minds, then the Documents, Not in a Folder, at x 16 / 40.
+  const projectRows = tree.locator(
+    '[data-testid="mind-list-item"], [data-testid="document-list-item"]',
+  );
+  await expect(projectRows).toHaveCount(3 + 4);
+  for (const { icon, text, depth } of await rowEdges(sidebar, projectRows)) {
+    expect(depth).toBe(0);
+    expect(icon).toBeCloseTo(16, 0);
+    expect(text).toBeCloseTo(40, 0);
+  }
+  for (const row of await projectRows.all()) {
+    expect((await boxOf(row)).height).toBeCloseTo(28, 0);
+  }
+
+  // On disk: every Folder, group and Document row, depth 0 at x 16 / 40, each level 24px deeper.
+  await showSourceLocations(window);
+  const rows = tree.locator(
+    '[data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
+  );
+  await expect(rows).toHaveCount(3 + 1 + 4);
   await expect(documents.filter({ hasText: "Attention Is All You Need" })).toHaveAttribute(
     "data-depth",
     "2",
   );
-
-  const sidebar = window.getByTestId("sidebar");
-  // Every Mind, Folder, group and Document row: depth 0 at x 16 / 40, each level 24px deeper.
-  const rows = tree.locator(
-    '[data-testid="mind-list-item"], [data-testid="folder-item"], [data-testid="other-documents"], [data-testid="document-list-item"]',
-  );
-  await expect(rows).toHaveCount(3 + 3 + 1 + 4);
   const edges = await rowEdges(sidebar, rows);
   for (const { icon, text, depth } of edges) {
     expect(icon).toBeCloseTo(16 + depth * 24, 0);
@@ -218,21 +235,22 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   const child = documents.filter({ hasText: "Language Models" });
   expect(await boxOf(child.locator("svg").first()).then((box) => box.x)).toBeCloseTo(papersText, 0);
   expect(await textLeft(child.getByTestId("row-text"))).toBeCloseTo(papersText + 24, 0);
-  // Minds, both Linked folders and "Other Documents" at the top; 2026 and the Documents in
+  // Both Linked folders and "Other Documents" at the top; 2026 and the Documents in
   // Papers, Reports and Other Documents one step in; the Document in 2026 two.
-  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2]);
+  expect(edges.map((edge) => edge.depth).sort()).toEqual([0, 0, 0, 1, 1, 1, 1, 2]);
 
-  // "New Mind", Settings and the section labels share the columns.
+  // "All Documents", Settings and Not in a Folder's label share the columns.
   const sidebarLeft = (await boxOf(sidebar)).x;
-  const newMind = window.getByTestId("new-mind");
-  expect((await boxOf(newMind.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
-  expect((await textLeft(newMind.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
+  const allDocuments = window.getByTestId("open-library");
+  expect((await boxOf(allDocuments.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
+  expect((await textLeft(allDocuments.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
   const settings = window.getByTestId("sidebar-footer").getByRole("button", { name: "Settings" });
   expect((await boxOf(settings.locator("svg"))).x - sidebarLeft).toBeCloseTo(16, 0);
   expect((await textLeft(settings.locator("span"))) - sidebarLeft).toBeCloseTo(40, 0);
-  for (const label of [window.locator("#minds-heading"), window.locator("#documents-heading")]) {
-    expect((await textLeft(label)) - sidebarLeft).toBeCloseTo(16, 0);
-  }
+  await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
+  const notInAFolder = window.getByTestId("not-in-a-folder-toggle").locator("span");
+  expect((await textLeft(notInAFolder)) - sidebarLeft).toBeCloseTo(16, 0);
+  await showSourceLocations(window);
   // The header starts the window's title bar: macOS's traffic lights there (e2e/titleBar.spec.ts),
   // or else the app's mark, on the icon column.
   const header = window.getByTestId("sidebar-header");
@@ -241,20 +259,20 @@ test("sidebar rows share one text edge, a Folder's children are one step deeper,
   }
 
   // Rows are 28px.
-  for (const row of [newMind, ...(await rows.all())]) {
+  for (const row of [allDocuments, ...(await rows.all())]) {
     expect((await boxOf(row)).height).toBeCloseTo(28, 0);
   }
 
   // The sidebar's header is 44px; the card's band of tabs is 36px, 8px down, so its bottom
   // lines up with the header's rule.
-  const mindHeader = window.getByTestId("mind-header");
+  const mindHeader = window.getByTestId("tab-strip");
   const sidebarHeader = await boxOf(header);
   const mindHeaderBox = await boxOf(mindHeader);
   expect(sidebarHeader.height).toBe(44);
   expect(mindHeaderBox.height).toBe(36);
   expect(mindHeaderBox.y + mindHeaderBox.height).toBe(sidebarHeader.y + sidebarHeader.height);
   await expect(
-    mindHeader.locator('[role="tab"][aria-selected="true"]').getByTestId("mind-tab-title"),
+    mindHeader.locator('[role="tab"][aria-selected="true"]').getByTestId("tab-title"),
   ).toHaveText("Reading notes: LM scaling");
 
   // Folding a Folder hides what's inside it.
@@ -316,6 +334,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await addDocuments(window, [join(sources, "Supervisor meeting notes.txt")]);
   await linkFolder(window, drivePath);
   await linkFolder(window, projectsPath);
+  await showSourceLocations(window);
   const drive = linkedFolderRow(window, "Drive");
   const projects = linkedFolderRow(window, "Projects");
   await expect(drive).toHaveAttribute("data-state", "idle");
@@ -374,6 +393,7 @@ test("Linked folder and Document rows stay 28px, on the shared text edge, throug
   await rename(drivePath, join(sources, "Drive (unplugged)"));
   running = await launchApp(dataDir);
   window = running.window;
+  await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Drive")).toHaveAttribute("data-state", "unavailable", {
     timeout: 15_000,
   });
@@ -387,7 +407,7 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   await writeFile(paper, "A report on attention in language models.\n");
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Field notes");
   // An empty Linked folder: its own Folder is listed, with nothing in it to tag.
   await mkdir(join(sources, "Projects"));
@@ -397,10 +417,10 @@ test("the status footer doesn't move the tree when tagging starts or stops", asy
   const footer = window.getByTestId("sidebar-footer");
   const status = window.getByTestId("sidebar-status");
   const watched = [
-    window.getByTestId("new-mind"),
+    window.getByTestId("open-library"),
+    window.getByTestId("browse-views"),
+    window.getByTestId("not-in-a-folder-toggle"),
     window.getByTestId("mind-list-item"),
-    window.getByTestId("folder-item"),
-    window.locator("#documents-heading"),
   ];
   const layout = async () => ({
     rows: await Promise.all(watched.map(async (each) => (await boxOf(each)).y)),
@@ -445,9 +465,9 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
     { node: process.execPath, server: TIDE_SERVER },
   );
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Trip");
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Other notes");
   const trip = window.getByTestId("mind-list-item").filter({ hasText: "Trip" });
   await trip.click();
@@ -483,7 +503,7 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
   );
   expect((await boxOf(tabDot)).width).toBe(6);
   await screenshot(window, "sidebar-approval", window.getByTestId("sidebar"));
-  await screenshot(window, "tabs-approval", window.getByTestId("mind-header"));
+  await screenshot(window, "tabs-approval", window.getByTestId("tab-strip"));
 
   await card.getByTestId("approval-deny").click();
   await expect(dot).toHaveCount(0);

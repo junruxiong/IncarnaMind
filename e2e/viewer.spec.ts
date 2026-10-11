@@ -12,6 +12,7 @@ import {
   interceptOpenPath,
   launchApp,
   linkFolderFromSidebar,
+  newMind,
   openDocumentAt,
   openDocumentMenu,
   pathsOpened,
@@ -30,12 +31,21 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
   await target.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-/** Sets the viewer's width, as dragging its edge would, through the core's bridge. */
-const setViewerWidth = (window: Page, width: number) =>
-  window.evaluate(async (viewerWidth) => {
+/**
+ * Makes the Document's group, right of the Mind's, this wide, as dragging the
+ * divider between them would, through the core's bridge.
+ */
+async function setViewerWidth(window: Page, width: number): Promise<void> {
+  await expect(window.getByTestId("tab-group")).toHaveCount(2);
+  await window.evaluate(async (wanted) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    await bridge.updateSettings({ device: { viewerWidth } });
+    const groups = document.querySelector('[data-testid="tab-groups"]');
+    if (!groups) throw new Error("No groups.");
+    const room = groups.getBoundingClientRect().width - 1;
+    await bridge.changeLayout("main", { type: "resize", widths: [room - wanted, wanted] });
   }, width);
+  await expect.poll(() => widthOf(window.getByTestId("viewer"))).toBeCloseTo(width, 0);
+}
 
 /** An element's box; it must be shown. */
 async function boxOf(locator: Locator) {
@@ -130,20 +140,23 @@ async function writeSources() {
   return { report, notes };
 }
 
-test("clicking a PDF in the sidebar opens it in the viewer, and another Document replaces it", async () => {
+test("clicking a PDF in the sidebar opens it in a tab beside the Mind, and another Document replaces its preview", async () => {
   const { report, notes } = await writeSources();
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [report, notes]);
+  await window.getByTestId("new-tab").click();
   const viewer = window.getByTestId("viewer");
-  const mindArea = window.getByTestId("mind-area");
+  const groups = window.getByTestId("tab-group");
   const items = window.getByTestId("document-list-item");
   await expect(viewer).toHaveCount(0);
-  const fullWidth = await widthOf(mindArea);
+  await expect(groups).toHaveCount(1);
+  const fullWidth = await widthOf(groups.first());
 
   await items.filter({ hasText: "Report" }).getByTestId("open-document").click();
   await expect(viewer).toBeVisible();
-  expect(await widthOf(mindArea)).toBeLessThan(fullWidth);
+  await expect(groups).toHaveCount(2);
+  expect(await widthOf(groups.first())).toBeLessThan(fullWidth);
   await expect(window.getByTestId("viewer-title")).toHaveText("Report");
 
   // Page 1 is drawn on its canvas, with its text selectable in the text layer.
@@ -171,16 +184,18 @@ test("clicking a PDF in the sidebar opens it in the viewer, and another Document
   await window.getByTestId("pdf-fit-width").click();
   await expect.poll(() => widthOf(page1)).toBe(fitted);
 
-  // Another Document replaces the PDF: one Document at a time.
+  // Another Document replaces the PDF's preview: one tab, not a pile.
   await items.filter({ hasText: "Field notes" }).getByTestId("open-document").click();
   await expect(window.getByTestId("viewer-title")).toHaveText("Field notes");
+  await expect(window.getByTestId("document-tab")).toHaveCount(1);
   await expect(viewer.locator("[data-page-number]")).toHaveCount(0);
   await expect(window.getByTestId("viewer-text").locator("h1")).toHaveText("Field notes");
 
-  // Closing gives the Mind its full width back.
-  await window.getByTestId("viewer-close").click();
+  // Closing its tab gives the Mind its full width back.
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await expect(viewer).toHaveCount(0);
-  expect(await widthOf(mindArea)).toBe(fullWidth);
+  await expect(groups).toHaveCount(1);
+  expect(await widthOf(groups.first())).toBe(fullWidth);
   await app.close();
 });
 
@@ -274,14 +289,14 @@ test("in a narrow viewer with the outline open, Fit width fits the page in the w
   await copyFile(join(FORMATS, "Coastal Flood Risk Review.docx"), word);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await setViewerWidth(window, 420);
+  await window.getByTestId("new-tab").click();
   await addDocuments(window, [guide, word]);
   const viewer = window.getByTestId("viewer");
   const items = window.getByTestId("document-list-item");
 
   // A PDF: zoomed, then fitted again with the outline beside it.
   await items.filter({ hasText: "Guide" }).getByTestId("open-document").click();
-  await expect.poll(() => widthOf(viewer)).toBe(420);
+  await setViewerWidth(window, 420);
   const page1 = viewer.locator('[data-page-number="1"]');
   await expect(page1).toHaveAttribute("data-drawn", "true");
   await window.getByTestId("pdf-outline-button").click();
@@ -427,9 +442,10 @@ test("a pinch zooms a PDF smoothly around the pointer; the wheel with Ctrl held 
   );
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await setViewerWidth(window, 420);
+  await window.getByTestId("new-tab").click();
   await addDocuments(window, [long]);
   await window.getByTestId("open-document").click();
+  await setViewerWidth(window, 420);
   const viewer = window.getByTestId("viewer");
   const scroller = window.getByTestId("pdf-scroller");
   const level = window.getByTestId("pdf-zoom-level");
@@ -626,7 +642,7 @@ test("a Document deleted while it is open, or already deleted, shows Document re
   await expect(viewer.locator("[data-page-number]")).toHaveCount(0);
 
   // A Citation of a deleted Document opens the panel on the message and its stored quote.
-  await window.getByTestId("viewer-close").click();
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await openDocumentAt(window, { documentId, pageFrom: 2, quote: "Revenue grew by ten percent" });
   await expect(window.getByTestId("viewer-removed")).toContainText(
     "has been deleted from IncarnaMind",
@@ -682,7 +698,7 @@ test("the open viewer follows its file on disk: the new version once indexed, an
   await expect(text).toContainText("The second draft, rewritten.");
   await expect(viewer.getByTestId("viewer-open-externally")).toHaveCount(0);
   // Opened again, it can't be shown: its file is missing, the Document isn't deleted...
-  await window.getByTestId("viewer-close").click();
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await notesItem.getByTestId("open-document").click();
   const gone = window.getByTestId("viewer-removed");
   await expect(gone).toContainText("The file for Notes is missing from its folder");
@@ -754,26 +770,27 @@ test("the open viewer follows its file on disk: the new version once indexed, an
   await app.close();
 });
 
-test("the viewer has one 36px header, level with the Mind's, holding every control in order", async () => {
+test("a Document's tab has one 36px toolbar under its group's strip, holding every control in order", async () => {
   const guide = join(sources, "Guide.pdf");
   await writeFile(guide, GUIDE);
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await addDocuments(window, [guide]);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("open-document").click();
   const viewer = window.getByTestId("viewer");
   await expect(viewer.locator('[data-page-number="1"]')).toHaveAttribute("data-drawn", "true");
 
-  // One header, 36px tall, its top level with the Mind pane's header.
+  // One toolbar, 36px tall, right under its group's strip.
   const header = viewer.getByTestId("viewer-header");
   await expect(viewer.locator("header")).toHaveCount(1);
   const headerBox = await boxOf(header);
-  const mindHeader = window.getByTestId("mind-area").locator(":scope > *").first();
+  const strip = await boxOf(window.getByTestId("tab-strip").nth(1));
   expect(headerBox.height).toBe(36);
-  expect(headerBox.y).toBe((await boxOf(mindHeader)).y);
+  expect(headerBox.y).toBe(strip.y + strip.height);
 
-  // In order: the outline toggle, the name, its Tags, page navigation, zoom, open, close.
+  // In order: the outline toggle, the name, its Tags, page navigation, zoom, Keep open (it is
+  // a preview), and its own app.
   const controls = header.locator("button, input, [data-testid='viewer-title']");
   expect(
     await controls.evaluateAll((elements) =>
@@ -789,11 +806,11 @@ test("the viewer has one 36px header, level with the Mind's, holding every contr
     "pdf-zoom-out",
     "pdf-zoom-in",
     "pdf-fit-width",
+    "viewer-keep",
     "viewer-open-externally",
-    "viewer-close",
   ]);
   await expect(window.getByTestId("viewer-title")).toHaveText("Guide");
-  for (const control of await header.locator("button").all()) {
+  for (const control of await header.locator("button:not([data-testid='viewer-keep'])").all()) {
     await expect(control).toHaveAttribute("aria-label", /.+/);
     expect((await boxOf(control)).height).toBe(28);
   }
@@ -814,8 +831,8 @@ test("the viewer has one 36px header, level with the Mind's, holding every contr
     "pdf-zoom-out",
     "pdf-zoom-in",
     "pdf-fit-width",
+    "viewer-keep",
     "viewer-open-externally",
-    "viewer-close",
   ]);
 
   // "Open in default app" opens a copy named after the Document, as the sidebar's menu does.
@@ -825,13 +842,6 @@ test("the viewer has one 36px header, level with the Mind's, holding every contr
   const [opened] = await pathsOpened(app);
   expect(basename(opened ?? "")).toBe("Guide.pdf");
 
-  // It slides in as it opens, unless the system asks for less motion.
-  const animation = () => viewer.evaluate((element) => getComputedStyle(element).animationName);
-  expect(await animation()).toBe("viewer-pane-in");
-  await window.getByTestId("viewer-close").click();
-  await window.emulateMedia({ reducedMotion: "reduce" });
-  await window.getByTestId("open-document").click();
-  expect(await animation()).toBe("none");
   await app.close();
   // The app would remove the copy a day later; the test doesn't leave it behind.
   if (opened) await rm(dirname(opened), { recursive: true, force: true });

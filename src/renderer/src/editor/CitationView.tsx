@@ -5,8 +5,8 @@ import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, type CitationAttributes } from "../..
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { useAnswers } from "../answers";
-import { files } from "../core";
-import { errorMessage } from "../errors";
+import { commands } from "../commands/registry";
+import { useTabPlace } from "../components/tabs/tabItems";
 import { useLanguage, useT } from "../i18n";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
@@ -58,6 +58,8 @@ export function CitationView({
   );
   const kept = useAppStore((state) => state.keptCitationTexts);
   const openDocument = useAppStore((state) => state.openDocument);
+  /** The Mind's group: the Document opens in the group to its right. */
+  const place = useTabPlace();
   const state = citationState(attributes, documents, kept);
   const location = citationLocation(attributes);
   const where = location ? formatLocation(location, t) : null;
@@ -78,19 +80,22 @@ export function CitationView({
   const openCited = (withQuote: boolean) => {
     const documentId = state.documentId ?? attributes.documentId;
     if (!documentId) return;
-    openDocument({
-      documentId,
-      // A whole TXT or Markdown file cited before Locations, whose quote wasn't found, opens at the top.
-      pageFrom: attributes.pageFrom ?? undefined,
-      pageTo: attributes.pageTo ?? undefined,
-      quote: withQuote && attributes.quote ? attributes.quote : undefined,
-      citation: {
-        check: state.check,
-        ...(number > 0 ? { number } : {}),
-        ...(where ? { label: where } : {}),
-        ...(attributes.contentHash ? { contentHash: attributes.contentHash } : {}),
+    openDocument(
+      {
+        documentId,
+        // A whole TXT or Markdown file cited before Locations, whose quote wasn't found, opens at the top.
+        pageFrom: attributes.pageFrom ?? undefined,
+        pageTo: attributes.pageTo ?? undefined,
+        quote: withQuote && attributes.quote ? attributes.quote : undefined,
+        citation: {
+          check: state.check,
+          ...(number > 0 ? { number } : {}),
+          ...(where ? { label: where } : {}),
+          ...(attributes.contentHash ? { contentHash: attributes.contentHash } : {}),
+        },
       },
-    });
+      { as: "citation", ...(place && { from: place.groupId }) },
+    );
   };
 
   const onClick = () => {
@@ -310,9 +315,10 @@ function CitationCard({
             className="citation-card-action"
             onClick={() => {
               if (!state.documentId) return;
-              files.openDocumentExternally(state.documentId).catch((failure: unknown) => {
-                useAppStore.setState({ actionError: errorMessage(failure) });
-              });
+              const focus = { kind: "document" as const, id: state.documentId };
+              commands
+                .run("document.openLivePage", { selection: [], focus, surface: "mind" })
+                .catch(useAppStore.getState().reportError);
             }}
           >
             {t("webPages.openLive")}

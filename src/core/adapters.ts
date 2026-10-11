@@ -357,7 +357,7 @@ export interface UsageDataSender {
   /** Where events go, for the Privacy page. */
   readonly service: ExternalService;
   /**
-   * A test build (the alpha): usage data is on until the User turns it off,
+   * A test build (for invited testers): usage data is on until the User turns it off,
    * as testers agree to when they join, and a first-run notice says so.
    * Otherwise it is off until the User agrees.
    */
