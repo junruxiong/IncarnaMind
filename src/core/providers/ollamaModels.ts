@@ -19,6 +19,7 @@
 import { freemem, totalmem } from "node:os";
 import type { CitationSupport } from "../api";
 import { isRecord } from "../errors";
+import { isRemoteEntry } from "./ollamaCloud";
 
 /** The settings every chat request to one model carries. */
 export interface OllamaModelSettings {
@@ -46,6 +47,8 @@ export interface OllamaModelProfile {
   support: CitationSupport | null;
   /** False for a model that can't answer Questions, such as an embedding model. */
   chat: boolean;
+  /** True for a cloud model: Ollama forwards its requests to ollama.com (see `OLLAMA_CLOUD`). */
+  remote: boolean;
   settings: OllamaModelSettings;
 }
 
@@ -300,6 +303,7 @@ export function profileOf(
     parameters,
     support: citingMode(capabilities, parameters),
     chat: capabilities ? capabilities.includes("completion") : true,
+    remote: isRemoteEntry(tag) || isRemoteEntry(show),
     settings: {
       numCtx,
       outputTokens: outputTokensFor(numCtx, think),
@@ -364,7 +368,9 @@ export function createOllamaModels(
           body: JSON.stringify({ model }),
         }).then(
           (show) => profileOf(found, isRecord(show) ? show : {}, memory()),
-          () => null,
+          // Without /api/show a model is unknown, except that /api/tags may already
+          // say it runs on ollama.com: that must still reach the consent check.
+          () => (isRemoteEntry(found) ? profileOf(found, {}, memory()) : null),
         );
         profiles.set(key, profile);
         // A failed lookup is tried again next time.

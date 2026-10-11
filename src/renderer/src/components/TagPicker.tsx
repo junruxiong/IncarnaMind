@@ -13,6 +13,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { Document, DocumentTag, Tag } from "../../../core/api";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { type Box, enterFrom, exitToward } from "../motion";
 import { useAppStore } from "../store";
 import { actionFor, pickerOptions, type TagOnDocuments, tagsOnDocuments } from "../tagEditing";
 import { CheckLineIcon, CloseLineIcon, PlusLineIcon, SparkLineIcon } from "./lineIcons";
@@ -25,22 +26,26 @@ const EDGE_PX = 8;
 /**
  * Below its button, or above it if the window is too short; kept inside the
  * window. A popover not showing yet has no size, so it is laid out for a
- * moment to measure it as it will show (as `usePopoverMenu` does).
+ * moment to measure it as it will show (as `usePopoverMenu` does). Returns
+ * where it put it.
  */
-function place(button: HTMLElement | null, popover: HTMLElement | null): void {
+function place(button: HTMLElement | null, popover: HTMLElement | null): Box | null {
   const anchor = button?.getBoundingClientRect();
-  if (!anchor || !popover) return;
+  if (!anchor || !popover) return null;
   const hidden = !popover.matches(":popover-open");
   if (hidden) popover.style.display = "block";
   const width = popover.offsetWidth;
   const height = popover.offsetHeight;
   if (hidden) popover.style.removeProperty("display");
-  popover.style.left = `${Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX))}px`;
+  const left = Math.max(EDGE_PX, Math.min(anchor.left, window.innerWidth - width - EDGE_PX));
   const below = anchor.bottom + GAP_PX;
-  popover.style.top =
+  const top =
     below + height > window.innerHeight - EDGE_PX
-      ? `${Math.max(EDGE_PX, anchor.top - GAP_PX - height)}px`
-      : `${below}px`;
+      ? Math.max(EDGE_PX, anchor.top - GAP_PX - height)
+      : below;
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+  return { left, top, width, height };
 }
 
 /** Focuses the picker's field (or the description field while describing a new Tag). */
@@ -59,10 +64,12 @@ export function useTagPopover() {
   const [open, setOpen] = useState(false);
 
   // Once rendered with the picker, and before it is drawn: placed, so it shows where it
-  // belongs from the first frame. It takes the focus once it shows (here or on `toggle`).
+  // belongs from the first frame, growing from its button. It takes the focus once it shows
+  // (here or on `toggle`).
   useLayoutEffect(() => {
     if (!open) return;
-    place(button.current, popover.current);
+    const box = place(button.current, popover.current);
+    if (popover.current && box) enterFrom(popover.current, button.current, box);
     if (popover.current?.matches(":popover-open")) focusFieldIn(popover.current);
   }, [open]);
 
@@ -73,7 +80,9 @@ export function useTagPopover() {
       button.current?.focus();
     },
     /** Places it again, e.g. after its height changed. */
-    reposition: () => place(button.current, popover.current),
+    reposition: () => {
+      place(button.current, popover.current);
+    },
     buttonProps: {
       ref: button,
       popoverTarget: id,
@@ -85,6 +94,9 @@ export function useTagPopover() {
       id,
       popover: "auto" as const,
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
+        if (event.newState === "closed" && popover.current) {
+          exitToward(popover.current, button.current);
+        }
         setOpen(event.newState === "open");
       },
       // Now it shows, where it was placed: it can take the focus.

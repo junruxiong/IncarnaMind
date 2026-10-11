@@ -100,10 +100,9 @@
   &[open] summary::before {
     transform: rotate(45deg);
   }
-  @media (prefers-reduced-motion: reduce) {
-    summary::before {
-      transition: none;
-    }
+  /* Reduced motion, from the motion module's mode (src/renderer/src/motion.ts). */
+  :root:not([data-motion="on"]) & summary::before {
+    transition: none;
   }
 }
 .viewer-deck-notes-body {

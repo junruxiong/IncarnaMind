@@ -11,8 +11,13 @@ import {
   dismissChatSetup,
   dragBlock,
   launchApp,
+  leavingCopies,
+  motionLook,
+  motionRunning,
+  motionSettled,
   newMind,
   removeDataFolder,
+  setMotionSpeed,
   setWindowSize,
   slideSelect,
   useLocalChatModel,
@@ -122,6 +127,8 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
   await expect(field).toBeFocused();
   await window.keyboard.type("Twice a month.");
   const marker = editor.getByTestId("footnote-marker").first();
+  // Measured once the popover has grown from its marker.
+  await motionSettled(window);
   const markerBox = await marker.boundingBox();
   const popoverBox = await popover.boundingBox();
   if (!markerBox || !popoverBox) throw new Error("The marker or its popover isn't visible.");
@@ -412,3 +419,100 @@ test("in Chinese: footnotes typed with an input method number together with an A
   expect(paragraphs).toContain("Spring tides 大潮[1][2][3]");
   await app.close();
 });
+
+for (const motion of ["on", "off"] as const) {
+  test(`a Citation's card opened in a footnote closes before the footnote, and only it moves (motion ${motion})`, async () => {
+    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await setWindowSize(app, window, 1280, 800);
+    await window.emulateMedia({ reducedMotion: "no-preference" });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await window.evaluate(
+      (chosen) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+          device: { motion: chosen },
+        }),
+      motion,
+    );
+    await expect(window.locator("html")).toHaveAttribute("data-motion", motion);
+    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type("Spring tides");
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("When do spring tides happen?");
+    await window.keyboard.press("Enter");
+    const answer = editor.getByTestId("answer");
+    await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(answer.getByTestId("citation")).toHaveAttribute("data-check", "found");
+
+    // The Answer's Citation, copied into a footnote's text.
+    const copied = await editor.evaluate((dom) => {
+      const { view } = (dom as unknown as { editor: Editor }).editor;
+      let at = -1;
+      view.state.doc.descendants((node, pos) => {
+        if (at < 0 && node.type.name === "citation") at = pos;
+      });
+      return view.serializeForClipboard(view.state.doc.slice(at, at + 1)).dom.innerHTML;
+    });
+    await clickEndOf(window, editor.locator(":scope > p").first());
+    await window.keyboard.press("ControlOrMeta+Alt+F");
+    const popover = window.getByTestId("footnote-popover");
+    const field = popover.getByTestId("footnote-text");
+    await expect(field).toBeFocused();
+    await field.evaluate(
+      (dom, html) => (dom as unknown as { editor: Editor }).editor.view.pasteHTML(html),
+      copied,
+    );
+    const held = field.getByTestId("citation");
+    await expect(held).toHaveAttribute("data-check", "found");
+    await motionSettled(window);
+    await setMotionSpeed(window, 0.2);
+
+    // Its card opens over the footnote: on, it grows from its Citation; off, it is there at once.
+    // The footnote, open already, isn't animated again.
+    await held.getByTestId("citation-chip").hover();
+    const card = window.getByTestId("citation-card");
+    await expect(card).toBeVisible();
+    const opening = await motionLook(card);
+    if (motion === "on") {
+      expect(opening.opacity).toBeLessThan(1);
+      expect(opening.scale).toBeLessThan(1);
+    } else {
+      expect(opening).toMatchObject({ opacity: 1, scale: 1, y: 0 });
+      expect(await motionRunning(window)).toBe(0);
+    }
+    expect(await motionLook(popover)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
+    await motionSettled(window);
+
+    // Esc closes the card first: on, its copy goes back toward its Citation, the only thing
+    // moving; the footnote stays as it was, with the focus.
+    await window.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
+    await expect(popover).toBeVisible();
+    if (motion === "on") {
+      await expect.poll(async () => (await leavingCopies(window)).length).toBe(1);
+      expect(await motionRunning(window)).toBe(1);
+    } else {
+      expect(await leavingCopies(window)).toEqual([]);
+      expect(await motionRunning(window)).toBe(0);
+    }
+    expect(await motionLook(popover)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
+    await motionSettled(window);
+    await expect(field).toBeFocused();
+
+    // Then Esc closes the footnote, toward its marker.
+    await window.keyboard.press("Escape");
+    await expect(popover).toHaveCount(0);
+    if (motion === "on") {
+      await expect.poll(async () => (await leavingCopies(window)).length).toBe(1);
+    } else {
+      expect(await leavingCopies(window)).toEqual([]);
+    }
+    await motionSettled(window);
+    expect(await leavingCopies(window)).toEqual([]);
+    await app.close();
+  });
+}
