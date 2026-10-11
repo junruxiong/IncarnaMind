@@ -130,13 +130,16 @@ function GroupDivider({
     next[index] = pair - px / room;
     return next;
   };
+  const pairPx = Math.round(pair * room);
+  // Two groups too narrow for their minimum each keep half.
+  const min = Math.min(GROUP_MIN_PX, Math.floor(pairPx / 2));
   return (
     <ResizeRod
       testId="group-divider"
       label={t("tabs.resize")}
       width={Math.round(before * room)}
-      min={GROUP_MIN_PX}
-      max={Math.round(pair * room) - GROUP_MIN_PX}
+      min={min}
+      max={pairPx - min}
       direction={1}
       onPreview={(px) => onPreview(sharesWith(px))}
       onCommit={(px) => onCommit(sharesWith(px))}

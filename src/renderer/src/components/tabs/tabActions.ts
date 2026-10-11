@@ -1,4 +1,9 @@
-import { type LayoutChange, type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
+import {
+  type LayoutChange,
+  type LayoutTab,
+  MAX_TAB_GROUPS,
+  type WindowLayout,
+} from "../../../../core/api";
 import { activeTabOf, focusedGroupOf, groupOfTab, groupsMerged } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 
@@ -56,12 +61,16 @@ export async function moveToGroup(tabId: string, direction: -1 | 1): Promise<voi
   if (next) focusTab(tabId);
 }
 
+const openTabs = (layout: WindowLayout | null) =>
+  layout?.groups.reduce((sum, group) => sum + group.tabs.length, 0) ?? 0;
+
 /** Closes tabs, then says how many, with Reopen. */
 export async function closeSome(change: LayoutChange, tab: LayoutTab): Promise<void> {
   const store = useAppStore.getState();
-  const before = store.layout?.reopenable ?? 0;
+  // Not from `reopenable`, which stops growing once it holds as many as the core keeps.
+  const before = openTabs(store.layout);
   const next = await store.changeLayout(change);
-  const count = next ? next.reopenable - before : 0;
+  const count = next ? before - openTabs(next) : 0;
   if (count > 0) store.showTabNotice({ kind: "closed", item: tab.item, count });
 }
 
