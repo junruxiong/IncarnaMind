@@ -478,7 +478,42 @@ describe("exporting a Mind", () => {
       includeQuestions: false,
     });
     expect(decode(exported)).toBe("A Note.\n");
-    expect(exported).toMatchObject({ fileName: "Untitled.md", citations: 0, questions: 1 });
+    expect(exported).toMatchObject({ fileName: "A Note.md", citations: 0, questions: 1 });
+  });
+
+  describe("the file is named as the app shows the Mind", () => {
+    const nameOf = async (title: string, blocks: JSONContent[], format: "markdown" | "docx") => {
+      const { core, mind, client } = await setUp(title);
+      writeMind(client, blocks);
+      await client.settled();
+      return (await core.previewMindExport(mind.id, { format })).fileName;
+    };
+
+    test("a Mind with no title takes its first line, in English and Chinese", async () => {
+      expect(await nameOf("", [note("Tides and the moon"), note("More")], "markdown")).toBe(
+        "Tides and the moon.md",
+      );
+      expect(await nameOf("", [note("潮汐与月亮的关系"), note("更多")], "docx")).toBe(
+        "潮汐与月亮的关系.docx",
+      );
+    });
+
+    test("a typed title wins over the first line", async () => {
+      expect(await nameOf("Tides", [note("Something else")], "markdown")).toBe("Tides.md");
+    });
+
+    test("an empty Mind is Untitled", async () => {
+      expect(await nameOf("", [], "markdown")).toBe("Untitled.md");
+    });
+
+    test("the first line is cleaned for a file name and cut", async () => {
+      expect(await nameOf("", [note("Tides: spring/neap?")], "docx")).toBe(
+        "Tides spring neap.docx",
+      );
+      const long = await nameOf("", [note("tide ".repeat(40))], "markdown");
+      expect(long.length).toBeLessThanOrEqual(64);
+      expect(long.endsWith(" tide.md")).toBe(true);
+    });
   });
 
   test("a Citation whose Document has been deleted is unverified, whatever its check said", async () => {
