@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { type NumberedCitation, numberedCitations, textBlockEdited } from "./citationNumbers";
 import { CheckMarkIcon } from "./icons";
+import { peekCitation } from "./peek";
 
 const MARK_HEIGHT = 18;
 /** Between two marks stacked because their markers share a line (or nearly). */
@@ -272,6 +273,11 @@ export function MarginChecks({ editor }: { editor: Editor }) {
           title={mark.label}
           // Keep the editor's selection and focus where they are.
           onMouseDown={(event) => event.preventDefault()}
+          // Its Citation's card opens on hover and focus, as the marker's own does.
+          onPointerEnter={() => peekCitation(mark.marker, "mark-pointer", true)}
+          onPointerLeave={() => peekCitation(mark.marker, "mark-pointer", false)}
+          onFocus={() => peekCitation(mark.marker, "mark-focus", true)}
+          onBlur={() => peekCitation(mark.marker, "mark-focus", false)}
           onClick={() => {
             if (mark.marker.isConnected) mark.marker.click();
           }}

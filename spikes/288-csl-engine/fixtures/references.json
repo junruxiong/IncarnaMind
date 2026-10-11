@@ -1,0 +1,424 @@
+[
+  {
+    "id": "en-shannon-1940",
+    "type": "thesis",
+    "language": "en",
+    "author": [{ "family": "Shannon", "given": "Claude Elwood" }],
+    "title": "An algebra for theoretical genetics",
+    "genre": "Doctoral dissertation",
+    "publisher": "Massachusetts Institute of Technology",
+    "publisher-place": "Cambridge, MA",
+    "issued": { "date-parts": [[1940]] },
+    "URL": "http://hdl.handle.net/1721.1/11174"
+  },
+  {
+    "id": "en-kahneman-1979",
+    "type": "article-journal",
+    "language": "en",
+    "author": [
+      { "family": "Kahneman", "given": "Daniel" },
+      { "family": "Tversky", "given": "Amos" }
+    ],
+    "title": "Prospect theory: An analysis of decision under risk",
+    "container-title": "Econometrica",
+    "volume": "47",
+    "issue": "2",
+    "page": "263-291",
+    "issued": { "date-parts": [[1979, 3]] },
+    "DOI": "10.2307/1914185"
+  },
+  {
+    "id": "en-jumper-2021",
+    "type": "article-journal",
+    "language": "en",
+    "author": [
+      { "family": "Jumper", "given": "John" },
+      { "family": "Evans", "given": "Richard" },
+      { "family": "Pritzel", "given": "Alexander" },
+      { "family": "Green", "given": "Tim" },
+      { "family": "Figurnov", "given": "Michael" },
+      { "family": "Ronneberger", "given": "Olaf" },
+      { "family": "Tunyasuvunakool", "given": "Kathryn" },
+      { "family": "Bates", "given": "Russ" },
+      { "family": "Žídek", "given": "Augustin" },
+      { "family": "Potapenko", "given": "Anna" },
+      { "family": "Bridgland", "given": "Alex" },
+      { "family": "Meyer", "given": "Clemens" },
+      { "family": "Kohl", "given": "Simon A. A." },
+      { "family": "Ballard", "given": "Andrew J." },
+      { "family": "Cowie", "given": "Andrew" },
+      { "family": "Romera-Paredes", "given": "Bernardino" },
+      { "family": "Nikolov", "given": "Stanislav" },
+      { "family": "Jain", "given": "Rishub" },
+      { "family": "Adler", "given": "Jonas" },
+      { "family": "Back", "given": "Trevor" },
+      { "family": "Petersen", "given": "Stig" },
+      { "family": "Reiman", "given": "David" },
+      { "family": "Clancy", "given": "Ellen" },
+      { "family": "Zielinski", "given": "Michal" },
+      { "family": "Steinegger", "given": "Martin" },
+      { "family": "Pacholska", "given": "Michalina" },
+      { "family": "Berghammer", "given": "Tamas" },
+      { "family": "Bodenstein", "given": "Sebastian" },
+      { "family": "Silver", "given": "David" },
+      { "family": "Vinyals", "given": "Oriol" },
+      { "family": "Senior", "given": "Andrew W." },
+      { "family": "Kavukcuoglu", "given": "Koray" },
+      { "family": "Kohli", "given": "Pushmeet" },
+      { "family": "Hassabis", "given": "Demis" }
+    ],
+    "title": "Highly accurate protein structure prediction with AlphaFold",
+    "container-title": "Nature",
+    "volume": "596",
+    "issue": "7873",
+    "page": "583-589",
+    "issued": { "date-parts": [[2021, 8, 26]] },
+    "DOI": "10.1038/s41586-021-03819-2"
+  },
+  {
+    "id": "en-vaswani-2017",
+    "type": "paper-conference",
+    "language": "en",
+    "author": [
+      { "family": "Vaswani", "given": "Ashish" },
+      { "family": "Shazeer", "given": "Noam" },
+      { "family": "Parmar", "given": "Niki" },
+      { "family": "Uszkoreit", "given": "Jakob" },
+      { "family": "Jones", "given": "Llion" },
+      { "family": "Gomez", "given": "Aidan N." },
+      { "family": "Kaiser", "given": "Łukasz" },
+      { "family": "Polosukhin", "given": "Illia" }
+    ],
+    "title": "Attention is all you need",
+    "container-title": "Advances in Neural Information Processing Systems 30",
+    "publisher": "Curran Associates",
+    "publisher-place": "Red Hook, NY",
+    "page": "5998-6008",
+    "issued": { "date-parts": [[2017]] },
+    "URL": "https://papers.nips.cc/paper/7181-attention-is-all-you-need"
+  },
+  {
+    "id": "en-vandermaaten-2008",
+    "type": "article-journal",
+    "language": "en",
+    "author": [
+      { "family": "Maaten", "given": "Laurens", "non-dropping-particle": "van der" },
+      { "family": "Hinton", "given": "Geoffrey" }
+    ],
+    "title": "Visualizing data using t-SNE",
+    "container-title": "Journal of Machine Learning Research",
+    "volume": "9",
+    "issue": "86",
+    "page": "2579-2605",
+    "issued": { "date-parts": [[2008]] },
+    "URL": "http://jmlr.org/papers/v9/vandermaaten08a.html"
+  },
+  {
+    "id": "en-zhou-2018",
+    "type": "article-journal",
+    "language": "en",
+    "author": [{ "family": "Zhou", "given": "Zhi-Hua" }],
+    "title": "A brief introduction to weakly supervised learning",
+    "container-title": "National Science Review",
+    "volume": "5",
+    "issue": "1",
+    "page": "44-53",
+    "issued": { "date-parts": [[2018, 1]] },
+    "DOI": "10.1093/nsr/nwx106"
+  },
+  {
+    "id": "en-kuhn-2012",
+    "type": "book",
+    "language": "en",
+    "author": [{ "family": "Kuhn", "given": "Thomas S." }],
+    "title": "The structure of scientific revolutions",
+    "edition": "4",
+    "publisher": "University of Chicago Press",
+    "publisher-place": "Chicago",
+    "issued": { "date-parts": [[2012]] },
+    "original-date": { "date-parts": [[1962]] }
+  },
+  {
+    "id": "en-tversky-1982",
+    "type": "chapter",
+    "language": "en",
+    "author": [
+      { "family": "Tversky", "given": "Amos" },
+      { "family": "Kahneman", "given": "Daniel" }
+    ],
+    "editor": [
+      { "family": "Kahneman", "given": "Daniel" },
+      { "family": "Slovic", "given": "Paul" },
+      { "family": "Tversky", "given": "Amos" }
+    ],
+    "title": "Judgment under uncertainty: Heuristics and biases",
+    "container-title": "Judgment under uncertainty: Heuristics and biases",
+    "page": "3-20",
+    "publisher": "Cambridge University Press",
+    "publisher-place": "Cambridge",
+    "issued": { "date-parts": [[1982]] },
+    "DOI": "10.1017/CBO9780511809477.002"
+  },
+  {
+    "id": "en-who-2023",
+    "type": "webpage",
+    "language": "en",
+    "author": [{ "literal": "World Health Organization" }],
+    "title": "Depression",
+    "genre": "Fact sheet",
+    "container-title": "WHO",
+    "issued": { "date-parts": [[2023, 3, 31]] },
+    "accessed": { "date-parts": [[2026, 9, 1]] },
+    "URL": "https://www.who.int/news-room/fact-sheets/detail/depression"
+  },
+  {
+    "id": "en-csl-nd",
+    "type": "webpage",
+    "language": "en",
+    "author": [{ "literal": "Citation Style Language" }],
+    "title": "Citation Style Language 1.0.2 specification",
+    "container-title": "CitationStyles.org",
+    "accessed": { "date-parts": [[2026, 10, 1]] },
+    "URL": "https://docs.citationstyles.org/en/stable/specification.html"
+  },
+  {
+    "id": "en-ipcc-2023",
+    "type": "report",
+    "language": "en",
+    "author": [{ "literal": "Intergovernmental Panel on Climate Change" }],
+    "title": "Climate change 2023: Synthesis report",
+    "publisher": "IPCC",
+    "publisher-place": "Geneva",
+    "issued": { "date-parts": [[2023]] },
+    "DOI": "10.59327/IPCC/AR6-9789291691647"
+  },
+  {
+    "id": "en-iso-690",
+    "type": "standard",
+    "language": "en",
+    "author": [{ "literal": "International Organization for Standardization" }],
+    "title": "Information and documentation — Guidelines for bibliographic references and citations to information resources",
+    "number": "ISO 690:2021",
+    "edition": "4",
+    "publisher": "ISO",
+    "publisher-place": "Geneva",
+    "issued": { "date-parts": [[2021, 6]] }
+  },
+  {
+    "id": "en-gdpr-2016",
+    "type": "legislation",
+    "language": "en",
+    "title": "Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)",
+    "title-short": "General Data Protection Regulation",
+    "container-title": "Official Journal of the European Union",
+    "volume": "L 119",
+    "page": "1-88",
+    "issued": { "date-parts": [[2016, 5, 4]] },
+    "URL": "http://data.europa.eu/eli/reg/2016/679/oj"
+  },
+  {
+    "id": "en-nature-2023",
+    "type": "article-journal",
+    "language": "en",
+    "title": "Tools such as ChatGPT threaten transparent science; here are our ground rules for their use",
+    "container-title": "Nature",
+    "volume": "613",
+    "issue": "7945",
+    "page": "612",
+    "issued": { "date-parts": [[2023, 1, 24]] },
+    "DOI": "10.1038/d41586-023-00191-1"
+  },
+  {
+    "id": "en-oecd-2019a",
+    "type": "book",
+    "language": "en",
+    "author": [{ "literal": "OECD" }],
+    "title": "OECD skills outlook 2019: Thriving in a digital world",
+    "publisher": "OECD Publishing",
+    "publisher-place": "Paris",
+    "issued": { "date-parts": [[2019]] },
+    "DOI": "10.1787/df80bc12-en"
+  },
+  {
+    "id": "en-oecd-2019b",
+    "type": "book",
+    "language": "en",
+    "author": [{ "literal": "OECD" }],
+    "title": "PISA 2018 results (Volume I): What students know and can do",
+    "publisher": "OECD Publishing",
+    "publisher-place": "Paris",
+    "issued": { "date-parts": [[2019]] },
+    "DOI": "10.1787/5f07c754-en"
+  },
+  {
+    "id": "zh-qian-1990",
+    "type": "article-journal",
+    "language": "zh-CN",
+    "author": [
+      { "family": "钱", "given": "学森" },
+      { "family": "于", "given": "景元" },
+      { "family": "戴", "given": "汝为" }
+    ],
+    "title": "一个科学新领域——开放的复杂巨系统及其方法论",
+    "container-title": "自然杂志",
+    "volume": "13",
+    "issue": "1",
+    "page": "3-10",
+    "issued": { "date-parts": [[1990]] }
+  },
+  {
+    "id": "zh-liu-2016",
+    "type": "article-journal",
+    "language": "zh-CN",
+    "author": [
+      { "family": "刘", "given": "知远" },
+      { "family": "孙", "given": "茂松" },
+      { "family": "林", "given": "衍凯" },
+      { "family": "谢", "given": "若冰" }
+    ],
+    "title": "知识表示学习研究进展",
+    "container-title": "计算机研究与发展",
+    "volume": "53",
+    "issue": "2",
+    "page": "247-261",
+    "issued": { "date-parts": [[2016]] },
+    "DOI": "10.7544/issn1000-1239.2016.20160020"
+  },
+  {
+    "id": "zh-fei-2012",
+    "type": "book",
+    "language": "zh-CN",
+    "author": [{ "family": "费", "given": "孝通" }],
+    "title": "乡土中国",
+    "publisher": "北京大学出版社",
+    "publisher-place": "北京",
+    "issued": { "date-parts": [[2012]] }
+  },
+  {
+    "id": "zh-zhou-2016",
+    "type": "book",
+    "language": "zh-CN",
+    "author": [{ "family": "周", "given": "志华" }],
+    "title": "机器学习",
+    "publisher": "清华大学出版社",
+    "publisher-place": "北京",
+    "issued": { "date-parts": [[2016]] }
+  },
+  {
+    "id": "zh-bai-1998",
+    "type": "chapter",
+    "language": "zh-CN",
+    "author": [{ "family": "白", "given": "书农" }],
+    "editor": [{ "family": "李", "given": "承森" }],
+    "title": "植物开花研究",
+    "container-title": "植物科学进展",
+    "publisher": "高等教育出版社",
+    "publisher-place": "北京",
+    "page": "146-163",
+    "issued": { "date-parts": [[1998]] }
+  },
+  {
+    "id": "zh-wu-2003",
+    "type": "thesis",
+    "language": "zh-CN",
+    "author": [{ "family": "吴", "given": "云芳" }],
+    "title": "面向中文信息处理的现代汉语并列结构研究",
+    "genre": "博士学位论文",
+    "publisher": "北京大学",
+    "publisher-place": "北京",
+    "issued": { "date-parts": [[2003]] },
+    "accessed": { "date-parts": [[2013, 10, 14]] },
+    "URL": "http://thesis.lib.pku.edu.cn/dlib/List.asp?lang=gb&type=Reader&DocGroupID=4&DocID=6328"
+  },
+  {
+    "id": "zh-jia-2011",
+    "type": "paper-conference",
+    "language": "zh-CN",
+    "author": [
+      { "family": "贾", "given": "东琴" },
+      { "family": "柯", "given": "平" }
+    ],
+    "editor": [{ "literal": "中国图书馆学会" }],
+    "title": "面向数字素养的高校图书馆数字服务体系研究",
+    "container-title": "中国图书馆学会年会论文集：2011年卷",
+    "publisher": "国家图书馆出版社",
+    "publisher-place": "北京",
+    "page": "45-52",
+    "issued": { "date-parts": [[2011]] }
+  },
+  {
+    "id": "zh-cnnic-2012",
+    "type": "report",
+    "language": "zh-CN",
+    "author": [{ "literal": "中国互联网络信息中心" }],
+    "title": "第29次中国互联网络发展状况统计报告",
+    "issued": { "date-parts": [[2012, 1, 16]] },
+    "accessed": { "date-parts": [[2013, 3, 26]] },
+    "URL": "http://www.cnnic.net.cn/hlwfzyj/hlwxzbg/201201/P020120709345264469680.pdf"
+  },
+  {
+    "id": "zh-gbt7714-2015",
+    "type": "standard",
+    "language": "zh-CN",
+    "author": [
+      { "literal": "中华人民共和国国家质量监督检验检疫总局" },
+      { "literal": "中国国家标准化管理委员会" }
+    ],
+    "title": "信息与文献 参考文献著录规则",
+    "number": "GB/T 7714—2015",
+    "publisher": "中国标准出版社",
+    "publisher-place": "北京",
+    "issued": { "date-parts": [[2015, 5, 15]] }
+  },
+  {
+    "id": "zh-pipl-2021",
+    "type": "legislation",
+    "language": "zh-CN",
+    "author": [{ "literal": "全国人民代表大会常务委员会" }],
+    "title": "中华人民共和国个人信息保护法",
+    "issued": { "date-parts": [[2021, 8, 20]] }
+  },
+  {
+    "id": "zh-xiao-2001",
+    "type": "webpage",
+    "language": "zh-CN",
+    "author": [{ "family": "萧", "given": "钰" }],
+    "title": "出版业信息化迈入快车道",
+    "issued": { "date-parts": [[2001, 12, 19]] },
+    "accessed": { "date-parts": [[2002, 4, 15]] },
+    "URL": "http://www.creader.com/news/20011219/200112190019.html"
+  },
+  {
+    "id": "zh-ding-2000",
+    "type": "article-newspaper",
+    "language": "zh-CN",
+    "author": [{ "family": "丁", "given": "文祥" }],
+    "title": "数字革命与竞争国际化",
+    "container-title": "中国青年报",
+    "page": "15",
+    "issued": { "date-parts": [[2000, 11, 20]] }
+  },
+  {
+    "id": "zh-unwin-1988",
+    "type": "book",
+    "language": "zh-CN",
+    "author": [
+      { "family": "昂温", "given": "G" },
+      { "family": "昂温", "given": "P S" }
+    ],
+    "translator": [{ "family": "陈", "given": "生铮" }],
+    "title": "外国出版史",
+    "publisher": "中国书籍出版社",
+    "publisher-place": "北京",
+    "issued": { "date-parts": [[1988]] }
+  },
+  {
+    "id": "zh-mechanics-1990",
+    "type": "book",
+    "language": "zh-CN",
+    "author": [{ "literal": "中国力学学会" }],
+    "title": "第3届全国实验流体力学学术会议论文集",
+    "publisher-place": "天津",
+    "issued": { "date-parts": [[1990]] }
+  }
+]

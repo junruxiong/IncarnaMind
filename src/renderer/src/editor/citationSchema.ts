@@ -72,6 +72,8 @@ export const Citation = Node.create<CitationOptions>({
         renderHTML: (attributes: Record<string, unknown>) => ({ "data-check": attributes.check }),
       },
       checkReason: dataAttribute("checkReason"),
+      // Only a claim check sets it, so a Citation without one stores nothing.
+      verdict: { ...dataAttribute("verdict"), default: undefined },
     };
     return attributes;
   },
