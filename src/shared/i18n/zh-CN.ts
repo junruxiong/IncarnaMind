@@ -1346,6 +1346,14 @@ export const zhCN = {
   "menu.zoom": "缩放",
   "menu.front": "前置全部窗口",
 
+  "command.tab.new": "新建标签页",
+  "command.tab.next": "下一个标签页",
+  "command.tab.previous": "上一个标签页",
+  "command.tab.show": "显示第 {number} 个标签页",
+  "command.tab.showLast": "显示最后一个标签页",
+  "command.composer.focus": "提问",
+  "command.viewer.toggle": "显示或隐藏文档查看器",
+
   "update.available.message": "IncarnaMind {version} 已发布",
   "update.available.detail": "当前安装的 IncarnaMind 无法自动更新。请下载新版本，替换当前版本。",
   "update.available.confirm": "下载",
