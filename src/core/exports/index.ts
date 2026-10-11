@@ -11,6 +11,7 @@ import {
 } from "../../shared/citationStyles";
 import { citationState, citedLocation } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
+import { mindName } from "../../shared/naming";
 import type {
   CitationAttributes,
   CitationFormatRequest,
@@ -86,7 +87,7 @@ export function createExports(deps: ExportsDependencies) {
     }));
     const footnotes = footnotesIn(blocks);
     const preview: MindExportPreview = {
-      fileName: `${safeFileName(mind.title || translate(language, "mind.untitled"), "Mind")}.${EXTENSIONS[format]}`,
+      fileName: `${safeFileName(mindName(mind) || translate(language, "mind.untitled"), "Mind")}.${EXTENSIONS[format]}`,
       citations: footnotes.length,
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
