@@ -3,7 +3,7 @@ import { type ChatProviderKind, chatProviderKinds, type ExternalService } from "
 import { InvalidInputError } from "../errors";
 import { catalogProviderOfKind, endpointOf } from "./catalog/providers";
 import type { CatalogProvider, Endpoint } from "./catalog/types";
-import { CHATGPT_SERVICE } from "./chatgpt/codexEndpoint";
+import { CHATGPT_SERVICE } from "./chatgpt/service";
 
 /** Ollama's default local address. 127.0.0.1 rather than localhost, which may resolve to IPv6 first. */
 export const OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434";

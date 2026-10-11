@@ -9,10 +9,17 @@ import {
   choiceTextClass,
   choiceTitleClass,
 } from "../ui";
+import {
+  ChatGptSignInState,
+  ChatGptStorageNotice,
+  ContinueWithChatGptButton,
+  useChatGptStorage,
+  useContinueWithChatGpt,
+} from "./ChatGptSignIn";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
 import { ProviderForm } from "./ProviderForm";
 
-/** Where Answers come from: local models, an API key, or (experimental) a ChatGPT plan. */
+/** Where Answers come from: local models, an API key, or the User's ChatGPT plan. */
 export type ChatProviderChoice = "ollama" | "api-key" | "chatgpt";
 
 interface ChatProviderChoicesProps {
@@ -22,11 +29,12 @@ interface ChatProviderChoicesProps {
   ollama: Ollama;
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
+  /** A provider was saved: by its key, or by signing in with ChatGPT. */
   onSaved(provider: ChatProvider): void;
-  /** First run offers the ChatGPT plan, which is set up in Settings. */
-  includeChatGpt?: boolean;
   /** Settings puts Ollama's button in its row; first run puts it at the dialog's foot. */
   ollamaActionInRow?: boolean;
+  /** First run offers the ChatGPT plan here; Settings has a section of its own for it. */
+  includeChatGpt?: boolean;
 }
 
 /**
@@ -36,7 +44,7 @@ interface ChatProviderChoicesProps {
  */
 export function ChatProviderChoices(props: ChatProviderChoicesProps) {
   const { choice, onChoose, ollama, providers, onSaved } = props;
-  const { includeChatGpt = false, ollamaActionInRow = false } = props;
+  const { ollamaActionInRow = false, includeChatGpt = false } = props;
   const t = useT();
   const name = useId();
 
@@ -99,19 +107,33 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
       </Choice>
 
       {includeChatGpt && (
-        <Choice inputId={`${name}-chatgpt`} chosen={choice === "chatgpt"}>
+        <Choice
+          inputId={`${name}-chatgpt`}
+          chosen={choice === "chatgpt"}
+          details={<ChatGptChoice onSaved={onSaved} />}
+        >
           {radio("chatgpt")}
           <span className="flex min-w-0 flex-col gap-1">
-            <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <span className={choiceTitleClass}>{t("providers.kind.chatgpt")}</span>
-              <span className="text-label font-semibold text-ink-meta">
-                {t("providers.choice.experimental")}
-              </span>
-            </span>
+            <span className={choiceTitleClass}>{t("chatgpt.title")}</span>
             <span className={choiceTextClass}>{t("providers.choice.chatgpt.body")}</span>
           </span>
         </Choice>
       )}
+    </div>
+  );
+}
+
+/** The ChatGPT plan's row, chosen: "Continue with ChatGPT", which saves the plan once signed in. */
+function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
+  const sign = useContinueWithChatGpt({ onSignedIn: ({ provider }) => onSaved(provider) });
+  const storage = useChatGptStorage();
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <ChatGptStorageNotice storage={storage} />
+      {!sign.waiting && (
+        <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+      )}
+      <ChatGptSignInState sign={sign} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
+import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { dismissEditProblem, stopEdit, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
@@ -44,13 +44,9 @@ export function EditStatus({ mindId }: { mindId: string }) {
         <ProblemLine
           testId="edit-problem"
           className="composer-problem"
-          action={{
-            label: t("question.setUp"),
-            onClick: () => {
-              dismissEditProblem(mindId);
-              openSettings(settingsPageFor(problem.readiness));
-            },
-          }}
+          action={readinessAction(problem.readiness, t, openSettings, t("question.setUp"), () =>
+            dismissEditProblem(mindId),
+          )}
         >
           <ReadinessExplanation readiness={problem.readiness} inLine />
         </ProblemLine>
