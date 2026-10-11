@@ -65,7 +65,7 @@ A reference, anchored in the text of an Answer, to the Passage a claim was drawn
 _Avoid_: source, reference
 
 **Reference record**:
-What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details".
+What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
 **Source provider**:

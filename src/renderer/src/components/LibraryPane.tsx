@@ -41,8 +41,10 @@ import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
 import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibraryFilterBar } from "./LibraryFilterBar";
+import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
+import { ReferenceImportPanel } from "./ReferenceImportPanel";
 import { DocumentTagChips } from "./TagChips";
 import { useTabPlace } from "./tabs/tabItems";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
@@ -214,6 +216,7 @@ export function LibraryPane() {
               className={`${inputClass} mt-0 min-w-32 flex-1`}
             />
             <AddDocumentsMenu />
+            <LibraryMoreMenu />
           </div>
           {findingSources && <FindSourcesPanel />}
           {/* The name takes the whole width and wraps by word, two lines at most (#213); the actions sit below it, never beside. */}
@@ -292,6 +295,7 @@ export function LibraryPane() {
               <SettingsLineIcon className="size-4" />
             </button>
           </div>
+          <ReferenceImportPanel />
           {error && (
             <p role="alert" className={`${errorTextClass} mb-4`}>
               {error}

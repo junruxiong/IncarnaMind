@@ -2,7 +2,7 @@
 
 What IncarnaMind sends from your computer, and how to change it. **Settings → Privacy** in the app lists the same, live.
 
-- **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector) goes only to the service you picked, and only after you allow it. Settings → Privacy lists every flow and lets you revoke it.
+- **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector, and, once you turn on suggestions as you write, the paragraph you pause in with the Passages that match it) goes only to the service you picked, and only after you allow it. Settings → Privacy lists every flow and lets you revoke it.
 - **Look up** in a Document's "Cite as" sends its DOI to Crossref, or its arXiv ID to arXiv, and nothing else from the Document, only when you click it, after you allow it once. It is off in local mode.
 - **Find sources** (the Library's "Add Documents ▾", the "+" menu, or an Answer asked to find papers) sends what you search for, the words and filters such as years, to each provider it searches: OpenAlex, arXiv and PubMed, and Crossref for a DOI you type. Adding a work sends its DOI, arXiv ID or PubMed ID to the provider that gives its copy. Nothing from your Documents or Minds is sent. Each provider asks once, before its first request; one you don't allow is never sent anything. An open-access copy on a publisher's or a repository's site is downloaded once when you add it, without cookies, as adding a web page is: only its address is requested. Find sources is off in local mode.
 - **Traffic without your content**: update checks, model downloads, and remote Connectors' sign-in.
