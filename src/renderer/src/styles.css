@@ -3655,6 +3655,57 @@
     background: var(--color-sheet);
     box-shadow: var(--shadow-popover);
   }
+  /*
+   * "Choose a citation style? APA · GB/T 7714 · More…": a quiet line where the References
+   * would be, in the meta ink of the Mind's other offers, with accent actions and a close
+   * button that shows on hover or focus.
+   */
+  .citation-style-prompt-action {
+    border-radius: 2px;
+    font-weight: 600;
+    color: var(--color-accent);
+    white-space: nowrap;
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+    }
+  }
+  .citation-style-prompt-dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 6px;
+    vertical-align: -5px;
+    border-radius: 4px;
+    color: var(--color-ink-meta);
+    opacity: 0;
+
+    &:hover {
+      background: var(--color-hover);
+    }
+    &:focus-visible {
+      opacity: 1;
+      outline: 2px solid var(--color-accent);
+    }
+  }
+  .citation-style-prompt {
+    margin-top: 48px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    overflow-wrap: break-word;
+  }
+  .citation-style-prompt:hover .citation-style-prompt-dismiss,
+  .citation-style-prompt:focus-within .citation-style-prompt-dismiss {
+    opacity: 1;
+  }
 
   /* The menu under selected text: Turn into, the format buttons, and the AI section. */
   .selection-menu {

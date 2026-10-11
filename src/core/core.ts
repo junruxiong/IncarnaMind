@@ -853,11 +853,14 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
   });
-  const mindCitationStyle = (mindId: string): MindCitationStyle =>
-    content.readSettings(mindId, (mindSettings) => ({
-      style: citationStyleIn(mindSettings, settings.get().language),
+  const mindCitationStyle = (mindId: string): MindCitationStyle => {
+    const { folderId } = minds.get(mindId);
+    return content.readSettings(mindId, (mindSettings) => ({
+      style: citationStyleIn(mindSettings),
       chosen: chosenCitationStyle(mindSettings) !== null,
+      folderDefault: folderId === null ? null : library.citationStyle(folderId),
     }));
+  };
   // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
   const edits = createEdits({
     content,
@@ -1323,6 +1326,11 @@ export function createCore(adapters: CoreAdapters): Core {
       const parsed = parseCreateMindInput(input);
       if (parsed.folderId !== null) library.folder(parsed.folderId);
       const mind = minds.create(parsed);
+      // It starts in the style last chosen for a Mind in its Folder, as its own choice (#289).
+      const style = parsed.folderId === null ? null : library.citationStyle(parsed.folderId);
+      if (style !== null) {
+        content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+      }
       mindsChanged();
       usageData.record({ event: "mind_created", fields: {} });
       return mind;
@@ -1910,13 +1918,26 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     formatCitations: (request) => citationStyles.format(request),
     getMindCitationStyle: async (mindId) => mindCitationStyle(minds.get(mindId).id),
-    setMindCitationStyle: async (mindId, style) => {
-      if (style !== null && !isCitationStyleId(style)) {
+    setMindCitationStyle: async (mindId, style, options) => {
+      const notAStyle = (value: unknown) =>
+        value !== null && value !== undefined && !isCitationStyleId(value);
+      if (style === undefined || notAStyle(style)) {
         throw new InvalidInputError(`"${String(style)}" isn't a citation style.`);
       }
-      const id = writableMind(mindId).id;
-      content.editSettings(id, (mindSettings) => setCitationStyle(mindSettings, style));
-      return mindCitationStyle(id);
+      const folderDefault = options?.folderDefault;
+      if (notAStyle(folderDefault)) {
+        throw new InvalidInputError(`"${String(folderDefault)}" isn't a citation style.`);
+      }
+      const mind = writableMind(mindId);
+      content.editSettings(mind.id, (mindSettings) => setCitationStyle(mindSettings, style));
+      // The style chosen is the one new Minds in its Folder start in, as a document app keeps
+      // the last template used; Undo puts back the one before.
+      const { folderId } = minds.get(mind.id);
+      if (folderId !== null) {
+        if (folderDefault !== undefined) library.setCitationStyle(folderId, folderDefault);
+        else if (style !== null) library.setCitationStyle(folderId, style);
+      }
+      return mindCitationStyle(mind.id);
     },
     getOutputSettings: async () => outputs.settings(),
     setOutputLocation: (path) => outputs.setLocation(path),

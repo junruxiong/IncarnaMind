@@ -65,7 +65,7 @@ describe("what the binding adds to Hayagriva", () => {
     });
     const cited = text(authorDate.citations[0]);
     expect(cited).toContain("Jumper et al.");
-    expect(cited).toContain("刘 等");
+    expect(cited).toContain("刘等");
   });
 
   test("an English style keeps its own terms for a Chinese work", () => {
@@ -131,16 +131,37 @@ describe("what the binding adds to Hayagriva", () => {
     expect(new Set((output.citations[0] ?? []).map((run) => run.item))).not.toContain(1);
   });
 
-  // PENDING: a check against the text of GB/T 7714—2015 (§10.2.1). Hayagriva writes the space
-  // before 等 that the style's own comment asks for; Zotero's citeproc-js removes it. These
-  // golden files follow Hayagriva until a Chinese reader confirms which the standard wants.
-  test("GB/T 7714 author-date puts a space between a name and 等 (pending a check against the standard)", () => {
-    const items = [reference("zh-qian-1990")];
-    const cited = (style: "gb-t-7714-2015-author-date" | "gb-t-7714-2025-author-date") =>
-      text(formatHere(style, { items, citations: one(items) }).citations[0]);
-    expect(cited("gb-t-7714-2015-author-date")).toBe("(钱 等, 1990)");
+  // As Zotero's citeproc-js writes GB/T 7714, and Chinese academic writing has it, rather than
+  // the space Hayagriva writes from the style's own comment.
+  test("GB/T 7714: no space between a Chinese name and 等, and et al. with its space in English", () => {
+    const qian = reference("zh-qian-1990");
+    // Reference records keep a Chinese name whole.
+    const whole: CslItem = {
+      ...qian,
+      id: "whole",
+      author: ["钱学森", "于景元", "戴汝为", "王寿云"].map((literal) => ({ literal })),
+    };
+    const items = [qian, whole, reference("en-kahneman-1979")];
+    const cited = (style: "gb-t-7714-2015-author-date" | "gb-t-7714-2025-author-date") => {
+      const output = formatHere(style, { items, citations: one(items) });
+      return output.citations.map(text);
+    };
+    expect(cited("gb-t-7714-2015-author-date")).toEqual([
+      "(钱等, 1990)",
+      "(钱学森等, 1990)",
+      "(Kahneman et al., 1979)",
+    ]);
     // The 2025 style writes its brackets and comma full-width.
-    expect(cited("gb-t-7714-2025-author-date")).toBe("（钱 等，1990）");
+    expect(cited("gb-t-7714-2025-author-date")).toEqual([
+      "（钱等，1990）",
+      "（钱学森等，1990）",
+      "（Kahneman et al.，1979）",
+    ]);
+    // Nor after a full-width comma, in the 2025 style's entries.
+    const liu = [reference("zh-liu-2016")];
+    const entry = formatHere("gb-t-7714-2025-numeric", { items: liu, citations: one(liu) })
+      .bibliography[0];
+    expect(text(entry?.runs)).toContain("林衍凯，等.");
   });
 
   test("a work with only a title, and a Chinese name kept whole, are still formatted", () => {

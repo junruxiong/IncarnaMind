@@ -167,10 +167,19 @@ export const CITATION_STYLES: readonly CitationStyle[] = [
   },
 ];
 
-/** A Mind that hasn't chosen follows the interface language: APA 7 in English, GB/T 7714—2015 in Chinese. */
-export const DEFAULT_CITATION_STYLE: Readonly<Record<Language, CitationStyleId>> = {
-  en: "apa",
-  "zh-CN": "gb-t-7714-2015-numeric",
+/**
+ * A Mind that hasn't chosen is Numbered: many Minds cite contracts and reports that no
+ * citation style could cite better, so none turns into "(n.d.)" by itself.
+ */
+export const DEFAULT_CITATION_STYLE: CitationStyleId = "numbered";
+
+/**
+ * The styles the prompt in a Mind that cites papers or books offers (`CitationStylePrompt`),
+ * the interface language's own first.
+ */
+export const PROMPTED_CITATION_STYLES: Readonly<Record<Language, readonly CitationStyleId[]>> = {
+  en: ["apa", "gb-t-7714-2015-numeric"],
+  "zh-CN": ["gb-t-7714-2015-numeric", "apa"],
 };
 
 export const isCitationStyleId = (value: unknown): value is CitationStyleId =>

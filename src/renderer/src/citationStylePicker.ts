@@ -43,8 +43,9 @@ export const styleLabel = (style: CitationStyleId, t: Translate) => {
 };
 
 /**
- * Chooses a Mind's citation style, at once, and offers Undo, which puts back the one before
- * (or "follow the default" if it had none). Returns false if the core refused.
+ * Chooses a Mind's citation style, at once, which new Minds in its Folder then start in, and
+ * offers Undo, which puts back both as they were (the Mind's "no choice", Numbered, if it had
+ * none). Returns false if the core refused.
  */
 export async function chooseCitationStyle(
   mindId: string,
@@ -61,7 +62,9 @@ export async function chooseCitationStyle(
     useUndo.getState().offer({
       message: t("citationStyle.changed", { style: styleLabel(style, t) }),
       undo: async () => {
-        await core.setMindCitationStyle(mindId, previous.chosen ? previous.style : null);
+        await core.setMindCitationStyle(mindId, previous.chosen ? previous.style : null, {
+          folderDefault: previous.folderDefault,
+        });
       },
     });
     return true;

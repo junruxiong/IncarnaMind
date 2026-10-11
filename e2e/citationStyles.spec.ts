@@ -14,6 +14,7 @@ import {
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  sidebarFolder,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -89,7 +90,7 @@ async function chooseStyle(window: Page, search: string, label: string): Promise
   await expect(picker).toBeHidden();
 }
 
-test("a Mind's Citations and References read in its citation style, which the References' picker switches, with Undo, and the export follows", async () => {
+test("a Mind citing a paper offers a citation style; chosen, its Citations and References read in it, the References' picker switches it, with Undo, and the export follows", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await writeFile(join(sources, "Lease agreement.txt"), "Spring rent is due at the new moon.");
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -98,10 +99,22 @@ test("a Mind's Citations and References read in its citation style, which the Re
   await addDocuments(window, [join(sources, "Tides.pdf"), join(sources, "Lease agreement.txt")]);
   await setRecord(window, await documentIdOf(window, "Tides"), TIDES_RECORD);
 
-  // "each": one Citation of each Document, side by side, which APA 7 (the default) writes as one.
+  // "each": one Citation of each Document, side by side. A Mind is Numbered until it chooses:
+  // numbered markers, and no References.
   const answer = await ask(window, "When do spring tides happen in each?");
   const chips = answer.getByTestId("citation-chip");
-  await expect(chips).toHaveCount(2);
+  await expect(chips).toHaveText(["1", "2"]);
+  const references = window.getByTestId("references");
+  await expect(references).toHaveCount(0);
+
+  // It cites a paper (Tides has a record with its authors), so its end offers a style, APA
+  // first in English. Chosen, APA 7 writes the two side by side as one.
+  const prompt = window.getByTestId("citation-style-prompt");
+  await expect(prompt).toHaveText("Choose a citation style? APA · GB/T 7714 · More…");
+  await screenshot(window, "citation-style-prompt-en");
+  await pointAndClick(window, prompt.getByTestId("citation-style-prompt-choice").first());
+  await expect(prompt).toHaveCount(0);
+  await expect(window.getByTestId("undo-line")).toContainText("Citation style changed to APA 7");
   const styled = answer.locator('[data-testid="citation"][data-styled="runs"]');
   await expect(styled).toHaveCount(1);
   await expect(styled.getByTestId("citation-chip")).toHaveText(
@@ -122,7 +135,6 @@ test("a Mind's Citations and References read in its citation style, which the Re
   await expect(card).toHaveCount(1);
 
   // The References: each Document once, in APA 7, the thin one by its name, needing details.
-  const references = window.getByTestId("references");
   await expect(references).toHaveAttribute("data-style", "apa");
   await expect(references.getByTestId("references-style")).toHaveText("APA 7");
   const entries = references.getByTestId("reference-entry");
@@ -206,7 +218,7 @@ test("a Mind's Citations and References read in its citation style, which the Re
   await app.close();
 });
 
-test("in Chinese: GB/T 7714—2015 by default, raised numbers, 参考文献, and the picker finds 国标 styles; a narrow window keeps the header on its lines", async () => {
+test("in Chinese: the offer puts GB/T 7714 first; chosen, raised numbers and 参考文献, and the picker finds 国标 styles; a narrow window keeps the header on its lines", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   await writeFile(join(sources, "复杂系统.txt"), "开放的复杂巨系统是一个科学新领域。");
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
@@ -229,6 +241,10 @@ test("in Chinese: GB/T 7714—2015 by default, raised numbers, 参考文献, and
   });
 
   const answer = await ask(window, "开放的复杂巨系统 each");
+  const prompt = window.getByTestId("citation-style-prompt");
+  await expect(prompt).toHaveText("选择引用格式？GB/T 7714 · APA · 更多…");
+  await screenshot(window, "citation-style-prompt-zh");
+  await pointAndClick(window, prompt.getByTestId("citation-style-prompt-choice").first());
   const styled = answer.locator('[data-testid="citation"][data-styled="runs"]').first();
   await expect(styled.getByTestId("citation-chip")).toHaveText(/^\[\d(,\d)?\]$/);
   await expect(styled.getByTestId("citation-chip")).toHaveClass(/citation-marker--raised/);
@@ -267,5 +283,81 @@ test("in Chinese: GB/T 7714—2015 by default, raised numbers, 参考文献, and
   if (!column || !head) throw new Error("The References or the Mind aren't on screen.");
   expect(head.x + head.width).toBeLessThanOrEqual(column.x + column.width + 1);
   await screenshot(window, "references-narrow-zh");
+  await app.close();
+});
+
+test("a Mind citing files with no details isn't offered a style until one is a paper; closed, the offer stays closed there, with Undo; More… opens the picker", async () => {
+  await writeFile(join(sources, "Lease agreement.txt"), "Spring rent is due at the new moon.");
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await addDocuments(window, [join(sources, "Lease agreement.txt")]);
+
+  // A contract: a numbered marker, as before styles, and nothing offered.
+  const answer = await ask(window, "When is spring rent due?");
+  await expect(answer.getByTestId("citation-chip")).toHaveText(["1"]);
+  const prompt = window.getByTestId("citation-style-prompt");
+  await expect(window.getByTestId("margin-check")).toHaveCount(1);
+  await expect(prompt).toHaveCount(0);
+  await expect(window.getByTestId("references")).toHaveCount(0);
+
+  // Once its record says it is a paper, the offer shows at the Mind's end.
+  await setRecord(window, await documentIdOf(window, "Lease agreement"), {
+    type: "article-journal",
+    title: "Rent and the Moon",
+    authors: [{ family: "Oke", given: "T. R." }],
+    issued: "1982",
+  });
+  await expect(prompt).toBeVisible();
+
+  // Closed, it doesn't come back in this Mind; Undo brings it back.
+  await pointAndClick(window, prompt.getByTestId("citation-style-prompt-dismiss"));
+  await expect(prompt).toHaveCount(0);
+  await expect(window.getByTestId("undo-line")).toContainText(
+    "Won't ask about a citation style in this Mind",
+  );
+  await pointAndClick(window, window.getByTestId("undo-action"));
+  await expect(prompt).toBeVisible();
+
+  // More… opens the picker, for any style.
+  await pointAndClick(window, prompt.getByTestId("citation-style-prompt-more"));
+  await chooseStyle(window, "harvard", "Harvard (Cite Them Right)");
+  await expect(prompt).toHaveCount(0);
+  await expect(window.getByTestId("references")).toHaveAttribute("data-style", "harvard");
+  await expect(answer.getByTestId("citation-chip")).toHaveText("(Oke, 1982, l. 1)");
+  await app.close();
+});
+
+test("the style chosen for a Mind in a Folder, from its menu, is the one a new Mind there starts in", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const folder = await core.createLibraryGroup({ name: "Thesis", description: "" });
+    await core.createMind({ title: "Chapter 1", folderId: folder.id });
+  });
+  const folder = sidebarFolder(window, "Thesis");
+  await pointAndClick(window, folder.getByTestId("folder-row"));
+  await expect(folder).toHaveAttribute("data-expanded", "true");
+
+  /** Opens a Mind's citation style picker from its row's ⋯ menu. */
+  const openPicker = async (row: Locator) => {
+    await row.hover();
+    await pointAndClick(window, row.getByTestId("mind-menu"));
+    await pointAndClick(window, row.getByTestId("mind-citation-style"));
+  };
+  await openPicker(folder.getByTestId("mind-row").filter({ hasText: "Chapter 1" }));
+  await chooseStyle(window, "ieee", "IEEE");
+
+  // "New Mind here", from the Folder's menu: it starts in IEEE, ticked in its picker.
+  await pointAndClick(window, folder.getByTestId("folder-row"), { button: "right" });
+  await pointAndClick(window, folder.getByTestId("folder-new-mind-here"));
+  const rows = folder.getByTestId("mind-row");
+  await expect(rows).toHaveCount(2);
+  await openPicker(rows.filter({ hasNotText: "Chapter 1" }));
+  const current = window.locator('[data-testid="citation-style-option"][data-current="true"]');
+  await expect(current).toHaveText("IEEE");
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("citation-style-picker")).toBeHidden();
   await app.close();
 });

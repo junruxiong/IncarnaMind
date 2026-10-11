@@ -1115,6 +1115,16 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE library_groups ADD COLUMN counts_own_files INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 51,
+    description: "The citation style new Minds in a Folder start in (#289)",
+    // The id of the style last chosen for a Mind in the Folder (src/shared/citationStyles.ts);
+    // NULL: none was, and its new Minds are Numbered. One a newer version knows and this one
+    // doesn't reads as NULL.
+    sql: `
+      ALTER TABLE library_groups ADD COLUMN citation_style TEXT;
+    `,
+  },
 ];
 
 /**

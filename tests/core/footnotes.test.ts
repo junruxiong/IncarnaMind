@@ -71,9 +71,6 @@ async function setUp() {
   const path = await writeSourceFile(sources, "Tides.txt", "Spring tides happen at new moon.");
   const [tides] = await addAndProcess(core, [path]);
   const mind = await core.createMind({ title: "Tides" });
-  // Numbered, where each Citation is a footnote too; the other citation styles' footnotes
-  // are in citationStyles.test.ts.
-  await core.setMindCitationStyle(mind.id, "numbered");
   const client = await connectToMind(core, mind.id);
   return { dataDir, core, mind, client, tides: tides as Document };
 }
