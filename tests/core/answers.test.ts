@@ -738,11 +738,17 @@ describe("Choosing the model", () => {
     expect(await core.listChatModels()).toEqual([
       // Embedding models can't answer, so they aren't offered. Ollama says what llama3.2 can
       // do; nothing says what the others can.
-      { provider: local, models: ["llama3.2:latest", "qwen3:4b"], unknown: ["qwen3:4b"] },
+      {
+        provider: local,
+        models: ["llama3.2:latest", "qwen3:4b"],
+        unknown: ["qwen3:4b"],
+        cloud: [],
+      },
       {
         provider: compatible,
         models: ["deepseek-chat", "deepseek-reasoner"],
         unknown: ["deepseek-chat", "deepseek-reasoner"],
+        cloud: [],
       },
     ]);
     expect(server.authorizations).toEqual(["Bearer sk-local"]);
@@ -759,7 +765,7 @@ describe("Choosing the model", () => {
     onTestFinished(() => fetch.mockRestore());
 
     expect(await core.listChatModels()).toEqual([
-      { provider, models: ["gpt-test"], unknown: ["gpt-test"] },
+      { provider, models: ["gpt-test"], unknown: ["gpt-test"], cloud: [] },
     ]);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -773,7 +779,7 @@ describe("Choosing the model", () => {
     });
 
     expect(await core.listChatModels()).toEqual([
-      { provider, models: ["qwen3:4b"], unknown: ["qwen3:4b"] },
+      { provider, models: ["qwen3:4b"], unknown: ["qwen3:4b"], cloud: [] },
     ]);
   });
 });

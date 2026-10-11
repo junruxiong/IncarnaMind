@@ -79,6 +79,7 @@ describe("Library PDF page images", () => {
               id: "research",
               name: "Research",
               description: "Papers",
+              countsOwnFiles: false,
               createdAt: "",
               updatedAt: "",
             },
@@ -202,7 +203,16 @@ describe("Library PDF page images", () => {
         apiKey: "test",
         usePageImages: true,
       }).decide(
-        [{ id: "research", name: "Research", description: "Papers", createdAt: "", updatedAt: "" }],
+        [
+          {
+            id: "research",
+            name: "Research",
+            description: "Papers",
+            countsOwnFiles: false,
+            createdAt: "",
+            updatedAt: "",
+          },
+        ],
         { name: "Paper", kind: "pdf", pageCount: 1, text: "Research" },
         new AbortController().signal,
         [{ page: 1, data: "not-to-be-sent" }],

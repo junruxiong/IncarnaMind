@@ -5,6 +5,7 @@ import { currentTabOf } from "../layoutSlice";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
+import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
@@ -30,6 +31,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...evidenceCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",

@@ -7,8 +7,10 @@ import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
+import { EvidenceSettings } from "./EvidenceSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { MeetingsSettings } from "./MeetingsSettings";
+import { MotionSettings } from "./MotionSettings";
 import { OrganizationSettings } from "./OrganizationSettings";
 import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
@@ -152,6 +154,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />
           <DataFolderSettings />
@@ -178,6 +181,7 @@ function PageContent({ page }: { page: SettingsPage }) {
             <EmbeddingSettingsSection />
           </Titled>
           <RerankSettingsSection />
+          <EvidenceSettings />
         </Page>
       );
     case "meetings":
