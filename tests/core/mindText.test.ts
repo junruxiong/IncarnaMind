@@ -128,7 +128,7 @@ describe("a Block as the text Question context shows the model", () => {
     );
   });
 
-  test("a table shows the Blocks of its cells, and an image nothing", () => {
+  test("a table is a pipe table, its cells' lines joined by <br> and pipes escaped; an image is nothing", () => {
     expect(
       markdownOf({
         type: "table",
@@ -142,11 +142,19 @@ describe("a Block as the text Question context shows the model", () => {
           },
           {
             type: "tableRow",
-            content: [{ type: "tableCell", content: [paragraph(text("Next"))] }],
+            content: [
+              {
+                type: "tableCell",
+                content: [
+                  paragraph(text("Next "), citation({ documentName: "Tides", pageFrom: 2 })),
+                  paragraph(text("a | b")),
+                ],
+              },
+            ],
           },
         ],
       }),
-    ).toBe("Head\n\nCell\n\nNext");
+    ).toBe("| Head | Cell |\n| --- | --- |\n| Next [Tides, p. 2]<br>a \\| b |  |");
     expect(markdownOf({ type: "image", attrs: { src: "x.png", alt: "A figure" } })).toBe("");
   });
 

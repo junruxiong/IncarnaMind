@@ -1,5 +1,6 @@
 import type { MouseEvent, ReactNode } from "react";
 import { ChevronDownLineIcon, ChevronRightLineIcon } from "./lineIcons";
+import { openMenuFromRightClick } from "./usePopoverMenu";
 
 /*
  * The sidebar's rows (DESIGN.md, Sidebar): 28px, inset 8px by the sidebar's
@@ -48,15 +49,7 @@ export function openRowMenu(event: MouseEvent<HTMLElement>, menuTestId: string):
   );
   if (!button) return;
   event.preventDefault();
-  if (button.getAttribute("aria-expanded") === "true") return;
-  // With a button still held, open once it's let go: letting go outside the menu would close it.
-  if (event.buttons === 0) button.click();
-  else {
-    const open = () => {
-      if (button.isConnected) button.click();
-    };
-    window.addEventListener("pointerup", () => setTimeout(open), { once: true });
-  }
+  openMenuFromRightClick(button, event.buttons);
 }
 
 /** A name being typed in a row. */
