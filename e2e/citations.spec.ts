@@ -65,7 +65,7 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   const answer = await ask(window, "When do spring tides happen?");
 
   // It shows that it searched the Documents, and what for.
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
   await answer.getByTestId("answer-tools-toggle").click();
   await expect(answer.getByTestId("answer-tool-call")).toContainText(
@@ -74,7 +74,7 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
 
   // Added to a Note, the sentence keeps its Citation, check result and all.
   const editor = window.getByTestId("mind-editor");
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   const note = editor.locator(":scope > p").first();
   await expect(note).toContainText("Your Documents answer this");
@@ -149,7 +149,7 @@ test("a quote that isn't on its page says so, and the page can still be opened, 
 
   // Added to the note, the Citation is checked again there, and can be removed from the note.
   const editor = window.getByTestId("mind-editor");
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   const added = editor.getByTestId("citation");
   await expect(added).toHaveAttribute("data-check", "not-found");

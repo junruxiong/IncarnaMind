@@ -970,7 +970,7 @@ export async function askInAssistant(window: Page, question: string): Promise<Lo
  * end), with the mouse, as a person keeps one (#201), and waits until it is in.
  */
 export async function addToNote(window: Page, answer: Locator): Promise<void> {
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(answer.getByTestId("answer-added")).toBeVisible();
 }

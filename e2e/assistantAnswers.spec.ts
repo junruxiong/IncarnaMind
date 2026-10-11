@@ -156,7 +156,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   // Copy takes the Answer with its Citation: as HTML that pastes back as a Citation, and as
   // text that names its source.
   const copied = await stubClipboard(window);
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-copy"));
   await expect(answer.getByTestId("answer-copy")).toHaveText("Copied");
   const clipboard = await copied();
@@ -165,7 +165,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   expect(clipboard["text/plain"]).toContain("[Tides, p. 2]");
 
   // Add to note: at the note's cursor, named in its tooltip; the Citation is found there too.
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   const add = answer.getByTestId("answer-add");
   await expect(add).toHaveAttribute("title", /Add to “Reading notes: tides”/);
   await pointAndClick(window, add);
@@ -191,7 +191,7 @@ test("an Answer streams into the assistant and leaves the Mind as it was; Add to
   await expect(answer.getByTestId("answer-added")).toHaveCount(0);
 
   // Added again, ⌘Z in the note takes it back too.
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect.poll(() => blocksOf(editor)).toContain("Your Documents answer this .");
   await pointAndClick(window, editor.locator(":scope > p").first());
@@ -211,7 +211,7 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
   const answer = await askInAssistant(window, "When do spring tides happen?");
 
   // ▾: the Mind in focus first, then the recent ones, a search, and New Mind.
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add-to"));
   const picker = window.getByTestId("add-to-picker");
   await expect(picker).toBeVisible();
@@ -267,7 +267,7 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
 
   // ▾ → New Mind: named as the conversation, in a new tab, its content as changes to accept.
   const shown = assistantAnswers(window).first();
-  await pointAt(window, shown.locator(".assistant-answer-text p").first());
+  await pointAt(window, shown.getByTestId("assistant-answer-text"));
   await pointAndClick(window, shown.getByTestId("answer-add-to"));
   await pointAndClick(window, window.getByTestId("add-to-option").last());
   await expect(shown.getByTestId("answer-added")).toContainText(
@@ -315,7 +315,7 @@ test("with no Mind in focus, Add to note opens the ▾, and adds through it", as
   // The Library in front: no Mind in focus.
   await pointAndClick(window, window.getByTestId("open-library"));
   await expect(window.getByTestId("assistant-reads")).toContainText("Searches All Documents");
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   const add = answer.getByTestId("answer-add");
   await expect(add).toHaveAttribute("title", "Choose a Mind to add it to");
   await pointAndClick(window, add);
@@ -353,11 +353,13 @@ test("the keyboard reaches it all: ⌘J, Tab through an Answer's actions, ⌘⇧
   );
   await expect(answer.getByTestId("answer-meta")).toHaveAttribute("aria-label", "Answer actions");
 
-  // ⌘⇧C copies the newest Answer; ⌘⇧A adds it to the Mind in focus, at its cursor.
-  await window.keyboard.press("ControlOrMeta+Shift+c");
+  // ⌘⇧C copies the newest Answer; ⌘⇧A adds it to the Mind in focus, at its cursor. The keys
+  // as a keyboard reports them with Shift held: "C" and "A" (Linux's editor reads a lowercase
+  // letter with Shift as the same letter without it, and Ctrl+A selects all).
+  await window.keyboard.press("ControlOrMeta+Shift+C");
   await expect.poll(async () => (await copied())["text/plain"] ?? "").toContain("[Tides, p. 2]");
   await pointAndClick(window, editor.locator(":scope > p").nth(1));
-  await window.keyboard.press("ControlOrMeta+Shift+a");
+  await window.keyboard.press("ControlOrMeta+Shift+A");
   await expect
     .poll(() => blocksOf(editor))
     .toEqual([
@@ -421,7 +423,7 @@ test("the ⋯ menu adds the last Answer to a new Mind and clears the conversatio
     await bridge.updateSettings({ user: { language: "zh-CN" } });
   });
   const answer = assistantAnswers(window).first();
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect(answer.getByTestId("answer-add")).toHaveText("添加到笔记");
   await expect(answer.getByTestId("answer-copy")).toHaveText("复制");
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");

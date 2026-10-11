@@ -158,8 +158,18 @@ export function ConversationLinks({ editor }: { editor: Editor }) {
             onFocus={(event) => show(run, event.currentTarget)}
             onBlur={hide}
             onClick={(event) => {
-              if (name) openOrigin(run.origin);
-              else setCard({ run, anchor: event.currentTarget });
+              if (name) {
+                openOrigin(run.origin);
+                return;
+              }
+              // Not listed (yet, just after the app opens, or any more): asked of the core, it
+              // opens if it is there, and the card says why if it isn't.
+              const anchor = event.currentTarget;
+              core.resolveReference(run.origin.from).then(
+                (target) =>
+                  target.status === "available" ? openOrigin(run.origin) : setCard({ run, anchor }),
+                (error: unknown) => useAppStore.getState().reportError(error),
+              );
             }}
             className="conversation-link"
           >
