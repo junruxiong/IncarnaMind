@@ -12,9 +12,13 @@
  * left alone: the User gets the settings to paste instead. Disconnecting a
  * pairing takes IncarnaMind out of the file it was written to, if it is
  * still its own entry there.
+ *
+ * Where the agent reads Agent Skills (#378), setting it up also adds the
+ * Skill (./skill) to its skills folder, which tells it when to use
+ * IncarnaMind; Disconnect and Undo take it out again if it is unchanged.
  */
-import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { AGENT_TOKEN_ENV } from "../../shared/agentSocket";
@@ -45,10 +49,12 @@ import {
   type SettingsFile,
   serverEntry,
   settingsFilesFor,
+  skillPathFor,
   withCodexTable,
   withMcpServersEntry,
   withoutCodexTable,
 } from "./clients";
+import { SKILL_MARKDOWN } from "./skill";
 
 /** How long a bundle waits in the temporary folder for the agent's app to install it. */
 const BUNDLE_KEPT_MS = 15 * 60_000;
@@ -174,16 +180,48 @@ export function createAgentSetup(options: AgentSetupOptions) {
     }
   };
 
+  /** The Skill to hand over for an agent IncarnaMind can't install it for. */
+  const skillToAdd = (client: ClientDefinition | null) => (client?.skills ? null : SKILL_MARKDOWN);
+
+  /**
+   * The Agent Skill in the agent's skills folder, unless a file is already
+   * there: one the User changed or wrote is theirs, and is left as it is.
+   */
+  const addSkill = async (client: ClientDefinition) => {
+    const path = skillPathFor(options.home, client.id);
+    if (path === null || (await readText(path)) !== null) return;
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, SKILL_MARKDOWN);
+  };
+
+  /**
+   * Takes the Skill out of the agent's skills folder if it is still as
+   * IncarnaMind wrote it, and no other pairing of the same agent needs it.
+   */
+  const removeSkill = async (client: string | null, leaving: string) => {
+    const path = skillPathFor(options.home, client);
+    if (path === null) return;
+    const others = options.agents
+      .settings()
+      .pairings.some((each) => each.id !== leaving && each.client === client);
+    if ((await readText(path)) !== SKILL_MARKDOWN || others) return;
+    await unlink(path);
+    // Its folder goes too, unless the User keeps something else in it.
+    await rmdir(dirname(path)).catch(() => undefined);
+  };
+
   const copy = (
     how: "command" | "settings",
     text: string,
     token: string,
+    skill: string | null,
     path?: string,
   ): Extract<AgentSetupResult, { kind: "copy" }> => ({
     kind: "copy",
     how,
     text,
     shown: hideToken(text, token),
+    skill,
     ...(path && { path }),
   });
 
@@ -238,7 +276,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
         planned.push({ path, before, after: changed(file, before, launch) });
       } catch {
         // Nothing is written until every file can be.
-        return copy("settings", changeShown(file, launch), token, path);
+        return copy("settings", changeShown(file, launch), token, skillToAdd(client), path);
       }
     }
     for (const each of planned) {
@@ -267,9 +305,14 @@ export function createAgentSetup(options: AgentSetupOptions) {
       case "file":
         return writeSettings(client, pairingId, launch);
       case "command":
-        return copy("command", claudeCodeCommand(launch, options.platform), token);
+        return copy(
+          "command",
+          claudeCodeCommand(launch, options.platform),
+          token,
+          skillToAdd(client),
+        );
       case "manual":
-        return copy("settings", mcpServersSnippet(launch), token);
+        return copy("settings", mcpServersSnippet(launch), token, skillToAdd(client));
     }
   };
 
@@ -282,6 +325,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
         name: client.name,
         installed: client.id !== "other" && isInstalled(client, where, existsSync),
         setup: client.setup,
+        skillPath: skillPathFor(options.home, client.id),
       }));
       return [...all.filter((each) => each.installed), ...all.filter((each) => !each.installed)];
     },
@@ -311,9 +355,12 @@ export function createAgentSetup(options: AgentSetupOptions) {
         client: client.id,
       });
       try {
+        // The agent still works without it, from the server's instructions.
+        await addSkill(client).catch(options.reportError);
         return { pairing, result: await install(client, pairing.id, launch) };
       } catch (error) {
         // Nothing half made: the pairing goes with the setup that failed.
+        await removeSkill(client.id, pairing.id).catch(options.reportError);
         await options.agents.disconnect(pairing.id).catch(options.reportError);
         throw error;
       }
@@ -332,6 +379,8 @@ export function createAgentSetup(options: AgentSetupOptions) {
         else await writeFile(file.path, file.before);
       }
       written.delete(pairingId);
+      const pairing = options.agents.settings().pairings.find((each) => each.id === pairingId);
+      await removeSkill(pairing?.client ?? null, pairingId).catch(options.reportError);
       await options.agents.disconnect(pairingId);
     },
 
@@ -341,9 +390,19 @@ export function createAgentSetup(options: AgentSetupOptions) {
       const launch = await options.agents.launch(pairing.id);
       const token = launch.env[AGENT_TOKEN_ENV] ?? "";
       if (pairing.client === "claude-code") {
-        return copy("command", claudeCodeCommand(launch, options.platform), token);
+        return copy(
+          "command",
+          claudeCodeCommand(launch, options.platform),
+          token,
+          skillToAdd(clientDefinition(pairing.client)),
+        );
       }
-      return copy("settings", mcpServersSnippet(launch), token);
+      return copy(
+        "settings",
+        mcpServersSnippet(launch),
+        token,
+        skillToAdd(clientDefinition(pairing.client)),
+      );
     },
 
     /**
@@ -353,8 +412,10 @@ export function createAgentSetup(options: AgentSetupOptions) {
      */
     async removeFromSettings(pairingId: unknown): Promise<void> {
       const pairing = options.agents.settings().pairings.find((each) => each.id === pairingId);
-      const files = settingsFilesFor(pairing?.client ?? null);
-      if (!pairing || files.length === 0) return;
+      if (!pairing) return;
+      await removeSkill(pairing.client, pairing.id).catch(options.reportError);
+      const files = settingsFilesFor(pairing.client);
+      if (files.length === 0) return;
       written.delete(pairing.id);
       const token = (await options.agents.launch(pairing.id)).env[AGENT_TOKEN_ENV] ?? "";
       for (const file of files) {
@@ -373,3 +434,14 @@ export function createAgentSetup(options: AgentSetupOptions) {
 }
 
 export type AgentSetup = ReturnType<typeof createAgentSetup>;
+
+/** Whether the agent's Agent Skill is in its skills folder as IncarnaMind wrote it. */
+export function skillInstalled(home: string, client: string | null): boolean {
+  const path = skillPathFor(home, client);
+  try {
+    return path !== null && readFileSync(path, "utf8") === SKILL_MARKDOWN;
+  } catch {
+    // Not there (or not readable): the row says it isn't installed, which is true.
+    return false;
+  }
+}

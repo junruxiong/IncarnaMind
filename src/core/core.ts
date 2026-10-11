@@ -12,7 +12,7 @@ import {
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
-import { createAgentSetup } from "./agents/setup";
+import { createAgentSetup, skillInstalled } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -1416,6 +1416,8 @@ export function createCore(adapters: CoreAdapters): Core {
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
+  // Where agents keep their settings and skills.
+  const home = adapters.agents?.home ?? homedir();
   const agents = createAgents({
     db,
     now,
@@ -1460,6 +1462,7 @@ export function createCore(adapters: CoreAdapters): Core {
         answers.answerOutside(question, documentIds, signal),
       show: (place) => events.emit("agents.citationShown", place),
     },
+    skillInstalled: (client) => skillInstalled(home, client),
     changed: (value) => events.emit("agents.changed", value),
     called: (activity) => events.emit("agents.activity", activity),
     reportError: (error) => console.error(error),
@@ -1467,7 +1470,6 @@ export function createCore(adapters: CoreAdapters): Core {
   agentsLocalModeChanged = () => agents.localModeChanged();
   agents.start().catch((error: unknown) => console.error(error));
   // Setting IncarnaMind up in the User's agent, from Settings → Agents.
-  const home = adapters.agents?.home ?? homedir();
   const agentSetup = createAgentSetup({
     agents,
     home,

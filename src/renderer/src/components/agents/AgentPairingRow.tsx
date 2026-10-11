@@ -35,11 +35,14 @@ export interface JustSetUp {
  */
 export function AgentPairingRow({
   pairing,
+  skillInstalled,
   folders,
   justSetUp,
   onUndone,
 }: {
   pairing: AgentPairing;
+  /** IncarnaMind's Skill is in the agent's skills folder. */
+  skillInstalled: boolean;
   folders: readonly LibraryGroup[];
   justSetUp: JustSetUp | null;
   onUndone(): void;
@@ -49,7 +52,7 @@ export function AgentPairingRow({
   const reportError = useAppStore((state) => state.reportError);
   const [open, setOpen] = useState<"folders" | "activity" | null>(null);
   const [activity, setActivity] = useState<AgentActivity[] | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"settings" | "skill" | null>(null);
   const [renaming, setRenaming] = useState(false);
 
   // The activity list follows each call while it is open.
@@ -75,11 +78,11 @@ export function AgentPairingRow({
       reportError(error);
     });
   };
-  const copySettings = async () => {
+  const copySettings = async (what: "settings" | "skill") => {
     try {
       const setup = await core.copyAgentSetup(pairing.id);
-      await navigator.clipboard.writeText(setup.text);
-      setCopied(true);
+      await navigator.clipboard.writeText(what === "skill" ? (setup.skill ?? "") : setup.text);
+      setCopied(what);
     } catch (error) {
       reportError(error);
     }
@@ -119,6 +122,11 @@ export function AgentPairingRow({
             ? t("agents.pairing.lastUsed", { when: timeWords(pairing.lastUsedAt, language) })
             : t("agents.pairing.notUsed")}
         </span>
+        {skillInstalled && (
+          <span data-testid="agent-pairing-skill" className={hintClass}>
+            {t("agents.pairing.skill", { agent: pairing.name })}
+          </span>
+        )}
         {done && (
           <p data-testid="agent-setup-done" role="status" className={`${rowTextClass} mt-1`}>
             {doneWords(done, pairing.name, t)}
@@ -199,11 +207,24 @@ export function AgentPairingRow({
           <button
             type="button"
             data-testid="agent-copy-settings"
-            onClick={() => void copySettings()}
+            onClick={() => void copySettings("settings")}
             className={`${ghostButtonClass} mt-1`}
           >
-            {copied ? t("agents.pairing.copied") : t("agents.pairing.copySettings")}
+            {copied === "settings" ? t("agents.pairing.copied") : t("agents.pairing.copySettings")}
           </button>
+          {!skillInstalled && (
+            <>
+              <button
+                type="button"
+                data-testid="agent-copy-skill"
+                onClick={() => void copySettings("skill")}
+                className={`${ghostButtonClass} mt-1 ml-2`}
+              >
+                {copied === "skill" ? t("agents.pairing.copied") : t("agents.pairing.copySkill")}
+              </button>
+              <p className={hintClass}>{t("agents.pairing.copySkill.hint")}</p>
+            </>
+          )}
         </details>
       </div>
       <div className={rowButtonsClass}>
