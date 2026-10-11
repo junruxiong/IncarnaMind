@@ -77,10 +77,21 @@ export interface Citing {
 /** How many Document versions' matching rules (see `matchingOf`) are kept, the latest used. */
 const MATCHINGS_KEPT = 16;
 
-/** The terms of a search (`keywordTerms`) that a text holds as words, each once, in order. */
+const HAN = /\p{Script=Han}/u;
+
+/**
+ * The terms of a search (`keywordTerms`) that a text holds, each once, in
+ * order: as words; a Chinese term as characters, wherever they are, since
+ * the same characters split into other words in another sentence ("绿地多的"
+ * gives 绿|地|多, "城市绿地" 城市|绿地).
+ */
 export function matchingTerms(terms: readonly string[], text: string): string[] {
-  const words = ` ${keywordText(text)} `;
-  return terms.filter((term) => words.includes(` ${term} `));
+  const words = keywordText(text);
+  const spaced = ` ${words} `;
+  const characters = words.replaceAll(" ", "");
+  return terms.filter((term) =>
+    HAN.test(term) ? characters.includes(term.replaceAll(" ", "")) : spaced.includes(` ${term} `),
+  );
 }
 
 export function createCiting(documents: CitingDocuments): Citing {

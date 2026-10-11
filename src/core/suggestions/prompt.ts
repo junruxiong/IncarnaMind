@@ -15,13 +15,29 @@ const TOLERANCE = 1.5;
 
 export const SUGGESTION_INSTRUCTIONS = [
   "You help the User write. They paused at the end of the paragraph they are writing. Suggest how it goes on, using only the Passages from their Documents below.",
-  "- If its last sentence is unfinished, finish it; otherwise write the next sentence. The paragraph ends at the end of a word.",
+  "- Your text is added right after the paragraph's last character, and the two must read as one text. If the paragraph stops in the middle of a sentence, your text completes that very sentence, so it reads correctly from its start (after “the survey found that”, say what the survey found). If the paragraph ends with a full sentence, write the next one. Never repeat the paragraph's words.",
   `- One sentence at most: no more than ${MAX_WORDS} words, or ${MAX_CJK_CHARACTERS} Chinese characters.`,
-  "- Write in the paragraph's language and tone, as the User would go on. Don't repeat what the paragraph already says.",
+  "- Write in the paragraph's language and tone, as the User would go on.",
   "- Rest it on one Passage, and copy from that Passage a short quote that supports it, character for character.",
   "- If no Passage supports a way on, give empty text.",
   'Reply with JSON only: {"text": the words to add after the paragraph, "passage": the id of the Passage, such as P1, "quote": the quote}.',
 ].join("\n");
+
+/** The fewest characters a reply must repeat of the paragraph's end before they are taken off it. */
+const MIN_OVERLAP = 8;
+
+/**
+ * The reply's words without the end of the paragraph they start with, when
+ * the model repeated it (as models do, despite being told not to).
+ */
+export function continuationOf(paragraph: string, text: string): string {
+  const end = paragraph.trimEnd().toLowerCase();
+  const start = text.toLowerCase();
+  for (let length = Math.min(end.length, start.length); length >= MIN_OVERLAP; length--) {
+    if (end.endsWith(start.slice(0, length))) return text.slice(length).trim();
+  }
+  return text;
+}
 
 export interface SuggestionReply {
   text: string;
