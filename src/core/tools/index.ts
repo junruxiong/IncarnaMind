@@ -3,8 +3,9 @@
  * (docs/designs/agent-extensibility.md §4.1, ADR-0013). Every action an
  * Answer can call has this one shape, whichever provider it comes from:
  * Document search and `cite` from the Documents, `use_skill`,
- * `read_skill_file` and `run_skill_script` from the Skills, and each
- * Connector's own Tools from the Connectors. A later capability (Files, a
+ * `read_skill_file` and `run_skill_script` from the Skills,
+ * `find_sources` from Find sources, and each Connector's own Tools from
+ * the Connectors. A later capability (Files, a
  * Browser, a Shell…) is a new provider, not a change to the Answer loop.
  *
  * Each Tool declares its Effects (CONTEXT.md): what a call with a given
@@ -20,8 +21,8 @@
  */
 import type { Effect } from "../api";
 
-/** v1's providers; later ones add their kind here. */
-export type ToolProviderKind = "documents" | "skills" | "connector";
+/** v1's providers, and Find sources; later ones add their kind here. */
+export type ToolProviderKind = "documents" | "skills" | "connector" | "sources";
 
 /** Which provider a Tool comes from: for its Tool-call card, its approvals and the log. */
 export interface ToolProviderInfo {
@@ -38,6 +39,8 @@ export interface ToolCallContext {
   toolCallId: string;
   /** Stops the call, e.g. when the User stops the Answer. */
   signal: AbortSignal;
+  /** Says how many things the call found, for its Tool-call card: Find sources' works. */
+  counted?(count: number): void;
 }
 
 /** A Tool (CONTEXT.md) as a Run offers it to the model. */
@@ -92,6 +95,9 @@ export const SKILL_TOOLS = {
   runScript: "run_skill_script",
 } as const;
 
+/** The name of Find sources' Tool (#296). */
+export const SOURCE_TOOLS = { find: "find_sources" } as const;
+
 /**
  * IncarnaMind's own Tools' names. They are reserved: a Tool from outside
  * IncarnaMind (a Connector's) never takes one (see `offeredTools`).
@@ -99,6 +105,7 @@ export const SKILL_TOOLS = {
 export const RESERVED_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...Object.values(DOCUMENT_TOOLS),
   ...Object.values(SKILL_TOOLS),
+  ...Object.values(SOURCE_TOOLS),
 ]);
 
 /** A Tool from outside IncarnaMind: a Connector's. Every other provider is IncarnaMind's own. */
