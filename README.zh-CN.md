@@ -22,9 +22,11 @@
   <!-- 第一个版本发布后，加上：<a href="https://github.com/junruxiong/IncarnaMind/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/junruxiong/IncarnaMind?color=17191C"></a> -->
 </p>
 
-<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示十个界面：旁边带着助手的 Mind，助手里回答的引用都已核对，这个回答也已添加到笔记；指向一条引用，显示它的引文；打开它，PDF 页面上高亮着这段引文；各种格式的全部文档，带文件夹和标签；在 Excel 表里选中单元格提问；跨十份合同的对比表；带修订和批注的 Word 合同；会议实时转写旁的笔记；正在运行和定时运行的后台任务；以及设置里的 Claude、GPT、DeepSeek 和通过 Ollama 运行的本地模型。"></p>
+<p align="center"><img src="docs/images/demo.gif" width="880" alt="依次展示八个界面：Mind 旁边是助手，回答里的引用都已核对；展开回答的过程，可以看到它读了什么、搜了什么；在笔记旁打开一条引用，PDF 页面上高亮着引文；助手的修改在 Mind 里等你接受或拒绝；资料库里的全部文档、文件夹和标签；三组标签页并排；在 Mind 里记会议笔记，助手根据实时转写回答；以及中文界面。"></p>
 
-<p align="center"><sub>选中内容提问、对比表、Word 修订与批注、会议和后台任务<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
+<p align="center"><sub>展开回答的过程、助手修改 Mind 等你接受，以及根据会议实时转写回答，<a href="#即将推出">即将推出</a>，其余功能现在就能用。</sub></p>
+
+**IncarnaMind** 是一款免费开源的桌面应用，支持 macOS、Windows 和 Linux：它根据你自己的 PDF、Word、PowerPoint 和 Excel 文件回答问题，并把每条引用和原文所在页逐一核对。
 
 ## 下载
 
@@ -50,13 +52,19 @@ npm install && npm run dev
 
 **每个回答都能核对。** 回答会标出每个说法的出处，并附上原文引文，再逐条到那个位置核对：找到了打绿勾，没找到就标成橙色；点一下，原文就打开到那一页，引文高亮显示。
 
-**直接用你手上的文件。** 关联你平时用的文件夹，连 Zotero 的存储文件夹也可以：IncarnaMind 就地读取里面的 PDF、Word（连批注一起）、PowerPoint、Excel、CSV、Markdown 和纯文本文件，从不移动或修改它们，文件有变化也会跟着更新。
+**直接用你手上的文件。** 把你平时用的文件夹添加为同步文件夹，连 Zotero 的存储文件夹也可以：IncarnaMind 就地读取里面的 PDF、Word（连批注一起）、PowerPoint、Excel、CSV、Markdown 和纯文本文件，从不移动或修改它们，文件有变化也会跟着更新。
 
-**文档再多也不乱。** 标签会自动添加，IncarnaMind 还能把文档分进你的文件夹；你自己做的选择都会保留。
+**查找和添加资料。** 在 OpenAlex、arXiv 和 PubMed 里搜索论文，开放获取的直接添加为文档；输入网址保存网页，像文件一样引用和核对；还能从 Zotero 或任何 CSL JSON、BibTeX、RIS 文件导入引用信息。
 
-**模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、硅基流动、OpenRouter 密钥，或接入任何兼容 OpenAI 接口的服务；也可以通过 Ollama 使用免费的本地模型，内容不出你的电脑。
+**AI 帮你写，改不改由你定。** 选中文字，选“用 AI 编辑…”，改动以修订的形式回来，由你接受或拒绝。开启写作建议后，你停下来时会出现灰色的续写，只在你的文档支持时出现，并且总带着引用；按 Tab 采纳。
 
-**写完就能交。** 把 Mind 导出为 Word，引用自动变成脚注；也可以导出为 Markdown。没通过核对的引用会标上“[未核实]”。
+**文档再多也不乱。** 标签会自动添加，IncarnaMind 还会给每个文档推荐文件夹，由你确认；你自己做的选择都会保留。
+
+**模型由你来选。** 可以用你自己的 OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、硅基流动、OpenRouter 密钥，或接入任何兼容 OpenAI 接口的服务；也可以通过 Ollama 使用免费的本地模型，内容不出你的电脑。已经订阅了 ChatGPT Plus 或 Pro，也可以使用 ChatGPT 登录，直接用订阅提问。
+
+**在你已经在用的 AI 智能体里提问**（实验功能，默认关闭）。在**设置 → 智能体**里连接 Claude、Codex、Cursor 等，用的是它们自己的订阅：它们只能读你选定的文件夹，从 IncarnaMind 拿到的每条引文都经过核对；它们读到的内容会按其服务条款发给它们的 AI 服务。[各个智能体的连接方法](docs/agents.zh-CN.md)。
+
+**写完就能交。** 把 Mind 导出为 Word 或 Markdown，引用和参考文献按你选的引用格式排好：APA、MLA、Chicago、Harvard、IEEE、Vancouver、GB/T 7714，或 IncarnaMind 自己的编号格式。没通过核对的引用会标上“[未核实]”。
 
 **连接应用和技能，运行前先问你。** 添加连接器（MCP 服务器），或者直接导入你在 Claude Desktop、Cursor 里配置好的；也可以添加技能（标准的 `SKILL.md` 文件夹），内置三个。可能改动内容的工具和技能里的脚本，都要你同意后才会运行。
 
@@ -67,15 +75,17 @@ npm install && npm run dev
 不用注册账号，也没有 IncarnaMind 服务器。你的 Mind 和搜索索引都存在你电脑上的一个数据文件夹里，你的文件原样留在原处。你的问题和为它找到的段落只发给你选的模型，用本地模型时哪儿也不去。API 密钥用系统自带的安全存储加密保存。使用数据只有在你同意后才收集，是[匿名事件](docs/privacy.md#usage-data)，绝不包括你的文件或问题，随时可以在**设置 → 隐私**中关闭。崩溃报告默认关闭，开启后也会先去掉你的内容。
 
 - **发送之前先问你。** IncarnaMind 第一次要把内容发给外部服务之前，会先告诉你要发什么、发给谁，等你同意后才发送。**设置 → 隐私**里列出了每一项，随时可以撤回。
-- **要求服务商不保存。** 服务商提供选项的，IncarnaMind 都会要求它不要保存你的请求；发给 OpenAI 和 xAI 的每个请求都带着这个要求，发给 OpenRouter 的请求则要求它只使用不保存、不训练的提供商。
+- **要求提供商不保存。** 提供商提供选项的，IncarnaMind 都会要求它不要保存你的请求；发给 OpenAI 和 xAI 的每个请求都带着这个要求，发给 OpenRouter 的请求则要求它只使用不保存、不训练的提供商。
 - **运行什么，由你说了算。** 连接器里可能改动内容的工具，以及技能里的脚本，在运行之前 IncarnaMind 都会先问你：允许这一次、始终允许，或者拒绝。**设置 → 隐私**里列出了你设过的每条规则，随时可以撤销。
 
 <details>
 <summary><b>常见问题</b></summary>
 
-- **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。用云端模型时，按用量付费给模型服务商；用本地模型则完全免费。
-- **一定要有 API 密钥吗？** 不一定。只要 [Ollama](https://ollama.com) 在运行，IncarnaMind 一键就能下载本地模型。也可以填 OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、硅基流动、OpenRouter 的密钥，或接入任何兼容 OpenAI 接口的服务。
-- **能离线用吗？** 搜索文件可以离线：搜索靠文件里的字词，按含义搜索（嵌入）是可选功能，默认关闭。回答需要模型，所以用本地模型时，全部功能都能离线。
+- **要花钱吗？** 不用。IncarnaMind 开源免费（Apache 2.0 许可证）。用云端模型时，按用量付费给模型提供商；用本地模型则完全免费。
+- **一定要有 API 密钥吗？** 不一定。只要 [Ollama](https://ollama.com) 在运行，IncarnaMind 一键就能下载本地模型。也可以填 OpenAI、Anthropic、Google、DeepSeek、通义千问、Kimi、智谱 GLM、Mistral、xAI、硅基流动、OpenRouter 的密钥，或接入任何兼容 OpenAI 接口的服务。订阅了 ChatGPT Plus 或 Pro，可以使用 ChatGPT 登录；订阅了 Claude，可以在**设置 → 智能体**里连接 Claude 应用（实验功能），在 Claude 里问你的文档。
+- **是 NotebookLM 的替代品吗？** 是。IncarnaMind 在你的电脑上运行，文件始终留在本地；模型由你来选（你自己的密钥、ChatGPT 订阅，或通过 Ollama 运行的本地模型）；每条引用都和原文所在页逐一核对；Mind 还能导出为带引用的 Word。
+- **能用我的 ChatGPT 订阅吗？** 能，需要 ChatGPT Plus 或 Pro。在**设置 → 模型**里选**使用 ChatGPT 继续**，在浏览器里完成登录即可：之后的提问会以你的账号发给 OpenAI，计入订阅的用量上限，不需要密钥。
+- **能离线用吗？** 能，配合通过 Ollama 运行的本地模型：读取文件、搜索和引用核对都在你的电脑上完成。云端模型需要联网。按含义搜索（嵌入）是可选功能，默认关闭。
 - **会改动我的文件吗？** 不会。它只在原处读取文件，只往自己的数据文件夹和你导出的文件里写内容。
 - **“找到引文”是什么意思？** 意思是这段文字确实在引用所指的位置，但不代表它能证明你写的那句话，所以原文永远只差一次点击。“无法核对”表示那里没有可以比对的文字，比如扫描页。
 - **怎么备份？** 复制数据文件夹就行，里面有你的 Mind、搜索索引和设置。
@@ -84,7 +94,7 @@ npm install && npm run dev
 
 ## 即将推出
 
-下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/junruxiong/IncarnaMind/issues/74)）：会议实时转写，回答可以引用转写内容；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；由你接受或拒绝的 AI 修改；在后台运行的研究任务。
+下面是计划中的功能，现在还不能用，也没有具体日期（见[路线图](https://github.com/junruxiong/IncarnaMind/issues/74)）：回答下方折叠的过程，显示助手读了什么、搜了什么；会议实时转写，回答可以引用转写内容；助手直接修改你的 Mind，每处修改都等你接受；打开 Word 文件再导出回去，修改保留为修订；对照你的文件核对你自己的草稿和别人的文档；跨文档的对比表；在后台运行的研究任务。
 
 ## 参与贡献
 
