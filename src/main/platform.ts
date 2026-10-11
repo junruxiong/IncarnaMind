@@ -325,6 +325,16 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     scriptRuntimes: {
       node: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } },
     },
+    // An outside agent starts the shim (#351) the same way: this app's binary, as plain Node,
+    // running the shim built beside this file (inside app.asar, which Node mode reads).
+    agents: {
+      launcher: {
+        command: process.execPath,
+        args: [join(__dirname, "agentShim.js")],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      },
+      version: app.getVersion(),
+    },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
     // The fake models have no files to download.
