@@ -257,6 +257,7 @@ export function createOpenAlex(baseUrl: string = OPENALEX_URL): SourceProvider {
     });
   return {
     id: "openalex",
+    resolves: ["doi", "arxiv", "pmid"],
     name: "OpenAlex",
     service: { id: "https://api.openalex.org", name: "OpenAlex" },
     terms,
