@@ -543,6 +543,24 @@ export async function widthOf(locator: Locator): Promise<number> {
 }
 
 /**
+ * Slides the mouse onto an element, in steps, as a person does, and clicks it:
+ * with the left button, or the right to open its menu.
+ */
+export async function pointAndClick(
+  window: Page,
+  target: Locator,
+  { button = "left" }: { button?: "left" | "right" } = {},
+): Promise<void> {
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't visible.");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await window.mouse.move(x, y, { steps: 8 });
+  await window.mouse.click(x, y, { button });
+}
+
+/**
  * Drags an element horizontally by `dx` CSS pixels, as a person grabs it: a
  * few pixels off its centre (a divider is a 1px rule with a wider strip to
  * grab), after sliding the mouse there.

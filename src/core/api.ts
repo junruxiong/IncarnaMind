@@ -72,8 +72,14 @@ export interface CreateMindInput {
  * and attributes a Mind's Yjs document may hold. Raise it when a change would
  * make an older version lose or misread content (a new node type or mark, a
  * new attribute); a Mind without a recorded version is version 1.
+ *
+ * - 1: Notes, Questions, Answers and Citations.
+ * - 2: tables (`table`, `tableRow`, `tableHeader` and `tableCell`, whose cells
+ *   keep `colspan`, `rowspan`, `colwidth` and `align`). Version 1 content is
+ *   version 2 content as it is: nothing is rewritten, and a Mind records 2
+ *   once this version writes to it.
  */
-export const CONTENT_SCHEMA_VERSION = 1;
+export const CONTENT_SCHEMA_VERSION = 2;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -169,6 +175,7 @@ export const NOTE_BLOCK_TYPES = [
   "orderedList",
   "blockquote",
   "horizontalRule",
+  "table",
 ] as const;
 
 /** The node type of a Question Block. Its content is the User's text (inline). */

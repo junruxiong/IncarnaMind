@@ -24,6 +24,7 @@
  *   a heading is level 1, a list starts at 1, a text attribute is "".
  */
 import * as Y from "yjs";
+import type { TableAlign } from "../shared/markdownTables";
 import { ANSWER_BLOCK, CITATION_NODE, QUESTION_BLOCK } from "./api";
 
 export interface Marks {
@@ -61,7 +62,22 @@ export interface TableCell {
   header: boolean;
   /** How many columns the cell spans, from 1. */
   colspan: number;
+  /** How many rows the cell spans, from 1. */
+  rowspan: number;
+  /** How its text is aligned; null: as the text flows. */
+  align: TableAlign;
   content: Block[];
+}
+
+/**
+ * One place in a row of a table laid out as Word and Markdown lay one out:
+ * a cell where it starts, the cell again where it spans down from a row
+ * above (`continued`), or null for a place no cell fills. A cell over
+ * several columns takes one place: its `colspan` covers the rest.
+ */
+export interface TableSlot {
+  cell: TableCell | null;
+  continued: boolean;
 }
 
 export type Block =
@@ -221,20 +237,74 @@ function readBlockElement(element: Y.XmlElement, options: ReadOptions): Block[] 
 
 function readTable(table: Y.XmlElement, options: ReadOptions): TableCell[][] {
   const rows: TableCell[][] = [];
+  const span = (cell: Y.XmlElement, name: string) =>
+    Math.max(Math.trunc(Number(cell.getAttribute(name))) || 1, 1);
   for (const row of table.toArray()) {
     if (!(row instanceof Y.XmlElement)) continue;
     const cells: TableCell[] = [];
     for (const cell of row.toArray()) {
       if (!(cell instanceof Y.XmlElement)) continue;
+      const align = cell.getAttribute("align");
       cells.push({
         header: cell.nodeName === "tableHeader",
-        colspan: Math.max(Math.trunc(Number(cell.getAttribute("colspan"))) || 1, 1),
+        colspan: span(cell, "colspan"),
+        rowspan: span(cell, "rowspan"),
+        align: align === "left" || align === "center" || align === "right" ? align : null,
         content: readChildren(cell.toArray(), options),
       });
     }
     if (cells.length > 0) rows.push(cells);
   }
   return rows;
+}
+
+/**
+ * A table's rows laid out (see `TableSlot`), and how many columns it has. A
+ * cell that spans rows takes its place again in each row it reaches down to,
+ * at its column; a row with too few cells to reach that column gets empty
+ * places before it. Rows are as wide as their cells and continued cells make
+ * them: a writer pads the rest out to `columns`.
+ */
+export function tableLayout(rows: readonly (readonly TableCell[])[]): {
+  rows: TableSlot[][];
+  columns: number;
+} {
+  /** The cells from rows above that still reach down, by the column they start at. */
+  let reaching = new Map<number, { cell: TableCell; rows: number }>();
+  const laidOut: TableSlot[][] = [];
+  let columns = 1;
+  for (const row of rows) {
+    const slots: TableSlot[] = [];
+    const next = new Map<number, { cell: TableCell; rows: number }>();
+    let column = 0;
+    /** Puts in the cells from above that reach down at `column`, or before `until`. */
+    const continueFromAbove = (until: number) => {
+      for (;;) {
+        const above = reaching.get(column);
+        const later = [...reaching.keys()].filter((at) => at >= column && at < until);
+        if (!above && later.length === 0) return;
+        if (!above) {
+          slots.push({ cell: null, continued: false });
+          column++;
+          continue;
+        }
+        slots.push({ cell: above.cell, continued: true });
+        if (above.rows > 1) next.set(column, { cell: above.cell, rows: above.rows - 1 });
+        column += above.cell.colspan;
+      }
+    };
+    for (const cell of row) {
+      continueFromAbove(column + 1);
+      slots.push({ cell, continued: false });
+      if (cell.rowspan > 1) next.set(column, { cell, rows: cell.rowspan - 1 });
+      column += cell.colspan;
+    }
+    continueFromAbove(Number.POSITIVE_INFINITY);
+    reaching = next;
+    laidOut.push(slots);
+    columns = Math.max(columns, column);
+  }
+  return { rows: laidOut, columns };
 }
 
 function readImage(element: Y.XmlElement): Image {

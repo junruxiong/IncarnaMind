@@ -13,6 +13,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  pointAndClick,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -47,17 +48,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
-
-/** Slides the mouse onto an element, in steps, as a person does, and clicks it. */
-async function pointAndClick(window: Page, target: Locator): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  await window.mouse.move(x, y, { steps: 8 });
-  await window.mouse.click(x, y);
-}
 
 /** Slides the mouse onto an element and leaves it there. */
 async function pointAt(window: Page, target: Locator): Promise<void> {

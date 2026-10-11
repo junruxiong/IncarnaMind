@@ -58,6 +58,7 @@
     "@tiptap/extension-highlight": "3.31.4",
     "@tiptap/extension-mathematics": "3.31.4",
     "@tiptap/extension-node-range": "3.31.4",
+    "@tiptap/extension-table": "3.31.4",
     "@tiptap/extension-typography": "3.31.4",
     "@tiptap/extension-unique-id": "3.31.4",
     "@tiptap/extensions": "3.31.4",

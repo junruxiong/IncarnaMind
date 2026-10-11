@@ -1,17 +1,21 @@
 /**
  * Turns the Markdown a chat model writes into the node types of Notes:
  * paragraphs, headings 1-6, bullet and ordered lists (nested), block quotes,
- * horizontal rules, fenced code blocks with their language, and math as
- * KaTeX formulas (`$…$` or `\(…\)` inline, `$$…$$` or `\[…\]` as a block),
- * with bold, italic, strikethrough, inline code and links. Anything else
- * (tables, HTML) stays as text. A line break inside a paragraph is kept.
+ * horizontal rules, fenced code blocks with their language, GitHub's pipe
+ * tables (the first row as the heading row, each column's alignment, and
+ * "<br>" as a line break in a cell), and math as KaTeX formulas (`$…$` or
+ * `\(…\)` inline, `$$…$$` or `\[…\]` as a block), with bold, italic,
+ * strikethrough, inline code and links. Anything else (HTML) stays as text.
+ * A line break inside a paragraph is kept.
  *
  * While an Answer streams, the text is cut off at an arbitrary point. With
  * `streaming`, what would still change how it looks is held back (a half-typed
- * list marker or fence, an unclosed formula or link) and what is open is shown
- * closed (bold, inline code, a code block), so the Answer grows without
- * flickering between raw Markdown and formatting.
+ * list marker or fence, an unclosed formula or link, a table's heading row
+ * until the row under it is complete) and what is open is shown closed (bold,
+ * inline code, a code block), so the Answer grows without flickering between
+ * raw Markdown and formatting. A table grows a row at a time.
  */
+import { delimiterRow, type TableAlign, tableCellRanges } from "../../shared/markdownTables";
 import type { MarkJSON, NodeJSON } from "./blocks";
 
 export interface MarkdownOptions {
@@ -38,6 +42,12 @@ const MATH_BLOCK = /^ {0,3}(\$\$|\\\[)(.*)$/;
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
 const RULE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const QUOTE = /^ {0,3}>/;
+/** A row that starts with a pipe: perhaps a table's heading row, once the row under it is written. */
+const PIPE_ROW = /^ {0,3}\|/;
+/** A delimiter row, or what one looks like while it is still being written. */
+const PARTIAL_DELIMITER = /^[ \t|:-]*$/;
+/** A line break written into a table cell, where a row can't break. */
+const BREAK_TAG = /<br[ \t]*\/?>/gi;
 const LIST_ITEM = /^( {0,3})([-*+]|\d{1,9}[.)])(?:([ \t]+)(.*))?$/;
 /** Holding back an unclosed formula or link stops after this many characters: it was plain text after all. */
 const MAX_PENDING = 300;
@@ -76,6 +86,35 @@ function startsBlock(line: string): boolean {
     RULE.test(line) ||
     QUOTE.test(line) ||
     LIST_ITEM.test(line)
+  );
+}
+
+/**
+ * Each column's alignment, when a table starts at `lines[i]`: a row with a
+ * pipe, then a delimiter row with as many cells.
+ */
+function tableStart(lines: readonly string[], i: number): TableAlign[] | null {
+  const head = lines[i];
+  const below = lines[i + 1];
+  if (head === undefined || below === undefined || !head.includes("|")) return null;
+  const align = delimiterRow(below);
+  return align && tableCellRanges(head).length === align.length ? align : null;
+}
+
+/**
+ * While the text streams, whether `lines[i]` may be a table's heading row
+ * whose delimiter row is still being written (or is written, but its line
+ * hasn't ended: a ":" may still align its last column). Shown before then,
+ * it would flash as a paragraph of pipes.
+ */
+function tablePending(lines: readonly string[], i: number, open: boolean): boolean {
+  if (!open) return false;
+  const line = lines[i] as string;
+  if (i === lines.length - 1) return PIPE_ROW.test(line);
+  if (i + 1 !== lines.length - 1) return false;
+  return (
+    (PIPE_ROW.test(line) && PARTIAL_DELIMITER.test(lines[i + 1] as string)) ||
+    tableStart(lines, i) !== null
   );
 }
 
@@ -158,6 +197,15 @@ function parseBlocks(lines: readonly string[], open: boolean): NodeJSON[] {
       continue;
     }
 
+    if (tablePending(lines, i, open)) break;
+    const align = tableStart(lines, i);
+    if (align) {
+      const table = parseTable(lines, i, align, open);
+      blocks.push(table.block);
+      i = table.next;
+      continue;
+    }
+
     if (QUOTE.test(line)) {
       const quoted: string[] = [];
       while (i < lines.length) {
@@ -185,7 +233,14 @@ function parseBlocks(lines: readonly string[], open: boolean): NodeJSON[] {
 
     const text: string[] = [line];
     i++;
-    while (i < lines.length && !isBlank(lines[i] as string) && !startsBlock(lines[i] as string)) {
+    // A table may follow a paragraph's last line with no blank line between, as models write them.
+    while (
+      i < lines.length &&
+      !isBlank(lines[i] as string) &&
+      !startsBlock(lines[i] as string) &&
+      !tableStart(lines, i) &&
+      !tablePending(lines, i, open)
+    ) {
       text.push(lines[i] as string);
       i++;
     }
@@ -193,6 +248,65 @@ function parseBlocks(lines: readonly string[], open: boolean): NodeJSON[] {
   }
   return blocks;
 }
+
+/**
+ * A table from its heading row at `start` to the first blank line, line
+ * without a pipe, or other kind of Block. Every row has the heading row's
+ * columns: missing cells are empty, extra ones are left out. While the text
+ * streams, the last row shows as far as it is written, once it has any text.
+ */
+function parseTable(
+  lines: readonly string[],
+  start: number,
+  align: readonly TableAlign[],
+  open: boolean,
+): { block: NodeJSON; next: number } {
+  const rows = [tableRow(lines[start] as string, align, true, false)];
+  let i = start + 2;
+  while (i < lines.length) {
+    const line = lines[i] as string;
+    if (isBlank(line) || !line.includes("|") || startsBlock(line)) break;
+    const writing = open && i === lines.length - 1;
+    if (!writing || tableCellRanges(line).some((cell) => cell.end > cell.start)) {
+      rows.push(tableRow(line, align, false, writing));
+    }
+    i++;
+  }
+  return { block: { type: "table", content: rows }, next: i };
+}
+
+/**
+ * A row's cells, each a paragraph, with their column's alignment and the
+ * attributes the editor stores for a cell (it spans one column and one row).
+ */
+function tableRow(
+  line: string,
+  align: readonly TableAlign[],
+  header: boolean,
+  open: boolean,
+): NodeJSON {
+  const ranges = tableCellRanges(line);
+  return {
+    type: "tableRow",
+    content: align.map((columnAlign, column) => {
+      const range = ranges[column];
+      const source = range ? withLineBreaks(line.slice(range.start, range.end)) : "";
+      return {
+        type: header ? "tableHeader" : "tableCell",
+        attrs: { colspan: 1, rowspan: 1, ...(columnAlign ? { align: columnAlign } : {}) },
+        // The cell being written is the last one there is.
+        content: [paragraph(source, open && column === ranges.length - 1)],
+      };
+    }),
+  };
+}
+
+/** A cell's "<br>"s as line breaks, outside its code. */
+const withLineBreaks = (cell: string) =>
+  cell
+    .split(/(`+[^`]*`+)/)
+    .map((part, index) => (index % 2 === 0 ? part.replace(BREAK_TAG, "\n") : part))
+    .join("");
 
 /** Fence names models use for languages that highlight.js knows by another name. */
 const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {

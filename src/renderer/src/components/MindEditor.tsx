@@ -28,6 +28,8 @@ import { QuestionFold } from "../editor/questionFold";
 import { ScopePicker } from "../editor/ScopePicker";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
+import { TableMenu } from "../editor/TableMenu";
+import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
 import { useT } from "../i18n";
 import { skillDescription } from "../skills";
@@ -226,6 +228,7 @@ function MindEditorView({
         ScopePicker,
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
+        TableKeys,
         QuestionCommands.configure({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),
@@ -286,6 +289,7 @@ function MindEditorView({
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
+        {!readOnly && <TableMenu editor={editor} />}
       </div>
       {dock &&
         !readOnly &&
