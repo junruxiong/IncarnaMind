@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { RECOMMENDED_OLLAMA_MODEL } from "../../src/core";
 import { type ChatProviderKind, chatProviderKinds } from "../../src/core/api";
+import { automaticTagging } from "../../src/core/library/tagging";
 import {
   cloudWindow,
   givesStructuredOutput,
@@ -15,6 +16,7 @@ import {
   catalogFacts,
   catalogModel,
   catalogModels,
+  catalogRoleModel,
   isNonChatModel,
   LOCAL_MODEL_TIERS,
   LOCAL_MODELS,
@@ -30,6 +32,7 @@ import {
   requiresApiKey,
   serviceFor,
 } from "../../src/core/providers/kinds";
+import { OLLAMA_CLOUD } from "../../src/core/providers/ollamaCloud";
 import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
@@ -402,6 +405,11 @@ describe("The providers of #178", () => {
       expect(catalogProvider(id)?.request?.thinkingOff, id).toBeDefined();
     }
     expect(catalogProvider("glm")?.request?.thinkingOff?.unless).toEqual(["glm-5.3"]);
+    // OpenAI's small calls run with reasoning off, except on the models that refuse "none".
+    expect(catalogProvider("openai")?.request?.thinkingOff?.except).toEqual(
+      expect.arrayContaining(["gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano"]),
+    );
+    expect(catalogProvider("openai")?.request?.thinkingOff?.except).not.toContain("gpt-6-luna");
   });
 
   test("a provider needs a key and takes no server URL; a region comes with the endpoint", () => {
@@ -412,5 +420,48 @@ describe("The providers of #178", () => {
       );
       expect(baseUrlFor(id as ChatProviderKind, undefined), id).toBeNull();
     }
+  });
+});
+
+describe("Tagging models (#180)", () => {
+  test("a provider tags with its quick-tasks model, except Mistral, whose tagging model is Mistral Small 4", () => {
+    const tagging = CATALOG_PROVIDERS.filter((each) => each.roles.tagging !== undefined);
+    expect(tagging.map((each) => [each.id, each.roles.tagging])).toEqual([
+      ["mistral", "mistral-small-2603"],
+    ]);
+    // Same input price as Ministral 8B, which is nearly all of what tagging costs.
+    expect(catalogModel("mistral", "mistral-small-2603")?.price?.input).toBe(
+      catalogModel("mistral", "ministral-8b-2512")?.price?.input,
+    );
+    expect(catalogRoleModel("anthropic", "tagging")).toBeUndefined();
+    expect(catalogRoleModel("anthropic", "quickTasks")).toBe("claude-haiku-5-5");
+  });
+
+  test("the ChatGPT plan tags with GPT-6 Luna", () => {
+    expect(catalogRoleModel("chatgpt", "tagging")).toBe("gpt-6-luna");
+    expect(catalogRoleModel("chatgpt", "quickTasks")).toBe("gpt-6-luna");
+    expect(catalogRoleModel("chatgpt", "images")).toBeUndefined();
+  });
+
+  test("Ollama's cloud models get no tagging default: Automatic passes them by", () => {
+    expect(catalogRoleModel("ollama", "tagging")).toBeUndefined();
+    const cloud = {
+      choice: { providerId: "ollama", modelId: "gpt-oss:20b-cloud" },
+      kind: "ollama" as const,
+      catalogId: "ollama",
+      service: OLLAMA_CLOUD,
+      ollamaCloud: true,
+      readsImages: false,
+      name: "gpt-oss:20b-cloud",
+      price: undefined,
+    };
+    const picked = automaticTagging({
+      localOnly: false,
+      jev: { enabled: false, local: false },
+      chat: { model: cloud, tagging: cloud, reason: "answers-model" },
+      decision: null,
+      localChat: null,
+    });
+    expect(picked).toBeNull();
   });
 });

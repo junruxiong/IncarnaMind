@@ -328,12 +328,9 @@ function OtherModelForm({
 }) {
   const t = useT();
   const [providers, setProviders] = useState<ChatProvider[]>([]);
+  // A saved provider's id, "ollama" for a decision model by name, or "auto" for them picked per Document.
   const [where, setWhere] = useState(
-    current?.kind === "chat"
-      ? current.choice.providerId
-      : current?.kind === "ollama"
-        ? "ollama"
-        : "",
+    current?.kind === "chat" ? current.choice.providerId : current ? current.kind : "",
   );
   const [modelId, setModelId] = useState(
     current?.kind === "chat"
@@ -343,7 +340,9 @@ function OtherModelForm({
         : "",
   );
   const [baseUrl, setBaseUrl] = useState(
-    current?.kind === "ollama" ? current.baseUrl : "http://localhost:11434",
+    current?.kind === "ollama" || current?.kind === "auto"
+      ? current.baseUrl
+      : "http://localhost:11434",
   );
   const [usePageImages, setUsePageImages] = useState(
     current?.kind === "ollama" && current.usePageImages === true,
@@ -364,6 +363,10 @@ function OtherModelForm({
       className="flex flex-col gap-3 px-4 pt-1 pb-4 pl-11"
       onSubmit={(event) => {
         event.preventDefault();
+        if (where === "auto") {
+          onSave({ kind: "auto", baseUrl });
+          return;
+        }
         const model = modelId.trim();
         if (!model) return;
         onSave(
@@ -392,20 +395,23 @@ function OtherModelForm({
             </option>
           ))}
           <option value="ollama">{t("library.ollama")}</option>
+          <option value="auto">{t("tagging.other.auto")}</option>
         </select>
       </label>
-      <label className={fieldLabelClass}>
-        {t("library.model")}
-        <input
-          className={inputClass}
-          required
-          maxLength={200}
-          value={modelId}
-          spellCheck={false}
-          onChange={(event) => setModelId(event.target.value)}
-        />
-      </label>
-      {where === "ollama" && (
+      {where !== "auto" && (
+        <label className={fieldLabelClass}>
+          {t("library.model")}
+          <input
+            className={inputClass}
+            required
+            maxLength={200}
+            value={modelId}
+            spellCheck={false}
+            onChange={(event) => setModelId(event.target.value)}
+          />
+        </label>
+      )}
+      {(where === "ollama" || where === "auto") && (
         <>
           <label className={fieldLabelClass}>
             {t("library.server")}
@@ -417,7 +423,7 @@ function OtherModelForm({
               onChange={(event) => setBaseUrl(event.target.value)}
             />
           </label>
-          {supportsLibraryImages(modelId) && (
+          {where === "ollama" && supportsLibraryImages(modelId) && (
             <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
               <input
                 type="checkbox"

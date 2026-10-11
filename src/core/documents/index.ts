@@ -438,8 +438,9 @@ export function createDocuments(options: DocumentsOptions) {
       folderId: row.folder_id,
       tags: tagsOfDocument(db, row.id),
       tagging,
+      // Why it failed, or why it waits when that is worth saying (the ChatGPT plan's limit).
       taggingError:
-        tagging === "failed"
+        tagging === "failed" || (tagging === "waiting-for-provider" && row.tagging_error_kind)
           ? {
               kind: (row.tagging_error_kind ?? "unknown") as ProviderErrorKind,
               message: row.tagging_error_message ?? "",

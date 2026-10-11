@@ -401,7 +401,7 @@ describe("Small calls skip thinking", () => {
       streamsUsage: false,
     });
     const requests = fakeProvider(url.host, {
-      protocol: kind === "xai" ? "responses" : "chat",
+      protocol: kind === "xai" || kind === "openai" ? "responses" : "chat",
       models: { data: [] },
       query: "",
       records: () => [],
@@ -425,6 +425,10 @@ describe("Small calls skip thinking", () => {
     ["siliconflow", "Qwen/Qwen3-8B", "enable_thinking", false],
     ["openrouter", "openai/gpt-6-luna", "reasoning", { effort: "none" }],
     ["xai", "grok-4.3", "reasoning", { effort: "none" }],
+    // On the Organize evaluation, GPT-6 Luna tagged as well with reasoning off (#180).
+    ["openai", "gpt-6-luna", "reasoning", { effort: "none" }],
+    ["openai", "gpt-5.4-nano", "reasoning", { effort: "none" }],
+    ["mistral", "mistral-small-2603", "reasoning_effort", "none"],
   ] as const)("%s (%s) asks for no thinking", async (kind, modelId, field, value) => {
     expect((await bodyOf(kind, modelId, "off"))[field]).toEqual(value);
     afterEachStub();
@@ -433,6 +437,20 @@ describe("Small calls skip thinking", () => {
 
   test("GLM-5.3 can't turn thinking off, so it is not asked to", async () => {
     expect((await bodyOf("glm", "glm-5.3-flash", "off")).thinking).toBeUndefined();
+  });
+
+  test.each(["gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-5-nano", "gpt-5-2025-08-07"])(
+    "OpenAI's %s refuses reasoning effort none, so it is not asked to",
+    async (modelId) => {
+      expect((await bodyOf("openai", modelId, "off")).reasoning).toBeUndefined();
+    },
+  );
+
+  test("OpenAI keeps storing nothing with reasoning off", async () => {
+    expect(await bodyOf("openai", "gpt-6-luna", "off")).toMatchObject({
+      store: false,
+      reasoning: { effort: "none" },
+    });
   });
 });
 

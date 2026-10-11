@@ -7,6 +7,7 @@
  */
 import { describe, expect, test, vi } from "vitest";
 import type { ChatModelFactory, ChatModelSpec, Core, CoreAdapters } from "../../src/core";
+import { type AnswerRequest, createAiSdkAnswerEngine } from "../../src/core/answers/engine";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -18,6 +19,7 @@ import { waitForTagging } from "../helpers/tags";
 
 const OPENAI = "https://api.openai.com";
 const ANTHROPIC = "https://api.anthropic.com";
+const OPENROUTER = "https://openrouter.ai";
 
 /** What one call that doesn't write the Answer asked of which model. */
 interface SmallCall {
@@ -232,9 +234,14 @@ describe("Automatic picks the model that tags", () => {
 describe("Which model each quick call uses", () => {
   test("an Answer's search query and its translation go to the quick-tasks model; the Answer to its own", async () => {
     const { core, calls, answers, specs } = await start();
-    await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-3.5-turbo" });
-    await core.allowDataFlow("chat", OPENAI);
-    await core.allowDataFlow("tagging", OPENAI);
+    // A model that can't call Tools searches once, for the Question rewritten, and translated.
+    await core.saveChatProvider({
+      kind: "openrouter",
+      apiKey: "key",
+      modelId: "cohere/command-r7b-12-2024",
+    });
+    await core.allowDataFlow("chat", OPENROUTER);
+    await core.allowDataFlow("tagging", OPENROUTER);
     await addText(
       core,
       "城市热岛.md",
@@ -253,19 +260,20 @@ describe("Which model each quick call uses", () => {
     if (!result.asked) throw new Error("Not asked.");
     const ended = await answerEnded(core, result.answerId);
 
-    expect(ended.event).toBe("finished");
-    // GPT-3.5 Turbo can't call Tools: it answers in one go, after one search, rewritten and translated.
+    if (ended.event !== "finished") throw new Error("The Answer failed.");
+    expect(ended.payload.citationSupport).not.toBe("tools");
     const small = calls.filter(
       (each) => each.purpose === "rewrite" || each.purpose === "translate",
     );
     expect(small).toEqual([
-      { kind: "openai", modelId: "gpt-6-luna", thinking: "off", purpose: "rewrite" },
-      { kind: "openai", modelId: "gpt-6-luna", thinking: "off", purpose: "translate" },
+      { kind: "openrouter", modelId: "openai/gpt-6-luna", thinking: "off", purpose: "rewrite" },
+      { kind: "openrouter", modelId: "openai/gpt-6-luna", thinking: "off", purpose: "translate" },
     ]);
-    expect(answers).toEqual(["gpt-3.5-turbo"]);
-    expect(specs.find((spec) => spec.modelId === "gpt-3.5-turbo")?.thinking).toBeUndefined();
-    // Counted as the Answer's: its own call and the two small ones.
-    if (ended.event !== "finished") throw new Error("Not finished.");
+    expect(answers).toEqual(["cohere/command-r7b-12-2024"]);
+    expect(specs.find((spec) => spec.modelId === "cohere/command-r7b-12-2024")?.thinking).toBe(
+      undefined,
+    );
+    // Counted as the Answer's, as its own call is: 5 input tokens each.
     expect(ended.payload.usage.inputTokens).toBe(15);
   });
 
@@ -321,6 +329,71 @@ describe("Which model each quick call uses", () => {
     const document = await addText(core, "Report.md", "Quarterly report on sales.");
     await waitForTagging(core, [document.id]);
     expect(calls.map((each) => each.modelId)).toEqual(["house-model"]);
+  });
+});
+
+describe("The Answer engine's small calls", () => {
+  /** A model that says which it is in every reply, and records what it was asked for. */
+  const named = (name: string, asked: string[]) =>
+    scriptedModel(() => ({ text: JSON.stringify({ answer: `From ${name}.`, citations: [] }) }), {
+      modelId: name,
+      generate: ({ system }) => {
+        asked.push(`${name}: ${system.startsWith("You turn") ? "rewrite" : "translate"}`);
+        return { text: system.startsWith("You turn") ? "query" : "查询" };
+      },
+    });
+  const request = (overrides: Partial<AnswerRequest>): AnswerRequest => ({
+    instructions: () => "Answer from the Documents.",
+    messages: [
+      { role: "user", content: "Tides come twice a day." },
+      { role: "assistant", content: "Noted." },
+      { role: "user", content: "Why?" },
+    ],
+    question: "Why?",
+    model: named("answers", []),
+    documents: {
+      documentCount: 1,
+      documentLanguages: [{ language: "Chinese", documents: 1 }],
+      searchDocuments: async () => ({ text: "No Passages found.", passageCount: 0 }),
+      cite: () => "Recorded.",
+    },
+    tools: [],
+    support: "structured-output",
+    signal: new AbortController().signal,
+    ...overrides,
+  });
+  const run = async (answer: AnswerRequest) => {
+    for await (const event of createAiSdkAnswerEngine().generate(answer)) {
+      if (event.type === "failed") throw new Error(event.error.message);
+    }
+  };
+
+  test("go to the quick-tasks model when there is one", async () => {
+    const asked: string[] = [];
+    await run(
+      request({
+        model: named("answers", asked),
+        quickModel: async () => named("quick", asked),
+      }),
+    );
+    expect(asked).toEqual(["quick: rewrite", "quick: translate"]);
+  });
+
+  test("go to the Answer's model with no quick-tasks model, or when it can't be had", async () => {
+    const without: string[] = [];
+    await run(request({ model: named("answers", without) }));
+    expect(without).toEqual(["answers: rewrite", "answers: translate"]);
+
+    const declined: string[] = [];
+    await run(
+      request({
+        model: named("answers", declined),
+        quickModel: async () => {
+          throw new Error("The User declined the chat flow to its service.");
+        },
+      }),
+    );
+    expect(declined).toEqual(["answers: rewrite", "answers: translate"]);
   });
 });
 

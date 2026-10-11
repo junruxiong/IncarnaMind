@@ -105,9 +105,19 @@ describe("Data-flow consent", () => {
         consent: "not-asked",
         decidedAt: null,
       },
-      // Automatic tagging also goes to the default model's service, and asks for itself.
+      // Automatic tagging also goes to the default model's provider, and asks for itself.
       {
         flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
+        consent: "not-asked",
+        decidedAt: null,
+      },
+      // So does Organize, once there are Folders, with the same model (#180).
+      {
+        flow: {
+          id: "classification",
+          service: OPENAI_SERVICE,
+          sends: ["groups", "tags", "document-excerpts", "page-images"],
+        },
         consent: "not-asked",
         decidedAt: null,
       },
@@ -187,7 +197,8 @@ describe("Data-flow consent", () => {
         }),
         consent: "declined",
       }),
-      // Edit with AI, suggestions and tagging go to the default model's service only: Anthropic, saved last.
+      // Edit with AI, suggestions, tagging and Organize go to the default model's service only:
+      // Anthropic, saved last.
       expect.objectContaining({
         flow: expect.objectContaining({
           id: "suggestions",
@@ -205,6 +216,13 @@ describe("Data-flow consent", () => {
       expect.objectContaining({
         flow: expect.objectContaining({
           id: "tagging",
+          service: { id: "https://api.anthropic.com", name: "Anthropic" },
+        }),
+        consent: "not-asked",
+      }),
+      expect.objectContaining({
+        flow: expect.objectContaining({
+          id: "classification",
           service: { id: "https://api.anthropic.com", name: "Anthropic" },
         }),
         consent: "not-asked",
@@ -232,6 +250,8 @@ describe("Data-flow consent", () => {
       expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "edits" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
+      // Organize, once there are Folders, with the same model as tagging (#180).
+      expect.objectContaining({ flow: expect.objectContaining({ id: "classification" }) }),
     ]);
     const second = await testAndWaitForConsent(core);
     expect(models.model.doGenerateCalls).toHaveLength(1);
@@ -298,6 +318,8 @@ describe("Data-flow consent", () => {
       expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "edits" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
+      // Organize, once there are Folders, with the same model as tagging (#180).
+      expect.objectContaining({ flow: expect.objectContaining({ id: "classification" }) }),
     ]);
   });
 

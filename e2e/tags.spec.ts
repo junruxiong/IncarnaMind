@@ -151,7 +151,10 @@ test("without a model, Documents are ready to search, and one notice, not one pe
   await expect(settings).toBeVisible();
   await expect(settings).toHaveAttribute("data-page", "models");
   await expect(settings.getByTestId("chat-model-settings")).toBeVisible();
-  await expect(settings.getByTestId("jev-settings")).toBeVisible();
+  await expect(settings.getByTestId("tagging-automatic-line")).toHaveText(
+    "No model to tag with yet: set up a chat model, or install Tev1 in Ollama. Documents wait until then.",
+  );
+  await expect(settings.getByTestId("jev-settings")).toBeAttached();
   await closeSettings(window);
 
   // Once a model is set up, the Documents are tagged and the notice goes.

@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { totalmem } from "node:os";
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { AUTO_CLASSIFICATION } from "../src/core/library/automatic";
 import { buildPdf } from "../tests/helpers/pdf";
@@ -32,20 +32,21 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-async function organizationSettings(window: Page) {
-  await window
-    .getByTestId("library")
-    .getByRole("button", { name: "Organization", exact: true })
-    .click();
-  return window.getByTestId("settings");
+/** The Tagging section in Settings → Models, from the Library's button. */
+async function taggingSettings(window: Page) {
+  await window.getByTestId("library").getByRole("button", { name: "Tagging", exact: true }).click();
+  const section = window.getByTestId("settings").getByTestId("tagging-settings");
+  await section.scrollIntoViewIfNeeded();
+  return section;
 }
-async function saveOrganization(window: Page) {
-  await window
-    .getByTestId("settings")
-    .getByRole("button", { name: "Save settings", exact: true })
-    .click();
-  await expect(window.getByTestId("settings").getByRole("status")).toHaveText("Settings saved.");
-  await closeSettings(window);
+
+/** "Other model…": fills in a model the list doesn't have, and uses it. */
+async function useOtherModel(section: Locator, fill: (form: Locator) => Promise<void>) {
+  await section.getByTestId("tagging-other").click();
+  const form = section.getByTestId("tagging-other-form");
+  await fill(form);
+  await form.getByRole("button", { name: "Use this model", exact: true }).click();
+  await expect(section.getByTestId("tagging-other").getByRole("radio")).toBeChecked();
 }
 
 test("folders, tags, search, edits and removal update the index while originals stay in place", async () => {
@@ -136,7 +137,7 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     await library.getByLabel("Folder name", { exact: true }).fill("Research");
     await library.getByLabel("Description", { exact: true }).fill("Research papers and reports");
     await library.getByRole("button", { name: "Save folder" }).click();
-    const settings = await organizationSettings(window);
+    const section = await taggingSettings(window);
     const providerId = await window.evaluate(
       async () =>
         (
@@ -146,15 +147,18 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
         )[0]?.id,
     );
     if (!providerId) throw new Error("No provider");
-    await settings.getByLabel("Connection", { exact: true }).selectOption(providerId);
-    await settings.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    await useOtherModel(section, async (form) => {
+      await form.getByLabel("Connection", { exact: true }).selectOption(providerId);
+      await form.getByLabel("Model name", { exact: true }).fill("small-classifier");
+    });
     // On by default; turned off here, so the Document waits for the Organize button.
-    const automatic = settings.getByRole("checkbox", {
+    const automatic = section.getByRole("checkbox", {
       name: /^Organize new and changed Documents automatically/,
     });
     await expect(automatic).toBeChecked();
     await automatic.uncheck();
-    await saveOrganization(window);
+    await expect(automatic).not.toBeChecked();
+    await closeSettings(window);
     const path = join(sources, "Research notes.txt");
     await writeFile(path, "Research report about membrane separation and water filtration.");
     await addDocuments(window, [path]);
@@ -195,16 +199,15 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
     const row = reopened.window.getByTestId("library-document");
     await expect(row.getByRole("combobox", { name: /^Folder for/ })).toHaveValue("");
     await expect(row.getByTestId("document-tags")).toContainText("Membrane");
-    const settings = await organizationSettings(reopened.window);
-    await expect(settings.getByLabel("Model name", { exact: true })).toHaveValue(
-      "small-classifier",
-    );
+    const section = await taggingSettings(reopened.window);
+    await expect(section.getByTestId("tagging-other")).toContainText("small-classifier");
+    await expect(section.getByLabel("Model name", { exact: true })).toHaveValue("small-classifier");
   } finally {
     await reopened.app.close();
   }
 });
 
-test("onboarding offers starter folders and Chinese organization settings", async () => {
+test("onboarding offers starter folders and Chinese tagging settings", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   try {
     await window.getByTestId("onboarding-groups").click();
@@ -219,10 +222,10 @@ test("onboarding offers starter folders and Chinese organization settings", asyn
     await expect(sidebarFolder(window, "研究论文").getByTestId("folder-row")).toBeVisible();
     await window
       .getByTestId("library")
-      .getByRole("button", { name: "文档整理", exact: true })
+      .getByRole("button", { name: "自动打标签", exact: true })
       .click();
     await expect(window.getByTestId("settings-page-title")).toHaveText("模型");
-    await expect(window.getByTestId("organization-settings")).toContainText("文档整理");
+    await expect(window.getByTestId("tagging-settings")).toContainText("自动打标签");
     await window.getByTestId("settings-close").click();
     await window.screenshot({ path: "/tmp/incarnamind-organize-chinese.png" });
   } finally {
@@ -297,13 +300,14 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
     await library.getByRole("button", { name: "Add selected folders" }).click();
-    let settings = await organizationSettings(window);
-    await settings.getByLabel("Connection", { exact: true }).selectOption("auto");
-    await expect(settings.getByLabel("Model name", { exact: true })).toHaveCount(0);
-    await settings
-      .getByLabel("Local Ollama address", { exact: true })
-      .fill(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
-    await saveOrganization(window);
+    const ollama = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    let section = await taggingSettings(window);
+    await useOtherModel(section, async (form) => {
+      await form.getByLabel("Connection", { exact: true }).selectOption("auto");
+      await expect(form.getByLabel("Model name", { exact: true })).toHaveCount(0);
+      await form.getByLabel("Local Ollama address", { exact: true }).fill(ollama);
+    });
+    await closeSettings(window);
     await library.getByRole("button", { name: "Organize", exact: true }).click();
     const notes = library
       .getByTestId("library-document")
@@ -336,18 +340,21 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     );
     await expect(scan.locator("summary")).toHaveText("Organized");
     // Explicit Clef override can include or omit PDF images; the choice persists.
-    settings = await organizationSettings(window);
-    await expect(settings.getByLabel("Connection", { exact: true })).toHaveValue("auto");
-    await settings.getByLabel("Connection", { exact: true }).selectOption("ollama");
-    await settings.getByLabel("Model name", { exact: true }).fill("clef-flash");
-    const images = settings.getByRole("checkbox", { name: /Include up to 3 PDF page images/ });
-    await images.check();
-    await saveOrganization(window);
-    settings = await organizationSettings(window);
+    section = await taggingSettings(window);
+    const form = section.getByTestId("tagging-other-form");
+    await expect(form.getByLabel("Connection", { exact: true })).toHaveValue("auto");
+    const images = form.getByRole("checkbox", { name: /Include up to 3 PDF page images/ });
+    await useOtherModel(section, async () => {
+      await form.getByLabel("Connection", { exact: true }).selectOption("ollama");
+      await form.getByLabel("Model name", { exact: true }).fill("clef-flash");
+      await images.check();
+    });
+    await closeSettings(window);
+    section = await taggingSettings(window);
     await expect(images).toBeChecked();
-    await images.uncheck();
-    await saveOrganization(window);
-    settings = await organizationSettings(window);
+    await useOtherModel(section, () => images.uncheck());
+    await closeSettings(window);
+    section = await taggingSettings(window);
     await expect(images).not.toBeChecked();
     await closeSettings(window);
     await window.screenshot({ path: "/tmp/incarnamind-organize-auto.png" });
