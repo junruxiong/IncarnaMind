@@ -1,5 +1,5 @@
 import { type Editor, Extension } from "@tiptap/core";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, QUESTION_BLOCK } from "../../../core/api";
 
@@ -16,7 +16,7 @@ const foldedByMind = new Map<string, Folded>();
 
 /**
  * Folding a Question hides its Answer (DESIGN.md, Question). The Question gets
- * `data-folded` (and a decoration whose spec says so, see `isFolded`), its
+ * `data-folded` (see `isQuestionFolded`), its
  * Answer the class `answer-folded`; nothing is stored in the Mind.
  */
 export function questionFoldPlugin(mindId: string): Plugin<Folded> {
@@ -85,9 +85,10 @@ export function toggleFold(editor: Editor, questionId: string): void {
   });
 }
 
-/** Whether the Question is folded, from the decorations its node view is given. */
-export const isFolded = (decorations: readonly { spec: unknown }[]): boolean =>
-  decorations.some((decoration) => {
-    const spec = decoration.spec as { folded?: unknown } | null;
-    return spec?.folded !== undefined;
-  });
+/**
+ * Whether the Question is folded. Read from the plugin's state, not from the
+ * decorations its node view is given: those don't reach the component again
+ * once the last fold is undone, which left the chevron saying "folded".
+ */
+export const isQuestionFolded = (state: EditorState, questionId: string): boolean =>
+  questionFoldKey.getState(state)?.has(questionId) ?? false;
