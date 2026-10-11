@@ -117,6 +117,7 @@ export function createArxiv(urls: { api: string; files: string } = ARXIV_URLS): 
   });
   return {
     id: "arxiv",
+    resolves: ["arxiv"],
     name: "arXiv",
     service: { id: "https://export.arxiv.org", name: "arXiv" },
     terms,

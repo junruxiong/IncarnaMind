@@ -7,6 +7,7 @@ import {
   type ProviderErrorKind,
   SKILL_SCRIPT_LIMITS,
   type SkillScriptApprovalRequest,
+  SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
 import { AnswerWriting } from "../answerPhase";
@@ -753,6 +754,10 @@ function SourcesCall({ call }: { call: AnswerToolCall }) {
                 fromYear: year("from_year"),
                 toYear: year("to_year"),
                 openAccessOnly: call.input.open_access_only === true,
+                ...(typeof call.input.kind === "string" &&
+                  SOURCE_KIND_PROVIDERS[call.input.kind] && {
+                    providers: SOURCE_KIND_PROVIDERS[call.input.kind],
+                  }),
               })
             }
             className="answer-action"
