@@ -56,7 +56,7 @@
 - en-oecd-2019a: [15] OECD. OECD skills outlook 2019: Thriving in a digital world[M/OL]. Paris：OECD Publishing，2019. DOI:<a href="https://doi.org/10.1787/df80bc12-en">10.1787/df80bc12-en</a>.
 - en-oecd-2019b: [16] OECD. PISA 2018 results (Volume I): What students know and can do[M/OL]. Paris：OECD Publishing，2019. DOI:<a href="https://doi.org/10.1787/5f07c754-en">10.1787/5f07c754-en</a>.
 - zh-qian-1990: [17] 钱学森，于景元，戴汝为. 一个科学新领域——开放的复杂巨系统及其方法论[J]. 自然杂志，1990，13（1）：3-10.
-- zh-liu-2016: [18] 刘知远，孙茂松，林衍凯， 等. 知识表示学习研究进展[J/OL]. 计算机研究与发展，2016，53（2）：247-261. DOI:<a href="https://doi.org/10.7544/issn1000-1239.2016.20160020">10.7544/issn1000-1239.2016.20160020</a>.
+- zh-liu-2016: [18] 刘知远，孙茂松，林衍凯，等. 知识表示学习研究进展[J/OL]. 计算机研究与发展，2016，53（2）：247-261. DOI:<a href="https://doi.org/10.7544/issn1000-1239.2016.20160020">10.7544/issn1000-1239.2016.20160020</a>.
 - zh-fei-2012: [19] 费孝通. 乡土中国[M]. 北京：北京大学出版社，2012.
 - zh-zhou-2016: [20] 周志华. 机器学习[M]. 北京：清华大学出版社，2016.
 - zh-bai-1998: [21] 白书农. 植物开花研究[M]//李承森. 植物科学进展. 北京：高等教育出版社，1998：146-163.

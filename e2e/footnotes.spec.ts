@@ -16,7 +16,6 @@ import {
   motionRunning,
   motionSettled,
   newMind,
-  pointAndClick,
   removeDataFolder,
   setMotionSpeed,
   setWindowSize,
@@ -304,16 +303,6 @@ test("in Chinese: footnotes typed with an input method number together with an A
   await bridge(window).language("zh-CN");
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await newMind(window);
-  // In Numbered, an Answer's Citations are footnotes too, numbered with the User's (#289):
-  // chosen from the Mind's menu, in Chinese.
-  const row = window.getByTestId("mind-row").first();
-  await row.hover();
-  await pointAndClick(window, row.getByTestId("mind-menu"));
-  await pointAndClick(window, row.getByTestId("mind-citation-style"));
-  await expect(window.getByTestId("citation-style-search")).toBeFocused();
-  await window.keyboard.type("编号");
-  await window.keyboard.press("Enter");
-  await expect(window.getByTestId("citation-style-picker")).toBeHidden();
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Spring tides 大潮");

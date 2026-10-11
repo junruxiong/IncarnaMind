@@ -8,7 +8,7 @@ import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
 import { citationStyle } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
-import { useCitationFormattingFor, useMindCitationStyle } from "../citationFormatting";
+import { useCitationFormattingFor, useMindStyleChoice } from "../citationFormatting";
 import { noteHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
@@ -16,6 +16,7 @@ import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { BlockHandle } from "../editor/BlockHandle";
 import { BlockCommands } from "../editor/blockCommands";
+import { CitationStylePrompt } from "../editor/CitationStylePrompt";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
@@ -220,7 +221,8 @@ function MindEditorView({
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
   /** The Mind's citation style, followed as it changes (#289). */
-  const style = useMindCitationStyle(doc);
+  const styleChoice = useMindStyleChoice(doc);
+  const { style } = styleChoice;
   const styleRef = useRef(style);
   styleRef.current = style;
 
@@ -416,7 +418,12 @@ function MindEditorView({
         <MarginChecks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
-        <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
+        {style !== "numbered" && (
+          <ReferencesBlock mindId={mindId} editor={editor} readOnly={readOnly} />
+        )}
+        {!readOnly && !styleChoice.chosen && !styleChoice.promptDismissed && (
+          <CitationStylePrompt mindId={mindId} editor={editor} doc={doc} />
+        )}
       </div>
       {dock &&
         !readOnly &&

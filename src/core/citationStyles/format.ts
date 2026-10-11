@@ -1,6 +1,7 @@
 /**
  * What the binding adds to Hayagriva's output (ADR-0016), for one request: English references
- * in a Chinese style in English terms, and no italics on Chinese text. Pure: it only calls
+ * in a Chinese style in English terms, no italics on Chinese text, and no space between a
+ * Chinese name and 等, each as Zotero's citeproc-js writes them. Pure: it only calls
  * `render`, so tests run it on the engine directly and the worker runs it on its own instance.
  */
 import { CJK } from "../../shared/text";
@@ -30,6 +31,35 @@ export function uprightChinese<T extends EngineRun>(runs: readonly T[]): T[] {
     const { italic: _, ...upright } = run;
     return upright as T;
   });
+}
+
+/** A space before 等 that follows Chinese, or full-width punctuation ("钱学森 等", "林衍凯， 等"). */
+const spaceBeforeDeng = new RegExp(`(?<=[${CJK}\\u3000-\\u303f\\uff00-\\uffef])\\s+(?=等)`, "gu");
+
+/**
+ * No space between a Chinese name and 等 ("et al."), as Zotero's citeproc-js writes GB/T 7714
+ * and Chinese academic writing has it: "(钱学森等, 1990)", "林衍凯，等". Hayagriva writes the
+ * space the style's own comment asks for. The runs are read as one text, so a space at the end
+ * of one run and 等 at the start of the next go too; a Latin name keeps its space.
+ */
+export function noSpaceBeforeDeng<T extends EngineRun>(runs: readonly T[]): T[] {
+  const text = runs.map((run) => run.text).join("");
+  const dropped = new Set<number>();
+  for (const match of text.matchAll(spaceBeforeDeng)) {
+    for (let at = match.index; at < match.index + match[0].length; at++) dropped.add(at);
+  }
+  if (dropped.size === 0) return [...runs];
+  let start = 0;
+  return runs
+    .map((run) => {
+      let kept = "";
+      for (let index = 0; index < run.text.length; index++) {
+        if (!dropped.has(start + index)) kept += run.text[index];
+      }
+      start += run.text.length;
+      return kept === run.text ? run : { ...run, text: kept };
+    })
+    .filter((run) => run.text !== "");
 }
 
 /**
@@ -88,13 +118,15 @@ export function formatJob(
       }),
     };
   }
+  const chinese = <T extends EngineRun>(runs: readonly T[]) =>
+    noSpaceBeforeDeng(uprightChinese(runs));
   return {
     ...output,
-    citations: output.citations.map(uprightChinese),
+    citations: output.citations.map(chinese),
     bibliography: output.bibliography.map((entry) => ({
       ...entry,
-      firstField: entry.firstField && uprightChinese(entry.firstField),
-      runs: uprightChinese(entry.runs),
+      firstField: entry.firstField && chinese(entry.firstField),
+      runs: chinese(entry.runs),
     })),
   };
 }

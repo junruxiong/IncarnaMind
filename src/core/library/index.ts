@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { type CitationStyleId, isCitationStyleId } from "../../shared/citationStyles";
 import { translate } from "../../shared/i18n";
 import { supportsLibraryImages } from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
@@ -463,6 +464,15 @@ export function createLibrary(options: {
     for (const row of ordered) enqueue(row.document_id);
   }
 
+  /** A Folder's stored citation style; one this version doesn't know reads as none. */
+  function citationStyleOf(id: string): CitationStyleId | null {
+    const value = db.get<{ citation_style: string | null }>(
+      "SELECT citation_style FROM library_groups WHERE id = ?",
+      [id],
+    )?.citation_style;
+    return isCitationStyleId(value) ? value : null;
+  }
+
   function create(input: unknown): LibraryGroup {
     const value = parseGroup(input);
     const at = now();
@@ -567,6 +577,22 @@ export function createLibrary(options: {
       revision++;
       changed();
       return group(existing.id);
+    },
+    /** The citation style new Minds in a live Folder start in (#289); null if none was chosen. */
+    citationStyle(id: string): CitationStyleId | null {
+      return citationStyleOf(group(id).id);
+    },
+    /** Sets the style new Minds in a live Folder start in; null: none, so they are Numbered. */
+    setCitationStyle(id: string, style: CitationStyleId | null): void {
+      const existing = group(id);
+      if (citationStyleOf(existing.id) === style) return;
+      db.run("UPDATE library_groups SET citation_style = ?, updated_at = ? WHERE id = ?", [
+        style,
+        now(),
+        existing.id,
+      ]);
+      revision++;
+      changed();
     },
     /**
      * Deletes a Folder: its Documents go to Not in a Folder, as the Minds and conversations

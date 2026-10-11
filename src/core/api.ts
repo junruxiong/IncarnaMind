@@ -3904,8 +3904,22 @@ export interface FormattedCitations {
 /** The citation style a Mind is in. */
 export interface MindCitationStyle {
   style: CitationStyleId;
-  /** The Mind chose it; otherwise it follows the default for the interface language. */
+  /** The Mind chose it; otherwise it is Numbered, the default. */
   chosen: boolean;
+  /**
+   * The style new Minds in the Mind's Folder start in: the one last chosen for a Mind there.
+   * Null when none was, or the Mind isn't in a Folder.
+   */
+  folderDefault: CitationStyleId | null;
+}
+
+/** What `setMindCitationStyle` changes besides the Mind's own choice. */
+export interface SetMindCitationStyleOptions {
+  /**
+   * The style new Minds in the Mind's Folder start in, exactly (null: none). Left out, a style
+   * chosen becomes it, and forgetting the choice leaves it as it is. Undo passes the one before.
+   */
+  folderDefault?: CitationStyleId | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -4924,10 +4938,18 @@ export interface CoreApi {
    * request like the last ones is answered from memory.
    */
   formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
-  /** The citation style a Mind is in: its own choice, or the default for the interface language. */
+  /** The citation style a Mind is in: its own choice, or Numbered, the default. */
   getMindCitationStyle(mindId: string): Promise<MindCitationStyle>;
-  /** Chooses the Mind's citation style; null forgets the choice. Undo sets the one before. */
-  setMindCitationStyle(mindId: string, style: CitationStyleId | null): Promise<MindCitationStyle>;
+  /**
+   * Chooses the Mind's citation style; null forgets the choice. A style chosen is also the one
+   * new Minds in its Folder start in (see `SetMindCitationStyleOptions`). Undo sets the ones
+   * before.
+   */
+  setMindCitationStyle(
+    mindId: string,
+    style: CitationStyleId | null,
+    options?: SetMindCitationStyleOptions,
+  ): Promise<MindCitationStyle>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;

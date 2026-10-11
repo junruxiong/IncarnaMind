@@ -117,19 +117,54 @@ async function format(
 }
 
 describe("a Mind's citation style", () => {
-  test("follows the interface language until the Mind chooses one, and keeps its choice", async () => {
+  test("is Numbered until the Mind chooses one, in either language, and keeps its choice", async () => {
     const { core, mind } = await setUp();
-    expect(await core.getMindCitationStyle(mind.id)).toEqual({ style: "apa", chosen: false });
+    const numbered = { style: "numbered", chosen: false, folderDefault: null };
+    expect(await core.getMindCitationStyle(mind.id)).toEqual(numbered);
     await core.updateSettings({ user: { language: "zh-CN" } });
-    expect(await core.getMindCitationStyle(mind.id)).toEqual({
-      style: "gb-t-7714-2015-numeric",
-      chosen: false,
+    expect(await core.getMindCitationStyle(mind.id)).toEqual(numbered);
+    expect(await core.setMindCitationStyle(mind.id, "mla")).toEqual({
+      style: "mla",
+      chosen: true,
+      folderDefault: null,
     });
-    expect(await core.setMindCitationStyle(mind.id, "mla")).toEqual({ style: "mla", chosen: true });
-    await core.updateSettings({ user: { language: "en" } });
-    expect(await core.getMindCitationStyle(mind.id)).toEqual({ style: "mla", chosen: true });
-    // Undo puts back "no choice": the default again.
-    expect(await core.setMindCitationStyle(mind.id, null)).toEqual({ style: "apa", chosen: false });
+    // Undo puts back "no choice": Numbered again.
+    expect(await core.setMindCitationStyle(mind.id, null)).toEqual(numbered);
+  });
+
+  test("chosen for a Mind in a Folder, it is the style new Minds there start in; Undo puts both back", async () => {
+    const { core } = await setUp();
+    const folder = await core.createLibraryGroup({ name: "Thesis", description: "" });
+    const first = await core.createMind({ title: "Chapter 1", folderId: folder.id });
+    const elsewhere = await core.createMind({ title: "Contracts" });
+    expect(await core.setMindCitationStyle(first.id, "chicago-notes")).toEqual({
+      style: "chicago-notes",
+      chosen: true,
+      folderDefault: "chicago-notes",
+    });
+
+    const second = await core.createMind({ title: "Chapter 2", folderId: folder.id });
+    expect(await core.getMindCitationStyle(second.id)).toEqual({
+      style: "chicago-notes",
+      chosen: true,
+      folderDefault: "chicago-notes",
+    });
+    // A Mind in no Folder is as it was, and a new one there is Numbered.
+    expect((await core.getMindCitationStyle(elsewhere.id)).style).toBe("numbered");
+    const loose = await core.createMind({ title: "Loose" });
+    expect((await core.getMindCitationStyle(loose.id)).style).toBe("numbered");
+
+    // Undo of the first choice: the first Mind has none again, and nor has the Folder.
+    await core.setMindCitationStyle(first.id, null, { folderDefault: null });
+    expect(await core.getMindCitationStyle(first.id)).toEqual({
+      style: "numbered",
+      chosen: false,
+      folderDefault: null,
+    });
+    const third = await core.createMind({ title: "Chapter 3", folderId: folder.id });
+    expect((await core.getMindCitationStyle(third.id)).style).toBe("numbered");
+    // The Mind made meanwhile keeps the style it started in.
+    expect((await core.getMindCitationStyle(second.id)).style).toBe("chicago-notes");
   });
 
   test("is part of the Mind's document, so an open window sees the change", async () => {

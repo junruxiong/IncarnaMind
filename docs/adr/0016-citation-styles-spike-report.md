@@ -278,7 +278,7 @@ Hayagriva is Typst's bibliography engine, so it is maintained as long as Typst i
 ## What is left uncertain
 
 - **citeproc-js as a stand-in for Zotero.** The engine code and its options are Zotero's, but its conversion of items to CSL JSON and its word-processor plugins were not exercised, and the app was not run.
-- **Open: which side is right on D6a** (a space before 等 in GB/T author-date citations). A Chinese reader will check it against the text of GB/T 7714, and #289's golden tests follow the answer. D5 and D14 are judgement calls too.
+- **Decided in #289: D6a follows Zotero** (no space before 等 after a Chinese name in GB/T author-date citations), as most Chinese academics cite with it; the binding removes the space, and D6b's with it. D5 and D14 are judgement calls too.
 - **Upstream timing.** Fixes for D1, D2, D4, D8, D9, D11, D12, D15 and S1 have to be written (by us, in Rust) and accepted, and then released or pinned. How fast Typst reviews them is unknown.
 - **Rich text from Zotero (S3)** needs a design: convert in the binding, or parse upstream.
 - **The build.** The app's build is npm only today. Either CI installs Rust and builds the wasm, or a built `.wasm` is committed with a script that reproduces it byte for byte. #289 decides.

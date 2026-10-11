@@ -17,11 +17,14 @@ import {
   type StyledRun,
 } from "../../core/api";
 import type { CitationStyleId } from "../../shared/citationStyles";
-import { citationStyleIn } from "../../shared/mindCitationStyle";
+import {
+  chosenCitationStyle,
+  citationStyleIn,
+  citationStylePromptDismissed,
+} from "../../shared/mindCitationStyle";
 import { core } from "./core";
 import { citationClusters, citedWorkOf } from "./editor/citationClusters";
 import { errorMessage } from "./errors";
-import { useLanguage } from "./i18n";
 import { useAppStore } from "./store";
 
 /** A Mind's formatting, as last answered. */
@@ -68,18 +71,40 @@ export const useCitationFormatting = create<FormattingState>()((set) => ({
 export const useMindFormatting = (mindId: string) =>
   useCitationFormatting((state) => state.minds[mindId]);
 
-/** The style a Mind's document says it is in, following its changes and the interface language. */
-export function useMindCitationStyle(doc: Y.Doc): CitationStyleId {
-  const language = useLanguage();
+/** What a Mind's document says of its citation style, following its changes. */
+export interface MindStyleChoice {
+  style: CitationStyleId;
+  /** The Mind chose it; otherwise it is Numbered, the default. */
+  chosen: boolean;
+  /** The User closed the prompt that offers a style, for this Mind. */
+  promptDismissed: boolean;
+}
+
+const choiceIn = (settings: Y.Map<unknown>): MindStyleChoice => ({
+  style: citationStyleIn(settings),
+  chosen: chosenCitationStyle(settings) !== null,
+  promptDismissed: citationStylePromptDismissed(settings),
+});
+
+/** The Mind's style, whether it chose it, and whether it closed the offer of one. */
+export function useMindStyleChoice(doc: Y.Doc): MindStyleChoice {
   const settings = doc.getMap<unknown>(MIND_SETTINGS_FIELD);
-  const [style, setStyle] = useState(() => citationStyleIn(settings, language));
+  const [choice, setChoice] = useState(() => choiceIn(settings));
   useEffect(() => {
-    const read = () => setStyle(citationStyleIn(settings, language));
+    const read = () =>
+      setChoice((before) => {
+        const now = choiceIn(settings);
+        return now.style === before.style &&
+          now.chosen === before.chosen &&
+          now.promptDismissed === before.promptDismissed
+          ? before
+          : now;
+      });
     read();
     settings.observe(read);
     return () => settings.unobserve(read);
-  }, [settings, language]);
-  return style;
+  }, [settings]);
+  return choice;
 }
 
 /** How long the editor waits after a change before it asks again: a run of changes asks once. */
@@ -107,6 +132,13 @@ export function useCitationFormattingFor(
     const ask = () => {
       timer = undefined;
       if (editor.isDestroyed) return;
+      // Numbered needs nothing formatted: its markers are numbered in the editor.
+      if (style === "numbered") {
+        progress.asked = "";
+        progress.latest++;
+        update(mindId, { style, formatted: null, signatures: [], pending: false, problem: null });
+        return;
+      }
       const clusters = citationClusters(editor.state);
       const request: CitationFormatRequest = {
         style,
