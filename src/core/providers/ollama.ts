@@ -11,6 +11,7 @@ import type { ExternalService, OllamaPullProgress, OllamaStatus } from "../api";
 import { isRecord } from "../errors";
 import { LOCAL_MODELS } from "./catalog/local";
 import { catalogProvider } from "./catalog/providers";
+import { isCloudModelName, isRemoteEntry } from "./ollamaModels";
 
 /** Where Ollama downloads the models it pulls from: its registry, not this app. */
 export const OLLAMA_REGISTRY: Readonly<ExternalService> = {
@@ -51,10 +52,22 @@ export async function detectOllama(baseUrl: string): Promise<OllamaStatus> {
     if (!response.ok) return { running: false, baseUrl };
     const body: unknown = await response.json();
     const listed = isRecord(body) && Array.isArray(body.models) ? body.models : [];
-    const models = listed
-      .map((model: unknown) => (isRecord(model) ? (model.name ?? model.model) : undefined))
-      .filter((name): name is string => typeof name === "string");
-    return { running: true, baseUrl, models, recommendedModel: RECOMMENDED_OLLAMA_MODEL };
+    const models: string[] = [];
+    const cloudModels: string[] = [];
+    for (const model of listed) {
+      if (!isRecord(model)) continue;
+      const name = model.name ?? model.model;
+      if (typeof name !== "string") continue;
+      // A cloud model is listed beside the local ones but runs on ollama.com.
+      (isRemoteEntry(model) || isCloudModelName(name) ? cloudModels : models).push(name);
+    }
+    return {
+      running: true,
+      baseUrl,
+      models,
+      cloudModels,
+      recommendedModel: RECOMMENDED_OLLAMA_MODEL,
+    };
   } catch {
     return { running: false, baseUrl };
   }

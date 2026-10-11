@@ -38,6 +38,10 @@ export function providerLabel(provider: ChatProvider, t: Translate): string {
       ? `${kind} · ${t(`providers.region.${provider.endpoint}`)}`
       : kind;
   }
+  // Ollama's default model can be a cloud model, which runs on ollama.com, not here.
+  if (provider.kind === "ollama") {
+    return `${kind} · ${t(provider.service ? "providers.settings.cloud" : "providers.settings.local")}`;
+  }
   return `${kind} · ${provider.service?.name ?? t("providers.settings.local")}`;
 }
 
