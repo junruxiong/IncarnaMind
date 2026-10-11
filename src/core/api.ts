@@ -2883,8 +2883,10 @@ export interface CoreApi {
   /**
    * Look up (#286): fetches the record for the Document's DOI from Crossref,
    * or for its arXiv id (from an arXiv address) from arXiv, and fills its
-   * empty fields with it, leaving every field that has a value. Only the
-   * identifier is sent, after the User has allowed the "reference-lookup"
+   * empty fields with it, leaving every other field that has a value. The
+   * type is the one exception: one read from the file is only a guess from a
+   * DOI or an arXiv id, so the service's replaces it, unless the User chose
+   * it. Only the identifier is sent, after the User has allowed the "reference-lookup"
    * flow to that service (asked once); never in local mode. Only when the
    * User asks: nothing looks up by itself.
    */

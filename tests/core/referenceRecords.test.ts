@@ -583,6 +583,43 @@ describe("Look up", () => {
     expect(result.document.reference?.fields.url).toBe("");
   });
 
+  test("the type read from the file is a guess the service corrects, but the User's choice stays", async () => {
+    const chapter = JSON.stringify({
+      status: "ok",
+      message: {
+        type: "book-chapter",
+        DOI: "10.5555/a-chapter",
+        title: ["Parks and the urban heat island"],
+        "container-title": ["Urban Climates"],
+      },
+    });
+    const services = await startReferenceServices({
+      crossref: { "10.5555/a-chapter": chapter, "10.5555/b-chapter": chapter },
+    });
+    onTestFinished(() => services.close());
+    const core = startCore(await createTempDataFolder(), {
+      referenceLookup: { crossref: services.url, arxiv: services.url },
+    });
+    const { documents } = await addFiles(core, {
+      "guessed.pdf": buildPdf([{ lines: ["DOI: 10.5555/a-chapter"] }]),
+      "chosen.pdf": buildPdf([{ lines: ["DOI: 10.5555/b-chapter"] }]),
+    });
+    const guessed = documents["guessed.pdf"] as Document;
+    const chosen = documents["chosen.pdf"] as Document;
+    expect(guessed.reference?.fields.type).toBe("article-journal");
+    await core.updateReference(chosen.id, { type: "report" });
+
+    const corrected = filled(await lookUp(core, guessed.id, true));
+    expect(corrected.document.reference?.fields.type).toBe("chapter");
+    expect(corrected.document.reference?.sources.type).toBe("lookup");
+    expect(corrected.filled).toContain("type");
+
+    const kept = filled(await lookUp(core, chosen.id, true));
+    expect(kept.document.reference?.fields.type).toBe("report");
+    expect(kept.document.reference?.sources.type).toBe("user");
+    expect(kept.filled).not.toContain("type");
+  });
+
   test("in local mode it sends nothing and asks nothing", async () => {
     const { core, services } = await startWithServices();
     const { documents } = await addFiles(core, { "s41586-020-2649-2.pdf": numpyPdf() });
