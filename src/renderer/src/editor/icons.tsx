@@ -71,6 +71,20 @@ const MARKS: Record<CitationCheck, (props: IconProps) => JSX.Element> = {
       <path d="M7 12h10" />
     </Stroke>
   ),
+  unsupported: (props) => (
+    <Stroke weight={3} {...props}>
+      <path d="M12 6v8" />
+      <path d="M12 18.5v.01" />
+    </Stroke>
+  ),
+  // "≠": an equals sign struck through.
+  contradicted: (props) => (
+    <Stroke weight={2.5} {...props}>
+      <path d="M6 9.5h12" />
+      <path d="M6 14.5h12" />
+      <path d="m15 5-6 14" />
+    </Stroke>
+  ),
   checking: (props) => (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
       <circle cx="12" cy="12" r="4" />
@@ -90,13 +104,20 @@ export function CheckStateIcon({ check, ...props }: IconProps & { check: Citatio
     <Stroke weight={2} {...props}>
       <circle cx="12" cy="12" r="9" />
       {check === "found" && <path d="m8.5 12 2.5 2.5 4.5-5" />}
-      {check === "not-found" && (
+      {(check === "not-found" || check === "unsupported") && (
         <>
           <path d="M12 7.5v5" />
           <path d="M12 16.2v.01" />
         </>
       )}
       {check === "cant-check" && <path d="M8 12h8" />}
+      {check === "contradicted" && (
+        <>
+          <path d="M8.5 10h7" />
+          <path d="M8.5 14h7" />
+          <path d="m13.5 7.5-3 9" />
+        </>
+      )}
       {check === "checking" && <path d="M12 7.5V12l3 2" />}
     </Stroke>
   );

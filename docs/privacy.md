@@ -7,6 +7,7 @@ What IncarnaMind sends from your computer, and how to change it. **Settings → 
 - **Traffic without your content**: update checks, model downloads, and remote Connectors' sign-in.
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
+- **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy.
 
 ## Usage data
 
@@ -43,7 +44,7 @@ Every field is a value from a closed list, a whole number, or true/false: there'
 | `mind_created` | No fields: you made a Mind |
 | `question_asked` | `provider`: the kind of provider of the model (`openai`, `anthropic`, `google`, `deepseek`, `qwen`, `kimi`, `glm`, `siliconflow`, `mistral`, `xai`, `openrouter`, `openai-compatible`, `ollama`, `chatgpt`); `local`: whether the model runs on your computer. Never the Question or the model's prompt |
 | `answer_finished` | `outcome`: `done` or `stopped`; `duration_ms`: how long it took; `citations`: how many Citations it has; `found`, `not_found`, `cant_check`: how many of them by check |
-| `citation_opened` | `check`: the Citation's check, `found`, `not-found`, `cant-check` or `checking` |
+| `citation_opened` | `check`: the Citation's check, `found`, `not-found`, `unsupported`, `contradicted`, `cant-check` or `checking` |
 | `documents_added` | `documents`: how many new Documents; `already_added`: files that were in already; `skipped`: files that couldn't be added; `pdf`, `docx`, `pptx`, `xlsx`, `csv`, `markdown`, `text`: the new Documents by format. Never their names |
 | `folder_linked` | No fields: you linked a folder. Never its name or path |
 | `organize_run` | `documents`: how many Documents; `all`: whether it was all of them; `model`: the kind of model, `chat`, `jev`, `auto` or `ollama` |

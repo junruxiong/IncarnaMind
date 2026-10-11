@@ -169,11 +169,16 @@ export const zhCN = {
   "move.done.minds": "已将 {count} 个 Mind 移动到“{folder}”",
   "move.done.documents": "已将 {count} 个文档移动到“{folder}”",
   "move.done.items": "已将 {count} 项移动到“{folder}”",
+  "move.done.conversations": "已将 {count} 个对话移动到“{folder}”",
   "move.undo": "撤销",
   "move.undoLabel": "撤销：{message}",
   "move.dismiss": "关闭",
 
   "mind.untitled": "未命名",
+  "conversation.untitled": "新对话",
+  "object.renamed": "已重命名为“{name}”",
+  "object.deleted": "已删除“{name}”",
+  "object.deleted.conversations": "已删除 {count} 个对话",
   "mind.noneOpen.title": "新建一个 Mind",
   "mind.noneOpen.body": "Mind 就是一个笔记本，每个主题或项目一个。",
   "mind.title.label": "Mind 标题",
@@ -387,6 +392,8 @@ export const zhCN = {
   "viewer.outline.untitled": "无标题",
   "viewer.mark.found": "引用 {number}：已找到引文",
   "viewer.mark.notFound": "引用 {number}：未找到引文",
+  "viewer.mark.contradicted": "引用 {number}：与文档矛盾",
+  "viewer.mark.contradicted.at": "引用 {number}：与文档矛盾，{location}",
   "viewer.mark.found.at": "引用 {number}：已找到引文，{location}",
   "viewer.mark.notFound.at": "引用 {number}：未找到引文，{location}",
   "viewer.slide.label": "第 {number} 张幻灯片",
@@ -1155,6 +1162,12 @@ export const zhCN = {
   "privacy.skills.title": "技能脚本",
   "privacy.skills.body":
     "技能脚本在这台电脑上运行，可以自行发起网络请求，发送它能读取的任何内容。本页的设置对它们不起作用：它们只受每次运行前你的批准控制。你也可以在“设置”的“技能”中关闭它们。",
+  "privacy.aiUse.title": "AI 使用记录",
+  "privacy.aiUse.body":
+    "IncarnaMind 会记录 AI 向你的 Mind 写入了什么，以及你保留、修改还是删除了它，方便你说明自己如何使用 AI。记录不含你或 AI 的任何文字，只保存在这台电脑上；无论你如何设置使用数据，都不会发送到任何地方。",
+  "privacy.aiUse.entries": "共 {count} 条",
+  "privacy.aiUse.clear": "清除记录",
+  "privacy.aiUse.cleared": "已清除 AI 使用记录。",
   "privacy.crashReports.title": "崩溃报告",
   "privacy.crashReports.toggle": "发送崩溃报告",
   "privacy.crashReports.body":
@@ -1309,6 +1322,8 @@ export const zhCN = {
   "citation.badge.notFound.in": "未在 {location} 中找到引文",
   "citation.badge.notFound.document": "未在“{document}”中找到引文",
   "citation.badge.cantCheck": "无法核对",
+  "citation.badge.unsupported": "文档中没有依据",
+  "citation.badge.contradicted": "与文档矛盾",
   "citation.reason.quote-not-on-pages": "所引位置的文字中没有这段引文。",
   "citation.reason.pages-outside-passage": "所引位置不在这段引文所属的段落中。",
   "citation.reason.too-many-pages":
@@ -1520,7 +1535,7 @@ export const zhCN = {
   "export.unnamedDocument": "未命名文档",
   "export.dataFolder.title": "数据文件夹",
   "export.dataFolder.body":
-    "你的 Mind、文档和设置都保存在这台电脑上的一个文件夹里。如需备份，请先退出 IncarnaMind，再复制这个文件夹。",
+    "你的 Mind、对话、文档和设置都保存在这台电脑上的一个文件夹里。如需备份，请先退出 IncarnaMind，再复制这个文件夹。",
   "export.dataFolder.open": "打开数据文件夹",
   "export.dataFolder.openLogs": "打开日志文件夹",
   "export.dataFolder.logs":
@@ -1590,6 +1605,7 @@ export const zhCN = {
   "command.group.close": "关闭这一栏",
   "command.group.equalize": "各栏等宽",
   "command.composer.focus": "提问",
+  "command.citation.open": "打开引用页面",
   "command.suggestions.on": "开启写作建议",
   "command.suggestions.off": "关闭写作建议",
 

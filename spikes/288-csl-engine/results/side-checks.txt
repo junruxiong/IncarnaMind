@@ -1,0 +1,43 @@
+
+### APA: year suffixes when the later title is cited first
+citeproc-js citations: ["(OECD, 2019b)","(OECD, 2019a)"]
+citeproc-js: OECD. (2019a). OECD skills outlook 2019: Thriving in a digital world. OECD Publishing. https://doi.org/10.1787/df80bc12-en
+citeproc-js: OECD. (2019b). PISA 2018 results (Volume I): What students know and can do. OECD Publishing. https://doi.org/10.1787/5f07c754-en
+Hayagriva citations:   ["(OECD, 2019a)","(OECD, 2019b)"]
+Hayagriva:   OECD. (2019b). OECD skills outlook 2019: Thriving in a digital world. OECD Publishing. https://doi.org/10.1787/df80bc12-en
+Hayagriva:   OECD. (2019a). PISA 2018 results (Volume I): What students know and can do. OECD Publishing. https://doi.org/10.1787/5f07c754-en
+
+### APA: conference paper with an editor
+citeproc-js citations: ["(Doe, 2011)","(贾 & 柯, 2011)"]
+citeproc-js: Doe, J. (2011). A paper. In J. Smith (Ed.), Proceedings of X (pp. 45–52). 国家图书馆出版社.
+citeproc-js: 贾东琴, & 柯平. (2011). 面向数字素养的高校图书馆数字服务体系研究. In 中国图书馆学会 (Ed.), 中国图书馆学会年会论文集：2011年卷 (pp. 45–52). 国家图书馆出版社.
+Hayagriva citations:   ["(Doe, 2011)","(贾 & 柯, 2011)"]
+Hayagriva:   Doe, J. (2011). A paper. In J. Smith (Ed.), Proceedings of X.
+Hayagriva:   贾东琴, & 柯平. (2011). 面向数字素养的高校图书馆数字服务体系研究. In 中国图书馆学会 (ed.), 中国图书馆学会年会论文集：2011年卷.
+
+### Chicago author-date: rich text in a title
+citeproc-js citations: ["(Smith 2020)"]
+citeproc-js: Smith, Ann. 2020. “Growth of Escherichia Coli at 37 °C and the CO2 Effect.” Microbiology.
+Hayagriva citations:   ["(Smith 2020)"]
+Hayagriva:   Smith, Ann. 2020. “Growth of <i>escherichia Coli</i> at 37 °c and the Co<sub>2</sub> Effect.” Microbiology.
+
+### APA, HTML output: field text that looks like markup
+citeproc-js citations: ["(Smith, 2020)"]
+citeproc-js: <div class="csl-entry">Smith, A. (2020). Cats &#38; dogs &#60;img src=x onerror=alert(1)&#62;. <i>J &#38; K</i>.</div>
+Hayagriva citations:   ["(Smith, 2020)"]
+Hayagriva:   Smith, A. (2020). Cats & dogs <img src=x onerror=alert(1)>. <span style="font-style: italic;">J & K</span>.
+
+### APA, the binding's runs output: same input
+Hayagriva:   [{"text":"Smith, A"},{"text":". ("},{"text":"2020"},{"text":"). "},{"text":"Cats & dogs <img src=x onerror=alert(1)>"},{"text":". "},{"italic":true,"text":"J & K"},{"text":"."}]
+
+### GB/T 7714—2015 numeric with its CSL-M layout uncommented
+citeproc-js citations: ["[1]","[2]","[3]"]
+citeproc-js: [1] JUMPER J, EVANS R, PRITZEL A, et al. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature, 2021, 596(7873): 583-589. DOI:10.1038/s41586-021-03819-2.
+citeproc-js: [2] KUHN T S. The structure of scientific revolutions[M]. 4th ed. Chicago: University of Chicago Press, 2012.
+citeproc-js: [3] 刘知远, 孙茂松, 林衍凯, 等. 知识表示学习研究进展[J/OL]. 计算机研究与发展, 2016, 53(2): 247-261. DOI:10.7544/issn1000-1239.2016.20160020.
+Hayagriva: error: Error: style: Deserialization error occured at `bibliography`
+
+### GB/T 7714—2015 numeric, Hayagriva rendered twice, entry picked by its language
+Hayagriva:   [1] JUMPER J, EVANS R, PRITZEL A, et al. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature, 2021, 596(7873): 583-589. DOI:10.1038/s41586-021-03819-2.
+Hayagriva:   [2] KUHN T S. The structure of scientific revolutions[M]. 4th ed. Chicago: University of Chicago Press, 2012.
+Hayagriva:   [3] 刘知远, 孙茂松, 林衍凯, 等. 知识表示学习研究进展[J/OL]. 计算机研究与发展, 2016, 53(2): 247-261. DOI:10.7544/issn1000-1239.2016.20160020.

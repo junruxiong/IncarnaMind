@@ -180,11 +180,16 @@ export const en = {
   "move.done.minds": "Moved {count} Minds to {folder}",
   "move.done.documents": "Moved {count} Documents to {folder}",
   "move.done.items": "Moved {count} items to {folder}",
+  "move.done.conversations": "Moved {count} conversations to {folder}",
   "move.undo": "Undo",
   "move.undoLabel": "Undo: {message}",
   "move.dismiss": "Dismiss",
 
   "mind.untitled": "Untitled",
+  "conversation.untitled": "New chat",
+  "object.renamed": "Renamed to “{name}”",
+  "object.deleted": "Deleted “{name}”",
+  "object.deleted.conversations": "Deleted {count} conversations",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
@@ -405,6 +410,8 @@ export const en = {
   "viewer.outline.untitled": "Untitled",
   "viewer.mark.found": "Citation {number}: quote found",
   "viewer.mark.notFound": "Citation {number}: quote not found",
+  "viewer.mark.contradicted": "Citation {number}: contradicted",
+  "viewer.mark.contradicted.at": "Citation {number}: contradicted, {location}",
   "viewer.mark.found.at": "Citation {number}: quote found, {location}",
   "viewer.mark.notFound.at": "Citation {number}: quote not found, {location}",
   "viewer.slide.label": "Slide {number}",
@@ -1215,6 +1222,12 @@ export const en = {
   "privacy.skills.title": "Skill scripts",
   "privacy.skills.body":
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
+  "privacy.aiUse.title": "AI use record",
+  "privacy.aiUse.body":
+    "IncarnaMind keeps a record of what the AI wrote into your Minds and whether you kept, edited or deleted it, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
+  "privacy.aiUse.entries": "Entries: {count}",
+  "privacy.aiUse.clear": "Clear record",
+  "privacy.aiUse.cleared": "Cleared the AI use record.",
   "privacy.crashReports.title": "Crash reports",
   "privacy.crashReports.toggle": "Send crash reports",
   "privacy.crashReports.body":
@@ -1371,6 +1384,8 @@ export const en = {
   "citation.badge.notFound.in": "Quote not found in {location}",
   "citation.badge.notFound.document": "Quote not found in {document}",
   "citation.badge.cantCheck": "Can't check",
+  "citation.badge.unsupported": "Unsupported by your Documents",
+  "citation.badge.contradicted": "Contradicted",
   "citation.reason.quote-not-on-pages": "The quote isn't in the text of the place it cites.",
   "citation.reason.pages-outside-passage":
     "The place it cites isn't part of the Passage the quote came from.",
@@ -1396,6 +1411,7 @@ export const en = {
   "citation.openAnyway.lines": "Open the lines anyway",
   "citation.openAnyway.document": "Open the Document anyway",
   "citation.remove": "Remove the Citation",
+  "command.citation.open": "Open cited page",
   "citation.regenerate": "Regenerate the Answer",
   "citation.changedAfterCited": "The Document changed after this was cited.",
   "citation.recheck": "Check against the current version",
@@ -1591,7 +1607,7 @@ export const en = {
   "export.unnamedDocument": "Untitled Document",
   "export.dataFolder.title": "Data folder",
   "export.dataFolder.body":
-    "Your Minds, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
+    "Your Minds, conversations, Documents and settings are all kept in one folder on this computer. To back them up, copy it while IncarnaMind is closed.",
   "export.dataFolder.open": "Open data folder",
   "export.dataFolder.openLogs": "Open logs folder",
   "export.dataFolder.logs":

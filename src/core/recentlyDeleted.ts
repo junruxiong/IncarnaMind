@@ -1,8 +1,8 @@
 /**
  * Recently deleted (CONTEXT.md), and putting back what was deleted, merged or untagged.
  *
- * Deleting marks rows deleted (ADR-0003), a Mind, Document, Folder or Tag together with the
- * rows that go with it, all at the same moment: restoring one brings back the rows whose
+ * Deleting marks rows deleted (ADR-0003), a Mind, conversation, Document, Folder or Tag together
+ * with the rows that go with it, all at the same moment: restoring one brings back the rows whose
  * `deleted_at` is its own. Deleting permanently, by the User or `RECENTLY_DELETED_DAYS` after
  * at start-up, drops that content and keeps the row as a tombstone (`purged_at`), which can't
  * be restored. Nothing here reads or writes the User's files.
@@ -17,6 +17,7 @@ import {
   type RestoreRef,
   type TagLinkState,
 } from "./api";
+import type { Conversations } from "./conversations";
 import type { createDocuments } from "./documents";
 import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 import type { createLibrary } from "./library";
@@ -25,18 +26,18 @@ import type { createMinds } from "./minds";
 import type { Database } from "./storage";
 import { parseTagLinkStates, sameName, type TagsStore } from "./tags";
 
-type Stored = "mind" | "document" | "folder" | "tag";
-
-const TABLES: Readonly<Record<Stored, string>> = {
+const TABLES: Readonly<Record<DeletedKind, string>> = {
   mind: "minds",
+  conversation: "conversations",
   document: "documents",
   folder: "library_groups",
   tag: "tags",
 };
 
-const KINDS: readonly DeletedKind[] = ["mind", "chat", "document", "folder", "tag"];
+const KINDS: readonly DeletedKind[] = ["mind", "conversation", "document", "folder", "tag"];
 
-const stored = (kind: DeletedKind): Stored => (kind === "chat" ? "mind" : kind);
+/** A name as `mindName` and `conversationName` give it: the title typed, else the one it gave itself. */
+const OWN_NAME = "CASE WHEN title <> '' THEN title ELSE auto_title END";
 
 const earliestRestorable = (now: string) =>
   new Date(Date.parse(now) - RECENTLY_DELETED_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -54,11 +55,31 @@ function parseRefs(input: unknown, what: string): RestoreRef[] {
 }
 
 /** Drops deleted rows' content and marks them deleted permanently. Run in a transaction. */
-function purge(db: Database, kind: Stored, ids: readonly string[], at: string): void {
+function purge(db: Database, kind: DeletedKind, ids: readonly string[], at: string): void {
   if (ids.length === 0) return;
   const list = JSON.stringify(ids);
   const IN = "IN (SELECT value FROM json_each(?))";
   if (kind === "mind") db.run(`DELETE FROM mind_updates WHERE mind_id ${IN}`, [list]);
+  if (kind === "conversation") {
+    // Its messages, their index and its titles: everything the User asked or was answered.
+    const purged = `(SELECT id FROM conversations WHERE id ${IN} AND deleted_at IS NOT NULL)`;
+    db.run(
+      `DELETE FROM conversation_messages_fts WHERE rowid IN (
+         SELECT seq FROM conversation_messages WHERE conversation_id IN ${purged})`,
+      [list],
+    );
+    db.run(`DELETE FROM conversation_messages WHERE conversation_id IN ${purged}`, [list]);
+    db.run(
+      `DELETE FROM conversations_fts WHERE rowid IN (
+         SELECT seq FROM conversations WHERE id ${IN} AND deleted_at IS NOT NULL)`,
+      [list],
+    );
+    db.run(
+      `UPDATE conversations SET title = '', auto_title = ''
+       WHERE id ${IN} AND deleted_at IS NOT NULL AND purged_at IS NULL`,
+      [list],
+    );
+  }
   if (kind === "document") {
     db.run(`DELETE FROM passages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
     // Live text of a deleted Document is what its Linked folder kept for Citations: it stays.
@@ -77,7 +98,7 @@ function purge(db: Database, kind: Stored, ids: readonly string[], at: string): 
 export function purgeExpired(db: Database, now: string): void {
   const before = earliestRestorable(now);
   db.transaction(() => {
-    for (const kind of Object.keys(TABLES) as Stored[]) {
+    for (const kind of KINDS) {
       const ids = db.all<{ id: string }>(
         `SELECT id FROM ${TABLES[kind]} WHERE deleted_at < ? AND purged_at IS NULL`,
         [before],
@@ -105,27 +126,33 @@ export function createRecentlyDeleted(options: {
   say(key: MessageKey, params?: MessageParams): string;
   minds: ReturnType<typeof createMinds>;
   content: ReturnType<typeof createMindContent>;
+  conversations: Conversations;
   documents: ReturnType<typeof createDocuments>;
   tags: TagsStore;
   library: ReturnType<typeof createLibrary>;
   mindsChanged(): void;
+  conversationsChanged(): void;
   tagsChanged(): void;
   tagged(documentIds: string[]): void;
 }) {
-  const { db, now, say, minds, content, documents, tags, library } = options;
+  const { db, now, say, minds, content, conversations, documents, tags, library } = options;
 
-  /** A Mind's name as `mindName` gives it: its title, else its first line. */
-  const MIND_NAME = "CASE WHEN title <> '' THEN title ELSE auto_title END";
-
-  const rowOf = (kind: Stored, id: string) =>
+  const rowOf = (kind: DeletedKind, id: string) =>
     db.get<DeletedRow>(
-      `SELECT ${kind === "mind" ? MIND_NAME : "name"} AS name, deleted_at, purged_at
+      `SELECT ${kind === "mind" || kind === "conversation" ? OWN_NAME : "name"} AS name,
+         deleted_at, purged_at
        FROM ${TABLES[kind]} WHERE id = ?`,
       [id],
     );
 
-  const nameOf = (kind: Stored, row: DeletedRow) =>
-    kind === "mind" && row.name === "" ? say("mind.untitled") : row.name;
+  const nameOf = (kind: DeletedKind, row: DeletedRow) =>
+    row.name !== ""
+      ? row.name
+      : kind === "mind"
+        ? say("mind.untitled")
+        : kind === "conversation"
+          ? say("conversation.untitled")
+          : "";
 
   function checkDocument(id: string, name: string): void {
     const row = db.get<{ path: string; linked_folder_id: string | null }>(
@@ -171,19 +198,15 @@ export function createRecentlyDeleted(options: {
         linkedFolderId: document?.linkedFolderId ?? null,
       });
       const items = [
-        ...db
-          .all<{
-            id: string;
-            name: string;
-            kind: string;
-            deleted_at: string;
-            group_id: string | null;
-          }>(
-            `SELECT id, ${MIND_NAME} AS name, kind, deleted_at, folder_id AS group_id FROM minds
-             WHERE deleted_at >= ? AND purged_at IS NULL`,
-            [since],
-          )
-          .map((row) => item(row.kind === "chat" ? "chat" : "mind", row)),
+        ...(["mind", "conversation"] as const).flatMap((kind) =>
+          db
+            .all<{ id: string; name: string; deleted_at: string; group_id: string | null }>(
+              `SELECT id, ${OWN_NAME} AS name, deleted_at, folder_id AS group_id FROM ${TABLES[kind]}
+               WHERE deleted_at >= ? AND purged_at IS NULL`,
+              [since],
+            )
+            .map((row) => item(kind, row)),
+        ),
         ...db
           .all<{
             id: string;
@@ -229,13 +252,14 @@ export function createRecentlyDeleted(options: {
       const done = db.transaction(() => {
         const restored = {
           minds: false,
+          conversations: false,
           documents: [] as string[],
           folders: false,
           tags: false,
           tagged: new Set<string>(),
         };
         for (const ref of refs) {
-          const kind = stored(ref.kind);
+          const { kind } = ref;
           const row = rowOf(kind, ref.id);
           if (!row) throw new NotFoundError(say("restore.error.unknown"));
           const name = nameOf(kind, row);
@@ -250,12 +274,19 @@ export function createRecentlyDeleted(options: {
               minds.restore(ref.id);
               content.restore(ref.id, row.deleted_at);
               restored.minds = true;
+            } else if (kind === "conversation") {
+              conversations.restore(ref.id);
+              restored.conversations = true;
             } else if (kind === "document") {
               checkDocument(ref.id, name);
               documents.restore([ref.id]);
               restored.documents.push(ref.id);
             } else if (kind === "folder") {
-              if (minds.returnToFolder(library.restore(ref.id), ref.id)) restored.minds = true;
+              const taken = library.restore(ref.id);
+              if (minds.returnToFolder(taken.minds, ref.id)) restored.minds = true;
+              if (conversations.returnToFolder(taken.conversations, ref.id)) {
+                restored.conversations = true;
+              }
               restored.folders = true;
             } else {
               if (tags.list().some((tag) => sameName(tag.name, row.name)))
@@ -272,6 +303,7 @@ export function createRecentlyDeleted(options: {
         return restored;
       });
       if (done.minds) options.mindsChanged();
+      if (done.conversations) options.conversationsChanged();
       if (done.documents.length > 0) {
         documents.restored(done.documents);
         library.announce(done.documents);
@@ -295,15 +327,14 @@ export function createRecentlyDeleted(options: {
       const refs: DeletedRef[] = parseRefs(input, "deletePermanently");
       const at = now();
       db.transaction(() => {
-        for (const ref of refs) {
-          const kind = stored(ref.kind);
-          const row = rowOf(kind, ref.id);
+        for (const { kind, id } of refs) {
+          const row = rowOf(kind, id);
           if (!row) throw new NotFoundError(say("restore.error.unknown"));
           if (row.deleted_at === null)
             throw new InvalidInputError(
               say("deletePermanently.error.notDeleted", { name: nameOf(kind, row) }),
             );
-          purge(db, kind, [ref.id], at);
+          purge(db, kind, [id], at);
         }
       });
     },
