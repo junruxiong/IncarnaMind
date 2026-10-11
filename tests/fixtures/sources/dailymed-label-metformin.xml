@@ -1,0 +1,537 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<document xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:hl7-org:v3 https://www.accessdata.fda.gov/spl/schema/spl.xsd">
+  <id root="5a018880-4483-4e86-9af0-cba3ec87f9e3" />
+  <code code="34391-3" displayName="HUMAN PRESCRIPTION DRUG LABEL" codeSystem="2.16.840.1.113883.6.1" />
+  <title>
+    <content styleCode="bold">These highlights do not include all the information needed to use </content>
+    <content styleCode="bold">METFORMIN HYDROCHLORIDE ORAL SOLUTION</content>
+    <content styleCode="bold"> safely and effectively. See full prescribing information for </content>
+    <content styleCode="bold">METFORMIN HYDROCHLORIDE ORAL SOLUTION</content>
+    <content styleCode="bold">.<br />
+      <br />
+    </content>
+    <content styleCode="bold">METFORMIN HYDROCHLORIDE</content>
+    <content styleCode="bold"> oral solution<br />
+    </content>
+    <content styleCode="bold">Initial U.S. Approval: 1995</content>
+  </title>
+  <effectiveTime value="20260630" />
+  <setId root="e087ce3b-8d7f-43a3-8d20-54513da7617d" />
+  <versionNumber value="9" />
+  <author>
+    <time />
+    <assignedEntity>
+      <representedOrganization>
+        <id extension="048458728" root="1.3.6.1.4.1.519.1" />
+        <name>VistaPharm, LLC</name>
+        <assignedEntity>
+          <assignedOrganization />
+        </assignedEntity>
+      </representedOrganization>
+    </assignedEntity>
+  </author>
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <id root="8a6c3dc8-7200-4566-86e2-ffdfd498413c" />
+          <code code="48780-1" displayName="SPL listing data elements section" codeSystem="2.16.840.1.113883.6.1" />
+          <effectiveTime value="20260630" />
+          <subject>
+            <manufacturedProduct>
+              <manufacturedProduct>
+                <code code="66689-318" codeSystem="2.16.840.1.113883.6.69" />
+                <name>Metformin Hydrochloride</name>
+                <formCode code="C42986" displayName="SOLUTION" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                <asEntityWithGeneric>
+                  <genericMedicine>
+                    <name>Metformin Hydrochloride</name>
+                  </genericMedicine>
+                </asEntityWithGeneric>
+                <ingredient classCode="ACTIB">
+                  <quantity>
+                    <numerator unit="mg" value="500" />
+                    <denominator unit="mL" value="5" />
+                  </quantity>
+                  <ingredientSubstance>
+                    <code code="786Z46389E" codeSystem="2.16.840.1.113883.4.9" />
+                    <name>METFORMIN HYDROCHLORIDE</name>
+                    <activeMoiety>
+                      <activeMoiety>
+                        <code code="9100L32L2N" codeSystem="2.16.840.1.113883.4.9" />
+                        <name>METFORMIN</name>
+                      </activeMoiety>
+                    </activeMoiety>
+                  </ingredientSubstance>
+                </ingredient>
+                <ingredient classCode="IACT">
+                  <ingredientSubstance>
+                    <code code="QTT17582CB" codeSystem="2.16.840.1.113883.4.9" />
+                    <name>HYDROCHLORIC ACID</name>
+                  </ingredientSubstance>
+                </ingredient>
+                <ingredient classCode="IACT">
+                  <ingredientSubstance>
+                    <code code="059QF0KO0R" codeSystem="2.16.840.1.113883.4.9" />
+                    <name>WATER</name>
+                  </ingredientSubstance>
+                </ingredient>
+                <ingredient classCode="IACT">
+                  <ingredientSubstance>
+                    <code code="55X04QC32I" codeSystem="2.16.840.1.113883.4.9" />
+                    <name>SODIUM HYDROXIDE</name>
+                  </ingredientSubstance>
+                </ingredient>
+                <ingredient classCode="IACT">
+                  <ingredientSubstance>
+                    <code code="96K6UQ3ZD4" codeSystem="2.16.840.1.113883.4.9" />
+                    <name>SUCRALOSE</name>
+                  </ingredientSubstance>
+                </ingredient>
+                <ingredient classCode="IACT">
+                  <ingredientSubstance>
+                    <code code="VCQ006KQ1E" codeSystem="2.16.840.1.113883.4.9" />
+                    <name>XYLITOL</name>
+                  </ingredientSubstance>
+                </ingredient>
+                <asContent>
+                  <quantity>
+                    <numerator unit="mL" value="473" />
+                    <denominator value="1" />
+                  </quantity>
+                  <containerPackagedProduct>
+                    <code />
+                    <formCode code="C43169" displayName="BOTTLE" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                    <asContent>
+                      <quantity>
+                        <numerator unit="1" value="1" />
+                        <denominator value="1" />
+                      </quantity>
+                      <containerPackagedProduct>
+                        <code code="66689-318-16" codeSystem="2.16.840.1.113883.6.69" />
+                        <formCode code="C43182" displayName="CARTON" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                      </containerPackagedProduct>
+                      <subjectOf>
+                        <marketingAct>
+                          <code code="C53292" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                          <statusCode code="active" />
+                          <effectiveTime>
+                            <low value="20221219" />
+                          </effectiveTime>
+                        </marketingAct>
+                      </subjectOf>
+                    </asContent>
+                  </containerPackagedProduct>
+                  <subjectOf>
+                    <characteristic>
+                      <code code="SPLCMBPRDTP" codeSystem="2.16.840.1.113883.1.11.19255" />
+                      <value code="C112160" displayName="Type 0: Not a Combination Product" codeSystem="2.16.840.1.113883.3.26.1.1" xsi:type="CV" />
+                    </characteristic>
+                  </subjectOf>
+                </asContent>
+              </manufacturedProduct>
+              <subjectOf>
+                <approval>
+                  <id extension="ANDA212677" root="2.16.840.1.113883.3.150" />
+                  <code code="C73584" displayName="ANDA" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                  <author>
+                    <territorialAuthority>
+                      <territory>
+                        <code code="USA" codeSystem="2.16.840.1.113883.5.28" />
+                      </territory>
+                    </territorialAuthority>
+                  </author>
+                </approval>
+              </subjectOf>
+              <subjectOf>
+                <marketingAct>
+                  <code code="C53292" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                  <statusCode code="active" />
+                  <effectiveTime>
+                    <low value="20221219" />
+                  </effectiveTime>
+                </marketingAct>
+              </subjectOf>
+              <subjectOf>
+                <characteristic classCode="OBS">
+                  <code code="SPLFLAVOR" codeSystem="2.16.840.1.113883.1.11.19255" />
+                  <value code="C73375" displayName="CHERRY" codeSystem="2.16.840.1.113883.3.26.1.1" xsi:type="CV">
+                    <originalText>Artificial Wild Cherry</originalText>
+                  </value>
+                </characteristic>
+              </subjectOf>
+              <consumedIn>
+                <substanceAdministration>
+                  <routeCode code="C38288" displayName="ORAL" codeSystem="2.16.840.1.113883.3.26.1.1" />
+                </substanceAdministration>
+              </consumedIn>
+            </manufacturedProduct>
+          </subject>
+        </section>
+      </component>
+      <component>
+        <section ID="LINK_b7e90274-8447-41bf-8803-c34d58d232cd">
+          <id root="47df33ba-251e-47b9-ab0a-f326a611bc75" />
+          <code code="34066-1" codeSystem="2.16.840.1.113883.6.1" displayName="BOXED WARNING SECTION" />
+          <title>WARNING:
+LACTIC ACIDOSIS</title>
+          <text>
+            <paragraph>
+              <content styleCode="bold">Postmarketing cases of metformin-associated lactic acidosis have resulted in death, </content>
+              <content styleCode="bold">hypothermia, hypotension, and resistant bradyarrhythmias. The onset of metformin­ </content>
+              <content styleCode="bold">associated lactic acidosis is often subtle, accompanied only by nonspecific symptoms such </content>
+              <content styleCode="bold">as malaise, myalgias, respiratory distress, somnolence, and abdominal pain. Metformin­-</content>
+              <content styleCode="bold">associated lactic acidosis was characterized by elevated blood lactate levels (&gt;5 </content>
+              <content styleCode="bold">mmol/Liter), anion gap acidosis (without evidence of ketonuria or ketonemia), an increased </content>
+              <content styleCode="bold">lactate/pyruvate ratio; and metformin plasma levels generally &gt;5 mcg/mL [see </content>
+              <content styleCode="bold">
+                <content styleCode="italics">
+                  <content styleCode="bold">
+                    <content styleCode="italics">
+                      <linkHtml href="#www.splportal.comLINK_cced4812-c7b9-4204-9297-846ae370455d">Warnings and </linkHtml>
+                    </content>
+                  </content>
+                  <content styleCode="bold">
+                    <content styleCode="italics">
+                      <linkHtml href="#www.splportal.comLINK_cced4812-c7b9-4204-9297-846ae370455d">Precautions (5.1)</linkHtml>
+                    </content>
+                  </content>
+                </content>
+              </content>
+              <content styleCode="bold">].</content>
+            </paragraph>
+            <paragraph>
+              <content styleCode="bold">
+                <content styleCode="xmChange">Risk factors for metformin-associated lactic acidosis include renal impairment, concomitant use of certain drugs (e.g., carbonic anhydrase inhibitors such as topiramate), age 65 years old or greater, having a radiological study with contrast, surgery and other procedures, hypoxic states (e.g., acute congestive heart failure), excessive alcohol intake, hepatic impairment, and mitochondrial diseases [see <content styleCode="italics">
+                    <linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">Warnings and Precautions (5.1</linkHtml>
+                  </content>
+                  <linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">)</linkHtml>].</content>
+              </content>
+            </paragraph>
+          </text>
+          <effectiveTime value="20260630" />
+          <excerpt>
+            <highlight>
+              <text>
+                <paragraph>
+                  <content styleCode="bold">WARNING: LACTIC ACIDOSIS</content>
+                </paragraph>
+                <paragraph>
+                  <content styleCode="bold">
+                    <content styleCode="italics">See full prescribing information for complete boxed warning</content>
+                  </content>
+                </paragraph>
+                <list listType="unordered" styleCode="Disc">
+                  <item>
+                    <content styleCode="bold">Postmarketing cases of metformin-associated lactic acidosis have resulted in death, hypothermia, hypotension, and resistant bradyarrhythmias. Symptoms included malaise, myalgias, respiratory distress, somnolence, and abdominal pain. Laboratory abnormalities included elevated blood lactate levels, anion gap acidosis, increased lactate/pyruvate ratio; and metformin plasma levels generally &gt; 5 mcg/mL. (<linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">5.1</linkHtml>)</content>
+                  </item>
+                  <item>
+                    <content styleCode="bold">Risk factors include renal impairment, concomitant use of certain drugs, age ≥ 65 years old, radiological studies with contrast, surgery and other procedures, hypoxic states, excessive alcohol intake, hepatic impairment, and mitochondrial diseases. Steps to reduce the risk of and manage metformin-associated lactic acidosis in these high risk groups are provided in the Full Prescribing Information. (<linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">5.1</linkHtml>)</content>
+                  </item>
+                  <item>
+                    <content styleCode="bold"> </content>
+                    <content styleCode="bold">
+                      <content styleCode="bold">If lactic acidosis is suspected, discontinue metformin hydrochloride and institute general supportive measures in a hospital setting. Prompt hemodialysis is recommended. (<linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">5.1</linkHtml>)</content>
+                    </content>
+                  </item>
+                </list>
+              </text>
+            </highlight>
+          </excerpt>
+        </section>
+      </component>
+      <component>
+        <section ID="LINK_00108012-715a-415a-8f6b-a245260c7faa">
+          <id root="0f7638c0-85ec-4719-966f-c94f54267088" />
+          <code code="34067-9" codeSystem="2.16.840.1.113883.6.1" displayName="INDICATIONS &amp; USAGE SECTION" />
+          <title>1 INDICATIONS AND USAGE</title>
+          <text>
+            <paragraph>Metformin hydrochloride oral solution is indicated as an adjunct to diet and exercise to improve glycemic control in adults and pediatric patients 10 years of age and older with type 2 diabetes mellitus.</paragraph>
+          </text>
+          <effectiveTime value="20260630" />
+          <excerpt>
+            <highlight>
+              <text>
+                <paragraph>Metformin hydrochloride is a biguanide indicated as an adjunct to diet and exercise to improve glycemic control in adults and pediatric patients 10 years of age and older with type 2 diabetes mellitus. (<linkHtml href="#LINK_00108012-715a-415a-8f6b-a245260c7faa">1</linkHtml>)</paragraph>
+              </text>
+            </highlight>
+          </excerpt>
+        </section>
+      </component>
+      <component>
+        <section ID="LINK_c934637e-3125-4e1a-b7ad-1c85e65dbc9e">
+          <id root="6419e660-c7d4-4385-90d0-488a26f9f51c" />
+          <code code="34070-3" codeSystem="2.16.840.1.113883.6.1" displayName="CONTRAINDICATIONS SECTION" />
+          <title>4 CONTRAINDICATIONS</title>
+          <text>
+            <paragraph>Metformin hydrochloride oral solution is contraindicated in patients with:</paragraph>
+            <list listType="unordered" styleCode="Disc">
+              <item>Severe renal impairment (eGFR below 30 mL/min/1.73 m<sup>2</sup>) [see <content styleCode="italics">
+                  <linkHtml href="#www.splportal.comLINK_cced4812-c7b9-4204-9297-846ae370455d">Warnings and Precautions (5.1)</linkHtml>
+                </content>].</item>
+              <item>Hypersensitivity to metformin.</item>
+              <item>Acute or chronic metabolic acidosis, including diabetic ketoacidosis, with or without coma.</item>
+            </list>
+          </text>
+          <effectiveTime value="20260630" />
+          <excerpt>
+            <highlight>
+              <text>
+                <list listType="unordered" styleCode="Disc">
+                  <item> Severe renal impairment (eGFR below 30 mL/min/1.73 m<sup>2</sup>) (<linkHtml href="#LINK_c934637e-3125-4e1a-b7ad-1c85e65dbc9e">4</linkHtml>, <linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">5.1</linkHtml>)</item>
+                  <item> Hypersensitivity to metformin (<linkHtml href="#LINK_c934637e-3125-4e1a-b7ad-1c85e65dbc9e">4</linkHtml>)</item>
+                  <item> Acute or chronic metabolic acidosis, including diabetic ketoacidosis, with or without coma. (<linkHtml href="#LINK_c934637e-3125-4e1a-b7ad-1c85e65dbc9e">4</linkHtml>)</item>
+                </list>
+              </text>
+            </highlight>
+          </excerpt>
+        </section>
+      </component>
+      <component>
+        <section ID="LINK_7ea52931-fc46-4a6d-b71e-6bd33fb5c8d7">
+          <id root="8f60c516-0e00-4625-a47c-3921c981c931" />
+          <code code="43685-7" codeSystem="2.16.840.1.113883.6.1" displayName="WARNINGS AND PRECAUTIONS SECTION" />
+          <title>5 WARNINGS AND PRECAUTIONS</title>
+          <text />
+          <effectiveTime value="20260630" />
+          <excerpt>
+            <highlight>
+              <text>
+                <list listType="unordered" styleCode="Disc">
+                  <item>
+                    <content styleCode="italics">Lactic acidosis:</content> See boxed warning. (<linkHtml href="#LINK_cced4812-c7b9-4204-9297-846ae370455d">5.1</linkHtml>)</item>
+                  <item>
+                    <content styleCode="italics">Vitamin B<sub>12</sub> deficiency:</content> Metformin may lower vitamin B<sub>12</sub> levels. Measure hematological parameters annually and vitamin B<sub>12</sub> at 2 to 3 year intervals and manage any abnormalities. (<linkHtml href="#LINK_ee206f02-a7d8-4872-a7a7-a1ab0ec32222">5.2</linkHtml>)</item>
+                  <item>
+                    <content styleCode="italics">Hypoglycemia with Concomitant Use with Insulin and Insulin Secretagogues:</content> Increased risk of hypoglycemia when used in combination with insulin and/or an insulin secretagogue. Lower dose of insulin or insulin secretagogue may be required. (<linkHtml href="#LINK_00c697bf-bcd7-465f-8930-2274b88ff3d4">5.3</linkHtml>)</item>
+                </list>
+              </text>
+            </highlight>
+          </excerpt>
+          <component>
+            <section ID="LINK_cced4812-c7b9-4204-9297-846ae370455d">
+              <id root="7d424caa-d164-4638-a57f-1fab47a81eff" />
+              <code code="42229-5" codeSystem="2.16.840.1.113883.6.1" displayName="SPL UNCLASSIFIED SECTION" />
+              <title>5.1 Lactic
+Acidosis</title>
+              <text>
+                <paragraph>There have been postmarketing cases of metformin-associated lactic acidosis,including fatal cases. These cases had a subtle onset and were accompanied by nonspecific symptoms such as malaise, myalgias, abdominal pain, respiratory distress, or increased somnolence; however, hypotension and resistant bradyarrhythmias have occurred with severe acidosis. Metformin-associated lactic acidosis was characterized by elevated blood lactate concentrations (&gt;5 mmol/L), anion gap acidosis (without evidence of ketonuria or ketonemia), and an increased lactate: pyruvate ratio; metformin plasma levels were generally &gt;5 mcg/mL. Metformin decreases liver uptake of lactate increasing lactate blood levels which may increase the risk of lactic acidosis, especially in patients at risk.</paragraph>
+                <paragraph>If metformin-associated lactic acidosis is suspected, general supportive measures should be instituted promptly in a hospital setting, along with immediate discontinuation of metformin hydrochloride. In metformin hydrochloride treated patients with a diagnosis or strong suspicion of lactic acidosis, prompt hemodialysis is recommended to correct the acidosis and remove accumulated metformin (metformin hydrochloride is dialyzable with a clearance of up to 170 mL/min under good hemodynamic conditions). Hemodialysis has often resulted in reversal of symptoms and recovery.</paragraph>
+                <list listType="unordered" styleCode="Disc">
+                  <item>
+                    <content styleCode="italics">Renal impairment</content> — The postmarketing metformin-associated lactic acidosis cases primarily occurred in patients with significant renal impairment.</item>
+                </list>
+                <list listType="unordered" styleCode="Circle">
+                  <item>Before initiating metformin hydrochloride, obtain an estimated glomerular filtration rate (eGFR).</item>
+                  <item>Metformin hydrochloride is contraindicated in patients with an eGFR less than 30 mL/min/1.73 m<sup>2</sup> [see <content styleCode="italics">
+                      <linkHtml href="#www.splportal.comLINK_c934637e-3125-4e1a-b7ad-1c85e65dbc9e">Contraindications (4)</linkHtml>
+                    </content>].</item>
+                  <item>Initiation of metformin hydrochloride is not recommended in patients with eGFR between 30-45 mL/min/1.73 m<sup>2</sup>.</item>
+                  <item>Obtain an eGFR at least annually in all patients taking metformin hydrochloride. In patients at risk for the development of renal impairment (e.g., the elderly), renal function should be assessed more frequently.</item>
+                  <item>In patients taking metformin hydrochloride whose eGFR falls below 45 mL/min/1.73 m<sup>2</sup>, assess the benefit and risk of continuing therapy.</item>
+                </list>
+                <list listType="unordered" styleCode="Disk">
+                  <item>
+                    <content styleCode="italics">Drug interactions </content>— The concomitant use of metformin hydrochloride with specific drugs may increase the risk of metformin-associated lactic acidosis: those that impair renal function, result in significant hemodynamic change, interfere with acid-base balance, or increase metformin accumulation. Consider more frequent monitoring of patients [see <content styleCode="italics">
+                      <linkHtml href="#www.splportal.comLINK_ac978bed-03c5-41e5-a9b3-9518b73c8d1c">Drug Interactions (7)</linkHtml>
+                    </content>].</item>
+                  <item>
+                    <content styleCode="italics">Age 65 or greater</content> — The risk of metformin-associated lactic acidosis increases with the patient’s age because elderly patients have a greater likelihood of having hepatic, renal, or cardiac impairment than younger patients. Assess renal function more frequently in elderly patients.</item>
+                  <item>
+                    <content styleCode="italics">Radiologic studies with contrast</content> — Administration of intravascular iodinated contrast agents in metformin-treated patients has led to an acute decrease in renal function and the occurrence of lactic acidosis. Stop metformin hydrochloride at the time of, or prior to, an iodinated contrast imaging procedure in patients with an eGFR between 30 and 60 mL/min/1.73 m<sup>2</sup>, in patients with a history of hepatic impairment, alcoholism or heart failure, or in patients who will be administered intra-arterial iodinated contrast. Re-evaluate eGFR 48 hours after the imaging procedure, and restart metformin hydrochloride if renal function is stable.</item>
+                  <item>
+                    <content styleCode="italics">Surgery and other procedures</content> — Withholding of food and fluids during surgical or other procedures may increase the risk for volume depletion, hypotension, and renal impairment. Metformin hydrochloride should be temporarily discontinued while patients have restricted food and fluid intake.</item>
+                  <item>
+                    <content styleCode="italics">Hypoxic states</content> — Several of the postmarketing cases of metformin-associated lactic acidosis occurred in the setting of acute congestive heart failure (particularly when accompanied by hypoperfusion and hypoxemia). Cardiovascular collapse (shock), acute myocardial infarction, sepsis, and other conditions associated with hypoxemia have been associated with lactic acidosis and may cause prerenal azotemia. When such an event occurs, discontinue metformin hydrochloride.</item>
+                  <item>
+                    <content styleCode="italics">Excessive alcohol </content>
+                    <content styleCode="italics">intake</content> — Alcohol potentiates the effect of metformin on lactate metabolism. Patients should be warned against excessive alcohol intake while receiving metformin hydrochloride.</item>
+                  <item>
+                    <content styleCode="italics">Hepatic impairment</content> — Patients with hepatic impairment have developed cases of metformin-associated lactic acidosis. This may be due to impaired lactate clearance resulting in higher lactate blood levels. Therefore, avoid use of metformin hydrochloride in patients with clinical or laboratory evidence of hepatic disease.</item>
+                  <item>
+                    <content styleCode="italics">Mitochondrial Diseases</content> — Metformin may increase the risk of lactic acidosis in patients with mitochondrial diseases such as mitochondrial encephalomyopathy with lactic acidosis, and stroke-like episodes (MELAS) syndrome and maternally inherited diabetes and deafness (MIDD). Metformin hydrochloride oral solution is not recommended in patients with mitochondrial diseases such as MELAS syndrome and MIDD.<br />
+                    <br />
+    If a patient taking metformin hydrochloride oral solution develops elevated lactic acid levels (with or without accompanying neurologic signs and symptoms), discontinue metformin hydrochloride oral solution. Depending on the clinical context, consider evaluating the patient for MELAS, MIDD, or other mitochondrial disease.</item>
+                </list>
+              </text>
+              <effectiveTime value="20260630" />
+            </section>
+          </component>
+          <component>
+            <section ID="LINK_ee206f02-a7d8-4872-a7a7-a1ab0ec32222">
+              <id root="40317f54-7e31-495a-8456-b94c1698146c" />
+              <code code="42229-5" codeSystem="2.16.840.1.113883.6.1" displayName="SPL UNCLASSIFIED SECTION" />
+              <title>5.2 Vitamin
+B<sub>12</sub> Deficiency</title>
+              <text>
+                <paragraph>In clinical trials of 29-week duration with metformin hydrochloride (HCl) tablets, a decrease to subnormal levels of previously normal serum vitamin B<sub>12</sub> levels was observed in approximately 7% of patients. Such decrease, possibly due to interference with B<sub>12</sub> absorption from the B<sub>12</sub>-intrinsic factor complex, may be associated with anemia but appears to be rapidly reversible with discontinuation of metformin or vitamin B<sub>12 </sub>supplementation. Certain individuals (those with inadequate vitamin B<sub>12</sub> or calcium intake or absorption) appear to be predisposed to developing subnormal vitamin B<sub>12</sub> levels. Measure hematologic parameters on an annual basis and vitamin B<sub>12</sub> at 2 to 3 year intervals in patients on metformin hydrochloride and manage any abnormalities [see <content styleCode="italics">
+                    <content styleCode="italics">
+                      <linkHtml href="#www.splportal.comLINK_d0b099ac-599d-4433-aead-ebdc16fb29fe">Adverse Reactions </linkHtml>
+                    </content>
+                    <content styleCode="italics">
+                      <linkHtml href="#www.splportal.comLINK_d0b099ac-599d-4433-aead-ebdc16fb29fe">(6.1)</linkHtml>
+                    </content>
+                  </content>].</paragraph>
+              </text>
+              <effectiveTime value="20260630" />
+            </section>
+          </component>
+          <component>
+            <section ID="LINK_00c697bf-bcd7-465f-8930-2274b88ff3d4">
+              <id root="41689096-2cd6-402e-bc81-6e124f984680" />
+              <code code="42229-5" codeSystem="2.16.840.1.113883.6.1" displayName="SPL UNCLASSIFIED SECTION" />
+              <title>5.3
+Hypoglycemia with Concomitant Use with Insulin and Insulin Secretagogues</title>
+              <text>
+                <paragraph>Insulin and insulin secretagogues (e.g., sulfonylurea) are known to cause hypoglycemia. Metformin hydrochloride may increase the risk of hypoglycemia when combinedwith insulin and/or an insulin secretagogue. Therefore, a lower dose of insulin or insulin secretagogue may be required to minimize the risk of hypoglycemia when used in combination with metformin hydrochloride [see <content styleCode="italics">
+                    <linkHtml href="#www.splportal.comLINK_ac978bed-03c5-41e5-a9b3-9518b73c8d1c">Drug Interactions (7)</linkHtml>
+                  </content>].</paragraph>
+              </text>
+              <effectiveTime value="20260630" />
+            </section>
+          </component>
+          <component>
+            <section ID="LINK_9855496d-8ffc-45c3-a91a-e1339084f2eb">
+              <id root="8e169e71-238b-4891-8577-32f4e2db077c" />
+              <code code="42229-5" codeSystem="2.16.840.1.113883.6.1" displayName="SPL UNCLASSIFIED SECTION" />
+              <title>5.4
+Macrovascular Outcomes</title>
+              <text>
+                <paragraph>There have been no clinical studies establishing conclusive evidence of macrovascular risk reduction with metformin hydrochloride.</paragraph>
+              </text>
+              <effectiveTime value="20260630" />
+            </section>
+          </component>
+        </section>
+      </component>
+      <component>
+        <section ID="LINK_a17ac771-3438-42d9-a31e-b746f99324f4">
+          <id root="bdffa470-f38c-4429-970c-31cbd1293ce8" />
+          <code code="34084-4" codeSystem="2.16.840.1.113883.6.1" displayName="ADVERSE REACTIONS SECTION" />
+          <title>6 ADVERSE REACTIONS</title>
+          <text>
+            <paragraph>The following adverse reactions are also discussed elsewhere in the labeling:</paragraph>
+            <list listType="unordered" styleCode="Disc">
+              <item>Lactic Acidosis [see <content styleCode="italics">
+                  <linkHtml href="#www.splportal.comLINK_b7e90274-8447-41bf-8803-c34d58d232cd">Boxed Warning</linkHtml> and <linkHtml href="#www.splportal.comLINK_cced4812-c7b9-4204-9297-846ae370455d">Warnings and Precautions (5.1)</linkHtml>
+                </content>]</item>
+              <item>Vitamin B<sub>12</sub> Deficiency [see <content styleCode="italics">
+                  <linkHtml href="#www.splportal.comLINK_ee206f02-a7d8-4872-a7a7-a1ab0ec32222">Warnings and Precautions (5.2)</linkHtml>
+                </content>]</item>
+              <item>Hypoglycemia [see <content styleCode="italics">
+                  <linkHtml href="#www.splportal.comLINK_00c697bf-bcd7-465f-8930-2274b88ff3d4">Warnings and Precautions (5.3)</linkHtml>
+                </content>]</item>
+            </list>
+          </text>
+          <effectiveTime value="20260630" />
+          <excerpt>
+            <highlight>
+              <text>
+                <paragraph>The most common adverse reactions are diarrhea, nausea/vomiting, flatulence, asthenia, indigestion, abdominal discomfort, and headache. (<linkHtml href="#LINK_d0b099ac-599d-4433-aead-ebdc16fb29fe">6.1</linkHtml>)</paragraph>
+                <paragraph>
+                  <content styleCode="bold">To report SUSPECTED ADVERSE REACTIONS, contact VistaPharm, LLC at 1-888-655-1505 or FDA at 1-800-FDA-1088 or http://www.fda.gov/medwatch</content>
+                </paragraph>
+              </text>
+            </highlight>
+          </excerpt>
+          <component>
+            <section ID="LINK_d0b099ac-599d-4433-aead-ebdc16fb29fe">
+              <id root="3cb876a7-d3bc-4683-a046-156c9ed6bebd" />
+              <code code="42229-5" codeSystem="2.16.840.1.113883.6.1" displayName="SPL UNCLASSIFIED SECTION" />
+              <title>6.1
+Clinical Studies Experience</title>
+              <text>
+                <paragraph>Because clinical trials are conducted under widely varying conditions, adverse reaction rates observed in the clinical trials of a drug cannot be directly compared to rates in the clinical trials of another drug and may not reflect the rates observed in practice.</paragraph>
+                <paragraph>In a U.S. clinical trial of metformin HCl tablets in patients with type 2 diabetes mellitus, a total of 141 patients received metformin HCl tablets up to 2,550 mg per day. Adverse reactions reported in greater than 5% of patients treated with metformin HCl tablets and that were more common than in placebo-treated patients, are listed in Table 1.</paragraph>
+                <table width="800pt" cellspacing="0" cellpadding="0" border="1">
+                  <col width="155.8pt" />
+                  <col width="155.8pt" />
+                  <col width="155.8pt" />
+                  <tbody>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule" />
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                    <tr>
+                      <td styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                      <td align="center" styleCode=" Botrule Toprule Lrule Rrule">
+                                    </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </text>
+              <effectiveTime value="20260630" />
+            </section>
+          </component>
+          <component>
+            <section ID="LINK_b60b728a-ecaa-4574-b79d-c1d35f8f911c">
+              <id root="37d08669-3332-425b-9f70-0d91fca5dbf8" />
+              <code code="42229-5" codeSystem="2.16.840.1.113883.6.1" displayName="SPL UNCLASSIFIED SECTION" />
+              <title>6.2
+Postmarketing Experience</title>
+              <text>
+                <paragraph>The following adverse reactions have been identified during post approval use of metformin. Because these reactions are reported voluntarily from a population of uncertain size, it is not always possible to reliably estimate their frequency or establish a causal relationship to drug exposure.</paragraph>
+                <paragraph>Cholestatic, hepatocellular, and mixed hepatocellular liver injury have been reported with postmarketing use of metformin.</paragraph>
+              </text>
+              <effectiveTime value="20260630" />
+            </section>
+          </component>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</document>
