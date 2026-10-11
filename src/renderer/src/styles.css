@@ -113,21 +113,6 @@
   /* Depth for floating layers only; panes are flat. */
   --shadow-popover: 0 0 0 1px var(--color-rule), 0 12px 32px rgb(23 25 28 / 0.12);
   --shadow-dialog: 0 0 0 1px rgb(23 25 28 / 0.06), 0 24px 64px rgb(23 25 28 / 0.22);
-
-  /* The old look's tokens, until every component has moved to the ones above. */
-  --font-lora: var(--font-serif);
-  --color-dark-50: #191919;
-  --color-dark-100: #151515;
-  --color-dark-150: #212121;
-  --color-dark-200: #090909;
-  --color-dark-300: #161616;
-  --text-custom: 15px;
-  --text-custom--line-height: 28px;
-  --text-custom-xs: 13px;
-  --text-custom-xs--line-height: 21px;
-  --text-custom-sm: 15px;
-  --shadow-custom-focus: 0 0 10px rgba(0, 0, 0, 0.15);
-  --shadow-custom-unfocus: 0 0 10px rgba(0, 0, 0, 0.12);
 }
 
 /*
@@ -484,10 +469,6 @@
   /* The band starts in the sidebar's header: the app's mark at x 16, or macOS's traffic lights. */
   .sidebar-header {
     padding-left: max(16px, var(--window-buttons-left));
-  }
-  /* The card is 8px from the window's edge, so Windows' buttons overlap it by 8px less. */
-  .library-header {
-    padding-right: max(16px, calc(8px + var(--window-buttons-right)));
   }
 
   /*
@@ -1042,8 +1023,8 @@
    * in which every text starts at one edge, and a 48px right margin for the
    * Citation checks; centred. Nothing in a Block may move its text off that
    * edge: boxes that need padding (code blocks, quotes) reach into the margin
-   * instead. Under 900px both margins fold away (see the container query at
-   * the end).
+   * instead. Below 784px both margins narrow to 40px at 760px, and under
+   * 760px they fold away (see the container queries at the end).
    */
   /*
    * What scrolls the Mind: room is kept for a scrollbar where they always show,
@@ -1645,9 +1626,6 @@
     font-weight: 600;
     color: var(--color-ink-meta);
   }
-  .model-menu-heading-note {
-    font-weight: 400;
-  }
   .model-menu-item {
     display: grid;
     grid-template-columns: 16px minmax(0, 1fr) auto;
@@ -1889,7 +1867,6 @@
       .hljs-keyword,
       .hljs-selector-tag,
       .hljs-built_in,
-      .hljs-builtin-name,
       .hljs-literal,
       .hljs-type,
       .hljs-title,
@@ -2948,7 +2925,7 @@
   /*
    * A change out of date (#94; DESIGN.md, AI edits): its new words grey, on a
    * dashed ink-placeholder underline, and a grey line under its Block, "Out of
-   * date · Regenerate". It can't be accepted.
+   * date · Regenerate · Reject", in place of its bar. It can't be accepted.
    */
   .mind-editor ins.proposal-insert:has(> .proposal-stale),
   .mind-editor .proposal-node--insert.proposal-stale:not(.citation-marker) {
@@ -3963,15 +3940,24 @@
     color: var(--color-ink-meta);
   }
 
+  /* The margins narrow, from 56px and 48px to 40px each at 760px, with the measure kept at 680px. */
+  @container mind (width < 784px) {
+    .mind-measure {
+      margin-left: calc(40px + (100% - 760px) * 2 / 3);
+    }
+    .margin-checks {
+      width: 40px;
+    }
+  }
+
   /*
-   * A narrow Mind (under 900px): the right margin folds away and the left keeps the 40px the
-   * block handle and a Question's fold chevron share. Each Citation marker shows
-   * its check, since the margin column is gone.
+   * A folded Mind (under 760px): the right margin's checks move into the text, as each marker's
+   * check, and both sides keep a 40px gutter, so the text edge stays where it was at 760px.
    */
-  @container mind (width < 900px) {
+  @container mind (width < 760px) {
     .mind-measure {
       width: auto;
-      margin-inline: 40px 24px;
+      margin-inline: 40px;
     }
     .mind-editor {
       --editor-gutter: 40px;
@@ -4315,15 +4301,22 @@
   }
   /* At the bottom, the conversation and the composer keep to the Mind's column, 832px. */
   .assistant[data-dock="bottom"] {
+    .assistant-thread {
+      padding-inline: 40px;
+    }
+    .assistant-composer {
+      padding-inline: 40px;
+    }
     .assistant-thread > *,
-    .assistant-composer > .composer,
-    .assistant-no-mind {
+    .assistant-composer > .composer {
       width: auto;
       max-width: 812px;
       margin-inline: auto;
     }
     .assistant-no-mind {
-      margin-bottom: 10px;
+      width: auto;
+      max-width: 812px;
+      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
     }
   }
 

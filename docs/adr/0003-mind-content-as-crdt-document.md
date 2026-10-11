@@ -25,3 +25,7 @@ Chats now, and sheets, decks and boards after the alpha, are stored the way Mind
 ## Amendment: conversations are not Minds (2026-10-11, ADR-0017)
 
 The assistant's conversations are kept by the core in SQLite, not as Minds (ADR-0017), so two things above change. The `chat` kind is retired: `mind` is the only kind this version opens, and `kind` stays for sheets, decks and boards. And a reference names its artifact's kind, `{ artifactKind, artifactId, anchor }`: a Mind's anchor is a Block, a conversation's is a message (`{ kind: "message", messageId }`). A reference stored without `artifactKind` is a Mind's. Citations stay as above: a Citation in a conversation is checked against its Document like any other.
+
+## Amendment: where third-party text came from (2026-10-11, #78)
+
+A Mind's Yjs document keeps, beside its Blocks, a `textOrigins` map: for each Block, top-level or nested, that holds third-party text (ADR-0013, amended), where it came from ("imported", "web-page" or "checked-document"), by Block id. It is a map rather than a Block attribute: an attribute would have to be declared on every node type a Block can be, nested ones too, and an older version's editor would strip it unless the content schema version rose, which would make every Mind written since open read-only there. An older version keeps the map as it is, so the content schema version stays 4. A Block deleted since leaves its entry unused. A copy pasted elsewhere gets a new id and counts as the User's, as text pasted from another app does.
