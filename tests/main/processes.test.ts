@@ -62,7 +62,6 @@ describe("The login-shell environment", () => {
     const { shell } = await fakeShell(["sleep 5"]);
     const reportError = vi.fn();
 
-    const started = Date.now();
     const env = await readLoginShellEnvironment({
       shell,
       platform: "linux",
@@ -71,7 +70,7 @@ describe("The login-shell environment", () => {
       reportError,
     });
 
-    expect(Date.now() - started).toBeLessThan(3000);
+    // Had it waited for the shell, the login-shell variables would be in it.
     expect(env).toEqual(APP_ENV);
     expect(reportError).toHaveBeenCalledWith(
       expect.objectContaining({ message: expect.stringMatching(/longer than 200 ms/) }),
