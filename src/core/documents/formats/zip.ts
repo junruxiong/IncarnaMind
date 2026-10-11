@@ -73,7 +73,6 @@ export function packageSizeError(size: number): ExtractionError | null {
   return size > MAX_PACKAGE_BYTES ? tooLargeToOpen("500 MB") : null;
 }
 
-/** Word, PowerPoint and Excel files: the kinds `packageSizeError` limits. */
 export const isPackageKind = (kind: DocumentKind) =>
   kind === "docx" || kind === "pptx" || kind === "xlsx";
 
