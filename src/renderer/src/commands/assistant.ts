@@ -1,6 +1,6 @@
 import type { AssistantDock } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
-import { isSide, SIDE_DOCK_FROM } from "../assistantPlace";
+import { shownDock } from "../assistantPlace";
 import { useComposer } from "../composer";
 import { useAppStore } from "../store";
 import { assistantHandle } from "./handles";
@@ -32,7 +32,9 @@ export const dockCommandId = (dock: AssistantDock) =>
  * kept for when it is wider; meanwhile a line says why it stays at the bottom.
  */
 export function placeAt(dock: AssistantDock): Promise<void> {
-  if (isSide(dock) && window.innerWidth < SIDE_DOCK_FROM) {
+  const place = store().layout?.assistant;
+  // The same rule the Workbench draws it by: the notice says what the window shows.
+  if (place && shownDock({ ...place, dock }, window.innerWidth) !== dock) {
     store().showTabNotice({ kind: "assistantNarrow" });
   }
   return store().placeAssistant({ dock, folded: false });
