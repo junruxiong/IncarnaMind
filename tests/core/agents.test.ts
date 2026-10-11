@@ -99,7 +99,10 @@ describe("outside agents", () => {
   it("are off by default: nothing listens, and the shim says IncarnaMind isn't reachable", async () => {
     const { core } = await startAgentsCore(replyingModel());
     expect(await core.getAgents()).toEqual({ enabled: false, paused: null, pairings: [] });
-    const { launch } = await core.connectAgent({ name: "Codex" });
+    const { launch, pairing } = await core.connectAgent({ name: "Codex", client: "codex" });
+    expect(pairing).toMatchObject({ name: "Codex", client: "codex", folderIds: [] });
+    await expect(core.connectAgent({ name: "Codex" })).rejects.toThrow(/already connected/);
+    await expect(core.connectAgent({ name: "Odd", client: "../codex" })).rejects.toThrow();
 
     await expect(connectLegacyAgent(launch)).rejects.toThrow(/IncarnaMind isn't open/);
   });
