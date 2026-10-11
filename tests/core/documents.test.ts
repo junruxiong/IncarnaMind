@@ -434,6 +434,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         { path: missing, reason: "unreadable" },
         { path: sources, reason: "unsupported-type" },
       ],
+      batchId: expect.any(String),
     });
     expect(await core.listDocuments()).toEqual([]);
     await expect(core.addDocuments(["relative/notes.txt"])).rejects.toThrow(InvalidInputError);

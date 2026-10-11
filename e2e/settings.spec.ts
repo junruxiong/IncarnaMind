@@ -17,7 +17,12 @@ const PAGES = [
   {
     page: "general",
     name: "General",
-    sections: ["language-settings", "data-folder-settings", "about-settings"],
+    sections: [
+      "language-settings",
+      "output-location-settings",
+      "data-folder-settings",
+      "about-settings",
+    ],
   },
   {
     page: "models",

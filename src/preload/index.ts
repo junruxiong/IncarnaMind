@@ -62,9 +62,8 @@ contextBridge.exposeInMainWorld(BRIDGE_KEY, bridge);
 // A sandboxed renderer can't see where a dropped or picked file lives; Electron's preload can.
 const files: FilesBridge = {
   pathForFile: (file) => webUtils.getPathForFile(file),
-  saveMindExport: (mindId, options) =>
-    ipcRenderer.invoke(FILES_CHANNELS.saveMindExport, mindId, options),
-  showExportInFolder: (path) => ipcRenderer.invoke(FILES_CHANNELS.showExportInFolder, path),
+  showSavedFile: (path) => ipcRenderer.invoke(FILES_CHANNELS.showSavedFile, path),
+  pickOutputLocation: () => ipcRenderer.invoke(FILES_CHANNELS.pickOutputLocation),
   openDataFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openDataFolder),
   openLogsFolder: () => ipcRenderer.invoke(FILES_CHANNELS.openLogsFolder),
   pickSkill: (kind) => ipcRenderer.invoke(FILES_CHANNELS.pickSkill, kind),

@@ -70,7 +70,8 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
  */
 export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}): Core {
   const core = createCore({
-    paths: { dataDir },
+    // A Documents folder of its own, so a test that saves a file never writes into the User's.
+    paths: { dataDir, documents: join(dataDir, "Documents") },
     systemLanguages: () => ["en-US"],
     keychain: createMemoryKeychain(),
     browser: {

@@ -1,7 +1,7 @@
 import { rename, rm, utimes } from "node:fs/promises";
 import { join } from "node:path";
 import type { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { Core, CoreAdapters, Document, Folder, Reranker, SearchScope } from "../../src/core";
 import { translate } from "../../src/shared/i18n";
 import {
@@ -23,7 +23,13 @@ import {
   scopeAttributes,
   writeMind,
 } from "../helpers/minds";
-import { type ModelCall, promptOf, scriptedModel } from "../helpers/models";
+import {
+  type GenerateCall,
+  type GeneratedReply,
+  type ModelCall,
+  promptOf,
+  scriptedModel,
+} from "../helpers/models";
 
 /**
  * The library: a Linked folder with the folders Coast › Rivers › Deltas,
@@ -48,15 +54,21 @@ const SINGLES = [
 
 const ALL = ["Almanac", "Delta", "Estuary", "Harbour", "Moon", "Recipes"];
 
-/** A model that calls Tools: it searches once for tides, then answers without citing. */
-function searchingModel(): MockLanguageModelV4 {
-  return scriptedModel((call: ModelCall) => {
-    if (!call.tools.includes("search_documents")) return { text: "No Tools were offered." };
-    if (call.results.length === 0) {
-      return { calls: [{ tool: "search_documents", input: { query: "tides" } }] };
-    }
-    return { text: "Here is what your Documents say." };
-  });
+/**
+ * A model that calls Tools: it searches once for tides, then answers without
+ * citing. `generate` answers what isn't streamed, such as Organize.
+ */
+function searchingModel(generate?: (call: GenerateCall) => GeneratedReply): MockLanguageModelV4 {
+  return scriptedModel(
+    (call: ModelCall) => {
+      if (!call.tools.includes("search_documents")) return { text: "No Tools were offered." };
+      if (call.results.length === 0) {
+        return { calls: [{ tool: "search_documents", input: { query: "tides" } }] };
+      }
+      return { text: "Here is what your Documents say." };
+    },
+    { generate },
+  );
 }
 
 /**
@@ -174,6 +186,35 @@ describe("Resolving a Search scope", { timeout: 30_000 }, () => {
     const before = searches.length;
     await askScoped(core, client, mind.id, { folderIds: [folder.id] });
     expect(searches).toHaveLength(before);
+  });
+
+  test("a Suggested Folder counts in its Folder's scope until it is rejected", async () => {
+    let suggested = "";
+    const { core, client, mind, searches, id } = await setUpLibrary(
+      searchingModel(() => ({ text: JSON.stringify({ groupId: suggested, tags: [] }) })),
+    );
+    const folder = await core.createLibraryGroup({
+      name: "Research",
+      description: "Ocean science",
+    });
+    suggested = folder.id;
+    const [provider] = await core.listChatProviders();
+    await core.saveLibrarySettings({
+      classifier: { kind: "chat", choice: { providerId: provider?.id ?? "", modelId: "local" } },
+      automatic: false,
+    });
+    await core.classifyDocuments([id("Moon")]);
+    await vi.waitFor(async () =>
+      expect((await core.getLibrary()).assignments).toEqual([
+        expect.objectContaining({ groupId: folder.id, suggested: true, status: "classified" }),
+      ]),
+    );
+
+    await askScoped(core, client, mind.id, { folderIds: [folder.id] });
+    expect(searches).toEqual([["Moon"]]);
+    await core.rejectAssignments([id("Moon")]);
+    await askScoped(core, client, mind.id, { folderIds: [folder.id] });
+    expect(searches).toHaveLength(1);
   });
 
   test("a Folder covers its Documents and those of its sub-Folders, at any depth", async () => {
