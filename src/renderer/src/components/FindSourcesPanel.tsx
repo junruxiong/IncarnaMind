@@ -13,6 +13,7 @@ import { formatCount } from "../linkedFolders";
 import { useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
+import { SourceKeyField } from "./SourceKeyField";
 import { buttonStyle, iconButtonClass, inputClass, sectionTitleClass } from "./ui";
 
 /** How far back "Since …" offers, in years from this one. */
@@ -202,6 +203,11 @@ export function FindSourcesPanel() {
           </select>
         </label>
       </div>
+      {providers
+        .filter((each) => each.key !== "none" && !off.includes(each.id))
+        .map((provider) => (
+          <SourceKeyField key={provider.id} provider={provider} />
+        ))}
       {error && (
         <ProblemLine
           className="mt-3"
@@ -338,6 +344,14 @@ function ResultRow({ work }: { work: FoundSource }) {
         >
           {facts.join(" · ")}
         </p>
+        {work.notice && (
+          <p
+            data-testid="find-sources-result-notice"
+            className="text-[13px] leading-5 break-words text-ink-meta"
+          >
+            {t("sources.notice", { notice: work.notice })}
+          </p>
+        )}
         <AddLine work={work} add={add} />
       </div>
       <div className="flex flex-col items-end gap-1">
