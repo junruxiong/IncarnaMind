@@ -772,6 +772,41 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    // 37 and 38 are reserved by work in progress.
+    version: 39,
+    description:
+      "Recently deleted: what was deleted permanently, and what a Folder's deletion took out",
+    // Restoring a deleted row brings back the rows deleted with it: those whose deleted_at is
+    // its own (src/core/recentlyDeleted.ts).
+    sql: `
+      -- When a deleted row's content was dropped, by the User or 30 days after it was
+      -- deleted. The row stays as its tombstone, so a later sync can pass the deletion on.
+      ALTER TABLE minds ADD COLUMN purged_at TEXT;
+      ALTER TABLE documents ADD COLUMN purged_at TEXT;
+      ALTER TABLE tags ADD COLUMN purged_at TEXT;
+      ALTER TABLE library_groups ADD COLUMN purged_at TEXT;
+      CREATE INDEX documents_by_deleted_at ON documents (deleted_at)
+        WHERE deleted_at IS NOT NULL AND purged_at IS NULL;
+
+      -- What deleting a Folder (library_groups) took out of it: one row per Document and Mind
+      -- in it (item_kind 'document' or 'mind', checked in code), so restoring the Folder puts
+      -- back those still in none, a suggested Folder as a suggestion again (suggested is 1).
+      -- Restoring it marks its rows deleted.
+      CREATE TABLE deleted_folder_items (
+        id TEXT PRIMARY KEY NOT NULL,
+        folder_id TEXT NOT NULL,
+        item_kind TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        suggested INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX deleted_folder_items_by_folder ON deleted_folder_items (folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
     version: 41,
     description: "Web pages saved as Documents: each version's address, site and fetch time",
     // A web page Document's file is its snapshot (src/core/documents/web); a row per
