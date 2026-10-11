@@ -5,7 +5,6 @@ import { ExportDialog } from "./ExportDialog";
 import { DeleteFolderDialog } from "./LibraryFolders";
 import { UnlinkFolderDialog } from "./UnlinkFolderDialog";
 
-/** The dialogs commands ask for (`requests.ts`), mounted once for every menu that can ask. */
 export function RequestedDialogs() {
   const { deleteMind, deleteDocument, deleteFolder, unlink, exportMind, clear } = useRequests();
   return (

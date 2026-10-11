@@ -105,7 +105,6 @@ export function offered(command: Command, ctx: CommandContext): boolean {
 export const isEnabled = (command: Command, ctx: CommandContext): boolean =>
   (command.enabled?.(ctx) ?? true) === true;
 
-/** What a menu calls it. */
 export const menuLabelOf = (command: Command, ctx: CommandContext, t: Translate): string =>
   labelOf({ ...command, label: command.menuLabel ?? command.label }, ctx, t);
 

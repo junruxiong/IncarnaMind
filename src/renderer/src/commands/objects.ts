@@ -26,7 +26,6 @@ const linkedOf = (ctx: CommandContext): LinkedFolder | undefined => {
   return store().linkedFolders.find((each) => each.id === id);
 };
 
-/** The Question a Document's menu asks about it. */
 function bridgeOf(ctx: CommandContext): LibraryBridge | null {
   const [document] = documentsOf(ctx);
   if (!document) return null;
@@ -370,7 +369,6 @@ export const linkedFolderCommands: readonly Command[] = [
   },
 ];
 
-/** What only the Answer in the note can do: its text is in the editor. */
 export const answerCommands: readonly Command[] = [
   {
     id: "answer.copy",

@@ -9,7 +9,6 @@ export function useLanguage(): Language {
   return language ?? resolveLanguage("system", navigator.languages);
 }
 
-/** The interface language now, outside React. */
 export function languageNow(): Language {
   return (
     useAppStore.getState().settings?.language ?? resolveLanguage("system", navigator.languages)

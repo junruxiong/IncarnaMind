@@ -31,7 +31,6 @@ const TEST_ID_PREFIX: Record<ObjectKind, string> = {
 
 const keyOf = (target: ObjectRef) => `${target.kind}:${target.id}`;
 
-/** A key that opens the focused row's menu: the context-menu key, or Shift+F10. */
 const opensMenu = (event: KeyboardEvent) =>
   event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
 

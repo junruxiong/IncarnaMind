@@ -4,7 +4,6 @@ import { useWebPages } from "../webPages";
 import type { Command, CommandContext } from "./registry";
 import { documentsOf, everyDocument } from "./targets";
 
-/** The web page Documents a command acts on. */
 const webPagesOf = (ctx: CommandContext) => documentsOf(ctx).filter((document) => document.web);
 
 /** Only while every Document it acts on is a web page. */
