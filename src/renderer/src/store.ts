@@ -1268,6 +1268,9 @@ core.on("skills.changed", (skills) => useAppStore.setState({ skills }));
 // Documents' Tags, or their tagging, changed: by the User, by automatic tagging, or with a deleted Tag.
 core.on("documents.tagged", (tagged) => documentUpdates.upsert(tagged));
 
+// Documents' reference records changed: the User edited one, put one back, or Look up filled one.
+core.on("references.changed", (changed) => documentUpdates.upsert(changed));
+
 // Organize queued, started, finished or failed on Documents, or the User put one in a Folder.
 core.on("library.assignments", (assignments) => documentUpdates.assign(assignments));
 

@@ -72,6 +72,11 @@ import {
 } from "./providers/ollama";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import {
+  createReferences,
+  REFERENCE_LOOKUP_SENDS,
+  REFERENCE_SERVICE_URLS,
+} from "./referenceRecords";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -729,6 +734,26 @@ export function createCore(adapters: CoreAdapters): Core {
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
 
+  // Reference records (#286): read from files as they're processed, edited by the User, and
+  // filled by Look up, which sends a DOI or an arXiv id only, with consent, never in local mode.
+  const references = createReferences({
+    db,
+    now,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    urls: { ...REFERENCE_SERVICE_URLS, ...adapters.referenceLookup },
+    document: (id) => documents.get(id),
+    changed: (list) => events.emit("references.changed", list),
+    signal: lifetime.signal,
+  });
+  // Look up goes to Crossref or arXiv only when the User asks, so the flow goes nowhere until
+  // then; the Privacy page lists each service once the User has decided on it.
+  consent.registry.register({
+    id: "reference-lookup",
+    sends: REFERENCE_LOOKUP_SENDS,
+    services: async () => [],
+  });
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
@@ -989,6 +1014,10 @@ export function createCore(adapters: CoreAdapters): Core {
     listLinkedFolders: async () => documents.linkedFolders.list(),
     removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
+    updateReference: async (documentId, patch) => references.update(documentId, patch),
+    restoreReference: async (documentId, before, fields) =>
+      references.restore(documentId, before, fields),
+    lookUpReference: (documentId) => references.lookUp(documentId),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
     createExamples: async (group) => examples.create(group),

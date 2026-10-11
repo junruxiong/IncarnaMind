@@ -240,6 +240,14 @@ function createUsageDataSender(): UsageDataSender | undefined {
   });
 }
 
+/**
+ * Test-only launch flag: where Look up asks Crossref and arXiv (#286), a
+ * local server standing in for both, so the smoke tests reach neither. Only
+ * a test build honours it.
+ */
+const referenceLookupUrl =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_REFERENCE_LOOKUP : undefined;
+
 /** Builds the core's adapters, with the log the core writes to. Call after `app` is ready. */
 export function createElectronAdapters(log: Logger): CoreAdapters {
   const dataDir = app.getPath("userData");
@@ -248,6 +256,9 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   return {
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
+    ...(referenceLookupUrl && {
+      referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
+    }),
     log,
     paths: { dataDir, builtInSkills: builtInSkillsFolder(), examples: examplesFolder() },
     systemLanguages: () => app.getPreferredSystemLanguages(),

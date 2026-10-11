@@ -1,8 +1,25 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type Ref,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../../core/api";
+import type {
+  Document,
+  DocumentGroupAssignment,
+  LibraryGroup,
+  ReferenceField,
+  ReferenceRecord,
+} from "../../../core/api";
 import { displayName, fileNameOf } from "../../../shared/documentNames";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
+import { missingDetails } from "../../../shared/references";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
 import { useLanguage, useT } from "../i18n";
@@ -17,7 +34,9 @@ import {
   toggleFilterValue,
 } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
+import { missingList } from "../referenceEditing";
 import { useAppStore } from "../store";
+import { CiteAsPanel } from "./CiteAsPanel";
 import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
@@ -419,6 +438,10 @@ const LibraryRow = memo(function LibraryRow({
   const t = useT();
   const name = displayName(doc);
   const fileName = fileNameOf(doc.path);
+  /** "Cite as" open under the row, and the field to start in. */
+  const [citing, setCiting] = useState<{ focus: ReferenceField | null } | null>(null);
+  const citeToggle = useRef<HTMLButtonElement>(null);
+  const citePanelId = useId();
   const status =
     item?.status === "classifying" || item?.status === "pending"
       ? "library.working"
@@ -437,17 +460,29 @@ const LibraryRow = memo(function LibraryRow({
     >
       <LibrarySelectBox document={doc} shownIds={shownIds} />
       <div className="library-document-name min-w-0">
-        <button
-          type="button"
-          title={name === fileName ? name : `${name}\n${fileName}`}
-          className="flex max-w-full items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-          onClick={() => useAppStore.getState().openDocument({ documentId: doc.id })}
-        >
-          <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
-          <span data-testid="library-document-name" className="truncate font-semibold">
-            {name}
-          </span>
-        </button>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            title={name === fileName ? name : `${name}\n${fileName}`}
+            className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+            onClick={() => useAppStore.getState().openDocument({ documentId: doc.id })}
+          >
+            <DocumentLineIcon kind={doc.kind} className="size-4 shrink-0 text-ink-meta" />
+            <span data-testid="library-document-name" className="truncate font-semibold">
+              {name}
+            </span>
+          </button>
+          {doc.reference && (
+            <CiteAsToggle
+              ref={citeToggle}
+              document={doc}
+              record={doc.reference}
+              panelId={citePanelId}
+              open={citing !== null}
+              onToggle={(focus) => setCiting(citing === null ? { focus } : null)}
+            />
+          )}
+        </div>
         <details className="mt-1 text-[12px] text-ink-meta">
           <summary className="w-fit cursor-pointer">{t(status)}</summary>
           <p className="mt-1 break-words">
@@ -486,9 +521,75 @@ const LibraryRow = memo(function LibraryRow({
         ))}
       </select>
       <DocumentTagChips document={doc} />
+      {citing && doc.reference && (
+        <div id={citePanelId} className="col-span-full min-w-0">
+          <CiteAsPanel
+            document={doc}
+            record={doc.reference}
+            focusField={citing.focus}
+            onClose={() => {
+              setCiting(null);
+              citeToggle.current?.focus();
+            }}
+          />
+        </div>
+      )}
     </li>
   );
 });
+
+/**
+ * A Library row's way into "Cite as" (#286), after its name: "Needs details",
+ * with the waiting dot, while the record is too thin to cite, which opens it
+ * at the first missing field; otherwise "Cite as", shown while the row is
+ * pointed at or focused.
+ */
+function CiteAsToggle({
+  ref,
+  document,
+  record,
+  panelId,
+  open,
+  onToggle,
+}: {
+  ref: Ref<HTMLButtonElement>;
+  document: Document;
+  record: ReferenceRecord;
+  panelId: string;
+  open: boolean;
+  onToggle(focus: ReferenceField | null): void;
+}) {
+  const t = useT();
+  const language = useLanguage();
+  const missing = missingDetails(record);
+  const list = missingList(language, record);
+  const label = t("reference.citeAs.label", { name: displayName(document) });
+  return (
+    <button
+      ref={ref}
+      type="button"
+      data-testid="cite-as-toggle"
+      data-needs-details={missing.length > 0 ? "" : undefined}
+      aria-expanded={open}
+      aria-controls={open ? panelId : undefined}
+      aria-label={
+        list ? `${label}. ${t("reference.needsDetails.title", { missing: list })}` : label
+      }
+      title={list ? t("reference.needsDetails.title", { missing: list }) : undefined}
+      onClick={() => onToggle(missing[0] ?? null)}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-sm text-[12px] leading-5 whitespace-nowrap text-ink-meta hover:text-ink hover:underline ${
+        missing.length > 0 || open
+          ? ""
+          : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100"
+      }`}
+    >
+      {missing.length > 0 && (
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-attention" />
+      )}
+      {t(missing.length > 0 ? "reference.needsDetails" : "reference.citeAs")}
+    </button>
+  );
+}
 
 /**
  * From the sheet into writing: "Ask about this Folder" adds a Question that

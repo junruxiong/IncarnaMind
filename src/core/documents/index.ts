@@ -42,6 +42,7 @@ import type {
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Folders } from "../folders";
+import { referenceOf, writeFileReference } from "../referenceRecords/store";
 import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
@@ -423,6 +424,7 @@ export function createDocuments(options: DocumentsOptions) {
           : null,
       creationDate: row.creation_date,
       title: row.title,
+      reference: referenceOf(db, row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -668,6 +670,8 @@ export function createDocuments(options: DocumentsOptions) {
           job.documentId,
         ],
       );
+      // What the User edited, or Look up filled, stays; the rest is this version's.
+      writeFileReference(db, job.documentId, result.reference, at);
       return { status, replaced: true };
     });
   }
@@ -714,24 +718,27 @@ export function createDocuments(options: DocumentsOptions) {
       metadataQueued = false;
       if (result.outcome === "read") {
         // Only for the version read, and unless processing it again read it meanwhile.
-        const written = db.get<{ id: string }>(
-          `UPDATE documents SET creation_date = ?, title = ?, metadata_version = ?, updated_at = ?
-           WHERE id = ? AND content_hash = ? AND metadata_version < ? AND deleted_at IS NULL
-           RETURNING id`,
-          [
-            result.creationDate,
-            result.title,
-            BigInt(METADATA_VERSION),
-            now(),
-            job.documentId,
-            job.contentHash,
-            BigInt(METADATA_VERSION),
-          ],
-        );
-        const row =
-          written && (result.creationDate !== null || result.title !== null)
-            ? find(job.documentId)
-            : undefined;
+        const written = db.transaction(() => {
+          const at = now();
+          const updated = db.get<{ id: string }>(
+            `UPDATE documents SET creation_date = ?, title = ?, metadata_version = ?, updated_at = ?
+             WHERE id = ? AND content_hash = ? AND metadata_version < ? AND deleted_at IS NULL
+             RETURNING id`,
+            [
+              result.creationDate,
+              result.title,
+              BigInt(METADATA_VERSION),
+              at,
+              job.documentId,
+              job.contentHash,
+              BigInt(METADATA_VERSION),
+            ],
+          );
+          if (updated) writeFileReference(db, job.documentId, result.reference, at);
+          return updated !== undefined;
+        });
+        // Its reference record is new, whatever else was found.
+        const row = written ? find(job.documentId) : undefined;
         if (row) emitStatus(toDocument(row));
       } else {
         // The file changed (processing the new version reads its date), can't
