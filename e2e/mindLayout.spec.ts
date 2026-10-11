@@ -460,7 +460,7 @@ async function sizeMind(app: ElectronApplication, window: Page, width: number) {
 }
 
 for (const language of ["en", "zh-CN"] as const) {
-  for (const mindWidth of [800, 1440]) {
+  for (const mindWidth of [650, 800, 1440]) {
     test(`a Question's fold chevron and the Block handle share the 40px left margin without covering each other, in a ${mindWidth}px Mind (${language})`, async () => {
       const { app, window } = await launchApp(dataDir, { fakeChat: true });
       await dismissChatSetup(window);
