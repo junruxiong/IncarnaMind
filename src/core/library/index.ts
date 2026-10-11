@@ -417,7 +417,40 @@ export function createLibrary(options: {
           "SELECT g.* FROM document_groups g JOIN documents d ON d.id = g.document_id WHERE g.deleted_at IS NULL AND d.deleted_at IS NULL",
         )
         .map(assignmentOf);
-      return { groups: groups(), assignments, settings: getSettings() };
+      const deletedGroups = db.all<LibraryGroup>(
+        `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NOT NULL ORDER BY name COLLATE NOCASE, id`,
+      );
+      return { groups: groups(), deletedGroups, assignments, settings: getSettings() };
+    },
+    /** A live Folder, or NotFoundError. */
+    folder: group,
+    /**
+     * Puts these Documents in a Folder (or in none) as the User's choice, as
+     * `assign` does for one, all or none, and returns where each was. It says
+     * nothing yet: the caller calls `moved` once what it is part of is saved.
+     */
+    move(ids: readonly string[], groupId: string | null): { id: string; from: string | null }[] {
+      if (groupId !== null) group(groupId);
+      const docs = ids.map(document);
+      const moved = db.transaction(() =>
+        docs.map((doc) => {
+          const from = assignment(doc.id)?.group_id ?? null;
+          write(doc, groupId, "user", "classified");
+          // A manual choice cancels an in-flight suggestion, including its busy indicator.
+          db.run(
+            "UPDATE documents SET tagging_status = 'waiting-for-provider' WHERE id = ? AND tagging_status IN ('pending', 'tagging')",
+            [doc.id],
+          );
+          return { id: doc.id, from };
+        }),
+      );
+      return moved;
+    },
+    /** Says that these Documents moved (`move`): one "library.assignments", and their tagging. */
+    moved(ids: readonly string[]) {
+      if (ids.length === 0) return;
+      options.tagged([...ids]);
+      announce(ids);
     },
     create,
     update(id: unknown, input: unknown) {

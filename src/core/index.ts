@@ -63,12 +63,7 @@ export {
 } from "./providers/ollamaModels";
 export type { RerankingModelFactory, RerankingModelSpec } from "./providers/rerank";
 export { blockReference, parseReference } from "./references";
-export {
-  BUILT_IN_RERANKING_MODEL,
-  downloadSize,
-  RERANKING_MODEL_CANDIDATES,
-  type RerankingModelDefinition,
-} from "./reranking";
+export { BUILT_IN_RERANKING_MODEL, type RerankingModelDefinition } from "./reranking";
 export { BUILT_IN_SKILLS_PACKAGED, BUILT_IN_SKILLS_SOURCE } from "./skills/builtIn";
 export {
   COMMON_FIELDS,

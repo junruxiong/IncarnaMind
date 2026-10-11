@@ -64,6 +64,7 @@ const assignment = (
 
 const snapshot = (assignments: DocumentGroupAssignment[]): LibrarySnapshot => ({
   groups: [{ id: "g", name: "Research", description: "", createdAt: "", updatedAt: "" }],
+  deletedGroups: [],
   assignments,
   settings: { classifier: null, automatic: false },
 });

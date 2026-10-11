@@ -9,6 +9,8 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
+  openFolderInLibrary,
   removeDataFolder,
   setWindowSize,
 } from "./app";
@@ -71,7 +73,7 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
   try {
     let { window } = session;
     await dismissChatSetup(window);
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.keyboard.type("Tide notes");
     await expect(window.getByTestId("mind-tab")).toHaveCount(1);
 
@@ -103,7 +105,7 @@ test("the Library is a tab beside the Mind, which stays in its own tab, and it c
     await expect(window.getByTestId("library")).toBeVisible();
 
     // It closes like a Mind's tab; the Mind is shown again.
-    await window.getByTestId("library-tab-close").click();
+    await window.getByTestId("library-tab").getByTestId("tab-close").click();
     await expect(window.getByTestId("library-tab")).toHaveCount(0);
     await expect(window.getByTestId("mind-title")).toHaveValue("Tide notes");
     await session.app.close();
@@ -168,20 +170,17 @@ test("each kind of Document has its own icon, names show no extension, and a mac
   }
 });
 
-test("a Folder's header holds at the narrowest width with the viewer open: its name on two lines at most, Document actions only in Document menus", async () => {
+test("a Folder's header holds in the narrowest window that keeps groups side by side, with a Document open beside it: its name on two lines at most, Document actions only in Document menus", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
     await addDocuments(window, await writeSources());
     await addFolder(window, "Reports & presentations");
-    await setWindowSize(app, window, 900, 700);
+    await setWindowSize(app, window, 1000, 700);
     await window.getByTestId("open-library").click();
     const library = window.getByTestId("library");
-    await window
-      .getByTestId("library-folders")
-      .getByRole("button", { name: /^Reports & presentations/ })
-      .click();
-    // Put a Document in the Folder, and open it in the viewer beside the Library.
+    await openFolderInLibrary(window, "Reports & presentations");
+    // Put a Document in the Folder, and open it in a group beside the Library.
     const row = library.getByTestId("library-document").first();
     await window.evaluate(async () => {
       const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;

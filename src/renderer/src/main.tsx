@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import "./commands/app";
 import { files } from "./core";
 import "./fonts.css";
 import "./styles.css";

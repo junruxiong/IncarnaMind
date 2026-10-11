@@ -42,7 +42,7 @@ export interface LaunchOptions {
   /**
    * Where usage data goes: a test build sends it only with this, to a local
    * server standing in for PostHog, and ignores the project a real build is
-   * made with. `testerBuild`: as a test build (the alpha) would, on until the
+   * made with. `testerBuild`: as a test build (for invited testers) would, on until the
    * User turns it off.
    */
   usageData?: { host: string; testerBuild?: boolean };
@@ -115,7 +115,7 @@ export async function launchApp(
   openApps.set(app, dataDir);
   app.on("close", () => openApps.delete(app));
   const window = await app.firstWindow();
-  await window.getByTestId("new-mind").waitFor();
+  await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
     await app.evaluate(({ BrowserWindow }, size) => {
       BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
@@ -127,6 +127,42 @@ export async function launchApp(
       .toEqual([WINDOW_SIZE.width, WINDOW_SIZE.height]);
   }
   return { app, window };
+}
+
+/** "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind in no Folder. */
+export async function newMind(window: Page): Promise<void> {
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-new-mind").click();
+}
+
+/** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
+export const sidebarFolder = (window: Page, name: string) =>
+  window
+    .getByTestId("library-folders")
+    .getByTestId("library-folder")
+    .filter({
+      has: window.locator(':scope > div [data-testid="row-text"]', { hasText: name }),
+    });
+
+/** Opens a Folder's page in the Library's tab, from its menu in the sidebar: "Open in the Library". */
+export async function openFolderInLibrary(window: Page, name: string): Promise<void> {
+  const folder = sidebarFolder(window, name);
+  await folder.getByTestId("folder-row").hover();
+  await folder.getByTestId("folder-menu").click();
+  await folder.getByTestId("folder-open").click();
+  await expect(window.getByTestId("library")).toBeVisible();
+}
+
+/**
+ * Shows the sidebar's Source locations view: each Linked folder with its
+ * folders as on disk, and "Other Documents".
+ */
+export async function showSourceLocations(window: Page): Promise<void> {
+  const button = window.getByTestId("browse-views").getByRole("button", {
+    name: "Source locations",
+  });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
 /**
@@ -328,18 +364,23 @@ export function urlsOpened(app: ElectronApplication) {
 }
 
 /**
- * "Add folder…" from the sidebar: the system's folder picker (answered by the
- * test with `path`), then the link dialog's preview. Returns the dialog, with
- * the preview counted. Choose a layout in it, then `confirmLink`.
+ * "Link a folder…" from the sidebar's "+" menu (or `button`): the system's
+ * folder picker (answered by the test with `path`), then the link dialog's
+ * preview. Returns the dialog, with the preview counted. Choose a layout in
+ * it, then `confirmLink`.
  */
 export async function previewLink(
   app: ElectronApplication,
   window: Page,
   path: string,
-  button = window.getByTestId("add-linked-folder"),
+  button?: Locator,
 ): Promise<Locator> {
   await interceptOpenDialog(app, path);
-  await button.click();
+  if (button) await button.click();
+  else {
+    await window.getByTestId("plus-menu").click();
+    await window.getByTestId("plus-link-folder").click();
+  }
   const dialog = window.getByTestId("link-folder-dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByTestId("link-folder-files")).toBeVisible();
@@ -352,7 +393,7 @@ export async function confirmLink(dialog: Locator): Promise<void> {
   await expect(dialog).toBeHidden();
 }
 
-/** Links a folder as the User does: "Add folder…", the picker, then "Link folder" in the dialog. */
+/** Links a folder as the User does: "Link a folder…", the picker, then "Link folder" in the dialog. */
 export async function linkFolderFromSidebar(
   app: ElectronApplication,
   window: Page,
@@ -376,22 +417,36 @@ export async function openLinkedFolderMenu(row: Locator): Promise<Locator> {
   return menu;
 }
 
-/** Opens the empty Document viewer panel through the test hook. */
-export async function openViewer(window: Page): Promise<void> {
-  await window.evaluate(() => {
-    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
-    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
-    hooks.openViewer();
-  });
-  // The viewer slides in; measure it once it has settled, not mid-animation.
-  await window.waitForFunction(() => {
-    const viewer = document.querySelector('[data-testid="viewer"]');
-    const animations = viewer?.getAnimations({ subtree: true });
-    return animations?.every((animation) => animation.playState !== "running") === true;
-  });
+/**
+ * Opens the Library in a group beside the Mind, the focus staying in the
+ * Mind, or closes every group but the Mind's, through the core's bridge: the
+ * Mind then has half the card, as beside a Document, or all of it.
+ */
+export async function setGroupBeside(window: Page, open: boolean): Promise<void> {
+  await window.evaluate(async (show) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const layout = await bridge.getLayout("main");
+    if (show && layout.groups.length === 1) {
+      await bridge.changeLayout("main", {
+        type: "open",
+        item: { kind: "library" },
+        where: { in: "side" },
+        focus: false,
+      });
+    } else if (!show) {
+      for (const group of layout.groups.slice(1)) {
+        await bridge.changeLayout("main", { type: "closeGroup", groupId: group.id });
+      }
+    }
+  }, open);
+  await expect(window.getByTestId("tab-group")).toHaveCount(open ? 2 : 1);
 }
 
-/** Opens a Document in the viewer at a location, as a Citation will, through the test hook. */
+/**
+ * Opens a Document at a location as a Citation does, through the test hook: as a
+ * preview in the group right of the Mind the User is in (made if needed); with
+ * no Mind in front, as from the sidebar.
+ */
 export async function openDocumentAt(window: Page, location: DocumentLocation): Promise<void> {
   await window.evaluate((at) => {
     const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
@@ -412,14 +467,22 @@ export async function interceptSkillPicker(window: Page, path: string): Promise<
   }, path);
 }
 
-/** Adds files through the sidebar's file picker and waits until each is processed and ready. */
+/** Not in a Folder lists its first five Documents, then "Show N more Documents". */
+const FIRST_LISTED = 5;
+
+/**
+ * Adds files through the sidebar's file picker and waits until each is
+ * processed and ready. Each shows Not in a Folder (its first five, if more).
+ */
 export async function addDocuments(window: Page, paths: string[]): Promise<void> {
   await window.getByTestId("add-documents-input").setInputFiles(paths);
   const items = window.getByTestId("document-list-item");
-  await expect(items).toHaveCount(paths.length);
-  for (let index = 0; index < paths.length; index++) {
+  const listed = Math.min(paths.length, FIRST_LISTED);
+  await expect(items).toHaveCount(listed);
+  for (let index = 0; index < listed; index++) {
     await expect(items.nth(index)).toHaveAttribute("data-status", "ready");
   }
+  if (paths.length > listed) await expectReadyDocuments(window, paths.length);
 }
 
 /** Sizes the app's window, e.g. to its narrowest (900px wide, the minimum) or a wide one. */
@@ -434,6 +497,27 @@ export async function setWindowSize(
     { width, height },
   );
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+}
+
+/**
+ * Waits until the core has this many Documents ready, wherever the sidebar
+ * lists them (a Folder starts closed, and lists its first few).
+ */
+export async function expectReadyDocuments(window: Page, count: number): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        window.evaluate(
+          async () =>
+            (
+              await (
+                globalThis as unknown as { incarnamind: CoreBridge }
+              ).incarnamind.listDocuments()
+            ).filter((each) => each.status === "ready").length,
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(count);
 }
 
 /** The id of the Document listed in the sidebar under `name`. */
@@ -487,6 +571,31 @@ export async function dragBy(window: Page, handle: Locator, dx: number): Promise
   await window.mouse.down();
   await window.mouse.move(x + dx, y, { steps: 5 });
   await window.mouse.up();
+}
+
+/**
+ * Drags a tab as a person does: slides onto it, presses, slides to (x, y) in
+ * small steps, then, once `whileHeld` has looked at what the drag shows, lets go.
+ */
+export async function dragTabTo(
+  window: Page,
+  tab: Locator,
+  to: { x: number; y: number },
+  whileHeld?: () => Promise<void>,
+): Promise<void> {
+  const box = await tab.boundingBox();
+  if (!box) throw new Error("The tab isn't visible.");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await window.mouse.move(x - 20, y + 30);
+  await window.mouse.move(x, y, { steps: 5 });
+  await window.mouse.down();
+  try {
+    await window.mouse.move(to.x, to.y, { steps: 16 });
+    await whileHeld?.();
+  } finally {
+    await window.mouse.up();
+  }
 }
 
 /**

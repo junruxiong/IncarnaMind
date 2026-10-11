@@ -695,6 +695,18 @@ export const migrations: readonly Migration[] = [
   },
   {
     version: 34,
+    description: "A Mind belongs to one Folder, or to none (#111)",
+    // The in-app Folder (library_groups) a Mind belongs to; NULL: Not in a
+    // Folder, where every Mind made before is. No foreign key: a later sync
+    // may deliver a Mind before its Folder. Deleting a Folder sets its Minds'
+    // folder_id back to NULL.
+    sql: `
+      ALTER TABLE minds ADD COLUMN folder_id TEXT;
+      CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 40,
     description: "A Mind without a title is named by its first line of text",
     // Kept up to date by the core as the Mind is edited; the title the User typed stays in `title`.
     sql: `ALTER TABLE minds ADD COLUMN auto_title TEXT NOT NULL DEFAULT '';`,

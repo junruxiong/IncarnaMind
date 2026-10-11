@@ -21,7 +21,8 @@ test("a Mind with no title is named by its first line, in the sidebar and the ta
   await setWindowSize(app, window, 1280, 660);
   await dismissChatSetup(window);
 
-  await window.getByTestId("new-mind").click();
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-new-mind").click();
   const title = window.getByTestId("mind-title");
   await expect(title).toBeFocused();
   const row = window.getByTestId("mind-list-item");
@@ -55,7 +56,8 @@ test("a long first line is cut at a word, and a Chinese one at a character", asy
   await setWindowSize(app, window, 1280, 660);
   await dismissChatSetup(window);
 
-  await window.getByTestId("new-mind").click();
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-new-mind").click();
   await enterContent(window);
   await window.keyboard.type(
     "How much cooler are large irrigated parks than the surrounding built-up streets during clear windless summer nights",
@@ -64,7 +66,8 @@ test("a long first line is cut at a word, and a Chinese one at a character", asy
   await expect(row).toContainText("parks than the");
   await expect(row).not.toContainText("surrounding");
 
-  await window.getByTestId("new-mind").click();
+  await window.getByTestId("plus-menu").click();
+  await window.getByTestId("plus-new-mind").click();
   await enterContent(window);
   await window.keyboard.type("夜间降温".repeat(20));
   await expect(window.getByTestId("mind-list-item").first()).toContainText("夜间降温".repeat(15));
