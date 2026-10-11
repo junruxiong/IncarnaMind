@@ -5,12 +5,15 @@ import { useRef } from "react";
 import type { CitationAttributes } from "../../../core/api";
 import { citationState } from "../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../shared/locations";
+import { noteOfCitation, useMindFormatting } from "../citationFormatting";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { numberedCitations, numberedFootnotes } from "./citationNumbers";
 import { FootnoteText } from "./FootnoteText";
 import { focusNow, returnToFootnote } from "./footnoteSchema";
 import { CheckMarkIcon } from "./icons";
+import { useMindId } from "./mindContext";
+import { StyledRuns } from "./StyledRuns";
 
 /** One footnote of the area, in the Mind's one numbering. */
 type Row =
@@ -23,9 +26,10 @@ function rowsOf(editor: Editor): Row[] {
   if (footnotes.length === 0) return [];
   const rows: Row[] = [
     ...footnotes.map(({ number, id }): Row => ({ kind: "footnote", number, id })),
-    ...numberedCitations(editor.state).map(
-      ({ number, key, attributes }): Row => ({ kind: "citation", number, key, attributes }),
-    ),
+    // Only the Citations the Mind's citation style makes footnotes of (#289).
+    ...numberedCitations(editor.state)
+      .filter((citation) => citation.footnote)
+      .map(({ number, key, attributes }): Row => ({ kind: "citation", number, key, attributes })),
   ];
   return rows.sort((a, b) => a.number - b.number);
 }
@@ -128,6 +132,9 @@ function CitationRow({ editor, row }: { editor: Editor; row: Extract<Row, { kind
   const where = location ? formatLocation(location, t) : null;
   const name = attributes.documentName ?? "";
   const source = where ? t("citation.where", { document: name, location: where }) : name;
+  // In a note style, the note as the style writes it (#289), once it is formatted.
+  const formatting = useMindFormatting(useMindId());
+  const note = noteOfCitation(editor.state, formatting, row.key);
   return (
     <li
       className="footnote-area-row footnote-area-row--citation"
@@ -153,7 +160,7 @@ function CitationRow({ editor, row }: { editor: Editor; row: Extract<Row, { kind
       </button>
       <span className="footnote-area-source">
         <CheckMarkIcon check={state.check} className="footnote-area-check" />
-        {source}
+        {note ? <StyledRuns runs={note} /> : source}
       </span>
     </li>
   );
