@@ -842,32 +842,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 43,
-    description: "Web pages saved as Documents: each version's address, site and fetch time",
-    // A web page Document's file is its snapshot (src/core/documents/web); a row per
-    // version it has had, by the snapshot's content hash, so a Citation of an older
-    // version still says when that one was fetched.
-    sql: `
-      CREATE TABLE web_pages (
-        id TEXT PRIMARY KEY NOT NULL,
-        document_id TEXT NOT NULL REFERENCES documents (id),
-        content_hash TEXT NOT NULL,
-        address TEXT NOT NULL,
-        site_name TEXT NOT NULL,
-        author TEXT,
-        published TEXT,
-        fetched_at TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
-      ) STRICT;
-      CREATE UNIQUE INDEX web_pages_by_version ON web_pages (document_id, content_hash)
-        WHERE deleted_at IS NULL;
-      CREATE INDEX web_pages_by_address ON web_pages (address) WHERE deleted_at IS NULL;
-    `,
-  },
-  {
-    // 41 and 44 are reserved by work in progress.
+    // 41, 43 and 44 are reserved by work in progress.
     version: 45,
     description: "Conversations: the assistant's own history, kept per Folder (ADR-0017)",
     // No foreign keys: a later sync may bring a message before its conversation, or a
@@ -950,6 +925,31 @@ export const migrations: readonly Migration[] = [
       -- Conversations are no longer Minds of kind 'chat' (ADR-0017). Nothing made one, but
       -- any that exists becomes a plain Mind rather than one this version can't open.
       UPDATE minds SET kind = 'mind' WHERE kind = 'chat';
+    `,
+  },
+  {
+    version: 47,
+    description: "Web pages saved as Documents: each version's address, site and fetch time",
+    // A web page Document's file is its snapshot (src/core/documents/web); a row per
+    // version it has had, by the snapshot's content hash, so a Citation of an older
+    // version still says when that one was fetched.
+    sql: `
+      CREATE TABLE web_pages (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        content_hash TEXT NOT NULL,
+        address TEXT NOT NULL,
+        site_name TEXT NOT NULL,
+        author TEXT,
+        published TEXT,
+        fetched_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX web_pages_by_version ON web_pages (document_id, content_hash)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX web_pages_by_address ON web_pages (address) WHERE deleted_at IS NULL;
     `,
   },
 ];
