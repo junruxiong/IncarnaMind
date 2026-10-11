@@ -758,7 +758,17 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
+  motion: MotionPreference;
 }
+
+/**
+ * How the window moves on a device (DESIGN.md, Motion): as the system's own
+ * Reduce motion setting says ("system", until the User chooses), on,
+ * reduced (movement becomes short fades) or off (every change is instant).
+ */
+export const MOTION_PREFERENCES = ["system", "on", "reduced", "off"] as const;
+export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
 
 /**
  * How the programs Tools start (Skill scripts) are confined:
@@ -2303,6 +2313,12 @@ export interface ChatModelGroup {
    * out as it goes.
    */
   unknown: string[];
+  /**
+   * The ids in `models` that run in the cloud although the provider is on this
+   * computer: an Ollama cloud model, which Ollama forwards to ollama.com. Asking
+   * with one needs consent to send to that service, and local mode refuses it.
+   */
+  cloud: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -2979,8 +2995,10 @@ export type OllamaStatus =
   | {
       running: true;
       baseUrl: string;
-      /** Models already pulled, e.g. "qwen3:4b". */
+      /** Models already pulled that run on this computer, e.g. "qwen3:4b". */
       models: string[];
+      /** Cloud models Ollama lists (e.g. "gpt-oss:120b-cloud"): they run on ollama.com, so they are never offered as local. */
+      cloudModels: string[];
       /** The model one click pulls and selects. */
       recommendedModel: string;
     };

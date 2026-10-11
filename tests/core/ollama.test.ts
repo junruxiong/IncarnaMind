@@ -27,6 +27,7 @@ describe("Ollama", () => {
       running: true,
       baseUrl: ollama.baseUrl,
       models: ["llama3.2:latest", "qwen3:8b"],
+      cloudModels: [],
       recommendedModel: RECOMMENDED_OLLAMA_MODEL,
     });
   });
