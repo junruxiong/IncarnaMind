@@ -499,7 +499,7 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   return {
-    ...createLayoutSlice(set, (error) => set({ actionError: messageOf(error) })),
+    ...createLayoutSlice(set, get, (error) => set({ actionError: messageOf(error) })),
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,

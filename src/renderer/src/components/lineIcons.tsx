@@ -322,3 +322,78 @@ export function PinLineIcon(props: IconProps) {
     </LineIcon>
   );
 }
+
+export function ChevronLeftLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2} {...props}>
+      <path d="m15 6-6 6 6 6" />
+    </LineIcon>
+  );
+}
+
+export function ChevronUpLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2} {...props}>
+      <path d="m6 15 6-6 6 6" />
+    </LineIcon>
+  );
+}
+
+/** The assistant and its conversations: a speech bubble. */
+export function ChatLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M5 4.5h14a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2h-7.5L7 20.5V17H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z" />
+    </LineIcon>
+  );
+}
+
+/** History: a clock with its hand turning back, as in Cursor and Claude. */
+export function HistoryLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
+      <path d="M4.5 4.5V9H9" />
+      <path d="M12 8.5V12l2.5 1.5" />
+    </LineIcon>
+  );
+}
+
+const WINDOW_FRAME = <rect x="3.5" y="4.5" width="17" height="15" rx="2" />;
+
+/** Where the assistant can sit: a window with its place in it marked. */
+export function DockRightLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      {WINDOW_FRAME}
+      <path d="M14.5 4.5v15" />
+    </LineIcon>
+  );
+}
+
+export function DockLeftLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      {WINDOW_FRAME}
+      <path d="M9.5 4.5v15" />
+    </LineIcon>
+  );
+}
+
+export function DockBottomLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      {WINDOW_FRAME}
+      <path d="M3.5 13.5h17" />
+    </LineIcon>
+  );
+}
+
+export function FloatLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      {WINDOW_FRAME}
+      <rect x="10.5" y="10.5" width="7" height="6" rx="1" />
+    </LineIcon>
+  );
+}
