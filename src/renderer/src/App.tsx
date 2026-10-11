@@ -18,6 +18,7 @@ import { UsageDataDialog } from "./components/UsageDataDialog";
 import { buttonStyle } from "./components/ui";
 import { files } from "./core";
 import { useLanguage, useT } from "./i18n";
+import { useMeetings } from "./meetings";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
 import { useAppStore } from "./store";
 import { useWindowWidth } from "./useWindowWidth";
@@ -36,6 +37,7 @@ export function App() {
 
   useEffect(() => {
     void load();
+    void useMeetings.getState().load();
   }, [load]);
 
   useEffect(() => {
