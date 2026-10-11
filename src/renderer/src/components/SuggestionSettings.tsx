@@ -26,14 +26,20 @@ export function SuggestionSettings() {
   const [status, setStatus] = useState<SuggestionStatus | null>(null);
   const id = useId();
 
+  // Settings keeps its pages mounted: the status is read again each time General shows, and
+  // when what it depends on changes (the switch, the chat model, whether it can be used).
+  const shown = useAppStore((state) => state.settingsOpen && state.settingsPage === "general");
+  const chatModel = useAppStore((state) => state.settings?.user.chatModel);
+  const readiness = useAppStore((state) => state.chatReadiness);
+
   const refresh = useCallback(
     () => core.getSuggestionStatus().then(setStatus, reportError),
     [reportError],
   );
-  // Again whenever the switch changes: the reason it is paused may have gone.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the model and readiness are when to read the status again, not what it is read from.
   useEffect(() => {
-    if (on !== undefined) void refresh();
-  }, [on, refresh]);
+    if (on !== undefined && shown) void refresh();
+  }, [on, shown, chatModel, readiness, refresh]);
   if (on === undefined) return null;
 
   const turn = async (next: boolean) => {

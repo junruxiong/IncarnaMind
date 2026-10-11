@@ -72,7 +72,9 @@ function citationNode(state: EditorState, suggestion: Suggestion): ProseMirrorNo
   const attrs = Object.fromEntries(
     Object.entries(suggestion.citation).filter(([, value]) => value !== null),
   );
-  return state.schema.nodes[CITATION_NODE]?.create(attrs) as ProseMirrorNode;
+  const type = state.schema.nodes[CITATION_NODE];
+  if (!type) throw new Error(`The note's schema has no ${CITATION_NODE} node.`);
+  return type.create(attrs);
 }
 
 /** Keeps an accepted suggestion one step of Undo of its own: what was typed before it isn't part of it. */
