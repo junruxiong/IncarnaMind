@@ -1023,8 +1023,8 @@
    * in which every text starts at one edge, and a 48px right margin for the
    * Citation checks; centred. Nothing in a Block may move its text off that
    * edge: boxes that need padding (code blocks, quotes) reach into the margin
-   * instead. Under 900px both margins fold away (see the container query at
-   * the end).
+   * instead. Below 784px both margins narrow to 40px at 760px, and under
+   * 760px they fold away (see the container queries at the end).
    */
   /*
    * What scrolls the Mind: room is kept for a scrollbar where they always show,
@@ -3948,15 +3948,24 @@
     color: var(--color-ink-meta);
   }
 
+  /* The margins narrow, from 56px and 48px to 40px each at 760px, with the measure kept at 680px. */
+  @container mind (width < 784px) {
+    .mind-measure {
+      margin-left: calc(40px + (100% - 760px) * 2 / 3);
+    }
+    .margin-checks {
+      width: 40px;
+    }
+  }
+
   /*
-   * A narrow Mind (under 900px): the right margin folds away and the left keeps the 40px the
-   * block handle and a Question's fold chevron share. Each Citation marker shows
-   * its check, since the margin column is gone.
+   * A folded Mind (under 760px): the right margin's checks move into the text, as each marker's
+   * check, and both sides keep a 40px gutter, so the text edge stays where it was at 760px.
    */
-  @container mind (width < 900px) {
+  @container mind (width < 760px) {
     .mind-measure {
       width: auto;
-      margin-inline: 40px 24px;
+      margin-inline: 40px;
     }
     .mind-editor {
       --editor-gutter: 40px;
@@ -4300,15 +4309,22 @@
   }
   /* At the bottom, the conversation and the composer keep to the Mind's column, 832px. */
   .assistant[data-dock="bottom"] {
+    .assistant-thread {
+      padding-inline: 40px;
+    }
+    .assistant-composer {
+      padding-inline: 40px;
+    }
     .assistant-thread > *,
-    .assistant-composer > .composer,
-    .assistant-no-mind {
+    .assistant-composer > .composer {
       width: auto;
       max-width: 812px;
       margin-inline: auto;
     }
     .assistant-no-mind {
-      margin-bottom: 10px;
+      width: auto;
+      max-width: 812px;
+      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
     }
   }
 

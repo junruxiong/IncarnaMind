@@ -997,6 +997,8 @@ export const en = {
   "providers.form.region": "Region",
   "providers.region.cn": "China",
   "providers.region.intl": "International",
+  "providers.form.more": "More providers",
+  "providers.form.keyGuide": "How do I get one?",
   "providers.form.getKey": "Get a key",
   "providers.form.planCredits": "Learn more",
   "providers.form.dataUse": "What it does with your data.",
