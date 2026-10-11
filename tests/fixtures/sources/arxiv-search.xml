@@ -1,0 +1,56 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/l7sUZpJ53vBLR1mZJBBQhEjqbM8</id>
+  <title>arXiv Query: search_query=all:"off-target" AND all:CRISPR AND submittedDate:"202101010000 TO 209912312359"&amp;id_list=&amp;start=0&amp;max_results=5</title>
+  <updated>2026-10-11T06:20:10Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=all:%22off-target%22+AND+(all:CRISPR+AND+submittedDate:%22202101010000+TO+209912312359%22)&amp;start=0&amp;max_results=5&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>
+  <opensearch:totalResults>11</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2602.16327v1</id>
+    <title>Guide-Guard: Off-Target Predicting in CRISPR Applications</title>
+    <updated>2026-02-18T10:06:54Z</updated>
+    <link href="https://arxiv.org/abs/2602.16327v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2602.16327v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>With the introduction of cyber-physical genome sequencing and editing technologies, such as CRISPR, researchers can more easily access tools to investigate and create remedies for a variety of topics in genetics and health science (e.g. agriculture and medicine). As the field advances and grows, new concerns present themselves in the ability to predict the off-target behavior. In this work, we explore the underlying biological and chemical model from a data driven perspective. Additionally, we present a machine learning based solution named \textit{Guide-Guard} to predict the behavior of the system given a gRNA in the CRISPR gene-editing process with 84\% accuracy. This solution is able to be trained on multiple different genes at the same time while retaining accuracy.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CV" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-02-18T10:06:54Z</published>
+    <arxiv:comment>10 pages, 11 figs, accepted to IDEAL 2022</arxiv:comment>
+    <arxiv:primary_category term="cs.LG"/>
+    <arxiv:journal_ref>Lecture Notes in Computer Science, vol 13756. Springer, Cham. (2022)</arxiv:journal_ref>
+    <author>
+      <name>Joseph Bingham</name>
+    </author>
+    <author>
+      <name>Netanel Arussy</name>
+    </author>
+    <author>
+      <name>Saman Zonouz</name>
+    </author>
+    <arxiv:doi>10.1007/978-3-031-21753-1_41</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1007/978-3-031-21753-1_41" title="doi"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2508.20130v1</id>
+    <title>Artificial Intelligence for CRISPR Guide RNA Design: Explainable Models and Off-Target Safety</title>
+    <updated>2025-08-26T13:34:15Z</updated>
+    <link href="https://arxiv.org/abs/2508.20130v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2508.20130v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>CRISPR-based genome editing has revolutionized biotechnology, yet optimizing guide RNA (gRNA) design for efficiency and safety remains a critical challenge. Recent advances (2020--2025, updated to reflect current year if needed) demonstrate that artificial intelligence (AI), especially deep learning, can markedly improve the prediction of gRNA on-target activity and identify off-target risks. In parallel, emerging explainable AI (XAI) techniques are beginning to illuminate the black-box nature of these models, offering insights into sequence features and genomic contexts that drive Cas enzyme performance. Here we review how state-of-the-art machine learning models are enhancing gRNA design for CRISPR systems, highlight strategies for interpreting model predictions, and discuss new developments in off-target prediction and safety assessment. We emphasize breakthroughs from top-tier journals that underscore an interdisciplinary convergence of AI and genome editing to enable more efficient, specific, and clinically viable CRISPR applications.</summary>
+    <category term="q-bio.QM" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-08-26T13:34:15Z</published>
+    <arxiv:comment>29 pages, 5 figures, 2 tables, 42 cited references</arxiv:comment>
+    <arxiv:primary_category term="q-bio.QM"/>
+    <author>
+      <name>Alireza Abbaszadeh</name>
+    </author>
+    <author>
+      <name>Armita Shahlai</name>
+    </author>
+  </entry>
+</feed>

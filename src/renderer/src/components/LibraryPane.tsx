@@ -22,6 +22,7 @@ import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { missingDetails } from "../../../shared/references";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
+import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import { bridgeFrom, type LibraryBridge, type LibraryView } from "../libraryBridges";
 import {
@@ -36,7 +37,9 @@ import {
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
 import { useAppStore } from "../store";
+import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
+import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
@@ -72,6 +75,7 @@ export function LibraryPane() {
   const filter = useAppStore((state) => state.libraryFilter);
   const tags = useAppStore((state) => state.tags);
   const tagFilter = useAppStore(useShallow((state) => state.tagFilter));
+  const findingSources = useFindSources((state) => state.open);
   const [search, setSearch] = useState("");
   /** The year, format and status filters' choices (see `LibraryFilterBar`). */
   const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
@@ -211,15 +215,10 @@ export function LibraryPane() {
               }}
               className={`${inputClass} mt-0 min-w-32 flex-1`}
             />
-            <button
-              type="button"
-              className={buttonStyle("secondary")}
-              onClick={() => void useAppStore.getState().pickDocuments()}
-            >
-              {t("documents.add")}
-            </button>
+            <AddDocumentsMenu />
             <LibraryMoreMenu />
           </div>
+          {findingSources && <FindSourcesPanel />}
           {/* The name takes the whole width and wraps by word, two lines at most (#213); the actions sit below it, never beside. */}
           <div className="mb-2">
             <h1
