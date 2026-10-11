@@ -37,6 +37,9 @@ interface RecordRow {
 }
 
 const SOURCES: readonly ReferenceSource[] = ["file", "lookup", "user"];
+
+export const isReferenceSource = (value: unknown): value is ReferenceSource =>
+  SOURCES.some((source) => source === value);
 const FIELDS = new Set<string>(Object.keys(emptyReferenceFields()));
 
 export const isReferenceField = (value: unknown): value is ReferenceField =>
@@ -66,8 +69,8 @@ function parseStored(json: string): StoredFields {
   const stored: StoredFields = {};
   for (const [field, entry] of Object.entries(parsed)) {
     if (!isReferenceField(field) || !isRecord(entry)) continue;
-    const source = SOURCES.find((each) => each === entry.source);
-    if (source && isFieldValue(field, entry.value)) stored[field] = { value: entry.value, source };
+    const { source, value } = entry;
+    if (isReferenceSource(source) && isFieldValue(field, value)) stored[field] = { value, source };
   }
   return stored;
 }
