@@ -10,6 +10,7 @@ import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { OrganizationSettings } from "./OrganizationSettings";
+import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { ChatGptPlanSettings } from "./providers/ChatGptPlanSettings";
 import { ChatModelSettings } from "./providers/ChatModelSettings";
@@ -152,6 +153,7 @@ function PageContent({ page }: { page: SettingsPage }) {
         <Page>
           <LanguageSettings />
           <SuggestionSettings />
+          <OutputLocationSettings />
           <DataFolderSettings />
           <AboutSettings />
         </Page>
