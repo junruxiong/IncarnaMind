@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
-import { ComposerDockContext } from "../editor/mindContext";
+import { ComposerDockContext, CountSlotContext } from "../editor/mindContext";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ExportDialog } from "./ExportDialog";
@@ -25,6 +25,7 @@ export function MindPane() {
   const isExample = useIsExample(mind?.id);
   /** The Mind whose export dialog is open: switching to another Mind closes it. */
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [countSlot, setCountSlot] = useState<HTMLElement | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const gutter = useScrollbarWidth(scroller);
@@ -67,10 +68,13 @@ export function MindPane() {
                   <div className="mind-measure">
                     {isExample && <ExampleBanner />}
                     <MindTitle mind={mind} />
+                    <div ref={setCountSlot} data-testid="mind-count-slot" />
                     {/* The example works without a chat model: it says so in its Answer instead. */}
                     {!isExample && <ChatReadinessNotice />}
                     <ComposerDockContext.Provider value={dock}>
-                      <MindEditor mindId={mind.id} />
+                      <CountSlotContext.Provider value={countSlot}>
+                        <MindEditor mindId={mind.id} />
+                      </CountSlotContext.Provider>
                     </ComposerDockContext.Provider>
                   </div>
                 </article>
