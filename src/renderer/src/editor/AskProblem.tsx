@@ -1,12 +1,13 @@
 import type { AskBlock } from "../answers";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
+import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
 import { useT } from "../i18n";
-import { useAppStore } from "../store";
 
 /**
  * Why a Question couldn't be asked, or an Answer written again: one line,
- * where it was asked, with the one thing that fixes it. For a Question that
+ * where it was asked, with the one thing that fixes it (in local mode, a
+ * Question to a model that isn't on this computer, refused before anything
+ * was sent: a local model, or local mode off). For a Question that
  * forces a Skill that is off or gone, asking without it, where that can be
  * done; an Answer whose Edits ask first shows its own notice instead.
  */
@@ -23,20 +24,15 @@ export function AskProblem({
   onAskWithoutSkill?: () => void;
 }) {
   const t = useT();
-  const openSettings = useAppStore((state) => state.openSettings);
   if (problem.kind === "not-ready") {
     return (
-      <ProblemLine
-        role="status"
+      <ReadinessLine
+        readiness={problem.readiness}
         testId={testIds.notReady}
-        className={className}
-        action={{
-          label: t("question.setUp"),
-          onClick: () => openSettings(settingsPageFor(problem.readiness)),
-        }}
-      >
-        <ReadinessExplanation readiness={problem.readiness} inLine />
-      </ProblemLine>
+        {...(className && { className })}
+        setUpLabel={t("question.setUp")}
+        refused
+      />
     );
   }
   if (problem.kind === "skill-unavailable") {

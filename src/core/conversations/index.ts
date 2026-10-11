@@ -131,6 +131,7 @@ const ERROR_KINDS: Record<ProviderErrorKind, true> = {
   network: true,
   provider: true,
   "consent-declined": true,
+  "local-mode": true,
   "not-signed-in": true,
   "plan-limit": true,
   blocked: true,
