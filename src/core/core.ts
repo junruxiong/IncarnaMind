@@ -697,7 +697,7 @@ export function createCore(adapters: CoreAdapters): Core {
     sends: FIND_SOURCES_SENDS,
     services: async () => [],
   });
-  void sources.dropPurged();
+  sources.dropPurged().catch((error: unknown) => console.error(error));
   /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
   const searchDocuments = (
     query: string,
@@ -1658,7 +1658,7 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await webPages.dropPurged();
+      await Promise.all([webPages.dropPurged(), sources.dropPurged()]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),

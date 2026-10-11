@@ -590,31 +590,32 @@ describe("Find sources: adding", () => {
     expect(await core.listDocuments()).toEqual([]);
   });
 
-  test("a found paper deleted permanently has its copy removed at the next start, once", async () => {
-    const { core, dataDir, services } = await setUp();
+  test("a found paper or web page deleted permanently has its copy removed at once", async () => {
+    const { core, dataDir } = await setUp();
     answerConsent(core);
     const result = found(await core.findSources({ query: "CRISPR off-target detection" }));
-    const { document } = await add(core, work(result.works, /^Improving the sensitivity/).key);
-    const path = document?.path ?? "";
-    await core.deleteDocument(document?.id ?? "");
-    await core.deletePermanently([{ kind: "document", id: document?.id ?? "" }]);
+    const { document: paper } = await add(
+      core,
+      work(result.works, /^Improving the sensitivity/).key,
+    );
+    const { document: page } = await add(core, work(result.works, /^CHOPOFF/).key);
+    const ids = [paper?.id ?? "", page?.id ?? ""];
     expect(await readdir(join(dataDir, "Sources"))).toHaveLength(1);
-    core.close();
+    expect(await readdir(join(dataDir, "Web pages"))).toHaveLength(1);
 
-    const again = startCore(dataDir, { sourceProviders: services.providers });
-    await expect.poll(() => readdir(join(dataDir, "Sources"))).toEqual([]);
-    await expect
-      .poll(
-        () =>
-          queryDatabase<{ deleted_at: string | null }>(
-            dataDir,
-            "SELECT deleted_at FROM found_sources WHERE document_id = ?",
-            [document?.id ?? ""],
-          )[0]?.deleted_at,
-      )
-      .not.toBeNull();
-    expect(path.startsWith(await realpath(dataDir))).toBe(true);
-    again.close();
+    for (const id of ids) await core.deleteDocument(id);
+    await core.deletePermanently(ids.map((id) => ({ kind: "document" as const, id })));
+
+    expect(await readdir(join(dataDir, "Sources"))).toEqual([]);
+    expect(await readdir(join(dataDir, "Web pages"))).toEqual([]);
+    // Their rows go too, so nothing is removed again at the next start.
+    expect(
+      queryDatabase<{ deleted_at: string | null }>(
+        dataDir,
+        "SELECT deleted_at FROM found_sources WHERE document_id IN (?, ?)",
+        ids,
+      ).map((row) => row.deleted_at),
+    ).toEqual([expect.any(String), expect.any(String)]);
   });
 
   test("a work not found this session can't be added: search again", async () => {

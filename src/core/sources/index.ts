@@ -545,18 +545,19 @@ export function createSources(options: SourcesOptions) {
       // Documents keep the path with links resolved (on macOS, /private/var for /var).
       const folders = [options.folder, await realpath(options.folder).catch(() => options.folder)];
       await Promise.all(
-        files
-          .filter((file) => folders.some((folder) => isInside(folder, file.path)))
-          .map(async (file) => {
-            try {
+        files.map(async (file) => {
+          try {
+            // A web page's snapshot is removed with the other web pages'.
+            if (folders.some((folder) => isInside(folder, file.path))) {
               await rm(file.path, { force: true });
-              // The core may have closed meanwhile: the row is forgotten at the next start.
-              if (!options.signal.aborted) forgetFoundFile(db, file.id, now());
-            } catch (error) {
-              // Tried again at the next start.
-              options.reportError(error);
             }
-          }),
+            // The core may have closed meanwhile: the row is forgotten at the next start.
+            if (!options.signal.aborted) forgetFoundFile(db, file.id, now());
+          } catch (error) {
+            // Tried again at the next start.
+            options.reportError(error);
+          }
+        }),
       );
     },
   };
