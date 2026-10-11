@@ -9,7 +9,7 @@ The evidence behind [ADR-0016](0016-citation-styles-hayagriva-in-wasm.md). The q
 - **Speed, on one machine** (Apple M2 Max, Node 26.11.1, other work running): formatting the 30 references (34 citations and the bibliography) takes 38–132 ms cold in a new process, 27 ms warm for APA, 3–6 ms for the numeric and GB/T styles, and 69 ms for Chicago notes, the slowest style. Like for like, that is 1.4 to 2.1 times faster than citeproc-js cold, and 1.1 to 2.9 times faster warm. At 300 references APA takes 0.34 s and Chicago notes 0.75 s, so #289 should format in a worker, not on every keystroke.
 - **Against citeproc-js as Zotero ships it,** across 11 styles: 338 of 374 citations (90%) and 269 of 330 bibliography entries (82%) are identical, with 7 more that differ only in spaces. Every difference is listed below. Fifteen kinds of difference account for all of them, and most are Hayagriva bugs that can be fixed upstream. The released 0.10.1 drops the authors in Vancouver. Its `main` branch, pinned here, fixes that.
 - **Licences:** 73 crates in the build, 58 of them linked into the wasm. All are permissive (MIT, Apache-2.0, Unicode-3.0, BSL-1.0, Unlicense, 0BSD/CC0). Nothing is copyleft. The CSL styles and locales are CC BY-SA 3.0. Shipped unmodified next to our code, they form a "Collection" under the licence, so share-alike covers the style files and not IncarnaMind's code.
-- **Recommendation: (A) Hayagriva in wasm,** behind an interface of our own. Bugs get fixed upstream. A few gaps are left for the binding to bridge in #289, none of them built yet: no italics on Chinese text (the comparison above still shows them), English entries in GB/T styles rendered in English, and Zotero's rich text. See ADR-0016.
+- **Recommendation: (A) Hayagriva in wasm,** behind an interface of our own. Accepted on 2026-10-11 as ADR-0016. Bugs get fixed upstream. A few gaps are left for the binding to bridge in #289, none of them built yet: no italics on Chinese text (the comparison above still shows them), English entries in GB/T styles rendered in English, and Zotero's rich text. See ADR-0016.
 
 ## What was built
 
@@ -118,7 +118,7 @@ Run by `harness/side-checks.mjs`. The output is in `results/side-checks.txt`.
 |---|---|---|---|
 | `cargo build`, opt-level s, LTO (before wasm-bindgen) | 2,759,305 | 735,058 | 548,864 |
 | After wasm-bindgen | 2,631,816 | 741,961 | 541,336 |
-| **After `wasm-opt -Oz` (proposed)** | **2,485,275** | **789,410** | **573,638** |
+| **After `wasm-opt -Oz` (recommended)** | **2,485,275** | **789,410** | **573,638** |
 | opt-level 3 and `wasm-opt -O3` (faster, see below) | 2,559,813 | 844,940 | 621,010 |
 | Hayagriva 0.10.1, `-Oz` | 2,482,013 | 788,128 | 579,247 |
 | JavaScript glue (`--target web`) | 11,676 | 3,056 | |
@@ -278,7 +278,7 @@ Hayagriva is Typst's bibliography engine, so it is maintained as long as Typst i
 ## What is left uncertain
 
 - **citeproc-js as a stand-in for Zotero.** The engine code and its options are Zotero's, but its conversion of items to CSL JSON and its word-processor plugins were not exercised, and the app was not run.
-- **Which side is right on D6a** (a space before 等 in GB/T author-date citations) needs a Chinese reader with the standard. D5 and D14 are judgement calls too.
+- **Open: which side is right on D6a** (a space before 等 in GB/T author-date citations). A Chinese reader will check it against the text of GB/T 7714, and #289's golden tests follow the answer. D5 and D14 are judgement calls too.
 - **Upstream timing.** Fixes for D1, D2, D4, D8, D9, D11, D12, D15 and S1 have to be written (by us, in Rust) and accepted, and then released or pinned. How fast Typst reviews them is unknown.
 - **Rich text from Zotero (S3)** needs a design: convert in the binding, or parse upstream.
 - **The build.** The app's build is npm only today. Either CI installs Rust and builds the wasm, or a built `.wasm` is committed with a script that reproduces it byte for byte. #289 decides.
