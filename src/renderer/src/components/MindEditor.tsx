@@ -35,6 +35,8 @@ import { SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { Suggestions } from "../editor/suggestions";
+import { TableMenu } from "../editor/TableMenu";
+import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
 import { useT } from "../i18n";
@@ -147,7 +149,7 @@ const citationView = ReactNodeViewRenderer(CitationView, {
 /**
  * Notes (see `noteExtensions`), Questions and Answers in the Mind's Yjs
  * document, with the slash menu, the "@" picker of a Question's Search scope,
- * the drag handle, the formatting menu, smart typography, the LaTeX field,
+ * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
  * suggestions as the User writes (see `Suggestions`),
  * the margin column of Citation checks, and the composer at the column's
  * foot, where Questions are asked (drawn in the dock, `ComposerDockContext`).
@@ -252,6 +254,7 @@ function MindEditorView({
         ScopePicker,
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
+        TableKeys,
         NoteKeymap,
         QuestionCommands.configure({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
@@ -334,6 +337,7 @@ function MindEditorView({
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
+        {!readOnly && <TableMenu editor={editor} />}
         <FootnoteArea editor={editor} citationView={citationView} />
       </div>
       {dock &&

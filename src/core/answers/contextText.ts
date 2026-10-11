@@ -4,10 +4,11 @@
  * (../mindText); this only writes them.
  *
  * It shows bold, italic, strikethrough, inline code and links, math as `$…$`
- * and `$$…$$`, Citations as plain references like "[Attention Is All You
- * Need, p. 3]", not as markers the model could reuse, and the User's footnotes
- * where their markers are, as Pandoc's inline notes: "^[…]". Underline and
- * highlight add nothing, and an image adds nothing (the model can't see it).
+ * and `$$…$$`, tables as pipe tables, Citations as plain references like
+ * "[Attention Is All You Need, p. 3]", not as markers the model could reuse,
+ * and the User's footnotes where their markers are, as Pandoc's inline notes:
+ * "^[…]". Underline and highlight add nothing, and an image adds nothing (the
+ * model can't see it).
  */
 
 import type * as Y from "yjs";
@@ -20,6 +21,8 @@ import {
   type ReadOptions,
   readBlock,
   readBlocks,
+  type TableCell,
+  tableLayout,
 } from "../mindText";
 
 /**
@@ -87,10 +90,38 @@ function blockMarkdown(block: Block): string {
         .map((line) => (line ? `> ${line}` : ">"))
         .join("\n");
     case "table":
-      return blocksMarkdown(block.rows.flatMap((row) => row.flatMap((cell) => cell.content)));
+      return tableMarkdown(block.rows);
     case "image":
       return "";
   }
+}
+
+/**
+ * A table as a pipe table, as models write them: its first row as the heading
+ * row, a cell's lines joined by "<br>", and a cell over several columns or
+ * rows in the first of them.
+ */
+function tableMarkdown(rows: readonly TableCell[][]): string {
+  const layout = tableLayout(rows);
+  const lines = layout.rows.map((row) => {
+    const cells: string[] = [];
+    for (const { cell, continued } of row) {
+      const text = cell && !continued ? blocksMarkdown(cell.content) : "";
+      // A backslash before a pipe is escaped first, or it would escape the pipe's own escape.
+      cells.push(
+        text
+          .replace(/\\(?=\|)/g, "\\\\")
+          .replace(/\|/g, "\\|")
+          .replace(/\n+/g, "<br>"),
+      );
+      for (let more = 1; more < (cell?.colspan ?? 1); more++) cells.push("");
+    }
+    while (cells.length < layout.columns) cells.push("");
+    return `| ${cells.join(" | ")} |`;
+  });
+  if (lines.length === 0) return "";
+  lines.splice(1, 0, `|${" --- |".repeat(layout.columns)}`);
+  return lines.join("\n");
 }
 
 function listMarkdown(list: Extract<Block, { kind: "list" }>): string {

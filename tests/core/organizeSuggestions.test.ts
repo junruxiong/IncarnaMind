@@ -350,10 +350,16 @@ describe("Organize suggests a Folder and waits for the User", () => {
         suggested: false,
       }),
     );
-    expect((await core.getLibrary()).assignments).toEqual(filed);
+    // The snapshot lists assignments in no set order.
+    const allFiled = async () => {
+      const { assignments } = await core.getLibrary();
+      expect(assignments).toHaveLength(filed.length);
+      expect(assignments).toEqual(expect.arrayContaining(filed));
+    };
+    await allFiled();
     const last = await batches.until(batchId, (batch) => !batch.adding && batch.sorted === 3);
     expect(last).toMatchObject({ groupId: thesis.id, read: 3, suggested: [] });
-    expect((await core.getLibrary()).assignments).toEqual(filed);
+    await allFiled();
     expect(assigned.every((each) => each.groupId === thesis.id && !each.suggested)).toBe(true);
     const tagsOf = Object.fromEntries(
       (await core.listDocuments()).map((each) => [each.name, each.tags.map((tag) => tag.tagId)]),
