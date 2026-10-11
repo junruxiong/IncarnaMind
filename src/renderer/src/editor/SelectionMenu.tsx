@@ -35,6 +35,21 @@ export interface SelectionAction {
   id: string;
   label: MessageKey;
   icon: ReactNode;
+  /** The keys that do it too, as the menu shows them. */
+  keys?: string;
+  /** Whether it applies to the selection now; it isn't shown when it doesn't. */
+  available?(editor: Editor): boolean;
+  /** Choices it asks for first (Translate… into which language), in a menu beside it. */
+  choices?: readonly SelectionChoice[];
+  run(editor: Editor): void;
+}
+
+/** One choice of an AI action that asks for one. */
+export interface SelectionChoice {
+  /** A stable name; tests find the choice by it (`selection-choice-<id>`). */
+  id: string;
+  /** In words that need no translating (a language in its own name). */
+  label: string;
   run(editor: Editor): void;
 }
 
@@ -150,6 +165,14 @@ export function SelectionMenu({
   const pressed = useRef(false);
   const [turning, setTurning] = useState<"mouse" | "keyboard" | null>(null);
   const [linking, setLinking] = useState(false);
+  /** The AI action whose choices are open, and how it was opened. */
+  const [choosing, setChoosing] = useState<{
+    action: SelectionAction;
+    anchor: HTMLElement;
+    focus: boolean;
+  } | null>(null);
+  const actions = useRef(ai);
+  actions.current = ai;
 
   const state = useEditorState({
     editor,
@@ -167,8 +190,12 @@ export function SelectionMenu({
       oneLine: inOneTextblock(current) && canTurnInto(current),
       // A footnote goes after the selection, in text: not in a Question or code.
       footnote: footnotePlace(current.state) !== null,
+      ai: actions.current
+        .filter((action) => action.available?.(current) ?? true)
+        .map((action) => action.id),
     }),
   });
+  const shownAi = ai.filter((action) => state.ai.includes(action.id));
 
   const shouldShow = useCallback<NonNullable<BubbleMenuProps["shouldShow"]>>(
     ({ editor: current, element, view }) =>
@@ -225,6 +252,9 @@ export function SelectionMenu({
   const options = useRef({
     placement: "bottom-start" as const,
     offset: 8,
+    // With the AI section the menu is tall: where it fits neither above nor below the
+    // selection, it slides into the Mind's view rather than lose its top row (the offset comes after).
+    shift: { crossAxis: true, padding: 8 },
     onShow: () => {
       shown.current = true;
     },
@@ -232,6 +262,7 @@ export function SelectionMenu({
       shown.current = false;
       setTurning(null);
       setLinking(false);
+      setChoosing(null);
     },
   }).current;
 
@@ -262,6 +293,19 @@ export function SelectionMenu({
     if (event.key === "ArrowRight" && document.activeElement === turnRow.current) {
       event.preventDefault();
       setTurning("keyboard");
+      return;
+    }
+    const withChoices = shownAi.find(
+      (action) =>
+        action.choices && document.activeElement?.getAttribute("data-action") === action.id,
+    );
+    if (
+      event.key === "ArrowRight" &&
+      withChoices &&
+      document.activeElement instanceof HTMLElement
+    ) {
+      event.preventDefault();
+      setChoosing({ action: withChoices, anchor: document.activeElement, focus: true });
       return;
     }
     const step =
@@ -436,7 +480,7 @@ export function SelectionMenu({
             <span aria-hidden="true">T×</span>
           </button>
         </div>
-        {ai.length > 0 && (
+        {shownAi.length > 0 && (
           <>
             <hr className="selection-rule" />
             {/* biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold. */}
@@ -444,18 +488,35 @@ export function SelectionMenu({
               <p aria-hidden="true" className="selection-section">
                 {t("editor.selection.ai")}
               </p>
-              {ai.map((action) => (
+              {shownAi.map((action) => (
                 <button
                   key={action.id}
                   type="button"
                   role="menuitem"
+                  data-action={action.id}
                   data-testid={`selection-action-${action.id}`}
+                  aria-haspopup={action.choices ? "menu" : undefined}
+                  aria-expanded={action.choices ? choosing?.action.id === action.id : undefined}
+                  aria-keyshortcuts={action.keys}
                   onMouseDown={keepSelection}
-                  onClick={() => act(() => action.run(editor))}
+                  onClick={(event) => {
+                    if (!action.choices) {
+                      act(() => action.run(editor));
+                      return;
+                    }
+                    const anchor = event.currentTarget;
+                    setChoosing((open) =>
+                      open?.action.id === action.id
+                        ? null
+                        : { action, anchor, focus: event.detail === 0 },
+                    );
+                  }}
                   className="editor-menu-item"
                 >
                   <span className="editor-menu-icon">{action.icon}</span>
-                  <span className="truncate">{t(action.label)}</span>
+                  <span className="flex-1 truncate">{t(action.label)}</span>
+                  {action.keys && <span className="editor-menu-shortcut">{action.keys}</span>}
+                  {action.choices && <ChevronIcon className="size-4 text-ink-meta" />}
                 </button>
               ))}
             </div>
@@ -469,6 +530,24 @@ export function SelectionMenu({
           focus={turning === "keyboard"}
           onChoose={turnInto}
           onClose={closeTurning}
+        />
+      )}
+      {choosing?.action.choices && (
+        <ChoiceMenu
+          label={t(choosing.action.label)}
+          choices={choosing.action.choices}
+          anchor={choosing.anchor}
+          focus={choosing.focus}
+          testId={`selection-choices-${choosing.action.id}`}
+          onChoose={(choice) => {
+            setChoosing(null);
+            act(() => choice.run(editor));
+          }}
+          onClose={(refocus) => {
+            const anchor = choosing.anchor;
+            setChoosing(null);
+            if (refocus) anchor.focus();
+          }}
         />
       )}
       {linking && linkButton.current && (
@@ -596,6 +675,86 @@ function TurnIntoMenu({
         >
           <span className="editor-menu-icon">{index === current ? "✓" : ""}</span>
           <span className="truncate">{t(kind.label)}</span>
+        </button>
+      ))}
+    </Popover>
+  );
+}
+
+/** The choices of an AI action that asks for one (Translate… into which language), beside it. */
+function ChoiceMenu({
+  label,
+  choices,
+  anchor,
+  focus,
+  testId,
+  onChoose,
+  onClose,
+}: {
+  label: string;
+  choices: readonly SelectionChoice[];
+  anchor: HTMLElement;
+  focus: boolean;
+  testId: string;
+  onChoose(choice: SelectionChoice): void;
+  onClose(refocus: boolean): void;
+}) {
+  const items = useRef<(HTMLButtonElement | null)[]>([]);
+  const first = useRef<HTMLButtonElement>(null);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (isComposing(event)) return;
+    const all = items.current.filter((each): each is HTMLButtonElement => each !== null);
+    const index = all.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Escape" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose(true);
+      return;
+    }
+    const next =
+      event.key === "ArrowDown"
+        ? all[(index + 1) % all.length]
+        : event.key === "ArrowUp"
+          ? all[(index - 1 + all.length) % all.length]
+          : event.key === "Home"
+            ? all[0]
+            : event.key === "End"
+              ? all.at(-1)
+              : undefined;
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  };
+
+  return (
+    <Popover
+      anchor={anchor}
+      placement="right-start"
+      initialFocus={focus ? first : undefined}
+      role="menu"
+      aria-label={label}
+      data-testid={testId}
+      onDismiss={() => onClose(false)}
+      onKeyDown={onKeyDown}
+      className="editor-menu w-[200px]"
+    >
+      {choices.map((choice, index) => (
+        <button
+          key={choice.id}
+          ref={(element) => {
+            items.current[index] = element;
+            if (index === 0) first.current = element;
+          }}
+          type="button"
+          role="menuitem"
+          data-testid={`selection-choice-${choice.id}`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onChoose(choice)}
+          className="editor-menu-item"
+        >
+          <span className="editor-menu-icon" />
+          <span className="truncate">{choice.label}</span>
         </button>
       ))}
     </Popover>

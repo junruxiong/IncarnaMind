@@ -47,8 +47,12 @@ _Avoid_: chat (except in "New chat"), thread, session
 ### Documents
 
 **Document**:
-A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on. The file stays where the User keeps it; IncarnaMind keeps the text it read from it. The same file in two places is two Documents.
+A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on, or a Web page. A file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Web page's snapshot is kept in IncarnaMind's data folder. The same file in two places is two Documents.
 _Avoid_: file, doc, source
+
+**Web page**:
+A Document saved from a web address: a snapshot of the page's readable text, fetched from the User's computer when it is added, and again only when the User asks. Its Citations point at the snapshot, never at the live page, so they can always be checked.
+_Avoid_: link, bookmark, clipping
 
 **Missing Document**:
 A Document whose file was removed while its folder is still there. New searches leave it out; its text, and the Citations that quote it, remain.
@@ -83,7 +87,7 @@ What a citation style needs to cite a Document: its type, title, authors, date, 
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
 **Location**:
-Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), or a range of lines in plain text.
+Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, or a range of lines in plain text.
 _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
@@ -142,7 +146,7 @@ _Avoid_: default Skill, system Skill
 ### Changes
 
 **Proposal**:
-A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, and it is out of date once the text it changes has changed.
+A change to a Mind, made by the AI or brought in from another person's Word file, that waits for the User to accept or reject it. Until it is accepted it does not count as part of the Mind, and it is out of date once the text it changes has changed. Each Proposal is one change in one place (the words it removes and those it adds there, or a whole Block), accepted or rejected on its own; one request, such as an Edit with AI, can make several. The interface calls them changes: "3 changes from the assistant".
 _Avoid_: suggestion, edit, draft, diff
 
 **Checkpoint**:

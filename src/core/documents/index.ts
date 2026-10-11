@@ -9,14 +9,15 @@
  * its file as read for processing. Passages and page text belong to a
  * version. When the file changes, the new version is processed and its
  * Passages replace the old ones in search; the old version's page text stays
- * for as long as a Citation quotes it (`collectOldVersions`), so the
- * Citation is still checked against the text it quoted. A new version that
- * can't be processed replaces nothing: the last good one stays (`record`).
+ * for as long as a Citation quotes it, or a feature retains it
+ * (./retention), so the Citation is still checked against the text it
+ * quoted (`collectOldVersions`). A new version that can't be processed
+ * replaces nothing: the last good one stays (`record`).
  *
  * A Document removed from the index is deleted with its Passages and text,
  * except when its Linked folder is unlinked: then the Units the Citations in
- * Minds point to stay, the only text a deleted Document keeps
- * (`keptCitationTexts`), so those Citations can still be checked.
+ * Minds point to, and those retained, stay, the only text a deleted Document
+ * keeps (`keptCitationTexts`), so those Citations can still be checked.
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
@@ -82,6 +83,8 @@ import {
 import { detectLanguage, languageList, type TextLanguage } from "./textLanguage";
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
+import type { SnapshotFile } from "./web";
+import { webPageInfo } from "./web/store";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -335,8 +338,9 @@ export interface DocumentsOptions {
   /** Asks iCloud Drive to download a file an ".icloud" stub stands for. */
   downloadStub?: (path: string) => Promise<void>;
   /**
-   * The Units the Citations in Minds point to in these Documents: kept when
-   * the Documents leave the index with their Linked folder. None if not given.
+   * The Units the Citations in Minds point to in these Documents, and those
+   * features retain: kept when the Documents leave the index with their
+   * Linked folder. None if not given.
    */
   citedUnits?: (documentIds: readonly string[]) => CitedUnits[];
   linkedFolders: {
@@ -426,6 +430,7 @@ export function createDocuments(options: DocumentsOptions) {
           : null,
       creationDate: row.creation_date,
       title: row.title,
+      web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -901,6 +906,11 @@ export function createDocuments(options: DocumentsOptions) {
       );
       db.run(
         `UPDATE document_tags SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
+        `UPDATE web_pages SET deleted_at = ?, updated_at = ?
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
         [at, at, list],
       );
@@ -1577,6 +1587,40 @@ export function createDocuments(options: DocumentsOptions) {
       return { documents, skipped };
     },
 
+    /**
+     * Adds a web page's snapshot, in the data folder, as a new Document
+     * named `name`, and queues it; `record` runs in the same transaction.
+     */
+    addSnapshot(id: string, name: string, file: SnapshotFile, record: () => void): Document {
+      const at = now();
+      db.transaction(() => {
+        db.run(
+          `INSERT INTO documents (id, content_hash, name, kind, size, status, path,
+             linked_folder_id, folder_id, file_status, file_mtime_ms, created_at, updated_at)
+           VALUES (?, ?, ?, 'web', ?, 'queued', ?, NULL, NULL, 'available', ?, ?, ?)`,
+          [
+            id,
+            file.contentHash,
+            parseName(name.slice(0, MAX_NAME_LENGTH)),
+            file.size,
+            file.path,
+            file.mtimeMs,
+            at,
+            at,
+          ],
+        );
+        record();
+      });
+      announce(id);
+      process(id);
+      const row = find(id);
+      if (!row) throw new NotFoundError("There is no such Document.");
+      return toDocument(row);
+    },
+
+    /** Looks at a file again now, as when it is opened: a new version is processed. */
+    check: (path: string) => library.check([path]),
+
     list,
     ids,
 
@@ -1629,7 +1673,7 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Brings back Documents the User deleted (the caller checks they may), with the
-     * Passages, text and Tags deleted with them, without reading their files. Run in the
+     * Passages, text, Tags and web page versions deleted with them, without reading their files. Run in the
      * caller's transaction, then `restored`.
      */
     restore(ids: readonly string[]): void {
@@ -1649,6 +1693,10 @@ export function createDocuments(options: DocumentsOptions) {
         );
         db.run(
           "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
+          deleted,
+        );
+        db.run(
+          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
           deleted,
         );
         db.run(
@@ -1780,7 +1828,8 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * Garbage-collects old versions' text: the pages (and replaced Passages)
      * of each version that isn't a live Document's current one, unless
-     * `isCited` says a Citation quotes it. Returns how many versions went.
+     * `isCited` says a Citation quotes it or a feature retains it. Returns
+     * how many versions went.
      */
     collectOldVersions(isCited: (documentId: string, contentHash: string) => boolean): number {
       const versions = db.all<{ document_id: string; content_hash: string | null }>(
@@ -1814,8 +1863,9 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Lets go of the text kept of unlinked Documents (`keptCitationTexts`):
-     * each version's, unless `isCited` says a Citation still quotes it. It is
-     * deleted as their other text was. Returns how many versions went.
+     * each version's, unless `isCited` says a Citation still quotes it or a
+     * feature retains it. It is deleted as their other text was. Returns how
+     * many versions went.
      */
     releaseKeptText(isCited: (documentId: string, contentHash: string) => boolean): number {
       const at = now();

@@ -15,6 +15,7 @@ import {
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
 import { Footnote } from "./footnoteSchema";
+import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
@@ -55,9 +56,10 @@ export interface NoteSchemaOptions {
  * an "include in Question context" flag. Questions and Answers, top-level
  * only. Citations, inline in Answers and in whatever they are copied into,
  * table cells included. Footnotes the User writes, inline, each holding its
- * text. Every Block and every footnote has a UUID. The editor adds its
- * interface on top (collaboration, menus, the drag handle, smart typography);
- * tests use this alone.
+ * text. Proposals the AI made, waiting for the User (see `proposalSchema`).
+ * Every Block and every footnote has a UUID. The editor adds its interface on
+ * top (collaboration, menus, the drag handle, smart typography); tests use
+ * this alone.
  */
 export function noteExtensions({
   onEditMath,
@@ -101,6 +103,10 @@ export function noteExtensions({
     Citation.configure({ view: citationView ?? null }),
     Footnote.configure({ view: footnoteView ?? null }),
     QuestionContextFlag,
+    // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
+    ProposalInsert,
+    ProposalDelete,
+    ProposalAttributes,
     UniqueID.configure({
       attributeName: BLOCK_ID_ATTRIBUTE,
       types: [...BLOCK_TYPES, FOOTNOTE_NODE],

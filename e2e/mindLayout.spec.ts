@@ -14,6 +14,7 @@ import {
   newMind,
   removeDataFolder,
   setGroupBeside,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -48,8 +49,7 @@ test.afterEach(async () => {
  * beside the assistant docked on the right (#253), which takes 368px of it.
  */
 async function useMockupSize(app: ElectronApplication, window: Page) {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 900));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(1500);
+  await setWindowSize(app, window, 1600, 900);
   await window.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 

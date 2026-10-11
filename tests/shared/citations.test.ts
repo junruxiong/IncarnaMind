@@ -242,6 +242,21 @@ describe("A Citation's Location label (ADR-0011)", () => {
         "§ Start, comment",
         "§ 开头，批注",
       ],
+      [
+        { kind: "section", heading: "History", paragraphs: { from: 3, to: 3 } },
+        "§ History, ¶\u00a03",
+        "§ History，第 3 段",
+      ],
+      [
+        { kind: "section", heading: "唐代的茶", paragraphs: { from: 1, to: 2 } },
+        "§ 唐代的茶, ¶\u00a01–2",
+        "§ 唐代的茶，第 1–2 段",
+      ],
+      [
+        { kind: "section", heading: null, paragraphs: { from: 2, to: 2 } },
+        "§ Start, ¶\u00a02",
+        "§ 开头，第 2 段",
+      ],
       [{ kind: "lines", from: 120, to: 134 }, "lines 120–134", "第 120–134 行"],
     ];
     for (const [location, en, zh] of cases) {
@@ -299,6 +314,17 @@ describe("A Citation's Location label (ADR-0011)", () => {
       kind: "section",
       heading: null,
     });
+  });
+
+  test("a web page's stored Location keeps its paragraphs, and copies as text with them (#261)", () => {
+    const location = { kind: "section", heading: "History", paragraphs: { from: 2, to: 3 } };
+    expect(parseLocation(JSON.stringify(location))).toEqual(location);
+    expect(citationReference(at(location as CitationAttributes["location"], "Tea"))).toBe(
+      "[Tea, § History, ¶\u00a02–3]",
+    );
+    expect(
+      parseLocation({ kind: "section", heading: "History", paragraphs: { from: 3, to: 2 } }),
+    ).toEqual({ kind: "section", heading: "History" });
   });
 
   test("copies as text with its label, and a stored Location that isn't one falls back to the pages", () => {

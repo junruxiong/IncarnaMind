@@ -78,13 +78,20 @@ export interface LaunchOptions {
  * the menu bar and the Dock are off it), where a window opened 1024 wide folds
  * the Mind's margins away. macOS lets a window be wider than its screen, but
  * not taller, so each launch sets this size and checks the page got it, and
- * says so if a screen is too short for it.
+ * says so if a screen is too short for it. It is the page's size, the window's
+ * content: on Linux the window also holds the menu bar, above the page.
  *
  * It is wider than the app's default (1280): the assistant docked on the right
  * takes 368px (#253), and this leaves the card about the room a 1280px window
  * gave it before, so groups sit side by side and the Mind keeps its margins.
  */
 export const WINDOW_SIZE = { width: 1600, height: 660 };
+
+/**
+ * The key that, held with an arrow, moves the caret a word at a time, and with
+ * Shift too selects by word: Option on macOS, Ctrl on Windows and Linux.
+ */
+export const WORD_KEY = process.platform === "darwin" ? "Alt" : "Control";
 
 /**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
@@ -139,7 +146,7 @@ export async function launchApp(
   await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
     await app.evaluate(({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
+      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
     }, WINDOW_SIZE);
     await expect
       .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]), {
@@ -216,6 +223,31 @@ export async function turnOnEmbeddings(window: Page): Promise<void> {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.saveEmbeddingProvider({ kind: "built-in" });
   });
+}
+
+/**
+ * Keys are kept with the system's keyring. On Linux with none running, as on
+ * CI's Linux runner, the User first accepts storing them in plain text, once
+ * on this computer. With `form`, accepts it as the User does, in the notice a
+ * form that saves a key shows ("No keyring is running"); without, through the
+ * core's bridge, as that notice does. With a keyring there's nothing to accept.
+ */
+export async function acceptPlainTextKeys(window: Page, form?: Locator): Promise<void> {
+  const { protection, plainTextAccepted } = await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.getSecretStorage(),
+  );
+  if (protection !== "plain-text" || plainTextAccepted) return;
+  if (!form) {
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.acceptPlainTextSecretStorage();
+    });
+    return;
+  }
+  const notice = form.getByTestId("plain-text-secrets");
+  await notice.getByRole("checkbox").click();
+  // Accepted, the key can be saved, and the notice goes.
+  await expect(notice).toBeHidden();
 }
 
 /** The pages in Settings' list. */
@@ -511,7 +543,12 @@ export async function addDocuments(window: Page, paths: string[]): Promise<void>
   if (paths.length > listed) await expectReadyDocuments(window, paths.length);
 }
 
-/** Sizes the app's window, e.g. to its narrowest (900px wide, the minimum) or a wide one. */
+/**
+ * Sizes the app's page, e.g. to its narrowest (900px wide, the minimum) or a
+ * wide one, as `WINDOW_SIZE` is: its content, without Linux's menu bar. The
+ * screen may not have room for the height (see `WINDOW_SIZE`), so only the
+ * width is waited for.
+ */
 export async function setWindowSize(
   app: ElectronApplication,
   window: Page,
@@ -519,7 +556,8 @@ export async function setWindowSize(
   height: number,
 ): Promise<void> {
   await app.evaluate(
-    ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
+    ({ BrowserWindow }, size) =>
+      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
     { width, height },
   );
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
@@ -580,6 +618,29 @@ export async function widthOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
   if (!box) throw new Error("The element isn't visible.");
   return box.width;
+}
+
+/**
+ * Checks that the window's first group's tabs start at the card's left edge:
+ * flush with it on macOS, where the sidebar's button sits in the sidebar's
+ * header beside the traffic lights; on Windows and Linux just after that
+ * button, which starts the strip there (SidebarToggle), 8px in and 6px before
+ * the first tab (styles.css).
+ */
+export async function expectFirstTabAtCardStart(window: Page, firstTab: Locator): Promise<void> {
+  const card = await window.getByTestId("card").boundingBox();
+  const tab = await firstTab.boundingBox();
+  if (!card || !tab) throw new Error("The card or its first tab isn't visible.");
+  const toggle = window.getByTestId("tab-strip").first().getByTestId("sidebar-toggle");
+  if (process.platform === "darwin") {
+    await expect(toggle).toHaveCount(0);
+    expect(tab.x).toBeCloseTo(card.x, 0);
+    return;
+  }
+  const button = await toggle.boundingBox();
+  if (!button) throw new Error("The sidebar's button isn't at the start of the strip.");
+  expect(button.x - card.x).toBeCloseTo(8, 0);
+  expect(tab.x - (button.x + button.width)).toBeCloseTo(6, 0);
 }
 
 /**

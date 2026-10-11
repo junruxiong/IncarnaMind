@@ -6,12 +6,14 @@ import {
   confirmLink,
   createDataFolder,
   dismissChatSetup,
+  expectFirstTabAtCardStart,
   interceptOpenDialog,
   launchApp,
   linkedFolderRow,
   placeAssistant,
   previewLink,
   removeDataFolder,
+  setWindowSize,
   showSourceLocations,
   widthOf,
 } from "./app";
@@ -60,12 +62,7 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     [1440, 860],
     [1000, 700],
   ] as const) {
-    await app.evaluate(
-      ({ BrowserWindow }, size) =>
-        BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
-      { width, height: requested },
-    );
-    await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+    await setWindowSize(app, window, width, requested);
     // The screen may not have room for the height asked for: the card follows the page's.
     await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeGreaterThan(600);
     const height = await window.evaluate(() => globalThis.innerHeight);
@@ -86,13 +83,12 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     expect(style).toBe("10px");
 
     // The band is the card's first 36px, so it ends level with the sidebar header's rule at y 44,
-    // and the tabs sit inside it, the first flush with the card's left edge.
+    // and the tabs sit inside it, the first at the card's left edge.
     const header = await boxOf(window.getByTestId("sidebar-header"));
     const band = await boxOf(window.getByTestId("tab-strip"));
     expect(band).toMatchObject({ x: card.x, y: 8, width: card.width, height: 36 });
     expect(header.y + header.height).toBe(band.y + band.height);
-    const firstTab = await boxOf(window.getByTestId("mind-tab").first());
-    expect(firstTab.x).toBe(card.x);
+    await expectFirstTabAtCardStart(window, window.getByTestId("mind-tab").first());
 
     if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `shell-${width}.png`) });
 
@@ -145,7 +141,7 @@ test("the divider in the gap before the card is grabbed with the mouse and moved
   await app.close();
 });
 
-test("the + menu in the sidebar header offers New Mind, Add Documents… and Link a folder…, by mouse and by keyboard", async () => {
+test("the + menu in the sidebar header offers New Mind, New Folder…, Add Documents…, Add a web page… and Link a folder…, by mouse and by keyboard", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   const plus = window.getByTestId("plus-menu");
@@ -159,14 +155,20 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await expect(plus).toHaveAccessibleName("New or add");
   await expect(plus).toHaveAttribute("aria-haspopup", "menu");
 
-  // Opened by the mouse, its four actions are menu items, and the first has the focus.
+  // Opened by the mouse, its five actions are menu items, and the first has the focus.
   await window.mouse.move(button.x - 40, button.y + 14);
   await window.mouse.move(button.x + 14, button.y + 14, { steps: 6 });
   await window.mouse.down();
   await window.mouse.up();
   await expect(menu).toBeVisible();
   const items = menu.getByRole("menuitem");
-  await expect(items).toHaveText([/New Mind/, /New Folder…/, /Add Documents…/, /Link a folder…/]);
+  await expect(items).toHaveText([
+    /New Mind/,
+    /New Folder…/,
+    /Add Documents…/,
+    /Add a web page…/,
+    /Link a folder…/,
+  ]);
   await expect(items.first()).toBeFocused();
   await expect(plus).toHaveAttribute("aria-expanded", "true");
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-menu-en.png") });
@@ -175,7 +177,7 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await window.keyboard.press("ArrowDown");
   await expect(items.nth(1)).toBeFocused();
   await window.keyboard.press("End");
-  await expect(items.nth(3)).toBeFocused();
+  await expect(items.nth(4)).toBeFocused();
   await window.keyboard.press("ArrowDown");
   await expect(items.first()).toBeFocused();
   await window.keyboard.press("Escape");
@@ -212,7 +214,7 @@ test("the + menu in the sidebar header offers New Mind, Add Documents… and Lin
   await plus.focus();
   await window.keyboard.press("Enter");
   await expect(items.first()).toBeFocused();
-  const dialog = await previewLink(app, window, folder, items.nth(3));
+  const dialog = await previewLink(app, window, folder, items.nth(4));
   await confirmLink(dialog);
   await showSourceLocations(window);
   await expect(linkedFolderRow(window, "Library")).toHaveCount(1);
@@ -233,6 +235,7 @@ test("the + menu and the shell speak Chinese too", async () => {
     /新建 Mind/,
     /新建文件夹…/,
     /添加文档…/,
+    /添加网页…/,
     /添加同步文件夹…/,
   ]);
   if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, "shell-zh-menu.png") });

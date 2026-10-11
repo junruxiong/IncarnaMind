@@ -15,6 +15,7 @@ import {
   launchApp,
   pointAndClick,
   removeDataFolder,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -63,8 +64,7 @@ async function pointAt(window: Page, target: Locator): Promise<void> {
  * beside the assistant docked on the right (#253), which takes 368px of it.
  */
 async function atMockupSize(app: ElectronApplication, window: Page) {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 900));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(1500);
+  await setWindowSize(app, window, 1600, 900);
   await window.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -599,8 +599,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
 
   // A narrow window: the assistant goes to the bottom (#253), and the composer spans it there,
   // up to the Mind's column.
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(960, 640));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeLessThan(1000);
+  await setWindowSize(app, window, 960, 640);
   const assistant = window.getByTestId("assistant");
   await expect(assistant).toHaveAttribute("data-dock", "bottom");
   const card = await window.getByTestId("card").boundingBox();

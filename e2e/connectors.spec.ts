@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { startFakeRemote } from "../tests/helpers/remoteMcp";
 import {
+  acceptPlainTextKeys,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -37,6 +38,8 @@ test("a local Connector added in Settings starts and reaches ready, and turning 
   await form.getByLabel(/^Command/).fill(process.execPath);
   await form.getByLabel("Arguments, one per line").fill(TIDE_SERVER);
   await form.getByLabel(/^Environment variables/).fill("TIDE_TOKEN=smoke-secret");
+  // Its variables are kept with the keys: on Linux with no keyring, once the User accepts it.
+  await acceptPlainTextKeys(window, form);
   await form.getByRole("button", { name: "Add Connector" }).click();
 
   const connector = section.getByTestId("connector");
@@ -115,6 +118,9 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     expect(await urlsOpened(app)).toEqual([]);
     expect(fake.registrations).toEqual([]);
 
+    // The service's tokens are kept with the keys: on Linux with no keyring, the User has
+    // accepted that first (in a form that saves a key; the sign-in doesn't offer it yet, #342).
+    await acceptPlainTextKeys(window);
     // Signing in opens the authorization request and waits for the browser.
     await connector.getByTestId("connector-sign-in").click();
     await expect(connector).toHaveAttribute("data-state", "signing-in");
@@ -163,6 +169,7 @@ test("a whole command line pasted as the command is split into its arguments, an
   await form.getByLabel("Name", { exact: true }).fill("Tides");
   await form.getByLabel(/^Command/).fill("tide-runtime-not-installed");
   await form.getByLabel(/^Environment variables/).fill("TIDE_TOKEN=smoke-secret");
+  await acceptPlainTextKeys(window, form);
   await form.getByRole("button", { name: "Add Connector" }).click();
   const connector = section.getByTestId("connector");
   await expect(connector).toHaveAttribute("data-state", "error", { timeout: 30_000 });

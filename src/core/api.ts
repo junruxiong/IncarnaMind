@@ -90,8 +90,12 @@ export interface CreateMindInput {
  * - 3: footnotes the User writes (`FOOTNOTE_NODE`, with an `id`). Version 2
  *   content is version 3 content as it is: nothing is rewritten, and a Mind
  *   records 3 once this version writes to it.
+ * - 4: Proposals waiting for the User (#93): the `proposalInsert` and
+ *   `proposalDelete` marks on text, and the `proposal` attribute on Blocks and
+ *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 4
+ *   content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 3;
+export const CONTENT_SCHEMA_VERSION = 4;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -202,6 +206,62 @@ export const MIND_SETTINGS_FIELD = "settings";
 
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
+
+/**
+ * Proposals (CONTEXT.md): changes the AI made to a Mind that wait for the
+ * User to accept or reject them, stored in the Mind's Yjs document so they
+ * survive sync and reload (see `src/shared/proposals.ts`, which reads and
+ * resolves them). Each Proposal is one change in one place, and carries
+ * `ProposalRef`:
+ *
+ * - words it adds are text under the `proposalInsert` mark, and words it
+ *   removes stay, under the `proposalDelete` mark, until it is resolved;
+ * - a whole Block it adds or removes, and an inline node (a Citation, a
+ *   formula, a line break) it adds or removes, has the `proposal` attribute,
+ *   a `ProposalAttribute` (the editor's binding keeps no marks on nodes).
+ *
+ * Until it is accepted a Proposal isn't part of the Mind: what reads the
+ * Mind's text (Question context, exports) leaves its new words out and keeps
+ * the words it would remove.
+ */
+export const PROPOSAL_INSERT_MARK = "proposalInsert";
+export const PROPOSAL_DELETE_MARK = "proposalDelete";
+export const PROPOSAL_ATTRIBUTE = "proposal";
+
+/** Which Proposal a mark or attribute belongs to. */
+export interface ProposalRef {
+  /** The Proposal's random UUID: what is accepted or rejected on its own. */
+  id: string;
+  /**
+   * What asked for it: one Edit with AI, or (later) one reply of the
+   * assistant. Its Proposals are accepted or rejected together from there,
+   * and `MIND_PROPOSAL_REQUESTS_FIELD` says which model made them.
+   */
+  request: string;
+}
+
+/** The `proposal` attribute of a Block or an inline node: it adds it, or removes it. */
+export interface ProposalAttribute extends ProposalRef {
+  kind: "insert" | "delete";
+}
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says what made each
+ * request's Proposals (`ProposalRequest`, by `ProposalRef.request`): kept
+ * once written, so accepting a Proposal on any device can say which model
+ * wrote it.
+ */
+export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
+
+/** What made a request's Proposals. */
+export interface ProposalRequest {
+  /** Edit with AI (#93); the assistant (#202) and Enhance (#114) add theirs. */
+  source: "edit-with-ai";
+  providerId: string;
+  modelId: string;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+}
 
 /**
  * The node types of a Note: any top-level Block that isn't a Question or an
@@ -497,7 +557,8 @@ export const MAX_CITED_PAGES = 2;
  * - "section": the heading of the section the quote sits under; null before
  *   the first heading. `notes`: a Word file's footnotes and endnotes.
  *   `comment`: the quote is in a Word comment anchored in that section, by
- *   its author (null when the file names none) (#76).
+ *   its author (null when the file names none) (#76). `paragraphs`: in a
+ *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  */
 export type CitationLocation =
@@ -509,6 +570,7 @@ export type CitationLocation =
       heading: string | null;
       notes?: boolean;
       comment?: { author: string | null };
+      paragraphs?: { from: number; to: number };
     };
 
 /**
@@ -879,10 +941,11 @@ export type LayoutChange =
   | { type: "assistant"; place: Partial<AssistantPlace> };
 
 /**
- * The kinds of file that can be added as Documents (ADR-0011): PDF, plain
- * text, Markdown, Word (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV.
+ * The kinds of Document (ADR-0011): files of PDF, plain text, Markdown, Word
+ * (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV, and web pages saved by
+ * their address (#261).
  */
-export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv";
+export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv" | "web";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text,
@@ -1011,7 +1074,10 @@ export interface Document {
    * moved. The same content at two paths is two Documents.
    */
   contentHash: string;
-  /** The file, where the User keeps it: an absolute path. IncarnaMind never changes it. */
+  /**
+   * The file, where the User keeps it: an absolute path. IncarnaMind never
+   * changes it. A web page's is its snapshot, in the data folder.
+   */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
   fileStatus: DocumentFileStatus;
@@ -1056,6 +1122,8 @@ export interface Document {
    * heading, else its first line. Null if it has none, or until it is read.
    */
   title: string | null;
+  /** A web page's address and what it says of itself; null for a file. */
+  web: WebPageInfo | null;
   /**
    * What a Citation of it needs to say (#286): its reference record, read
    * from its file and edited by the User. Null until its file has been read.
@@ -1066,6 +1134,76 @@ export interface Document {
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
+
+/**
+ * A web page saved as a Document (#261): its snapshot is the Document's file,
+ * kept in the data folder, and each fetch that changed it is a new version.
+ */
+export interface WebPageInfo {
+  /** The address it was saved from: http or https, without a fragment. */
+  address: string;
+  /** The site's name, as the page gives it, else its host. */
+  siteName: string;
+  author: string | null;
+  /** When the page says it was published, as it gives it; null if it doesn't. */
+  published: string | null;
+  /** When it was last fetched. ISO 8601, UTC. */
+  fetchedAt: string;
+  /** When each version kept was last fetched, for the Citations that quote an older one. */
+  versions: { contentHash: string; fetchedAt: string }[];
+}
+
+/** What `saveWebPage` takes. */
+export interface SaveWebPageInput {
+  /** An http or https address; one without a scheme ("example.com/page") is read as https. */
+  address: string;
+  /** The page's HTML, when the caller has it already (a page open in the app): nothing is fetched. */
+  html?: string;
+  /** The Library Folder to file a new Document in; none or null: Unsorted. */
+  folderId?: string | null;
+}
+
+/**
+ * Why a web page wasn't saved, or wasn't fetched again:
+ * - "invalid-address": not an http or https address.
+ * - "unreachable": the site couldn't be reached (offline, no such site, a
+ *   connection refused or a certificate that isn't valid).
+ * - "timed-out": the site took too long to answer.
+ * - "not-found": the site has no such page (404, 410).
+ * - "needs-sign-in": the page is behind a sign-in (401, 403, a login form).
+ * - "too-large": the page is larger than IncarnaMind fetches.
+ * - "site-error": the site answered with another error.
+ * - "not-a-page": the address is a file (a PDF, an image), not a web page.
+ * - "video": the page is a video, with little text to read.
+ * - "not-text": the page has too little text to read, such as an app.
+ */
+export type WebPageFailureReason =
+  | "invalid-address"
+  | "unreachable"
+  | "timed-out"
+  | "not-found"
+  | "needs-sign-in"
+  | "too-large"
+  | "site-error"
+  | "not-a-page"
+  | "video"
+  | "not-text";
+
+export interface WebPageFailure {
+  reason: WebPageFailureReason;
+  /** Technical detail in English, for logs and tooltips. */
+  message: string;
+}
+
+/** What saving a web page, or fetching it again, came to. */
+export type WebPageResult =
+  | {
+      outcome: "saved";
+      document: Document;
+      /** The address was saved already: `saveWebPage` returns its Document as it is. */
+      existing: boolean;
+    }
+  | { outcome: "failed"; address: string; failure: WebPageFailure };
 
 /**
  * The kinds of work a reference record describes (#286), by their Citation
@@ -1975,6 +2113,72 @@ export interface SuggestionAccepted {
   acceptedAt: string;
 }
 
+/**
+ * A place in a Mind's text: a paragraph or a heading, by its Block id, and a
+ * character offset into its text, where an inline node (a Citation, a
+ * formula, a line break, a footnote with all its text) counts as one
+ * character.
+ */
+export interface TextPlace {
+  blockId: string;
+  offset: number;
+}
+
+/**
+ * What Edit with AI does with the selected text (#93): improve the writing,
+ * shorten it, translate it, explain it in a new paragraph under it, or what
+ * the User asked for in their own words.
+ */
+export const editActions = ["improve", "shorten", "translate", "explain", "instruction"] as const;
+export type EditAction = (typeof editActions)[number];
+
+export interface EditWithAiInput {
+  /** Chosen by the caller, so it can stop the request (`cancelEdit`). */
+  requestId: string;
+  mindId: string;
+  /** Where the selection starts, and where it ends, after it. */
+  from: TextPlace;
+  to: TextPlace;
+  /**
+   * The selected text as the editor read it: an inline node as U+FFFC, and
+   * each paragraph on a line of its own. The core edits it only while the
+   * Mind still holds it.
+   */
+  text: string;
+  action: EditAction;
+  /**
+   * For "translate", the language to translate into, as the User would name
+   * it ("English", "简体中文"); for "instruction", what the User asked for.
+   */
+  instruction?: string;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What Edit with AI did. */
+export type EditWithAiResult =
+  /**
+   * The changes are in the Mind as Proposals: `proposals` of them, all from
+   * `request`. `droppedCitations`: how many Citations they would remove.
+   */
+  | { kind: "proposed"; request: string; proposals: number; droppedCitations: number }
+  /** The model gave the text back as it was: there is nothing to propose. */
+  | { kind: "unchanged" }
+  /** Nothing was sent: the model can't be used now, and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** Nothing was sent: local mode is on, and the model isn't on this computer. */
+  | { kind: "local-mode" }
+  /** The selected text isn't in the Mind as it was any more: it was edited meanwhile. */
+  | { kind: "changed" }
+  /** Nothing was sent: the selection holds Proposals that are still waiting. */
+  | { kind: "has-proposals" }
+  /** Nothing was sent: the selected text is more than the model can take at once. */
+  | { kind: "too-long" }
+  /** The User stopped it (`cancelEdit`). */
+  | { kind: "cancelled" }
+  /** The model failed, or gave nothing back. */
+  | { kind: "failed"; error: ProviderError };
+
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
   /** The Answer is being written into the Mind, right after its Question. */
@@ -2530,6 +2734,7 @@ export const dataKinds = [
   "writing",
   "writing-passages",
   "identifiers",
+  "selection",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -2554,6 +2759,8 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "edits": when the User asks Edit with AI (#93), the text they selected
+ *   and the paragraphs it is in, to the chat model's provider. None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -2564,6 +2771,7 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "edits",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -3676,6 +3884,25 @@ export interface CoreApi {
    */
   saveTextAsDocument(input: { name: string; text: string }): Promise<Document>;
   /**
+   * Saves a web page as a Document (#261): its readable text, without
+   * navigation, ads or scripts, kept as a snapshot that Citations point at
+   * and the check reads, named by the page's title. The page is fetched from
+   * this computer, with a time and size limit, unless `html` is given (a
+   * page the app has open). Its images aren't fetched. An address saved
+   * already gives its Document, as it is. "document.status" events report
+   * its processing. A page that can't be fetched, or that is mostly not text,
+   * isn't saved: the result says why.
+   */
+  saveWebPage(input: SaveWebPageInput): Promise<WebPageResult>;
+  /**
+   * "Fetch again" on a web page Document: its address is fetched anew, and a
+   * page that changed becomes a new version. Citations keep pointing at the
+   * version they quote. One that can't be fetched now leaves the Document as
+   * it was: the result says why. Throws NotFoundError for an unknown
+   * Document, and InvalidInputError for one that isn't a web page.
+   */
+  fetchWebPageAgain(documentId: string): Promise<WebPageResult>;
+  /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its
    * sub-Folders if asked; with a Tag, only the Documents carrying it; with a
@@ -3963,6 +4190,19 @@ export interface CoreApi {
   acceptSuggestion(input: { suggestionId: string; characters: number }): Promise<void>;
   /** Today's counts, and why suggestions can't be made now. */
   getSuggestionStatus(): Promise<SuggestionStatus>;
+
+  /**
+   * Edit with AI (#93): asks the model to change the selected text as
+   * `action` says, and writes what it gives back into the Mind as Proposals
+   * waiting for the User to accept or reject, never as an edit. Citations the
+   * new text keeps stay, checked again; one it would drop stays in a Proposal
+   * for the User to review. Sends on the "edits" flow once the User allows it
+   * for the model's service; in local mode only a model on this computer is
+   * used. Pushes the Proposals as a "mind.update", like any edit.
+   */
+  editWithAi(input: EditWithAiInput): Promise<EditWithAiResult>;
+  /** Stops an Edit with AI request: it gives "cancelled". Stopping one that ended does nothing. */
+  cancelEdit(requestId: string): Promise<void>;
 
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
@@ -4527,6 +4767,8 @@ const methods: Record<CoreApiMethod, true> = {
   getLayout: true,
   changeLayout: true,
   addDocuments: true,
+  saveWebPage: true,
+  fetchWebPageAgain: true,
   saveTextAsDocument: true,
   listDocuments: true,
   renameDocument: true,
@@ -4576,6 +4818,8 @@ const methods: Record<CoreApiMethod, true> = {
   cancelSuggestion: true,
   acceptSuggestion: true,
   getSuggestionStatus: true,
+  editWithAi: true,
+  cancelEdit: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,
