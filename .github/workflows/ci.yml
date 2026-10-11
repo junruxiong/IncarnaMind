@@ -52,13 +52,6 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # Electron downloads its binary the first time it's required, into ~/.cache/electron:
-      # keep it between runs, for each Electron version.
-      - name: Cache the Electron binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/electron
-          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/electron/package.json') }}
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
       - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke

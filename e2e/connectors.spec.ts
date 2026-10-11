@@ -119,7 +119,7 @@ test("a remote Connector added by URL needs a sign-in, which goes through the br
     expect(fake.registrations).toEqual([]);
 
     // The service's tokens are kept with the keys: on Linux with no keyring, the User has
-    // accepted that first (in a form that saves a key; the sign-in doesn't offer it yet).
+    // accepted that first (in a form that saves a key; the sign-in doesn't offer it yet, #342).
     await acceptPlainTextKeys(window);
     // Signing in opens the authorization request and waits for the browser.
     await connector.getByTestId("connector-sign-in").click();
