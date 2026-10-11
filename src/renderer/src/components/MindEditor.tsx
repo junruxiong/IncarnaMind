@@ -133,6 +133,8 @@ const editorPropsFor = (label: string, emptyFormula: string) => ({
     // Shown in a formula that has no LaTeX yet (see styles.css).
     style: `--empty-formula: ${JSON.stringify(emptyFormula)}`,
   },
+  // The cursor scrolled into view stays clear of the bar of changes at the Mind's top (ProposalBars).
+  scrollMargin: { top: 48, right: 5, bottom: 5, left: 5 },
 });
 
 /**
