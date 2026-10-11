@@ -1664,7 +1664,7 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Brings back Documents the User deleted (the caller checks they may), with the
-     * Passages, text and Tags deleted with them, without reading their files. Run in the
+     * Passages, text, Tags and web page versions deleted with them, without reading their files. Run in the
      * caller's transaction, then `restored`.
      */
     restore(ids: readonly string[]): void {
@@ -1684,6 +1684,10 @@ export function createDocuments(options: DocumentsOptions) {
         );
         db.run(
           "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
+          deleted,
+        );
+        db.run(
+          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
           deleted,
         );
         db.run(

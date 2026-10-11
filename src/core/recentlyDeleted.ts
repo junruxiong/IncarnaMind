@@ -64,6 +64,7 @@ function purge(db: Database, kind: Stored, ids: readonly string[], at: string): 
     // Live text of a deleted Document is what its Linked folder kept for Citations: it stays.
     db.run(`DELETE FROM document_pages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
     db.run(`DELETE FROM document_tags WHERE document_id ${IN}`, [list]);
+    db.run(`DELETE FROM web_pages WHERE document_id ${IN} AND deleted_at IS NOT NULL`, [list]);
   }
   if (kind === "tag") db.run(`DELETE FROM document_tags WHERE tag_id ${IN}`, [list]);
   if (kind === "folder") db.run(`DELETE FROM deleted_folder_items WHERE folder_id ${IN}`, [list]);

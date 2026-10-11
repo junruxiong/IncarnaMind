@@ -4,7 +4,7 @@
  * snapshot, fetched again as new versions, and refused, saying why, when
  * they can't be fetched or are mostly not text.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -320,5 +320,30 @@ describe("Fetching a web page again", { timeout: 30_000 }, () => {
       status: "ready",
     });
     await expect(core.fetchWebPageAgain("no-such-document")).rejects.toThrow();
+  });
+});
+
+describe("Deleting a web page", { timeout: 30_000 }, () => {
+  test("restored, it is the web page it was; deleted permanently, its snapshot goes too", async () => {
+    const site = await startSite();
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir, LIMITS);
+    const { document } = await saved(core, { address: site.url("/tea") });
+
+    await core.deleteDocument(document.id);
+    await core.restore([{ kind: "document", id: document.id }]);
+    const [restored] = await core.listDocuments();
+    expect(restored).toMatchObject({
+      id: document.id,
+      kind: "web",
+      web: { address: site.url("/tea"), siteName: "The Open Encyclopedia" },
+    });
+
+    await core.deleteDocument(document.id);
+    await core.deletePermanently([{ kind: "document", id: document.id }]);
+    expect(existsSync(document.path)).toBe(false);
+    expect(
+      queryDatabase(dataDir, "SELECT 1 FROM web_pages WHERE document_id = ?", [document.id]),
+    ).toEqual([]);
   });
 });

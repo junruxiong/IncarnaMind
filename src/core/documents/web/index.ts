@@ -118,6 +118,14 @@ export function createWebPages(options: WebPagesOptions) {
   });
 
   return {
+    /** Removes the snapshots of web pages deleted permanently: their text goes with them. */
+    async dropPurged(): Promise<void> {
+      const rows = db.all<{ path: string }>(
+        "SELECT path FROM documents WHERE kind = 'web' AND purged_at IS NOT NULL",
+      );
+      await Promise.all(rows.map((row) => rm(row.path, { force: true })));
+    },
+
     /** See `CoreApi.saveWebPage`; the caller files it in its Folder. */
     save(input: unknown): Promise<WebPageResult> {
       const { address: typed, html } = parseSaveInput(input);
