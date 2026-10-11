@@ -5,6 +5,8 @@ import { PlusMenuPlaceholder, SidebarHeader } from "./Sidebar";
 const SIDEBAR_WIDTH_KEY = "incarnamind.sidebarWidth";
 /** The sidebar's width before it is resized (DESIGN.md, Layout). */
 const DEFAULT_SIDEBAR_WIDTH = 248;
+/** The skeleton rows' lengths, as a share of the row, uneven like real names. */
+const SKELETON_ROWS = [62, 48, 70, 40, 56, 66];
 
 function rememberedSidebarWidth(): number {
   try {
@@ -49,6 +51,14 @@ export function AppShell() {
         <SidebarHeader>
           <PlusMenuPlaceholder />
         </SidebarHeader>
+        {/* With thousands of Documents the lists take a moment (#167): rows' outlines hold their place. */}
+        <ul aria-hidden="true" data-testid="sidebar-skeleton" className="mt-3 flex flex-col px-2">
+          {SKELETON_ROWS.map((width) => (
+            <li key={width} className="flex h-7 items-center px-2">
+              <span className="h-2.5 rounded-sm bg-chip" style={{ width: `${width}%` }} />
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="w-2 shrink-0" />
       <div className="app-card flex-col">
