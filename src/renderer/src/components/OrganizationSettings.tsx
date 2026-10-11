@@ -130,9 +130,7 @@ function ClassifierForm({
           };
         else if (selection)
           classifier = { kind: "chat", choice: { providerId: selection, modelId: modelId.trim() } };
-        void act(() =>
-          core.saveLibrarySettings({ classifier, automatic: !!classifier && automatic }),
-        );
+        void act(() => core.saveLibrarySettings({ classifier, automatic }));
       }}
     >
       <p className="mb-3 text-[13px] text-ink-meta">{t("library.modelHint")}</p>

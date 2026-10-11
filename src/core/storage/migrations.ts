@@ -723,6 +723,25 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 36,
+    description: "Suggested Folders wait for the User, and a rejected one isn't suggested again",
+    // Every assignment so far keeps what it was: none of them is a suggestion. No foreign
+    // keys: a later sync may deliver a rejection before its Document or Folder.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN suggested INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE document_group_rejections (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        group_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX document_group_rejections_live
+        ON document_group_rejections (document_id, group_id) WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
