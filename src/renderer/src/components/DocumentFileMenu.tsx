@@ -4,6 +4,7 @@ import { displayName } from "../../../shared/documentNames";
 import { commands } from "../commands/registry";
 import { files } from "../core";
 import { errorMessage } from "../errors";
+import { useCountedByChoice, useLeftOutOfEvidence } from "../evidence";
 import { useT } from "../i18n";
 import type { LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel } from "../linkedFolders";
@@ -20,7 +21,8 @@ import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
  * A Document's "More" menu: process it again if it failed (and its file is
- * there); rename it; its file, where the User keeps it ("Open in default
+ * there); for a file IncarnaMind wrote, count it as evidence or take that
+ * back (#80); rename it; its file, where the User keeps it ("Open in default
  * app" and "Show in folder", which the main process does for live Documents
  * whose file is there, and which say why not for a file that is missing or
  * can't be reached), or a web page's "Fetch again", "Open the live page" and
@@ -44,6 +46,8 @@ export function DocumentFileMenu({
   const fileState = fileStatusLabel(item.fileStatus);
   const reason = fileState ? t(fileState.reason) : undefined;
   const canRetry = item.status === "failed" && fileState === null;
+  const leftOut = useLeftOutOfEvidence(item);
+  const countedByChoice = useCountedByChoice(item);
   const { web } = item;
   const runCommand = (id: CommandId) => {
     menu.close();
@@ -136,6 +140,22 @@ export function DocumentFileMenu({
             className={`${menuItemClass} pl-2`}
           >
             {t("webPages.fetchAgain")}
+          </button>
+        )}
+        {/* A file IncarnaMind wrote: checks leave it out until it is counted, and back (#80). */}
+        {(leftOut || countedByChoice) && (
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="document-evidence"
+            data-counted={item.ownFile?.counted ? "yes" : "no"}
+            title={t("evidence.menuHint")}
+            onClick={() =>
+              runCommand(leftOut ? "document.countAsEvidence" : "document.leaveOutOfEvidence")
+            }
+            className={`${menuItemClass} pl-2`}
+          >
+            {t(leftOut ? "evidence.count" : "evidence.leaveOut")}
           </button>
         )}
         <button

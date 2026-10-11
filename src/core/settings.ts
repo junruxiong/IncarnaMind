@@ -41,12 +41,18 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
 const userScope: Scope<UserSettings> = {
   name: "user",
   table: "user_settings",
-  defaults: { language: "system", chatModel: null, suggestWhileWriting: false },
+  defaults: {
+    language: "system",
+    chatModel: null,
+    suggestWhileWriting: false,
+    leaveOutOwnFiles: true,
+  },
   validators: {
     language: isLanguagePreference,
     chatModel: (value): value is ChatModelChoice | null =>
       value === null || isChatModelChoice(value),
     suggestWhileWriting: isBoolean,
+    leaveOutOwnFiles: isBoolean,
   },
 };
 
