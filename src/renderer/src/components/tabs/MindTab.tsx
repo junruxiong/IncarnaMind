@@ -140,7 +140,7 @@ function MindTitle({ mind }: { mind: Mind }) {
         rows={1}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
-        placeholder={t("mind.untitled")}
+        placeholder={mind.autoTitle || t("mind.untitled")}
         value={draft ?? mind.title}
         onFocus={() => setDraft(mind.title)}
         onBlur={() => setDraft(null)}
