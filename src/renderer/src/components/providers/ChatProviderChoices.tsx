@@ -13,6 +13,7 @@ import {
   ChatGptSignInState,
   ChatGptStorageNotice,
   ContinueWithChatGptButton,
+  useChatGptStorage,
   useContinueWithChatGpt,
 } from "./ChatGptSignIn";
 import { type Ollama, OllamaProgress, ollamaDescription } from "./OllamaCard";
@@ -125,10 +126,13 @@ export function ChatProviderChoices(props: ChatProviderChoicesProps) {
 /** The ChatGPT plan's row, chosen: "Continue with ChatGPT", which saves the plan once signed in. */
 function ChatGptChoice({ onSaved }: { onSaved(provider: ChatProvider): void }) {
   const sign = useContinueWithChatGpt({ onSignedIn: ({ provider }) => onSaved(provider) });
+  const storage = useChatGptStorage();
   return (
     <div className="flex flex-col items-start gap-2">
-      <ChatGptStorageNotice />
-      {!sign.waiting && <ContinueWithChatGptButton onClick={() => void sign.run()} />}
+      <ChatGptStorageNotice storage={storage} />
+      {!sign.waiting && (
+        <ContinueWithChatGptButton onClick={() => void sign.run()} disabled={!storage.canSave} />
+      )}
       <ChatGptSignInState sign={sign} />
     </div>
   );

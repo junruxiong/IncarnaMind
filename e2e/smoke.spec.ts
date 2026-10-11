@@ -1,6 +1,7 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
@@ -171,7 +172,17 @@ test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registr
   await openSettings(window, "models");
   const section = window.getByTestId("chatgpt-settings");
   await expect(section.getByTestId("chatgpt-account")).toHaveText("Not signed in.");
+  // Where the sign-in couldn't be kept safely (Linux without a keyring), that's said up front and
+  // Continue waits, so OpenAI's page never opens for a sign-in that would have nowhere to go.
+  const storage = await window.evaluate(() =>
+    (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.getSecretStorage(),
+  );
+  if (!storage.canSave) {
+    await expect(section.getByTestId("plain-text-secrets")).toBeVisible();
+    await expect(section.getByTestId("chatgpt-continue")).toBeDisabled();
+  }
   await acceptPlainTextKeys(window, section);
+  await expect(section.getByTestId("chatgpt-continue")).toBeEnabled();
   await section.getByTestId("chatgpt-continue").click();
   await expect(section.getByTestId("chatgpt-cancel")).toBeVisible();
   await expect.poll(() => urlsOpened(app)).toHaveLength(1);

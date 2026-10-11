@@ -12,6 +12,7 @@ import {
   dialogClass,
   dialogTextClass,
   dialogTitleClass,
+  noticeClass,
   primaryButtonClass,
 } from "../ui";
 import { useModal } from "../useModal";
@@ -59,20 +60,44 @@ export function ContinueWithChatGptButton({
 }
 
 /**
- * Where no keyring keeps secrets safe (Linux without one), the sign-in can't
- * be kept until the User accepts storing it in plain text, as for API keys.
+ * Whether this device can keep a ChatGPT sign-in, read before the User
+ * signs in: "Continue with ChatGPT" waits for it, so OpenAI's page never
+ * opens for a sign-in that would then have nowhere to go.
  */
-export function ChatGptStorageNotice() {
+export function useChatGptStorage() {
   const [status, setStatus] = useState<SecretStorageStatus | null>(null);
   useEffect(() => {
     core.getSecretStorage().then(setStatus, () => undefined);
   }, []);
-  if (!status || status.canSave) return null;
-  const accept = () =>
-    core
+  const acceptPlainText = () =>
+    void core
       .acceptPlainTextSecretStorage()
       .then(setStatus, (error: unknown) => useAppStore.getState().reportError(error));
-  return <SecretStorageNotice status={status} onAccept={() => void accept()} />;
+  return { status, canSave: status?.canSave === true, acceptPlainText };
+}
+
+/**
+ * Why the sign-in can't be kept, said up front, beside a "Continue with
+ * ChatGPT" that can't be used yet: no keychain or keyring can be reached
+ * (e.g. a development run whose HOME hides the macOS keychain), or none is
+ * running (Linux), until the User accepts plain-text storage as for API keys.
+ */
+export function ChatGptStorageNotice({
+  storage,
+}: {
+  storage: ReturnType<typeof useChatGptStorage>;
+}) {
+  const t = useT();
+  const { status } = storage;
+  if (!status || status.canSave) return null;
+  if (status.protection === "unavailable") {
+    return (
+      <p role="alert" data-testid="chatgpt-storage-unavailable" className={noticeClass}>
+        {t("chatgpt.signIn.error.secret-storage")}
+      </p>
+    );
+  }
+  return <SecretStorageNotice status={status} onAccept={storage.acceptPlainText} />;
 }
 
 /** "Manage usage ↗": ChatGPT's own page, where the User sees and limits what apps use of the plan. */
