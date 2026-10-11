@@ -1,4 +1,6 @@
+import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
 import { currentTabOf } from "../layoutSlice";
@@ -14,6 +16,12 @@ import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { webPageCommands } from "./webPages";
+
+/** What opens the menu of the Block with this ID, if its Mind is open. */
+function blockMenuFor(blockId: string) {
+  const editor = noteHolding(blockId);
+  return (editor && blockMenuOpeners.get(editor)) ?? null;
+}
 
 /** The Mind in the tab the User is in, if that tab holds one. */
 function mindInFront(): string | null {
@@ -37,6 +45,17 @@ const appCommands: readonly Command[] = [
     group: "open",
     reversible: true,
     run: () => useAppStore.getState().openSettings(),
+  },
+  {
+    id: "chatgpt.continue",
+    label: "chatgpt.continue",
+    group: "main",
+    reversible: true,
+    // Signs in, then shows the plan in Settings → Models, where its model is chosen; a failure says why there.
+    run: async () => {
+      const { openSettings } = useAppStore.getState();
+      if (await signInAgain(openSettings)) openSettings("models");
+    },
   },
   {
     ...fromMenu("sidebar.toggle"),
@@ -124,6 +143,18 @@ const appCommands: readonly Command[] = [
     run(ctx) {
       // The Blocks the note's selection touches, the focused one among them.
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
+    },
+  },
+  {
+    id: "block.menu",
+    label: "editor.block.menu",
+    shortcut: { keys: "Shift+F10" },
+    group: "main",
+    appliesTo: ["block"],
+    reversible: true,
+    when: (ctx) => ctx.focus?.kind === "block" && blockMenuFor(ctx.focus.id) !== null,
+    run(ctx) {
+      if (ctx.focus?.kind === "block") blockMenuFor(ctx.focus.id)?.(ctx.focus.id);
     },
   },
   ...footnoteCommands,
