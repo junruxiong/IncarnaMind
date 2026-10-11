@@ -164,7 +164,8 @@ export function createAgents(options: AgentsOptions) {
   /** When each pairing's "last used" time was last written. */
   const lastWritten = new Map<string, number>();
   let listener: AgentListener | null = null;
-  let listening: Promise<void> | null = null;
+  /** Starting and stopping the listener, one after another, so two quick toggles can't race. */
+  let listening: Promise<void> = Promise.resolve();
   let closed = false;
   let mcp: Promise<typeof import("./mcp")> | null = null;
 
@@ -388,22 +389,21 @@ export function createAgents(options: AgentsOptions) {
   };
 
   /** Listens while connecting agents is on; stops when it is turned off. */
-  const syncListening = async () => {
-    await listening;
-    if (closed) return;
-    if (enabled() && !listener) {
-      listening = listenForAgents(options.socketPath, serve).then(
-        (started) => {
-          listener = started;
-          // Turned off, or closed, while it started.
-          if (closed || !enabled()) return stopListening();
-        },
-        (error: unknown) => options.reportError(error),
-      );
-    } else if (!enabled() && listener) {
-      listening = stopListening();
-    }
-    await listening;
+  const syncListening = (): Promise<void> => {
+    listening = listening.then(async () => {
+      if (closed) return;
+      if (enabled() && !listener) {
+        try {
+          listener = await listenForAgents(options.socketPath, serve);
+        } catch (error) {
+          // Another copy of IncarnaMind on this data folder is listening already.
+          options.reportError(error);
+        }
+      } else if (!enabled() && listener) {
+        await stopListening();
+      }
+    });
+    return listening;
   };
 
   const stopListening = async () => {

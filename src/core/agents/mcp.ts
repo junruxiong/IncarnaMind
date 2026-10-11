@@ -323,7 +323,9 @@ export function serveConnection(
         if (socket.destroyed) return;
         const handle = serveStdio(() => createAgentServer(opened.access, options.version), {
           transport: new StdioServerTransport(input, socket),
-          onerror: (error) => options.reportError(error),
+          // By its kind only: the SDK's message can quote what the agent sent.
+          onerror: (error) =>
+            options.reportError(new Error(`An agent's connection failed (${error.name}).`)),
         });
         options.paired(opened.pairingId, {
           close: async () => {
