@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+    "terms": "https://open.fda.gov/terms/",
+    "license": "https://open.fda.gov/license/",
+    "last_updated": "2026-10-09",
+    "results": {
+      "skip": 0,
+      "limit": 10,
+      "total": 2
+    }
+  },
+  "results": [
+    {
+      "boxed_warning": [
+        "WARNING: LACTIC ACIDOSIS WARNING: LACTIC ACIDOSIS See full prescribing information for complete boxed warning . Postmarketing cases of metformin-associated lactic acidosis have resulted in death, hypothermia, hypotension, and resistant bradyarrhythmias. Symptoms included malaise, myalgias, respiratory distress, somnolence, and abdominal pain. Laboratory abnormalities included elevated blood lactate levels, anion gap acidosis, increased lactate/pyruvate ratio, and metformin plasma levels generally >5 mcg/mL. ( 5.1 ) Risk factors include renal impairment, concomitant use of certain drugs, age ≥65 years old, radiological studies with contrast, surgery and other procedures, hypoxic states, excessive alcohol intake, hepatic impairment, mitochondrial diseases. Steps to reduce the risk of and manage metformin-associated lactic acidosis in these high-risk groups are provided in the Full Prescribing Information. ( 5.1 ) If lactic acidosis is suspected, discontinue ZITUVIMET and institute general supportive measures in a hospital setting. Prompt hemodialysis is recommended. ( 5.1 ) Postmarketing cases of metformin-associated lactic acidosis have resulted in death, hypothermia, hypotension, and resistant bradyarrhythmias. The onset of metformin-associated lactic acidosis is often subtle, accompanied only by nonspecific symptoms such as malaise, myalgias, respiratory distress, somnolence, "
+      ],
+      "indications_and_usage": [
+        "1 INDICATIONS AND USAGE ZITUVIMET is a combination of sitagliptin, a dipeptidyl peptidase-4 (DPP-4) inhibitor, and metformin hydrochloride (HCl), a biguanide, indicated as an adjunct to diet and exercise to improve glycemic control in adults with type 2 diabetes mellitus. ( 1 ) Limitations of Use: ZITUVIMET is not recommended in patients with type 1 diabetes mellitus. ( 1 ) ZITUVIMET has not been studied in patients with a history of pancreatitis. ( 1 ) ZITUVIMET is indicated as an adjunct to diet and exercise to improve glycemic control in adults with type 2 diabetes mellitus. Limitations of Use ZITUVIMET is not recommended in patients with type 1 diabetes mellitus. ZITUVIMET has not been studied in patients with a history of pancreatitis. It is unknown whether patients with a history of pancreatitis are at increased risk for the development of pancreatitis while using ZITUVIMET. [see Warnings and Precautions ( 5.2 )]."
+      ],
+      "contraindications": [
+        "4 CONTRAINDICATIONS Severe renal impairment: (eGFR below 30 mL/min/1.73 m 2 ) ( 4) Metabolic acidosis, including diabetic ketoacidosis. ( 4 ) History of a serious hypersensitivity reaction to ZITUVIMET, sitagliptin, or metformin, such as anaphylaxis or angioedema. (4) ZITUVIMET is contraindicated in patients with: Severe renal impairment (eGFR below 30 mL/min/1.73 m 2 ) [see Warnings and Precautions ( 5.1 )]. Acute or chronic metabolic acidosis, including diabetic ketoacidosis. History of a serious hypersensitivity reaction to sitagliptin, metformin, or any of the excipients in ZITUVIMET. Serious hypersensitivity reactions including anaphylaxis or angioedema have been reported. [see Warnings and Precautions ( 5.7 ) and Adverse Reactions ( 6.2 )]."
+      ],
+      "warnings_and_cautions": [
+        "5 WARNINGS AND PRECAUTIONS Lactic Acidosis: See boxed warning . ( 5.1 ) Pancreatitis: There have been postmarketing reports of acute pancreatitis, including fatal and non-fatal hemorrhagic or necrotizing pancreatitis. If pancreatitis is suspected, promptly discontinue ZITUVIMET. ( 5.2 ) Heart Failure : Has been observed with two other members of the DPP-4 inhibitor class. Consider risks and benefits of ZITUVIMET in patients who have known risk factors for heart failure. Monitor patients for signs and symptoms. ( 5.3 ) Acute Renal Failure: Has been reported postmarketing, sometimes requiring dialysis. Before initiating ZITUVIMET and at least annually thereafter, assess renal function. ( 5.4 ) Vitamin B 12 Deficiency: Metformin may lower vitamin B 12 levels. Measure hematologic parameters annually and vitamin B 12 at 2 to 3 year intervals and manage any abnormalities. ( 5.5 ) Hypoglycemia with Concomitant Use with Insulin or Insulin Secretagogues: Increased risk of hypoglycemia when used in combination with insulin and/or an insulin secretagogue. A lower dose of insulin or insulin secretagogue may be required. ( 5.6 ) Hypersensitivity Reactions: There have been postmarketing reports of serious allergic and hypersensitivity reactions in patients treated with sitagliptin such as anaphylaxis, angioedema, and exfoliative skin conditions including Stevens-Johnson syndrome. Promptly st"
+      ],
+      "adverse_reactions": [
+        "6 ADVERSE REACTIONS The following adverse reactions are also discussed elsewhere in the prescribing information: Lactic Acidosis [see Warnings and Precautions ( 5.1 )] Pancreatitis [see Warnings and Precautions ( 5.2 )] Heart Failure [see Warnings and Precautions ( 5.3 )] Acute Renal Failure [see Warnings and Precautions ( 5.4 )] Vitamin B12 Deficiency [see Warnings and Precautions ( 5.5 )] Hypoglycemia with Concomitant Use with Insulin or Insulin Secretagogues [see Warnings and Precautions ( 5.6 )] Hypersensitivity Reactions [see Warnings and Precautions ( 5.7 )] Severe and Disabling Arthralgia [see Warnings and Precautions ( 5.8 )] Bullous Pemphigoid [see Warnings and Precautions ( 5.9 )] Most common adverse reactions (incidence ≥5% of patients simultaneously started on sitagliptin and metformin and more commonly than in patients treated with placebo were diarrhea, upper respiratory tract infection, and headache. ( 6.1 ) To report SUSPECTED ADVERSE REACTIONS, contact Zydus Pharmaceuticals (USA) Inc. at 1-877-993-8779 or FDA at 1-800-FDA-1088 or www.fda.gov/medwatch. 6.1 Clinical Trials Experience Because clinical trials are conducted under widely varying conditions, adverse reaction rates observed in the clinical trials of a drug cannot be directly compared to rates in the clinical trials of another drug and may not reflect the rates observed in practice. Common Adverse React"
+      ],
+      "set_id": "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142",
+      "id": "8c26dc1a-fba3-4266-bfaf-624b0941ef8b",
+      "effective_time": "20260812",
+      "version": "6",
+      "openfda": {
+        "application_number": ["NDA216743"],
+        "brand_name": ["ZITUVIMET"],
+        "generic_name": ["SITAGLIPTIN AND METFORMIN HYDROCHLORIDE"],
+        "manufacturer_name": ["Zydus Lifesciences Limited"],
+        "spl_set_id": ["0098dec4-f0e5-45d5-8aa4-5d0faf9ab142"]
+      }
+    },
+    {
+      "boxed_warning": [
+        "WARNING: LACTIC ACIDOSIS Postmarketing cases of metformin-associated lactic acidosis have resulted in death, hypothermia, hypotension, and resistant bradyarrhythmias. The onset of metformin­ associated lactic acidosis is often subtle, accompanied only by nonspecific symptoms such as malaise, myalgias, respiratory distress, somnolence, and abdominal pain. Metformin­- associated lactic acidosis was characterized by elevated blood lactate levels (>5 mmol/Liter), anion gap acidosis (without evidence of ketonuria or ketonemia), an increased lactate/pyruvate ratio; and metformin plasma levels generally >5 mcg/mL [see Warnings and Precautions (5.1) ]. Risk factors for metformin-associated lactic acidosis include renal impairment, concomitant use of certain drugs (e.g., carbonic anhydrase inhibitors such as topiramate), age 65 years old or greater, having a radiological study with contrast, surgery and other procedures, hypoxic states (e.g., acute congestive heart failure), excessive alcohol intake, and hepatic impairment. Steps to reduce the risk of and manage metformin-associated lactic acidosis in these high risk groups are provided [see Dosage and Administration (2.3) , Contraindications (4) , Warnings and Precautions (5.1) ]. If metformin-associated lactic acidosis is suspected, immediately discontinue metformin hydrochloride oral solution and institute general supportive measures"
+      ],
+      "indications_and_usage": [
+        "1 INDICATIONS AND USAGE Metformin hydrochloride oral solution is indicated as an adjunct to diet and exercise to improve glycemic control in adults and pediatric patients 10 years of age and older with type 2 diabetes mellitus. Metformin hydrochloride is a biguanide indicated as an adjunct to diet and exercise to improve glycemic control in adults and pediatric patients 10 years of age and older with type 2 diabetes mellitus. ( 1 )"
+      ],
+      "contraindications": [
+        "4 CONTRAINDICATIONS Metformin hydrochloride oral solution is contraindicated in patients with: Severe renal impairment (eGFR below 30 mL/min/1.73 m 2 ) [see Warnings and Precautions (5.1) ]. Hypersensitivity to metformin. Acute or chronic metabolic acidosis, including diabetic ketoacidosis, with or without coma. Severe renal impairment (eGFR below 30 mL/min/1.73 m 2 ) ( 4 , 5.1 ) Hypersensitivity to metformin ( 4 ) Acute or chronic metabolic acidosis, including diabetic ketoacidosis, with or without coma. ( 4 )"
+      ],
+      "warnings_and_cautions": [
+        "5 WARNINGS AND PRECAUTIONS Lactic acidosis: See boxed warning. ( 5.1 ) Vitamin B 12 deficiency: Metformin may lower vitamin B 12 levels. Measure hematological parameters annually and vitamin B 12 at 2 to 3 year intervals and manage any abnormalities. ( 5.2 ) Hypoglycemia with Concomitant Use with Insulin and Insulin Secretagogues: Increased risk of hypoglycemia when used in combination with insulin and/or an insulin secretagogue. Lower dose of insulin or insulin secretagogue may be required. ( 5.3 ) 5.1 Lactic Acidosis There have been postmarketing cases of metformin-associated lactic acidosis,including fatal cases. These cases had a subtle onset and were accompanied by nonspecific symptoms such as malaise, myalgias, abdominal pain, respiratory distress, or increased somnolence; however, hypotension and resistant bradyarrhythmias have occurred with severe acidosis. Metformin-associated lactic acidosis was characterized by elevated blood lactate concentrations (>5 mmol/L), anion gap acidosis (without evidence of ketonuria or ketonemia), and an increased lactate: pyruvate ratio; metformin plasma levels were generally >5 mcg/mL. Metformin decreases liver uptake of lactate increasing lactate blood levels which may increase the risk of lactic acidosis, especially in patients at risk. If metformin-associated lactic acidosis is suspected, general supportive measures should be institut"
+      ],
+      "adverse_reactions": [
+        "6 ADVERSE REACTIONS The following adverse reactions are also discussed elsewhere in the labeling: Lactic Acidosis [see Boxed Warning and Warnings and Precautions (5.1) ] Vitamin B 12 Deficiency [see Warnings and Precautions (5.2) ] Hypoglycemia [see Warnings and Precautions (5.3) ] The most common adverse reactions are diarrhea, nausea/vomiting, flatulence, asthenia, indigestion, abdominal discomfort, and headache. ( 6.1 ) To report SUSPECTED ADVERSE REACTIONS, contact VistaPharm, LLC at 1-888-655-1505 or FDA at 1-800-FDA-1088 or http://www.fda.gov/medwatch 6.1 Clinical Studies Experience Because clinical trials are conducted under widely varying conditions, adverse reaction rates observed in the clinical trials of a drug cannot be directly compared to rates in the clinical trials of another drug and may not reflect the rates observed in practice. In a U.S. clinical trial of metformin HCl tablets in patients with type 2 diabetes mellitus, a total of 141 patients received metformin HCl tablets up to 2,550 mg per day. Adverse reactions reported in greater than 5% of patients treated with metformin HCl tablets and that were more common than in placebo-treated patients, are listed in Table 1. Table 1: Adverse Reactions from a Clinical Trial of Metformin HCl Tablets Occurring >5% and More Common than Placebo in Patients with Type 2 Diabetes Mellitus Metformin HCl Tablets (n = 141) P"
+      ],
+      "set_id": "e087ce3b-8d7f-43a3-8d20-54513da7617d",
+      "id": "88a5077b-b1b5-47bb-ab45-32de55907ea6",
+      "effective_time": "20241010",
+      "version": "8",
+      "openfda": {}
+    }
+  ]
+}
