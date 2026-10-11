@@ -85,3 +85,7 @@ Web pages and documents other people wrote are now main inputs, so the consequen
 - **When a Run is third-party.** From its start, when its Question context holds third-party text, or when it checks a document (#97); and from the moment one of its Tools reads some, such as a search that finds a web page's Passages. Calls from an outside agent, the User's own agent connected to IncarnaMind (#351), are untrusted input of the same kind: an Answer one asks for is offered no Tool that writes or sends, so no "always" can be steered by it.
 - **Origin is kept with the text.** A Mind records, beside its Blocks, which Blocks hold third-party text and where it came from (ADR-0003, amended); a conversation's Answer records it on its row. An Answer written by a third-party Run is recorded too, so a later Question that has it in its context counts as third-party as well.
 - **Check Runs get two Tools.** Find support, verify, comparison tables' cells and contradiction watch are offered only Document search and `cite`, whatever else is set up, so a document being checked can't steer a write or a send. Ordinary Answers keep every Tool.
+
+## Amendment, 2026-10-12: where an Answer is written (ADR-0017)
+
+The opening says an Answer is written into a Mind. Since #201 and ADR-0017, an Answer is written in the assistant's conversation instead. A Mind gets it only when the User picks Add to note, or as Proposals the User accepts (#202). The product stays documents-first: wherever an Answer is shown, its Citations are checked against the Documents.
