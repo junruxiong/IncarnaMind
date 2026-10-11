@@ -10,6 +10,7 @@ import type { AnswerEngine } from "./answers/engine";
 import type { AudioSource, ExternalService, SandboxLevel, SecretProtection } from "./api";
 import type { Reranker } from "./documents/searchTool";
 import type { WatchFolder } from "./documents/watcher";
+import type { FetchLimits } from "./documents/web/fetch";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { EmbeddingModelFactory } from "./providers/embeddings";
 import type { ChatModelFactory } from "./providers/models";
@@ -435,6 +436,11 @@ export interface CoreAdapters {
   shell?: FileShell;
   /** How Linked folders are watched (see `LinkedFolderOptions`). */
   linkedFolders?: LinkedFolderOptions;
+  /**
+   * How web pages are fetched (#261). Defaults to Node's fetch, within 20
+   * seconds and 10 MB; tests shorten the limits.
+   */
+  webPages?: { fetch?: typeof fetch; limits?: FetchLimits };
   processes: ProcessLauncher;
   /**
    * Runs the programs Tools start, such as Skill scripts (see `Executor`).

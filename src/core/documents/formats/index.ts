@@ -14,6 +14,7 @@ import { extractDocx } from "./docx";
 import { ExtractionError } from "./errors";
 import { extractPptx } from "./pptx";
 import { lineUnits, markdownUnits } from "./text";
+import { webUnits } from "./web";
 import { extractXlsx } from "./xlsx";
 
 export { ExtractionError } from "./errors";
@@ -43,5 +44,7 @@ export async function extractUnits(
       return (await extractXlsx(bytes)).units;
     case "csv":
       return extractCsv(bytes).units;
+    case "web":
+      return webUnits(new TextDecoder().decode(bytes));
   }
 }

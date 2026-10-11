@@ -8,6 +8,7 @@ import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { webPageCommands } from "./webPages";
 
 const appCommands: readonly Command[] = [
   {
@@ -18,6 +19,7 @@ const appCommands: readonly Command[] = [
   },
   ...tabCommands,
   ...meetingCommands,
+  ...webPageCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",

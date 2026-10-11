@@ -133,6 +133,7 @@ const KIND_NAMES: Record<DocumentKind, string> = {
   pptx: "PowerPoint deck",
   xlsx: "Excel workbook",
   csv: "CSV table",
+  web: "web page",
 };
 
 export const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
