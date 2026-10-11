@@ -185,7 +185,7 @@ test("typing in the composer and pressing Enter shows the Question in the assist
   });
   await window.mouse.move(10, 10);
   await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(0);
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
   await screenshot(window, "answer-hover-en");
   await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
@@ -566,7 +566,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   const question = window.getByTestId("assistant-question");
   await expect(question.getByTestId("assistant-question-skill")).toHaveText("literature-review");
   await expect(answer.getByTestId("answer-scope")).toHaveText("“Tides”");
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");
   await expect(answer.getByTestId("answer-add")).toHaveText("添加到笔记");
   await screenshot(window, "answer-hover-zh");

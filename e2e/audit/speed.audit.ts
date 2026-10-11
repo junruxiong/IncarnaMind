@@ -273,7 +273,7 @@ async function askAndKeep(window: Page, question: string, index: number, timeout
   await window.keyboard.press("Enter");
   const answer = window.getByTestId("assistant-answer").nth(index);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout });
-  await window.keyboard.press("ControlOrMeta+Shift+a");
+  await window.keyboard.press("ControlOrMeta+Shift+A");
   await expect(answer.getByTestId("answer-added")).toBeVisible();
 }
 

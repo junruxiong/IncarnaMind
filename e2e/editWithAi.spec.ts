@@ -86,11 +86,17 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   await window.keyboard.type("The tides here are very strong and really regular");
   await expect(note).toContainText("The tides here are very strong and really regular");
 
+  // The Answer's last line, under it, taken out as a person would: then nothing follows the line.
+  const last = editor.locator(":scope > p").last();
+  await expect(last).toHaveText("That is all.");
+  await slideSelect(window, last, "That is all.");
+  await window.keyboard.press("Backspace");
+  await window.keyboard.press("Backspace");
+  await expect(editor.locator(":scope > p")).toHaveCount(2);
+
   // Selected, the menu offers the AI's actions; Shorten comes back as two changes.
-  // The words, then to the end of their line: the space, the Citation and the full stop after
-  // them (the Answer's last line, under it, left out).
-  await slideSelect(window, note, "The tides here are very strong and really regular");
-  await window.keyboard.press("Shift+End");
+  // The words, then the space, the Citation and the full stop after them.
+  await selectWords(window, note, "The tides here are very strong and really regular", 3);
   const menu = window.getByTestId("selection-menu");
   await expect(menu.getByTestId("selection-action-shorten")).toBeVisible();
   await expect(menu.getByTestId("selection-action-edit")).toContainText("Edit with AI…");

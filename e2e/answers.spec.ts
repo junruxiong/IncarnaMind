@@ -62,7 +62,7 @@ test("a Question asked in the assistant gets an Answer that streams in there, an
   await expect(editor.getByTestId("answer")).toHaveCount(0);
 
   // Kept in the Mind, with a link back to its conversation.
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await pointAt(window, answer.getByTestId("assistant-answer-text"));
   await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(editor.locator("strong")).toHaveText("scripted");
   await first.app.close();
