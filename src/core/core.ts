@@ -58,6 +58,7 @@ import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
+import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
 import {
@@ -141,6 +142,10 @@ export interface Core extends CoreApi, CoreEventSource {
    * resolves once that, and any change already reported, has been taken in.
    */
   reconcileDocuments(): Promise<void>;
+  /** The computer is about to sleep: a Meeting recording saves what it has and stops capturing. */
+  systemSleeping(): void;
+  /** The computer woke: a Meeting the sleep stopped records again, the sleep marked as a gap. */
+  systemAwake(): void;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -211,7 +216,14 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
-  const settings = createSettings(db, now, adapters.systemLanguages, scriptSandbox);
+  const capture = adapters.audioCapture;
+  const settings = createSettings(
+    db,
+    now,
+    adapters.systemLanguages,
+    scriptSandbox,
+    !capture ? "none" : capture.systemAudio ? "both" : "microphone",
+  );
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
   const tags = createTags(db, now);
@@ -980,6 +992,37 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
 
+  // Meetings (#135): while audio is being captured, background model work holds back.
+  const meetings = createMeetings({
+    db,
+    dataDir,
+    now,
+    capture: adapters.audioCapture,
+    enabled: () => settings.get().device.meetingsEnabled,
+    noticeAccepted: () => settings.get().device.meetingNoticeAccepted,
+    systemAudioByDefault: () => settings.get().device.meetingSystemAudio,
+    language: () => settings.get().language,
+    createMind: (title) => {
+      const mind = minds.create(parseCreateMindInput({ title }));
+      mindsChanged();
+      return mind;
+    },
+    mindExists: (mindId) => {
+      try {
+        minds.get(mindId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    changed: (list) => events.emit("meetings.changed", list),
+    onCapturingChange: (capturing) => {
+      background.setRecording(capturing);
+      documents.hold(capturing);
+    },
+    log: adapters.log ?? silentLogger,
+  });
+
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => {
@@ -998,10 +1041,12 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     deleteMind: async (mindId) => {
       const at = now();
-      db.transaction(() => {
+      const deleted = db.transaction(() => {
         const mind = minds.delete(mindId, at);
         content.remove(mind.id, at);
+        return mind;
       });
+      meetings.mindDeleted(deleted.id);
       mindsChanged();
       layouts.forgetDeletedMinds();
     },
@@ -1463,6 +1508,16 @@ export function createCore(adapters: CoreAdapters): Core {
     listFileWriteRequests: async () => outputs.requests(),
     respondToFileWrite: (requestId, accept) => outputs.respond(requestId, accept),
 
+    listMeetings: async () => meetings.list(),
+    createMeeting: async (input) => meetings.create(input),
+    discardMeeting: async (meetingId) => meetings.discard(meetingId),
+    startMeeting: async (input) => meetings.start(input),
+    pauseMeeting: async (meetingId) => meetings.pause(meetingId),
+    resumeMeeting: async (meetingId) => meetings.resume(meetingId),
+    stopMeeting: async (meetingId) => meetings.stop(meetingId),
+    deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
+    openAudioSettings: (source) => meetings.openSettings(source),
+
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
     openDocumentInApp: async (documentId) => {
@@ -1483,6 +1538,8 @@ export function createCore(adapters: CoreAdapters): Core {
       adapters.shell.showItemInFolder(path);
     },
     reconcileDocuments: () => documents.linkedFolders.sync(),
+    systemSleeping: () => meetings.sleeping(),
+    systemAwake: () => meetings.awake(),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
@@ -1491,6 +1548,8 @@ export function createCore(adapters: CoreAdapters): Core {
     close: () => {
       if (lifetime.signal.aborted) return;
       lifetime.abort();
+      // What a Meeting has captured is saved before anything else stops.
+      meetings.close();
       // First, so stopping the Answers below starts no background work.
       background.close();
       void chatGpt.cancelSignIn();
