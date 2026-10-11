@@ -13,6 +13,7 @@ import {
 } from "../../../core/api";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
+import { ProposalAttributes, ProposalDelete, ProposalInsert } from "./proposalSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
@@ -49,7 +50,8 @@ export interface NoteSchemaOptions {
  * by lowlight, inline and block math rendered by KaTeX, and tables, each with
  * an "include in Question context" flag. Questions and Answers, top-level
  * only. Citations, inline in Answers and in whatever they are copied into,
- * table cells included. Every Block has a UUID. The editor adds its interface
+ * table cells included. Proposals the AI made, waiting for the User (see
+ * `proposalSchema`). Every Block has a UUID. The editor adds its interface
  * on top (collaboration, menus, the drag handle, smart typography); tests use
  * this alone.
  */
@@ -93,6 +95,10 @@ export function noteExtensions({
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
     QuestionContextFlag,
+    // Proposals waiting for the User: words struck and added, and whole Blocks (#93).
+    ProposalInsert,
+    ProposalDelete,
+    ProposalAttributes,
     UniqueID.configure({ attributeName: BLOCK_ID_ATTRIBUTE, types: [...BLOCK_TYPES] }),
   ];
 }
