@@ -429,6 +429,24 @@ describe("A Block's origin makes an Ask third-party", { timeout: 30_000 }, () =>
 
     expect(textOriginOf(client.doc, answerId)).toBeNull();
   });
+
+  test("imported text the Question context leaves out, over its budget, doesn't count: the model never reads it", async () => {
+    const { core, logFile, mind, client } = await setUp(searchThenBook(null));
+    const requested = denyEveryRequest(core);
+    const imported = note("The landlord's draft lease.");
+    // About 15,000 tokens of the User's own notes between: more than the Question context keeps.
+    const own = note("Tide tables for Dover, read at the harbour. ".repeat(1_400));
+    const asked = question(QUESTION);
+    writeMind(client, [imported, own, asked]);
+    setTextOrigin(client.doc, [idOf(imported)], "imported");
+
+    const answerId = await askLast(core, client, mind.id, asked.attrs.id);
+    await answerEnded(core, answerId);
+
+    expect(requested).toEqual([]);
+    expect(await callsReceived(logFile)).toEqual(["book_boat"]);
+    expect(textOriginOf(client.doc, answerId)).toBeNull();
+  });
 });
 
 describe("A Block's origin survives sync and reload", { timeout: 30_000 }, () => {

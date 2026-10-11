@@ -109,13 +109,7 @@ import {
   withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
-import {
-  buildQuestionContext,
-  conversationContext,
-  conversationContextOrigins,
-  type QuestionContext,
-  questionContextOrigins,
-} from "./context";
+import { conversationContextOf, type QuestionContext, questionContextOf } from "./context";
 import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
@@ -1147,13 +1141,14 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
+    const { context, origins } = conversationContextOf(turn.earlier, question.text);
     start({
       home: conversationHome(conversation.id, answer.id),
       answerId: answer.id,
       questionId: question.id,
       model: ready.model,
-      context: conversationContext(turn.earlier, question.text),
-      contextOrigins: conversationContextOrigins(turn.earlier),
+      context,
+      contextOrigins: origins,
       documentIds,
       emptyScope,
       forcedSkill: question.forcedSkill,
@@ -1219,11 +1214,8 @@ export function createAnswers(options: AnswersOptions) {
       (blocks): { edited: string } | ({ answerId: string } & Asked) => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError("That Question isn't in this Mind.");
-        const context = buildQuestionContext(blocks, question.index);
-        const asked = {
-          ...askedWith(context, question.element),
-          contextOrigins: questionContextOrigins(blocks, question.index),
-        };
+        const { context, origins } = questionContextOf(blocks, question.index);
+        const asked = { ...askedWith(context, question.element), contextOrigins: origins };
         const attributes: Partial<AnswerAttributes> = {
           questionId,
           // No model writes an Answer that says the Search scope is empty.
