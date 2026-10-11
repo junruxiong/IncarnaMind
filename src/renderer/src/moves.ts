@@ -61,20 +61,17 @@ export function movedLocally(
 }
 
 /**
- * The moves that take a move back: each thing to the Folder it was in, in as
- * few moves as there were Folders it came from. Those that didn't move are left.
+ * The moves that take a move's Minds back: each to the Folder it was in, in as
+ * few moves as there were Folders they came from. Those that didn't move are
+ * left. Its Documents go back with `restoreAssignment`, so an automatic choice
+ * stays automatic.
  */
 export function undoMoves(move: FolderMove): { items: MoveItems; folderId: string | null }[] {
-  const back = new Map<string | null, { mindIds: string[]; documentIds: string[] }>();
-  const add = (from: string | null, kind: "mindIds" | "documentIds", id: string) => {
-    if (from === move.folderId) return;
-    const entry = back.get(from) ?? { mindIds: [], documentIds: [] };
-    entry[kind].push(id);
-    back.set(from, entry);
-  };
-  for (const item of move.minds) add(item.from, "mindIds", item.id);
-  for (const item of move.documents) add(item.from, "documentIds", item.id);
-  return [...back].map(([folderId, items]) => ({ folderId, items }));
+  const back = new Map<string | null, string[]>();
+  for (const { id, from } of move.minds) {
+    if (from !== move.folderId) back.set(from, [...(back.get(from) ?? []), id]);
+  }
+  return [...back].map(([folderId, mindIds]) => ({ folderId, items: { mindIds } }));
 }
 
 /**

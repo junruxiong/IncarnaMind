@@ -155,18 +155,30 @@ export function createMinds(db: Database, now: () => string) {
       });
     },
 
-    /** A Folder was deleted: its Minds go to Not in a Folder. Returns whether there were any. */
-    leaveFolder(folderId: string): boolean {
-      const inIt = db.get<{ count: number }>(
-        "SELECT count(*) AS count FROM minds WHERE folder_id = ? AND deleted_at IS NULL",
-        [folderId],
-      );
-      // Live Minds only: a deleted one stays as it was deleted.
-      db.run(
-        "UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
-        [now(), folderId],
-      );
-      return (inIt?.count ?? 0) > 0;
+    /**
+     * A Folder was deleted: its Minds go to Not in a Folder, deleted ones too, so none is
+     * restored into a deleted Folder. Returns them, for restoring the Folder.
+     */
+    leaveFolder(folderId: string): { id: string; live: boolean }[] {
+      return db
+        .all<{ id: string; live: number }>(
+          `UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ?
+           RETURNING id, deleted_at IS NULL AS live`,
+          [now(), folderId],
+        )
+        .map((row) => ({ id: row.id, live: row.live === 1 }));
+    },
+
+    /** A deleted Folder was restored: these Minds go back into it, those still in none. Returns whether a live one did. */
+    returnToFolder(mindIds: readonly string[], folderId: string): boolean {
+      return db
+        .all<{ live: number }>(
+          `UPDATE minds SET folder_id = ?, updated_at = ?
+           WHERE folder_id IS NULL AND id IN (SELECT value FROM json_each(?))
+           RETURNING deleted_at IS NULL AS live`,
+          [folderId, now(), JSON.stringify(mindIds)],
+        )
+        .some((row) => row.live === 1);
     },
 
     /** Marks the Mind deleted at `at`. Its content rows are the caller's to mark. */
@@ -175,6 +187,11 @@ export function createMinds(db: Database, now: () => string) {
       db.run("UPDATE minds SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, mind.id]);
       if (lastTouched?.mindId === mind.id) lastTouched = null;
       return mind;
+    },
+
+    /** Brings back a deleted Mind (the caller checks it may). Its content rows are the caller's. */
+    restore(mindId: string): void {
+      db.run("UPDATE minds SET deleted_at = NULL, updated_at = ? WHERE id = ?", [now(), mindId]);
     },
 
     /**
