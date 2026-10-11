@@ -440,6 +440,35 @@ describe("Edit with AI", () => {
     expect(shown(client)).toEqual(["First and second, together.", "One line.", "Another line."]);
   });
 
+  test("an empty paragraph in the selection stays out of the pairing: each paragraph gets its own new text", async () => {
+    const calls: EditCall[] = [];
+    const { core, mind, client } = await setUp(
+      editingModel(() => "First line.\n\nThird line.", calls),
+    );
+    const first = paragraph(text("First paragraph."));
+    const empty = paragraph();
+    const third = paragraph(text("Third paragraph."));
+    writeMind(client, [first, empty, third]);
+    await client.settled();
+
+    const result = await core.editWithAi({
+      requestId: "edit-across-a-blank-line",
+      mindId: mind.id,
+      from: { blockId: first.attrs.id, offset: 0 },
+      to: { blockId: third.attrs.id, offset: "Third paragraph.".length },
+      text: "First paragraph.\n\nThird paragraph.",
+      action: "shorten",
+    });
+
+    expect(calls[0]?.passage).toBe("First paragraph.\n\nThird paragraph.");
+    expect(result).toMatchObject({ kind: "proposed", proposals: 2 });
+    expect(shown(client)).toEqual([
+      "First [-paragraph-]{+line+}.",
+      "",
+      "Third [-paragraph-]{+line+}.",
+    ]);
+  });
+
   test("nothing is proposed over text that changed or holds Proposals, nor when the model gives it back as it was", async () => {
     let release = () => {};
     const waiting = new Promise<void>((resolve) => {
