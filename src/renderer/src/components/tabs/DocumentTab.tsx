@@ -18,6 +18,7 @@ const SlidesView = lazy(() =>
 const SheetView = lazy(() =>
   import("../../viewer/SheetView").then((m) => ({ default: m.SheetView })),
 );
+const WebView = lazy(() => import("../../viewer/WebView").then((m) => ({ default: m.WebView })));
 
 /** How far the User scrolls a preview, at least, to keep it: the jump to the quote doesn't count. */
 const KEEP_AFTER_SCROLL_PX = 120;
@@ -72,6 +73,8 @@ function DocumentView({ document, target }: { document: Document; target: Viewer
     case "xlsx":
     case "csv":
       return <SheetView document={document} target={target} />;
+    case "web":
+      return <WebView document={document} target={target} />;
   }
 }
 
@@ -140,7 +143,7 @@ function useKeepOnReading(section: HTMLElement | null, tabId: string, preview: b
 
 /**
  * A Document's tab: its toolbar and the view for its kind (PDF, Word,
- * PowerPoint, Excel, CSV, Markdown, text), at the place it was opened, a
+ * PowerPoint, Excel, CSV, Markdown, text, web page), at the place it was opened, a
  * Citation's quote washed. It follows the Document's file on disk: a new
  * version is shown once it is indexed, and a file that went missing is shown
  * again when it comes back, at the same place.

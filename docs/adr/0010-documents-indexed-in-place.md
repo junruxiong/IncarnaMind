@@ -21,6 +21,7 @@ Settled with the User on 2026-10-07:
 - **Big folders.** Linking says how many files and roughly how long before indexing starts. Indexing runs newest first, and can be paused and resumed.
 - **Read-only.** IncarnaMind never writes, renames or deletes anything in a Linked folder. (Amended on 2026-10-10, below: it may add new files there with the folder's permission, and still never changes the files already there.)
 - **Other Documents.** Files added on their own form the "Other Documents" group, below the Linked folders.
+- **Web pages** (2026-10-10, #261) have no file of the User's to index in place: a page saved by its address is kept as a snapshot in the data folder ("Web pages"), which is its Document's file, and "Fetch again" writes its new versions there (ADR-0011's amendment).
 
 This replaces the spec's original choice (issue #20, story 41: "copied into the app's data folder, so that moving or deleting the originals breaks nothing") and narrows ADR-0008: the data folder no longer holds Document files.
 
@@ -56,3 +57,11 @@ One core call does all of this for every feature that makes a file (`OutputFiles
 - **Overwrite the original, with a backup:** the most convenient, like saving in Word, but it fights cloud-drive sync clients and risks losing the User's file.
 - **Never write inside a Linked folder** (the rule until now): the strictest, but every Word round trip would be saved somewhere away from its original.
 - **Ask before every save into a Linked folder:** safe, but asking again and again teaches the User to click through; adding a file is not destructive, so one answer per folder is enough.
+
+## Amendment: check results, saved pages, Tasks and Checkpoints retain old versions too (2026-10-11, #79)
+
+An old version's text was kept only while a Citation quoted it. Check results (their evidence), saved pages, unfinished Tasks and Checkpoints point at versions too, and they are kept outside Minds. Each now retains the versions it needs, and where in them, in one table (migration 48, `src/core/documents/retention.ts`):
+
+- The start-up clean-up keeps a version that a Citation quotes or something retains. It reads every retained version with one query, beside its walk over Minds, which isn't extended.
+- Unlinking a Linked folder keeps the Units retained, as it keeps those Citations point to.
+- Once its last owner releases a version, and no Citation quotes it, its text goes at the next start. A release stays as a deleted row for 30 days, for a later sync to pass on, and is then forgotten.

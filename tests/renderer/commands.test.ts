@@ -134,6 +134,15 @@ describe("shortcuts", () => {
         const form = keysForm(keysOn(command.shortcut.keys, mac), mac);
         // A plain key, or one with Shift, types.
         expect(/(meta|ctrl|alt)\+/.test(form), command.id).toBe(true);
+        // A key of text is taken only on a Block, where the command says it applies.
+        if (command.shortcut.inText) {
+          expect(command.appliesTo, command.id).toEqual(["block"]);
+          expect(command.when, command.id).toBeDefined();
+          expect(command.when?.({ selection: [], focus: null, surface: "mind" }), command.id).toBe(
+            false,
+          );
+          continue;
+        }
         expect(text.has(form), command.id).toBe(false);
       }
     },

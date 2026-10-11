@@ -1,4 +1,4 @@
-import { type CSSProperties, useLayoutEffect, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useState } from "react";
 import { type AssistantPlace, DEFAULT_ASSISTANT } from "../../../../core/api";
 import {
   BOTTOM_MIN,
@@ -42,7 +42,14 @@ import { useAssistantDrag } from "./useAssistantDrag";
  * Each change is laid out at once at its new size; the card is measured, and
  * the groups share what it is given (`useGroupsMerged`).
  */
-export function Workbench({ sidebarHidden }: { sidebarHidden: boolean }) {
+export function Workbench({
+  sidebarHidden,
+  cardOverlay,
+}: {
+  sidebarHidden: boolean;
+  /** Drawn over the card, such as where dropped links go. */
+  cardOverlay: ReactNode;
+}) {
   const t = useT();
   const place = useAppStore((state) => state.layout?.assistant) ?? DEFAULT_ASSISTANT;
   const placeAssistant = useAppStore((state) => state.placeAssistant);
@@ -119,6 +126,7 @@ export function Workbench({ sidebarHidden }: { sidebarHidden: boolean }) {
         className="app-card"
       >
         <ComposerDockContext.Provider value={slot}>{groups}</ComposerDockContext.Provider>
+        {cardOverlay}
       </div>
       {dock === "float" ? null : folded ? (
         <div aria-hidden="true" className="workbench-gap" />

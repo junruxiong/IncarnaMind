@@ -2,8 +2,9 @@ import type { AssistantDock } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { shownDock } from "../assistantPlace";
 import { useComposer } from "../composer";
+import { startEditing } from "../editWithAi";
 import { useAppStore } from "../store";
-import { assistantHandle } from "./handles";
+import { assistantHandle, noteHandle } from "./handles";
 import type { Command } from "./registry";
 
 /*
@@ -46,6 +47,18 @@ export function focusComposer(): void {
   useComposer.getState().requestFocus();
 }
 
+/**
+ * ⌘J: the assistant's composer. From a note with text selected in it, the
+ * composer says what to change in that text (Edit with AI…, #93), as Cursor's ⌘K does.
+ */
+function askOrEdit(): void {
+  const note = noteHandle.current;
+  if (note && !note.editor.isDestroyed && note.editor.view.hasFocus()) {
+    startEditing(note.editor, note.mindId);
+  }
+  focusComposer();
+}
+
 export const assistantCommands: readonly Command[] = [
   ...DOCKS.map(
     ({ dock, label }): Command => ({
@@ -74,7 +87,7 @@ export const assistantCommands: readonly Command[] = [
     group: "main",
     reversible: true,
     when: isThere,
-    run: focusComposer,
+    run: askOrEdit,
   },
   {
     // An empty conversation is reused, so with no conversations kept yet (#258),

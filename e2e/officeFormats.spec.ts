@@ -23,6 +23,7 @@ import {
   newMind,
   openDocumentAt,
   removeDataFolder,
+  setWindowSize,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -63,10 +64,7 @@ async function screenshot(window: Page, name: string) {
  * where the mark and its label go.
  */
 async function widen(app: ElectronApplication, window: Page) {
-  await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(2400, 1000);
-  });
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(2400);
+  await setWindowSize(app, window, 2400, 1000);
 }
 
 /** An element's box; it must be shown. */

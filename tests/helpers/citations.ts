@@ -173,11 +173,17 @@ export async function askAndFinish(
   return { answerId, finished: ended.payload };
 }
 
-/** The Citation nodes in an Answer, in order, as the editor reads them. */
+/**
+ * The Citation nodes in an Answer, in order, as the editor reads them: their
+ * Citation's attributes, without the `proposal` attribute every inline node
+ * has (null where no Proposal adds or removes it).
+ */
 export function citationsIn(client: MindClient, answerId: string): CitationAttributes[] {
   const found: CitationAttributes[] = [];
   answerIn(client, answerId).descendants((node) => {
-    if (node.type.name === "citation") found.push(node.attrs as CitationAttributes);
+    if (node.type.name !== "citation") return;
+    const { proposal: _proposal, ...attributes } = node.attrs;
+    found.push(attributes as CitationAttributes);
   });
   return found;
 }

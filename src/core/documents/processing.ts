@@ -12,11 +12,17 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { TextUnit } from "../../shared/units";
 import type { DocumentFailureReason, DocumentKind } from "../api";
-import { type FileMetadata, type FileReference, readReference } from "../referenceRecords/read";
+import {
+  type FileMetadata,
+  type FileReference,
+  readReference,
+  webPageReference,
+} from "../referenceRecords/read";
 import { stripBoilerplate } from "./boilerplate";
 import { creationDate, pdfDate, w3cDate } from "./creationDate";
 import { ExtractionError, extractText, pdfMetadata } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
+import { readWebPage } from "./formats/web";
 import { packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
@@ -54,6 +60,7 @@ export const CURRENT_SINCE: Readonly<Record<DocumentKind, number>> = {
   pptx: 5,
   xlsx: 5,
   csv: 5,
+  web: 7,
 };
 
 /**
@@ -279,7 +286,7 @@ export async function readMetadata(job: MetadataJob): Promise<MetadataResult> {
 }
 
 const hasMetadata = (kind: DocumentKind) =>
-  kind === "pdf" || kind === "docx" || kind === "pptx" || kind === "xlsx";
+  kind === "pdf" || kind === "docx" || kind === "pptx" || kind === "xlsx" || kind === "web";
 
 /** The local calendar year now: no later creation date is plausible. */
 const thisYear = () => new Date().getFullYear();
@@ -303,6 +310,28 @@ async function readMetadataOf(
   let property: string | null = null;
   const parts: FileMetadata = { kind, firstPages: firstPages ?? [] };
   try {
+    if (kind === "web") {
+      // When it was published, if it says; a year in its text is no date of the page's.
+      const { meta } = readWebPage(new TextDecoder().decode(bytes));
+      const title = documentTitle(meta.title, firstUnit);
+      return {
+        creationDate: creationDate(
+          [meta.published === null ? null : w3cDate(meta.published)],
+          null,
+          thisYear(),
+        ),
+        title,
+        reference: webPageReference(
+          {
+            address: meta.address ?? "",
+            siteName: meta.siteName ?? "",
+            author: meta.author,
+            published: meta.published,
+          },
+          title,
+        ),
+      };
+    }
     if (kind === "pdf") {
       const pdf = await pdfMetadata(bytes, firstPages === null ? REFERENCE_PAGES : 0);
       fromMetadata = [

@@ -959,6 +959,65 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX ai_use_by_mind ON ai_use (mind_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 47,
+    description: "Web pages saved as Documents: each version's address, site and fetch time",
+    // A web page Document's file is its snapshot (src/core/documents/web); a row per
+    // version it has had, by the snapshot's content hash, so a Citation of an older
+    // version still says when that one was fetched.
+    sql: `
+      CREATE TABLE web_pages (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL REFERENCES documents (id),
+        content_hash TEXT NOT NULL,
+        address TEXT NOT NULL,
+        site_name TEXT NOT NULL,
+        author TEXT,
+        published TEXT,
+        fetched_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX web_pages_by_version ON web_pages (document_id, content_hash)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX web_pages_by_address ON web_pages (address) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 48,
+    description:
+      "Versions of Documents that check results, saved pages, Tasks and Checkpoints need",
+    sql: `
+      -- One row per version of a Document, and place in it, that an owner retains
+      -- (src/core/documents/retention.ts). kind is 'check-result', 'saved-page', 'task'
+      -- or 'checkpoint', checked in code; owner_id is that check result, saved page, Task
+      -- or Checkpoint. page_from and page_to are the Units (pages, slides…), from 1, both
+      -- NULL for all of them; location is where, as a Citation's Location (JSON), NULL if
+      -- it doesn't say. The start-up clean-up keeps a retained version's text, as it keeps
+      -- a quoted one's. A release marks rows deleted; they are forgotten 30 days later.
+      -- No foreign keys: a later sync may bring a row before its Document or owner.
+      CREATE TABLE retained_versions (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        page_from INTEGER,
+        page_to INTEGER,
+        location TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX retained_versions_by_owner ON retained_versions (kind, owner_id)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX retained_versions_by_version ON retained_versions (document_id, content_hash)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX retained_versions_released ON retained_versions (deleted_at)
+        WHERE deleted_at IS NOT NULL;
+    `,
+  },
 ];
 
 /**

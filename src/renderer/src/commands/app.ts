@@ -5,9 +5,11 @@ import { assistantCommands } from "./assistant";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
+import { proposalCommands } from "./proposals";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { webPageCommands } from "./webPages";
 
 const appCommands: readonly Command[] = [
   {
@@ -18,6 +20,7 @@ const appCommands: readonly Command[] = [
   },
   ...tabCommands,
   ...meetingCommands,
+  ...webPageCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -88,6 +91,7 @@ const appCommands: readonly Command[] = [
   },
   ...footnoteCommands,
   ...tableCommands,
+  ...proposalCommands,
 ];
 
 for (const command of appCommands) commands.register(command);
