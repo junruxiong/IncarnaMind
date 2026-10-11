@@ -1561,7 +1561,7 @@ export const en = {
   "meetings.start.dismiss": "Don’t record; keep this as a note (Esc)",
   "meetings.notice.title": "Before you record",
   "meetings.notice.both":
-    "IncarnaMind records your microphone and the computer’s sound, which carries everyone else on the call.",
+    "IncarnaMind records your microphone and the computer’s sound, which carries everyone else in the meeting.",
   "meetings.notice.microphone": "IncarnaMind records your microphone.",
   "meetings.notice.kept.mac": "The audio stays on this Mac and is deleted within a day.",
   "meetings.notice.kept.other": "The audio stays on this computer and is deleted within a day.",

@@ -91,6 +91,15 @@ export function writePart(
     closeSync(fd);
   }
   renameSync(writing, path);
+  // The rename must reach the disk too, or a power cut can undo it. Windows can't flush a folder.
+  if (process.platform !== "win32") {
+    const dir = openSync(folder, "r");
+    try {
+      fsyncSync(dir);
+    } finally {
+      closeSync(dir);
+    }
+  }
   return { source, offsetMs, durationMs: msOf(samples.length), path };
 }
 
