@@ -16,7 +16,6 @@
  * It runs under Vitest only for its TypeScript and worker-thread handling
  * (eval/vitest.config.ts); `npm test` never runs it.
  */
-import { execFileSync } from "node:child_process";
 import { arch, cpus, platform } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +33,7 @@ import {
   runCitations,
   summariseGroup,
 } from "./lib/citations";
+import { commitOf } from "./lib/commit";
 import { type EvalConfig, readConfig } from "./lib/config";
 import { cloudEmbeddingProvider, createWorkerEmbedder } from "./lib/embedder";
 import { type EvalQuestion, FORMATS_SET, isGating, loadEvaluationSet } from "./lib/evaluationSet";
@@ -67,19 +67,6 @@ import {
 } from "./lib/retrieval";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-
-function git(...args: string[]): string {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
-}
-
-function commit(): string {
-  try {
-    const changed = git("status", "--porcelain") !== "";
-    return `${git("rev-parse", "--short", "HEAD")}${changed ? " (with uncommitted changes)" : ""}`;
-  } catch {
-    return "unknown";
-  }
-}
 
 async function retrieve(
   library: Library,
@@ -377,7 +364,7 @@ test("retrieval and Citation evaluation", async () => {
       run: {
         startedAt: started.toISOString(),
         seconds: (Date.now() - started.getTime()) / 1000,
-        commit: commit(),
+        commit: commitOf(root),
         node: process.version,
         platform: `${platform()} ${arch()}`,
         cpu: `${cpu[0]?.model.trim() ?? "unknown CPU"} (${cpu.length} cores)`,
