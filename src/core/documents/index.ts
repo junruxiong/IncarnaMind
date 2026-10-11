@@ -21,7 +21,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type { Anchor, UnitKind, UnitLabel } from "../../shared/units";
 import type { CitedUnits } from "../answers/citedVersions";
@@ -52,6 +52,7 @@ import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
 import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside } from "./files";
+import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { createLibrary, type LibraryHooks } from "./library";
 import type { PageText } from "./passages";
@@ -1810,9 +1811,23 @@ export function createDocuments(options: DocumentsOptions) {
       return toDocument(find(id) ?? row);
     },
 
-    /** Opens a live Document's file where it is. Missing and unreachable files are refused (NotFoundError). */
+    /**
+     * Opens a live Document's file where it is. Missing and unreachable files
+     * are refused (NotFoundError), and so is a Word, PowerPoint or Excel file
+     * over the size limit (ExtractionError "too-large"), on its size alone:
+     * nothing is read, as in processing.
+     */
     async openFile(idInput: unknown): Promise<DocumentFile> {
       const row = await openablePath(idInput);
+      if (isPackageKind(row.kind as DocumentKind)) {
+        // A file that can't be looked at is left to `openFile` to refuse as missing.
+        const size = await stat(row.path).then(
+          (stats) => stats.size,
+          () => null,
+        );
+        const refused = size === null ? null : packageSizeError(size);
+        if (refused) throw refused;
+      }
       try {
         const { stream, size } = await openFile(row.path);
         return { document: toDocument(row), stream, size };

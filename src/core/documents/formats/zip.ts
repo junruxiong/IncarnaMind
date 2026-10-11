@@ -24,6 +24,7 @@
  * content always gives the same bytes. The module has no Node imports, so
  * the caller passes the deflate: the core's is Node's zlib.
  */
+import type { DocumentKind } from "../../api";
 import { ExtractionError } from "./errors";
 
 /** An entry as the central directory lists it. */
@@ -71,6 +72,10 @@ const tooLargeToOpen = (limit: string) =>
 export function packageSizeError(size: number): ExtractionError | null {
   return size > MAX_PACKAGE_BYTES ? tooLargeToOpen("500 MB") : null;
 }
+
+/** Word, PowerPoint and Excel files: the kinds `packageSizeError` limits. */
+export const isPackageKind = (kind: DocumentKind) =>
+  kind === "docx" || kind === "pptx" || kind === "xlsx";
 
 const EOCD = 0x06054b50;
 const ZIP64_EOCD_LOCATOR = 0x07064b50;
