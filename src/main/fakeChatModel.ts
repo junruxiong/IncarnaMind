@@ -27,7 +27,7 @@
  * A Question that names a script and a Connector Tool gets both, the script
  * first, and the Answer starts with what each said.
  *
- * With Find sources (a Question that asks for papers): it calls find_sources
+ * With Find sources (a Question that names papers): it calls find_sources
  * once, for the words after "on" (and the year after "since"), then lists
  * the first three titles it found.
  *
@@ -361,7 +361,8 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
     if (result === undefined) return { tool: named.tool, input: named.input };
     said.push(`${named.own} said: ${result}`);
   }
-  if (names.includes("find_sources")) {
+  // As a real model does: only a Question that asks for papers searches for them.
+  if (names.includes("find_sources") && /\bpapers?\b/i.test(question)) {
     const found = lastResult(prompt, "find_sources");
     if (found === undefined) return { tool: "find_sources", input: sourcesQuery(question) };
     const titles = [...found.matchAll(/^\d+\. "([^"]+)"/gm)].slice(0, 3).map((match) => match[1]);

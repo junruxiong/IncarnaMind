@@ -643,6 +643,8 @@ describe("Find sources: the Answer's Tool", { timeout: 30_000 }, () => {
     expect(asksForSources("帮我找几篇关于 CRISPR 脱靶检测的论文")).toBe(true);
     expect(asksForSources("What does the literature say about urban heat islands?")).toBe(true);
     expect(asksForSources("租户需要提前多久通知？")).toBe(false);
+    expect(asksForSources("When are the tide tables published?")).toBe(false);
+    expect(asksForSources("What does Article 5 of the lease say?")).toBe(false);
   });
 
   test("in local mode, an Answer isn't offered find_sources", async () => {
