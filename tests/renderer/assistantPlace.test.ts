@@ -32,9 +32,9 @@ const place = (change: Partial<AssistantPlace> = {}): AssistantPlace => ({
 const WINDOW = { width: 1440, height: 900 };
 
 describe("where it is drawn", () => {
-  test("a new window's assistant is docked on the right, 360px wide", () => {
+  test("a new window's assistant is docked on the right, 320px wide", () => {
     expect(shownDock(place(), 1440)).toBe("right");
-    expect(DEFAULT_ASSISTANT.width).toBe(360);
+    expect(DEFAULT_ASSISTANT.width).toBe(320);
   });
 
   test("under 1,000px a side dock is drawn at the bottom, and its choice is kept", () => {
@@ -77,8 +77,8 @@ describe("sizes", () => {
         y: 40,
       },
     });
-    expect(restoredSize(moved, "right")).toEqual({ width: 360 });
-    expect(restoredSize(moved, "left")).toEqual({ width: 360 });
+    expect(restoredSize(moved, "right")).toEqual({ width: 320 });
+    expect(restoredSize(moved, "left")).toEqual({ width: 320 });
     expect(restoredSize(moved, "bottom")).toEqual({ height: 300 });
     // A floating box keeps its corner and its distance to it.
     expect(restoredSize(moved, "float")).toEqual({
@@ -144,9 +144,9 @@ describe("dragging the header", () => {
     expect(zones.map((zone) => zone.dock).sort()).toEqual(["bottom", "left", "right"]);
     const right = zones.find((zone) => zone.dock === "right");
     expect(right?.rect).toEqual({
-      left: area.left + area.width - 360,
+      left: area.left + area.width - 320,
       top: 8,
-      width: 360,
+      width: 320,
       height: 884,
     });
     expect(snapZones(area, place(), 999).map((zone) => zone.dock)).toEqual(["bottom"]);

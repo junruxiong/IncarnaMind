@@ -58,6 +58,15 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Downloads from GitHub's releases fail now and then (a 500), and each shard downloads
+      # Electron, so a failed download is tried again here rather than failing every spec.
+      - name: Make sure Electron is installed
+        run: |
+          for attempt in 1 2 3; do
+            node node_modules/electron/install.js && exit 0
+            sleep 20
+          done
+          exit 1
       # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
       # none, so a printed PDF would hold no Chinese for the export specs to read back.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk

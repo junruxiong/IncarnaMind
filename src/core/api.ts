@@ -95,8 +95,12 @@ export interface CreateMindInput {
  *   `proposalDelete` marks on text, and the `proposal` attribute on Blocks and
  *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 4
  *   content as it is: nothing is rewritten.
+ * - 5: a Proposal records the text it changes (#94): `target` on its marks
+ *   and its `proposal` attributes (see `ProposalRef`), so it goes out of date
+ *   once that text changes. Version 4 Proposals have none and never go out
+ *   of date: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 4;
+export const CONTENT_SCHEMA_VERSION = 5;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -222,8 +226,12 @@ export const BLOCK_ID_ATTRIBUTE = "id";
  *   a `ProposalAttribute` (the editor's binding keeps no marks on nodes).
  *
  * Until it is accepted a Proposal isn't part of the Mind: what reads the
- * Mind's text (Question context, exports) leaves its new words out and keeps
- * the words it would remove.
+ * Mind's text (Question context, exports, copying, the word count) leaves its
+ * new words out and keeps the words it would remove. It is out of date once
+ * the text it changes has changed (`target`): the words it removes were
+ * edited, partly deleted, or had words typed between them, or the Block it
+ * removes was edited. One out of date can't be accepted, only rejected or
+ * made again (regenerated) from the text as it is now.
  */
 export const PROPOSAL_INSERT_MARK = "proposalInsert";
 export const PROPOSAL_DELETE_MARK = "proposalDelete";
@@ -234,11 +242,20 @@ export interface ProposalRef {
   /** The Proposal's random UUID: what is accepted or rejected on its own. */
   id: string;
   /**
-   * What asked for it: one Edit with AI, or (later) one reply of the
-   * assistant. Its Proposals are accepted or rejected together from there,
-   * and `MIND_PROPOSAL_REQUESTS_FIELD` says which model made them.
+   * What asked for it: one Edit with AI, one Regenerate of an Answer the User
+   * edited, or (later) one reply of the assistant. Its Proposals are accepted
+   * or rejected together from there, and `MIND_PROPOSAL_REQUESTS_FIELD` says
+   * which model made them.
    */
   request: string;
+  /**
+   * A hash of the text it changes as it was when it was made (`targetHash` in
+   * src/shared/proposals.ts): its removed words, an inline node as U+FFFC, or
+   * the whole Block it removes; the hash of "" for one that only adds. Every
+   * part of the Proposal carries it. Absent on Proposals made before version 5,
+   * which are never out of date.
+   */
+  target?: string;
 }
 
 /** The `proposal` attribute of a Block or an inline node: it adds it, or removes it. */
@@ -254,10 +271,24 @@ export interface ProposalAttribute extends ProposalRef {
  */
 export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 
-/** What made a request's Proposals. */
-export interface ProposalRequest {
-  /** Edit with AI (#93); the assistant (#202) and Enhance (#114) add theirs. */
-  source: "edit-with-ai";
+/**
+ * What made a request's Proposals: Edit with AI (#93), with what it was asked
+ * so a change can be made again (regenerated) once it is out of date; or
+ * Regenerate of an Answer the User had edited (#94). The assistant (#202) and
+ * Enhance (#114) add theirs.
+ */
+export type ProposalRequest =
+  | (ProposalMaker & {
+      source: "edit-with-ai";
+      /** Absent on requests made before #94: their changes can't be regenerated. */
+      action?: EditAction;
+      /** What the User asked for ("translate", "instruction"); "" for none. */
+      instruction?: string;
+    })
+  | (ProposalMaker & { source: "answer"; answerId: string });
+
+/** The model that made a request's Proposals, and when. */
+export interface ProposalMaker {
   providerId: string;
   modelId: string;
   /** ISO 8601, UTC. */
@@ -931,7 +962,7 @@ export interface AssistantPlace {
 export const DEFAULT_ASSISTANT: AssistantPlace = {
   dock: "right",
   folded: false,
-  width: 360,
+  width: 320,
   height: 300,
   float: { width: 380, height: 520, corner: "top-right", x: 24, y: 56 },
 };
@@ -2355,15 +2386,11 @@ export interface AskQuestionInput {
   mindId: string;
   /** The Question Block's id. */
   questionId: string;
-  /** Replace the Question's Answer even if the User has edited it. Defaults to false. */
-  discardEdits?: boolean;
 }
 
 export interface RegenerateAnswerInput {
   mindId: string;
   answerId: string;
-  /** Replace the Answer even if the User has edited it. Defaults to false. */
-  discardEdits?: boolean;
 }
 
 export interface StopAnswerInput {
@@ -2480,20 +2507,46 @@ export interface EditWithAiInput {
   model?: ChatModelChoice | null;
 }
 
+/**
+ * Regenerate of a change from Edit with AI (#94), usually one out of date:
+ * the same request is made again from the text the change covers as it is
+ * now, and its new changes replace it.
+ */
+export interface RegenerateProposalInput {
+  /** Chosen by the caller, so it can stop the request (`cancelEdit`). */
+  requestId: string;
+  mindId: string;
+  /** The Proposal to make again (`ProposalRef.id`). */
+  proposalId: string;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
 /** What Edit with AI did. */
 export type EditWithAiResult =
   /**
    * The changes are in the Mind as Proposals: `proposals` of them, all from
    * `request`. `droppedCitations`: how many Citations they would remove.
+   * `outOfDate`: how many were out of date as they arrived, because the User
+   * edited their text while the model worked.
    */
-  | { kind: "proposed"; request: string; proposals: number; droppedCitations: number }
+  | {
+      kind: "proposed";
+      request: string;
+      proposals: number;
+      droppedCitations: number;
+      outOfDate: number;
+    }
   /** The model gave the text back as it was: there is nothing to propose. */
   | { kind: "unchanged" }
   /** Nothing was sent: the model can't be used now, and `readiness` says why. */
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
   | { kind: "local-mode" }
-  /** The selected text isn't in the Mind as it was any more: it was edited meanwhile. */
+  /**
+   * The selected text isn't in the Mind any more (its paragraphs were deleted
+   * meanwhile), or the change to regenerate has gone: nothing was written.
+   */
   | { kind: "changed" }
   /** Nothing was sent: the selection holds Proposals that are still waiting. */
   | { kind: "has-proposals" }
@@ -2510,8 +2563,6 @@ export type AskResult =
   | { asked: true; answerId: string }
   /** Nothing was sent: Questions can't be asked yet, and `readiness` says why. */
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
-  /** Nothing was sent: the User has edited the Answer. Ask again with `discardEdits` to replace it. */
-  | { asked: false; reason: "edited"; answerId: string }
   /**
    * Nothing was sent: the Question forces a Skill (`skill`, its name) that is
    * turned off or no longer there. Turn it on, or take it off the Question.
@@ -4920,9 +4971,10 @@ export interface CoreApi {
   /**
    * Asks a Question: its Answer is written into the Mind right after it, as the
    * model streams it ("answer.*" events follow its progress). Asking a Question
-   * that already has an Answer replaces that Answer in place. Nothing is sent
-   * when Questions can't be asked yet, or when the Answer has edits the User
-   * hasn't agreed to lose.
+   * that already has an Answer writes it again in place. An Answer the User
+   * has edited isn't replaced: the new one is written, once it is finished,
+   * as Proposals over the User's version (#94), which stays until they accept
+   * a change to it. Nothing is sent when Questions can't be asked yet.
    */
   askQuestion(input: AskQuestionInput): Promise<AskResult>;
   /** Writes an Answer again, in place, from its Question. Same rules as `askQuestion`. */
@@ -4965,6 +5017,16 @@ export interface CoreApi {
    * used. Pushes the Proposals as a "mind.update", like any edit.
    */
   editWithAi(input: EditWithAiInput): Promise<EditWithAiResult>;
+  /**
+   * Makes a change from Edit with AI again (#94), usually one out of date:
+   * rejects it and asks the model again, as that request asked, for the text
+   * it covered as it is now, the User's edits included. What comes back are
+   * new Proposals, written as `editWithAi` writes them; when the model gives
+   * the text back as it is, the change just goes ("unchanged"). If the model
+   * fails or is stopped, the change stays. Not for changes from other
+   * requests (an Answer's Regenerate is `regenerateAnswer`).
+   */
+  regenerateProposal(input: RegenerateProposalInput): Promise<EditWithAiResult>;
   /** Stops an Edit with AI request: it gives "cancelled". Stopping one that ended does nothing. */
   cancelEdit(requestId: string): Promise<void>;
 
@@ -5656,6 +5718,7 @@ const methods: Record<CoreApiMethod, true> = {
   acceptSuggestion: true,
   getSuggestionStatus: true,
   editWithAi: true,
+  regenerateProposal: true,
   cancelEdit: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
