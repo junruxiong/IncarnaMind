@@ -28,14 +28,19 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import type {
-  Skill,
-  SkillAvailability,
-  SkillFile,
-  SkillImportCheck,
-  SkillImportPreview,
+import { skillNameFrom } from "../../shared/skillName";
+import {
+  SKILL_LIMITS,
+  type Skill,
+  type SkillAvailability,
+  type SkillDraft,
+  type SkillFile,
+  type SkillImportCheck,
+  type SkillImportPreview,
+  type SkillSaveProblem,
+  type SkillSaveResult,
 } from "../api";
-import { InvalidInputError, NotFoundError } from "../errors";
+import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
 import { type BuiltInSkill, readBuiltInSkills } from "./builtIn";
 import { MAX_NAME_LENGTH, parseSkillMd, renameSkillMd, type SkillFrontmatter } from "./frontmatter";
@@ -48,6 +53,7 @@ import {
   type SkillLimits,
   type SkillSourceFile,
 } from "./source";
+import { composeSkillMd, MAX_DESCRIPTION_LENGTH, oneLine, skillZip } from "./write";
 
 /** Previews kept for importing; an older one is forgotten when a newer one comes. */
 const MAX_PENDING_IMPORTS = 3;
@@ -211,6 +217,55 @@ function copyName(name: string, taken: (name: string) => boolean): string {
   }
 }
 
+function parseDraft(input: unknown): SkillDraft {
+  if (!isRecord(input)) throw new InvalidInputError("A Skill draft must be an object.");
+  const { name, description, steps } = input;
+  if (typeof name !== "string" || typeof description !== "string" || typeof steps !== "string") {
+    throw new InvalidInputError(
+      "A Skill draft needs a name, when to use it and its steps, as text.",
+    );
+  }
+  return { name, description, steps };
+}
+
+/** The draft as it will be written, or what is wrong with it. */
+function checkDraft(
+  draft: SkillDraft,
+  nameTaken: (name: string) => boolean,
+): { ok: true; draft: SkillDraft } | { ok: false; problem: SkillSaveProblem } {
+  const name = skillNameFrom(draft.name);
+  const description = oneLine(draft.description);
+  const steps = draft.steps.trim();
+  const problem: SkillSaveProblem | null =
+    name === ""
+      ? "invalid-name"
+      : nameTaken(name)
+        ? "name-taken"
+        : description === ""
+          ? "no-description"
+          : description.length > MAX_DESCRIPTION_LENGTH
+            ? "description-too-long"
+            : steps === ""
+              ? "no-steps"
+              : Buffer.byteLength(steps) > SKILL_LIMITS.maxInstructionsBytes
+                ? "too-large"
+                : null;
+  return problem ? { ok: false, problem } : { ok: true, draft: { name, description, steps } };
+}
+
+/** A checked draft as a Skill staged to be written: its SKILL.md alone. */
+function stagedFrom(draft: SkillDraft, kept?: SkillFrontmatter): Staged {
+  const text = composeSkillMd(draft, kept);
+  const parsed = parseSkillMd(text);
+  if (!parsed.ok)
+    throw new Error(`The Skill "${draft.name}" couldn't be written: ${parsed.message}`);
+  return {
+    source: "",
+    frontmatter: parsed.frontmatter,
+    files: [{ path: INSTRUCTIONS_FILE, data: Buffer.from(text, "utf8") }],
+  };
+}
+
 const builtInNameMessage = (name: string) =>
   `"${name}" is the name of a built-in Skill, whose files can't be replaced. Give the Skill another name in its SKILL.md, or duplicate the built-in Skill to make your own.`;
 
@@ -278,6 +333,21 @@ export function createSkills(options: SkillsOptions) {
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, file.data, { flag: "wx" });
     }
+  }
+
+  /** Every file of a Skill, read from its folder now. */
+  async function readFiles(row: SkillRow): Promise<SkillSourceFile[]> {
+    const files: SkillSourceFile[] = [];
+    for (const file of filesOf(row)) {
+      const segments = insidePath(file.path);
+      if (!segments || segments.length === 0) throw new Error(`Refused to read ${file.path}.`);
+      try {
+        files.push({ path: file.path, data: await readFile(join(folderOf(row.id), ...segments)) });
+      } catch {
+        throw new Error(`The files of the Skill "${row.name}" are missing from the data folder.`);
+      }
+    }
+    return files;
   }
 
   /** A Skill's instructions, read from its folder now. */
@@ -457,6 +527,77 @@ export function createSkills(options: SkillsOptions) {
     }
   }
 
+  /**
+   * Writes a staged Skill's files and row: a new Skill, or `existing`'s files
+   * and row replaced (keeping its id and whether it's on), the old files
+   * going once the row says so. Call inside `serially`.
+   */
+  async function commit(staged: Staged, existing: SkillRow | undefined): Promise<Skill> {
+    const { frontmatter } = staged;
+    const skillId = existing?.id ?? randomUUID();
+    const target = folderOf(skillId);
+
+    const written = join(incoming, randomUUID());
+    try {
+      await writeFiles(written, staged.files);
+    } catch (error) {
+      await rm(written, { recursive: true, force: true });
+      throw error;
+    }
+    // Swap the new files in; the old ones (a Skill replaced) go once the row says so.
+    const previous = existing ? join(incoming, randomUUID()) : null;
+    if (previous) await rename(target, previous).catch(() => undefined);
+    try {
+      await rename(written, target);
+    } catch (error) {
+      await rm(written, { recursive: true, force: true });
+      if (previous) await rename(previous, target).catch(() => undefined);
+      throw error;
+    }
+
+    const at = now();
+    const files = JSON.stringify(inSkillOrder(describe(staged.files)));
+    try {
+      if (existing) {
+        db.run(
+          `UPDATE skills SET name = ?, description = ?, license = ?, compatibility = ?, files = ?, updated_at = ?
+           WHERE id = ?`,
+          [
+            frontmatter.name,
+            frontmatter.description,
+            frontmatter.license,
+            frontmatter.compatibility,
+            files,
+            at,
+            skillId,
+          ],
+        );
+      } else {
+        db.run(
+          `INSERT INTO skills (id, name, description, license, compatibility, files, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          [
+            skillId,
+            frontmatter.name,
+            frontmatter.description,
+            frontmatter.license,
+            frontmatter.compatibility,
+            files,
+            at,
+            at,
+          ],
+        );
+      }
+    } catch (error) {
+      // Put the old files back.
+      await rm(target, { recursive: true, force: true });
+      if (previous) await rename(previous, target).catch(() => undefined);
+      throw error;
+    }
+    if (previous) await rm(previous, { recursive: true, force: true }).catch(options.reportError);
+    return toSkill(rowOf(skillId));
+  }
+
   return {
     /** Live Skills, in name order. */
     list: (): Skill[] => rows().map(toSkill),
@@ -532,68 +673,7 @@ export function createSkills(options: SkillsOptions) {
         if (existing && existing.built_in !== 0) {
           throw new InvalidInputError(builtInNameMessage(frontmatter.name));
         }
-        const skillId = existing?.id ?? randomUUID();
-        const target = folderOf(skillId);
-
-        const written = join(incoming, randomUUID());
-        try {
-          await writeFiles(written, staged.files);
-        } catch (error) {
-          await rm(written, { recursive: true, force: true });
-          throw error;
-        }
-        // Swap the new files in; the old ones (a Skill replaced) go once the row says so.
-        const previous = existing ? join(incoming, randomUUID()) : null;
-        if (previous) await rename(target, previous).catch(() => undefined);
-        try {
-          await rename(written, target);
-        } catch (error) {
-          await rm(written, { recursive: true, force: true });
-          if (previous) await rename(previous, target).catch(() => undefined);
-          throw error;
-        }
-
-        const at = now();
-        const files = JSON.stringify(inSkillOrder(describe(staged.files)));
-        try {
-          if (existing) {
-            db.run(
-              `UPDATE skills SET description = ?, license = ?, compatibility = ?, files = ?, updated_at = ?
-               WHERE id = ?`,
-              [
-                frontmatter.description,
-                frontmatter.license,
-                frontmatter.compatibility,
-                files,
-                at,
-                skillId,
-              ],
-            );
-          } else {
-            db.run(
-              `INSERT INTO skills (id, name, description, license, compatibility, files, enabled, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-              [
-                skillId,
-                frontmatter.name,
-                frontmatter.description,
-                frontmatter.license,
-                frontmatter.compatibility,
-                files,
-                at,
-                at,
-              ],
-            );
-          }
-        } catch (error) {
-          // Put the old files back.
-          await rm(target, { recursive: true, force: true });
-          if (previous) await rename(previous, target).catch(() => undefined);
-          throw error;
-        }
-        if (previous)
-          await rm(previous, { recursive: true, force: true }).catch(options.reportError);
-        return toSkill(rowOf(skillId));
+        return commit(staged, existing);
       });
     },
 
@@ -635,21 +715,7 @@ export function createSkills(options: SkillsOptions) {
       const id = parseId(skillIdInput, "A Skill id");
       return serially(async () => {
         const row = rowOf(id);
-        const files: SkillSourceFile[] = [];
-        for (const file of filesOf(row)) {
-          const segments = insidePath(file.path);
-          if (!segments || segments.length === 0) throw new Error(`Refused to read ${file.path}.`);
-          try {
-            files.push({
-              path: file.path,
-              data: await readFile(join(folderOf(row.id), ...segments)),
-            });
-          } catch {
-            throw new Error(
-              `The files of the Skill "${row.name}" are missing from the data folder.`,
-            );
-          }
-        }
+        const files = await readFiles(row);
         const name = copyName(row.name, (taken) => rowNamed(taken) !== undefined);
         const instructions = files.find((file) => file.path === INSTRUCTIONS_FILE);
         const renamed = renameSkillMd(asText(instructions?.data ?? Buffer.alloc(0)) ?? "", name);
@@ -689,6 +755,58 @@ export function createSkills(options: SkillsOptions) {
         }
         return toSkill(rowOf(skillId));
       });
+    },
+
+    /** A Skill's name, "when to use" and steps, as its editor shows them. */
+    async draftOf(skillId: unknown): Promise<SkillDraft> {
+      const row = rowOf(skillId);
+      return { name: row.name, description: row.description, steps: await instructionsOf(row) };
+    },
+
+    /** Saves a new Skill from a draft. A name another Skill has is refused. */
+    create(input: unknown): Promise<SkillSaveResult> {
+      const draft = parseDraft(input);
+      return serially(async () => {
+        const checked = checkDraft(draft, (name) => rowNamed(name) !== undefined);
+        if (!checked.ok) return checked;
+        const skill = await commit(stagedFrom(checked.draft), undefined);
+        return { ok: true, skill };
+      });
+    },
+
+    /**
+     * Saves a Skill's draft again, keeping its other files, its id and whether
+     * it's on. A built-in Skill's files can't be replaced.
+     */
+    update(skillId: unknown, input: unknown): Promise<SkillSaveResult> {
+      const id = parseId(skillId, "A Skill id");
+      const draft = parseDraft(input);
+      return serially(async () => {
+        const row = rowOf(id);
+        if (row.built_in !== 0) throw new InvalidInputError(builtInNameMessage(row.name));
+        const checked = checkDraft(draft, (name) => {
+          const other = rowNamed(name);
+          return other !== undefined && other.id !== row.id;
+        });
+        if (!checked.ok) return checked;
+        const files = await readFiles(row);
+        const current = files.find((file) => file.path === INSTRUCTIONS_FILE);
+        const parsed = parseSkillMd(asText(current?.data ?? Buffer.alloc(0)) ?? "");
+        const kept = parsed.ok ? parsed.frontmatter : undefined;
+        const staged = stagedFrom(checked.draft, kept);
+        staged.files = [
+          ...staged.files,
+          ...files.filter((file) => file.path !== INSTRUCTIONS_FILE),
+        ];
+        return { ok: true, skill: await commit(staged, row) };
+      });
+    },
+
+    /** A Skill as a zip, named after it, for the host to save. */
+    async exportZip(skillId: unknown): Promise<{ fileName: string; data: Uint8Array }> {
+      const row = rowOf(skillId);
+      const files = await readFiles(row);
+      return { fileName: `${row.name}.zip`, data: skillZip(row.name, inSkillOrder(files)) };
     },
 
     /**
