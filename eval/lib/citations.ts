@@ -123,6 +123,14 @@ export interface AnswerRecord {
   quoteRetry?: QuoteRetry | null;
   /** The tokens the Answer's model calls counted (#343); absent in a result file from before. */
   usage?: AnswerUsage | null;
+  /** The Answer's full text, a block to a paragraph, each Citation as its marker ("[^1]"). */
+  text: string;
+  /**
+   * Set only for an unanswerable Question: whether the phrase rule (./declines)
+   * found the Answer saying the Documents don't answer it. A reviewer marks
+   * the declines it missed on the sheet.
+   */
+  declines?: boolean;
   /** Each sentence of the Answer (headings and code left out), and whether a Citation is anchored in it. */
   sentences: { text: string; cited: boolean }[];
   citations: CitationRecord[];
@@ -272,6 +280,24 @@ function answerSentences(
     return false;
   });
   return sentences;
+}
+
+/** The Answer's text as the editor shows it: a paragraph per block, a Citation as its marker, in order. */
+function answerText(answer: ProseMirrorNode): string {
+  const blocks: string[] = [];
+  let marker = 0;
+  answer.descendants((node) => {
+    if (!node.isTextblock) return true;
+    let text = "";
+    node.forEach((child) => {
+      if (child.isText) text += child.text ?? "";
+      else if (child.type.name === CITATION_NODE) text += `[^${++marker}]`;
+      else text += " ";
+    });
+    blocks.push(text.trim());
+    return false;
+  });
+  return blocks.filter(Boolean).join("\n\n");
 }
 
 /** An f-ligature's letters: "ffi", "ffl", "ff", "fi" or "fl". */
@@ -576,6 +602,7 @@ async function askOne(
     rejectedRecords: finished?.rejectedRecords ?? [],
     quoteRetry: finished?.quoteRetry ?? null,
     usage: finished?.usage ?? null,
+    text: answer ? answerText(answer) : "",
     sentences: sentences.map((sentence) => ({
       text: sentence.text,
       cited: sentence.citations.length > 0,
