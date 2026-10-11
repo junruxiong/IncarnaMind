@@ -88,9 +88,19 @@ function fontLicences(): Plugin {
 }
 
 // Entry points follow electron-vite's defaults (src/main, src/preload and src/renderer), plus the
-// hidden window that records a Meeting's audio: its preload and its page (ADR-0015).
+// hidden window that records a Meeting's audio: its preload and its page (ADR-0015), and the
+// shim an outside agent starts to reach the app (#351), run by the app's binary as plain Node.
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, "src/main/index.ts"),
+          agentShim: resolve(__dirname, "src/main/agentShim.ts"),
+        },
+      },
+    },
+  },
   preload: {
     build: {
       rollupOptions: {

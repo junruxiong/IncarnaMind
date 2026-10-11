@@ -11,6 +11,8 @@ import {
 } from "../shared/mindCitationStyle";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
+import { agentSocketPath, createAgents } from "./agents";
+import { createAgentSetup } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -70,6 +72,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
+import { renderMarkdown } from "./exports/markdown";
 import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { createLayouts } from "./layout";
@@ -89,7 +92,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
-import { firstLineOf } from "./mindText";
+import { firstLineOf, readBlocks } from "./mindText";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -542,9 +545,11 @@ export function createCore(adapters: CoreAdapters): Core {
   // Documents to search from an earlier run: the built-in reranking model downloads now, or
   // carries on from where the app quit, if it reranks them.
   if (documents.searchableCount() > 0) rerank.prepare();
+  /** Set once outside agents exist: Local mode pauses them. */
+  let agentsLocalModeChanged = () => {};
   /**
    * Local mode on or off: embeddings may switch back to the built-in model,
-   * rerank pauses, and usage data stops.
+   * rerank pauses, usage data stops, and outside agents pause.
    */
   const setLocalOnly = async (enabled: unknown) => {
     const wasLocal = embedding.localOnly();
@@ -553,6 +558,7 @@ export function createCore(adapters: CoreAdapters): Core {
     if (wasLocal !== embedding.localOnly()) {
       usageData.localModeChanged();
       privacyChanged();
+      agentsLocalModeChanged();
       await rerankChanged();
       // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
       await readinessChanged();
@@ -1310,6 +1316,76 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
 
+  // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
+  // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
+  const agents = createAgents({
+    db,
+    now,
+    clock: () => performance.now(),
+    secrets,
+    consent,
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    localOnly: () => embedding.localOnly(),
+    socketPath: adapters.agents?.socketPath ?? agentSocketPath(dataDir),
+    // Without a host's launcher there is no shim to start; tests and the evaluation give theirs.
+    launcher: adapters.agents?.launcher ?? { command: process.execPath, args: [] },
+    version: adapters.agents?.version ?? "0.0.0",
+    access: {
+      say: (key, params) => translate(settings.get().language, key, params),
+      folders: () => library.folders().map((folder) => ({ id: folder.id, name: folder.name })),
+      documentsIn: (folderIds) =>
+        folderIds.length === 0
+          ? []
+          : (resolveScope({ folderIds: [...folderIds], tagIds: [], documentIds: [] }) ?? []),
+      // Without the reranker: it costs about a second a search (ADR-0009), and an agent's
+      // search must answer in well under 100 ms. `ask` reranks, as every Answer does.
+      search: (query, documentIds, parameters, signal) =>
+        documents.searchTool(query, { documentIds, parameters, signal }),
+      passage: (passageId) => documents.passage(passageId),
+      passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
+      citing,
+      recheck: (input) => recheckCitation(documents, input),
+      minds: () => minds.list().filter((mind) => isKnownKind(mind.kind)),
+      mindMarkdown: (mindId, footnote) => {
+        const mind = minds.get(mindId);
+        const { language } = settings.get();
+        const blocks = content.peek(mind.id, (fragment) =>
+          readBlocks(fragment, { includeQuestions: true, footnote, trimBeforeCitation: true }),
+        );
+        return renderMarkdown(mind.title || mind.autoTitle, blocks, {
+          question: translate(language, "export.question"),
+          unverified: translate(language, "export.unverified"),
+        });
+      },
+      answer: (question, documentIds, signal) =>
+        answers.answerOutside(question, documentIds, signal),
+      show: (place) => events.emit("agents.citationShown", place),
+    },
+    changed: (value) => events.emit("agents.changed", value),
+    called: (activity) => events.emit("agents.activity", activity),
+    reportError: (error) => console.error(error),
+  });
+  agentsLocalModeChanged = () => agents.localModeChanged();
+  agents.start().catch((error: unknown) => console.error(error));
+  // Setting IncarnaMind up in the User's agent, from Settings → Agents.
+  const home = adapters.agents?.home ?? homedir();
+  const agentSetup = createAgentSetup({
+    agents,
+    home,
+    applications:
+      adapters.agents?.applications ??
+      (platform === "darwin" ? ["/Applications", join(home, "Applications")] : []),
+    platform,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    shimScript: adapters.agents?.shimScript ?? null,
+    version: adapters.agents?.version ?? "0.0.0",
+    openLink: adapters.agents?.openLink ?? null,
+    openPath: adapters.shell ? (path) => adapters.shell?.openPath(path) ?? Promise.resolve() : null,
+    say: (key, params) => translate(settings.get().language, key, params),
+    reportError: (error) => console.error(error),
+  });
+
   const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
     const batchId = batches.begin(library.target(options));
     const since = now();
@@ -1977,6 +2053,21 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
+    getAgents: async () => agents.settings(),
+    setAgentsEnabled: (enabled) => agents.setEnabled(enabled),
+    connectAgent: (input) => agents.connect(input),
+    updateAgent: async (pairingId, input) => agents.update(pairingId, input),
+    disconnectAgent: async (pairingId) => {
+      await agentSetup.removeFromSettings(pairingId);
+      await agents.disconnect(pairingId);
+    },
+    listAgentClients: async () => agentSetup.clients(),
+    previewAgentSetup: async (client) => agentSetup.preview(client),
+    setUpAgent: (input) => agentSetup.setUp(input),
+    undoAgentSetup: (pairingId) => agentSetup.undo(pairingId),
+    copyAgentSetup: (pairingId) => agentSetup.settingsFor(pairingId),
+    getAgentLaunch: (pairingId) => agents.launch(pairingId),
+    listAgentActivity: async (pairingId) => agents.activity(pairingId),
     reconcileDocuments: () => documents.linkedFolders.sync(),
     systemSleeping: () => meetings.sleeping(),
     systemAwake: () => meetings.awake(),
@@ -1991,6 +2082,8 @@ export function createCore(adapters: CoreAdapters): Core {
       lifetime.abort();
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
+      // Outside agents can't reach the core while it closes.
+      void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.
       background.close();
       void chatGpt.cancelSignIn();

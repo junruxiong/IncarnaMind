@@ -532,6 +532,8 @@ export function createLibrary(options: {
     },
     /** A live Folder, or NotFoundError. */
     folder: group,
+    /** The live Folders, by name. */
+    folders: groups,
     /**
      * Puts these Documents in a Folder (or in none) as the User's choice, as
      * `assign` does for one, all or none, and returns where each was. It says
