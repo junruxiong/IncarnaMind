@@ -33,17 +33,14 @@ export const en = {
   "library.deleteNotice":
     "Its Documents and Minds move to Not in a Folder. Their original files and Tags are kept.",
   "library.cancel": "Cancel",
-  "library.modelSettings": "Organization settings",
   "library.search": "Find by name or tag",
   "library.classify": "Organize",
-  "library.reclassify": "Organize this folder",
   "library.progress": "Organizing {count} Documents…",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.failed": "{count} Documents need attention. Open their details, then retry Organize.",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
-  "library.manualHint": "Choose a folder and tags, or use Organize to suggest them.",
   "library.empty": "Add Documents from the sidebar to start organising them.",
   "library.noMatches": "No Documents here yet.",
   "library.manual": "Your choice",
@@ -196,9 +193,6 @@ export const en = {
 
   "mind.untitled": "Untitled",
   "conversation.untitled": "New chat",
-  "object.renamed": "Renamed to “{name}”",
-  "object.deleted": "Deleted “{name}”",
-  "object.deleted.conversations": "Deleted {count} conversations",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
@@ -325,7 +319,6 @@ export const en = {
   "editor.ai.improve": "Improve writing",
   "editor.ai.shorten": "Shorten",
   "editor.ai.translate": "Translate…",
-  "editor.ai.translateTo": "Translate into",
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
   "edit.pending.improve": "Improving the writing…",
@@ -455,7 +448,6 @@ export const en = {
   "viewer.markdown.imageWeb": "Images from the web aren't loaded",
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.docx.comment": "Comment by {author}",
-  "viewer.section.start": "Start",
 
   "location.page": "p. {range}",
   "location.slide.one": "slide {range}",
@@ -870,9 +862,7 @@ export const en = {
   "tags.chip.automatic": "{tag}: added automatically",
   "tags.chip.user": "{tag}: added by you",
   "tags.menu.open": "Tags of {name}",
-  "tags.menu.title": "Tags",
   "tags.menu.none": "No Tags yet.",
-  "tags.menu.confirm": "Confirm {tag}",
   "tags.menu.retag": "Re-tag automatically",
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
@@ -1291,7 +1281,6 @@ export const en = {
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
 
-  "privacy.tabs.label": "Settings pages",
   "privacy.tabs.general": "General",
   "privacy.tabs.privacy": "Privacy",
   "privacy.intro":
@@ -1435,7 +1424,6 @@ export const en = {
   "scope.picker.documents": "Documents",
   "scope.picker.empty": "No Folders, Tags or Documents match",
   "scope.picker.none": "Add Documents, Folders or Tags to choose what a Question searches.",
-  "scope.label": "Search only",
   "scope.chip.folder": "Folder “{name}”, with its sub-Folders",
   "scope.chip.tag": "Documents tagged “{name}”",
   "scope.chip.document": "Document “{name}”",
@@ -1940,6 +1928,20 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
+  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
+  "approvals.thirdParty.read.checkedDocument":
+    "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
+  "approvals.thirdParty.mind.webPage":
+    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.mind.checkedDocument":
+    "This Mind contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.conversation.imported":
+    "This conversation contains imported text, so it asks you first.",
+  "approvals.thirdParty.conversation.webPage":
+    "This conversation contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "This conversation contains text from the document being checked, so it asks you first.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",

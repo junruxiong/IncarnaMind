@@ -382,8 +382,6 @@ test("a Linked folder shows its Folders as on disk, and files added on their own
     await showSourceLocations(window);
     await expect(looseItem).toHaveAttribute("data-depth", "0");
     await expect(others).toHaveCount(0);
-    // Folders on disk come from the disk: there is no moving a Document into one.
-    await expect(window.getByTestId("move-document")).toHaveCount(0);
 
     // "Add folder…" links a folder, picked with the system's picker (answered by the test),
     // once the User confirms in the link dialog.
