@@ -39,6 +39,24 @@ const appCommands: readonly Command[] = [
     run: () => composerHandle.current?.focus(),
   },
   {
+    // Suggest as I write (#282): on asks for consent first, as the switch in Settings does.
+    id: "suggestions.toggle",
+    label: (_ctx, t) =>
+      t(
+        useAppStore.getState().settings?.user.suggestWhileWriting
+          ? "command.suggestions.off"
+          : "command.suggestions.on",
+      ),
+    keywords: ["suggestions.settings.switch"],
+    group: "main",
+    reversible: true,
+    when: () => useAppStore.getState().settings !== null,
+    run: () => {
+      const on = useAppStore.getState().settings?.user.suggestWhileWriting ?? false;
+      return useAppStore.getState().updateSettings({ user: { suggestWhileWriting: !on } });
+    },
+  },
+  {
     id: "block.delete",
     label: "editor.block.delete",
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
