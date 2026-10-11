@@ -16,6 +16,7 @@ import {
   expectReadyDocuments,
   launchApp,
   openFolderInLibrary,
+  placeAssistant,
   removeDataFolder,
   sidebarFolder,
 } from "./app";
@@ -110,6 +111,8 @@ test("folders, tags, search, edits and removal update the index while originals 
     await expect(row.getByTestId("document-tags")).toContainText("Report");
     expect(await readFile(path, "utf8")).toBe(text);
     await window.setViewportSize({ width: 1000, height: 760 });
+    // The viewer opens beside the Library: at 1,000px, with the assistant at the bottom (#253).
+    await placeAssistant(window, { dock: "bottom" });
     await window.screenshot({ path: "/tmp/incarnamind-organize-manual.png" });
     await library.getByRole("button", { name: "Quarterly report", exact: true }).click();
     await expect(window.getByTestId("viewer")).toBeVisible();
@@ -421,6 +424,8 @@ test("organized folders remain separate from source locations and follow changes
     expect(await readFile(path, "utf8")).toBe(revised);
     await expect(window.getByTestId("sidebar-status")).not.toContainText("Tags need a model");
     await window.setViewportSize({ width: 1000, height: 760 });
+    // The viewer opens beside the Library: at 1,000px, with the assistant at the bottom (#253).
+    await placeAssistant(window, { dock: "bottom" });
     await row.getByRole("button", { name: "Membrane separation", exact: true }).click();
     await expect(window.getByTestId("viewer")).toBeVisible();
     await row.getByTestId("document-tags-menu").click();
