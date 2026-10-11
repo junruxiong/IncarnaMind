@@ -158,6 +158,7 @@ export function ChatModelSettings() {
               providers={providers}
               onSaved={done}
               ollamaActionInRow
+              withMoreProviders
             />
           </div>
           {current && (
