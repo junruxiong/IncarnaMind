@@ -126,6 +126,18 @@ export interface RunRecord {
 
 const HAIKU = { input: 0.1, cached: 0.01, cacheWrite: 0.125, output: 0.5 };
 const LUNA_CREDITS = { input: 2.5, cached: 0.25, output: 12.5 };
+/** GPT-6 Luna's API list price, the same as Haiku 5.5's: what the Codex arms would cost on a key. */
+const LUNA_USD = { input: 0.1, cached: 0.01, output: 0.5 };
+
+export function lunaUsd(usage: ModelUsage): number {
+  const fresh = Math.max(0, usage.inputTokens - usage.cachedInputTokens);
+  return (
+    (fresh * LUNA_USD.input +
+      usage.cachedInputTokens * LUNA_USD.cached +
+      usage.outputTokens * LUNA_USD.output) /
+    1e6
+  );
+}
 
 export function haikuUsd(usage: ModelUsage): number {
   const fresh = Math.max(0, usage.inputTokens - usage.cachedInputTokens - usage.cacheWriteTokens);

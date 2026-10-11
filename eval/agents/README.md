@@ -28,7 +28,7 @@ The ten tasks: an English PDF lookup (T1), a Word table (T2), a number from a Po
 Per run (`lib/score.ts`, `lib/judge.ts`):
 - **Time:** start-up (spawning the agent and its MCP server, until its turn starts) apart from task time (from then to the final text). H's task time includes the host's re-check.
 - **Model calls and tokens**, cached ones included: Codex's `turn.completed` usage (model calls estimated as Tool calls plus one), Claude Code's result, IncarnaMind's own model through a usage meter on the core's `createChatModel` adapter (`lib/usage.ts`). H's tokens aren't reported by ACP v1, so only its calls are counted.
-- **Cost:** Haiku 5.5 at list prices; Codex in plan credits.
+- **Cost:** Haiku 5.5 at list prices; Codex in plan credits, and in dollars at GPT-6 Luna's API list price (the same as Haiku 5.5's), so every arm compares in dollars.
 - **Citation found-rate:** each `[cite:…]` in the final text is looked up among the Citations minted for that run's pairing and checked again against its Document; any other token is an invented one. Sentences giving a page or slide with no token are counted too.
 - **Expected source** (the sets' hit rule) and **correct** (the judge, against the expected answer).
 - **Uncited claims:** sentences with no Citation that make a claim from the Library, as the judge (Haiku 5.5) says; `reviewer-sheet.csv` holds every tenth judged sentence for a person to check. H's host and the built-in assistant mark such sentences for the User; the others don't.
