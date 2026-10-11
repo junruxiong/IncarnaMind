@@ -1,0 +1,101 @@
+{
+  "studies": [
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT04412746",
+          "briefTitle": "Covid-19 and Diabetes in West of Algeria"
+        },
+        "statusModule": {
+          "overallStatus": "UNKNOWN",
+          "lastUpdatePostDateStruct": {
+            "date": "2020-06-02"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Coronavirus Infections",
+            "Diabetes Mellitus",
+            "Prevalence",
+            "Risk Factors",
+            "Patient Outcome Assessment",
+            "Severe Acute Respiratory Syndrome"
+          ]
+        },
+        "designModule": {},
+        "armsInterventionsModule": {
+          "interventions": [
+            {
+              "name": "MANAGEMENT OF COVID-19"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT04625985",
+          "briefTitle": "Metformin Glycinate, Treatment of Patients With COVID-19 and Severe Acute Respiratory Syndrome Secondary to SARS-CoV-2."
+        },
+        "statusModule": {
+          "overallStatus": "COMPLETED",
+          "lastUpdatePostDateStruct": {
+            "date": "2021-04-08"
+          }
+        },
+        "conditionsModule": {
+          "conditions": ["Severe Acute Respiratory Syndrome Coronavirus 2"]
+        },
+        "designModule": {
+          "phases": ["PHASE2"]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {
+              "name": "Metformin Glycinate"
+            },
+            {
+              "name": "Placebo oral tablet"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "protocolSection": {
+        "identificationModule": {
+          "nctId": "NCT04626089",
+          "briefTitle": "Metformin Glycinate in Patients With MS or DM2 , Hospitalized With COVID-19 and SARS Secondary to SARS-CoV-2"
+        },
+        "statusModule": {
+          "overallStatus": "WITHDRAWN",
+          "lastUpdatePostDateStruct": {
+            "date": "2021-04-08"
+          }
+        },
+        "conditionsModule": {
+          "conditions": [
+            "Severe Acute Respiratory Syndrome Coronavirus 2",
+            "Metabolic Syndrome",
+            "Type 2 Diabetes"
+          ]
+        },
+        "designModule": {
+          "phases": ["PHASE2"]
+        },
+        "armsInterventionsModule": {
+          "interventions": [
+            {
+              "name": "metformin glycinate"
+            },
+            {
+              "name": "Placebo oral tablet"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "nextPageToken": "ZVNj7o2Elu8o3lpzDMiio-numpOQJJxrY_mj2PcW"
+}

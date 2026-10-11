@@ -40,6 +40,7 @@ const record = (overrides: Partial<AnswerRecord>): AnswerRecord => ({
   droppedMarkers: 0,
   droppedRecords: 0,
   rejectedRecords: [],
+  text: "",
   sentences: [],
   citations: [],
   seconds: 1,
@@ -1027,8 +1028,8 @@ describe("The reviewer sheet", () => {
 
     expect(sheet.startsWith("\uFEFF")).toBe(true);
     expect(sheet.slice(1).split("\r\n")).toEqual([
-      "question_id,language,round,question,answer_sentence,quote,document,page,supports (y/n),note",
-      'zh-01,zh,1,可持续发展目标一共包含多少项具体目标？,"It has 169 ""targets"", in all.",共有 169 项,维基百科-可持续发展目标,1–2,,',
+      "question_id,language,round,question,answer_sentence,quote,document,page,supports (y/n),answer (the rule found no decline),decline missed by the rule (y/n),note",
+      'zh-01,zh,1,可持续发展目标一共包含多少项具体目标？,"It has 169 ""targets"", in all.",共有 169 项,维基百科-可持续发展目标,1–2,,,,',
       "",
     ]);
   });
