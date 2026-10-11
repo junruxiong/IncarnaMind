@@ -341,6 +341,8 @@ export const zhCN = {
   "viewer.outline.untitled": "无标题",
   "viewer.mark.found": "引用 {number}：已找到引文",
   "viewer.mark.notFound": "引用 {number}：未找到引文",
+  "viewer.mark.contradicted": "引用 {number}：与文档矛盾",
+  "viewer.mark.contradicted.at": "引用 {number}：与文档矛盾，{location}",
   "viewer.mark.found.at": "引用 {number}：已找到引文，{location}",
   "viewer.mark.notFound.at": "引用 {number}：未找到引文，{location}",
   "viewer.slide.label": "第 {number} 张幻灯片",
@@ -1260,6 +1262,8 @@ export const zhCN = {
   "citation.badge.notFound.in": "未在 {location} 中找到引文",
   "citation.badge.notFound.document": "未在“{document}”中找到引文",
   "citation.badge.cantCheck": "无法核对",
+  "citation.badge.unsupported": "文档中没有依据",
+  "citation.badge.contradicted": "与文档矛盾",
   "citation.reason.quote-not-on-pages": "所引位置的文字中没有这段引文。",
   "citation.reason.pages-outside-passage": "所引位置不在这段引文所属的段落中。",
   "citation.reason.too-many-pages":
@@ -1537,6 +1541,7 @@ export const zhCN = {
   "command.group.close": "关闭这一栏",
   "command.group.equalize": "各栏等宽",
   "command.composer.focus": "提问",
+  "command.citation.open": "打开引用页面",
   "command.suggestions.on": "开启写作建议",
   "command.suggestions.off": "关闭写作建议",
 

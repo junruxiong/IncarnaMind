@@ -1,16 +1,22 @@
 import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import type { ViewerCitation } from "../../../shared/documentViewer";
 import { useT } from "../i18n";
-import { ExclamationIcon, TickIcon } from "./icons";
+import { ExclamationIcon, NotEqualIcon, TickIcon } from "./icons";
 
 /**
  * How a quote is washed: green, the colour of a found Citation's check, unless
- * it was opened anyway after its check said "not found", which is amber.
+ * it was opened anyway after its check said "not found" (or "unsupported"),
+ * which is amber. A contradicted claim is never green: its words are outlined
+ * in red, with no fill.
  */
-export type QuoteTone = "found" | "not-found";
+export type QuoteTone = "found" | "not-found" | "contradicted";
 
 export const quoteTone = (citation: ViewerCitation | undefined): QuoteTone =>
-  citation?.check === "not-found" ? "not-found" : "found";
+  citation?.check === "not-found" || citation?.check === "unsupported"
+    ? "not-found"
+    : citation?.check === "contradicted"
+      ? "contradicted"
+      : "found";
 
 /** The check mark to show beside a quote: only when the Citation's check and number are known. */
 export interface QuoteMark {
@@ -22,9 +28,9 @@ export interface QuoteMark {
 
 export function quoteMarkOf(citation: ViewerCitation | undefined): QuoteMark | null {
   if (citation?.number === undefined) return null;
-  if (citation.check !== "found" && citation.check !== "not-found") return null;
+  if (citation.check === "checking" || citation.check === "cant-check") return null;
   return {
-    tone: citation.check,
+    tone: quoteTone(citation),
     number: citation.number,
     ...(citation.label ? { label: citation.label } : {}),
   };
@@ -76,14 +82,12 @@ export function CitationMark({
   const own = useRef<HTMLSpanElement>(null);
   const labelElement = useRef<HTMLSpanElement>(null);
   const [fits, setFits] = useState(true);
+  const word = ({ found: "found", "not-found": "notFound", contradicted: "contradicted" } as const)[
+    mark.tone
+  ];
   const label = mark.label
-    ? t(mark.tone === "found" ? "viewer.mark.found.at" : "viewer.mark.notFound.at", {
-        number: mark.number,
-        location: mark.label,
-      })
-    : t(mark.tone === "found" ? "viewer.mark.found" : "viewer.mark.notFound", {
-        number: mark.number,
-      });
+    ? t(`viewer.mark.${word}.at`, { number: mark.number, location: mark.label })
+    : t(`viewer.mark.${word}`, { number: mark.number });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: measured again as the room changes
   useLayoutEffect(() => {
@@ -97,7 +101,12 @@ export function CitationMark({
     else onWidth?.(element.offsetWidth);
   }, [room, mark.label, fits]);
 
-  const Icon = mark.tone === "found" ? TickIcon : ExclamationIcon;
+  const Icon =
+    mark.tone === "found"
+      ? TickIcon
+      : mark.tone === "contradicted"
+        ? NotEqualIcon
+        : ExclamationIcon;
   return (
     <span
       ref={own}

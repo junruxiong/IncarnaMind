@@ -402,8 +402,16 @@ export const CITATION_NODE = "citation";
  * - "checking": the Answer is still being written.
  * - "found", "not-found": see `checkReason` for why it wasn't found.
  * - "cant-check": there is no text to look in (see `checkReason`).
+ * - "unsupported", "contradicted": the verdict of checking the claim itself against
+ *   the Documents, not only its quote (`verdict` says what the evidence says).
  */
-export type CitationCheck = "checking" | "found" | "not-found" | "cant-check";
+export type CitationCheck =
+  | "checking"
+  | "found"
+  | "not-found"
+  | "cant-check"
+  | "unsupported"
+  | "contradicted";
 
 export type CitationCheckReason =
   /** Not found: the quote isn't in the text of the cited Units (pages, slides…). */
@@ -524,6 +532,8 @@ export interface CitationAttributes {
   quote: string | null;
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
+  /** One line on what the evidence says, when a claim check has one ("The agreement says 31 October 2026, p. 7"). */
+  verdict?: string | null;
 }
 
 /** A Citation, as the Answer event stream reports it. */
