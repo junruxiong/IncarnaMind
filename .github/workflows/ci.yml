@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # Pull requests run once, through pull_request; a push runs CI only on main.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
