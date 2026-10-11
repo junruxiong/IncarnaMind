@@ -89,8 +89,8 @@ pub struct Run {
     pub script: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
-    /// In a citation, which of its references this run belongs to (its index in the request's
-    /// `items`); none for the citation's own affixes and delimiters.
+    /// In a citation, which of its references this run belongs to (its index in that citation's
+    /// `items`, as given, before the style sorts them); none for its affixes and delimiters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub item: Option<usize>,
 }

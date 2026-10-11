@@ -22,6 +22,7 @@ import {
   linkFolderFromSidebar,
   newMind,
   openDocumentAt,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -146,7 +147,10 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   const open = async (document: string) => {
     await window.keyboard.press("Escape");
     const index = labels.findIndex((label) => label.includes(document));
-    await answer.locator(`[data-styled="runs"] [data-work="${index}"]`).first().click();
+    await pointAndClick(
+      window,
+      answer.locator(`[data-styled="runs"] [data-work="${index}"]`).first(),
+    );
     await expect(window.getByTestId("viewer-title")).toHaveText(document);
   };
 
@@ -262,12 +266,12 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
   await window.getByTestId("export-mind").click();
   const dialog = window.getByTestId("export-dialog");
   await expect(dialog.getByTestId("export-citations")).toHaveAttribute("data-unverified", "0");
-  await dialog.getByTestId("export-citation-style").click();
+  await pointAndClick(window, dialog.getByTestId("export-citation-style"));
   await expect(window.getByTestId("citation-style-search")).toBeFocused();
   await window.keyboard.type("numbered");
   await window.keyboard.press("Enter");
   await expect(dialog.getByTestId("export-citation-style")).toHaveText(
-    "Numbered (Document and page)",
+    "Numbered (Document and Location)",
   );
   await dialog.getByTestId("export-save").click();
   await expect(dialog.getByTestId("export-done")).toBeVisible();

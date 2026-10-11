@@ -2037,7 +2037,7 @@ export const en = {
     "Stop recording? This meeting can’t be picked up again. What was recorded is kept.",
   "meetings.command.noneLive": "No meeting is being recorded",
 
-  "citationStyle.numbered": "Numbered (Document and page)",
+  "citationStyle.numbered": "Numbered (Document and Location)",
   "citationStyle.apa": "APA 7",
   "citationStyle.mla": "MLA 9",
   "citationStyle.harvard": "Harvard (Cite Them Right)",

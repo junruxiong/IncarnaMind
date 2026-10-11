@@ -1936,7 +1936,7 @@ export const zhCN = {
   "meetings.command.stopConfirm": "停止录制？这次会议无法再继续录制，已录下的内容会保留。",
   "meetings.command.noneLive": "没有正在录制的会议",
 
-  "citationStyle.numbered": "编号（文档和页码）",
+  "citationStyle.numbered": "编号（文档和位置）",
   "citationStyle.apa": "APA 第 7 版",
   "citationStyle.mla": "MLA 第 9 版",
   "citationStyle.harvard": "哈佛（Cite Them Right）",
