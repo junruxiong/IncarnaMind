@@ -18,7 +18,10 @@ export function loadDocumentBytes(documentId: string, signal: AbortSignal): Prom
     request.onload = () => {
       if (request.status === 200) resolve(new Uint8Array(request.response as ArrayBuffer));
       else if (request.status === 404) reject(new MissingDocumentError("The Document is gone."));
-      else reject(new Error(`The Document's file couldn't be read (status ${request.status}).`));
+      else if (request.status === 413) {
+        // Over the size limit for an Office file: not read; the reason is the body.
+        reject(new Error(new TextDecoder().decode(request.response as ArrayBuffer)));
+      } else reject(new Error(`The Document's file couldn't be read (status ${request.status}).`));
     };
     request.onerror = () => reject(new Error("The Document's file couldn't be read."));
     request.onabort = () => reject(new DOMException("Aborted", "AbortError"));
