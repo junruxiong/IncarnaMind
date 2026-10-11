@@ -151,9 +151,16 @@ export function GroupMenu({ groupId, merged }: { groupId: string; merged: boolea
   const layout = useAppStore((state) => state.layout);
   const group = layout?.groups.find((each) => each.id === groupId);
   const full = (layout?.groups.length ?? 0) >= MAX_TAB_GROUPS;
+  const activeTab = group?.tabs.find((each) => each.id === group.activeTabId);
   const items: (Item | false)[] =
     menu.open && group
       ? [
+          activeTab?.item.kind === "mind" && {
+            id: "outline",
+            command: "mind.outline",
+            label: t("tabs.menu.outline"),
+          },
+          activeTab?.item.kind === "mind" && "rule",
           {
             id: "split",
             command: "tab.split",

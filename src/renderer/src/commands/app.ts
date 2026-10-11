@@ -4,6 +4,7 @@ import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
 import { currentTabOf } from "../layoutSlice";
+import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
@@ -156,6 +157,20 @@ const appCommands: readonly Command[] = [
     when: (ctx) => ctx.focus?.kind === "block" && blockMenuFor(ctx.focus.id) !== null,
     run(ctx) {
       if (ctx.focus?.kind === "block") blockMenuFor(ctx.focus.id)?.(ctx.focus.id);
+    },
+  },
+  {
+    id: "mind.outline",
+    label: "editor.outline.title",
+    keywords: ["editor.slash.heading1"],
+    shortcut: { keys: "CmdOrCtrl+Alt+L" },
+    group: "main",
+    // Opening it changes nothing.
+    reversible: true,
+    when: () => mindInFront() !== null,
+    run: () => {
+      const mindId = mindInFront();
+      if (mindId) useMindTools.getState().showOutline(mindId);
     },
   },
   ...footnoteCommands,

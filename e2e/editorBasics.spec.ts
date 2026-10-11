@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   createDataFolder,
   dismissChatSetup,
@@ -197,4 +197,82 @@ test("a link: added with the button or ⌘K on a selection, edited, opened and r
   // With nothing selected and the cursor outside a link, ⌘K does nothing here.
   await window.keyboard.press("ControlOrMeta+K");
   await expect(field).toHaveCount(0);
+});
+
+/** Types a Mind of headings with a page of text under each, then puts the cursor at its start. */
+async function writeSections(window: Page, titles: readonly string[]) {
+  for (const [index, title] of titles.entries()) {
+    await window.keyboard.type(`${index === 1 ? "## " : "# "}${title}`);
+    await window.keyboard.press("Enter");
+    for (let line = 0; line < 14; line++) {
+      await window.keyboard.type(`Line ${line} under ${index}`);
+      await window.keyboard.press("Enter");
+    }
+  }
+  await window.keyboard.press("ControlOrMeta+Home");
+}
+
+/** Whether the heading shows in the window. */
+const inView = (heading: Locator) =>
+  heading.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return box.top >= 0 && box.bottom <= window.innerHeight;
+  });
+
+for (const [language, titles] of [
+  ["en", ["Tides", "Spring tides", "Moons"]],
+  ["zh-CN", ["潮汐", "大潮", "月亮"]],
+] as const) {
+  test(`the Mind's outline lists its headings and jumps to each, from the menu or the keyboard (${language})`, async () => {
+    const { window, editor } = await startMind(language);
+    await writeSections(window, titles);
+    const items = window.getByTestId("outline-item");
+    const last = editor.locator("h1", { hasText: titles[2] });
+    expect(await inView(last)).toBe(false);
+
+    // From the ⋯ menu, by mouse: a heading per line, indented by level.
+    await window.getByTestId("group-menu").hover();
+    await window.getByTestId("group-menu").click();
+    await window.getByTestId("tab-menu-outline").hover();
+    await window.getByTestId("tab-menu-outline").click();
+    await expect(items).toHaveText([...titles]);
+    const levels = await items.evaluateAll((all) =>
+      all.map((each) => Number(each.getAttribute("data-level"))),
+    );
+    expect(levels).toEqual([1, 2, 1]);
+    const indents = await items.evaluateAll((all) =>
+      all.map((each) => Number.parseFloat(getComputedStyle(each).paddingLeft)),
+    );
+    expect(indents[1]).toBeGreaterThan(indents[0] ?? 0);
+    await items.nth(2).hover();
+    await items.nth(2).click();
+    await expect(window.getByTestId("mind-outline")).toHaveCount(0);
+    await expect.poll(() => inView(last)).toBe(true);
+    // The cursor is at the start of the heading: typing goes there.
+    await window.keyboard.type("!");
+    await expect(last).toHaveText(`!${titles[2]}`);
+
+    // From the keyboard: arrows and Enter; Esc closes it and gives the cursor back.
+    await window.keyboard.press("ControlOrMeta+Alt+L");
+    await expect(items.first()).toBeFocused();
+    await window.keyboard.press("Escape");
+    await expect(items).toHaveCount(0);
+    await expect(editor).toBeFocused();
+    await window.keyboard.press("ControlOrMeta+Alt+L");
+    await window.keyboard.press("ArrowDown");
+    await expect(items.nth(1)).toBeFocused();
+    await window.keyboard.press("Enter");
+    await expect.poll(() => inView(editor.locator("h2"))).toBe(true);
+    await window.keyboard.type("?");
+    await expect(editor.locator("h2")).toHaveText(`?${titles[1]}`);
+  });
+}
+
+test("the outline of a Mind with no headings says how to add one", async () => {
+  const { window } = await startMind();
+  await window.keyboard.type("Just a line");
+  await window.keyboard.press("ControlOrMeta+Alt+L");
+  await expect(window.getByTestId("mind-outline-empty")).toBeVisible();
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("mind-outline")).toHaveCount(0);
 });
