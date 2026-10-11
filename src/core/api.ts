@@ -87,12 +87,15 @@ export interface CreateMindInput {
  *   keep `colspan`, `rowspan`, `colwidth` and `align`). Version 1 content is
  *   version 2 content as it is: nothing is rewritten, and a Mind records 2
  *   once this version writes to it.
- * - 3: Proposals waiting for the User (#93): the `proposalInsert` and
+ * - 3: footnotes the User writes (`FOOTNOTE_NODE`, with an `id`). Version 2
+ *   content is version 3 content as it is: nothing is rewritten, and a Mind
+ *   records 3 once this version writes to it.
+ * - 4: Proposals waiting for the User (#93): the `proposalInsert` and
  *   `proposalDelete` marks on text, and the `proposal` attribute on Blocks and
- *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 3
+ *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 4
  *   content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 3;
+export const CONTENT_SCHEMA_VERSION = 4;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -452,6 +455,16 @@ export interface SkillScriptRun {
  * when its text is deleted.
  */
 export const CITATION_NODE = "citation";
+
+/**
+ * The node type of a footnote the User writes: an inline node at its marker,
+ * holding the footnote's text (text with marks, line breaks and Citations, but
+ * no footnote of its own), with a UUID in `BLOCK_ID_ATTRIBUTE` that names it
+ * across edits. User footnotes and Citations share one numbering, in the
+ * order they appear: a Citation's footnote is its reference, and a Citation
+ * inside a footnote is part of that footnote's text, with no number of its own.
+ */
+export const FOOTNOTE_NODE = "footnote";
 
 /**
  * Where a Citation's check stands. The check compares the model's quote with
@@ -1976,7 +1989,8 @@ export interface SuggestionAccepted {
 /**
  * A place in a Mind's text: a paragraph or a heading, by its Block id, and a
  * character offset into its text, where an inline node (a Citation, a
- * formula, a line break) counts as one character.
+ * formula, a line break, a footnote with all its text) counts as one
+ * character.
  */
 export interface TextPlace {
   blockId: string;
