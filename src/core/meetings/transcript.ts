@@ -102,6 +102,11 @@ interface Live {
   doneMs: number;
   /** Audio from here on isn't transcribed live: it is transcribed after Stop. Null while it is. */
   pendingFrom: number | null;
+  /**
+   * Where the audio that waited for the engine to start ends: until the engine
+   * is done with it, only audio after it counts towards falling behind.
+   */
+  backlogEnd: number;
 }
 
 interface State extends Saved {
@@ -341,6 +346,7 @@ export function createTranscripts(options: TranscriptsOptions) {
   }
 
   function heardSegment(segment: SpeechSegment): void {
+    if (closed) return;
     const found = owner(segment.stream);
     if (!found) return;
     const { state, baseMs, live } = found;
@@ -387,6 +393,7 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   /** The engine's process stopped: started again, the stretch it lost marked, unless it keeps stopping. */
   function engineStopped(reason: string): void {
+    if (closed) return;
     log.warn("transcript.engineStopped", { reason });
     for (const state of states.values()) {
       const live = state.live;
@@ -450,16 +457,22 @@ export function createTranscripts(options: TranscriptsOptions) {
       live.started = true;
       state.state = "live";
       state.problem = null;
-      for (const audio of live.held) send(state, live, audio);
+      const held = live.held;
       live.held = [];
+      for (const audio of held) {
+        transcriber.push(live.stream, audio.samples);
+        live.pushedMs = audio.atMs + audio.samples.length / SAMPLE_RATE_MS;
+      }
+      live.backlogEnd = live.pushedMs;
       options.changed();
     });
   }
 
   function send(state: State, live: Live, audio: MixedAudio): void {
+    if (!live.started || live.pendingFrom !== null) return;
     transcriber.push(live.stream, audio.samples);
     live.pushedMs = audio.atMs + audio.samples.length / SAMPLE_RATE_MS;
-    if (live.pushedMs - live.doneMs > BEHIND_MS) fallBehind(state, live);
+    if (live.pushedMs - Math.max(live.doneMs, live.backlogEnd) > BEHIND_MS) fallBehind(state, live);
   }
 
   /** Live text stops; the rest is transcribed after Stop. */
@@ -598,8 +611,10 @@ export function createTranscripts(options: TranscriptsOptions) {
       });
     } finally {
       state.finishing = null;
-      persist(state);
-      options.changed();
+      if (!closed) {
+        persist(state);
+        options.changed();
+      }
     }
   }
 
@@ -646,6 +661,7 @@ export function createTranscripts(options: TranscriptsOptions) {
         .finally(() => {
           state.catchUps.delete(live.stream);
           state.ending = null;
+          if (closed) return;
           writeLines(state, { now: true });
           persist(state);
         });
@@ -703,6 +719,7 @@ export function createTranscripts(options: TranscriptsOptions) {
         pushedMs: offsetMs,
         doneMs: offsetMs,
         pendingFrom: null,
+        backlogEnd: offsetMs,
       };
       state.problem = state.problem?.kind === "engine" ? state.problem : null;
       state.state = "preparing";
