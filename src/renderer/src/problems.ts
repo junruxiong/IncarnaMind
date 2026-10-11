@@ -34,6 +34,11 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
     line: "answer.error.consent-declined",
     fix: { kind: "settings", page: "privacy", label: "answer.error.allow" },
   },
+  // Stopped by local mode: a model on this computer can write it.
+  "local-mode": {
+    line: "answer.error.local-mode",
+    fix: { kind: "settings", page: "models", label: "answer.error.useLocal" },
+  },
   "rate-limit": { line: "answer.error.rate-limit", fix: retry },
   network: { line: "answer.error.network", fix: retry },
   provider: { line: "answer.error.provider", fix: retry },

@@ -137,6 +137,8 @@ type Outcome = { status: "done" | "stopped" } | { status: "failed"; error: Provi
 
 interface Generation {
   home: AnswerHome;
+  /** The model writing it. */
+  model: ChatModelChoice;
   /** Writes what has arrived with the final status, now. Later calls do nothing. */
   finish(outcome: Outcome): void;
 }
@@ -383,7 +385,11 @@ function failureOf(error: unknown): ProviderError {
   if (error instanceof ChatNotReadyError) {
     const { reason } = error.readiness;
     const kind =
-      reason === "consent-declined" ? reason : reason === "missing-api-key" ? "auth" : "model";
+      reason === "consent-declined" || reason === "local-mode"
+        ? reason
+        : reason === "missing-api-key"
+          ? "auth"
+          : "model";
     return { kind, message: error.message };
   }
   return classifyProviderError(error);
@@ -567,7 +573,7 @@ export function createAnswers(options: AnswersOptions) {
       }, ANSWER_WRITE_INTERVAL_MS);
     };
 
-    active.set(answerId, { home, finish });
+    active.set(answerId, { home, model, finish });
     if (active.size === 1) options.onWritingChange?.(true);
     events.emit("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
@@ -1344,6 +1350,22 @@ export function createAnswers(options: AnswersOptions) {
 
     /** Call before a Mind is opened: Answers a quit or crash left "streaming" become "stopped". */
     settleOrphans,
+
+    /**
+     * Local mode just turned on: stops every Answer being written by a model that isn't on
+     * this computer, keeping what was written. It ends as failed with the "local-mode"
+     * reason, so the Answer says why.
+     */
+    async stopCloud(): Promise<void> {
+      for (const generation of [...active.values()]) {
+        const readiness = await options.readiness(generation.model);
+        if (readiness.ready || readiness.reason !== "local-mode") continue;
+        generation.finish({
+          status: "failed",
+          error: { kind: "local-mode", message: "Stopped: local mode is on." },
+        });
+      }
+    },
 
     /** Stops every Answer, keeping what was written, e.g. when the app quits. */
     stopAll(): void {
