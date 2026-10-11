@@ -48,6 +48,30 @@ async function addText(core: Core, name: string, text: string): Promise<Document
   return document;
 }
 
+/** A core whose Organize files each Document in the Folder `fake.choose` names, as a suggestion. */
+async function startOrganizing() {
+  const fake = classifierModel();
+  const { core, clock } = await start({ createChatModel: () => fake.model });
+  const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
+  const finance = await core.createLibraryGroup({ name: "Finance", description: "Money." });
+  const research = await core.createLibraryGroup({ name: "Research", description: "Papers." });
+  await core.saveLibrarySettings({
+    classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "classifier" } },
+    automatic: false,
+  });
+  /** Organizes a Document into `folderId` and returns its assignment, a suggestion. */
+  const suggest = async (documentId: string, folderId: string) => {
+    fake.choose(folderId);
+    await core.classifyDocuments([documentId]);
+    return vi.waitFor(async () => {
+      const assignment = await assignmentOf(core, documentId);
+      expect(assignment).toMatchObject({ groupId: folderId, status: "classified" });
+      return assignment;
+    });
+  };
+  return { core, clock, finance, research, suggest };
+}
+
 const documentOf = async (core: Core, id: string) =>
   (await core.listDocuments()).find((each) => each.id === id);
 
@@ -247,6 +271,29 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
     expect((await core.getLibrary()).assignments).toEqual(before.assignments);
   });
 
+  test("a Folder holding a suggested and a chosen Document gives each back as it was", async () => {
+    const { core, clock, finance, suggest } = await startOrganizing();
+    const invoice = await addText(core, "Invoice.txt", "Invoice for the harbour dues.");
+    const budget = await addText(core, "Budget.txt", "The budget for next year.");
+    await suggest(invoice.id, finance.id);
+    await core.assignDocumentGroup(budget.id, finance.id);
+    const before = (await core.getLibrary()).assignments;
+    expect(before.map((each) => [each.documentId, each.source, each.suggested])).toEqual([
+      [invoice.id, "automatic", true],
+      [budget.id, "user", false],
+    ]);
+
+    clock.advance(1000);
+    await core.deleteLibraryGroup(finance.id);
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({ groupId: null, suggested: false });
+    clock.advance(1000);
+    await core.restore([{ kind: "folder", id: finance.id }]);
+
+    expect((await core.getLibrary()).assignments).toEqual(before);
+    // Still a suggestion: the User can accept it.
+    expect(await core.acceptAssignments([invoice.id])).toHaveLength(1);
+  });
+
   test("a Tag comes back with its links", async () => {
     const { core, clock } = await start();
     const a = await addText(core, "A.txt", "Notes about the first harbour.");
@@ -306,24 +353,10 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
 
 describe("Moving back and untagging", { timeout: 30_000 }, () => {
   test("a Document filed automatically and moved by hand goes back to its Folder, still automatic", async () => {
-    const fake = classifierModel();
-    const { core } = await start({ createChatModel: () => fake.model });
-    const provider = await core.saveChatProvider({ kind: "ollama", modelId: "main-model" });
-    const finance = await core.createLibraryGroup({ name: "Finance", description: "Money." });
-    const research = await core.createLibraryGroup({ name: "Research", description: "Papers." });
-    await core.saveLibrarySettings({
-      classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "classifier" } },
-      automatic: false,
-    });
+    const { core, finance, research, suggest } = await startOrganizing();
     const invoice = await addText(core, "Invoice.txt", "Invoice for the harbour dues.");
-    fake.choose(finance.id);
-    await core.classifyDocuments([invoice.id]);
-    const filed = await vi.waitFor(async () => {
-      const assignment = await assignmentOf(core, invoice.id);
-      expect(assignment?.status).toBe("classified");
-      return assignment;
-    });
-    expect(filed).toMatchObject({ groupId: finance.id, source: "automatic" });
+    const filed = await suggest(invoice.id, finance.id);
+    expect(filed).toMatchObject({ source: "automatic", suggested: true });
 
     const previous = await core.assignDocumentGroup(invoice.id, research.id);
     expect(previous).toEqual(filed);
@@ -340,21 +373,30 @@ describe("Moving back and untagging", { timeout: 30_000 }, () => {
     expect(await assignmentOf(core, invoice.id)).toEqual(filed);
 
     // Still automatic: Organize may file it elsewhere.
-    fake.choose(research.id);
-    await core.classifyDocuments([invoice.id]);
-    await vi.waitFor(async () =>
-      expect(await assignmentOf(core, invoice.id)).toMatchObject({
-        groupId: research.id,
-        source: "automatic",
-        status: "classified",
-      }),
-    );
+    expect(await suggest(invoice.id, research.id)).toMatchObject({ source: "automatic" });
 
     // One that had no assignment has none again.
     const budget = await addText(core, "Budget.txt", "The budget for next year.");
     expect(await core.assignDocumentGroup(budget.id, finance.id)).toBeNull();
     await core.restoreAssignment(budget.id, null);
     expect(await assignmentOf(core, budget.id)).toBeUndefined();
+  });
+
+  test("a suggestion moved by hand comes back a suggestion, which the User can still turn down", async () => {
+    const { core, finance, research, suggest } = await startOrganizing();
+    const invoice = await addText(core, "Invoice.txt", "Invoice for the harbour dues.");
+    const suggested = await suggest(invoice.id, finance.id);
+
+    const move = await core.moveToFolder({ documentIds: [invoice.id], folderId: research.id });
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({ suggested: false });
+    await core.restoreAssignment(invoice.id, move.documents[0]?.previous ?? null);
+    expect(await assignmentOf(core, invoice.id)).toEqual(suggested);
+
+    expect(await core.rejectAssignments([invoice.id])).toHaveLength(1);
+    expect(await assignmentOf(core, invoice.id)).toMatchObject({
+      groupId: null,
+      suggested: false,
+    });
   });
 
   test("Tags put back as they were record no removal, so automatic tagging can still add them", async () => {

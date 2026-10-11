@@ -706,8 +706,45 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 32 was reserved by #111, which took 34.
     version: 35,
+    description: "Whether IncarnaMind may add new files inside a Linked folder (#124)",
+    // Asked at the first save there, and changed in Settings; allowed is 1 or 0. It ends with
+    // its Linked folder: linked again, the folder is asked about again (src/core/outputFiles.ts).
+    sql: `
+      CREATE TABLE linked_folder_writes (
+        id TEXT PRIMARY KEY NOT NULL,
+        linked_folder_id TEXT NOT NULL,
+        allowed INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX linked_folder_writes_by_folder ON linked_folder_writes (linked_folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 36,
+    description: "Suggested Folders wait for the User, and a rejected one isn't suggested again",
+    // Every assignment so far keeps what it was: none of them is a suggestion. No foreign
+    // keys: a later sync may deliver a rejection before its Document or Folder.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN suggested INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE document_group_rejections (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        group_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX document_group_rejections_live
+        ON document_group_rejections (document_id, group_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 37 and 38 are reserved by work in progress.
+    version: 39,
     description:
       "Recently deleted: what was deleted permanently, and what a Folder's deletion took out",
     // Restoring a deleted row brings back the rows deleted with it: those whose deleted_at is
@@ -724,12 +761,14 @@ export const migrations: readonly Migration[] = [
 
       -- What deleting a Folder (library_groups) took out of it: one row per Document and Mind
       -- in it (item_kind 'document' or 'mind', checked in code), so restoring the Folder puts
-      -- back those still in none. Restoring it marks its rows deleted.
+      -- back those still in none, a suggested Folder as a suggestion again (suggested is 1).
+      -- Restoring it marks its rows deleted.
       CREATE TABLE deleted_folder_items (
         id TEXT PRIMARY KEY NOT NULL,
         folder_id TEXT NOT NULL,
         item_kind TEXT NOT NULL,
         item_id TEXT NOT NULL,
+        suggested INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT
