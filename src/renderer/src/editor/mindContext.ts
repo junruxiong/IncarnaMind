@@ -4,8 +4,9 @@ import { createContext, useContext } from "react";
 export const MindIdContext = createContext<string | null>(null);
 
 /**
- * Where the open Mind's composer is drawn: the dock at the foot of the Mind's
- * column, outside the part that scrolls (see `MindTab`). Null until it is there.
+ * Where a Mind's composer is drawn: the assistant's composer slot, given only
+ * to the Mind the assistant reads (see `MindTab`, `assistantTabOf`). Null for
+ * every other Mind on screen, and until the slot is there.
  */
 export const ComposerDockContext = createContext<HTMLElement | null>(null);
 

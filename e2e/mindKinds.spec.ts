@@ -54,8 +54,9 @@ test("a Mind written by a newer version opens read-only with a notice, and its s
   await expect(window.getByTestId("mind-notice-read-only")).toContainText("Read-only");
   await expect(window.getByTestId("mind-notice-read-only")).toContainText("Update IncarnaMind");
   await expect(editor).toHaveAttribute("contenteditable", "false");
-  // No composer: nothing can be asked in it.
-  await expect(window.getByTestId("composer-dock").getByRole("textbox")).toHaveCount(0);
+  // No composer in the assistant: nothing can be asked in it.
+  await expect(window.getByTestId("assistant")).toBeVisible();
+  await expect(window.getByTestId("composer")).toHaveCount(0);
 
   // Typing does nothing, and the stored state is exactly what it was.
   await editor.click();
