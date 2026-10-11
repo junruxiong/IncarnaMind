@@ -12,6 +12,7 @@ import {
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  slideSelect,
   useLocalChatModel,
 } from "./app";
 
@@ -269,6 +270,53 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(reopened.locator("tr")).toHaveCount(3);
     expect(await tableText(reopened)).toEqual(written);
     await second.app.close();
+  });
+
+  test(`the selection menu's Text › Table turns selected lines into a table's rows, and isn't offered inside a table (${language})`, async () => {
+    const words = WORDS[language];
+    const { app, window } = await launchApp(dataDir);
+    await dismissChatSetup(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 1280, 660);
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await pointAndClick(window, editor);
+    await window.keyboard.type(words.cells[3]);
+    await window.keyboard.press("Enter");
+    await window.keyboard.type(words.cells[5]);
+
+    // The mouse slides over both lines; the menu, by keyboard, to Text › Table.
+    const menu = window.getByTestId("selection-menu");
+    const lines = editor.locator("p");
+    await slideSelect(window, lines.first(), words.cells[3], {
+      line: lines.nth(1),
+      words: words.cells[5],
+    });
+    await expect(menu).toBeVisible();
+    await window.keyboard.press("ControlOrMeta+/");
+    await expect(window.getByTestId("selection-turn-into")).toBeFocused();
+    await window.keyboard.press("Enter");
+    const item = window.getByTestId("turn-into-table");
+    await expect(item).toContainText(words.table);
+    await window.keyboard.press("End");
+    await expect(item).toBeFocused();
+    await window.keyboard.press("Enter");
+    const table = editor.locator("table");
+    expect(await tableText(table)).toEqual([[words.cells[3]], [words.cells[5]]]);
+    await expect(table.locator("th")).toHaveCount(0);
+
+    // Text selected in a cell gets the formatting, but nothing to turn the table into.
+    await slideSelect(window, table.locator("td").first(), words.cells[3]);
+    await expect(menu).toBeVisible();
+    await expect(window.getByTestId("format-bold")).toBeVisible();
+    await expect(window.getByTestId("selection-turn-into")).toHaveCount(0);
+
+    // ⌘Z puts the lines back.
+    await window.keyboard.press("Escape");
+    await window.keyboard.press("ControlOrMeta+z");
+    await expect(table).toHaveCount(0);
+    await expect(editor.locator("p")).toHaveText([words.cells[3], words.cells[5]]);
+    await app.close();
   });
 }
 
