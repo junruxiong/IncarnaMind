@@ -374,6 +374,15 @@ test("in Chinese: footnotes typed with an input method number together with an A
   await expect(held).toHaveAttribute("data-check", "found");
   await expect(held.getByTestId("citation-chip")).toContainText("Tides");
   await screenshot(window, "footnote-citation-zh");
+  // Its card shows on hover, as any Citation's does; Esc closes the card, not the footnote.
+  await held.getByTestId("citation-chip").hover();
+  const card = window.getByTestId("citation-card");
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("data-check", "found");
+  await window.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  await expect(popover).toBeVisible();
+  await expect(field).toBeFocused();
   await window.keyboard.press("Enter");
   // It is footnote 3 now, before the Answer's Citation, which becomes 4; the one inside has no number.
   await expect(markers).toHaveText(["1", "2", "3"]);

@@ -134,6 +134,7 @@ describe("A Mind in a Folder", () => {
         { id: id("Moon"), from: research.id, previous: filed },
         { id: id("Harbour"), from: null, previous: null },
       ],
+      conversations: [],
     });
     expect((await core.listMinds())[0]?.folderId).toBe(finance.id);
     // One event of each, whatever the number moved.

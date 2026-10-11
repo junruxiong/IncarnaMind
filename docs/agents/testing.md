@@ -20,6 +20,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every push and pull request
 2. Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`.
 3. Run `npm run test:smoke`: the whole suite, or at least every spec that touches what you changed. To find them, search `e2e/` for the test ids, labels and strings you changed or removed.
 4. When you change or remove UI, update or remove the tests that used it in the same pull request. A test still looking for something your change removed is broken by your change.
+5. Try the edge cases below that apply to your change, by test or by hand, and say in the pull request which you tried and which don't apply.
 
 ## After you open it
 
@@ -41,13 +42,29 @@ CI (`.github/workflows/ci.yml`) runs three checks on every push and pull request
 
 ## Trying AI features by hand
 
-The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with a real model:
+The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with real models from **several providers**, because they differ in how they follow instructions, cite and format:
 
-- **A cloud model on your own key.** A small, fast model, such as Anthropic's Haiku or Sonnet, is enough.
-- **A small local model through Ollama.** For example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards.
-- **An Ollama cloud model, if your computer is busy.** Its name ends in `-cloud`. The app treats it as leaving the computer, which is fine for test Documents.
+- **Anthropic:** a small, fast model such as Haiku or Sonnet.
+- **OpenAI:** a current small model.
+- **An Ollama cloud model** (its name ends in `-cloud`, for example a `gpt-oss` or `qwen3` cloud model). The app treats it as leaving the computer, which is fine for test Documents.
+- **A small local model through Ollama,** for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards. Required when the feature runs in Local mode.
 
-Use a temporary data folder and test Documents, never your own files. Say in the pull request which model you used and what you checked: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
+Use at least three of these, including one from Anthropic and one from OpenAI, and say where a model did worse than the others.
+
+Use a temporary data folder and test Documents, never your own files. Say in the pull request which models you used and what you checked with each: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
+
+## Edge cases
+
+Most bugs a User meets sit at the edges, not on the path the feature was built for. Try each case that applies to your change, with an automated test where it can be one. The audit's fixtures (`e2e/audit/fixtures.ts`) already write many of these files.
+
+- **Empty, one and many.** Nothing at all (an empty Mind, Folder, Library or field), a single item, and a lot: 2,000 Documents, a 300-page PDF, a 50,000-cell sheet, a Mind of about 300 Blocks.
+- **Words.** Chinese, Chinese mixed with English, a very long name, emoji and unusual characters, and typing through a Chinese input method while it is still composing.
+- **Broken input.** A damaged, empty, password-protected or oversized file; a scanned PDF with no text layer; a format IncarnaMind doesn't read; a file that disappears while it's being read.
+- **No network and no consent.** Offline, the consent prompt declined, and Local mode.
+- **Models that misbehave.** A slow model, one that fails or can't be reached, and one that returns no Citations or nonsense. Cancel halfway, and act while an Answer is still streaming.
+- **Quitting halfway.** Force-quit in the middle of the action, then start again: nothing is lost, doubled or left half done.
+- **Twice and back.** Do the action twice quickly (a double click, a held key), then Undo and Redo it.
+- **Every way in.** Mouse and keyboard only, a narrow and a wide window, light and dark, English and Chinese.
 
 ## In a pull request
 

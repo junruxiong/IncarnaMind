@@ -1,7 +1,7 @@
 /**
- * A Mind's Blocks as Markdown for the model: Question context, and the
- * fingerprint of an Answer's text. The Blocks are read by the one reader
- * (../mindText); this only writes them.
+ * A Mind's Blocks, and a conversation's Answers, as Markdown for the model:
+ * Question context, and the fingerprint of an Answer's text. The Blocks are
+ * read by the one reader (../mindText); this only writes them.
  *
  * It shows bold, italic, strikethrough, inline code and links, math as `$…$`
  * and `$$…$$`, tables as pipe tables, Citations as plain references like
@@ -13,6 +13,7 @@
 
 import type * as Y from "yjs";
 import { citationLocation, englishLocation } from "../../shared/locations";
+import type { MarkedCitation } from "../api";
 import {
   type Block,
   type Footnote,
@@ -41,6 +42,27 @@ function citationSource(attributes: Record<string, unknown>): Footnote {
     pageTo: typeof to === "number" ? to : null,
   });
   return { source: location ? `${name}, ${englishLocation(location)}` : name, unverified: false };
+}
+
+/**
+ * An Answer of a conversation as Markdown for the model, as an Answer in a Mind
+ * reads: each Citation marker a plain reference to its source, a marker with no
+ * Citation left out.
+ */
+export function answerMarkdown(text: string, citations: readonly MarkedCitation[]): string {
+  const byMarker = new Map(citations.map((citation) => [citation.marker, citation]));
+  return text
+    .replace(/([ \t]?)\[\^(\d{1,4})\]/g, (_, space: string, marker: string) => {
+      const citation = byMarker.get(Number(marker));
+      const { source } = citationSource({
+        documentName: citation?.documentName,
+        pageFrom: citation?.pageFrom,
+        pageTo: citation?.pageTo,
+        location: citation?.location,
+      });
+      return source ? `${space}[${source}]` : "";
+    })
+    .trim();
 }
 
 /** Questions are read too, as the User's words; the space before a Citation stays. */
