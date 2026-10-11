@@ -1745,4 +1745,9 @@ export const zhCN = {
   "meetings.settings.whatMe": "只录制你的麦克风。",
   "meetings.settings.kept.mac": "音频只保存在这台 Mac 上，每次会议结束后最多一天删除。",
   "meetings.settings.kept.other": "音频只保存在这台电脑上，每次会议结束后最多一天删除。",
+  "meetings.command.pause": "暂停录制",
+  "meetings.command.resume": "继续录制",
+  "meetings.command.stop": "停止录制",
+  "meetings.command.stopConfirm": "停止录制？这次会议无法再继续录制，已录下的内容会保留。",
+  "meetings.command.noneLive": "没有正在录制的会议",
 } satisfies Dictionary;
