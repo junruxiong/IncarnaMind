@@ -306,8 +306,17 @@ export function createSources(options: SourcesOptions) {
     if (options.localOnly()) return { outcome: "local-mode" };
     const identifier = identifierOf(parsed.query);
     const asked = targets(parsed, identifier);
-    const cacheKey = JSON.stringify([parsed, asked.map((each) => each.id)]);
-    const cached = searches.get(cacheKey);
+    // The same search from the Library or an Answer, however its providers were named, while
+    // the User's decision on each stays as it was.
+    const cacheKey = () =>
+      JSON.stringify([
+        parsed.query,
+        parsed.fromYear,
+        parsed.toYear,
+        parsed.openAccessOnly,
+        asked.map((each) => `${each.id}:${consent.status("find-sources", each.service)}`),
+      ]);
+    const cached = searches.get(cacheKey());
     if (cached && options.clock() - cached.at < SEARCH_TTL_MS) {
       const kept = cached.works.flatMap((key) => {
         const work = works.get(key);
@@ -326,11 +335,12 @@ export function createSources(options: SourcesOptions) {
     ).filter((work) => !parsed.openAccessOnly || work.fullText.length > 0);
     for (const work of merged) keep(works, work.key, work, MAX_WORKS);
     const outcomes = answers.map((answer) => answer.outcome);
-    // A search a provider failed is asked again next time.
-    if (outcomes.every((outcome) => outcome.failure === null)) {
+    // A search a provider failed is asked again next time; one the User declined stays declined.
+    if (outcomes.every((outcome) => !outcome.failure || outcome.failure.reason === "declined")) {
+      // Keyed by the decisions made while it was asked.
       keep(
         searches,
-        cacheKey,
+        cacheKey(),
         { at: options.clock(), works: merged.map((work) => work.key), providers: outcomes },
         MAX_SEARCHES,
       );
