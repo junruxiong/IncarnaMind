@@ -244,6 +244,37 @@ export function createMindContent(
       return result as T;
     },
 
+    /**
+     * Reads the Mind's own choices (`MIND_SETTINGS_FIELD`), as `peek` reads its Blocks: a Mind
+     * that isn't loaded is read from what is stored and left unloaded.
+     */
+    readSettings<T>(mindId: string, look: (settings: Y.Map<unknown>) => T): T {
+      const mind = loaded.get(mindId);
+      if (mind) return look(mind.doc.getMap(MIND_SETTINGS_FIELD));
+      const { doc } = fromStorage(mindId);
+      try {
+        return look(doc.getMap(MIND_SETTINGS_FIELD));
+      } finally {
+        doc.destroy();
+      }
+    },
+
+    /** Changes the Mind's own choices in one transaction, stored and reported like `edit`. */
+    editSettings<T>(mindId: string, change: (settings: Y.Map<unknown>) => T): T {
+      const mind = load(mindId);
+      requireWritable(mind);
+      let result: T | undefined;
+      try {
+        mind.doc.transact(() => {
+          result = change(mind.doc.getMap(MIND_SETTINGS_FIELD));
+          stampContentVersion(mind.doc);
+        }, CORE_ORIGIN);
+      } finally {
+        flush(mindId, mind);
+      }
+      return result as T;
+    },
+
     /** Compacts the Mind and drops its document from memory. Does nothing if it isn't loaded. */
     close(mindId: string): void {
       const mind = loaded.get(mindId);
