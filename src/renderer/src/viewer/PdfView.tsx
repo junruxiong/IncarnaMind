@@ -405,14 +405,15 @@ function PdfPages({ pdfjs, pdf, firstPage, target }: PdfPagesProps) {
   }, [zoomAround]);
 
   // Each open request goes to the first page of its range (a plain reopen keeps the place).
-  // Read again, the file opens there too, or else where the view was.
+  // Read again, the file opens where the view was, or else at the range.
   const appliedRequest = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (appliedRequest.current === target.request) return;
     const first = appliedRequest.current === null;
     appliedRequest.current = target.request;
-    if (target.pageFrom !== undefined || target.quote) goToPage(target.pageFrom ?? 1);
-    else if (first) goToPage(recalled?.page ?? 1);
+    if (first && recalled) goToPage(recalled.page);
+    else if (target.pageFrom !== undefined || target.quote) goToPage(target.pageFrom ?? 1);
+    else if (first) goToPage(1);
   }, [target.request, target.pageFrom, target.quote, goToPage, recalled]);
 
   useEffect(() => {

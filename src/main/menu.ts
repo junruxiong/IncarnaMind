@@ -12,10 +12,10 @@ function send(command: MenuCommand): void {
 
 /**
  * The application menu, in the interface language: New Mind (⌘N), Close Tab
- * (⌘W) and Settings… (⌘,) with the usual Edit, View and Window items. As in
- * a browser, ⌘W closes the tab and Shift+⌘W the window. Reload and the
- * developer tools are only in development and test builds. Ctrl stands in
- * for ⌘ on Windows and Linux.
+ * (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
+ * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
+ * window. Reload and the developer tools are only in development and test
+ * builds. Ctrl stands in for ⌘ on Windows and Linux.
  */
 export function installAppMenu(language: Language, { developer }: { developer: boolean }): void {
   installed = { language, developer };
@@ -77,6 +77,7 @@ function buildMenu(): void {
         command("mind.new"),
         { type: "separator" },
         command("tab.close"),
+        command("tab.reopen"),
         { role: "close", label: t("menu.closeWindow"), accelerator: "Shift+CmdOrCtrl+W" },
         ...(isMac
           ? []
@@ -112,6 +113,7 @@ function buildMenu(): void {
             ] satisfies MenuItemConstructorOptions[])
           : []),
         command("sidebar.toggle", sidebarHidden ? "menu.showSidebar" : "menu.hideSidebar"),
+        command("tab.split"),
         { type: "separator" },
         { role: "resetZoom", label: t("menu.actualSize") },
         { role: "zoomIn", label: t("menu.zoomIn") },

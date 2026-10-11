@@ -60,6 +60,8 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Library | 资料库 | Where the User's files live in ChatGPT (资料库), Yuanbao (资料库, 加入资料库) and LobeChat. Not 知识库, which in Feishu and Yuque is a wiki and in AI clients a collection built for one assistant. |
 | Organize | 整理 | "整理此文件夹". As Tencent Docs (批量整理文档) and Apple Notes (整理备忘录). |
 | Not in a Folder | 不在文件夹中 | One place for Documents and Minds in no Folder. |
+| Tab | 标签页 | As Chrome, Edge and VS Code. A preview tab is kept with 保持打开. |
+| Group (of tabs) | 栏 | "第 1 栏", "向右拆分", "各栏等宽", "移动到右侧一栏". |
 | Tool | 工具 | Calling one: 调用. |
 | Connector | 连接器 | As Doubao, Feishu, LobeChat and Microsoft. |
 | Skill | 技能 | As Kimi, Doubao, Yuanbao, Feishu, Notion and Cherry Studio. |
