@@ -383,7 +383,9 @@ export function Composer({
     const current = useComposer.getState().draft(mindId);
     if (useEdits.getState().editing[mindId]) {
       // What to change in the selected text: it comes back as changes in the note.
-      if (editFromComposer(editor, mindId, doc, current.text)) update({ text: "" });
+      if (current.text.trim() !== "" && editFromComposer(editor, mindId, doc, current.text)) {
+        update({ text: "" });
+      }
       return;
     }
     const typed = current.text.trim();

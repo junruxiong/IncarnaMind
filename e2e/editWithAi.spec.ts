@@ -213,4 +213,17 @@ test("⌘J with text selected says what to change in the composer, in Chinese; �
   await expect(note.locator("del.proposal-delete")).toHaveText("非常");
   await window.keyboard.press("ControlOrMeta+Enter");
   await expect(note).toHaveText("潮水每天规律地涨落两次。");
+
+  // Translate… asks for the language beside it. A text the model gives back as it was (the
+  // scripted model only capitalises) says so in the composer, and changes nothing.
+  await selectWords(window, note, "潮水每天规律地涨落两次。");
+  await pointAndClick(window, window.getByTestId("selection-action-translate"));
+  const languages = window.getByTestId("selection-choices-translate");
+  await expect(languages).toBeVisible();
+  await pointAndClick(window, languages.getByTestId("selection-choice-en"));
+  const problem = window.getByTestId("edit-problem");
+  await expect(problem).toContainText("没有要修改的地方");
+  await expect(bar).toHaveCount(0);
+  await pointAndClick(window, problem.getByTestId("edit-problem-close"));
+  await expect(problem).toHaveCount(0);
 });
