@@ -5,7 +5,8 @@
  * Besides the gating set's figures: how many Answers cite a Document the
  * Question needs (for a near-duplicate one, the right version, and how many
  * cite another version), and, for the unanswerable Questions, how many are
- * answered without a Citation, as they should be.
+ * answered without a Citation, and how many say the Documents don't answer
+ * them (./declines), with or without Citations.
  */
 
 import {
@@ -16,7 +17,8 @@ import {
   summariseGroup,
 } from "../../lib/citations";
 import type { ChatSettings, EvalConfig } from "../../lib/config";
-import type { EvalQuestion } from "../../lib/evaluationSet";
+import { declines } from "../../lib/declines";
+import type { EvalLanguage, EvalQuestion } from "../../lib/evaluationSet";
 import type { Library } from "../../lib/library";
 import type { Log } from "../../lib/log";
 import { type Manifest, siblingsOf } from "./manifest";
@@ -29,6 +31,10 @@ export interface DifficultyCitations extends GroupSummary {
   citingOtherVersion: number;
   /** Unanswerable Questions: Answers that finished with no Citation. */
   withoutCitation: number;
+  /** Unanswerable Questions: Answers the phrase rule found saying the Documents don't answer it. */
+  declines: number;
+  /** The same per language, of the Answers to the unanswerable Questions. */
+  declinesByLanguage: Record<EvalLanguage, { answers: number; declines: number }>;
 }
 
 export interface HardCitations {
@@ -61,6 +67,10 @@ export function summariseDifficulty(
   let citingExpected = 0;
   let citingOtherVersion = 0;
   let withoutCitation = 0;
+  const declinesByLanguage: DifficultyCitations["declinesByLanguage"] = {
+    en: { answers: 0, declines: 0 },
+    zh: { answers: 0, declines: 0 },
+  };
   for (const answer of answers) {
     const question = questions.get(answer.questionId);
     if (!question) continue;
@@ -77,8 +87,19 @@ export function summariseDifficulty(
         citingOtherVersion++;
     }
     if (answer.status === "done" && answer.citations.length === 0) withoutCitation++;
+    if (question.difficulty === "unanswerable") {
+      declinesByLanguage[answer.language].answers++;
+      if (answer.declines) declinesByLanguage[answer.language].declines++;
+    }
   }
-  return { ...summariseGroup(answers), citingExpected, citingOtherVersion, withoutCitation };
+  return {
+    ...summariseGroup(answers),
+    citingExpected,
+    citingOtherVersion,
+    withoutCitation,
+    declines: declinesByLanguage.en.declines + declinesByLanguage.zh.declines,
+    declinesByLanguage,
+  };
 }
 
 /** Asks every Question once and scores the Answers per difficulty. Never gating. */
@@ -98,6 +119,11 @@ export async function runHardCitations(
     log,
   );
   const byId = new Map(questions.map((question) => [question.id, question]));
+  run.answers = run.answers.map((answer) =>
+    byId.get(answer.questionId)?.difficulty === "unanswerable"
+      ? { ...answer, declines: declines(answer.text) }
+      : answer,
+  );
   const documentName = (key: string) => library.documents.get(key)?.name;
   const byDifficulty: HardCitations["byDifficulty"] = {};
   for (const difficulty of DIFFICULTIES) {

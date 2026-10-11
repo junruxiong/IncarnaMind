@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "spl_version": 6,
+      "published_date": "Aug 12, 2026",
+      "title": "ZITUVIMET (SITAGLIPTIN AND METFORMIN HYDROCHLORIDE) TABLET, FILM COATED [ZYDUS LIFESCIENCES LIMITED]",
+      "setid": "0098dec4-f0e5-45d5-8aa4-5d0faf9ab142"
+    },
+    {
+      "spl_version": 9,
+      "published_date": "Sep 30, 2026",
+      "title": "METFORMIN HYDROCHLORIDE SOLUTION [VISTAPHARM, LLC]",
+      "setid": "e087ce3b-8d7f-43a3-8d20-54513da7617d"
+    },
+    {
+      "spl_version": 2,
+      "published_date": "Oct 08, 2026",
+      "title": "DAPAGLIFLOZIN AND METFORMIN HYDROCHLORIDE TABLET, FILM COATED, EXTENDED RELEASE [AUROBINDO PHARMA LIMITED]",
+      "setid": "513bdf9f-774c-4f7f-935a-54d3885e80a4"
+    }
+  ],
+  "metadata": {
+    "db_published_date": "Oct 09, 2026 08:16:46PM EST",
+    "elements_per_page": 100,
+    "total_elements": 3,
+    "total_pages": 1,
+    "current_page": 1
+  }
+}

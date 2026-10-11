@@ -1094,7 +1094,7 @@ export const zhCN = {
   "consent.flow.find-sources": "查找资料",
   "consent.flow.find-sources.purpose": "查找论文等资料，并添加你选中的",
   "consent.data.search-terms": "你搜索的内容：关键词和筛选条件，例如年份",
-  "consent.data.work-ids": "你添加的每项资料的 DOI、arXiv 编号或 PubMed 编号",
+  "consent.data.work-ids": "你添加的每项资料的 DOI、arXiv 编号、PubMed 编号、说明书 ID 或 NCT 编号",
   "consent.flow.edits": "用 AI 编辑",
   "consent.flow.edits.purpose": "按你的要求修改选中的文字",
   "consent.data.selection": "你选中的文字及其所在的段落，每次提出要求时发送",
@@ -1832,6 +1832,16 @@ export const zhCN = {
   "approvals.card.alwaysAllow": "始终允许",
   "approvals.card.alwaysAllowHint": "以后运行 {tool} 时不再询问。你可以在“设置”的“批准”中撤销。",
   "approvals.card.deny": "拒绝",
+  "approvals.thirdParty.read.webPage": "这条回答读过网页，所以会先问你。",
+  "approvals.thirdParty.read.checkedDocument": "这条回答读过正在核对的文档，所以会先问你。",
+  "approvals.thirdParty.mind.imported": "这个 Mind 里有导入的文字，所以会先问你。",
+  "approvals.thirdParty.mind.webPage": "这个 Mind 里有来自网页的文字，所以会先问你。",
+  "approvals.thirdParty.mind.checkedDocument":
+    "这个 Mind 里有正在核对的文档中的文字，所以会先问你。",
+  "approvals.thirdParty.conversation.imported": "这个对话里有导入的文字，所以会先问你。",
+  "approvals.thirdParty.conversation.webPage": "这个对话里有来自网页的文字，所以会先问你。",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "这个对话里有正在核对的文档中的文字，所以会先问你。",
   "approvals.call.waiting": "等待你的批准：{connector}：{tool}",
   "approvals.call.denied": "未允许：{connector}：{tool}",
   "approvals.call.allowed": "经你批准，已调用 {connector}：{tool}",
@@ -1977,9 +1987,9 @@ export const zhCN = {
 
   "sources.title": "查找资料",
   "sources.intro":
-    "在 OpenAlex、arXiv 和 PubMed 中搜索论文。开放获取的论文添加为文档，其余添加为引用信息。",
+    "在 OpenAlex、arXiv 和 PubMed 中搜索论文。开放获取的论文添加为文档，其余添加为引用信息。在下方选用 openFDA、DailyMed 或 ClinicalTrials.gov，可查找药品说明书和临床试验。",
   "sources.search.label": "搜索资料",
-  "sources.search.placeholder": "主题、标题、DOI 或 arXiv 编号",
+  "sources.search.placeholder": "主题、标题、DOI、arXiv 编号或 NCT 编号",
   "sources.search": "搜索",
   "sources.searching": "正在搜索…",
   "sources.close": "关闭查找资料",
@@ -2034,6 +2044,22 @@ export const zhCN = {
     "物理、数学、计算机科学等领域的预印本，全部开放获取。其记录采用 CC0。",
   "sources.provider.pubmed.about": "生物医学和生命科学论文，开放全文来自 PubMed Central。",
   "sources.provider.crossref.about": "查询你输入的 DOI。",
+  "sources.provider.openfda.about":
+    "FDA 药品说明书，按章节拆分。可按药品名称或说明书 ID 搜索。其记录采用 CC0；它声明不应依赖其内容做医疗决定。仅在你选用时才会搜索。",
+  "sources.provider.dailymed.about":
+    "美国国家医学图书馆收录的、向 FDA 提交的完整药品说明书，保留章节编号。可按药品名称或说明书 ID 搜索。仅在你选用时才会搜索。",
+  "sources.provider.clinicaltrials.about":
+    "临床试验记录：试验组、结局指标、入选标准和已发布的结果。可按疾病或药品搜索，也可输入 NCT 编号。仅在你选用时才会搜索。",
+  "sources.notice": "来源声明：{notice}",
+  "sources.key.open": "{provider} 密钥…",
+  "sources.key.title": "你自己的 {provider} 密钥",
+  "sources.key.hint":
+    "可选。使用密钥可提高 {provider} 的每日请求上限。密钥加密保存在系统中，只会发送给 {provider}。",
+  "sources.key.placeholder": "粘贴你的密钥",
+  "sources.key.save": "保存密钥",
+  "sources.key.remove": "移除密钥",
+  "sources.key.set": "密钥已保存",
+  "sources.key.failed": "无法保存密钥",
   "sources.call.running": "正在查找“{query}”的资料…",
   "sources.call.done": "已查找“{query}”的资料",
   "sources.call.found.one": "找到 1 个",
