@@ -34,6 +34,12 @@
  *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  * As the User writes, it suggests a Passage's line that shares words with their paragraph.
+ *
+ * Edit with AI (`fakeEdit`): Shorten drops filler words ("very", "really",
+ * 非常, 真的…), Improve writing capitalises each sentence and writes "a lot
+ * of" as "many", Translate… puts the text in capitals, Explain says what the
+ * passage starts with, and an instruction to "replace X with Y" (把 X 换成 Y)
+ * does so, or "drop the citations" (去掉引用) leaves their markers out.
  */
 import { MockLanguageModelV4 } from "ai/test";
 import type { ChatModelFactory } from "../core";
@@ -472,6 +478,54 @@ function fakeSuggestion(options: GenerateOptions): string {
   });
 }
 
+const FILLER = /(?:\b(?:very|really|truly|quite|actually|basically)\s+|非常|真的|其实|十分)/giu;
+
+/** The scripted Edit with AI (see the top of this file): the passage's new text, or an explanation. */
+function fakeEdit(options: GenerateOptions): string | null {
+  const request = options.prompt
+    .filter((message) => message.role === "user")
+    .map((message) =>
+      typeof message.content === "string"
+        ? message.content
+        : message.content.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    )
+    .join("\n");
+  const task = /<task action="([^"]+)">([\s\S]*?)<\/task>/.exec(request);
+  if (!task) return null;
+  const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(request)?.[1] ?? "";
+  const asked = (task[2] ?? "").replace(/^Do what the User asks: /, "");
+  switch (task[1]) {
+    case "shorten":
+      return passage.replace(FILLER, "");
+    case "improve":
+      return passage
+        .replace(/\ba lot of\b/g, "many")
+        .replace(
+          /(^|[.!?]\s+)([a-z])/g,
+          (_match, before: string, letter: string) => `${before}${letter.toUpperCase()}`,
+        );
+    case "translate":
+      return passage.toUpperCase();
+    case "explain": {
+      const words = passage
+        .replace(/\s*\[\d+\]/g, "")
+        .split(/\s+/)
+        .slice(0, 6)
+        .join(" ");
+      return `This passage says: ${words}…`;
+    }
+    default: {
+      const replace =
+        /replace\s+[“"]?(.+?)[”"]?\s+with\s+[“"]?(.+?)[”"]?\.?$/i.exec(asked) ??
+        /把\s*[“"]?(.+?)[”"]?\s*换成\s*[“"]?(.+?)[”"]?。?$/u.exec(asked);
+      if (replace?.[1] && replace[2] !== undefined)
+        return passage.split(replace[1]).join(replace[2]);
+      if (/drop the citations|去掉引用/i.test(asked)) return passage.replace(/\s*\[\d+\]/g, "");
+      return `${passage} (edited)`;
+    }
+  }
+}
+
 /** Test-only classifier: chooses a group whose name appears in the excerpt. */
 function fakeStructuredOutput(options: GenerateOptions): string {
   const format = options.responseFormat;
@@ -507,12 +561,16 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
   new MockLanguageModelV4({
     provider: "incarnamind-fake",
     modelId: spec.modelId,
-    // Structured output (automatic tagging) gets its Tags as JSON; anything else (a connection test) gets "OK".
+    // Structured output (automatic tagging) gets its Tags as JSON; Edit with AI its new text;
+    // anything else (a connection test) gets "OK".
     doGenerate: async (options) => ({
       content: [
         {
           type: "text",
-          text: options.responseFormat?.type === "json" ? fakeStructuredOutput(options) : "OK",
+          text:
+            options.responseFormat?.type === "json"
+              ? fakeStructuredOutput(options)
+              : (fakeEdit(options) ?? "OK"),
         },
       ],
       finishReason: { unified: "stop", raw: undefined },
