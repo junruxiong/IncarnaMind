@@ -151,7 +151,7 @@ describe("formatting", () => {
     expect(selectionToMath(editor)).toBe(8);
     expect(editor.getJSON().content?.[0]?.content?.[1]).toEqual({
       type: "inlineMath",
-      attrs: { latex: "E = mc^2" },
+      attrs: { latex: "E = mc^2", proposal: null },
     });
 
     const two = editorWith([paragraph(text("a")), paragraph(text("b"))]);

@@ -7,7 +7,7 @@ import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import { recheckCitation } from "./answers/citations";
+import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
   addCitedVersions,
@@ -42,6 +42,7 @@ import {
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
+import { createEdits } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -760,6 +761,20 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
+  const edits = createEdits({
+    content,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    defaultModel: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    recheck: (attributes) => recheckKept(documents, attributes),
+    now: () => adapters.now?.() ?? new Date(),
+  });
+
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
@@ -1462,6 +1477,8 @@ export function createCore(adapters: CoreAdapters): Core {
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
     acceptSuggestion: async (input) => suggestions.accept(input),
     getSuggestionStatus: () => suggestions.status(),
+    editWithAi: (input) => edits.editWithAi(input),
+    cancelEdit: async (requestId) => edits.cancel(requestId),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -1817,6 +1834,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       suggestions.stop();
+      edits.stopAll();
       scriptRunner.close();
       approvals.close();
       connectors.close();

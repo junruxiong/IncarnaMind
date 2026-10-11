@@ -99,6 +99,12 @@ describe("Data-flow consent", () => {
         consent: "not-asked",
         decidedAt: null,
       },
+      // Edit with AI goes there too, and asks for itself the first time it is used.
+      {
+        flow: { id: "edits", service: OPENAI_SERVICE, sends: ["selection"] },
+        consent: "not-asked",
+        decidedAt: null,
+      },
       // Automatic tagging also goes to the default model's service, and asks for itself.
       {
         flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
@@ -181,10 +187,17 @@ describe("Data-flow consent", () => {
         }),
         consent: "declined",
       }),
-      // Suggestions and tagging go to the default model's service only: Anthropic, saved last.
+      // Edit with AI, suggestions and tagging go to the default model's service only: Anthropic, saved last.
       expect.objectContaining({
         flow: expect.objectContaining({
           id: "suggestions",
+          service: { id: "https://api.anthropic.com", name: "Anthropic" },
+        }),
+        consent: "not-asked",
+      }),
+      expect.objectContaining({
+        flow: expect.objectContaining({
+          id: "edits",
           service: { id: "https://api.anthropic.com", name: "Anthropic" },
         }),
         consent: "not-asked",
@@ -217,6 +230,7 @@ describe("Data-flow consent", () => {
         decidedAt: null,
       }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: "edits" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
     ]);
     const second = await testAndWaitForConsent(core);
@@ -282,6 +296,7 @@ describe("Data-flow consent", () => {
     expect(await core.listDataFlows()).toEqual([
       expect.objectContaining({ consent: "accepted" }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: "edits" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
     ]);
   });
