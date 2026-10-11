@@ -3,6 +3,7 @@ import { commands } from "../../commands/registry";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
+  CheckLineIcon,
   DockBottomLineIcon,
   DockLeftLineIcon,
   DockRightLineIcon,
@@ -68,7 +69,7 @@ export function AssistantMenu() {
                 >
                   <Icon className="size-4 shrink-0 text-ink-meta" />
                   <span className="flex-1">{t(label)}</span>
-                  {chosen === dock && <span aria-hidden="true">✓</span>}
+                  {chosen === dock && <CheckLineIcon className="size-4 shrink-0 text-ink-meta" />}
                 </button>
               );
             })}

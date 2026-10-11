@@ -6,7 +6,6 @@ import {
   createDataFolder,
   dismissChatSetup,
   dragBy,
-  enterContent,
   launchApp,
   newMind,
   removeDataFolder,
@@ -55,8 +54,12 @@ const near = (actual: number, expected: number) =>
 /** Opens a new Mind in the focused group, with a line in it. */
 async function mindWithText(window: Page, title: string) {
   await newMind(window);
-  await window.getByTestId("mind-title").fill(title);
-  await enterContent(window);
+  // The new Mind's title has the focus, whatever other groups show.
+  const field = window.locator('[data-testid="mind-title"]:focus');
+  await expect(field).toHaveCount(1);
+  await field.fill(title);
+  await field.press("Enter");
+  await expect(window.locator('[data-testid="mind-editor"]:focus')).toHaveCount(1);
   await window.keyboard.type(`Notes on ${title}.`);
 }
 
@@ -219,7 +222,7 @@ test("dragging the header shows the edges' zones; dropped on one it docks there,
 
   // Into the middle: it floats there, over the card, inside the window.
   area = await workbenchBox(window);
-  const middle = { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+  const middle = { x: area.x + area.width / 2, y: area.y + 120 };
   await dragHeaderTo(window, middle, async () => {
     await expect(window.locator("[data-zone][data-active]")).toHaveCount(0);
     await expect(window.getByTestId("assistant-stand-in")).toContainText("Float here");

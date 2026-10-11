@@ -68,10 +68,13 @@ async function pointAt(window: Page, target: Locator): Promise<void> {
   });
 }
 
-/** The size the approved mockups were drawn at. */
+/**
+ * The Mind as wide as the approved mockups drew it (a 1440px window's card),
+ * beside the assistant docked on the right (#253), which takes 368px of it.
+ */
 async function atMockupSize(app: ElectronApplication, window: Page) {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(1200);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1600, 900));
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(1500);
   await window.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
