@@ -59,9 +59,10 @@ async function slideTo(window: Page, target: Locator): Promise<{ x: number; y: n
   return point;
 }
 
-async function rightClick(window: Page, target: Locator): Promise<void> {
+async function rightClick(window: Page, target: Locator): Promise<{ x: number; y: number }> {
   const point = await slideTo(window, target);
   await window.mouse.click(point.x, point.y, { button: "right" });
+  return point;
 }
 
 /** The commands a menu holds, in order, with its rules as "—". */
@@ -168,6 +169,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "document.ask",
     "document.startMind",
     "—",
+    "document.tags",
+    "—",
     "document.rename",
     "—",
     "document.openExternally",
@@ -192,6 +195,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "folder.open",
     "—",
     "folder.newMind",
+    "folder.organize",
+    "folder.editDescription",
     "—",
     "folder.rename",
     "—",
@@ -208,7 +213,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     tag.getByTestId("tag-menu"),
     tag.getByTestId("tag-actions"),
   );
-  expect(tagMenu).toEqual(["tag.open", "—", "tag.manage"]);
+  expect(tagMenu).toEqual(["tag.open", "—", "tag.manage", "tag.rename", "—", "tag.delete"]);
   await window.getByTestId("browse-views").getByRole("button", { name: "Folders" }).click();
 
   // A Linked folder, in Source locations.
@@ -238,6 +243,8 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
   await rightClick(window, tab);
   const tabMenu = tab.getByTestId("tab-actions");
   const byRightClick = await commandsIn(tabMenu);
+  // Its Mind's items first, then the tab's own.
+  expect(byRightClick.slice(0, 4)).toEqual(["mind.export", "—", "mind.delete", "—"]);
   expect(byRightClick.indexOf("tab.rename")).toBeLessThan(byRightClick.indexOf("tab.close"));
   expect(byRightClick.indexOf("tab.close")).toBeLessThan(byRightClick.indexOf("tab.closeOthers"));
   // Close and its kin end the menu, after a rule.
@@ -361,5 +368,86 @@ test("each item shows its shortcut as the system writes it, and the labels are i
   for (const item of await menu.getByRole("menuitem").all()) {
     expect((await item.boundingBox())?.height).toBeLessThanOrEqual(32);
   }
+  await app.close();
+});
+
+test("a right-click opens the menu at the pointer, the ⋯ at its button, and the keyboard at the row", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  const mind = window.getByTestId("mind-row").first();
+  const menu = mind.getByTestId("mind-actions");
+  const nearBy = async (point: { x: number; y: number }) => {
+    const box = await menu.boundingBox();
+    if (!box) throw new Error("The menu isn't laid out.");
+    expect(Math.abs(box.x - point.x)).toBeLessThan(16);
+    expect(box.y).toBeGreaterThanOrEqual(point.y - 2);
+    expect(box.y).toBeLessThan(point.y + 16);
+  };
+
+  const point = await rightClick(window, mind.getByTestId("mind-list-item"));
+  await expect(menu).toBeVisible();
+  await nearBy(point);
+  await window.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+
+  // The ⋯ opens it under the button, not at the last pointer.
+  await mind.hover();
+  const button = mind.getByTestId("mind-menu");
+  await button.click();
+  const buttonBox = await button.boundingBox();
+  const menuBox = await menu.boundingBox();
+  if (!buttonBox || !menuBox) throw new Error("Not laid out.");
+  expect(menuBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height - 2);
+  await window.keyboard.press("Escape");
+
+  // The keyboard opens it at the focused row.
+  await mind.getByTestId("mind-list-item").focus();
+  await window.keyboard.press("Shift+F10");
+  const rowBox = await mind.boundingBox();
+  const keyedBox = await menu.boundingBox();
+  if (!rowBox || !keyedBox) throw new Error("Not laid out.");
+  expect(keyedBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 2);
+  expect(keyedBox.y).toBeLessThan(rowBox.y + rowBox.height + 16);
+  await app.close();
+});
+
+test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and Delete start the flows the app already has", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await (await coreOf(window)).evaluate(async (core) => {
+    await core.createLibraryGroup({ name: "Finance", description: "Invoices" });
+    const tag = await core.createTag({ name: "Tides" });
+    const [first] = await core.listDocuments();
+    if (first) await core.addDocumentTag(first.id, tag.id);
+  });
+
+  const document = window.getByTestId("document-list-item").first();
+  await rightClick(window, document.getByTestId("open-document"));
+  await document.getByTestId("document.tags").click();
+  await expect(document.getByTestId("document-tags-popover")).toBeVisible();
+  await window.keyboard.press("Escape");
+
+  const folder = sidebarFolder(window, "Finance");
+  await rightClick(window, folder.getByTestId("folder-row"));
+  await folder.getByTestId("folder.editDescription").click();
+  await expect(window.getByTestId("library")).toBeVisible();
+  await expect(window.getByTestId("library").locator("form input").first()).toHaveValue("Finance");
+  await expect(window.getByTestId("library").locator("form textarea")).toHaveValue("Invoices");
+
+  await window.getByTestId("browse-views").getByRole("button", { name: "Tags" }).click();
+  const tag = window.getByTestId("sidebar-tag").filter({ hasText: "Tides" });
+  await rightClick(window, tag.getByTestId("row-text"));
+  await tag.getByTestId("tag.rename").click();
+  const dialog = window.getByTestId("tags-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId("tag-row").getByRole("textbox").first()).toHaveValue("Tides");
+  await window.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await rightClick(window, tag.getByTestId("row-text"));
+  await tag.getByTestId("tag.delete").click();
+  await expect(dialog.getByTestId("confirm-delete-tag")).toBeVisible();
   await app.close();
 });

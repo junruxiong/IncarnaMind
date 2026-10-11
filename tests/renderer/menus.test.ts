@@ -53,6 +53,8 @@ beforeAll(async () => {
     incarnamindFiles: bridge,
   };
   await import("../../src/renderer/src/commands/app");
+  const { useAppStore } = await import("../../src/renderer/src/store");
+  useAppStore.setState({ minds: [{ id: "one" } as never] });
 });
 
 describe("the menus", () => {
@@ -75,6 +77,8 @@ describe("the menus", () => {
       const here = Object.fromEntries(menuIds(kind).map((id) => [id, () => undefined]));
       const entries = buildMenu(kind, focusOn(kind, here));
       let lastGroup = -1;
+      let lastSection = -1;
+      let segments = 0;
       let rules = 0;
       let afterRule = false;
       for (const entry of entries) {
@@ -85,21 +89,22 @@ describe("the menus", () => {
           continue;
         }
         const group = COMMAND_GROUPS.indexOf(entry.command.group);
-        expect(group, `${kind}: ${entry.command.id} is out of order`).toBeGreaterThanOrEqual(
-          lastGroup,
-        );
-        // A rule comes exactly where the group changes.
-        expect(afterRule, `${kind}: ${entry.command.id}`).toBe(
-          group !== lastGroup && lastGroup >= 0,
-        );
+        const newSection = entry.section !== lastSection;
+        if (!newSection) {
+          expect(group, `${kind}: ${entry.command.id} is out of order`).toBeGreaterThanOrEqual(
+            lastGroup,
+          );
+        }
+        // A rule comes exactly where the group or the section changes.
+        const changes = newSection || group !== lastGroup;
+        expect(afterRule, `${kind}: ${entry.command.id}`).toBe(changes && lastGroup >= 0);
+        if (changes) segments += 1;
+        lastSection = entry.section;
         lastGroup = group;
         afterRule = false;
       }
       expect(afterRule, `${kind}: a rule at the end`).toBe(false);
-      const groups = new Set(
-        entries.flatMap((each) => (each === "rule" ? [] : [each.command.group])),
-      );
-      expect(rules, kind).toBe(Math.max(0, groups.size - 1));
+      expect(rules, kind).toBe(Math.max(0, segments - 1));
     }
   });
 

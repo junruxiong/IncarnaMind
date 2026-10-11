@@ -36,6 +36,7 @@ import {
 } from "../libraryFilters";
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
+import { useRequests } from "../requests";
 import { useAppStore } from "../store";
 import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
@@ -177,6 +178,13 @@ export function LibraryPane() {
     const item = assignments.get(doc.id);
     return item?.status !== "classified" || doc.tagging !== "tagged";
   });
+  const editFolder = useRequests((state) => state.editFolder);
+  useEffect(() => {
+    if (editFolder && selected?.id === editFolder) {
+      setEditing(selected);
+      useRequests.getState().clear("editFolder");
+    }
+  }, [editFolder, selected]);
   const organize = () => {
     if (!snapshot?.settings.classifier) {
       useAppStore.getState().openSettings("models");

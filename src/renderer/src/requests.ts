@@ -14,6 +14,10 @@ interface Requests {
   deleteFolder: LibraryGroup | null;
   unlink: { linked: LinkedFolder; name: string } | null;
   exportMind: Mind | null;
+  /** The Folder whose name and description the Library opens to edit. */
+  editFolder: string | null;
+  /** The Tag Manage Tags opens on, to rename or to delete. */
+  manageTag: { id: string; mode: "edit" | "delete" } | null;
   ask(request: Partial<Omit<Requests, "ask" | "clear">>): void;
   clear(key: keyof Omit<Requests, "ask" | "clear">): void;
 }
@@ -24,6 +28,8 @@ export const useRequests = create<Requests>((set) => ({
   deleteFolder: null,
   unlink: null,
   exportMind: null,
+  editFolder: null,
+  manageTag: null,
   ask: (request) => set(request),
   clear: (key) => set({ [key]: null }),
 }));

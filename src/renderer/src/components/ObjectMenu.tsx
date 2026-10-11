@@ -55,10 +55,10 @@ function focusRow(from: HTMLElement | null): void {
  */
 export function useObjectMenu(target: ObjectRef) {
   const key = keyOf(target);
-  const open = (row: HTMLElement, buttons: number): boolean => {
+  const open = (row: HTMLElement, buttons: number, at: { x: number; y: number }): boolean => {
     const button = row.querySelector<HTMLButtonElement>(`[data-object-menu="${CSS.escape(key)}"]`);
     if (!button) return false;
-    openMenuFromRightClick(button, buttons);
+    openMenuFromRightClick(button, buttons, at);
     return true;
   };
   return {
@@ -70,7 +70,7 @@ export function useObjectMenu(target: ObjectRef) {
         // Not from a menu or picker drawn from this row but sitting elsewhere in the page, nor an inner row's.
         if (!(event.target instanceof Node) || !row.contains(event.target)) return;
         if (event.defaultPrevented || (event.target as Element).closest('[role="menu"]')) return;
-        if (open(row, event.buttons)) {
+        if (open(row, event.buttons, { x: event.clientX, y: event.clientY })) {
           event.preventDefault();
           // The row's own menu only: not that of a row that holds this one.
           event.stopPropagation();
@@ -80,13 +80,23 @@ export function useObjectMenu(target: ObjectRef) {
         if (!opensMenu(event) || event.defaultPrevented) return;
         const field = event.target;
         if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) return;
-        if (open(event.currentTarget, 0)) {
+        const box = event.currentTarget.getBoundingClientRect();
+        if (open(event.currentTarget, 0, { x: box.left + 24, y: box.bottom })) {
           event.preventDefault();
           event.stopPropagation();
         }
       },
     },
   };
+}
+
+/** "Tags…" opens the Tag picker the Document's row or header already has, once the menu has closed. */
+function tagsHere(target: ObjectRef, from: HTMLElement | null): CommandContext["here"] {
+  const picker =
+    target.kind === "document"
+      ? from?.closest(ROW)?.querySelector<HTMLButtonElement>('[data-testid="document-tags-menu"]')
+      : null;
+  return picker ? { "document.tags": () => requestAnimationFrame(() => picker.click()) } : {};
 }
 
 const surfaceOf = (element: Element | null): Surface => {
@@ -127,7 +137,7 @@ export function ObjectMenu({
       : [],
     focus: target,
     surface: surfaceOf(button.current),
-    ...(here && { here }),
+    here: { ...tagsHere(target, button.current), ...here },
   };
   const entries = menu.open ? buildMenu(target.kind, ctx) : [];
 
