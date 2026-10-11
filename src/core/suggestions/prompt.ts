@@ -16,7 +16,7 @@ const TOLERANCE = 1.5;
 
 export const SUGGESTION_INSTRUCTIONS = [
   "You help the User write. They paused at the end of the paragraph they are writing. Suggest how it goes on, using only the Passages from their Documents below.",
-  "- Your text is added right after the paragraph's last character, and the two must read as one text. If the paragraph stops in the middle of a sentence, your text completes that very sentence, so it reads correctly from its start: after “…and the report found that”, write the rest, such as “most delays came from one supplier.”; after “…调查发现，大多数居民”, such as “每天步行上班。”. If the paragraph ends with a full sentence, write the next one. Never repeat the paragraph's words.",
+  "- Your text is added right after the paragraph's last character. If the paragraph stops in the middle of a sentence, your text finishes that very sentence: read the sentence's start and your text together, and make sure they form one grammatical sentence (after “…the report found that”, a whole clause, such as “most delays came from one supplier.”; after “…调查发现，大多数居民”, the rest, such as “每天步行上班。”). If the paragraph ends with a full sentence, write the next one. Never repeat the paragraph's words.",
   `- One sentence at most: no more than ${MAX_WORDS} words, or ${MAX_CJK_CHARACTERS} Chinese characters.`,
   "- Write in the paragraph's language and tone, as the User would go on.",
   "- Rest it on one Passage, and say nothing that Passage doesn't say. Copy from it a short quote that supports what you wrote, character for character.",
@@ -95,7 +95,19 @@ export function suggestionPrompt(paragraph: string, passages: readonly FoundPass
       : "";
     return `<passage id="${passageHandle(index)}" document="${attribute(passage.documentName)}"${where}>\n${passage.text}\n</passage>`;
   });
-  return [`<paragraph>\n${paragraph}\n</paragraph>`, ...shown].join("\n\n");
+  // Named on its own, small models finish the sentence rather than start another.
+  const unfinished = unfinishedSentence(paragraph);
+  const task = unfinished
+    ? `The paragraph's last sentence is unfinished: “${unfinished}”. Your text finishes it.`
+    : "The paragraph ends with a full sentence. Your text is the next one.";
+  return [`<paragraph>\n${paragraph}\n</paragraph>`, task, ...shown].join("\n\n");
+}
+
+/** The sentence a paragraph stops in the middle of, or "" when it ends with a full stop. */
+export function unfinishedSentence(paragraph: string): string {
+  const text = paragraph.trimEnd();
+  if (/[.!?。！？]["'”’)）」]?$/u.test(text)) return "";
+  return (text.split(/(?<=[.!?。！？])\s*/u).at(-1) ?? text).trim();
 }
 
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
