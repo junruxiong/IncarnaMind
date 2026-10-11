@@ -3295,7 +3295,8 @@
   }
   .conversation-link {
     position: absolute;
-    left: -56px;
+    /* 8px clear of the Block handle, which takes 48px to 28px left of the text (--handle-gap). */
+    left: -72px;
     display: flex;
     align-items: center;
     justify-content: center;
