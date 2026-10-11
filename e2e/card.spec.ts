@@ -11,6 +11,7 @@ import {
   linkedFolderRow,
   previewLink,
   removeDataFolder,
+  setWindowSize,
   showSourceLocations,
   widthOf,
 } from "./app";
@@ -59,12 +60,7 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     [1440, 860],
     [1000, 700],
   ] as const) {
-    await app.evaluate(
-      ({ BrowserWindow }, size) =>
-        BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
-      { width, height: requested },
-    );
-    await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+    await setWindowSize(app, window, width, requested);
     // The screen may not have room for the height asked for: the card follows the page's.
     await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeGreaterThan(600);
     const height = await window.evaluate(() => globalThis.innerHeight);
