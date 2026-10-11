@@ -382,6 +382,42 @@ export function recheckCitation(
   return result({ check: "not-found", checkReason: "quote-not-on-pages" }, cited);
 }
 
+/**
+ * A Citation that a change of its sentence keeps (Edit with AI, #93), checked
+ * again: its new attributes when its quote is found in the Document's current
+ * version and it said otherwise (not found yet, or found in an older
+ * version), else null. A quote the current version doesn't hold leaves the
+ * Citation as it was: its check stands for the version it quotes, whose text
+ * is kept.
+ */
+export function recheckKept(
+  documents: RecheckDocuments,
+  attributes: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const { documentId, quote } = attributes;
+  if (typeof documentId !== "string" || documentId === "") return null;
+  const page = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+  const now = recheckCitation(documents, {
+    documentId,
+    quote: typeof quote === "string" ? quote : "",
+    pageFrom: page(attributes.pageFrom),
+    pageTo: page(attributes.pageTo) ?? page(attributes.pageFrom),
+  });
+  if (now.check !== "found") return null;
+  if (attributes.check === "found" && attributes.contentHash === now.contentHash) return null;
+  return {
+    ...attributes,
+    check: now.check,
+    checkReason: now.checkReason,
+    contentHash: now.contentHash,
+    passageId: now.passageId ?? attributes.passageId ?? null,
+    pageFrom: now.pageFrom,
+    pageTo: now.pageTo,
+    location: now.location,
+  };
+}
+
 const pagesLabel = ({ pageFrom, pageTo }: PageRange) =>
   pageFrom === null
     ? ""
