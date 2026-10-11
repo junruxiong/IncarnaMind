@@ -865,7 +865,7 @@ export const zhCN = {
   "jev.form.save": "用 Jev 打标签",
   "tagging.title": "自动打标签",
   "tagging.intro":
-    "为你添加的每个文档打标签；有文件夹后，还会为它推荐文件夹。你自己设置的标签和文件夹不会被改动。",
+    "为你添加的每个文档打标签；有文件夹后，还会为它推荐文件夹。不会改动你自己设置的标签和文件夹。",
   "tagging.model": "打标签所用的模型",
   "tagging.automatic": "自动",
   "tagging.using.jev": "正在使用 {model}（你的 Jev 密钥）",
@@ -873,7 +873,7 @@ export const zhCN = {
   "tagging.using.quick-model": "正在使用 {model}：你的 {provider} 密钥的快速模型",
   "tagging.using.answers-model": "正在使用 {model}：你的 {provider} 回答模型",
   "tagging.using.plan": "正在使用 {model}：通过你的 ChatGPT 订阅",
-  "tagging.using.decision-models": "正在使用本机的本地分类模型（{model}）",
+  "tagging.using.decision-models": "正在使用本地分类模型（{model}）",
   "tagging.using.local-chat": "正在使用 {model}：在本机运行",
   "tagging.using.none":
     "还没有可用来打标签的模型：请设置一个对话模型，或在 Ollama 中安装 Tev1。在此之前，文档会等待打标签。",

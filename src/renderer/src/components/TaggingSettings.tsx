@@ -384,6 +384,7 @@ function OtherModelForm({
       <label className={fieldLabelClass}>
         {t("library.connection")}
         <select
+          aria-label={t("library.connection")}
           className={inputClass}
           value={where}
           onChange={(event) => setWhere(event.target.value)}
