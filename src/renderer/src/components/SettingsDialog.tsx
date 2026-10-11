@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
+import { EvidenceSettings } from "./EvidenceSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { MeetingsSettings } from "./MeetingsSettings";
 import { OrganizationSettings } from "./OrganizationSettings";
@@ -178,6 +179,7 @@ function PageContent({ page }: { page: SettingsPage }) {
             <EmbeddingSettingsSection />
           </Titled>
           <RerankSettingsSection />
+          <EvidenceSettings />
         </Page>
       );
     case "meetings":

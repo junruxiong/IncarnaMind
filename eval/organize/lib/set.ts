@@ -88,6 +88,7 @@ export function definitions(language: Language): {
       id: key,
       name: translate(language, `library.preset.${key}`),
       description: translate(language, `library.preset.${key}.description`),
+      countsOwnFiles: false,
       createdAt: "",
       updatedAt: "",
     })),
