@@ -73,7 +73,9 @@ The framework around the providers is the same for every one. It does consent, p
 
 `find_sources` (`src/core/sources/tool.ts`) runs the same search, under the same consent. Its results are public records, not the User's data, so the chat flow doesn't count them as "tool-results". Its Effects are network calls to each provider's service, which consent covers, so it runs without an approval card.
 
-Only a Question that asks for papers or other sources is offered it (`src/core/sources/intent.ts`, words in English and Chinese). Offered to every Answer, a model could send searches out, and put a consent request in front of the User, for a Question about their own Documents, and a small local model's window would carry the Tool for nothing. The Library's Find sources is there for anything the words miss. The assistant (#253) may widen this, for example within a conversation that has already searched.
+Only a Question that names scholarly works is offered it (`src/core/sources/intent.ts`): papers, literature, preprints, publications, studies, a DOI, arXiv or PubMed; 论文, 文献, 预印本 or 综述. Words like "published" or "article" are left out, as "When are the tide tables published?" and a contract's "Article 5" aren't asking for papers. Offered to every Answer, a model could send searches out, and put a consent request in front of the User, for a Question about their own Documents, and a small local model's window would carry the Tool for nothing. The Library's Find sources is there for anything the words miss. The assistant (#253) may widen this, for example within a conversation that has already searched.
+
+A model that cites with structured output, as small local models do (ADR-0007), is offered no Tools, so it doesn't search. With qwen3.5:4b, "Find papers…" was answered from the model's own knowledge. Such a User finds sources in the Library.
 
 What it finds is never cited with a marker. The Answer names the works, and its Tool-call row's "Show results" opens them in the Library to add.
 
