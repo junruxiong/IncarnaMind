@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { mindName } from "../../../shared/naming";
+import { useCitationStylePicker } from "../citationStylePicker";
 import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
@@ -161,7 +162,7 @@ export function MindRow({
 
 /**
  * A Mind's menu, from its ⋯ or a right-click, in the shared order: Open,
- * Open in a new tab; Move to…; Rename; Delete….
+ * Open in a new tab; its own Citation style… (#289); Move to…; Rename; Delete….
  */
 function MindMenu({
   mind,
@@ -227,6 +228,21 @@ function MindMenu({
           className={`${menuItemClass} pl-2`}
         >
           {t("mind.openSide")}
+        </button>
+        <div className={menuRuleClass} />
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="mind-citation-style"
+          onClick={choose(() => {
+            // Once the menu has closed and given the focus back to its button.
+            requestAnimationFrame(() =>
+              useCitationStylePicker.getState().show(mind.id, anchor.current),
+            );
+          })}
+          className={`${menuItemClass} pl-2`}
+        >
+          {t("citationStyle.command")}
         </button>
         <div className={menuRuleClass} />
         <button

@@ -1,0 +1,30 @@
+[package]
+name = "citation-styles"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+description = "IncarnaMind's binding to Hayagriva's CSL engine, built to WebAssembly (ADR-0016)."
+
+[lib]
+# cdylib for the .wasm the app loads; rlib so `cargo test` can run the binding natively.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Hayagriva's main branch, pinned (ADR-0016): 0.10.1, the latest release, drops every author in
+# the NLM/Vancouver style (typst/hayagriva#519, fixed after the release by #520). Move the pin to a
+# release once one carries the fixes we need; never patch a copy of it here.
+# No default features: BibLaTeX parsing and the bundled style archive are left out, because the
+# app passes CSL JSON and ships the style and locale files itself.
+hayagriva = { git = "https://github.com/typst/hayagriva", rev = "546c7c721bbb5539f96ce458df5d4bb3f97c11e9", default-features = false, features = ["csl-json"] }
+citationberg = { version = "0.7", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# Speed over size: about 30% faster on the heavy styles than opt-level "s", for about 75 KB more.
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
