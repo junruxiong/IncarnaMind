@@ -552,13 +552,16 @@ export function createLibrary(options: {
       return group(existing.id);
     },
     /**
-     * Deletes a Folder: its Documents go to Not in a Folder, as the Minds the caller took out
-     * of it did, and both are recorded so that restoring it puts them back.
+     * Deletes a Folder: its Documents go to Not in a Folder, as the Minds and conversations
+     * the caller took out of it did, and all are recorded so that restoring it puts them back.
      */
-    delete(id: unknown, mindIds: readonly string[] = []): Pick<FolderDeletion, "assignments"> {
+    delete(
+      id: unknown,
+      taken: { minds?: readonly string[]; conversations?: readonly string[] } = {},
+    ): Pick<FolderDeletion, "assignments"> {
       const existing = group(id);
       const at = now();
-      const record = (kind: "document" | "mind", itemId: string, suggested = 0) =>
+      const record = (kind: "document" | "mind" | "conversation", itemId: string, suggested = 0) =>
         db.run(
           `INSERT INTO deleted_folder_items
              (id, folder_id, item_kind, item_id, suggested, created_at, updated_at)
@@ -578,7 +581,10 @@ export function createLibrary(options: {
           existing.id,
         ]);
         for (const row of rows) record("document", row.document_id, row.suggested);
-        for (const mindId of mindIds) record("mind", mindId);
+        for (const mindId of taken.minds ?? []) record("mind", mindId);
+        for (const conversationId of taken.conversations ?? []) {
+          record("conversation", conversationId);
+        }
         db.run(
           "UPDATE document_groups SET group_id = NULL, suggested = 0, updated_at = ? WHERE group_id = ? AND deleted_at IS NULL",
           [at, existing.id],
@@ -591,11 +597,11 @@ export function createLibrary(options: {
     },
     /**
      * Brings back a deleted Folder (the caller checks it may), and the Documents its
-     * deletion took out that are in no Folder now. Returns the Minds it took out, for the
-     * caller to put back. Throws if its name is taken or the Library is full. Run in the
-     * caller's transaction, then `restored`.
+     * deletion took out that are in no Folder now. Returns the Minds and conversations it
+     * took out, for the caller to put back. Throws if its name is taken or the Library is
+     * full. Run in the caller's transaction, then `restored`.
      */
-    restore(id: string): string[] {
+    restore(id: string): { minds: string[]; conversations: string[] } {
       const row = db.get<{ name: string }>("SELECT name FROM library_groups WHERE id = ?", [id]);
       if (!row) throw new NotFoundError("That Folder doesn't exist.");
       const language = settings.get().language;
@@ -616,17 +622,19 @@ export function createLibrary(options: {
            AND document_groups.deleted_at IS NULL AND document_groups.group_id IS NULL`,
         [at, id],
       );
-      const mindIds = db
-        .all<{ item_id: string }>(
-          "SELECT item_id FROM deleted_folder_items WHERE folder_id = ? AND item_kind = 'mind' AND deleted_at IS NULL",
-          [id],
-        )
-        .map((each) => each.item_id);
+      const taken = (kind: "mind" | "conversation") =>
+        db
+          .all<{ item_id: string }>(
+            "SELECT item_id FROM deleted_folder_items WHERE folder_id = ? AND item_kind = ? AND deleted_at IS NULL",
+            [id, kind],
+          )
+          .map((each) => each.item_id);
+      const items = { minds: taken("mind"), conversations: taken("conversation") };
       db.run(
         "UPDATE deleted_folder_items SET deleted_at = ?, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
         [at, at, id],
       );
-      return mindIds;
+      return items;
     },
     /** Folders came back (`restore`): the Library is read again, and Organize may go on. */
     restored() {
