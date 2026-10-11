@@ -32,7 +32,7 @@ import { runClaudeCode } from "./claude";
 import { type AgentRun, runCodex, type ToolCall } from "./codex";
 import type { AgentsConfig, Arm } from "./config";
 import type { FixtureLibrary } from "./fixtureLibrary";
-import { judge } from "./judge";
+import { judge, type Verdict } from "./judge";
 import {
   type RunMetrics,
   type ScoredCitation,
@@ -285,43 +285,134 @@ export async function runOne(
     arm === "A0" || arm === "A0-L"
       ? await runBuiltIn(session, arm, task, prompt, runId)
       : await runOutside(session, arm, task, prompt, runId);
-  // No text: nothing to judge, and nothing correct.
-  const judged = !session.config.judge
-    ? null
-    : record.sentences.length === 0
-      ? { correct: "no" as const, claims: [], usage: NO_USAGE }
-      : await judge(session.config.chat, task, prompt, record.sentences).catch((error: unknown) => {
-          session.log(`  judge failed: ${error instanceof Error ? error.message : String(error)}`);
-          return null;
-        });
-  const sentences = record.sentences.map((sentence, index) => ({
-    ...sentence,
-    claim: judged ? judged.claims.includes(index) : null,
-  }));
-  const uncitedClaims = judged ? judged.claims.length : null;
+  const verdict = session.config.judge
+    ? await verdictFor(session.config.chat, task, prompt, record.sentences, session.log)
+    : null;
+  const { marks, ...rest } = record;
+  return withVerdict(
+    {
+      ...rest,
+      arm,
+      task: task.id,
+      repeat,
+      runId,
+      startedAt,
+      load,
+      waitedMs,
+      prompt,
+      metrics: {
+        ...record.metrics,
+        injection: {
+          ...record.metrics.injection,
+          listenerHits: session.canary.hitsSince(since).length,
+        },
+      },
+      judgeUsage: NO_USAGE,
+    },
+    verdict,
+    marks,
+  );
+}
+
+/** The judge's verdict on a run's sentences; with no text, nothing to judge and nothing correct. */
+async function verdictFor(
+  chat: AgentsConfig["chat"],
+  task: Task,
+  prompt: string,
+  sentences: readonly Sentence[],
+  log: Log,
+): Promise<Verdict | null> {
+  if (sentences.length === 0) return { correct: "no", claims: [], sources: [], usage: NO_USAGE };
+  return judge(chat, task, prompt, sentences).catch((error: unknown) => {
+    log(`  judge failed: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  });
+}
+
+/** A run's record with the judge's verdict applied (none: the judged fields stay empty). */
+function withVerdict(record: RunRecord, verdict: Verdict | null, marks: boolean): RunRecord {
+  const uncitedClaims = verdict ? verdict.claims.length : null;
   return {
     ...record,
-    arm,
-    task: task.id,
-    repeat,
-    runId,
-    startedAt,
-    load,
-    waitedMs,
-    prompt,
-    sentences,
+    sentences: record.sentences.map((sentence, index) => ({
+      ...sentence,
+      claim: verdict ? verdict.claims.includes(index) : null,
+    })),
     metrics: {
       ...record.metrics,
       uncitedClaims,
-      unmarkedUncitedClaims: uncitedClaims === null ? null : record.marks ? 0 : uncitedClaims,
-      correct: judged?.correct ?? null,
-      injection: {
-        ...record.metrics.injection,
-        listenerHits: session.canary.hitsSince(since).length,
+      unmarkedUncitedClaims: uncitedClaims === null ? null : marks ? 0 : uncitedClaims,
+      unbackedSources: verdict ? verdict.sources.length : null,
+      correct: verdict?.correct ?? null,
+    },
+    judgeUsage: verdict?.usage ?? NO_USAGE,
+  };
+}
+
+/**
+ * Scores a recorded run again without the Library: its sentences, the
+ * references written without a token, whether it reached IncarnaMind, and
+ * the judge. Citation checks, timings and canaries stay as recorded.
+ */
+export async function rescoreRecord(
+  record: RunRecord,
+  bakeoff: Bakeoff,
+  chat: AgentsConfig["chat"],
+  log: Log,
+): Promise<RunRecord> {
+  const task = bakeoff.tasks.find((each) => each.id === record.task);
+  if (!task) throw new Error(`${record.runId}: no task ${record.task}.`);
+  const builtIn = record.arm === "A0" || record.arm === "A0-L";
+  // A built-in Answer keeps the editor's own sentence split.
+  const sentences = builtIn
+    ? record.sentences
+    : sentencesOf(record.finalText, task.language).map((sentence) => ({
+        ...sentence,
+        claim: null,
+      }));
+  const fresh = scoreRun({
+    task,
+    bakeoff,
+    finalText: record.finalText,
+    citations: record.citations,
+    calls: record.calls,
+    innerSearches: builtIn ? record.calls.map((call) => call.input) : [],
+    innerText: builtIn
+      ? record.finalText
+      : record.calls
+          .filter((call) => /\bask\b/.test(call.name) || /incarnamind\s+ask/.test(call.input))
+          .map((call) => call.output)
+          .join("\n"),
+    retrievedKeys: new Set(),
+    marksUncited: record.arm === "H" || builtIn,
+    reachedIncarnaMind: builtIn || record.activity.length > 0,
+    scopeRefusals: record.metrics.scopeRefusals,
+    listenerHits: record.metrics.injection.listenerHits,
+    fileWritten: record.metrics.injection.fileWritten,
+    privatePaths: [],
+  });
+  const verdict = await verdictFor(chat, task, record.prompt, sentences, log);
+  return withVerdict(
+    {
+      ...record,
+      sentences,
+      metrics: {
+        ...record.metrics,
+        inventedRefs: fresh.inventedRefs,
+        malformedTokens: fresh.malformedTokens,
+        sentences: sentences.length,
+        uncitedSentences: sentences.filter((sentence) => !sentence.cited).length,
+        reachedIncarnaMind: fresh.reachedIncarnaMind,
+        injection: {
+          ...record.metrics.injection,
+          closingWord: fresh.injection.closingWord,
+          mentionsWord: fresh.injection.mentionsWord,
+        },
       },
     },
-    judgeUsage: judged?.usage ?? NO_USAGE,
-  };
+    verdict,
+    record.arm === "H" || builtIn,
+  );
 }
 
 type ArmResult = Omit<
@@ -363,6 +454,7 @@ async function runBuiltIn(
     innerText: finalText,
     retrievedKeys: retrieved,
     marksUncited: true,
+    reachedIncarnaMind: true,
     scopeRefusals: 0,
     listenerHits: 0,
     fileWritten: false,
@@ -624,6 +716,7 @@ async function runOutside(
       innerText: askAnswers,
       retrievedKeys: retrieved,
       marksUncited: arm === "H",
+      reachedIncarnaMind: activity.length > 0,
       scopeRefusals: activity.filter((call) => call.problem === "outside-scope").length,
       listenerHits: 0,
       fileWritten,

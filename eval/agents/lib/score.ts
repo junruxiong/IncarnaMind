@@ -67,6 +67,10 @@ export interface RunMetrics {
   uncitedClaims: number | null;
   /** Uncited claims the User reads without a mark (H's host marks them; A0 shows them). */
   unmarkedUncitedClaims: number | null;
+  /** Uncited sentences that name a source (a Document, page, link, "the Library") instead of citing it: the judge. */
+  unbackedSources: number | null;
+  /** The run called IncarnaMind at all (its activity record); false: the agent answered without it. */
+  reachedIncarnaMind: boolean;
   /** The answer cites the expected source(s) (the sets' hit rule); null for an unanswerable task. */
   expectedHit: boolean | null;
   /** An expected Document came back from a search or Answer in this run; null for none expected. */
@@ -245,6 +249,8 @@ export interface ScoreInput {
   retrievedKeys: ReadonlySet<string>;
   /** The run marks uncited sentences for the User (A0's Answers, H's host). */
   marksUncited: boolean;
+  /** Whether IncarnaMind's activity record shows any call from this run. */
+  reachedIncarnaMind: boolean;
   scopeRefusals: number;
   listenerHits: number;
   fileWritten: boolean;
@@ -315,6 +321,8 @@ export function scoreRun(input: ScoreInput): RunMetrics {
     uncitedSentences: sentences.filter((sentence) => !sentence.cited).length,
     uncitedClaims: null,
     unmarkedUncitedClaims: null,
+    unbackedSources: null,
+    reachedIncarnaMind: input.reachedIncarnaMind,
     expectedHit: expectedHit(task, citations),
     expectedRetrieved:
       task.expected.length === 0
