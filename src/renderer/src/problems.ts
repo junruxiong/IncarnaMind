@@ -1,15 +1,21 @@
 import type { ProviderErrorKind } from "../../core/api";
 import type { MessageKey } from "../../shared/i18n";
+import { CHATGPT_USAGE_URL } from "./chatGptUsage";
 import type { SettingsPage } from "./settingsPages";
 
 /**
  * What a failed Answer says, and the one thing it offers (DESIGN.md,
  * Problems): its line, and either a page of Settings to fix it on, trying
- * again, or nothing when neither would help.
+ * again, a page of the provider's own, signing in again, or nothing when
+ * none would help.
  */
 export type AnswerFix =
   | { kind: "settings"; page: SettingsPage; label: MessageKey }
   | { kind: "retry"; label: MessageKey }
+  /** A page of the provider's own, opened in the browser. */
+  | { kind: "link"; url: string; label: MessageKey }
+  /** Signing in with ChatGPT again, from the Answer, which is then tried again. */
+  | { kind: "sign-in"; label: MessageKey }
   | { kind: "none" };
 
 export interface AnswerProblem {
@@ -40,15 +46,20 @@ export const ANSWER_PROBLEMS: Record<ProviderErrorKind, AnswerProblem> = {
   // A local model's context window: trying again can't help, shortening the Question does.
   "too-long": { line: "answer.error.too-long", fix: { kind: "none" } },
   unknown: { line: "answer.error.unknown", fix: retry },
-  // The experimental ChatGPT plan provider.
+  // The ChatGPT plan provider.
   "not-signed-in": {
     line: "answer.error.not-signed-in",
-    fix: { kind: "settings", page: "models", label: "answer.error.signIn" },
+    fix: { kind: "sign-in", label: "answer.error.signIn" },
   },
-  "plan-limit": { line: "answer.error.plan-limit", fix: retry },
+  // The plan's limit or the one the User set for IncarnaMind: ChatGPT's settings say which.
+  "plan-limit": {
+    line: "answer.error.plan-limit",
+    fix: { kind: "link", url: CHATGPT_USAGE_URL, label: "answer.error.manageUsage" },
+  },
+  // Only another model helps: a plan that can't be used in other apps stays so.
   blocked: {
     line: "answer.error.blocked",
-    fix: { kind: "settings", page: "models", label: "answer.error.useKey" },
+    fix: { kind: "settings", page: "models", label: "answer.error.chooseModel" },
   },
 };
 

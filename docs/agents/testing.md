@@ -48,13 +48,38 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with real models from **several providers**, because they differ in how they follow instructions, cite and format:
 
 - **Anthropic:** a small, fast model such as Haiku or Sonnet.
-- **OpenAI:** a current small model.
+- **OpenAI:** a current small model. Prefer the ChatGPT plan, through the ChatGPT test profile below, to a paid key.
 - **An Ollama cloud model** (its name ends in `-cloud`, for example a `gpt-oss` or `qwen3` cloud model). The app treats it as leaving the computer, which is fine for test Documents.
 - **A small local model through Ollama,** for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards. Required when the feature runs in Local mode.
 
 Use at least three of these, including one from Anthropic and one from OpenAI, and say where a model did worse than the others.
 
 Use a temporary data folder and test Documents, never your own files. Say in the pull request which models you used and what you checked with each: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
+
+### The ChatGPT test profile
+
+The owner signs in with ChatGPT once, in a test profile; agents then use that sign-in for checks by hand on the owner's ChatGPT plan, without signing in themselves and without ever seeing a token.
+
+- **What it is.** A folder outside every checkout and data folder, `~/.incarnamind-chatgpt-profile`. A development build (`npm run dev`) or a test build started with `INCARNAMIND_CHATGPT_PROFILE` set to it keeps the ChatGPT sign-in there instead of in its data folder: encrypted by the system's keychain (`safeStorage`) like every secret, in a file only the owner's account can read. Everything else (Minds, Documents, settings) stays in the run's own temporary data folder. Release builds ignore the variable, and the smoke tests clear it.
+- **Several agents at once.** The tokens rotate when they are refreshed; a lock file in the folder makes processes take turns, so one refreshes and the others use its result.
+
+**The owner's one-time sign-in** (and again if it ever ends, e.g. after 30 days without use):
+
+```sh
+export INCARNAMIND_CHATGPT_PROFILE="$HOME/.incarnamind-chatgpt-profile"
+export INCARNAMIND_DATA_DIR="$(mktemp -d)"
+HOME="$(mktemp -d)" npm run dev
+```
+
+In the app, choose **ChatGPT plan** in the first window (or Settings → Models), then **Continue with ChatGPT**. Sign in with the ChatGPT Plus account in the browser, approve IncarnaMind and allow it to use the plan, then quit. In ChatGPT → Settings → Usage, the owner can cap IncarnaMind's weekly share of the plan.
+
+**Using it as an agent:**
+
+- Start the app with the same three lines. It starts signed in: choose a ChatGPT plan model under Settings → Models (**Use for Questions**) or in the composer's model chip.
+- Never read, copy, print or log anything in the profile folder, and never read another app's credentials (`~/.codex/auth.json` and the like). The app reads the profile; you don't.
+- Never sign out in the profile: signing out ends the owner's session at OpenAI. Sign-out is covered by the unit tests' fake OpenAI.
+- Keep checks small: they use the owner's plan, whose limits are shared with the owner's own ChatGPT.
+- If the app says you're signed out of ChatGPT, or macOS asks to allow access to the keychain, stop and ask the owner. Don't sign in or answer the prompt yourself.
 
 ## Edge cases
 

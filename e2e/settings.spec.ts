@@ -27,12 +27,7 @@ const PAGES = [
   {
     page: "models",
     name: "Models",
-    sections: [
-      "chat-model-settings",
-      "jev-settings",
-      "experimental-settings",
-      "organization-settings",
-    ],
+    sections: ["chat-model-settings", "chatgpt-settings", "jev-settings", "organization-settings"],
   },
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
   { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },

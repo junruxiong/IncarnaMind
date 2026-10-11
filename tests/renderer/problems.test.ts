@@ -23,12 +23,28 @@ describe("a failed Answer's problem line", () => {
     expect(Object.keys(ANSWER_PROBLEMS).sort()).toEqual([...KINDS].sort());
   });
 
-  test("offers at most one action: a page of Settings, trying again, or nothing", () => {
+  test("offers at most one action: a page of Settings, trying again, a provider's page, signing in, or nothing", () => {
     for (const kind of KINDS) {
       const { fix } = ANSWER_PROBLEMS[kind];
       if (fix.kind === "settings") expect(settingsPages).toContain(fix.page);
-      expect(["settings", "retry", "none"]).toContain(fix.kind);
+      if (fix.kind === "link") expect(fix.url).toMatch(/^https:\/\//);
+      expect(["settings", "retry", "link", "sign-in", "none"]).toContain(fix.kind);
     }
+  });
+
+  test("an ended ChatGPT sign-in offers to sign in again, right from the Answer", () => {
+    expect(ANSWER_PROBLEMS["not-signed-in"].fix).toEqual({
+      kind: "sign-in",
+      label: "answer.error.signIn",
+    });
+  });
+
+  test("a reached ChatGPT plan limit offers Manage usage, ChatGPT's own page for it", () => {
+    expect(ANSWER_PROBLEMS["plan-limit"].fix).toEqual({
+      kind: "link",
+      url: "https://chatgpt.com/settings/usage",
+      label: "answer.error.manageUsage",
+    });
   });
 
   test("what the User can fix in Settings opens the page that fixes it", () => {
@@ -42,7 +58,7 @@ describe("a failed Answer's problem line", () => {
   });
 
   test("a limit or a lost connection is tried again; a Question too long for the model is not", () => {
-    for (const kind of ["rate-limit", "network", "provider", "unknown", "plan-limit"] as const) {
+    for (const kind of ["rate-limit", "network", "provider", "unknown"] as const) {
       expect(ANSWER_PROBLEMS[kind].fix.kind).toBe("retry");
     }
     expect(ANSWER_PROBLEMS["too-long"].fix.kind).toBe("none");

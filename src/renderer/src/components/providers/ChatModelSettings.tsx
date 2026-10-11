@@ -16,7 +16,7 @@ import {
   ruledRow,
   ruledRowClass,
 } from "../ui";
-import { useChatGptPlan } from "./ChatGptPlanSettings";
+import { useChatGptPlan } from "./ChatGptSignIn";
 import { type ChatProviderChoice, ChatProviderChoices } from "./ChatProviderChoices";
 import { ReadinessExplanation } from "./ChatReadinessNotice";
 import { useOllama } from "./OllamaCard";
