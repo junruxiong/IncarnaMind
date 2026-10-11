@@ -32,8 +32,8 @@ export interface NetworkTrafficDefinition {
    */
   services?(): ExternalService[] | Promise<ExternalService[]>;
   /**
-   * Whether the traffic can happen in this app at all, e.g. the ChatGPT
-   * sign-in only while the experimental provider is on. Unlisted otherwise.
+   * Whether the traffic can happen in this app at all, e.g. the built-in
+   * reranking model's download only while it reranks. Unlisted otherwise.
    * Defaults to always.
    */
   listed?(): boolean | Promise<boolean>;
