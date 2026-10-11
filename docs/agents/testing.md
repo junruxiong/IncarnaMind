@@ -48,7 +48,7 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with real models from **several providers**, because they differ in how they follow instructions, cite and format:
 
 - **Anthropic:** Haiku first. Sonnet only when Haiku fails at the task or the feature needs the stronger model; say why in the pull request.
-- **OpenAI:** the cheapest current small model (a "mini" or "nano" tier), never a large one. Once "Continue with ChatGPT" (#122) lands, use a ChatGPT plan's allowance instead of an API key.
+- **OpenAI:** GPT-6 Luna, the newest small model, priced like Haiku. Not GPT-6 Sol or Astra unless the feature needs them. Once "Continue with ChatGPT" (#122) lands, use a ChatGPT plan's allowance instead of an API key.
 - **An Ollama cloud model** (its name ends in `-cloud`, for example a `gpt-oss` or `qwen3` cloud model). The app treats it as leaving the computer, which is fine for test Documents.
 - **A small local model through Ollama,** for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards. Required when the feature runs in Local mode.
 
