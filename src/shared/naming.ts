@@ -1,7 +1,7 @@
 /**
- * The one naming rule for Minds and Chats: the first line of what the User
- * wrote or asked, cut to about this many characters. A Chat's short title from
- * the model is cleaned by the same cut, so the rule is the same everywhere.
+ * The one naming rule for Minds and conversations: the first line of what the
+ * User wrote or asked, cut to about this many characters. A conversation's short
+ * title from the model is cleaned by the same cut, so the rule is the same everywhere.
  */
 export const NAME_LENGTH = 60;
 
@@ -34,7 +34,14 @@ export function cutTitle(raw: string): string {
 export const mindName = (mind: { title: string; autoTitle: string }): string =>
   mind.title || mind.autoTitle;
 
-/** What the quick-task model is asked to title a Chat with, in the language of the Question. */
+/**
+ * What a conversation is called: the title the User typed, else its own name (its first
+ * Question, cut, or the model's short title). Empty when it has neither: "New chat".
+ */
+export const conversationName = (conversation: { title: string; autoTitle: string }): string =>
+  conversation.title || conversation.autoTitle;
+
+/** What the quick-task model is asked to title a conversation with, in the language of the Question. */
 export const SHORT_TITLE_INSTRUCTION =
   "Write a title for the conversation that starts with the Question below: at most 6 words in English, or at most 12 characters in Chinese, " +
   "in the same language as the Question. Reply with the title only: no quotes, no full stop.";

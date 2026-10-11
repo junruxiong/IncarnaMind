@@ -1,0 +1,353 @@
+
+## APA 7th (apa.csl)
+
+- cite 14: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: (“Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use,” 2023)
+    - Hayagriva:   (“Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use,” 2023)
+- cite 34: [-2019a,-]{+2019a;+}
+    - citeproc-js: (OECD, 2019a, 2019b)
+    - Hayagriva:   (OECD, 2019a; 2019b)
+- bib en-csl-nd: [-CitationStyles.Org.-]{+Citationstyles.org.+}
+    - citeproc-js: Citation Style Language. (n.d.). Citation Style Language 1.0.2 specification. CitationStyles.Org. Retrieved October 1, 2026, from https://docs.citationstyles.org/en/stable/specification.html
+    - Hayagriva:   Citation Style Language. (n.d.). Citation Style Language 1.0.2 specification. Citationstyles.org. Retrieved October 1, 2026, from https://docs.citationstyles.org/en/stable/specification.html
+- bib en-iso-690: [-documentation—Guidelines-]{+documentation — Guidelines+}
+    - citeproc-js: International Organization for Standardization. (2021). Information and documentation—Guidelines for bibliographic references and citations to information resources (ISO 690:2021; 4th ed.). ISO.
+    - Hayagriva:   International Organization for Standardization. (2021). Information and documentation — Guidelines for bibliographic references and citations to information resources (ISO 690:2021; 4th ed.). ISO.
+- bib zh-gbt7714-2015: [-中华人民共和国国家质量监督检验检疫总局-]{+中华人民共和国国家质量监督检验检疫总局,+}
+    - citeproc-js: 中华人民共和国国家质量监督检验检疫总局 & 中国国家标准化管理委员会. (2015). 信息与文献 参考文献著录规则 (GB/T 7714—2015). 中国标准出版社.
+    - Hayagriva:   中华人民共和国国家质量监督检验检疫总局, & 中国国家标准化管理委员会. (2015). 信息与文献 参考文献著录规则 (GB/T 7714—2015). 中国标准出版社.
+- bib zh-unwin-1988: [-昂温 G.,-]{+昂温G,+} … [-昂温 P.-]{+昂温P+} … [-Trans.).-]{+trans.).+}
+    - citeproc-js: 昂温 G., & 昂温 P. S. (1988). 外国出版史 (陈生铮, Trans.). 中国书籍出版社.
+    - Hayagriva:   昂温G, & 昂温P S. (1988). 外国出版史 (陈生铮, trans.). 中国书籍出版社.
+- bib zh-bai-1998: [-(Ed.),-]{+(ed.),+}
+    - citeproc-js: 白书农. (1998). 植物开花研究. In 李承森 (Ed.), 植物科学进展 (pp. 146–163). 高等教育出版社.
+    - Hayagriva:   白书农. (1998). 植物开花研究. In 李承森 (ed.), 植物科学进展 (pp. 146–163). 高等教育出版社.
+- bib zh-jia-2011: [-(Ed.), 中国图书馆学会年会论文集：2011年卷 (pp. 45–52). 国家图书馆出版社.-]{+(ed.), 中国图书馆学会年会论文集：2011年卷.+}
+    - citeproc-js: 贾东琴, & 柯平. (2011). 面向数字素养的高校图书馆数字服务体系研究. In 中国图书馆学会 (Ed.), 中国图书馆学会年会论文集：2011年卷 (pp. 45–52). 国家图书馆出版社.
+    - Hayagriva:   贾东琴, & 柯平. (2011). 面向数字素养的高校图书馆数字服务体系研究. In 中国图书馆学会 (ed.), 中国图书馆学会年会论文集：2011年卷.
+
+## MLA 9th (modern-language-association.csl)
+
+- cite 14: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: (“Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use”)
+    - Hayagriva:   (“Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use”)
+- bib en-csl-nd: [-CitationStyles.Org,-]{+Citationstyles.org,+}
+    - citeproc-js: Citation Style Language. “Citation Style Language 1.0.2 Specification.” CitationStyles.Org, https://docs.citationstyles.org/en/stable/specification.html. Accessed 1 Oct. 2026.
+    - Hayagriva:   Citation Style Language. “Citation Style Language 1.0.2 Specification.” Citationstyles.org, https://docs.citationstyles.org/en/stable/specification.html. Accessed 1 Oct. 2026.
+- bib en-jumper-2021: [-AlphaFold.”-]{+Alphafold.”+}
+    - citeproc-js: Jumper, John, et al. “Highly Accurate Protein Structure Prediction with AlphaFold.” Nature, vol. 596, no. 7873, Aug. 2021, pp. 583–89, https://doi.org/10.1038/s41586-021-03819-2.
+    - Hayagriva:   Jumper, John, et al. “Highly Accurate Protein Structure Prediction with Alphafold.” Nature, vol. 596, no. 7873, Aug. 2021, pp. 583–89, https://doi.org/10.1038/s41586-021-03819-2.
+- bib en-gdpr-2016: [--]{+vol.+}
+    - citeproc-js: Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the Protection of Natural Persons with Regard to the Processing of Personal Data and on the Free Movement of Such Data (General Data Protection Regulation). Official Journal of the European Union, L 119, 4 May 2016, pp. 1–88, http://data.europa.eu/eli/reg/2016/679/oj.
+    - Hayagriva:   Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the Protection of Natural Persons with Regard to the Processing of Personal Data and on the Free Movement of Such Data (General Data Protection Regulation). Official Journal of the European Union, vol. L 119, 4 May 2016, pp. 1–88, http://data.europa.eu/eli/reg/2016/679/oj.
+- bib en-nature-2023: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: “Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” Nature, vol. 613, no. 7945, Jan. 2023, p. 612, https://doi.org/10.1038/d41586-023-00191-1.
+    - Hayagriva:   “Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” Nature, vol. 613, no. 7945, Jan. 2023, p. 612, https://doi.org/10.1038/d41586-023-00191-1.
+- bib en-vandermaaten-2008: [-T-SNE.”-]{+t-Sne.”+}
+    - citeproc-js: van der Maaten, Laurens, and Geoffrey Hinton. “Visualizing Data Using T-SNE.” Journal of Machine Learning Research, vol. 9, no. 86, 2008, pp. 2579–605, http://jmlr.org/papers/v9/vandermaaten08a.html.
+    - Hayagriva:   van der Maaten, Laurens, and Geoffrey Hinton. “Visualizing Data Using t-Sne.” Journal of Machine Learning Research, vol. 9, no. 86, 2008, pp. 2579–605, http://jmlr.org/papers/v9/vandermaaten08a.html.
+- bib zh-gbt7714-2015: [-中华人民共和国国家质量监督检验检疫总局-]{+中华人民共和国国家质量监督检验检疫总局,+}
+    - citeproc-js: 中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会. 信息与文献 参考文献著录规则. GB/T 7714—2015, 中国标准出版社, 15 May 2015.
+    - Hayagriva:   中华人民共和国国家质量监督检验检疫总局, and 中国国家标准化管理委员会. 信息与文献 参考文献著录规则. GB/T 7714—2015, 中国标准出版社, 15 May 2015.
+- bib zh-unwin-1988: [-昂温 G.,-]{+昂温G,+} … [-昂温 P.-]{+昂温P+}
+    - citeproc-js: 昂温 G., and 昂温 P. S. 外国出版史. Translated by 陈生铮, 中国书籍出版社, 1988.
+    - Hayagriva:   昂温G, and 昂温P S. 外国出版史. Translated by 陈生铮, 中国书籍出版社, 1988.
+- order: citeproc-js en-csl-nd, en-ipcc-2023, en-iso-690, en-jumper-2021, en-kahneman-1979, en-kuhn-2012, en-oecd-2019a, en-oecd-2019b, en-gdpr-2016, en-shannon-1940, en-nature-2023, en-tversky-1982, en-vandermaaten-2008, en-vaswani-2017, en-who-2023, en-zhou-2018, zh-ding-2000, zh-gbt7714-2015, zh-cnnic-2012, zh-mechanics-1990, zh-pipl-2021, zh-liu-2016, zh-wu-2003, zh-zhou-2016, zh-unwin-1988, zh-bai-1998, zh-xiao-2001, zh-fei-2012, zh-jia-2011, zh-qian-1990
+  - Hayagriva en-nature-2023, en-csl-nd, en-ipcc-2023, en-iso-690, en-jumper-2021, en-kahneman-1979, en-kuhn-2012, en-oecd-2019a, en-oecd-2019b, en-gdpr-2016, en-shannon-1940, en-tversky-1982, en-vandermaaten-2008, en-vaswani-2017, en-who-2023, en-zhou-2018, zh-ding-2000, zh-gbt7714-2015, zh-cnnic-2012, zh-mechanics-1990, zh-pipl-2021, zh-liu-2016, zh-wu-2003, zh-zhou-2016, zh-unwin-1988, zh-bai-1998, zh-xiao-2001, zh-fei-2012, zh-jia-2011, zh-qian-1990
+- html bib zh-ding-2000: [-中国青年报,-]{+<i>中国青年报</i>,+}
+- html bib zh-liu-2016: [-计算机研究与发展,-]{+<i>计算机研究与发展</i>,+}
+- html bib zh-wu-2003: [-面向中文信息处理的现代汉语并列结构研究.-]{+<i>面向中文信息处理的现代汉语并列结构研究</i>.+}
+- html bib zh-zhou-2016: [-机器学习.-]{+<i>机器学习</i>.+}
+- html bib zh-bai-1998: [-植物科学进展,-]{+<i>植物科学进展</i>,+}
+- html bib zh-xiao-2001: [-出版业信息化迈入快车道.-]{+<i>出版业信息化迈入快车道</i>.+}
+- html bib zh-fei-2012: [-乡土中国.-]{+<i>乡土中国</i>.+}
+- html bib zh-qian-1990: [-自然杂志,-]{+<i>自然杂志</i>,+}
+
+## Chicago 18th, notes and bibliography (chicago-notes-bibliography.csl)
+
+- cite 3: [-AlphaFold,”-]{+Alphafold,”+}
+    - citeproc-js: John Jumper et al., “Highly Accurate Protein Structure Prediction with AlphaFold,” Nature 596, no. 7873 (2021): 585, https://doi.org/10.1038/s41586-021-03819-2.
+    - Hayagriva:   John Jumper et al., “Highly Accurate Protein Structure Prediction with Alphafold,” Nature 596, no. 7873 (2021): 585, https://doi.org/10.1038/s41586-021-03819-2.
+- cite 5: [-T-SNE,”-]{+t-Sne,”+}
+    - citeproc-js: Laurens van der Maaten and Geoffrey Hinton, “Visualizing Data Using T-SNE,” Journal of Machine Learning Research 9, no. 86 (2008): 2579–605, http://jmlr.org/papers/v9/vandermaaten08a.html.
+    - Hayagriva:   Laurens van der Maaten and Geoffrey Hinton, “Visualizing Data Using t-Sne,” Journal of Machine Learning Research 9, no. 86 (2008): 2579–605, http://jmlr.org/papers/v9/vandermaaten08a.html.
+- cite 10: [-CitationStyles.Org,-]{+Citationstyles.org,+}
+    - citeproc-js: Citation Style Language, “Citation Style Language 1.0.2 Specification,” CitationStyles.Org, accessed October 1, 2026, https://docs.citationstyles.org/en/stable/specification.html.
+    - Hayagriva:   Citation Style Language, “Citation Style Language 1.0.2 Specification,” Citationstyles.org, accessed October 1, 2026, https://docs.citationstyles.org/en/stable/specification.html.
+- cite 14: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: “Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use,” Nature 613, no. 7945 (2023): 612, https://doi.org/10.1038/d41586-023-00191-1.
+    - Hayagriva:   “Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use,” Nature 613, no. 7945 (2023): 612, https://doi.org/10.1038/d41586-023-00191-1.
+- cite 29: [-昂温 G.-]{+昂温G+} … [-昂温 P. S.,-]{+昂温P S,+}
+    - citeproc-js: 昂温 G. and 昂温 P. S., 外国出版史, trans. 陈生铮 (中国书籍出版社, 1988).
+    - Hayagriva:   昂温G and 昂温P S, 外国出版史, trans. 陈生铮 (中国书籍出版社, 1988).
+- cite 31: [-“知识表示学习研究进展.”-]{+“知识表示学习研究进展”.+}
+    - citeproc-js: Vaswani et al., “Attention Is All You Need”; Kahneman and Tversky, “Prospect Theory: An Analysis of Decision under Risk”; 刘 et al., “知识表示学习研究进展.”
+    - Hayagriva:   Vaswani et al., “Attention Is All You Need”; Kahneman and Tversky, “Prospect Theory: An Analysis of Decision under Risk”; 刘 et al., “知识表示学习研究进展”.
+- bib en-csl-nd: [-CitationStyles.Org.-]{+Citationstyles.org.+}
+    - citeproc-js: Citation Style Language. “Citation Style Language 1.0.2 Specification.” CitationStyles.Org. Accessed October 1, 2026. https://docs.citationstyles.org/en/stable/specification.html.
+    - Hayagriva:   Citation Style Language. “Citation Style Language 1.0.2 Specification.” Citationstyles.org. Accessed October 1, 2026. https://docs.citationstyles.org/en/stable/specification.html.
+- bib en-jumper-2021: [-AlphaFold.”-]{+Alphafold.”+}
+    - citeproc-js: Jumper, John, Richard Evans, Alexander Pritzel, et al. “Highly Accurate Protein Structure Prediction with AlphaFold.” Nature 596, no. 7873 (2021): 583–89. https://doi.org/10.1038/s41586-021-03819-2.
+    - Hayagriva:   Jumper, John, Richard Evans, Alexander Pritzel, et al. “Highly Accurate Protein Structure Prediction with Alphafold.” Nature 596, no. 7873 (2021): 583–89. https://doi.org/10.1038/s41586-021-03819-2.
+- bib en-vandermaaten-2008: [-T-SNE.”-]{+t-Sne.”+}
+    - citeproc-js: Maaten, Laurens van der, and Geoffrey Hinton. “Visualizing Data Using T-SNE.” Journal of Machine Learning Research 9, no. 86 (2008): 2579–605. http://jmlr.org/papers/v9/vandermaaten08a.html.
+    - Hayagriva:   Maaten, Laurens van der, and Geoffrey Hinton. “Visualizing Data Using t-Sne.” Journal of Machine Learning Research 9, no. 86 (2008): 2579–605. http://jmlr.org/papers/v9/vandermaaten08a.html.
+- bib en-nature-2023: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: “Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” Nature 613, no. 7945 (2023): 612. https://doi.org/10.1038/d41586-023-00191-1.
+    - Hayagriva:   “Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” Nature 613, no. 7945 (2023): 612. https://doi.org/10.1038/d41586-023-00191-1.
+- bib zh-gbt7714-2015: [-中华人民共和国国家质量监督检验检疫总局-]{+中华人民共和国国家质量监督检验检疫总局,+}
+    - citeproc-js: 中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会. 信息与文献 参考文献著录规则. GB/T 7714—2015. 中国标准出版社, May 15, 2015.
+    - Hayagriva:   中华人民共和国国家质量监督检验检疫总局, and 中国国家标准化管理委员会. 信息与文献 参考文献著录规则. GB/T 7714—2015. 中国标准出版社, May 15, 2015.
+- bib zh-unwin-1988: [-昂温 G.,-]{+昂温G,+} … [-昂温 P.-]{+昂温P+}
+    - citeproc-js: 昂温 G., and 昂温 P. S. 外国出版史. Translated by 陈生铮. 中国书籍出版社, 1988.
+    - Hayagriva:   昂温G, and 昂温P S. 外国出版史. Translated by 陈生铮. 中国书籍出版社, 1988.
+- order: citeproc-js en-csl-nd, en-ipcc-2023, en-iso-690, en-jumper-2021, en-kahneman-1979, en-kuhn-2012, en-vandermaaten-2008, en-oecd-2019a, en-oecd-2019b, en-gdpr-2016, en-shannon-1940, en-nature-2023, en-tversky-1982, en-vaswani-2017, en-who-2023, en-zhou-2018, zh-ding-2000, zh-pipl-2021, zh-gbt7714-2015, zh-cnnic-2012, zh-mechanics-1990, zh-liu-2016, zh-wu-2003, zh-zhou-2016, zh-unwin-1988, zh-bai-1998, zh-xiao-2001, zh-fei-2012, zh-jia-2011, zh-qian-1990
+  - Hayagriva en-nature-2023, en-csl-nd, en-ipcc-2023, en-iso-690, en-jumper-2021, en-kahneman-1979, en-kuhn-2012, en-vandermaaten-2008, en-oecd-2019a, en-oecd-2019b, en-gdpr-2016, en-shannon-1940, en-tversky-1982, en-vaswani-2017, en-who-2023, en-zhou-2018, zh-ding-2000, zh-pipl-2021, zh-gbt7714-2015, zh-cnnic-2012, zh-mechanics-1990, zh-liu-2016, zh-wu-2003, zh-zhou-2016, zh-unwin-1988, zh-bai-1998, zh-xiao-2001, zh-fei-2012, zh-jia-2011, zh-qian-1990
+- html cite 17: [-自然杂志-]{+<i>自然杂志</i>+}
+- html cite 18: [-计算机研究与发展-]{+<i>计算机研究与发展</i>+}
+- html cite 19: [-乡土中国-]{+<i>乡土中国</i>+}
+- html cite 20: [-机器学习-]{+<i>机器学习</i>+}
+- html cite 21: [-植物科学进展,-]{+<i>植物科学进展</i>,+}
+- html cite 25: [-信息与文献 参考文献著录规则,-]{+<i>信息与文献 参考文献著录规则</i>,+}
+- html cite 28: [-中国青年报,-]{+<i>中国青年报</i>,+}
+- html bib zh-ding-2000: [-中国青年报,-]{+<i>中国青年报</i>,+}
+- html bib zh-liu-2016: [-计算机研究与发展-]{+<i>计算机研究与发展</i>+}
+- html bib zh-zhou-2016: [-机器学习.-]{+<i>机器学习</i>.+}
+- html bib zh-bai-1998: [-植物科学进展,-]{+<i>植物科学进展</i>,+}
+- html bib zh-fei-2012: [-乡土中国.-]{+<i>乡土中国</i>.+}
+- html bib zh-qian-1990: [-自然杂志-]{+<i>自然杂志</i>+}
+
+## Chicago 18th, author-date (chicago-author-date.csl)
+
+- cite 14: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: (“Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use” 2023)
+    - Hayagriva:   (“Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use” 2023)
+- cite 34: [-2019a,-]{+2019a;+}
+    - citeproc-js: (OECD 2019a, 2019b)
+    - Hayagriva:   (OECD 2019a; 2019b)
+- bib en-csl-nd: [-CitationStyles.Org.-]{+Citationstyles.org.+}
+    - citeproc-js: Citation Style Language. n.d. “Citation Style Language 1.0.2 Specification.” CitationStyles.Org. Accessed October 1, 2026. https://docs.citationstyles.org/en/stable/specification.html.
+    - Hayagriva:   Citation Style Language. n.d. “Citation Style Language 1.0.2 Specification.” Citationstyles.org. Accessed October 1, 2026. https://docs.citationstyles.org/en/stable/specification.html.
+- bib en-jumper-2021: [-AlphaFold.”-]{+Alphafold.”+}
+    - citeproc-js: Jumper, John, Richard Evans, Alexander Pritzel, et al. 2021. “Highly Accurate Protein Structure Prediction with AlphaFold.” Nature 596 (7873): 583–89. https://doi.org/10.1038/s41586-021-03819-2.
+    - Hayagriva:   Jumper, John, Richard Evans, Alexander Pritzel, et al. 2021. “Highly Accurate Protein Structure Prediction with Alphafold.” Nature 596 (7873): 583–89. https://doi.org/10.1038/s41586-021-03819-2.
+- bib en-vandermaaten-2008: [-T-SNE.”-]{+t-Sne.”+}
+    - citeproc-js: Maaten, Laurens van der, and Geoffrey Hinton. 2008. “Visualizing Data Using T-SNE.” Journal of Machine Learning Research 9 (86): 2579–605. http://jmlr.org/papers/v9/vandermaaten08a.html.
+    - Hayagriva:   Maaten, Laurens van der, and Geoffrey Hinton. 2008. “Visualizing Data Using t-Sne.” Journal of Machine Learning Research 9 (86): 2579–605. http://jmlr.org/papers/v9/vandermaaten08a.html.
+- bib en-nature-2023: [-ChatGPT-]{+Chatgpt+}
+    - citeproc-js: “Tools Such as ChatGPT Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” 2023. Nature 613 (7945): 612. https://doi.org/10.1038/d41586-023-00191-1.
+    - Hayagriva:   “Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” 2023. Nature 613 (7945): 612. https://doi.org/10.1038/d41586-023-00191-1.
+- bib zh-gbt7714-2015: [-中华人民共和国国家质量监督检验检疫总局-]{+中华人民共和国国家质量监督检验检疫总局,+}
+    - citeproc-js: 中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会. 2015. 信息与文献 参考文献著录规则. GB/T 7714—2015. 中国标准出版社, May 15.
+    - Hayagriva:   中华人民共和国国家质量监督检验检疫总局, and 中国国家标准化管理委员会. 2015. 信息与文献 参考文献著录规则. GB/T 7714—2015. 中国标准出版社, May 15.
+- bib zh-unwin-1988: [-昂温 G.,-]{+昂温G,+} … [-昂温 P.-]{+昂温P+}
+    - citeproc-js: 昂温 G., and 昂温 P. S. 1988. 外国出版史. Translated by 陈生铮. 中国书籍出版社.
+    - Hayagriva:   昂温G, and 昂温P S. 1988. 外国出版史. Translated by 陈生铮. 中国书籍出版社.
+- order: citeproc-js en-csl-nd, en-ipcc-2023, en-iso-690, en-jumper-2021, en-kahneman-1979, en-kuhn-2012, en-vandermaaten-2008, en-oecd-2019a, en-oecd-2019b, en-gdpr-2016, en-shannon-1940, en-nature-2023, en-tversky-1982, en-vaswani-2017, en-who-2023, en-zhou-2018, zh-ding-2000, zh-pipl-2021, zh-gbt7714-2015, zh-cnnic-2012, zh-mechanics-1990, zh-liu-2016, zh-wu-2003, zh-zhou-2016, zh-unwin-1988, zh-bai-1998, zh-xiao-2001, zh-fei-2012, zh-jia-2011, zh-qian-1990
+  - Hayagriva en-nature-2023, en-csl-nd, en-ipcc-2023, en-iso-690, en-jumper-2021, en-kahneman-1979, en-kuhn-2012, en-vandermaaten-2008, en-oecd-2019a, en-oecd-2019b, en-gdpr-2016, en-shannon-1940, en-tversky-1982, en-vaswani-2017, en-who-2023, en-zhou-2018, zh-ding-2000, zh-pipl-2021, zh-gbt7714-2015, zh-cnnic-2012, zh-mechanics-1990, zh-liu-2016, zh-wu-2003, zh-zhou-2016, zh-unwin-1988, zh-bai-1998, zh-xiao-2001, zh-fei-2012, zh-jia-2011, zh-qian-1990
+- html bib zh-ding-2000: [-中国青年报,-]{+<i>中国青年报</i>,+}
+- html bib zh-liu-2016: [-计算机研究与发展-]{+<i>计算机研究与发展</i>+}
+- html bib zh-zhou-2016: [-机器学习.-]{+<i>机器学习</i>.+}
+- html bib zh-bai-1998: [-植物科学进展,-]{+<i>植物科学进展</i>,+}
+- html bib zh-fei-2012: [-乡土中国.-]{+<i>乡土中国</i>.+}
+- html bib zh-qian-1990: [-自然杂志-]{+<i>自然杂志</i>+}
+
+## IEEE (ieee.csl)
+
+- bib zh-unwin-1988: [-昂温 G.-]{+昂温G+} … [-昂温 P. S.,-]{+昂温P S,+}
+    - citeproc-js: [29] 昂温 G. and 昂温 P. S., 外国出版史. 北京: 中国书籍出版社, 1988.
+    - Hayagriva:   [29] 昂温G and 昂温P S, 外国出版史. 北京: 中国书籍出版社, 1988.
+- html bib zh-qian-1990: [-自然杂志,-]{+<i>自然杂志</i>,+}
+- html bib zh-liu-2016: [-计算机研究与发展,-]{+<i>计算机研究与发展</i>,+}
+- html bib zh-fei-2012: [-乡土中国.-]{+<i>乡土中国</i>.+}
+- html bib zh-zhou-2016: [-机器学习.-]{+<i>机器学习</i>.+}
+- html bib zh-bai-1998: [-植物科学进展,-]{+<i>植物科学进展</i>,+}
+- html bib zh-gbt7714-2015: [-信息与文献 参考文献著录规则,-]{+<i>信息与文献 参考文献著录规则</i>,+}
+- html bib zh-pipl-2021: [-中华人民共和国个人信息保护法.-]{+<i>中华人民共和国个人信息保护法</i>.+}
+- html bib zh-ding-2000: [-中国青年报,-]{+<i>中国青年报</i>,+}
+
+## Vancouver (NLM Citing Medicine) (nlm-citation-sequence.csl)
+
+- bib en-kahneman-1979: [-Mar;47(2):263–91.-]{+Mar ;47(2):263–91.+}
+    - citeproc-js: 2. Kahneman D, Tversky A. Prospect theory: An analysis of decision under risk. Econometrica. 1979 Mar;47(2):263–91. doi:10.2307/1914185
+    - Hayagriva:   2. Kahneman D, Tversky A. Prospect theory: An analysis of decision under risk. Econometrica. 1979 Mar ;47(2):263–91. doi:10.2307/1914185
+- bib en-vaswani-2017: [-p.-]{+pp.+}
+    - citeproc-js: 4. Vaswani A, Shazeer N, Parmar N, Uszkoreit J, Jones L, Gomez AN, et al. Attention is all you need. In: Advances in Neural Information Processing Systems 30 [Internet]. Red Hook, NY: Curran Associates; 2017. p. 5998–6008. Available from: https://papers.nips.cc/paper/7181-attention-is-all-you-need
+    - Hayagriva:   4. Vaswani A, Shazeer N, Parmar N, Uszkoreit J, Jones L, Gomez AN, et al. Attention is all you need. In: Advances in Neural Information Processing Systems 30 [Internet]. Red Hook, NY: Curran Associates; 2017. pp. 5998–6008. Available from: https://papers.nips.cc/paper/7181-attention-is-all-you-need
+- bib en-vandermaaten-2008: [-2008;9(86):2579–605.-]{+2008 ;9(86):2579–605.+}
+    - citeproc-js: 5. van der Maaten L, Hinton G. Visualizing data using t-SNE. Journal of Machine Learning Research [Internet]. 2008;9(86):2579–605. Available from: http://jmlr.org/papers/v9/vandermaaten08a.html
+    - Hayagriva:   5. van der Maaten L, Hinton G. Visualizing data using t-SNE. Journal of Machine Learning Research [Internet]. 2008 ;9(86):2579–605. Available from: http://jmlr.org/papers/v9/vandermaaten08a.html
+- bib en-zhou-2018: [-Jan;5(1):44–53.-]{+Jan ;5(1):44–53.+}
+    - citeproc-js: 6. Zhou ZH. A brief introduction to weakly supervised learning. National Science Review. 2018 Jan;5(1):44–53. doi:10.1093/nsr/nwx106
+    - Hayagriva:   6. Zhou ZH. A brief introduction to weakly supervised learning. National Science Review. 2018 Jan ;5(1):44–53. doi:10.1093/nsr/nwx106
+- bib en-tversky-1982: [-Kahneman-]{+, editorsKahneman+} … [-A, editors.-]{+A.+} … [-p.-]{+pp.+}
+    - citeproc-js: 8. Tversky A, Kahneman D. Judgment under uncertainty: Heuristics and biases. In: Kahneman D, Slovic P, Tversky A, editors. Judgment under uncertainty: Heuristics and biases. Cambridge: Cambridge University Press; 1982. p. 3–20. doi:10.1017/CBO9780511809477.002
+    - Hayagriva:   8. Tversky A, Kahneman D. Judgment under uncertainty: Heuristics and biases. In: , editorsKahneman D, Slovic P, Tversky A. Judgment under uncertainty: Heuristics and biases. Cambridge: Cambridge University Press; 1982. pp. 3–20. doi:10.1017/CBO9780511809477.002
+- bib en-gdpr-2016: [-p.-]{+pp.+}
+    - citeproc-js: 13. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation). Official Journal of the European Union [Internet]. 2016 May 4. p. 1–88. Available from: http://data.europa.eu/eli/reg/2016/679/oj
+    - Hayagriva:   13. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation). Official Journal of the European Union [Internet]. 2016 May 4. pp. 1–88. Available from: http://data.europa.eu/eli/reg/2016/679/oj
+- bib zh-qian-1990: [-1990;13(1):3–10.-]{+1990 ;13(1):3–10.+}
+    - citeproc-js: 17. 钱学森, 于景元, 戴汝为. 一个科学新领域——开放的复杂巨系统及其方法论. 自然杂志. 1990;13(1):3–10.
+    - Hayagriva:   17. 钱学森, 于景元, 戴汝为. 一个科学新领域——开放的复杂巨系统及其方法论. 自然杂志. 1990 ;13(1):3–10.
+- bib zh-liu-2016: [-2016;53(2):247–61.-]{+2016 ;53(2):247–61.+}
+    - citeproc-js: 18. 刘知远, 孙茂松, 林衍凯, 谢若冰. 知识表示学习研究进展. 计算机研究与发展. 2016;53(2):247–61. doi:10.7544/issn1000-1239.2016.20160020
+    - Hayagriva:   18. 刘知远, 孙茂松, 林衍凯, 谢若冰. 知识表示学习研究进展. 计算机研究与发展. 2016 ;53(2):247–61. doi:10.7544/issn1000-1239.2016.20160020
+- bib zh-bai-1998: [-李承森, editor.-]{+, editor李承森.+} … [-p.-]{+pp.+}
+    - citeproc-js: 21. 白书农. 植物开花研究. In: 李承森, editor. 植物科学进展. 北京: 高等教育出版社; 1998. p. 146–63.
+    - Hayagriva:   21. 白书农. 植物开花研究. In: , editor李承森. 植物科学进展. 北京: 高等教育出版社; 1998. pp. 146–63.
+- bib zh-jia-2011: [-中国图书馆学会, editor.-]{+, editor中国图书馆学会.+} … [-p.-]{+pp.+}
+    - citeproc-js: 23. 贾东琴, 柯平. 面向数字素养的高校图书馆数字服务体系研究. In: 中国图书馆学会, editor. 中国图书馆学会年会论文集：2011年卷. 北京: 国家图书馆出版社; 2011. p. 45–52.
+    - Hayagriva:   23. 贾东琴, 柯平. 面向数字素养的高校图书馆数字服务体系研究. In: , editor中国图书馆学会. 中国图书馆学会年会论文集：2011年卷. 北京: 国家图书馆出版社; 2011. pp. 45–52.
+- bib zh-unwin-1988: [-昂温 G, 昂温 PS.-]{+昂温G, 昂温P S.+}
+    - citeproc-js: 29. 昂温 G, 昂温 PS. 外国出版史. 北京: 中国书籍出版社; 1988.
+    - Hayagriva:   29. 昂温G, 昂温P S. 外国出版史. 北京: 中国书籍出版社; 1988.
+
+## Harvard (Cite Them Right 12th) (harvard-cite-them-right.csl)
+
+- cite 34: [-2019a,-]{+2019a;+}
+    - citeproc-js: (OECD, 2019a, 2019b)
+    - Hayagriva:   (OECD, 2019a; 2019b)
+- bib en-nature-2023: [-use,”-]{+use”,+}
+    - citeproc-js: Nature (2023) “Tools such as ChatGPT threaten transparent science; here are our ground rules for their use,” 613(7945), p. 612. Available at: https://doi.org/10.1038/d41586-023-00191-1.
+    - Hayagriva:   Nature (2023) “Tools such as ChatGPT threaten transparent science; here are our ground rules for their use”, 613(7945), p. 612. Available at: https://doi.org/10.1038/d41586-023-00191-1.
+- bib en-vaswani-2017: [--]{+in+}
+    - citeproc-js: Vaswani, A. et al. (2017) “Attention is all you need,” Advances in Neural Information Processing Systems 30. Red Hook, NY: Curran Associates, pp. 5998–6008. Available at: https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+    - Hayagriva:   Vaswani, A. et al. (2017) “Attention is all you need,” in Advances in Neural Information Processing Systems 30. Red Hook, NY: Curran Associates, pp. 5998–6008. Available at: https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+- bib zh-unwin-1988: [-昂温 G.-]{+昂温G+} … [-昂温 P.S.-]{+昂温P S+}
+    - citeproc-js: 昂温 G. and 昂温 P.S. (1988) 外国出版史. Translated by 陈生铮. 北京: 中国书籍出版社.
+    - Hayagriva:   昂温G and 昂温P S (1988) 外国出版史. Translated by 陈生铮. 北京: 中国书籍出版社.
+- html bib zh-ding-2000: [-中国青年报,-]{+<i>中国青年报</i>,+}
+- html bib zh-pipl-2021: [-中华人民共和国个人信息保护法.-]{+<i>中华人民共和国个人信息保护法</i>.+}
+- html bib zh-liu-2016: [-计算机研究与发展,-]{+<i>计算机研究与发展</i>,+}
+- html bib zh-wu-2003: [-面向中文信息处理的现代汉语并列结构研究.-]{+<i>面向中文信息处理的现代汉语并列结构研究</i>.+}
+- html bib zh-zhou-2016: [-机器学习.-]{+<i>机器学习</i>.+}
+- html bib zh-bai-1998: [-植物科学进展.-]{+<i>植物科学进展</i>.+}
+- html bib zh-xiao-2001: [-出版业信息化迈入快车道.-]{+<i>出版业信息化迈入快车道</i>.+}
+- html bib zh-fei-2012: [-乡土中国.-]{+<i>乡土中国</i>.+}
+- html bib zh-qian-1990: [-自然杂志,-]{+<i>自然杂志</i>,+}
+
+## GB/T 7714—2015 numeric (china-national-standard-gb-t-7714-2015-numeric.csl)
+
+- bib en-gdpr-2016: [--]{+卷+}
+    - citeproc-js: [13] Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[A/OL]//Official Journal of the European Union: L 119. 2016: 1-88. http://data.europa.eu/eli/reg/2016/679/oj.
+    - Hayagriva:   [13] Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[A/OL]//Official Journal of the European Union: 卷 L 119. 2016: 1-88. http://data.europa.eu/eli/reg/2016/679/oj.
+- bib zh-unwin-1988: [-昂温 G, 昂温 P-]{+昂温G, 昂温P+}
+    - citeproc-js: [29] 昂温 G, 昂温 P S. 外国出版史[M]. 陈生铮, 译. 北京: 中国书籍出版社, 1988.
+    - Hayagriva:   [29] 昂温G, 昂温P S. 外国出版史[M]. 陈生铮, 译. 北京: 中国书籍出版社, 1988.
+
+## GB/T 7714—2015 author-date (china-national-standard-gb-t-7714-2015-author-date.csl)
+
+- cite 2: [-(Kahneman等,-]{+(Kahneman 等,+}
+    - citeproc-js: (Kahneman等, 1979)
+    - Hayagriva:   (Kahneman 等, 1979)
+- cite 3: [-(Jumper等,-]{+(Jumper 等,+}
+    - citeproc-js: (Jumper等, 2021)
+    - Hayagriva:   (Jumper 等, 2021)
+- cite 4: [-(Vaswani等,-]{+(Vaswani 等,+}
+    - citeproc-js: (Vaswani等, 2017)
+    - Hayagriva:   (Vaswani 等, 2017)
+- cite 5: [-Maaten等,-]{+Maaten 等,+}
+    - citeproc-js: (van der Maaten等, 2008)
+    - Hayagriva:   (van der Maaten 等, 2008)
+- cite 8: [-(Tversky等,-]{+(Tversky 等,+}
+    - citeproc-js: (Tversky等, 1982)
+    - Hayagriva:   (Tversky 等, 1982)
+- cite 17: [-(钱等,-]{+(钱 等,+}
+    - citeproc-js: (钱等, 1990)
+    - Hayagriva:   (钱 等, 1990)
+- cite 18: [-(刘等,-]{+(刘 等,+}
+    - citeproc-js: (刘等, 2016)
+    - Hayagriva:   (刘 等, 2016)
+- cite 23: [-(贾等,-]{+(贾 等,+}
+    - citeproc-js: (贾等, 2011)
+    - Hayagriva:   (贾 等, 2011)
+- cite 25: [-(中华人民共和国国家质量监督检验检疫总局等,-]{+(中华人民共和国国家质量监督检验检疫总局 等,+}
+    - citeproc-js: (中华人民共和国国家质量监督检验检疫总局等, 2015)
+    - Hayagriva:   (中华人民共和国国家质量监督检验检疫总局 等, 2015)
+- cite 29: [-(昂温等,-]{+(昂温 等,+}
+    - citeproc-js: (昂温等, 1988)
+    - Hayagriva:   (昂温 等, 1988)
+- cite 31: [-(Vaswani等,-]{+(Vaswani 等,+} … [-Kahneman等,-]{+Kahneman 等,+} … [-刘等,-]{+刘 等,+}
+    - citeproc-js: (Vaswani等, 2017; Kahneman等, 1979; 刘等, 2016)
+    - Hayagriva:   (Vaswani 等, 2017; Kahneman 等, 1979; 刘 等, 2016)
+- cite 34: [-2019a,-]{+2019a;+}
+    - citeproc-js: (OECD, 2019a, 2019b)
+    - Hayagriva:   (OECD, 2019a; 2019b)
+- bib zh-unwin-1988: [-昂温 G, 昂温 P-]{+昂温G, 昂温P+}
+    - citeproc-js: 昂温 G, 昂温 P S, 1988. 外国出版史[M]. 陈生铮, 译. 北京: 中国书籍出版社.
+    - Hayagriva:   昂温G, 昂温P S, 1988. 外国出版史[M]. 陈生铮, 译. 北京: 中国书籍出版社.
+- bib en-gdpr-2016: [--]{+卷+}
+    - citeproc-js: 佚名, 2016. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[A/OL]//Official Journal of the European Union: L 119. 1-88. http://data.europa.eu/eli/reg/2016/679/oj.
+    - Hayagriva:   佚名, 2016. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[A/OL]//Official Journal of the European Union: 卷 L 119. 1-88. http://data.europa.eu/eli/reg/2016/679/oj.
+
+## GB/T 7714—2025 numeric (china-national-standard-gb-t-7714-2025-numeric.csl)
+
+- bib en-jumper-2021: [-A，等.-]{+A， 等.+}
+    - citeproc-js: [3] Jumper J，Evans R，Pritzel A，等. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature，2021，596（7873）：583-589. DOI:10.1038/s41586-021-03819-2.
+    - Hayagriva:   [3] Jumper J，Evans R，Pritzel A， 等. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature，2021，596（7873）：583-589. DOI:10.1038/s41586-021-03819-2.
+- bib en-vaswani-2017: [-N，等.-]{+N， 等.+}
+    - citeproc-js: [4] Vaswani A，Shazeer N，Parmar N，等. Attention is all you need[C/OL]//Advances in Neural Information Processing Systems 30. Red Hook, NY：Curran Associates，2017：5998-6008. https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+    - Hayagriva:   [4] Vaswani A，Shazeer N，Parmar N， 等. Attention is all you need[C/OL]//Advances in Neural Information Processing Systems 30. Red Hook, NY：Curran Associates，2017：5998-6008. https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+- bib en-gdpr-2016: [-Union：L-]{+Union：卷L+}
+    - citeproc-js: [13] Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[EB/OL]//Official Journal of the European Union：L 119. http://data.europa.eu/eli/reg/2016/679/oj.
+    - Hayagriva:   [13] Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[EB/OL]//Official Journal of the European Union：卷L 119. http://data.europa.eu/eli/reg/2016/679/oj.
+- bib zh-liu-2016: [-刘知远，孙茂松，林衍凯，等.-]{+刘知远，孙茂松，林衍凯， 等.+}
+    - citeproc-js: [18] 刘知远，孙茂松，林衍凯，等. 知识表示学习研究进展[J/OL]. 计算机研究与发展，2016，53（2）：247-261. DOI:10.7544/issn1000-1239.2016.20160020.
+    - Hayagriva:   [18] 刘知远，孙茂松，林衍凯， 等. 知识表示学习研究进展[J/OL]. 计算机研究与发展，2016，53（2）：247-261. DOI:10.7544/issn1000-1239.2016.20160020.
+- bib zh-unwin-1988: [-昂温 G，昂温 P-]{+昂温G，昂温P+}
+    - citeproc-js: [29] 昂温 G，昂温 P S. 外国出版史[M]. 陈生铮，译. 北京：中国书籍出版社，1988.
+    - Hayagriva:   [29] 昂温G，昂温P S. 外国出版史[M]. 陈生铮，译. 北京：中国书籍出版社，1988.
+
+## GB/T 7714—2025 author-date (china-national-standard-gb-t-7714-2025-author-date.csl)
+
+- cite 2: [-（Kahneman等，1979）-]{+（Kahneman 等，1979）+}
+    - citeproc-js: （Kahneman等，1979）
+    - Hayagriva:   （Kahneman 等，1979）
+- cite 3: [-（Jumper等，2021）-]{+（Jumper 等，2021）+}
+    - citeproc-js: （Jumper等，2021）
+    - Hayagriva:   （Jumper 等，2021）
+- cite 4: [-（Vaswani等，2017）-]{+（Vaswani 等，2017）+}
+    - citeproc-js: （Vaswani等，2017）
+    - Hayagriva:   （Vaswani 等，2017）
+- cite 5: [-Maaten等，2008）-]{+Maaten 等，2008）+}
+    - citeproc-js: （van der Maaten等，2008）
+    - Hayagriva:   （van der Maaten 等，2008）
+- cite 8: [-（Tversky等，1982）-]{+（Tversky 等，1982）+}
+    - citeproc-js: （Tversky等，1982）
+    - Hayagriva:   （Tversky 等，1982）
+- cite 17: [-（钱等，1990）-]{+（钱 等，1990）+}
+    - citeproc-js: （钱等，1990）
+    - Hayagriva:   （钱 等，1990）
+- cite 18: [-（刘等，2016）-]{+（刘 等，2016）+}
+    - citeproc-js: （刘等，2016）
+    - Hayagriva:   （刘 等，2016）
+- cite 23: [-（贾等，2011）-]{+（贾 等，2011）+}
+    - citeproc-js: （贾等，2011）
+    - Hayagriva:   （贾 等，2011）
+- cite 25: [-（中华人民共和国国家质量监督检验检疫总局等，2015）-]{+（中华人民共和国国家质量监督检验检疫总局 等，2015）+}
+    - citeproc-js: （中华人民共和国国家质量监督检验检疫总局等，2015）
+    - Hayagriva:   （中华人民共和国国家质量监督检验检疫总局 等，2015）
+- cite 29: [-（昂温等，1988）-]{+（昂温 等，1988）+}
+    - citeproc-js: （昂温等，1988）
+    - Hayagriva:   （昂温 等，1988）
+- cite 31: [-（刘等，2016；Kahneman等，1979；Vaswani等，2017）-]{+（刘 等，2016；Kahneman 等，1979；Vaswani 等，2017）+}
+    - citeproc-js: （刘等，2016；Kahneman等，1979；Vaswani等，2017）
+    - Hayagriva:   （刘 等，2016；Kahneman 等，1979；Vaswani 等，2017）
+- cite 34: [-（OECD，2019a, 2019b）-]{+（OECD，2019a；2019b）+}
+    - citeproc-js: （OECD，2019a, 2019b）
+    - Hayagriva:   （OECD，2019a；2019b）
+- bib zh-unwin-1988: [-昂温 G，昂温 P-]{+昂温G，昂温P+}
+    - citeproc-js: 昂温 G，昂温 P S，1988. 外国出版史[M]. 陈生铮，译. 北京：中国书籍出版社.
+    - Hayagriva:   昂温G，昂温P S，1988. 外国出版史[M]. 陈生铮，译. 北京：中国书籍出版社.
+- bib zh-liu-2016: [-刘知远，孙茂松，林衍凯，等，2016.-]{+刘知远，孙茂松，林衍凯， 等，2016.+}
+    - citeproc-js: 刘知远，孙茂松，林衍凯，等，2016. 知识表示学习研究进展[J/OL]. 计算机研究与发展，53（2）：247-261. DOI:10.7544/issn1000-1239.2016.20160020.
+    - Hayagriva:   刘知远，孙茂松，林衍凯， 等，2016. 知识表示学习研究进展[J/OL]. 计算机研究与发展，53（2）：247-261. DOI:10.7544/issn1000-1239.2016.20160020.
+- bib en-gdpr-2016: [-Union：L-]{+Union：卷L+}
+    - citeproc-js: 佚名，2016. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[EB/OL]//Official Journal of the European Union：L 119. http://data.europa.eu/eli/reg/2016/679/oj.
+    - Hayagriva:   佚名，2016. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[EB/OL]//Official Journal of the European Union：卷L 119. http://data.europa.eu/eli/reg/2016/679/oj.
+- bib en-jumper-2021: [-A，等，2021.-]{+A， 等，2021.+}
+    - citeproc-js: Jumper J，Evans R，Pritzel A，等，2021. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature，596（7873）：583-589. DOI:10.1038/s41586-021-03819-2.
+    - Hayagriva:   Jumper J，Evans R，Pritzel A， 等，2021. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature，596（7873）：583-589. DOI:10.1038/s41586-021-03819-2.
+- bib en-vaswani-2017: [-N，等，2017.-]{+N， 等，2017.+}
+    - citeproc-js: Vaswani A，Shazeer N，Parmar N，等，2017. Attention is all you need[C/OL]//Advances in Neural Information Processing Systems 30. Red Hook, NY：Curran Associates：5998-6008. https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+    - Hayagriva:   Vaswani A，Shazeer N，Parmar N， 等，2017. Attention is all you need[C/OL]//Advances in Neural Information Processing Systems 30. Red Hook, NY：Curran Associates：5998-6008. https://papers.nips.cc/paper/7181-attention-is-all-you-need.

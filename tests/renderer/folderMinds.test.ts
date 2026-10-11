@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type {
+  Conversation,
   DocumentGroupAssignment,
   LibraryGroup,
   LibrarySnapshot,
@@ -132,7 +133,7 @@ describe("moving Minds and Documents", () => {
     ]);
   });
 
-  test("undoing moves each Mind back to where it was, in one move per Folder it came from", () => {
+  test("undoing moves each Mind and conversation back to where it was, in one move per Folder it came from", () => {
     expect(
       undoMoves({
         folderId: "finance",
@@ -143,9 +144,13 @@ describe("moving Minds and Documents", () => {
         ],
         // Documents go back with `restoreAssignment`, each with who chose its Folder.
         documents: [{ id: "moon", from: "research", previous: null }],
+        conversations: [
+          { id: "asked", from: null },
+          { id: "here", from: "finance" },
+        ],
       }),
     ).toEqual([
-      { folderId: null, items: { mindIds: ["shortlist"] } },
+      { folderId: null, items: { mindIds: ["shortlist"], conversationIds: ["asked"] } },
       { folderId: "research", items: { mindIds: ["notes"] } },
     ]);
   });
@@ -164,5 +169,46 @@ describe("moving Minds and Documents", () => {
     expect(moveMessage(t, { mindIds: ["shortlist"], documentIds: ["a"] }, "Finance", names)).toBe(
       "Moved 2 items to Finance",
     );
+  });
+
+  test("the line names a conversation moved, or counts them", () => {
+    const conversation = (id: string, title: string, autoTitle: string): Conversation => ({
+      id,
+      title,
+      autoTitle,
+      folderId: null,
+      askedFrom: [],
+      createdAt: "",
+      updatedAt: "",
+    });
+    const names = {
+      minds,
+      documents: [],
+      conversations: [
+        conversation("heat", "", "Why do parks cool at night"),
+        conversation("tides", "Tides", "When are spring tides"),
+        conversation("blank", "", ""),
+      ],
+    };
+    expect(moveMessage(t, { conversationIds: ["heat"] }, "Finance", names)).toBe(
+      "Moved “Why do parks cool at night” to Finance",
+    );
+    expect(moveMessage(t, { conversationIds: ["tides"] }, "Finance", names)).toBe(
+      "Moved “Tides” to Finance",
+    );
+    expect(moveMessage(t, { conversationIds: ["blank"] }, "Finance", names)).toBe(
+      "Moved “New chat” to Finance",
+    );
+    expect(moveMessage(t, { conversationIds: ["heat", "tides"] }, "Finance", names)).toBe(
+      "Moved 2 conversations to Finance",
+    );
+    expect(
+      moveMessage(
+        (key, params) => translate("zh-CN", key, params),
+        { conversationIds: ["heat", "tides"] },
+        "财务",
+        names,
+      ),
+    ).toBe("已将 2 个对话移动到“财务”");
   });
 });
