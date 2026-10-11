@@ -3,16 +3,16 @@ import type { CoreBridge } from "../src/core/api";
 import {
   createDataFolder,
   dismissChatSetup,
+  dragTabTo,
   launchApp,
   newMind as newMindFromMenu,
-  openViewer,
   removeDataFolder,
 } from "./app";
 
 /*
- * The Mind tabs (DESIGN.md, Components: Mind tabs): several Minds open at
- * once, as in a browser. Set INCARNAMIND_SCREENSHOTS to a folder to also save
- * a screenshot of the strip.
+ * Tabs in one group (DESIGN.md, Components: Mind tabs): several Minds open at
+ * once, as in a browser; tabs and groups side by side are in tabGroups.spec.ts.
+ * Set INCARNAMIND_SCREENSHOTS to a folder to also save a screenshot of the strip.
  */
 
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -32,7 +32,7 @@ async function boxOf(locator: Locator) {
 }
 
 const tabsOf = (window: Page) => window.getByTestId("mind-tab");
-const titlesOf = (window: Page) => window.getByTestId("mind-tab-title");
+const titlesOf = (window: Page) => tabsOf(window).getByTestId("tab-title");
 const activeTab = (window: Page) => window.locator('[role="tab"][aria-selected="true"]');
 /** The tab of the Mind with this title (a tab's tooltip is its full title). */
 const tabNamed = (window: Page, title: string) =>
@@ -46,10 +46,10 @@ async function newMind(window: Page, title: string): Promise<void> {
   await window.getByTestId("new-tab").click();
   await expect(tabsOf(window)).toHaveCount(count + 1);
   await window.getByTestId("mind-title").fill(title);
-  await expect(activeTab(window).getByTestId("mind-tab-title")).toHaveText(title);
+  await expect(activeTab(window).getByTestId("tab-title")).toHaveText(title);
 }
 
-test("Minds open as tabs; the sidebar switches to an open one, and ⌘-click or middle-click opens a new tab", async () => {
+test("Minds open as tabs; the sidebar shows an open one, opens another in a new tab without replacing the Mind in view, and ⌘-click opens it to the side", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   // No tab yet: the empty state, and no Export.
@@ -60,43 +60,46 @@ test("Minds open as tabs; the sidebar switches to an open one, and ⌘-click or 
   await expect(titlesOf(window)).toHaveText(["Alpha", "Beta", "Gamma"]);
   await expect(activeTab(window)).toHaveCount(1);
   await expect(activeTab(window)).toContainText("Gamma");
-  await expect(window.getByRole("tablist", { name: "Open Minds" })).toBeVisible();
+  await expect(window.getByRole("tablist", { name: "Group 1" })).toBeVisible();
 
-  // A Mind already open: the sidebar switches to its tab.
+  // A Mind already open: the sidebar shows its tab.
   await sidebarMind(window, "Alpha").click();
   await expect(tabsOf(window)).toHaveCount(3);
   await expect(activeTab(window)).toContainText("Alpha");
   const alphaId = await sidebarMind(window, "Alpha").getAttribute("data-mind-id");
   await expect(window.getByTestId("mind-pane")).toHaveAttribute("data-mind-id", `${alphaId}`);
-  await expect(window.getByRole("tabpanel")).toHaveAttribute(
+  const panel = window.getByRole("tabpanel");
+  await expect(panel).toHaveAttribute(
     "aria-labelledby",
-    `mind-tab-${alphaId}`,
+    `${await activeTab(window).getAttribute("id")}`,
   );
 
   // Clicking a tab shows its Mind.
   await tabNamed(window, "Beta").click();
   await expect(activeTab(window)).toContainText("Beta");
 
-  // Down to one tab; a plain click on another Mind opens it in that tab.
-  await tabNamed(window, "Alpha").getByTestId("mind-tab-close").click();
-  await tabNamed(window, "Gamma").getByTestId("mind-tab-close").click();
+  // Down to one tab; a click on another Mind opens it in a new tab after it: the Mind in view stays.
+  await tabNamed(window, "Alpha").getByTestId("tab-close").click();
+  await tabNamed(window, "Gamma").getByTestId("tab-close").click();
   await expect(titlesOf(window)).toHaveText(["Beta"]);
   await sidebarMind(window, "Gamma").click();
-  await expect(titlesOf(window)).toHaveText(["Gamma"]);
+  await expect(titlesOf(window)).toHaveText(["Beta", "Gamma"]);
+  await expect(activeTab(window)).toContainText("Gamma");
 
-  // ⌘-click (Ctrl-click) opens a new tab after the current one, and shows it.
+  // ⌘-click (Ctrl-click), or a middle click, opens it in the group to the right.
   await sidebarMind(window, "Alpha").click({ modifiers: ["ControlOrMeta"] });
-  await expect(titlesOf(window)).toHaveText(["Gamma", "Alpha"]);
-  await expect(activeTab(window)).toContainText("Alpha");
-  // So does a middle click.
-  await tabNamed(window, "Gamma").click();
-  await sidebarMind(window, "Beta").click({ button: "middle" });
-  await expect(titlesOf(window)).toHaveText(["Gamma", "Beta", "Alpha"]);
-  await expect(activeTab(window)).toContainText("Beta");
+  const groups = window.getByTestId("tab-group");
+  await expect(groups).toHaveCount(2);
+  await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
+  await groups.nth(1).getByTestId("tab-close").click();
+  await expect(groups).toHaveCount(1);
+  await sidebarMind(window, "Alpha").click({ button: "middle" });
+  await expect(groups).toHaveCount(2);
+  await expect(groups.nth(1).getByTestId("tab-title")).toHaveText(["Alpha"]);
   await app.close();
 });
 
-test("tabs close, move and switch by mouse and keyboard; a deleted Mind's tab closes; the last tab closed shows the empty state", async () => {
+test("tabs close, reopen, move and switch by mouse and keyboard; a deleted Mind's tab closes; the last tab closed shows the empty state", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   // ⌘T (Ctrl+T) is a new Mind in a new tab.
@@ -109,11 +112,7 @@ test("tabs close, move and switch by mouse and keyboard; a deleted Mind's tab cl
   }
   await expect(titlesOf(window)).toHaveText(["Alpha", "Beta", "Gamma"]);
 
-  // ⌘1–⌘9 jump to a tab (⌘9 the last); Ctrl+Tab and Ctrl+Shift+Tab cycle.
-  await window.keyboard.press("ControlOrMeta+1");
-  await expect(activeTab(window)).toContainText("Alpha");
-  await window.keyboard.press("ControlOrMeta+9");
-  await expect(activeTab(window)).toContainText("Gamma");
+  // Ctrl+Tab and Ctrl+Shift+Tab cycle through the group's tabs.
   await window.keyboard.press("Control+Tab");
   await expect(activeTab(window)).toContainText("Alpha");
   await window.keyboard.press("Control+Shift+Tab");
@@ -126,32 +125,38 @@ test("tabs close, move and switch by mouse and keyboard; a deleted Mind's tab cl
   await expect(activeTab(window)).toBeFocused();
   await expect(tabsOf(window).and(window.locator('[tabindex="0"]'))).toHaveCount(1);
 
-  // Dragged onto the right half of Gamma, Alpha moves after it.
-  const gamma = tabNamed(window, "Gamma");
-  const gammaBox = await boxOf(gamma);
-  await tabNamed(window, "Alpha").dragTo(gamma, {
-    targetPosition: { x: gammaBox.width - 12, y: gammaBox.height / 2 },
+  // Dragged with the mouse onto the right half of Gamma, Alpha moves after it; onto Beta's left half, before it.
+  const gamma = await boxOf(tabNamed(window, "Gamma"));
+  await dragTabTo(window, tabNamed(window, "Alpha"), {
+    x: gamma.x + gamma.width - 12,
+    y: gamma.y + gamma.height / 2,
   });
   await expect(titlesOf(window)).toHaveText(["Beta", "Gamma", "Alpha"]);
-  // And onto the left half of Beta, before it.
-  const beta = tabNamed(window, "Beta");
-  await tabNamed(window, "Alpha").dragTo(beta, { targetPosition: { x: 12, y: 17 } });
+  const beta = await boxOf(tabNamed(window, "Beta"));
+  await dragTabTo(window, tabNamed(window, "Alpha"), { x: beta.x + 12, y: beta.y + 17 });
   await expect(titlesOf(window)).toHaveText(["Alpha", "Beta", "Gamma"]);
 
   // A middle click closes a tab; closing the shown one shows the tab after it.
-  await expect(activeTab(window)).toContainText("Beta");
+  await tabNamed(window, "Beta").click();
   await tabNamed(window, "Beta").click({ button: "middle" });
   await expect(titlesOf(window)).toHaveText(["Alpha", "Gamma"]);
   await expect(activeTab(window)).toContainText("Gamma");
-  // ⌘W (Ctrl+W) closes the shown tab, and not the window.
+  // ⌘W (Ctrl+W) closes the shown tab, and not the window, and says so with Reopen.
   await window.keyboard.press("ControlOrMeta+w");
   await expect(titlesOf(window)).toHaveText(["Alpha"]);
   await expect(activeTab(window)).toContainText("Alpha");
   expect(window.isClosed()).toBe(false);
+  const notice = window.getByTestId("tab-notice");
+  await expect(notice).toContainText("Closed “Gamma”");
+  // ⇧⌘T reopens it where it was; the line's Reopen does the same.
+  await window.keyboard.press("ControlOrMeta+Shift+t");
+  await expect(titlesOf(window)).toHaveText(["Alpha", "Gamma"]);
+  await expect(activeTab(window)).toContainText("Gamma");
+  await window.keyboard.press("ControlOrMeta+w");
+  await notice.getByTestId("tab-notice-reopen").click();
+  await expect(titlesOf(window)).toHaveText(["Alpha", "Gamma"]);
 
   // Deleting a Mind closes its tab.
-  await sidebarMind(window, "Gamma").click({ modifiers: ["ControlOrMeta"] });
-  await expect(titlesOf(window)).toHaveText(["Alpha", "Gamma"]);
   const gammaRow = window.getByTestId("mind-row").filter({ hasText: "Gamma" });
   await gammaRow.hover();
   await gammaRow.getByTestId("mind-menu").click();
@@ -161,11 +166,38 @@ test("tabs close, move and switch by mouse and keyboard; a deleted Mind's tab cl
   await expect(activeTab(window)).toContainText("Alpha");
 
   // Closing the last tab shows the empty state.
-  await activeTab(window).getByTestId("mind-tab-close").click();
+  await activeTab(window).getByTestId("tab-close").click();
   await expect(tabsOf(window)).toHaveCount(0);
   await expect(window.getByTestId("mind-none-open")).toBeVisible();
   await expect(window.getByTestId("mind-pane")).toHaveCount(0);
   await expect(window.getByTestId("export-mind")).toHaveCount(0);
+  await app.close();
+});
+
+test("a Mind's tab is renamed in place: a double-click or F2, Enter saves, Esc and a blank name change nothing", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window, "Alpha notes");
+  const tab = tabsOf(window).first();
+  await tab.getByTestId("tab-title").dblclick();
+  const field = tab.getByTestId("tab-rename");
+  await expect(field).toBeFocused();
+  await field.fill("Alpha, revised");
+  await field.press("Enter");
+  await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
+  await expect(sidebarMind(window, "Alpha, revised")).toHaveCount(1);
+  await expect(tab).toBeFocused();
+
+  await window.keyboard.press("F2");
+  await expect(field).toBeFocused();
+  await field.fill("Not this");
+  await field.press("Escape");
+  await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
+  await expect(tab).toBeFocused();
+  await window.keyboard.press("F2");
+  await field.fill("   ");
+  await field.press("Enter");
+  await expect(titlesOf(window)).toHaveText(["Alpha, revised"]);
   await app.close();
 });
 
@@ -174,12 +206,14 @@ test("open tabs, their order and the shown one come back after a restart", async
   await dismissChatSetup(first.window);
   for (const title of ["Alpha", "Beta", "Gamma", "Delta"]) await newMind(first.window, title);
   // Delta is closed; Beta moves first and is shown.
-  await tabNamed(first.window, "Delta").getByTestId("mind-tab-close").click();
-  await tabNamed(first.window, "Beta").dragTo(tabNamed(first.window, "Alpha"), {
-    targetPosition: { x: 12, y: 17 },
+  await tabNamed(first.window, "Delta").getByTestId("tab-close").click();
+  const alpha = await boxOf(tabNamed(first.window, "Alpha"));
+  await dragTabTo(first.window, tabNamed(first.window, "Beta"), {
+    x: alpha.x + 12,
+    y: alpha.y + 17,
   });
-  await tabNamed(first.window, "Beta").click();
   await expect(titlesOf(first.window)).toHaveText(["Beta", "Alpha", "Gamma"]);
+  await tabNamed(first.window, "Beta").click();
   const betaId = await sidebarMind(first.window, "Beta").getAttribute("data-mind-id");
   await first.app.close();
 
@@ -202,7 +236,7 @@ test("the shown tab joins the Mind below with no edge under it, and long titles 
   await newMind(window, "Third");
   await tabNamed(window, "Short").click();
 
-  const strip = window.getByTestId("mind-header");
+  const strip = window.getByTestId("tab-strip");
   const stripBox = await boxOf(strip);
   expect(stripBox.height).toBe(36);
   const active = activeTab(window);
@@ -217,7 +251,7 @@ test("the shown tab joins the Mind below with no edge under it, and long titles 
     const style = getComputedStyle(tab);
     const box = tab.getBoundingClientRect();
     const panel = document.querySelector('[role="tabpanel"]');
-    const below = panel ? getComputedStyle(panel.closest("main") ?? panel).backgroundColor : "";
+    const below = panel ? getComputedStyle(panel).backgroundColor : "";
     const atBottom = document.elementFromPoint(box.left + box.width / 2, box.bottom - 0.5);
     return {
       border: style.borderBottomWidth,
@@ -243,7 +277,7 @@ test("the shown tab joins the Mind below with no edge under it, and long titles 
   const longBox = await boxOf(longTab);
   expect(longBox.height).toBe(34);
   expect(longBox.width).toBeLessThanOrEqual(220);
-  const title = longTab.getByTestId("mind-tab-title");
+  const title = longTab.getByTestId("tab-title");
   expect(await boxOf(title).then((box) => box.height)).toBe(20);
   expect(
     await title.evaluate((element) => ({
@@ -289,7 +323,7 @@ test("a new Mind's title has the focus, so typing names it instead of making mor
   await app.close();
 });
 
-test("tabs are 220px while there is room, and a mouse wheel scrolls the strip to tabs out of sight", async () => {
+test("tabs are 220px while there is room, the shown one keeps 132px as they shrink, and a mouse wheel scrolls the strip to tabs out of sight", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 800));
@@ -304,12 +338,15 @@ test("tabs are 220px while there is room, and a mouse wheel scrolls the strip to
     expect((await boxOf(tab)).width).toBeCloseTo(220, 0);
   await expect(titlesOf(window)).toHaveText(["Alpha notes", "Beta research", "Gamma draft"]);
 
-  // More tabs than room: the first ones scroll out of sight, and the strip fades on that side.
+  // More tabs than room: the others shrink to 64px, the shown one keeps 132px, and the first
+  // ones scroll out of sight, the strip fading on that side.
   for (let index = 0; index < 13; index++) {
     await window.getByTestId("new-tab").click();
     await expect(tabsOf(window)).toHaveCount(4 + index);
   }
-  const strip = window.getByTestId("mind-tabs");
+  expect((await boxOf(activeTab(window))).width).toBeGreaterThanOrEqual(132);
+  expect((await boxOf(tabNamed(window, "Beta research"))).width).toBeCloseTo(64, 0);
+  const strip = window.getByTestId("tab-list");
   await expect(strip).toHaveAttribute("data-hidden-before", "true");
   // A mouse wheel, turned up, brings them back.
   const box = await boxOf(strip);
@@ -342,7 +379,7 @@ async function chooseMenuItem(app: ElectronApplication, label: string): Promise<
 const menuTitles = (app: ElectronApplication) =>
   app.evaluate(({ Menu }) => (Menu.getApplicationMenu()?.items ?? []).map((item) => item.label));
 
-test("the application menu makes a new Mind, opens Settings and closes the tab, in the interface's language", async () => {
+test("the application menu makes a new Mind, opens Settings, and closes, reopens and splits tabs, in the interface's language", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
 
@@ -353,8 +390,14 @@ test("the application menu makes a new Mind, opens Settings and closes the tab, 
   await expect(window.getByTestId("settings")).toBeVisible();
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("settings")).toBeHidden();
+  await chooseMenuItem(app, "Split to the Right");
+  await expect(window.getByTestId("tab-group")).toHaveCount(2);
+  await chooseMenuItem(app, "Close Tab");
+  await expect(tabsOf(window)).toHaveCount(1);
   await chooseMenuItem(app, "Close Tab");
   await expect(tabsOf(window)).toHaveCount(0);
+  await chooseMenuItem(app, "Reopen Closed Tab");
+  await expect(tabsOf(window)).toHaveCount(1);
 
   // In Chinese, the menu is too.
   await window.evaluate(async () => {
@@ -364,6 +407,9 @@ test("the application menu makes a new Mind, opens Settings and closes the tab, 
   await expect.poll(() => menuTitles(app)).toContain("文件");
   await chooseMenuItem(app, "新建 Mind");
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
+  await chooseMenuItem(app, "向右拆分");
+  await expect(window.getByTestId("tab-group")).toHaveCount(2);
+  await expect(window.getByRole("tablist", { name: "第 2 栏" })).toBeVisible();
   await app.close();
 });
 
@@ -416,46 +462,5 @@ test("a Mind is renamed in place from its sidebar row, and Not in a Folder folds
   await expect(rows).toHaveCount(0);
   await toggle.click();
   await expect(rows).toHaveCount(2);
-  await app.close();
-});
-
-test("the card's band runs unbroken: tabs start at the card's edge, the viewer's toolbar sits on it, and no line crosses another", async () => {
-  const { app, window } = await launchApp(dataDir);
-  await dismissChatSetup(window);
-  for (const name of ["First", "Second"]) {
-    await newMindFromMenu(window);
-    await expect(window.getByTestId("mind-title")).toBeFocused();
-    await window.keyboard.type(name);
-  }
-  await tabsOf(window).first().click();
-  await openViewer(window);
-
-  // The first tab, shown, starts flush at the card's edge (8px from the sidebar), rounded at the top, with no left foot.
-  const sidebar = await boxOf(window.getByTestId("sidebar"));
-  const first = tabsOf(window).first();
-  expect((await boxOf(first)).x).toBeCloseTo(sidebar.x + sidebar.width + 8, 0);
-  expect(await first.evaluate((tab) => getComputedStyle(tab).borderTopLeftRadius)).toBe("10px");
-  await expect(first.locator('.mind-tab-foot[data-side="left"]')).toBeHidden();
-  // The sidebar header's rule is inset 8px each side, so it never meets the sidebar's edge.
-  const rule = await window.getByTestId("sidebar-header").evaluate((element) => {
-    const after = getComputedStyle(element, "::after");
-    return { left: after.left, right: after.right, height: after.height };
-  });
-  expect(rule).toEqual({ left: "8px", right: "8px", height: "1px" });
-
-  // The viewer's toolbar is on the band, with no rule under it; its divider starts below the band.
-  const band = await window
-    .getByTestId("mind-header")
-    .evaluate((element) => getComputedStyle(element).backgroundColor);
-  const toolbar = window.getByTestId("viewer-header");
-  expect(await toolbar.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(band);
-  expect(await toolbar.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe(
-    "0px",
-  );
-  expect(
-    await window
-      .getByTestId("viewer-resize")
-      .evaluate((element) => getComputedStyle(element).backgroundImage),
-  ).toContain("linear-gradient");
   await app.close();
 });

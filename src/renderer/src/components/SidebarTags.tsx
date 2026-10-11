@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo, useState } from "react";
 import type { Document } from "../../../core/api";
 import { useT } from "../i18n";
+import { isShown } from "../layoutSlice";
 import { documentsByTag, NEEDS_REVIEW } from "../libraryFilters";
 import { useAppStore } from "../store";
 import { BrowseGroup } from "./BrowseGroup";
@@ -52,7 +53,7 @@ export function SidebarTags({
       onOpen={() => {
         const store = useAppStore.getState();
         const only = store.tagFilter.length === 1 && store.tagFilter[0] === value;
-        if (only && store.libraryOpen) store.setTagFilter([]);
+        if (only && isShown(store.layout, { kind: "library" })) store.setTagFilter([]);
         else {
           store.setTagFilter([value]);
           store.openLibrary();
