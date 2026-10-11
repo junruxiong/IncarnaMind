@@ -124,7 +124,6 @@ export function usePopoverMenu({
   useEffect(() => {
     const element = menu.current;
     if (!open || !element) return;
-    touched.current = false;
     const observer = new MutationObserver(() => {
       const anchor = button.current;
       place(anchor, element, anchor && outer.current ? outer.current(anchor) : null);
@@ -175,11 +174,14 @@ export function usePopoverMenu({
       popover: "auto" as const,
       // Before it shows, so a menu that renders its items only while open has them when it paints.
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
+        // Untouched from the moment it opens, not from a render after: keys can come first.
+        if (event.newState === "open") touched.current = false;
         setOpen(event.newState === "open");
       },
-      // Now it shows, where it was placed: it can take the focus.
+      // Now it shows, where it was placed: it can take the focus, unless the User has moved it
+      // already (the event can come after their first keys).
       onToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState === "open") focusFirst(menu.current, first);
+        if (event.newState === "open" && !touched.current) focusFirst(menu.current, first);
       },
       onKeyDown,
       onPointerDown: () => {

@@ -5,10 +5,11 @@
 import type { DocumentLocation } from "./documentViewer";
 
 export interface TestHooks {
-  /** Opens the Document viewer panel without a Document. */
-  openViewer(): void;
-  closeViewer(): void;
-  /** What a Citation does: opens a Document in the viewer at a page range, highlighting a quote. */
+  /**
+   * What a Citation does: opens a Document at a page range, highlighting a
+   * quote, as a preview in the group right of the Mind the User is in; with
+   * no Mind in front, as a Document opened from the sidebar.
+   */
   openDocument(location: DocumentLocation): void;
   /**
    * The next "Import a folder…" or "Import a zip…" in Settings → Skills gets
