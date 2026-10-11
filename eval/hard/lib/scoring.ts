@@ -127,11 +127,12 @@ export function modeResult(
 export const searchable = (questions: readonly HardQuestion[]) =>
   questions.filter((question) => question.expected.length > 0);
 
-/** Searches each Question (and its translation) in keyword, vector and hybrid mode. */
+/** Searches each Question (and its translation) in keyword, vector and hybrid mode, or in `modes`. */
 export async function searchAll(
   core: Core,
   questions: readonly HardQuestion[],
   documentIds: ReadonlyMap<string, string>,
+  modes: readonly SearchMode[] = SEARCH_MODES,
 ): Promise<HardQuestionResult[]> {
   const results: HardQuestionResult[] = [];
   for (const question of searchable(questions)) {
@@ -143,7 +144,7 @@ export async function searchAll(
       question: question.question,
       modes: {},
     };
-    for (const mode of SEARCH_MODES) {
+    for (const mode of modes) {
       const ranks = async (query: string) =>
         ranksOf(
           await core.searchPassages(query, { mode, limit: RANK_DEPTH }),
