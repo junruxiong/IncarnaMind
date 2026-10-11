@@ -9,7 +9,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (a push 
 | Check | Where | What it runs |
 |---|---|---|
 | Typecheck, lint and unit tests | Ubuntu | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` |
-| Electron smoke test (Linux) | Ubuntu | `npm ci`, then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/` |
+| Electron smoke test (Linux) | Ubuntu | `npm ci`, then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, split into four shards that run at once (`Smoke shard N/4`); this check passes when all four do |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
 `main` must stay green. A pull request is merged only when all three pass and it is up to date with `main`. If `main` goes red, fixing it comes before new work.
@@ -27,7 +27,7 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 ## After you open it
 
 - Watch the checks until they finish: `gh pr checks <number> --watch`. Don't report the work as done, or ask for a merge, while a check is red or still running.
-- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the Playwright traces uploaded as the `smoke-test-results-linux` artifact (`smoke-test-results-macos` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
+- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the failing shard's log and the Playwright traces uploaded as its `smoke-test-results-linux-N` artifact (`smoke-test-results-macos` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
 - "Flaky" is a claim that needs evidence: it failed, then passed on a rerun with nothing changed, and you can say what timing it depends on. Then fix the test. Don't hide it with more retries, longer timeouts or a skip.
 
 ## Tests that pass on any machine

@@ -678,7 +678,12 @@ const csvCell = (value: string | number) => {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
-/** Found quotes, one row each, with an empty column for the reviewer's judgement. */
+/**
+ * Found quotes, one row each, with an empty column for the reviewer's
+ * judgement. Each Answer to an unanswerable Question the phrase rule didn't
+ * take as a decline gets a row with its text, and a column to mark a decline
+ * the rule missed.
+ */
 export function reviewerSheet(run: CitationRun): string {
   const rows: (string | number)[][] = [
     [
@@ -691,19 +696,23 @@ export function reviewerSheet(run: CitationRun): string {
       "document",
       "page",
       "supports (y/n)",
+      "answer (the rule found no decline)",
+      "decline missed by the rule (y/n)",
       "note",
     ],
   ];
+  const languageOf = (answer: CitationRun["answers"][number]) =>
+    answer.crossLingual
+      ? `${answer.language} (cross-lingual)`
+      : answer.paraphrase
+        ? `${answer.language} (paraphrase)`
+        : answer.language;
   for (const answer of run.answers) {
     for (const citation of answer.citations) {
       if (citation.outcome !== "found") continue;
       rows.push([
         answer.questionId,
-        answer.crossLingual
-          ? `${answer.language} (cross-lingual)`
-          : answer.paraphrase
-            ? `${answer.language} (paraphrase)`
-            : answer.language,
+        languageOf(answer),
         answer.round,
         answer.question,
         citation.sentence,
@@ -712,11 +721,47 @@ export function reviewerSheet(run: CitationRun): string {
         pages(citation.pageFrom, citation.pageTo),
         "",
         "",
+        "",
+        "",
+      ]);
+    }
+    if (answer.declines === false && answer.status === "done") {
+      rows.push([
+        answer.questionId,
+        languageOf(answer),
+        answer.round,
+        answer.question,
+        "",
+        "",
+        "",
+        "",
+        "",
+        answer.text,
+        "",
+        "",
       ]);
     }
   }
   // A byte-order mark, so spreadsheet apps read the Chinese text as UTF-8.
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
+}
+
+/** Every Answer's full text under its Question, for people to read beside the figures. */
+export function answersText(run: CitationRun): string {
+  return [
+    `# Answers (${run.model})`,
+    "",
+    ...run.answers.flatMap((answer) => [
+      `## ${answer.questionId}, round ${answer.round}, ${answer.language}`,
+      "",
+      `Question: ${answer.question}`,
+      "",
+      `Status: ${answer.status}${answer.declines === undefined ? "" : `; the rule ${answer.declines ? "found" : "did not find"} a decline`}`,
+      "",
+      answer.text || "(no text)",
+      "",
+    ]),
+  ].join("\n");
 }
 
 /** Writes the reports into a new folder and returns its path. */
@@ -731,6 +776,7 @@ export async function writeReports(
   await writeFile(join(dir, "report.md"), markdownReport(report, dir, root));
   if (!("skipped" in report.citations)) {
     await writeFile(join(dir, "reviewer-sheet.csv"), reviewerSheet(report.citations));
+    await writeFile(join(dir, "answers.md"), answersText(report.citations));
   }
   if (
     report.formats &&
@@ -741,6 +787,7 @@ export async function writeReports(
       join(dir, "reviewer-sheet-formats.csv"),
       reviewerSheet(report.formats.citations),
     );
+    await writeFile(join(dir, "answers-formats.md"), answersText(report.formats.citations));
   }
   return dir;
 }
