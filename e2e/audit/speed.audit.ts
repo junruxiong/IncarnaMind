@@ -658,6 +658,97 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
   }
 });
 
+test("B2b typing with 500 changes from Edit with AI waiting in the Mind (#93)", async () => {
+  test.setTimeout(10 * 60_000);
+  const dataDir = tempDir("data");
+  const app = await launch(dataDir, { fakeChat: true, readyTestId: "chat-setup" });
+  const { window } = app;
+  try {
+    await sealShell(app.app);
+    await click(window, window.getByTestId("chat-setup-later"));
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.saveChatProvider({ kind: "ollama", modelId: "fake-model" });
+    });
+    await click(window, window.getByTestId("plus-menu"));
+    await click(window, window.getByTestId("plus-new-mind"));
+    await click(window, window.getByTestId("mind-editor"));
+    // 50 paragraphs with 10 "very" each: Shorten (the scripted model drops them) gives 500 changes.
+    await window.getByTestId("mind-editor").evaluate((dom) => {
+      const { view } = (dom as unknown as { editor: Editor }).editor;
+      const words = [
+        "high",
+        "strong",
+        "wet",
+        "cold",
+        "late",
+        "calm",
+        "deep",
+        "grey",
+        "loud",
+        "slow",
+      ];
+      let html = "";
+      for (let n = 0; n < 50; n++) {
+        html += `<p>${words.map((word, i) => `At site ${n} mark ${i} the tide was very ${word}`).join(", ")}.</p>`;
+      }
+      view.pasteHTML(html);
+    });
+    // Half of it at a time (one request takes up to 12,000 characters), selected as a person
+    // would: a click at the start, then Shift and a click at the end.
+    const paragraphs = window.getByTestId("mind-editor").locator(":scope > p");
+    for (const [first, end, count] of [
+      [0, 24, 250],
+      [25, 49, 500],
+    ] as const) {
+      // In the middle of the view: the bar of changes at the Mind's top covers its first lines.
+      await paragraphs.nth(first).evaluate((element) => element.scrollIntoView({ block: "center" }));
+      await click(window, paragraphs.nth(first), { x: 1, y: 12 });
+      await paragraphs.nth(end).evaluate((element) => element.scrollIntoView({ block: "center" }));
+      const box = await paragraphs.nth(end).boundingBox();
+      await window.keyboard.down("Shift");
+      await click(window, paragraphs.nth(end), {
+        x: (box?.width ?? 2) - 2,
+        y: (box?.height ?? 24) - 12,
+      });
+      await window.keyboard.up("Shift");
+      await click(window, window.getByTestId("selection-action-shorten"));
+      await expect(window.getByTestId("proposals-count")).toHaveText(
+        `${count} changes from the assistant`,
+        { timeout: 60_000 },
+      );
+    }
+    const session = await cdp(window);
+    await installKeyLatency(window);
+
+    // Type in the middle of the Mind, and at its end.
+    const middle = window.getByTestId("mind-editor").locator(":scope > p").nth(25);
+    await middle.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await click(window, middle, { x: 20 });
+    await window.keyboard.press("End");
+    await takeKeyLatency(window);
+    const m0 = await cdpMetrics(session);
+    const stopFrames = await startFrames(window);
+    await typeFor(window, 160);
+    const frames = await stopFrames();
+    record("speed.typing.proposals500", {
+      ...(await takeKeyLatency(window)),
+      frames,
+      mainThread: busy(m0, await cdpMetrics(session)),
+    });
+    await shot(window, "B11-proposals-500");
+
+    // Accept all: one step, however many.
+    const started = Date.now();
+    await click(window, window.getByTestId("proposals-accept-all"));
+    await expect(window.getByTestId("proposals-bar")).toHaveCount(0, { timeout: 30_000 });
+    record("speed.proposals500.acceptAllMs", Date.now() - started);
+  } finally {
+    await close(app);
+    removeDir(dataDir);
+  }
+});
+
 test("B3 2,000 Documents: linking, the sidebar, the Library, Organize, and a warm start", async () => {
   test.setTimeout(60 * 60_000);
   const dataDir = tempDir("data");
