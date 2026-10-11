@@ -16,9 +16,6 @@ declare module "@tiptap/core" {
   }
 }
 
-/** Deletes the Block the cursor is in. Shown in the Block menu. */
-const DELETE_BLOCK_SHORTCUT = "Mod-Shift-Backspace";
-
 interface Range {
   from: number;
   to: number;
@@ -95,7 +92,7 @@ function selectedBlocks({ $from, $to }: Selection): Range | null {
   return from < to ? { from, to } : null;
 }
 
-/** Deleting Blocks as a whole: `deleteBlock`, and Mod-Shift-Backspace for the Block the cursor is in. */
+/** Deleting Blocks as a whole: `deleteBlock`, which the "block.delete" command runs (⌘⇧⌫). */
 export const BlockCommands = Extension.create({
   name: "blockCommands",
 
@@ -128,12 +125,6 @@ export const BlockCommands = Extension.create({
           }
           return true;
         },
-    };
-  },
-
-  addKeyboardShortcuts() {
-    return {
-      [DELETE_BLOCK_SHORTCUT]: () => this.editor.commands.deleteBlock(),
     };
   },
 });
