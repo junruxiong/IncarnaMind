@@ -341,7 +341,7 @@ test("a Tag automatic tagging wasn't sure of is confirmed or removed in one clic
     await window.keyboard.press("Escape");
     await expect(viewer).toBeVisible();
     await screenshot(window, "viewer");
-    await slideAndClick(window, viewer.getByTestId("viewer-close"));
+    await slideAndClick(window, window.getByTestId("document-tab").getByTestId("tab-close"));
     await expect(viewer).toBeHidden();
 
     // ✓ and × show once the chip is pointed at; ✓ keeps the Tag, as the User's.

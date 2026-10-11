@@ -7,7 +7,7 @@ import { iconButtonClass } from "./ui";
 
 /** What the window tells the sidebar's toggle buttons (see `Workspace` in App.tsx). */
 export interface SidebarControl {
-  /** The sidebar is out of the way (the User's choice, or a window too narrow). */
+  /** The sidebar is out of the way: the User hid it. */
   hidden: boolean;
   /** Hidden, but slid out over the content for now. */
   peeking: boolean;

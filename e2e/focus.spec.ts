@@ -57,8 +57,8 @@ async function pressTab(window: Page): Promise<Stop | null> {
     const shows =
       caret ||
       ringOn(element, field ? 1 : 2) ||
-      // A Mind tab draws its ring on its inner shape.
-      (element.matches(".mind-tab") && ringOn(element.querySelector(".mind-tab-inner"), 2)) ||
+      // A tab draws its ring on its inner shape.
+      (element.matches(".tab") && ringOn(element.querySelector(".tab-inner"), 2)) ||
       // A pane's divider, a 1px rule, turns blue and shows its grip; the 8px gap before the
       // card draws the ring's 2px line down its middle instead.
       (element.matches(".pane-divider") &&
@@ -79,7 +79,7 @@ async function pressTab(window: Page): Promise<Stop | null> {
       ? "settings"
       : element.closest('[data-testid="sidebar"]')
         ? "sidebar"
-        : element.closest('[data-testid="mind-area"]')
+        : element.closest('[data-testid="tab-groups"]')
           ? "mind"
           : "other";
     return {
