@@ -51,10 +51,10 @@ import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
 import { createEmbeddingQueue } from "./embedding";
-import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside } from "./files";
+import { DOCUMENT_EXTENSIONS, isInside, openFile, openImageBeside, relativePath } from "./files";
 import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
-import { createLibrary, type LibraryHooks } from "./library";
+import { createLibrary, type LibraryHooks, type LibraryOptions } from "./library";
 import type { PageText } from "./passages";
 import {
   CURRENT_SINCE,
@@ -365,6 +365,8 @@ export interface DocumentsOptions {
     retryMs: number;
     detectDataless: boolean;
   };
+  /** Says something to the User, in their language: why locating a Linked folder was refused. */
+  say: LibraryOptions["say"];
   reportError?: (error: unknown) => void;
 }
 
@@ -950,7 +952,7 @@ export function createDocuments(options: DocumentsOptions) {
   }
 
   // Startup: Documents copied into the data folder by the old layout (before
-  // ADR-0010) are single files there, until the User links their originals.
+  // ADR-0010) are files kept there, until the User links their originals.
   // Each copy gets its kind's extension, so another app can open it.
   for (const row of db.all<{ id: string; content_hash: string; kind: string }>(
     "SELECT id, content_hash, kind FROM documents WHERE deleted_at IS NULL AND path IS NULL",
@@ -973,6 +975,7 @@ export function createDocuments(options: DocumentsOptions) {
     db,
     now,
     dataDir,
+    say: options.say,
     folders: options.folders,
     watch: options.linkedFolders.watch,
     retryMs: options.linkedFolders.retryMs,
@@ -1622,14 +1625,16 @@ export function createDocuments(options: DocumentsOptions) {
       db.transaction(() => {
         db.run(
           `INSERT INTO documents (id, content_hash, name, kind, size, status, path,
-             linked_folder_id, folder_id, file_status, file_mtime_ms, created_at, updated_at)
-           VALUES (?, ?, ?, 'web', ?, 'queued', ?, NULL, NULL, 'available', ?, ?, ?)`,
+             linked_folder_id, folder_id, source_kind, relative_path, file_status, file_mtime_ms,
+             created_at, updated_at)
+           VALUES (?, ?, ?, 'web', ?, 'queued', ?, NULL, NULL, 'data-folder', ?, 'available', ?, ?, ?)`,
           [
             id,
             file.contentHash,
             parseName(name.slice(0, MAX_NAME_LENGTH)),
             file.size,
             file.path,
+            relativePath(dataDir, file.path),
             file.mtimeMs,
             at,
             at,
