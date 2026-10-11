@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { core, files } from "../core";
+import { CheckStateIcon } from "../editor/icons";
 import { errorMessage } from "../errors";
 import {
   type ExportResult,
@@ -12,7 +13,6 @@ import { useT } from "../i18n";
 import { enter } from "../motion";
 import { chooseOutputLocation } from "../outputFiles";
 import { saveFailureReason } from "../problems";
-import { QuoteNotFoundIcon } from "./icons";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 
@@ -188,7 +188,10 @@ function ResultBody({
                 }}
               >
                 {/* Not found is a Citation check: its icon, in its colour. */}
-                <QuoteNotFoundIcon className="mr-2 inline size-4 align-[-3px] text-warning" />
+                <CheckStateIcon
+                  check="not-found"
+                  className="mr-2 inline size-4 align-[-3px] text-warning"
+                />
                 {result.unverified === 1
                   ? t("export.unverified.line.one")
                   : t("export.unverified.line.other", { count: result.unverified })}
