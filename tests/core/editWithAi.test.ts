@@ -371,6 +371,98 @@ describe("Edit with AI", () => {
     expect(shown(client)).toEqual(["The force is ￼ for spring tides ⟨found⟩."]);
   });
 
+  test("a footnote the User wrote stays where the model keeps its marker, moves with its text, or is struck when left out", async () => {
+    const calls: EditCall[] = [];
+    let reply = "";
+    const { core, mind, client } = await setUp(editingModel(() => reply, calls));
+    const footnote = (id: string, words: string): JSONContent => ({
+      type: "footnote",
+      attrs: { id },
+      content: [text(words)],
+    });
+    const note = paragraph(
+      text("Neap tides"),
+      footnote("fn-before", "At the quarter moons."),
+      text(" are weak. Spring tides are very strong"),
+      footnote("fn-in", "Twice a month."),
+      text(" and regular."),
+    );
+    writeMind(client, [note]);
+    await client.settled();
+    // From "Spring" to the end: the footnote before it counts as one character, its text none.
+    const from = "Neap tides￼ are weak. ".length;
+    const selected = "Spring tides are very strong￼ and regular.";
+    const edit = async (requestId: string, rewrite: string) => {
+      reply = rewrite;
+      return core.editWithAi({
+        requestId,
+        mindId: mind.id,
+        from: { blockId: note.attrs.id, offset: from },
+        to: { blockId: note.attrs.id, offset: from + selected.length },
+        text: selected,
+        action: "shorten",
+      });
+    };
+    const footnotes = () => {
+      const found: { id: unknown; text: string; proposal: unknown }[] = [];
+      readMind(client).descendants((node) => {
+        if (node.type.name !== "footnote") return true;
+        const kind = (node.attrs[PROPOSAL_ATTRIBUTE] as { kind?: string } | null)?.kind ?? null;
+        found.push({ id: node.attrs.id, text: node.textContent, proposal: kind });
+        return false;
+      });
+      return found;
+    };
+
+    // Kept: only the words change around it.
+    expect(await edit("edit-kept", "Spring tides are strong[^1] and regular.")).toMatchObject({
+      kind: "proposed",
+      proposals: 1,
+    });
+    expect(calls[0]?.passage).toBe("Spring tides are very strong[^1] and regular.");
+    expect(calls[0]?.system).toContain("footnote marker, such as [^1]");
+    expect(shown(client)).toEqual([
+      "Neap tides￼ are weak. Spring tides are [-very -]strong￼ and regular.",
+    ]);
+    await resolve(client, "reject");
+
+    // Moved: struck where it was, and copied with its text where the model put it.
+    await edit("edit-moved", "Spring tides are very strong and regular[^1].");
+    expect(shown(client)).toEqual([
+      "Neap tides￼ are weak. Spring tides are very strong[-￼-] and regular{+￼+}.",
+    ]);
+    const [, moved, copy] = footnotes();
+    expect(moved).toEqual({ id: "fn-in", text: "Twice a month.", proposal: "delete" });
+    expect(copy).toMatchObject({ text: "Twice a month.", proposal: "insert" });
+    expect(copy?.id).not.toBe("fn-in");
+    // A footnote's text was the User's: accepting its move writes nothing into the record of AI use.
+    const accepted = await resolve(client, "accept");
+    expect(accepted.map((each) => each.characters)).toEqual([0, 0]);
+    expect(shown(client)).toEqual([
+      "Neap tides￼ are weak. Spring tides are very strong and regular￼.",
+    ]);
+    expect(footnotes().map((each) => each.text)).toEqual([
+      "At the quarter moons.",
+      "Twice a month.",
+    ]);
+    expect(await exported(core, mind.id)).toContain("regular[^2].");
+
+    // Left out: struck, for the User to review.
+    const after = "Spring tides are very strong and regular￼.";
+    reply = "Spring tides are strong and regular.";
+    await core.editWithAi({
+      requestId: "edit-dropped",
+      mindId: mind.id,
+      from: { blockId: note.attrs.id, offset: from },
+      to: { blockId: note.attrs.id, offset: from + after.length },
+      text: after,
+      action: "shorten",
+    });
+    expect(shown(client)).toEqual([
+      "Neap tides￼ are weak. Spring tides are [-very -]strong and regular[-￼-].",
+    ]);
+  });
+
   test("Chinese is compared character by character", async () => {
     const { core, mind, client } = await setUp(editingModel(() => "潮水每天很规律地涨落两次。"));
     const note = paragraph(text("潮水每天非常规律地涨落两次。"));
