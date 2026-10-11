@@ -1,0 +1,67 @@
+import type { Meeting } from "../../../core/api";
+import { currentMindIdOf } from "../layoutSlice";
+import { canRecordMeetings, isLive, useMeetings } from "../meetings";
+import { useAppStore } from "../store";
+import type { Command } from "./registry";
+
+/*
+ * Recording a Meeting (#135), from the keyboard, the menus and ⌘K. ⌘⇧P is a
+ * window-wide key, like a media key: it acts while the User types in the
+ * meeting's notes, and pauses the meeting that records from any Mind. It
+ * resumes only the meeting in view, so a paused one never starts from elsewhere.
+ */
+
+/** The Meeting these act on: the Mind in view's, while it is live, else the one recording. */
+function liveMeeting(): Meeting | undefined {
+  const { meetings } = useMeetings.getState();
+  const mindId = currentMindIdOf(useAppStore.getState().layout);
+  const inView = meetings.find((each) => each.mindId === mindId);
+  if (isLive(inView)) return inView;
+  return meetings.find((each) => each.status === "recording");
+}
+
+const meetingsOn = () => canRecordMeetings(useAppStore.getState().settings);
+
+const whileLive = () => (liveMeeting() ? true : { reason: "meetings.command.noneLive" as const });
+
+export const meetingCommands: readonly Command[] = [
+  {
+    id: "meeting.record",
+    label: "meetings.record",
+    group: "main",
+    // A new Mind, whose start block's ✕ takes the Meeting back.
+    reversible: true,
+    when: meetingsOn,
+    run: () => useMeetings.getState().record(),
+  },
+  {
+    id: "meeting.pauseResume",
+    label: (_ctx, t) =>
+      t(liveMeeting()?.status === "paused" ? "meetings.command.resume" : "meetings.command.pause"),
+    shortcut: { keys: "CmdOrCtrl+Shift+P" },
+    group: "main",
+    // Pressed again, it undoes itself.
+    reversible: true,
+    when: meetingsOn,
+    enabled: whileLive,
+    run() {
+      const meeting = liveMeeting();
+      if (!meeting) return;
+      const { pause, resume } = useMeetings.getState();
+      return meeting.status === "recording" ? pause(meeting.id) : resume(meeting.id);
+    },
+  },
+  {
+    id: "meeting.stop",
+    label: "meetings.command.stop",
+    group: "main",
+    // Nothing recorded is lost, but a stopped Meeting can't be picked up again.
+    reversible: { confirm: "meetings.command.stopConfirm" },
+    when: meetingsOn,
+    enabled: whileLive,
+    run() {
+      const meeting = liveMeeting();
+      if (meeting) return useMeetings.getState().stop(meeting.id);
+    },
+  },
+];
