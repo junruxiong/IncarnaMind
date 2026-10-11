@@ -1469,7 +1469,7 @@ export const en = {
     "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
   "answer.error.useLocal": "Use a local model",
   "answer.error.too-long":
-    "This Question is too long for the local model, even without the Notes above it. Shorten it, or pick another model on the Question",
+    "This Question is too long for the model’s context window, even with nothing before it. Shorten it, or choose another model",
   "answer.error.unknown": "This Answer couldn't be written",
   "answer.error.not-signed-in": "You're not signed in to ChatGPT",
   "answer.error.plan-limit": "Your ChatGPT plan's usage limit is reached",
