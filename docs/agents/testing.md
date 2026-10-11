@@ -14,7 +14,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (a push 
 
 `main` must stay green. A pull request is merged only when all three pass and it is up to date with `main`. If `main` goes red, fixing it comes before new work.
 
-Every night, and by hand from the Actions tab, `.github/workflows/nightly.yml` runs the same smoke suite on macOS (Electron smoke test (macOS)), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`. Until branch protection requires the Linux check, the macOS one also runs on each pull request.
+Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`. Until branch protection requires the Linux check, the macOS one also runs on each pull request.
 
 ## Before you open a pull request
 
