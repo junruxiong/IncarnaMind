@@ -108,7 +108,6 @@ export function PlusMenuPlaceholder() {
 }
 
 /**
-
  * Links pasted on the sidebar are saved as web pages: in the Folder whose
  * row has the focus, if one has.
  */
