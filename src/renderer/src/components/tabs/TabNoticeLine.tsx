@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import type { TabItem } from "../../../../core/api";
+import { shortcutLabel } from "../../commands/keymap";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { CloseLineIcon } from "../lineIcons";
-import { SPLIT_SHORTCUT } from "./tabActions";
 import { useTabTitle } from "./tabItems";
 
 /** How long a line about the tabs stays, unless dismissed or used first. */
@@ -39,7 +39,7 @@ export function TabNoticeLine() {
         ) : notice.kind === "pinned" ? (
           <Titled item={notice.item} message="tabs.notice.pinned" />
         ) : notice.kind === "noGroup" ? (
-          t("tabs.notice.noGroup", { n: notice.group, shortcut: SPLIT_SHORTCUT })
+          t("tabs.notice.noGroup", { n: notice.group, shortcut: shortcutLabel("tab.split") })
         ) : notice.kind === "maxGroups" ? (
           t("tabs.notice.maxGroups")
         ) : (

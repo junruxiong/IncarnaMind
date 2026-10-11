@@ -188,6 +188,7 @@ export function DocumentTab({ tab }: { tab: LayoutTab }) {
     <section
       ref={setSection}
       data-testid="viewer"
+      data-surface="viewer"
       data-document-id={documentId}
       aria-label={t("viewer.label")}
       className="viewer-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sheet"

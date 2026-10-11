@@ -471,8 +471,8 @@ test("the groups, their buttons and the tab's menu are in Chinese too", async ()
   const box = await boxOf(tab);
   await window.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
   const menu = tab.getByTestId("tab-menu-items");
-  await expect(menu.getByRole("menuitem", { name: "移到左侧一栏" })).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: "固定" })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "移动到左侧一栏" })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "置顶" })).toBeVisible();
   await screenshot(window, "groups-zh");
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();

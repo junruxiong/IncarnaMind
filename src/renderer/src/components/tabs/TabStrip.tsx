@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { LayoutGroup, LayoutTab } from "../../../../core/api";
+import { shortcutLabel } from "../../commands/keymap";
 import { useT } from "../../i18n";
 import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
@@ -18,10 +19,9 @@ import {
   SplitLineIcon,
 } from "../lineIcons";
 import { SidebarToggle } from "../SidebarToggle";
-import { NEW_MIND_SHORTCUT } from "../shortcuts";
 import { openRowMenu } from "../sidebarRows";
 import { GroupMenu, StripButton, TabMenu } from "./TabMenus";
-import { CLOSE_SHORTCUT, focusTab, SPLIT_SHORTCUT, splitToTheRight } from "./tabActions";
+import { focusTab, splitToTheRight } from "./tabActions";
 import { TabIcon, useTabTitle } from "./tabItems";
 import type { TabDrag } from "./useTabDrag";
 
@@ -130,8 +130,8 @@ export function TabStrip({
       <button
         type="button"
         data-testid="new-tab"
-        aria-label={t("tabs.new", { shortcut: NEW_MIND_SHORTCUT })}
-        title={t("tabs.new", { shortcut: NEW_MIND_SHORTCUT })}
+        aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
+        title={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
         onClick={() => void createMind({ groupId: group.id })}
         className="tab-new"
       >
@@ -145,7 +145,7 @@ export function TabStrip({
         <span className="tab-split">
           <StripButton
             testId="split-group"
-            label={t("tabs.split", { shortcut: SPLIT_SHORTCUT })}
+            label={t("tabs.split", { shortcut: shortcutLabel("tab.split") })}
             onClick={() => void splitToTheRight(shown?.id)}
           >
             <SplitLineIcon />
@@ -197,8 +197,8 @@ interface TabProps {
 function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: TabProps) {
   const t = useT();
   const title = useTabTitle(tab.item);
-  const [renaming, setRenaming] = useState(false);
-  const { changeLayout, closeTab } = useAppStore.getState();
+  const renaming = useAppStore((state) => state.renamingTabId === tab.id);
+  const { changeLayout, closeTab, renameTab } = useAppStore.getState();
   const isMind = tab.item.kind === "mind";
 
   const show = () => {
@@ -208,7 +208,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
     void changeLayout({ type: "show", tabId: tab.id });
   };
   const rename = () => {
-    if (isMind) setRenaming(true);
+    if (isMind) renameTab(tab.id);
   };
   const tooltip = tab.preview
     ? t("tabs.preview", { title })
@@ -258,12 +258,6 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
           event.preventDefault();
           if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
           show();
-        } else if (event.key === "Delete") {
-          event.preventDefault();
-          closeTab(tab.id);
-        } else if (event.key === "F2") {
-          event.preventDefault();
-          rename();
         } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
           event.preventDefault();
           event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="tab-menu"]')?.click();
@@ -288,7 +282,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
             mindId={tab.item.mindId}
             title={title}
             onDone={() => {
-              setRenaming(false);
+              renameTab(null);
               focusTab(tab.id);
             }}
           />
@@ -315,11 +309,11 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
         ) : (
           <button
             type="button"
-            // The tab is the keyboard stop; ⌘W or Delete closes it from there.
+            // The tab is the keyboard stop; ⌘W closes it from there.
             tabIndex={-1}
             data-testid="tab-close"
             aria-label={t("tabs.close", { title })}
-            title={`${t("tabs.close", { title })} (${CLOSE_SHORTCUT})`}
+            title={`${t("tabs.close", { title })} (${shortcutLabel("tab.close")})`}
             onClick={(event) => {
               event.stopPropagation();
               closeTab(tab.id);
@@ -331,7 +325,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
         )}
       </span>
       <span aria-hidden="true" data-side="right" className="tab-foot" />
-      <TabMenu tab={tab} title={title} onRename={rename} />
+      <TabMenu tab={tab} title={title} />
     </div>
   );
 }

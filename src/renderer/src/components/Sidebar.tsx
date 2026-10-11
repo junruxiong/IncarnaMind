@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { DocumentsSection } from "./DocumentsSection";
@@ -13,7 +14,6 @@ import {
 } from "./lineIcons";
 import { SidebarStatus } from "./SidebarStatus";
 import { SidebarToggle } from "./SidebarToggle";
-import { NEW_MIND_SHORTCUT } from "./shortcuts";
 import { rowButtonClass, rowClass, rowIconClass } from "./sidebarRows";
 import { UndoLine } from "./UndoLine";
 import { iconButtonClass, menuClass, menuItemClass, menuRuleClass } from "./ui";
@@ -35,6 +35,7 @@ export function Sidebar({ width, onOpenSettings }: { width: number; onOpenSettin
     <aside
       aria-label={t("sidebar.label")}
       id="sidebar"
+      data-surface="sidebar"
       data-testid="sidebar"
       className="flex min-w-[165px] shrink flex-col bg-frame"
       style={{ flexBasis: width }}
@@ -149,7 +150,7 @@ function PlusMenu() {
         >
           <MindLineIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.newMind")}</span>
-          <span className="pl-4 text-[13px] text-ink-meta">{NEW_MIND_SHORTCUT}</span>
+          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel("tab.new")}</span>
         </button>
         <button
           type="button"

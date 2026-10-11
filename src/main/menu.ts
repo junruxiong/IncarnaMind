@@ -1,9 +1,10 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron";
 import type { Language } from "../core/language";
 import { FILES_CHANNELS, type MenuCommand } from "../shared/bridge";
-import { translate } from "../shared/i18n";
+import { MENU_COMMANDS } from "../shared/commands";
+import { type MessageKey, translate } from "../shared/i18n";
 
-/** Asks the window in front to do what a menu item says (see `files.onMenuCommand`). */
+/** Asks the window in front to run a menu item's command (see `files.onMenuCommand`). */
 function send(command: MenuCommand): void {
   const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   if (window && !window.isDestroyed()) window.webContents.send(FILES_CHANNELS.menuCommand, command);
@@ -13,9 +14,8 @@ function send(command: MenuCommand): void {
  * The application menu, in the interface language: New Mind (⌘N), Close Tab
  * (⌘W), Reopen Closed Tab (⇧⌘T) and Settings… (⌘,) with the usual Edit, View
  * and Window items. As in a browser, ⌘W closes the tab and Shift+⌘W the
- * window; the window's page also handles ⌘T, ⌘1–⌘3 and Ctrl+Tab (see
- * components/tabs/useTabShortcuts.ts). Reload and the developer tools are
- * only in development and test builds. Ctrl stands in for ⌘ on Windows and Linux.
+ * window. Reload and the developer tools are only in development and test
+ * builds. Ctrl stands in for ⌘ on Windows and Linux.
  */
 export function installAppMenu(language: Language, { developer }: { developer: boolean }): void {
   installed = { language, developer };
@@ -37,12 +37,18 @@ function buildMenu(): void {
   if (!installed) return;
   const { language, developer } = installed;
   const isMac = process.platform === "darwin";
-  const t = (key: Parameters<typeof translate>[1]) => translate(language, key);
-  const settings: MenuItemConstructorOptions = {
-    label: t("menu.settings"),
-    accelerator: "CmdOrCtrl+,",
-    click: () => send("open-settings"),
-  };
+  const t = (key: MessageKey) => translate(language, key);
+  const command = (
+    id: MenuCommand,
+    label: MessageKey = MENU_COMMANDS[id].label,
+  ): MenuItemConstructorOptions => ({
+    label: t(label),
+    accelerator: MENU_COMMANDS[id].keys,
+    // The window's keymap binds the keys. macOS ignores this, but there the page has them first.
+    registerAccelerator: false,
+    click: () => send(id),
+  });
+  const settings = command("settings.open");
 
   const template: MenuItemConstructorOptions[] = [
     ...(isMac
@@ -68,14 +74,10 @@ function buildMenu(): void {
     {
       label: t("menu.file"),
       submenu: [
-        { label: t("menu.newMind"), accelerator: "CmdOrCtrl+N", click: () => send("new-mind") },
+        command("mind.new"),
         { type: "separator" },
-        { label: t("menu.closeTab"), accelerator: "CmdOrCtrl+W", click: () => send("close-tab") },
-        {
-          label: t("menu.reopenTab"),
-          accelerator: "Shift+CmdOrCtrl+T",
-          click: () => send("reopen-tab"),
-        },
+        command("tab.close"),
+        command("tab.reopen"),
         { role: "close", label: t("menu.closeWindow"), accelerator: "Shift+CmdOrCtrl+W" },
         ...(isMac
           ? []
@@ -110,17 +112,8 @@ function buildMenu(): void {
               { type: "separator" },
             ] satisfies MenuItemConstructorOptions[])
           : []),
-        {
-          label: t(sidebarHidden ? "menu.showSidebar" : "menu.hideSidebar"),
-          accelerator: "CmdOrCtrl+\\",
-          click: () => send("toggle-sidebar"),
-        },
-        {
-          label: t("menu.splitRight"),
-          // ⌘\ shows and hides the sidebar, as in Notion.
-          accelerator: "Alt+CmdOrCtrl+\\",
-          click: () => send("split-right"),
-        },
+        command("sidebar.toggle", sidebarHidden ? "menu.showSidebar" : "menu.hideSidebar"),
+        command("tab.split"),
         { type: "separator" },
         { role: "resetZoom", label: t("menu.actualSize") },
         { role: "zoomIn", label: t("menu.zoomIn") },

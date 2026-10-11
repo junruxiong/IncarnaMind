@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sidebarHandle, useHandle } from "./commands/handles";
+import { useKeymap } from "./commands/keymap";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
@@ -6,7 +8,7 @@ import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
-import { isSidebarShortcut, SidebarControlContext } from "./components/SidebarToggle";
+import { SidebarControlContext } from "./components/SidebarToggle";
 import { TagsDialog } from "./components/TagsDialog";
 import { TabGroups } from "./components/tabs/TabGroups";
 import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
@@ -50,25 +52,8 @@ export function App() {
 }
 
 /**
- * What the application menu's New Mind and Settings… do (src/main/menu.ts;
- * the tabs follow Close Tab, Reopen Closed Tab and Split to the Right). Nothing
- * while a dialog is open, as for the tab shortcuts.
- */
-function useMenuCommands(): void {
-  useEffect(
-    () =>
-      files.onMenuCommand((command) => {
-        if (document.querySelector("dialog[open]")) return;
-        const { createMind, openSettings } = useAppStore.getState();
-        if (command === "new-mind") void createMind();
-        else if (command === "open-settings") openSettings();
-      }),
-    [],
-  );
-}
-
-/**
- * Hiding and showing the sidebar (#219): ⌘\ (Ctrl+\) and View > Hide Sidebar (the menu, whose label follows), the title bar's
+ * Hiding and showing the sidebar (#219): ⌘\ (Ctrl+\) and View > Hide Sidebar
+ * (the "sidebar.toggle" command; the menu's label follows), the title bar's
  * button, and dragging the divider shut. The User's choice is remembered.
  */
 function useSidebarControl(userHidden: boolean) {
@@ -103,23 +88,6 @@ function useSidebarControl(userHidden: boolean) {
     refocus.current = false;
     return wanted;
   }, []);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !isSidebarShortcut(event)) return;
-      if (document.querySelector("dialog[open]")) return;
-      event.preventDefault();
-      toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    const stopMenu = files.onMenuCommand((command) => {
-      if (command === "toggle-sidebar" && !document.querySelector("dialog[open]")) toggle();
-    });
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      stopMenu();
-    };
-  }, [toggle]);
 
   // The View menu says Hide or Show to match.
   useEffect(() => files.setSidebarHidden(hidden), [hidden]);
@@ -178,7 +146,7 @@ function Workspace() {
   const fileDrop = useFileDrop((files, folders) => void addDropped(files, folders));
   const windowWidth = useWindowWidth();
   const openSettings = useAppStore((state) => state.openSettings);
-  useMenuCommands();
+  useKeymap();
   useRememberSidebarWidth(device?.sidebarWidth);
   const sidebar = useSidebarControl(device?.sidebarHidden ?? false);
   const peek = useSidebarPeek(sidebar.hidden);
@@ -198,6 +166,7 @@ function Workspace() {
     }),
     [sidebar.hidden, peek.peeking, sidebar.toggle, sidebar.takeRefocus],
   );
+  useHandle(sidebarHandle, control);
 
   if (!device) return null;
   const { sidebarWidth } = device;

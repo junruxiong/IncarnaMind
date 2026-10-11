@@ -22,7 +22,7 @@ interface ImportMetaEnv {
    */
   readonly MAIN_VITE_POSTHOG_HOST?: string;
   /**
-   * "1" for a test build (the alpha): usage data is on until the User turns
+   * "1" for a test build (for invited testers): usage data is on until the User turns
    * it off, as testers agree to when they join, and the first run says so.
    * Otherwise the first run asks, and it is off unless the User agrees.
    */

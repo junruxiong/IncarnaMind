@@ -12,7 +12,6 @@ import { MindTab, NoTabOpen } from "./MindTab";
 import { TabStrip } from "./TabStrip";
 import { TabIcon, TabPlaceContext, useTabTitle } from "./tabItems";
 import { type DraggedTab, type DropTarget, type TabDrag, useTabDrag } from "./useTabDrag";
-import { useTabShortcuts } from "./useTabShortcuts";
 
 /** A group is never dragged narrower than this. */
 const GROUP_MIN_PX = 220;
@@ -34,7 +33,6 @@ export function TabGroups() {
   /** The Mind whose export dialog is open. */
   const [exporting, setExporting] = useState<string | null>(null);
   const exportMind = useAppStore((state) => state.minds.find((mind) => mind.id === exporting));
-  useTabShortcuts();
 
   // A double-click on a divider makes the groups equal, as in VS Code.
   useEffect(() => {
