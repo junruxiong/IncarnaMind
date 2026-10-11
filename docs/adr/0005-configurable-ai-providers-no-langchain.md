@@ -1,5 +1,7 @@
 # AI providers are configurable, and we don't use LangChain
 
+**Amended 2026-10-11: which providers get first-class support, and which are best effort, is [ADR-0019](0019-few-first-class-providers-and-agents.md).**
+
 **Amended 2026-10-10 (#176): what the app knows about providers and models is one catalog in code** (`src/core/providers/catalog`), read instead of guessing from model names.
 - **Providers are written by hand:** names in English and Chinese, endpoints per region, the AI SDK adapter, the "get a key" link, request quirks (OpenAI's `store: false`), a line on what the provider does with API data, and the models for Answers, quick tasks and reading images. A provider's Answers default is its cheaper capable model; its strongest is one click away.
 - **Model facts are generated** from models.dev (MIT), cross-checked against LiteLLM's model list (MIT), by `node scripts/catalogModels.ts`, and corrected in a short hand-written overrides file. Their licences ship with the data. Prices are in the provider's own currency.
