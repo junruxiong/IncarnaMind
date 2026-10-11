@@ -253,6 +253,7 @@ describe("outside agents", () => {
       read_passages: { documentId: "any" },
       cite: { citations: [{ passageId: "any", quote: "Spring tides" }] },
       check_citations: { text: "Spring tides [cite:abcdefgh]." },
+      show_citation: { cite: "[cite:abcdefgh]" },
       list_minds: {},
       read_mind: { mindId: "any" },
       ask: { question: "When are spring tides?" },

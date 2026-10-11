@@ -5,6 +5,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -106,6 +107,8 @@ test("off by default; Connect asks once, writes Codex's settings as shown, and U
     await expect(dialog.getByTestId("connect-agent-change")).toContainText(codexSettings);
     const allow = dialog.getByTestId("connect-agent-allow");
     await expect(allow).toBeDisabled();
+    // Linux with no keyring running (CI): the dialog asks to keep the key as plain text first.
+    await acceptPlainTextKeys(window, dialog);
     await dialog.getByTestId("connect-agent-folder").check();
     await dialog.getByTestId("connect-agent-change").locator("summary").click();
     await shot(window, "agents-connect-dialog");
@@ -136,6 +139,7 @@ test("an agent set up by pasting its settings searches, its activity shows each 
     await dismissChatSetup(window);
     await withCoast(window);
     await catchCopies(window);
+    await acceptPlainTextKeys(window);
     const page = await openSettings(window, "agents");
     await page.getByTestId("agents-enabled").click();
     const more = page.getByTestId("agents-more");
