@@ -1,5 +1,7 @@
 import type { Document } from "../../../core/api";
+import type { CommandId } from "../../../shared/commands";
 import { displayName } from "../../../shared/documentNames";
+import { commands } from "../commands/registry";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
@@ -21,7 +23,8 @@ import { usePopoverMenu } from "./usePopoverMenu";
  * there); rename it; its file, where the User keeps it ("Open in default
  * app" and "Show in folder", which the main process does for live Documents
  * whose file is there, and which say why not for a file that is missing or
- * can't be reached); and delete it, or, for a missing one, remove it from
+ * can't be reached), or a web page's "Fetch again", "Open the live page" and
+ * "Copy address"; and delete it, or, for a missing one, remove it from
  * IncarnaMind.
  */
 export function DocumentFileMenu({
@@ -41,6 +44,13 @@ export function DocumentFileMenu({
   const fileState = fileStatusLabel(item.fileStatus);
   const reason = fileState ? t(fileState.reason) : undefined;
   const canRetry = item.status === "failed" && fileState === null;
+  const { web } = item;
+  const runCommand = (id: CommandId) => {
+    menu.close();
+    commands
+      .run(id, { selection: [], focus: { kind: "document", id: item.id }, surface: "sidebar" })
+      .catch(useAppStore.getState().reportError);
+  };
 
   const bridge: LibraryBridge = {
     kind: "documents",
@@ -117,6 +127,17 @@ export function DocumentFileMenu({
             {label}
           </button>
         ))}
+        {web && (
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="fetch-web-page-again"
+            onClick={() => runCommand("document.fetchAgain")}
+            className={`${menuItemClass} pl-2`}
+          >
+            {t("webPages.fetchAgain")}
+          </button>
+        )}
         <button
           type="button"
           role="menuitem"
@@ -130,29 +151,57 @@ export function DocumentFileMenu({
           {t("documents.renameAction")}
         </button>
         <div className={menuRuleClass} />
-        <p className={menuTitleClass}>{t("documents.copy.menuTitle")}</p>
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="document-open-externally"
-          aria-disabled={fileState ? true : undefined}
-          title={reason}
-          onClick={() => run(files.openDocumentExternally)}
-          className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
-        >
-          {t("documents.copy.open")}
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="document-show-in-folder"
-          aria-disabled={fileState ? true : undefined}
-          title={reason}
-          onClick={() => run(files.showDocumentInFolder)}
-          className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
-        >
-          {t("documents.copy.showInFolder")}
-        </button>
+        {web ? (
+          <>
+            <p className={menuTitleClass}>{t("webPages.menuTitle")}</p>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="document-open-externally"
+              title={web.address}
+              onClick={() => runCommand("document.openLivePage")}
+              className={`${menuItemClass} pl-2`}
+            >
+              {t("webPages.openLive")}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="copy-web-address"
+              title={web.address}
+              onClick={() => runCommand("document.copyAddress")}
+              className={`${menuItemClass} pl-2`}
+            >
+              {t("webPages.copyAddress")}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className={menuTitleClass}>{t("documents.copy.menuTitle")}</p>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="document-open-externally"
+              aria-disabled={fileState ? true : undefined}
+              title={reason}
+              onClick={() => run(files.openDocumentExternally)}
+              className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+            >
+              {t("documents.copy.open")}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="document-show-in-folder"
+              aria-disabled={fileState ? true : undefined}
+              title={reason}
+              onClick={() => run(files.showDocumentInFolder)}
+              className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
+            >
+              {t("documents.copy.showInFolder")}
+            </button>
+          </>
+        )}
         <div className={menuRuleClass} />
         <button
           type="button"

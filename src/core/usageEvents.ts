@@ -146,6 +146,7 @@ export const DOCUMENT_FORMATS = [
   "csv",
   "markdown",
   "text",
+  "web",
 ] as const satisfies readonly DocumentKind[];
 
 // The lists above follow their types: a new kind fails the type-check until it is listed.
@@ -211,6 +212,7 @@ export const USAGE_EVENTS = {
     csv: count,
     markdown: count,
     text: count,
+    web: count,
   },
   /** The User linked a folder. */
   folder_linked: {},

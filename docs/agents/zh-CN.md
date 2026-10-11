@@ -51,10 +51,11 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Unavailable Document | (status) 无法访问 | |
 | Linked folder | 同步文件夹 | "添加同步文件夹…", "移除同步文件夹…". As Tencent Docs does. Say IncarnaMind only reads it wherever a Linked folder is added. |
 | Other Documents | 其他文档 | |
+| Web page | 网页 | A Document saved from a web address (网址). Its snapshot is 快照, as search engines' 网页快照: "打开快照". Fetching it is 抓取: "重新抓取", "无法抓取：网页需要登录". The live page: 原网页 ("打开原网页"). |
 | Passage | 段落 | |
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
-| Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题". |
+| Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题", a web page's "§ 历史，第 3 段". |
 | Footnote | 脚注 | As Word, WPS and Feishu. "插入脚注", "脚注 3". |
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |

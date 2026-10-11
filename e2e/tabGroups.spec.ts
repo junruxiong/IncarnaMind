@@ -10,6 +10,7 @@ import {
   documentIdOf,
   dragBy,
   dragTabTo,
+  expectFirstTabAtCardStart,
   launchApp,
   openDocumentAt,
   removeDataFolder,
@@ -329,8 +330,8 @@ test("one divider runs the full height through the strips and the pages; it resi
   await expect(
     groupAt(window, 1).getByRole("tab").locator('.tab-foot[data-side="left"]'),
   ).toBeVisible();
-  // The window's first group starts flush with the card.
-  expect((await boxOf(groupAt(window, 0).getByRole("tab"))).x).toBeCloseTo(card.x, 0);
+  // The window's first group's tabs start at the card's edge.
+  await expectFirstTabAtCardStart(window, groupAt(window, 0).getByRole("tab"));
 
   // Dragged 100px, the left group grows by 100px and the right one gives them.
   const before = await widthOf(groupAt(window, 0));
