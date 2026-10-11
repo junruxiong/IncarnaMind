@@ -518,7 +518,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(window.getByTestId("block-menu")).toHaveCount(0);
       await expect(editor).toBeFocused();
 
-      // The keyboard: the chevron takes Enter, and the shortcut opens the Block's menu.
+      // The keyboard: the chevron takes Enter, and Shift+F10 opens the Block's menu.
       await fold.focus();
       await window.keyboard.press("Enter");
       await expect(fold).toHaveAttribute("aria-expanded", "false");
@@ -526,7 +526,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await window.keyboard.press("Enter");
       await expect(fold).toHaveAttribute("aria-expanded", "true");
       await question.locator(".question-text").click();
-      await window.keyboard.press("ControlOrMeta+Alt+m");
+      await window.keyboard.press("Shift+F10");
       await expect(window.getByTestId("block-menu")).toBeVisible();
       await window.keyboard.press("Escape");
       await expect(window.getByTestId("block-menu")).toHaveCount(0);

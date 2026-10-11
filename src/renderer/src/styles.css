@@ -1721,11 +1721,7 @@
 
   /* The Mind editor's content (Tiptap): your writing in Source Serif 4, 17/28. */
   .mind-editor {
-    /*
-     * How far left of the text edge the block handle's right side sits (see
-     * BlockHandle): its 20px fill the outer half of the 40px margin, clear of
-     * a Question's fold chevron in the inner half.
-     */
+    /* The handle's 20px fill the outer half of the 40px margin; a Question's fold chevron has the inner half. */
     --handle-gap: 20px;
     /*
      * The editor's box reaches over the left margin, past the block handle,
@@ -2097,12 +2093,6 @@
     line-height: var(--text-ui--line-height);
     color: var(--color-ink-meta);
   }
-  /*
-   * The left margin's 40px holds two 20px places beside the text (#354): the
-   * outer one is the block handle's (see --handle-gap), where a Question's
-   * spark rests until the handle comes; the inner one is the fold chevron's,
-   * always there.
-   */
   .question-fold {
     position: absolute;
     top: 0;
@@ -2140,7 +2130,6 @@
     color: var(--color-ink-meta);
     pointer-events: none;
 
-    /* The handle takes its place while the pointer is on this Block (BlockHandle). */
     [data-handle-on] & {
       opacity: 0;
     }
@@ -3708,7 +3697,6 @@
   @container mind (width < 900px) {
     .mind-measure {
       width: auto;
-      /* The left margin stays 40px: the block handle and a Question's fold chevron need it. */
       margin-inline: 40px 24px;
     }
     .mind-editor {

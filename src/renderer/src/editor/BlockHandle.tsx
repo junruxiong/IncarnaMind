@@ -31,8 +31,7 @@ function firstTextPos(node: ProseMirrorNode, pos: number): number | null {
 /**
  * Where the handle goes: in the left margin, a fixed gap left of the Mind's
  * text edge (the CSS sets `--handle-gap`), level with the Block's first line
- * of text. A Question's fold chevron takes the 20px beside the text, so the
- * handle's place is clear of it (styles.css, `.mind-editor`).
+ * of text.
  */
 function handleAnchor(
   editor: Editor,
@@ -69,7 +68,6 @@ const isNote = (node: ProseMirrorNode) =>
 
 /** The Block whose menu is open: its ID, where it was when the menu opened, and what it is. */
 interface MenuTarget {
-  /** What the menu sits next to: the handle, or the Block's own spot when the keyboard opened it. */
   anchor: Element | VirtualElement;
   id: unknown;
   pos: number;
@@ -154,16 +152,17 @@ export function BlockHandle({ editor }: { editor: Editor }) {
     if (block && grip.current) openMenuFor(block, grip.current);
   };
 
-  // The keyboard's way in (the "block.menu" command): the handle shows only under the mouse.
+  const open = useRef(openMenuFor);
+  open.current = openMenuFor;
   useEffect(() => {
     blockMenuOpeners.set(editor, (id) => {
       const found = findBlock(editor.state.doc, id);
-      if (found) openMenuFor(found, handleAnchor(editor, found) ?? editor.view.dom);
+      if (found) open.current(found, handleAnchor(editor, found) ?? editor.view.dom);
     });
     return () => {
       blockMenuOpeners.delete(editor);
     };
-  });
+  }, [editor]);
 
   const closeMenu = (refocus: boolean) => {
     setMenuFor(null);
@@ -207,7 +206,6 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         getReferencedVirtualElement={() => handleAnchor(editor, hovered.current)}
         onNodeChange={({ node, pos }) => {
           hovered.current = node ? { node, pos } : null;
-          // A Question's spark gives its place to the handle while the handle is on it (styles.css).
           for (const shown of editor.view.dom.querySelectorAll("[data-handle-on]"))
             shown.removeAttribute("data-handle-on");
           const dom = node ? editor.view.nodeDOM(pos) : null;
