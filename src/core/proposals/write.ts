@@ -4,7 +4,8 @@
  *
  * - `readSelection` reads a stretch of a Mind's text, from one paragraph or
  *   heading to another (`TextPlace`), as the model will read it: Citations
- *   as numbered markers, formulas as $…$, paragraphs apart.
+ *   and the User's footnotes as numbered markers ("[1]", "[^1]"), formulas as
+ *   $…$, paragraphs apart.
  * - `proposeRewrite` compares that stretch with the model's new text, word by
  *   word (./diff), and marks each place that changed as a Proposal of its
  *   own: the words it removes stay, under `proposalDelete`, and the words it
@@ -16,10 +17,11 @@
  * the User's text stays where and what it was until they accept.
  */
 import * as Y from "yjs";
-import { createElement, type NodeJSON } from "../answers/blocks";
+import { createElement } from "../answers/blocks";
 import {
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
+  FOOTNOTE_NODE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
   PROPOSAL_INSERT_MARK,
@@ -62,7 +64,15 @@ interface OldToken {
   /** Its text, or for an inline node its name and attributes. */
   text?: string;
   attributes?: Attributes;
-  node?: { name: string; attributes: Attributes };
+  node?: InlineNode;
+}
+
+/** An inline node of the selection, or one the new text adds. */
+interface InlineNode {
+  name: string;
+  attributes: Attributes;
+  /** What it holds, copied where it moves to: a footnote's text. */
+  source?: Y.XmlElement;
 }
 
 /** The part of one paragraph or heading the selection covers. */
@@ -89,6 +99,8 @@ export interface Selection {
   segments: Segment[];
   /** The Citations in it, in order: marker n is `citations[n - 1]`. */
   citations: Attributes[];
+  /** The User's footnotes in it, in order: marker "[^n]" is `footnotes[n - 1]`. */
+  footnotes: Y.XmlElement[];
   /** The selected text as the editor reads it: an inline node as U+FFFC, a line per paragraph. */
   plain: string;
   /** The selected text as the model reads it: markers for Citations, paragraphs apart. */
@@ -153,11 +165,12 @@ const hasProposal = (attributes: Attributes | undefined) =>
 
 /**
  * How a token is compared: words as they are; an inline node by what it is,
- * after a character no text holds (`n`: a Citation's marker).
+ * after a character no text holds (`n`: a Citation's or footnote's marker).
  */
 const keyOf = {
   text: (text: string) => text,
   citation: (n: number) => `\u0000c${n}`,
+  footnote: (n: number) => `\u0000f${n}`,
   math: (latex: string) => `\u0000m${latex}`,
   break: () => "\u0000b",
   node: (name: string, n: number) => `\u0000n${name}${n}`,
@@ -183,6 +196,7 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
     return { ok: false, reason: "has-proposals" };
 
   const citations: Attributes[] = [];
+  const footnotes: Y.XmlElement[] = [];
   const segments: Segment[] = [];
   const plain: string[] = [];
   const text: string[] = [];
@@ -228,10 +242,16 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       const name = child.node.nodeName;
       let key: string;
       let shown: string;
+      let source: Y.XmlElement | undefined;
       if (name === CITATION_NODE) {
         citations.push(attributes);
         key = keyOf.citation(citations.length);
         shown = `[${citations.length}]`;
+      } else if (name === FOOTNOTE_NODE) {
+        footnotes.push(child.node);
+        key = keyOf.footnote(footnotes.length);
+        shown = `[^${footnotes.length}]`;
+        source = child.node;
       } else if (name === MATH) {
         key = keyOf.math(stringOf(attributes.latex));
         shown = `$${stringOf(attributes.latex)}$`;
@@ -243,7 +263,12 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
         key = keyOf.node(name, tokens.length);
         shown = "";
       }
-      tokens.push({ key, from: child.start, to: child.start + 1, node: { name, attributes } });
+      tokens.push({
+        key,
+        from: child.start,
+        to: child.start + 1,
+        node: { name, attributes, ...(source && { source }) },
+      });
       seen.push(NODE_CHARACTER);
       words.push(shown);
     }
@@ -274,6 +299,7 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
     selection: {
       segments,
       citations,
+      footnotes,
       plain: plain.join("\n"),
       text: text.filter((each) => each !== "").join("\n\n"),
       context: context.join("\n\n"),
@@ -304,16 +330,16 @@ function blockText(element: Y.XmlElement): string {
 interface NewToken {
   key: string;
   text?: string;
-  node?: { name: string; attributes: Attributes };
+  node?: InlineNode;
 }
 
-const MARKER = /\[(\d+)\]|\$([^$\n]+)\$|\n/g;
+const MARKER = /\[\^(\d+)\]|\[(\d+)\]|\$([^$\n]+)\$|\n/g;
 
 /**
  * The new text's paragraphs as tokens. A marker "[n]" is Citation n of the
  * selection, with `fresh` attributes when its check came out differently
- * now; a marker for none it had is left out. A formula the selection had is
- * kept; another stays text.
+ * now, and "[^n]" is its footnote n; a marker for none it had is left out.
+ * A formula the selection had is kept; another stays text.
  */
 function newParagraphs(
   text: string,
@@ -327,6 +353,22 @@ function newParagraphs(
       ),
     ),
   );
+  const citationNode = (n: number): NewToken | null => {
+    const attributes = fresh.get(n) ?? selection.citations[n - 1];
+    if (!attributes) return null;
+    return {
+      key: `${keyOf.citation(n)}${fresh.has(n) ? "*" : ""}`,
+      node: { name: CITATION_NODE, attributes },
+    };
+  };
+  const footnoteNode = (n: number): NewToken | null => {
+    const source = selection.footnotes[n - 1];
+    if (!source) return null;
+    return {
+      key: keyOf.footnote(n),
+      node: { name: FOOTNOTE_NODE, attributes: source.getAttributes() as Attributes, source },
+    };
+  };
   return text
     .split(/\n[ \t]*\n+/)
     .map((paragraph) => paragraph.trim())
@@ -340,24 +382,20 @@ function newParagraphs(
       for (const match of paragraph.matchAll(MARKER)) {
         words(paragraph.slice(at, match.index));
         at = match.index + match[0].length;
+        const [, footnote, citation, formula] = match;
         if (match[0] === "\n") {
           tokens.push({ key: keyOf.break(), node: { name: BREAK, attributes: {} } });
-        } else if (match[1] !== undefined) {
-          const n = Number(match[1]);
-          const attributes = fresh.get(n) ?? selection.citations[n - 1];
-          if (attributes) {
-            tokens.push({
-              key: `${keyOf.citation(n)}${fresh.has(n) ? "*" : ""}`,
-              node: { name: CITATION_NODE, attributes },
-            });
-          }
+        } else if (footnote !== undefined || citation !== undefined) {
+          const n = Number(footnote ?? citation);
+          const node = footnote !== undefined ? footnoteNode(n) : citationNode(n);
+          if (node) tokens.push(node);
           // Spaces left where an unknown marker was are one.
           else if (/\s$/.test(paragraph.slice(0, match.index)) && /^\s/.test(paragraph.slice(at)))
             at++;
-        } else if (match[2] !== undefined && formulas.has(match[2])) {
+        } else if (formula !== undefined && formulas.has(formula)) {
           tokens.push({
-            key: keyOf.math(match[2]),
-            node: { name: MATH, attributes: { latex: match[2] } },
+            key: keyOf.math(formula),
+            node: { name: MATH, attributes: { latex: formula } },
           });
         } else {
           words(match[0]);
@@ -468,15 +506,26 @@ function insertText(element: Y.XmlElement, at: number, text: string, marks: Attr
   element.insert(children.filter((child) => child.start + child.size <= at).length, [fresh]);
 }
 
-/** A Citation, formula or line break the Proposal adds. */
-function nodeElement(node: NonNullable<NewToken["node"]>, ref: ProposalRef): Y.XmlElement {
-  return createElement({
-    type: node.name,
-    attrs: {
-      ...withoutProposalAttribute(node.attributes),
-      [PROPOSAL_ATTRIBUTE]: { ...ref, kind: "insert" } satisfies ProposalAttribute,
-    },
-  });
+/**
+ * An inline node for new text: a Citation, formula or line break, or a
+ * footnote moved, copied with its text under an id of its own, since the
+ * one it was copied from stays until the User accepts.
+ */
+function elementOf(node: InlineNode, newId: () => string): Y.XmlElement {
+  if (node.source) {
+    const copy = node.source.clone();
+    copy.removeAttribute(PROPOSAL_ATTRIBUTE);
+    copy.setAttribute(BLOCK_ID_ATTRIBUTE, newId());
+    return copy;
+  }
+  return createElement({ type: node.name, attrs: withoutProposalAttribute(node.attributes) });
+}
+
+/** An inline node the Proposal adds. */
+function nodeElement(node: InlineNode, ref: ProposalRef, newId: () => string): Y.XmlElement {
+  const element = elementOf(node, newId);
+  setProposal(element, { ...ref, kind: "insert" });
+  return element;
 }
 
 function withoutProposalAttribute(attributes: Attributes): Attributes {
@@ -491,6 +540,7 @@ function insertTokens(
   tokens: readonly NewToken[],
   marks: Attributes,
   ref: ProposalRef,
+  newId: () => string,
 ): void {
   const inserted = { ...marks, [PROPOSAL_INSERT_MARK]: { id: ref.id, request: ref.request } };
   let position = at;
@@ -504,7 +554,7 @@ function insertTokens(
   for (const token of tokens) {
     if (token.node) {
       flush();
-      insertNode(segment.element, position, nodeElement(token.node, ref));
+      insertNode(segment.element, position, nodeElement(token.node, ref, newId));
       position += 1;
     } else {
       words += token.text ?? "";
@@ -514,25 +564,35 @@ function insertTokens(
 }
 
 /** A new paragraph, as the Proposal's whole Block, holding these tokens. */
-function paragraphOf(tokens: readonly NewToken[], ref: ProposalRef): NodeJSON {
-  const content: NodeJSON[] = [];
-  for (const token of tokens) {
-    if (token.node) {
-      content.push({
-        type: token.node.name,
-        attrs: withoutProposalAttribute(token.node.attributes),
-      });
-      continue;
-    }
-    const last = content.at(-1);
-    if (last?.type === "text") last.text = `${last.text ?? ""}${token.text ?? ""}`;
-    else content.push({ type: "text", text: token.text ?? "" });
-  }
-  return {
+function paragraphOf(
+  tokens: readonly NewToken[],
+  ref: ProposalRef,
+  newId: () => string,
+): Y.XmlElement {
+  const paragraph = createElement({
     type: "paragraph",
     attrs: { [PROPOSAL_ATTRIBUTE]: { ...ref, kind: "insert" } satisfies ProposalAttribute },
-    content,
+  });
+  const children: (Y.XmlElement | Y.XmlText)[] = [];
+  let words = "";
+  const flush = () => {
+    if (words === "") return;
+    const text = new Y.XmlText();
+    text.insert(0, words);
+    children.push(text);
+    words = "";
   };
+  for (const token of tokens) {
+    if (token.node) {
+      flush();
+      children.push(elementOf(token.node, newId));
+    } else {
+      words += token.text ?? "";
+    }
+  }
+  flush();
+  paragraph.insert(0, children);
+  return paragraph;
 }
 
 /** The element a removed paragraph takes with it: the list item, list or quote that holds only it. */
@@ -629,7 +689,7 @@ export function proposeRewrite(
       const marks = firstWords
         ? withoutProposals(firstWords.attributes)
         : besideMarks(segment, end);
-      insertTokens(segment, end, added, marks, ref);
+      insertTokens(segment, end, added, marks, ref, newId);
       if (removed.length > 0) markRemoved(segment.element, removed[0]?.from ?? end, end, ref);
       for (const token of removed) note(removedCitations, token);
       for (const token of added) note(addedCitations, token);
@@ -653,7 +713,7 @@ export function proposeRewrite(
   if (anchor && paragraphs.length > pairs) {
     const added = paragraphs.slice(pairs).map((tokens) => {
       for (const token of tokens) note(addedCitations, token);
-      return createElement(paragraphOf(tokens, next()));
+      return paragraphOf(tokens, next(), newId);
     });
     addAfter(anchor.element, added);
   }
@@ -682,18 +742,17 @@ export function proposeAfter(
   if (!top || top.parent !== blocks) return { proposals: [], droppedCitations: 0 };
   const proposals: ProposalRef[] = [];
   const paragraphs = text
-    .replace(/\s*\[\d+\]/g, "")
+    .replace(/\s*\[\^?\d+\]/g, "")
     .split(/\n[ \t]*\n+/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph !== "");
   const added = paragraphs.map((paragraph) => {
     const ref = { id: newId(), request };
     proposals.push(ref);
-    return createElement(
-      paragraphOf(
-        splitWords(paragraph).map((word) => ({ key: keyOf.text(word), text: word })),
-        ref,
-      ),
+    return paragraphOf(
+      splitWords(paragraph).map((word) => ({ key: keyOf.text(word), text: word })),
+      ref,
+      newId,
     );
   });
   addAfter(top, added);

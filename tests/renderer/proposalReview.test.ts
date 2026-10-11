@@ -222,6 +222,30 @@ describe("The text Edit with AI changes", () => {
     });
   });
 
+  test("counts a footnote as one character, without the text it holds", () => {
+    const note = noteWith([
+      {
+        type: "paragraph",
+        attrs: { id: "p1" },
+        content: [
+          text("Neap tides"),
+          { type: "footnote", attrs: { id: "f1" }, content: [text("At the quarter moons.")] },
+          text(" are weak; spring tides"),
+          { type: "footnote", attrs: { id: "f2" }, content: [text("Twice a month.")] },
+          text(" are strong."),
+        ],
+      },
+    ]);
+
+    expect(
+      selectionForEdit(note.state, { from: note.after("weak; "), to: note.after(" are strong") }),
+    ).toMatchObject({
+      from: { blockId: "p1", offset: "Neap tides￼ are weak; ".length },
+      to: { blockId: "p1", offset: "Neap tides￼ are weak; spring tides￼ are strong".length },
+      text: "spring tides￼ are strong",
+    });
+  });
+
   test("isn't a Question, code, nothing but spaces, or an Answer being written", () => {
     const note = noteWith([
       { type: "question", attrs: { id: "q1" }, content: [text("When are tides high?")] },

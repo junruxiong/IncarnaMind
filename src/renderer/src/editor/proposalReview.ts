@@ -11,7 +11,6 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { ySyncPluginKey, yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import {
-  BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
@@ -133,7 +132,8 @@ export function proposalsIn(doc: ProseMirrorNode): PendingProposal[] {
     if (attribute) {
       const proposal = entry(attribute);
       extend(proposal, pos, pos + node.nodeSize, attribute.kind);
-      const text = node.isLeaf
+      // An inline node reads as one character, whatever it holds (a footnote, its text).
+      const text = node.isInline
         ? NODE_CHARACTER
         : node.textBetween(0, node.content.size, "\n", NODE_CHARACTER);
       if (attribute.kind === "insert") proposal.added += text;
@@ -426,20 +426,4 @@ export function resolveInEditor(
   }, ySyncPluginKey);
   undo?.stopCapturing();
   return resolved;
-}
-
-/** The ids of the Blocks a Proposal is in, for the record of AI use. */
-export function blockIdsOf(doc: ProseMirrorNode, proposal: PendingProposal): string[] {
-  const ids = new Set<string>();
-  for (const range of proposal.ranges) {
-    const $from = doc.resolve(range.from);
-    for (let depth = $from.depth; depth > 0; depth--) {
-      const id: unknown = $from.node(depth).attrs[BLOCK_ID_ATTRIBUTE];
-      if (typeof id === "string") {
-        ids.add(id);
-        break;
-      }
-    }
-  }
-  return [...ids];
 }

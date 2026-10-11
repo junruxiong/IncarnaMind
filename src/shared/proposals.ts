@@ -13,6 +13,7 @@
 import * as Y from "yjs";
 import {
   BLOCK_ID_ATTRIBUTE,
+  FOOTNOTE_NODE,
   MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
   PROPOSAL_DELETE_MARK,
@@ -123,11 +124,14 @@ export function resolveProposals(
         continue;
       }
       if (!(child instanceof Y.XmlElement)) continue;
-      const own = idOf(child) ?? owner;
+      // A footnote has an id but isn't a Block, and one a Proposal moves holds the User's text.
+      const footnote = child.nodeName === FOOTNOTE_NODE;
+      const own = (footnote ? null : idOf(child)) ?? owner;
       const attribute = readProposalAttribute(child.getAttribute(PROPOSAL_ATTRIBUTE));
       if (attribute && wanted(attribute)) {
         const keep = (attribute.kind === "insert") === (outcome === "accept");
-        note(attribute, keep && attribute.kind === "insert" ? textLength(child) : 0, own);
+        const written = keep && attribute.kind === "insert" && !footnote;
+        note(attribute, written ? textLength(child) : 0, own);
         if (!keep) {
           parent.delete(index, 1);
           continue;
