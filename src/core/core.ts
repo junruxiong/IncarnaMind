@@ -32,6 +32,7 @@ import type {
   Document,
   EmbeddingSettings,
   ExportMindOptions,
+  Meeting,
   Mind,
   MindCitationStyle,
   OwnFileKind,
@@ -82,9 +83,10 @@ import { createBatches } from "./library/batches";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
+import { listParts, meetingFolder } from "./meetings/audioFiles";
+import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
-
 import {
   createMinds,
   parseCreateMindInput,
@@ -135,6 +137,7 @@ import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import { createTranscriptionModel, TRANSCRIPTION_SPEED } from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
 
@@ -1285,6 +1288,62 @@ export function createCore(adapters: CoreAdapters): Core {
     return ollamaBaseUrl(input?.baseUrl);
   };
 
+  // Transcripts (#136): a Meeting is transcribed on this computer as it records, where this copy can.
+  let listMeetings: (() => Meeting[]) | undefined;
+  const meetingsChanged = () => {
+    if (listMeetings) events.emit("meetings.changed", listMeetings());
+  };
+  const transcriber = adapters.transcriber;
+  const transcripts =
+    transcriber &&
+    createTranscripts({
+      dataDir,
+      transcriber,
+      model: createTranscriptionModel({
+        dataDir,
+        transcriber,
+        ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
+        speed: () => {
+          const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+          return isRecord(value) ? (value as Record<string, number>) : {};
+        },
+        emitStatus: () => meetingsChanged(),
+      }),
+      documents: {
+        add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
+        file: (documentId, folderId) => library.assign(documentId, folderId),
+        check: (path) => documents.check(path),
+        moveFile: (id, path) => documents.moveFile(id, path),
+        find: (id) => {
+          try {
+            return documents.get(id);
+          } catch {
+            return null;
+          }
+        },
+      },
+      saveFile: (file) => outputs.save(file),
+      name: (meetingId) => {
+        const meeting = listMeetings?.().find((each) => each.id === meetingId);
+        const title = meeting ? minds.get(meeting.mindId).title : "";
+        return translate(settings.get().language, "meetings.transcript.name", { meeting: title });
+      },
+      folderOf: (meetingId) => {
+        const meeting = listMeetings?.().find((each) => each.id === meetingId);
+        return meeting ? minds.get(meeting.mindId).folderId : null;
+      },
+      partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      recordSpeed: (modelId, ratio) => {
+        const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
+        settings.writeDeviceValue(TRANSCRIPTION_SPEED, {
+          ...(isRecord(value) ? value : {}),
+          [modelId]: ratio,
+        });
+      },
+      changed: meetingsChanged,
+      log: adapters.log ?? silentLogger,
+    });
+
   // Meetings (#135): while audio is being captured, background model work holds back.
   const meetings = createMeetings({
     db,
@@ -1313,8 +1372,10 @@ export function createCore(adapters: CoreAdapters): Core {
       background.setRecording(capturing);
       documents.hold(capturing);
     },
+    ...(transcripts && { transcripts }),
     log: adapters.log ?? silentLogger,
   });
+  listMeetings = () => meetings.list();
 
   // Outside agents (#351): the User's own agent, paired in Settings, reads its Folders over the
   // socket and gets Citations IncarnaMind minted and checked. Off until the User turns it on.
@@ -2030,6 +2091,7 @@ export function createCore(adapters: CoreAdapters): Core {
     resumeMeeting: async (meetingId) => meetings.resume(meetingId),
     stopMeeting: async (meetingId) => meetings.stop(meetingId),
     deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
+    retryTranscript: async (meetingId) => meetings.retryTranscript(meetingId),
     openAudioSettings: (source) => meetings.openSettings(source),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
@@ -2082,6 +2144,7 @@ export function createCore(adapters: CoreAdapters): Core {
       lifetime.abort();
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
+      transcripts?.close();
       // Outside agents can't reach the core while it closes.
       void agents.close().catch((error: unknown) => console.error(error));
       // First, so stopping the Answers below starts no background work.

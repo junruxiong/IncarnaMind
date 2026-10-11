@@ -562,11 +562,14 @@ export const MAX_CITED_PAGES = 2;
  *   its author (null when the file names none) (#76). `paragraphs`: in a
  *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
+ * - "time": in a Transcript, from the start of the cue the quote starts in to
+ *   the end of the one it ends in, in ms from the Transcript's start (#136).
  */
 export type CitationLocation =
   | { kind: "page" | "slide"; from: number; to: number }
   | { kind: "rows"; sheet: string | null; from: number; to: number }
   | { kind: "lines"; from: number; to: number }
+  | { kind: "time"; from: number; to: number }
   | {
       kind: "section";
       heading: string | null;
@@ -960,10 +963,19 @@ export type LayoutChange =
 
 /**
  * The kinds of Document (ADR-0011): files of PDF, plain text, Markdown, Word
- * (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV, and web pages saved by
- * their address (#261).
+ * (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV, web pages saved by
+ * their address (#261), and Transcripts, WebVTT files (#136).
  */
-export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv" | "web";
+export type DocumentKind =
+  | "pdf"
+  | "text"
+  | "markdown"
+  | "docx"
+  | "pptx"
+  | "xlsx"
+  | "csv"
+  | "web"
+  | "transcript";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text,
@@ -4078,9 +4090,63 @@ export interface Meeting {
   audio: MeetingAudio;
   /** Why the latest audio couldn't be saved (e.g. the disk is full), until a part is saved again. */
   saveError: string | null;
+  /** Its Transcript, made on this computer (#136); null where this copy can't transcribe. */
+  transcript: MeetingTranscript | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Where a Meeting's Transcript is (#136):
+ * - "waiting": the Meeting hasn't recorded anything yet.
+ * - "preparing": the speech-to-text model is downloading or starting. The
+ *   audio is kept meanwhile, and transcribed once it can be.
+ * - "live": lines arrive a few seconds behind the Meeting.
+ * - "behind": live text fell behind, or couldn't go on: the meeting bar says
+ *   "Recording…", and the rest is transcribed once the Meeting stops.
+ * - "finishing": stopped; what is left is being transcribed and saved.
+ * - "saved": saved as a WebVTT file in the Output location (`savedPath`).
+ * - "empty": stopped with nothing said that could be transcribed: no file is saved.
+ * - "failed": it couldn't be finished; `problem` says why.
+ */
+export type TranscriptState =
+  | "waiting"
+  | "preparing"
+  | "live"
+  | "behind"
+  | "finishing"
+  | "saved"
+  | "empty"
+  | "failed";
+
+/**
+ * What stops a Transcript, each with one thing to do (`retryTranscript`):
+ * - "download": the speech-to-text model couldn't be downloaded.
+ * - "engine": it couldn't start, or stopped again and again.
+ * - "save": the WebVTT file couldn't be saved, or no Output location was chosen.
+ */
+export interface TranscriptProblem {
+  kind: "download" | "engine" | "save";
+  message: string;
+}
+
+export interface MeetingTranscript {
+  /** The Transcript's Document, from its first line: searchable and citable while the Meeting records. */
+  documentId: string | null;
+  state: TranscriptState;
+  /** How many lines it has. */
+  lines: number;
+  /** The speech being transcribed now, while live: where it starts, in the Meeting's time, and its words so far. */
+  partial: { startMs: number; text: string } | null;
+  /** The speech-to-text model, while it is downloading or failed to. */
+  model: TranscriptionModelStatus | null;
+  /** The WebVTT file in the Output location, once saved. */
+  savedPath: string | null;
+  problem: TranscriptProblem | null;
+}
+
+/** The speech-to-text model on this computer and its download, as the built-in embedding model's. */
+export type TranscriptionModelStatus = EmbeddingModelStatus;
 
 export interface MeetingAudio {
   /** Some audio is on this computer. */
@@ -5222,6 +5288,11 @@ export interface CoreApi {
   stopMeeting(meetingId: string): Promise<Meeting>;
   /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
   deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /**
+   * Tries the Meeting's Transcript again after a problem (`MeetingTranscript.problem`):
+   * downloads or starts the speech-to-text model, or saves the WebVTT file again.
+   */
+  retryTranscript(meetingId: string): Promise<Meeting>;
   /** Opens the system's settings where the User allows IncarnaMind to record this source. */
   openAudioSettings(source: AudioSource): Promise<void>;
 
@@ -5640,6 +5711,7 @@ const methods: Record<CoreApiMethod, true> = {
   resumeMeeting: true,
   stopMeeting: true,
   deleteMeetingAudio: true,
+  retryTranscript: true,
   openAudioSettings: true,
   getAgents: true,
   setAgentsEnabled: true,

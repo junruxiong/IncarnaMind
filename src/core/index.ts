@@ -31,6 +31,10 @@ export type {
   RerankingModelFiles,
   ScriptRuntimes,
   SpawnOptions,
+  SpeechSegment,
+  Transcriber,
+  TranscriberListener,
+  TranscriptionModelFiles,
   UsageDataSender,
   UsageEventMessage,
 } from "./adapters";

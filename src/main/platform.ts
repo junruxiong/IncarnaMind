@@ -26,6 +26,7 @@ import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
+import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
 
 /**
@@ -154,6 +155,14 @@ export async function chooseExecutor(log: Logger): Promise<Executor | undefined>
  */
 const fakeEmbedder =
   import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_EMBEDDER === "fake";
+
+/**
+ * Test-only launch flag: the smoke tests transcribe Meetings with a fake
+ * speech-to-text engine in the utility process, so no model is downloaded
+ * (#136). Only a test build honours it.
+ */
+const fakeTranscriber =
+  import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_TRANSCRIBER === "fake";
 
 /**
  * The built-in Skills: in a packaged app, where electron-builder copied them
@@ -359,6 +368,13 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       openLink: openAgentLink,
     },
     embedder: createUtilityProcessEmbedder({ fake: fakeEmbedder }),
+    transcriber: createUtilityProcessTranscriber({ fake: fakeTranscriber }),
+    ...(fakeTranscriber && {
+      transcriptionModelSource: {
+        model: { baseUrl: "http://localhost/", files: [] },
+        vad: { baseUrl: "http://localhost/", files: [] },
+      },
+    }),
     crossEncoder: createUtilityProcessCrossEncoder({ fake: fakeEmbedder }),
     // The fake models have no files to download.
     ...(fakeEmbedder && {
