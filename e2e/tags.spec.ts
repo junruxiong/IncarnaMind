@@ -184,6 +184,7 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   // Where the menu is laid out in the first frame drawn once it shows (as it grows in place
   // there, its transform aside: offsetTop and offsetHeight leave it out).
   await menu.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) throw new Error("The menu isn't an HTML element.");
     const firstFrame = new Promise((resolve) => {
       const measure = () => {
         const top = element.offsetTop;
