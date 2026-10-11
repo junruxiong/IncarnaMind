@@ -1,0 +1,216 @@
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { expect, type Page, test } from "@playwright/test";
+import type { CoreBridge } from "../src/core/api";
+import {
+  createDataFolder,
+  dismissChatSetup,
+  expectReadyDocuments,
+  launchApp,
+  openSettings,
+  removeDataFolder,
+  setWindowSize,
+  showSettingsPage,
+} from "./app";
+
+/*
+ * Settings → Agents (#351): turned on, an agent is connected after one plain
+ * confirmation that names what it may read and where that goes; Codex's
+ * settings file is written as shown, with Undo; an agent set up by pasting
+ * its settings searches, and its activity lists each call; Disconnect stops
+ * it. The home folder is a temporary one, so no agent of the User's is
+ * touched, and copying is caught in the page, so the machine's clipboard isn't.
+ */
+
+let dataDir: string;
+let sources: string;
+let home: string;
+test.beforeEach(async () => {
+  dataDir = await createDataFolder();
+  sources = await realpath(await createDataFolder());
+  home = await realpath(await createDataFolder());
+});
+test.afterEach(async () => {
+  await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+  await removeDataFolder(home);
+});
+
+const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
+
+/** Saves a screenshot when INCARNAMIND_SCREENSHOTS names a folder for them. */
+async function shot(window: Page, name: string) {
+  if (!SCREENSHOTS) return;
+  await mkdir(SCREENSHOTS, { recursive: true });
+  await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
+}
+
+const CODEX_SETTINGS = 'model = "gpt-6-luna"\n';
+
+/** A Folder "Coast" with one Document in it. */
+async function withCoast(window: Page) {
+  const tides = join(sources, "Tides.md");
+  await writeFile(
+    tides,
+    "# Tides\n\nSpring tides happen twice a month, at new moon and full moon, when the sun and the moon pull in line.\n",
+  );
+  await window.evaluate(async (path) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const coast = await bridge.createLibraryGroup({ name: "Coast", description: "The sea." });
+    await bridge.addDocuments([path], { groupId: coast.id });
+  }, tides);
+  await expectReadyDocuments(window, 1);
+}
+
+/** What the page copies goes here instead of the machine's clipboard. */
+async function catchCopies(window: Page) {
+  await window.evaluate(() => {
+    const caught = globalThis as unknown as { copied?: string };
+    navigator.clipboard.writeText = async (text: string) => {
+      caught.copied = text;
+    };
+  });
+}
+
+const copied = (window: Page) =>
+  window.evaluate(() => (globalThis as unknown as { copied?: string }).copied ?? "");
+
+test("off by default; Connect asks once, writes Codex's settings as shown, and Undo takes them back", async () => {
+  await mkdir(join(home, ".codex"));
+  const codexSettings = join(home, ".codex", "config.toml");
+  await writeFile(codexSettings, CODEX_SETTINGS);
+  const { app, window } = await launchApp(dataDir, { home });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    const page = await openSettings(window, "agents");
+    const enabled = page.getByTestId("agents-enabled");
+    await expect(enabled).not.toBeChecked();
+    await expect(page).toContainText("Off: no agent can reach your Documents.");
+    await expect(page.getByTestId("agents-clients")).toBeHidden();
+    await shot(window, "agents-off");
+
+    await enabled.click();
+    await expect(enabled).toBeChecked();
+    const installed = page.getByTestId("agents-installed");
+    const codex = installed.locator('[data-client="codex"]');
+    await expect(codex).toContainText("IncarnaMind adds itself to Codex’s settings");
+    await shot(window, "agents-on");
+    await codex.getByTestId("agent-connect").click();
+
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await expect(dialog).toContainText("Let Codex read your Documents?");
+    await expect(dialog).toContainText("Some plans may use it to train their models.");
+    await expect(dialog.getByTestId("connect-agent-change")).toContainText(codexSettings);
+    const allow = dialog.getByTestId("connect-agent-allow");
+    await expect(allow).toBeDisabled();
+    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("connect-agent-change").locator("summary").click();
+    await shot(window, "agents-connect-dialog");
+    await allow.click();
+    await expect(dialog).toBeHidden();
+
+    const connected = page.getByTestId("agent-pairing").filter({ hasText: "Codex" });
+    await expect(connected.getByTestId("agent-setup-done")).toContainText(
+      "Added to Codex’s settings.",
+    );
+    await expect(connected.getByTestId("agent-pairing-reads")).toHaveText("Reads Coast");
+    await shot(window, "agents-connected");
+    const written = await readFile(codexSettings, "utf8");
+    expect(written).toContain("[mcp_servers.incarnamind]");
+    expect(written.startsWith(CODEX_SETTINGS.trimEnd())).toBe(true);
+
+    await connected.getByTestId("agent-setup-undo").click();
+    await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
+    expect(await readFile(codexSettings, "utf8")).toBe(CODEX_SETTINGS);
+  } finally {
+    await app.close();
+  }
+});
+
+test("an agent set up by pasting its settings searches, its activity shows each call, and Disconnect stops it", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  try {
+    await dismissChatSetup(window);
+    await withCoast(window);
+    await catchCopies(window);
+    const page = await openSettings(window, "agents");
+    await page.getByTestId("agents-enabled").click();
+    const more = page.getByTestId("agents-more");
+    if (!(await more.evaluate((element) => (element as HTMLDetailsElement).open))) {
+      await more.locator("summary").click();
+    }
+    await more.locator('[data-client="other"]').getByTestId("agent-connect").click();
+    const dialog = window.getByTestId("connect-agent-dialog");
+    await expect(dialog).toContainText("Let Another agent read your Documents?");
+    await dialog.getByTestId("connect-agent-folder").check();
+    await dialog.getByTestId("connect-agent-allow").click();
+
+    const row = page.getByTestId("agent-pairing").filter({ hasText: "Another agent" });
+    await expect(row.getByTestId("agent-setup-done")).toContainText("Copied.");
+    const settings = JSON.parse(await copied(window)) as {
+      mcpServers: { incarnamind: { command: string; args: string[]; env: Record<string, string> } };
+    };
+    const server = settings.mcpServers.incarnamind;
+
+    const agent = new Client({ name: "test-agent", version: "1.0.0" });
+    await agent.connect(
+      new StdioClientTransport({
+        command: server.command,
+        args: server.args,
+        env: server.env,
+        stderr: "pipe",
+      }),
+    );
+    try {
+      await agent.callTool({ name: "search", arguments: { query: "spring tides" } });
+      await row.getByTestId("agent-activity-toggle").click();
+      await expect(row.getByTestId("agent-activity-call").first()).toContainText(
+        "Searched “spring tides” · 1 result",
+      );
+      await shot(window, "agents-activity");
+
+      // Its Folders change in place.
+      await row.getByTestId("agent-folders").click();
+      await row.getByTestId("agent-pairing-folders").getByRole("checkbox").uncheck();
+      await expect(row.getByTestId("agent-pairing-reads")).toHaveText("Reads no folders yet");
+
+      await row.getByTestId("agent-disconnect").click();
+      await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
+    } finally {
+      await agent.close();
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test("Local mode pauses agents, and the page reads in Chinese at a narrow window", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 900, 660);
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.setAgentsEnabled(true);
+      await bridge.setLocalOnly(true);
+      await bridge.updateSettings({ user: { language: "zh-CN" } });
+    });
+    await window.getByRole("button", { name: "设置" }).click();
+    const page = await showSettingsPage(window, "agents");
+    await expect(window.getByTestId("settings-page-title")).toHaveText("智能体");
+    await expect(page.getByTestId("agents-paused")).toContainText(
+      "开启“所有内容都留在这台电脑上”时暂停使用",
+    );
+    await shot(window, "agents-paused-zh-narrow");
+    // Nothing spills out of the page at its narrowest.
+    const fits = await page
+      .getByTestId("settings-page-agents")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+    expect(fits).toBe(true);
+  } finally {
+    await app.close();
+  }
+});

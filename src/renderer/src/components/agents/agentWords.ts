@@ -44,8 +44,9 @@ export function doneWords(result: AgentSetupResult, agent: string, t: Translate)
       return t("agents.done.wrote", { agent });
     case "copy":
       if (result.path) return t("agents.done.unreadable", { agent, path: result.path });
-      return result.how === "command"
-        ? t("agents.done.command")
+      if (result.how === "command") return t("agents.done.command");
+      return agent === t("agents.client.other")
+        ? t("agents.done.settings.other")
         : t("agents.done.settings", { agent });
   }
 }

@@ -59,14 +59,19 @@ export function AgentPairingRow({
     });
   }, [open, pairing.id, reportError]);
 
-  const names = pairing.folderIds
+  // The Folders as the User just chose them, shown at once; the core's answer then replaces them.
+  const [chosen, setChosen] = useState(pairing.folderIds);
+  useEffect(() => setChosen(pairing.folderIds), [pairing.folderIds]);
+  const names = chosen
     .map((id) => folders.find((folder) => folder.id === id)?.name)
     .filter((name): name is string => name !== undefined);
   const setFolder = (folderId: string, on: boolean) => {
-    const next = on
-      ? [...pairing.folderIds, folderId]
-      : pairing.folderIds.filter((id) => id !== folderId);
-    core.updateAgent(pairing.id, { folderIds: next }).catch(reportError);
+    const next = on ? [...chosen, folderId] : chosen.filter((id) => id !== folderId);
+    setChosen(next);
+    core.updateAgent(pairing.id, { folderIds: next }).catch((error: unknown) => {
+      setChosen(pairing.folderIds);
+      reportError(error);
+    });
   };
   const copySettings = async () => {
     try {
@@ -139,7 +144,7 @@ export function AgentPairingRow({
               >
                 <input
                   type="checkbox"
-                  checked={pairing.folderIds.includes(folder.id)}
+                  checked={chosen.includes(folder.id)}
                   onChange={(event) => setFolder(folder.id, event.target.checked)}
                   className="size-4 shrink-0 accent-ink"
                 />
