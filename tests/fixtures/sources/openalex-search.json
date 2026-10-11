@@ -249,7 +249,7 @@
       ],
       "primary_location": {
         "is_oa": true,
-        "landing_page_url": "https://doi.org/10.1101/2025.01.06.603201",
+        "landing_page_url": "http://STANDIN/files/chopoff.html",
         "pdf_url": null,
         "source": {
           "id": "https://openalex.org/S4306402567",
@@ -263,7 +263,7 @@
       "locations": [
         {
           "is_oa": true,
-          "landing_page_url": "https://doi.org/10.1101/2025.01.06.603201",
+          "landing_page_url": "http://STANDIN/files/chopoff.html",
           "pdf_url": null,
           "source": {
             "id": "https://openalex.org/S4306402567",
@@ -277,7 +277,7 @@
       ],
       "best_oa_location": {
         "is_oa": true,
-        "landing_page_url": "https://doi.org/10.1101/2025.01.06.603201",
+        "landing_page_url": "http://STANDIN/files/chopoff.html",
         "pdf_url": null,
         "source": {
           "id": "https://openalex.org/S4306402567",

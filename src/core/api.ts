@@ -1295,11 +1295,10 @@ export interface SourceLicence {
 
 /**
  * How a found work's full text can be had: "open", downloaded and processed
- * into a Document when added (a PDF, or text the provider gives by section);
- * open only as a "web-page" at its publisher, which adding keeps as a
- * reference record with the page to open (until web pages can be saved as
- * Documents, #261); or "closed" when no open copy is known, so adding keeps
- * its reference record only. Nothing is ever downloaded from behind a paywall.
+ * into a Document when added (a PDF, text the provider gives by section, or a
+ * "web-page" at its publisher's, saved as `saveWebPage` saves one); or
+ * "closed" when no open copy is known, so adding keeps its reference record
+ * only. Nothing is ever downloaded from behind a paywall.
  */
 export type SourceAccess =
   | {
@@ -1366,12 +1365,8 @@ export type AddFoundSourceResult =
       outcome: "reference";
       /** The reference record kept, with no Document. */
       recordId: string;
-      /**
-       * Why no Document: "closed", no open full text; "web-page", its open
-       * text is a web page at `landingUrl`; "download-failed", the open copy
-       * couldn't be had.
-       */
-      reason: "closed" | "web-page" | "download-failed";
+      /** Why no Document: "closed", no open full text; "download-failed", no open copy could be had. */
+      reason: "closed" | "download-failed";
       landingUrl: string | null;
       existing: boolean;
     }

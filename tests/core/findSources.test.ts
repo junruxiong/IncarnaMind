@@ -8,7 +8,7 @@
  * responses recorded from the real services: no test reaches the network.
  */
 import { readdir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, onTestFinished, test } from "vitest";
 import type {
   AnswerToolCall,
@@ -523,18 +523,71 @@ describe("Find sources: adding", () => {
     expect(await readdir(join(dataDir, "Sources")).catch(() => [])).toEqual([]);
   });
 
-  test("a work whose open text is the publisher's web page is a reference, with the page to open", async () => {
-    const { core } = await setUp();
+  test("a work whose open text is a web page is saved as a web page Document in the Folder, with the providers' reference record", async () => {
+    const { core, services, dataDir } = await setUp();
     answerConsent(core);
+    const folder = await core.createLibraryGroup({ name: "Thesis", description: "" });
     const result = found(await core.findSources({ query: "CRISPR off-target detection" }));
     const chopoff = work(result.works, /^CHOPOFF/);
-    expect(chopoff.access).toMatchObject({ kind: "open", format: "web-page" });
+    expect(chopoff.access).toMatchObject({ kind: "open", format: "web-page", version: "accepted" });
+    const page = `${services.url}/files/chopoff.html`;
 
-    expect(await core.addFoundSource({ key: chopoff.key })).toMatchObject({
-      outcome: "reference",
-      reason: "web-page",
-      landingUrl: "https://doi.org/10.1101/2025.01.06.603201",
+    const { result: added, document } = await add(core, chopoff.key, folder.id);
+
+    // Saved as Add a web page saves one: a snapshot in the data folder, and the address it came from.
+    expect(added).toMatchObject({ outcome: "document", existing: false });
+    expect(document).toMatchObject({ kind: "web", status: "ready" });
+    expect(await realpath(dirname(document?.path ?? ""))).toBe(
+      join(await realpath(dataDir), "Web pages"),
+    );
+    expect(document?.web).toMatchObject({ address: page, siteName: "bioRxiv" });
+    expect(document?.found).toMatchObject({
+      provider: { id: "openalex", name: "OpenAlex" },
+      address: page,
+      licence: { id: "cc-by-nc-nd", commercial: false },
+      version: "accepted",
     });
+    // Its record is the providers', not the page's: the page fills only what they left empty.
+    expect(document?.reference?.fields).toMatchObject({
+      title: "CHOPOFF: symbolic alignments enable fast and sensitive CRISPR off-target detection",
+      doi: "10.1101/2025.01.06.603201",
+      authors: expect.arrayContaining([expect.objectContaining({ family: "Labun" })]),
+    });
+    expect(document?.reference?.sources).toMatchObject({ title: "lookup", doi: "lookup" });
+    const library = await core.getLibrary();
+    expect(library.assignments.find((each) => each.documentId === document?.id)?.groupId).toBe(
+      folder.id,
+    );
+    const passages = await core.searchPassages("index of the genome once", { limit: 3 });
+    expect(passages[0]?.documentId).toBe(document?.id);
+    // Found again, it's in the Library; added again, it's the same Document.
+    const again = found(await core.findSources({ query: "CRISPR off-target detection" }));
+    expect(work(again.works, /^CHOPOFF/).inLibrary).toEqual({
+      documentId: document?.id,
+      recordId: document?.reference?.id,
+    });
+    expect(await core.addFoundSource({ key: chopoff.key })).toMatchObject({
+      outcome: "document",
+      existing: true,
+      document: { id: document?.id },
+    });
+  });
+
+  test("a web page that can't be saved leaves the reference record, with its page", async () => {
+    const { core, services } = await setUp();
+    answerConsent(core);
+    const result = found(await core.findSources({ query: "CRISPR off-target detection" }));
+    services.fail("files", 403);
+
+    const added = await core.addFoundSource({ key: work(result.works, /^CHOPOFF/).key });
+
+    expect(added).toMatchObject({
+      outcome: "reference",
+      reason: "download-failed",
+      landingUrl: `${services.url}/files/chopoff.html`,
+      existing: false,
+    });
+    expect(await core.listDocuments()).toEqual([]);
   });
 
   test("a found paper deleted permanently has its copy removed at the next start, once", async () => {

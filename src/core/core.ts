@@ -663,6 +663,12 @@ export function createCore(adapters: CoreAdapters): Core {
         batches.done(batchId);
       }
     },
+    async savePage(address, folderId, added) {
+      const result = await webPages.save({ address }, added);
+      if (result.outcome === "failed") return null;
+      if (!result.existing && folderId !== null) library.assign(result.document.id, folderId);
+      return { document: documents.get(result.document.id), existing: result.existing };
+    },
     document: (id) => documents.get(id),
     signal: lifetime.signal,
     reportError: (error) => console.error(error),

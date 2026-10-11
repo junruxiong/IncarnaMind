@@ -46,10 +46,8 @@ export type WorkIdentifier =
  * Where a work's full text can be had openly. "pdf": a PDF file at `url`.
  * "sections": text the provider gives by section, through its
  * `fetchFullText` (PMC's articles now; provisions of a law later). "html":
- * the text is a web page at `url`, the publisher's own; it is to be saved as
- * a web page snapshot (#261, `saveWebPage`) once that is in IncarnaMind,
- * and until then adding such a work keeps its reference record, with the
- * page to open.
+ * the text is a web page at `url`, a publisher's or a repository's, saved as
+ * `saveWebPage` saves one (#261), whatever its `provider`.
  */
 export interface FullTextLocation {
   format: "pdf" | "sections" | "html";
