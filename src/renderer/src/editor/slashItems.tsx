@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { QUESTION_BLOCK, type Skill } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { SkillIcon } from "../components/icons";
+import { insertFootnote } from "./footnoteSchema";
 import { TableIcon } from "./icons";
 import { emptyTable } from "./tableCommands";
 
@@ -132,6 +133,18 @@ export const noteSlashItems: readonly SlashItem[] = [
         .insertContent({ type: "inlineMath", attrs: { latex: "" } })
         .run();
       editor.commands.editMath(range.from);
+    },
+  },
+  {
+    id: "footnote",
+    label: "editor.slash.footnote",
+    // "jiaozhu" is 脚注 in pinyin.
+    keywords: ["note", "endnote", "jiaozhu"],
+    icon: "¹",
+    run(editor, range) {
+      // No focus command: its focus comes a frame later, and would take it from the footnote's text.
+      editor.commands.deleteRange(range);
+      insertFootnote(editor);
     },
   },
 ];
