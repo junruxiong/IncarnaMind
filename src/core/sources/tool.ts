@@ -46,7 +46,7 @@ function describe(work: FoundSource, index: number): string {
           work.access.format === "pdf"
             ? "PDF"
             : work.access.format === "web-page"
-              ? "a web page, added as a reference"
+              ? "a web page"
               : "full text"
         }${
           work.access.licence ? `, ${work.access.licence.label}` : ""

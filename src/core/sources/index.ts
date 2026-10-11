@@ -5,10 +5,11 @@
  * flow to it (../consent), never in local mode; their results are merged
  * (./merge) and kept for this session, so the work the User adds is the one
  * they saw. Adding downloads an open copy (only open-access ones, never
- * from behind a paywall) into the data folder's "Sources" and adds it as a
- * Document, its reference record filled from the providers' records and
- * where it came from recorded (./store); with no open copy, the reference
- * record alone is kept. The Answer's Tool (./tool) runs the same search.
+ * from behind a paywall) into the data folder's "Sources", or saves one that
+ * is a web page as web pages are saved (#261), and adds it as a Document,
+ * its reference record filled from the providers' records and where it came
+ * from recorded (./store); with no open copy, the reference record alone is
+ * kept. The Answer's Tool (./tool) runs the same search.
  */
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -54,6 +55,12 @@ export const FIND_SOURCES_SENDS: readonly DataKind[] = ["search-terms", "work-id
 /** For a row whose provider is unknown: never expected, as every work was found by one. */
 const UNKNOWN = { id: "unknown", name: "" };
 
+const LOCAL_MODE: AddFoundSourceResult = {
+  outcome: "failed",
+  reason: "local-mode",
+  message: "Local mode is on.",
+};
+
 /** How many works each provider is asked for. */
 const RESULTS_PER_PROVIDER = 10;
 
@@ -91,6 +98,16 @@ export interface SourcesOptions {
     folderId: string | null,
     added: (documentId: string) => void,
   ): Promise<Document | null>;
+  /**
+   * Saves a web page as a Document in a Folder, as Add a web page does;
+   * `added` hears a new one's id as it is stored, before it is processed.
+   * Null if the page couldn't be saved.
+   */
+  savePage(
+    address: string,
+    folderId: string | null,
+    added: (documentId: string) => void,
+  ): Promise<{ document: Document; existing: boolean } | null>;
   /** The live Document. */
   document(id: string): Document;
   /** Aborted when the core closes. */
@@ -164,16 +181,9 @@ const FAILURES: Record<SourceError["reason"], SourceFailureReason> = {
   "not-open": "service-error",
 };
 
-/**
- * A copy adding can download now. A web page ("html") is the seam for #261:
- * once `saveWebPage` is in IncarnaMind, it saves one as a snapshot Document,
- * and this takes it too.
- */
-const downloadable = (copy: FullTextLocation) => copy.format !== "html";
-
-/** How a found work's full text can be had: its first copy that adding can download, else a web page. */
+/** How a found work's full text can be had: as its first open copy, the one adding tries first. */
 function accessOf(work: MergedWork): SourceAccess {
-  const first = work.fullText.find(downloadable) ?? work.fullText[0];
+  const first = work.fullText[0];
   if (!first) return { kind: "closed" };
   return {
     kind: "open",
@@ -369,33 +379,14 @@ export function createSources(options: SourcesOptions) {
         existing: true,
       };
     }
-    let declined: string | null = null;
-    const fetchable = work.fullText.filter(downloadable);
-    for (const copy of fetchable) {
-      const provider = copy.provider === null ? null : byId.get(copy.provider);
-      // A copy only its provider can fetch, from a provider not here (or one that fetches none).
-      if (provider === undefined || (provider && !provider.fetchFullText)) continue;
-      if (provider && !(await allowed(provider.service))) {
-        declined = provider.name;
-        continue;
-      }
-      if (options.localOnly()) {
-        return { outcome: "failed", reason: "local-mode", message: "Local mode is on." };
-      }
-      let path: string;
-      let text: FullText;
-      try {
-        text = provider?.fetchFullText
-          ? await provider.fetchFullText(copy, context(options.signal))
-          : await downloadOpenPdf(http, copy.url, options.signal);
-        path = await keepCopy(text, work);
-      } catch (error) {
-        if (!(error instanceof SourceError)) throw error;
-        // That copy can't be had: the next one may be.
-        continue;
-      }
-      const document = await options.addFile(path, folderId, (documentId) => {
-        // Before the file is read: what its reading gives fills only what the providers left empty.
+    /**
+     * Hears a Document stored for the work, before it is read: what its
+     * reading gives fills only what the providers left empty.
+     */
+    const stored =
+      (copy: FullTextLocation, provider: SourceProvider | null, text: FullText | null) =>
+      (documentId: string) => {
+        const sections = text?.format === "sections" ? text : null;
         db.transaction(() => {
           const at = now();
           const linked =
@@ -410,19 +401,46 @@ export function createSources(options: SourcesOptions) {
               recordId: linked,
               provider: provider ?? byId.get(work.foundBy[0] ?? "") ?? UNKNOWN,
               workKey: work.key,
-              address: text.url,
-              licence: (text.format === "sections" ? text.licence : null) ?? copy.licence,
+              address: text?.url ?? copy.url,
+              licence: sections?.licence ?? copy.licence,
               version: copy.version,
-              versionDate:
-                (text.format === "sections" ? text.versionDate : null) ??
-                copy.versionDate ??
-                work.versionDate,
+              versionDate: sections?.versionDate ?? copy.versionDate ?? work.versionDate,
               fetchedAt: at,
             },
             at,
           );
         });
-      });
+      };
+    let declined: string | null = null;
+    for (const copy of work.fullText) {
+      if (copy.format === "html") {
+        // Open as a web page at its publisher's: saved as Add a web page saves one.
+        if (options.localOnly()) return LOCAL_MODE;
+        const saved = await options.savePage(copy.url, folderId, stored(copy, null, null));
+        if (saved) return { outcome: "document", ...saved };
+        continue;
+      }
+      const provider = copy.provider === null ? null : byId.get(copy.provider);
+      // A copy only its provider can fetch, from a provider not here (or one that fetches none).
+      if (provider === undefined || (provider && !provider.fetchFullText)) continue;
+      if (provider && !(await allowed(provider.service))) {
+        declined = provider.name;
+        continue;
+      }
+      if (options.localOnly()) return LOCAL_MODE;
+      let path: string;
+      let text: FullText;
+      try {
+        text = provider?.fetchFullText
+          ? await provider.fetchFullText(copy, context(options.signal))
+          : await downloadOpenPdf(http, copy.url, options.signal);
+        path = await keepCopy(text, work);
+      } catch (error) {
+        if (!(error instanceof SourceError)) throw error;
+        // That copy can't be had: the next one may be.
+        continue;
+      }
+      const document = await options.addFile(path, folderId, stored(copy, provider, text));
       if (document) return { outcome: "document", document, existing: false };
       await rm(path, { force: true });
     }
@@ -433,10 +451,8 @@ export function createSources(options: SourcesOptions) {
         message: `Downloading from ${declined} isn't allowed.`,
       };
     }
-    const page = work.fullText.find((copy) => copy.format === "html");
-    const reason = fetchable.length > 0 ? "download-failed" : page ? "web-page" : "closed";
-    // Its open text, when that is a web page; else its page at its publisher.
-    const landingUrl = (reason === "web-page" ? page?.url : null) ?? work.landingUrl;
+    const reason = work.fullText.length > 0 ? "download-failed" : "closed";
+    const { landingUrl } = work;
     if (existing) {
       return {
         outcome: "reference",
@@ -505,9 +521,7 @@ export function createSources(options: SourcesOptions) {
       if (folderId !== null && typeof folderId !== "string") {
         throw new InvalidInputError("A Folder id must be text, or null.");
       }
-      if (options.localOnly()) {
-        return { outcome: "failed", reason: "local-mode", message: "Local mode is on." };
-      }
+      if (options.localOnly()) return LOCAL_MODE;
       const work = works.get(input.key);
       if (!work) {
         return {

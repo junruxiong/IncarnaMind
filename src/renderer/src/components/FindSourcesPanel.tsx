@@ -309,7 +309,7 @@ function ResultRow({ work }: { work: FoundSource }) {
       providers: work.foundBy.map((each) => each.name).join(language === "zh-CN" ? "、" : ", "),
     }),
   ];
-  const open = access.kind === "open" && access.format !== "web-page";
+  const open = access.kind === "open";
   return (
     <li
       data-testid="find-sources-result"
@@ -345,11 +345,7 @@ function ResultRow({ work }: { work: FoundSource }) {
               data-testid="find-sources-get-pdf"
               className={buttonStyle("ghost")}
             >
-              {t(
-                access.kind === "open" && access.format === "web-page"
-                  ? "sources.openPage"
-                  : "sources.getPdf",
-              )}
+              {t("sources.getPdf")}
             </a>
           )}
       </div>

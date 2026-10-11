@@ -3,9 +3,9 @@
  * answers recorded from the real services on 2026-10-11
  * (tests/fixtures/sources/), trimmed: OpenAlex at /openalex, arXiv (its API
  * and its PDFs) at /arxiv, NCBI's E-utilities at /pubmed and Crossref at
- * /crossref. Open copies a recorded answer points to (a publisher's PDF) are
- * served at /files; "paywall.pdf" answers with a sign-in page, as a paywall
- * does. It records every request, so a test can check what was sent, and to
+ * /crossref. Open copies a recorded answer points to (a publisher's PDF or
+ * web page) are served at /files; "paywall.pdf" answers with a sign-in page,
+ * as a paywall does. It records every request, so a test can check what was sent, and to
  * whom. No test reaches the real services. Free of the test runner, so the
  * smoke tests use it too.
  */
@@ -56,6 +56,27 @@ export const OPEN_COPIES: Readonly<Record<string, Uint8Array>> = {
     "Improving the sensitivity of in vivo CRISPR off-target detection",
     ["This is the preprint of the paper."],
   ),
+};
+
+/** The open copies that are a publisher's web page, by file name. */
+const OPEN_PAGES: Readonly<Record<string, string>> = {
+  "chopoff.html": `<!doctype html>
+<html lang="en">
+<head>
+<title>CHOPOFF: symbolic alignments enable fast and sensitive CRISPR off-target detection | bioRxiv</title>
+<meta property="og:site_name" content="bioRxiv">
+</head>
+<body>
+<nav><a href="/">Home</a> <a href="/about">About</a> <a href="/submit">Submit a manuscript</a></nav>
+<article>
+<h1>CHOPOFF: symbolic alignments enable fast and sensitive CRISPR off-target detection</h1>
+<p>CHOPOFF searches a genome for the off-target sites of a CRISPR guide with symbolic alignments, which allow mismatches, insertions and deletions at once.</p>
+<p>It builds an index of the genome once, then answers each guide from that index, so a search over a whole genome with many guides takes minutes rather than days.</p>
+<p>Against other tools, CHOPOFF finds the sites they find and more of those with several mismatches and a bulge, which matter when editing cells from patients.</p>
+</article>
+</body>
+</html>
+`,
 };
 
 /** arXiv's PDFs, by id with its version. */
@@ -163,6 +184,8 @@ export async function startSourceServices(): Promise<SourceServices> {
               "<html><body><form>Sign in to read</form></body></html>",
             );
           }
+          const page = OPEN_PAGES[tail];
+          if (page) return send(response, 200, "text/html; charset=utf-8", page);
           const copy = OPEN_COPIES[tail];
           return copy ? send(response, 200, "application/pdf", copy) : notFound();
         }
