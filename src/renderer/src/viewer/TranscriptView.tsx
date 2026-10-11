@@ -133,12 +133,16 @@ function TranscriptContent({
   );
   const units = useMemo(() => transcriptUnits(transcript), [transcript]);
 
-  // Opened at a Citation: the quote washed in the cited lines, else anywhere; the view goes there.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each open request goes there again
+  // Opened at a Citation: the quote washed in the cited lines, else anywhere; the view goes there,
+  // once for each open request: lines arriving afterwards don't pull the view back.
+  const shownRequest = useRef<string | null>(null);
   useLayoutEffect(() => {
     const body = list.current;
     const container = scroller.current;
-    if (!body || !container || !target.quote) return;
+    const request = `${target.request}:${target.quote}:${target.pageFrom}:${target.pageTo}`;
+    if (!body || !container || !target.quote || shownRequest.current === request) return;
+    if (units.length === 0) return;
+    shownRequest.current = request;
     unmarkQuote(body);
     const cited = units.filter(
       (unit) =>
