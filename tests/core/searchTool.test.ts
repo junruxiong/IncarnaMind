@@ -268,6 +268,42 @@ describe("The document-search Tool", { timeout: 30_000 }, () => {
     ]);
     expect(reranked).toEqual([["p3", "p7", "p40"]]);
   });
+
+  test("says how relevant the reranker found each hit, and nothing when it kept search's own scores", async () => {
+    const passage = (index: number, score = 0) => ({
+      seq: index,
+      passageId: `p${index}`,
+      documentId: `d${index}`,
+      documentName: `Document ${index}`,
+      documentKind: "markdown" as const,
+      contentHash: "hash",
+      pageFrom: 1,
+      pageTo: 1,
+      position: 0,
+      windowFrom: 0,
+      windowTo: 0,
+      text: `Passage ${index}`,
+      score,
+    });
+    const sources: SearchToolSources = {
+      candidates: async () => [],
+      rerankCandidates: async () => [passage(1, 1 / 61), passage(2, 1 / 62)],
+      window: (documentId) => [passage(Number(documentId.slice(1)))],
+    };
+    const scoring: Reranker = async (_query, candidates) =>
+      candidates.map((each) => ({ ...each, score: each.passageId === "p2" ? 0.9 : 0.1 }));
+    // A reranker whose model isn't there yet gives search's order and scores back.
+    const notReady: Reranker = async (_query, candidates) => [...candidates];
+
+    const reranked = await searchDocumentsTool(sources, "lighthouse", { rerank: scoring });
+    const kept = await searchDocumentsTool(sources, "lighthouse", { rerank: notReady });
+
+    expect(reranked.map((each) => [each.passageId, each.relevance])).toEqual([
+      ["p2", 0.9],
+      ["p1", 0.1],
+    ]);
+    expect(kept.map((each) => each.relevance)).toEqual([undefined, undefined]);
+  });
 });
 
 describe("The search Tool's ranks", () => {

@@ -38,8 +38,10 @@ import { missingList } from "../referenceEditing";
 import { useAppStore } from "../store";
 import { CiteAsPanel } from "./CiteAsPanel";
 import { LibraryFilterBar } from "./LibraryFilterBar";
+import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
 import { DocumentLineIcon, SettingsLineIcon } from "./lineIcons";
+import { ReferenceImportPanel } from "./ReferenceImportPanel";
 import { DocumentTagChips } from "./TagChips";
 import { useTabPlace } from "./tabs/tabItems";
 import { buttonStyle, errorTextClass, fieldLabelClass, inputClass } from "./ui";
@@ -216,6 +218,7 @@ export function LibraryPane() {
             >
               {t("documents.add")}
             </button>
+            <LibraryMoreMenu />
           </div>
           {/* The name takes the whole width and wraps by word, two lines at most (#213); the actions sit below it, never beside. */}
           <div className="mb-2">
@@ -293,6 +296,7 @@ export function LibraryPane() {
               <SettingsLineIcon className="size-4" />
             </button>
           </div>
+          <ReferenceImportPanel />
           {error && (
             <p role="alert" className={`${errorTextClass} mb-4`}>
               {error}

@@ -7,7 +7,7 @@ describe("Settings", () => {
     const core = startCore(await createTempDataFolder());
 
     expect(await core.getSettings()).toEqual({
-      user: { language: "system", chatModel: null },
+      user: { language: "system", chatModel: null, suggestWhileWriting: false },
       device: {
         sidebarWidth: 248,
         sidebarHidden: false,
@@ -21,6 +21,7 @@ describe("Settings", () => {
         },
         skillScriptsEnabled: true,
         skillScriptTimeoutSeconds: 60,
+        suggestionOffers: 0,
         meetingsEnabled: false,
         meetingSystemAudio: true,
         meetingNoticeAccepted: false,
@@ -89,7 +90,11 @@ describe("Settings", () => {
     await core.updateSettings({ device: { sidebarWidth: 320 } });
     const settings = await core.updateSettings({ user: { language: "zh-CN" } });
 
-    expect(settings.user).toEqual({ language: "zh-CN", chatModel: null });
+    expect(settings.user).toEqual({
+      language: "zh-CN",
+      chatModel: null,
+      suggestWhileWriting: false,
+    });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
       sidebarHidden: false,
@@ -103,6 +108,7 @@ describe("Settings", () => {
       },
       skillScriptsEnabled: true,
       skillScriptTimeoutSeconds: 60,
+      suggestionOffers: 0,
       meetingsEnabled: false,
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
@@ -133,17 +139,18 @@ describe("Settings", () => {
       },
       skillScriptsEnabled: false,
       skillScriptTimeoutSeconds: 15,
+      suggestionOffers: 1,
       meetingsEnabled: true,
       meetingSystemAudio: false,
       meetingNoticeAccepted: true,
     };
-    await before.updateSettings({ user: { language: "zh-CN" }, device });
+    await before.updateSettings({ user: { language: "zh-CN", suggestWhileWriting: true }, device });
     before.close();
 
     const after = startCore(dataDir);
 
     expect(await after.getSettings()).toEqual({
-      user: { language: "zh-CN", chatModel: null },
+      user: { language: "zh-CN", chatModel: null, suggestWhileWriting: true },
       device,
       language: "zh-CN",
       scriptSandbox: "none",
