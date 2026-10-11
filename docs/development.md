@@ -18,6 +18,8 @@ npm run eval         # the retrieval evaluation (see below)
 
 Keep development data apart from your real data folder by pointing the app at another one: `INCARNAMIND_DATA_DIR=/tmp/incarnamind-dev npm run dev`.
 
+On Linux with no desktop, run the smoke test on a virtual display, as CI does: `xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run test:smoke`.
+
 ## Installers
 
 Installers for testers come from CI only: pushing a version tag builds them on a clean checkout (see [releasing.md](releasing.md)). Don't hand out a local `npm run dist` build. `npm run dist:dir` is for checking your own packaging changes; follow it with `npm run check:package`, which fails when `app.asar` holds anything but `out/`, `node_modules/` and `package.json`, or when a size is over its budget.

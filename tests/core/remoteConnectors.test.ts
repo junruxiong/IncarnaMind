@@ -696,7 +696,7 @@ describe("Consent and removal", { timeout: 30_000 }, () => {
     expect(await core.listConnectors()).toEqual([]);
   });
 
-  test("a sign-in waits for the keychain: without safe storage, it doesn't start", async () => {
+  test("a sign-in waits for the keychain: without safe storage, it doesn't start, and the Connector says why", async () => {
     const setup = await setUp({ keychain: createMemoryKeychain("unavailable") });
     const added = await addWiki(setup);
 
@@ -704,6 +704,9 @@ describe("Consent and removal", { timeout: 30_000 }, () => {
 
     expect(result).toMatchObject({ ok: false, error: { kind: "secret-storage" } });
     expect(setup.browser.opened).toEqual([]);
+    // The row shows it under the sign-in button, so the click doesn't seem to do nothing.
+    const [connector] = await setup.core.listConnectors();
+    expect(connector).toMatchObject({ signIn: { error: { kind: "secret-storage" } } });
   });
 });
 

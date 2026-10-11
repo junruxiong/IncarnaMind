@@ -21,6 +21,8 @@ const CONTENT_TYPES: Readonly<Record<DocumentKind, string>> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   csv: "text/csv",
+  // Our own snapshot of a page; the viewer reads it with the code that indexed it.
+  web: "application/xhtml+xml",
 };
 
 /** Must run before the app is ready. */

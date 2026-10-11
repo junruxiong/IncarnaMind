@@ -5,6 +5,7 @@ What IncarnaMind sends from your computer, and how to change it. **Settings → 
 - **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector, the text you select for Edit with AI with the paragraphs it is in, and, once you turn on suggestions as you write, the paragraph you pause in with the Passages that match it) goes only to the service you picked, and only after you allow it. Edit with AI asks once for its own flow, and in local mode uses only a model on this computer. Settings → Privacy lists every flow and lets you revoke it.
 - **Look up** in a Document's "Cite as" sends its DOI to Crossref, or its arXiv ID to arXiv, and nothing else from the Document, only when you click it, after you allow it once. It is off in local mode.
 - **Traffic without your content**: update checks, model downloads, and remote Connectors' sign-in.
+- **Web pages you add** are fetched from your computer, straight from their site, when you add one and when you choose Fetch again. Nothing else on the page is loaded: not its pictures, scripts or trackers.
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
 - **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy.
@@ -45,7 +46,7 @@ Every field is a value from a closed list, a whole number, or true/false: there'
 | `question_asked` | `provider`: the kind of provider of the model (`openai`, `anthropic`, `google`, `deepseek`, `qwen`, `kimi`, `glm`, `siliconflow`, `mistral`, `xai`, `openrouter`, `openai-compatible`, `ollama`, `chatgpt`); `local`: whether the model runs on your computer. Never the Question or the model's prompt |
 | `answer_finished` | `outcome`: `done` or `stopped`; `duration_ms`: how long it took; `citations`: how many Citations it has; `found`, `not_found`, `cant_check`: how many of them by check |
 | `citation_opened` | `check`: the Citation's check, `found`, `not-found`, `unsupported`, `contradicted`, `cant-check` or `checking` |
-| `documents_added` | `documents`: how many new Documents; `already_added`: files that were in already; `skipped`: files that couldn't be added; `pdf`, `docx`, `pptx`, `xlsx`, `csv`, `markdown`, `text`: the new Documents by format. Never their names |
+| `documents_added` | `documents`: how many new Documents; `already_added`: files that were in already; `skipped`: files that couldn't be added; `pdf`, `docx`, `pptx`, `xlsx`, `csv`, `markdown`, `text`, `web`: the new Documents by format (`web`: web pages saved by their address). Never their names or addresses |
 | `folder_linked` | No fields: you linked a folder. Never its name or path |
 | `organize_run` | `documents`: how many Documents; `all`: whether it was all of them; `model`: the kind of model, `chat`, `jev`, `auto` or `ollama` |
 | `mind_exported` | `format`: `markdown` or `docx`; `questions`: whether Questions were included |

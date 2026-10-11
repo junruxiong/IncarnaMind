@@ -1,12 +1,13 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 import type { Document } from "../../../core/api";
-import { displayName, fileNameOf } from "../../../shared/documentNames";
+import { displayName, sourceOf } from "../../../shared/documentNames";
 import { DocumentLineIcon, PinLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { DocumentTagChips } from "../components/TagChips";
 import { files } from "../core";
 import { errorMessage } from "../errors";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
+import { pageDate } from "../webPages";
 import { OpenExternallyIcon } from "./icons";
 
 /** What every view's toolbar needs from its tab: the Document shown, and whether it is a preview. */
@@ -33,7 +34,8 @@ export function HeaderDivider() {
  * A Document tab's 36px toolbar, under its group's tab strip: the outline
  * toggle (`leading`), the Document's kind and name, its Tags, the view's own
  * controls (`children`: where it is, page navigation and zoom for a PDF),
- * then Keep open for a preview, and "Open in default app".
+ * then Keep open for a preview, and "Open in default app" (for a web page,
+ * when it was fetched and "Open the live page").
  */
 export function ViewerHeader({
   leading,
@@ -49,6 +51,7 @@ export function ViewerHeader({
   openable?: boolean;
 }) {
   const t = useT();
+  const language = useLanguage();
   const { document, preview, keep } = useContext(ViewerFrameContext);
   /** Why the Document's own app couldn't open it, until it is tried again. */
   const [problem, setProblem] = useState<string | null>(null);
@@ -78,10 +81,10 @@ export function ViewerHeader({
           <span
             data-testid="viewer-title"
             title={
-              displayName(document) === fileNameOf(document.path)
+              displayName(document) === sourceOf(document)
                 ? displayName(document)
                 : `${displayName(document)}
-${fileNameOf(document.path)}`
+${sourceOf(document)}`
             }
             className="viewer-title"
           >
@@ -103,12 +106,17 @@ ${fileNameOf(document.path)}`
             <span>{t("viewer.keep")}</span>
           </button>
         )}
-        {document && openable && document.fileStatus === "available" && (
+        {document?.web && (
+          <span data-testid="viewer-web-fetched" className="viewer-meta">
+            {t("webPages.fetched", { date: pageDate(document.web.fetchedAt, language) })}
+          </span>
+        )}
+        {document && (document.web || (openable && document.fileStatus === "available")) && (
           <button
             type="button"
             data-testid="viewer-open-externally"
-            aria-label={t("documents.copy.open")}
-            title={t("documents.copy.open")}
+            aria-label={t(document.web ? "webPages.openLive" : "documents.copy.open")}
+            title={document.web ? document.web.address : t("documents.copy.open")}
             onClick={openExternally}
             className="viewer-icon-button"
           >
