@@ -47,12 +47,14 @@ Every night, and by hand from the Actions tab, the Electron smoke test (macOS) i
 
 The scripted chat model (`fakeChat`) is for automated tests only: CI has no keys, and its runs must give the same result every time. Before you call an AI feature done (Answers, Citations, Organize, tagging, Tasks, anything a model does), use it by hand in the built app with real models from **several providers**, because they differ in how they follow instructions, cite and format:
 
-- **Anthropic:** a small, fast model such as Haiku or Sonnet.
-- **OpenAI:** a current small model.
+- **Anthropic:** Haiku first. Sonnet only when Haiku fails at the task or the feature needs the stronger model; say why in the pull request.
+- **OpenAI:** the cheapest current small model (a "mini" or "nano" tier), never a large one. Once "Continue with ChatGPT" (#122) lands, use a ChatGPT plan's allowance instead of an API key.
 - **An Ollama cloud model** (its name ends in `-cloud`, for example a `gpt-oss` or `qwen3` cloud model). The app treats it as leaving the computer, which is fine for test Documents.
 - **A small local model through Ollama,** for example `qwen3.5:4b`, with the context at 8,192 tokens or less, one model loaded at a time, and unloaded afterwards. Required when the feature runs in Local mode.
 
 Use at least three of these, including one from Anthropic and one from OpenAI, and say where a model did worse than the others.
+
+**Keep the bill small.** These keys are paid by the person, not a company. Use the cheapest model that answers the question, run each check once per model rather than many times, use short test Documents, and stop as soon as the result is clear. Large or "pro" models need a reason in the pull request.
 
 Use a temporary data folder and test Documents, never your own files. Say in the pull request which models you used and what you checked with each: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
 
