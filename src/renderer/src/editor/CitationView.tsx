@@ -1,5 +1,5 @@
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ANSWER_BLOCK, BLOCK_ID_ATTRIBUTE, type CitationAttributes } from "../../../core/api";
 import { badgeMessage, type CitationState, citationState } from "../../../shared/citations";
@@ -10,7 +10,7 @@ import { useT } from "../i18n";
 import { recordUsage, useAppStore } from "../store";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
-import { useMindId } from "./mindContext";
+import { InFootnoteContext, useMindId } from "./mindContext";
 import { Popover } from "./Popover";
 
 /** The Answer a Citation sits in, if it does (it may have been copied into a Note). */
@@ -33,10 +33,12 @@ function answerAround(
 }
 
 /**
- * A Citation in the text: an 18px marker with its number, the Citation's
- * order within its Answer (see `CitationNumbers`). It stays neutral unless the
+ * A Citation in the text: an 18px marker with its number, its place among the
+ * Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
  * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
- * or, in a narrow Mind, as an icon inside the marker. Clicking it opens the
+ * or, in a narrow Mind, as an icon inside the marker. In a footnote's text
+ * it is part of the footnote: the marker shows where it points and its
+ * check's icon instead of a number. Clicking it opens the
  * cited page and shows its card: the check in words, the quote, and, when the
  * quote wasn't found, ways on: open the page anyway, remove the Citation, or
  * regenerate the Answer.
@@ -65,6 +67,11 @@ export function CitationView({
   const badgeText = t(badge.key, badge.params);
   const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
+  // In a footnote's text it is part of the footnote: it shows where it points, not a number.
+  const inFootnote = useContext(InFootnoteContext);
+  const source = where
+    ? t("citation.where", { document: documentName, location: where })
+    : documentName;
   const [open, setOpen] = useState(false);
   const marker = useRef<HTMLButtonElement>(null);
 
@@ -108,13 +115,9 @@ export function CitationView({
   };
 
   // The number, the Document, where it points and the check: the marker only shows the number.
-  const label = t("citation.label", {
-    number,
-    document: where
-      ? t("citation.where", { document: documentName, location: where })
-      : documentName,
-    badge: badgeText,
-  });
+  const label = inFootnote
+    ? t("citation.inFootnote.label", { document: source, badge: badgeText })
+    : t("citation.label", { number, document: source, badge: badgeText });
 
   return (
     <NodeViewWrapper
@@ -132,7 +135,7 @@ export function CitationView({
         data-testid="citation-chip"
         data-check={state.check}
         data-number={number || undefined}
-        className="citation-marker"
+        className={`citation-marker ${inFootnote ? "citation-marker--source" : ""}`}
         aria-label={label}
         title={label}
         aria-haspopup="dialog"
@@ -142,7 +145,7 @@ export function CitationView({
         onClick={onClick}
       >
         <CheckMarkIcon check={state.check} className="citation-marker-icon" />
-        <span>{number || "·"}</span>
+        <span>{inFootnote ? source : number || "·"}</span>
       </button>
       {open &&
         marker.current &&

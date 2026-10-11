@@ -24,8 +24,8 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
    * popover and `anchor`.
    */
   onDismiss(): void;
-  /** What gets the focus once the popover shows, e.g. a menu's first item. */
-  initialFocus?: RefObject<HTMLElement | null>;
+  /** What gets the focus once the popover shows, e.g. a menu's first item, or a text editor. */
+  initialFocus?: RefObject<{ focus(): void } | null>;
   children: ReactNode;
 }
 
@@ -65,9 +65,16 @@ export function Popover({
       });
     };
     const stopFollowing = autoUpdate(anchor, element, place);
+    /**
+     * Whether an event happened in another of the editor's popovers: one
+     * opened from inside this one, such as the card of a Citation in a
+     * footnote's text, which is not outside it.
+     */
+    const inAnother = (target: EventTarget | null) =>
+      target instanceof Element && !element.contains(target) && !!target.closest(".editor-popover");
     const dismissOnPressOutside = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Node) || element.contains(target)) return;
+      if (!(target instanceof Node) || element.contains(target) || inAnother(target)) return;
       if (anchor instanceof Element && anchor.contains(target)) return;
       dismiss.current();
     };
@@ -75,7 +82,7 @@ export function Popover({
     // button that opened it. Captured, and marked handled, before the
     // Document viewer's own Esc sees it; inside, `onKeyDown` handles it.
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape" || event.defaultPrevented || inAnother(event.target)) return;
       if (event.target instanceof Node && element.contains(event.target)) return;
       event.preventDefault();
       dismiss.current();

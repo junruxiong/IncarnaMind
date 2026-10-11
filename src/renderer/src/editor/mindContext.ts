@@ -9,6 +9,12 @@ export const MindIdContext = createContext<string | null>(null);
  */
 export const ComposerDockContext = createContext<HTMLElement | null>(null);
 
+/**
+ * Whether a node view is drawn in a footnote's text (`FootnoteText`), where a
+ * Citation is part of the footnote and has no number of its own.
+ */
+export const InFootnoteContext = createContext(false);
+
 export function useMindId(): string {
   const mindId = useContext(MindIdContext);
   if (!mindId) throw new Error("A node view is drawn outside a Mind's editor.");
