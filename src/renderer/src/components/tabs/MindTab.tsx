@@ -5,6 +5,7 @@ import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
+import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
 import { buttonStyle } from "../ui";
@@ -28,6 +29,7 @@ export function MindTab({ mindId }: { mindId: string }) {
           <div className="mind-measure">
             {isExample && <ExampleBanner />}
             <MindTitle mind={mind} />
+            <MeetingInMind mindId={mind.id} />
             {/* The example works without a chat model: it says so in its Answer instead. */}
             {!isExample && <ChatReadinessNotice />}
             <ComposerDockContext.Provider value={dock}>
