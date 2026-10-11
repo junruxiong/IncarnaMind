@@ -1,4 +1,9 @@
-import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
+import {
+  NodeViewContent,
+  NodeViewWrapper,
+  type ReactNodeViewProps,
+  useEditorState,
+} from "@tiptap/react";
 import { BLOCK_ID_ATTRIBUTE, type SkillAvailability } from "../../../core/api";
 import {
   hasSearchScope,
@@ -17,7 +22,7 @@ import { useAppStore } from "../store";
 import { ChevronDownSmallIcon, RemoveIcon } from "./icons";
 import { useMindId } from "./mindContext";
 import { askInEditor } from "./questionCommands";
-import { isFolded, toggleFold } from "./questionFold";
+import { isQuestionFolded, toggleFold } from "./questionFold";
 import { ScopeChips } from "./ScopeChips";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
@@ -33,7 +38,7 @@ const CHIPS_SHOWN = 8;
  * in it. Its text can be edited, and Enter asks it again; when that can't be
  * done, it says why underneath.
  */
-export function QuestionView({ node, editor, decorations, updateAttributes }: ReactNodeViewProps) {
+export function QuestionView({ node, editor, updateAttributes }: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
   const questionId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
@@ -44,7 +49,11 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
   );
   const empty = node.content.size === 0;
   const canAsk = questionId !== null && node.textContent.trim() !== "";
-  const folded = isFolded(decorations);
+  const folded = useEditorState({
+    editor,
+    selector: ({ editor: current }) =>
+      questionId !== null && isQuestionFolded(current.state, questionId),
+  });
   const dropSkill = () => {
     updateAttributes({ forcedSkill: null });
     if (questionId) useAnswers.getState().dismiss(questionId);
@@ -81,8 +90,8 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
         className="question-fold"
       >
         <ChevronDownSmallIcon className="question-fold-chevron" />
-        <SparkLineIcon className="question-spark" />
       </button>
+      <SparkLineIcon aria-hidden="true" className="question-spark" />
       <div className="question-row">
         {empty && (
           <span contentEditable={false} aria-hidden="true" className="question-placeholder">

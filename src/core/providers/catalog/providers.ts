@@ -49,7 +49,12 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。",
       },
     ],
-    checked: "2026-10-10",
+    planCredits: {
+      en: "Claude Max and Team plans include monthly API credits, for keys in the Console organization you link to the plan. Free, Pro and Enterprise plans don't.",
+      zh: "Claude Max 和 Team 订阅每月附带 API 额度，可用于你关联到订阅的 Console 组织中的密钥。Free、Pro 和 Enterprise 订阅不含。",
+      url: "https://support.claude.com/en/articles/17154008",
+    },
+    checked: "2026-10-11",
   },
   {
     id: "openai",
@@ -82,7 +87,12 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。",
       },
     ],
-    checked: "2026-10-10",
+    planCredits: {
+      en: "ChatGPT plans don't include API usage. With ChatGPT Plus or Pro, you can use Continue with ChatGPT instead of a key.",
+      zh: "ChatGPT 订阅不包含 API 用量。如果你有 ChatGPT Plus 或 Pro，可以改用“使用 ChatGPT 继续”，无需密钥。",
+      url: "https://learn.chatgpt.com/docs/sign-in-with-chatgpt",
+    },
+    checked: "2026-10-11",
   },
   {
     id: "google",
@@ -108,8 +118,8 @@ const PROVIDERS = [
     dataUse: {
       training: "free-tier",
       summary: {
-        en: "On the free tier, Google uses API data to improve its products, with human review; on a paid plan it doesn't.",
-        zh: "Google 会用免费层级的 API 数据改进其产品，并可能经人工审阅；付费方案则不会。",
+        en: "On the free tier, Google uses API data to improve its products, with human review, except in the EEA, Switzerland and the UK; on a paid plan it doesn't.",
+        zh: "免费层级下，Google 会用 API 数据改进其产品，并可能经人工审阅（欧洲经济区、瑞士和英国除外）；付费方案则不会。",
       },
       url: "https://ai.google.dev/gemini-api/terms",
     },
@@ -119,7 +129,12 @@ const PROVIDERS = [
         zh: "中国大陆和香港无法使用。欧洲经济区、英国和瑞士仅限付费方案。",
       },
     ],
-    checked: "2026-10-10",
+    planCredits: {
+      en: "Google AI Pro and Ultra include monthly Google Cloud credits that can pay for the Gemini API, once you activate them in the Google Developer Program.",
+      zh: "Google AI Pro 和 Ultra 订阅每月附带 Google Cloud 额度，在 Google 开发者计划中激活后可用于 Gemini API。",
+      url: "https://blog.google/innovation-and-ai/technology/developers-tools/gdp-premium-ai-pro-ultra/",
+    },
+    checked: "2026-10-11",
   },
   {
     id: "openrouter",

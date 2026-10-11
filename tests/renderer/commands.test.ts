@@ -132,8 +132,8 @@ describe("shortcuts", () => {
       for (const command of all) {
         if (!command.shortcut || command.shortcut.list) continue;
         const form = keysForm(keysOn(command.shortcut.keys, mac), mac);
-        // A plain key, or one with Shift, types.
-        expect(/(meta|ctrl|alt)\+/.test(form), command.id).toBe(true);
+        // A plain key, or one with Shift, types; a function key doesn't.
+        expect(/(meta|ctrl|alt)\+|(^|\+)f\d+$/i.test(form), command.id).toBe(true);
         // A key of text is taken only on a Block, where the command says it applies.
         if (command.shortcut.inText) {
           expect(command.appliesTo, command.id).toEqual(["block"]);
