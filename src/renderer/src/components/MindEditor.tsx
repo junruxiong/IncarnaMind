@@ -159,8 +159,8 @@ const citationView = ReactNodeViewRenderer(CitationView, {
  * document, with the slash menu, the "@" picker of a Question's Search scope,
  * the drag handle, the formatting menu, the table menu, smart typography, the LaTeX field,
  * suggestions as the User writes (see `Suggestions`),
- * the margin column of Citation checks, and the composer at the column's
- * foot, where Questions are asked (drawn in the dock, `ComposerDockContext`).
+ * the margin column of Citation checks, and the composer, where Questions
+ * are asked (drawn in the assistant, when it reads this Mind: `ComposerDockContext`).
  *
  * Every text starts at one edge: the column (styles.css, `.mind-column`) has
  * a left margin for the controls (the block handle, a Question's spark and
@@ -342,15 +342,17 @@ function MindEditorView({
   }, [editor, label, emptyFormula]);
 
   // The cursor is where the next Question goes while the focus is in the editor, or has gone
-  // from it only to the composer; anywhere else, Questions go at the end of the Mind. A dialog
-  // that asks something on the way (consent to send, say) gives the focus back: it doesn't count.
+  // from it only to the assistant the composer is in (its menus, its header); anywhere else,
+  // Questions go at the end of the Mind. A dialog that asks something on the way (consent to
+  // send, say) gives the focus back: it doesn't count.
   useEffect(() => {
+    const assistant = dock?.closest("[data-assistant]") ?? dock;
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (editor.view.dom.contains(target)) cursorInMind.current = true;
       else if (
-        !dock?.contains(target) &&
+        !assistant?.contains(target) &&
         !(target instanceof Element && target.closest("dialog"))
       ) {
         cursorInMind.current = false;

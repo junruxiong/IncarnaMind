@@ -832,7 +832,54 @@ export interface WindowLayout {
   focusedGroupId: string;
   /** How many closed tabs ⇧⌘T can reopen, most recent first. */
   reopenable: number;
+  /** Where the window's one assistant sits, outside the groups, and its sizes. */
+  assistant: AssistantPlace;
 }
+
+/**
+ * Where the assistant sits (#253): docked on the window's right, left or
+ * bottom edge, beside the card, or floating over it.
+ */
+export type AssistantDock = "right" | "left" | "bottom" | "float";
+
+/** A window's corner: a floating assistant keeps its distance to the one nearest it. */
+export type AssistantCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+/** A floating assistant's size and place, in CSS pixels. */
+export interface AssistantFloat {
+  width: number;
+  height: number;
+  /** The window's corner nearest to it. */
+  corner: AssistantCorner;
+  /** From the corner's side of the window (its left or right edge) to the box's. */
+  x: number;
+  /** From the corner's top or bottom edge of the window to the box's. */
+  y: number;
+}
+
+/**
+ * The User's choices for the assistant, kept with the window's layout. A side
+ * dock shows at the bottom while the window is narrow, without changing `dock`.
+ */
+export interface AssistantPlace {
+  dock: AssistantDock;
+  /** Folded: a 44px rail on a side, or only its header at the bottom or floating. */
+  folded: boolean;
+  /** A side dock's width, in CSS pixels. */
+  width: number;
+  /** A bottom dock's height, in CSS pixels. */
+  height: number;
+  float: AssistantFloat;
+}
+
+/** A new window's assistant: docked on the right, at its default sizes (#253). */
+export const DEFAULT_ASSISTANT: AssistantPlace = {
+  dock: "right",
+  folded: false,
+  width: 360,
+  height: 300,
+  float: { width: 380, height: 520, corner: "top-right", x: 24, y: 56 },
+};
 
 /**
  * Where `open` puts what it opens:
@@ -889,7 +936,9 @@ export type LayoutChange =
   /** The groups' widths, left to right, in any unit: they are made shares of 1. */
   | { type: "resize"; widths: number[] }
   /** Every group as wide as the others. */
-  | { type: "equalize" };
+  | { type: "equalize" }
+  /** Moves, resizes, folds or unfolds the assistant: what is given changes, the rest stays. */
+  | { type: "assistant"; place: Partial<AssistantPlace> };
 
 /**
  * The kinds of Document (ADR-0011): files of PDF, plain text, Markdown, Word
