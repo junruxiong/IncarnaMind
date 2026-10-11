@@ -1,0 +1,71 @@
+# ieee (ieee.csl)
+
+## Citations (34)
+
+1. [1]
+2. [2, p. 265]
+3. [3, p. 585]
+4. [4]
+5. [5]
+6. [6]
+7. [7, p. 52]
+8. [8, pp. 11–12]
+9. [9]
+10. [10]
+11. [11]
+12. [12]
+13. [13]
+14. [14]
+15. [15]
+16. [16]
+17. [17, p. 5]
+18. [18]
+19. [19, p. 23]
+20. [20, pp. 12–15]
+21. [21]
+22. [22]
+23. [23]
+24. [24]
+25. [25]
+26. [26]
+27. [27]
+28. [28]
+29. [29]
+30. [30]
+31. [2], [4], [18]
+32. [7, p. 60]
+33. [7, p. 61]
+34. [15], [16]
+
+## Bibliography (30)
+
+- en-shannon-1940: [1] C. E. Shannon, “An algebra for theoretical genetics,” Doctoral dissertation, Massachusetts Institute of Technology, Cambridge, MA, 1940. [Online].  Available: http://hdl.handle.net/1721.1/11174
+- en-kahneman-1979: [2] D. Kahneman and A. Tversky, “Prospect theory: An analysis of decision under risk,” <i>Econometrica</i>, vol. 47, no. 2, pp. 263–291, Mar. 1979, doi: <a href="https://doi.org/10.2307/1914185">10.2307/1914185</a>.
+- en-jumper-2021: [3] J. Jumper <i>et al.</i>, “Highly accurate protein structure prediction with AlphaFold,” <i>Nature</i>, vol. 596, no. 7873, pp. 583–589, Aug. 2021, doi: <a href="https://doi.org/10.1038/s41586-021-03819-2">10.1038/s41586-021-03819-2</a>.
+- en-vaswani-2017: [4] A. Vaswani <i>et al.</i>, “Attention is all you need,” in <i>Advances in Neural Information Processing Systems 30</i>, Red Hook, NY: Curran Associates,  2017, pp. 5998–6008. [Online].  Available: https://papers.nips.cc/paper/7181-attention-is-all-you-need
+- en-vandermaaten-2008: [5] L. van der Maaten and G. Hinton, “Visualizing data using t-SNE,” <i>Journal of Machine Learning Research</i>, vol. 9, no. 86, pp. 2579–2605, 2008, [Online].  Available: http://jmlr.org/papers/v9/vandermaaten08a.html
+- en-zhou-2018: [6] Z.-H. Zhou, “A brief introduction to weakly supervised learning,” <i>National Science Review</i>, vol. 5, no. 1, pp. 44–53, Jan. 2018, doi: <a href="https://doi.org/10.1093/nsr/nwx106">10.1093/nsr/nwx106</a>.
+- en-kuhn-2012: [7] T. S. Kuhn, <i>The structure of scientific revolutions</i>, 4th ed. Chicago: University of Chicago Press, 2012.
+- en-tversky-1982: [8] A. Tversky and D. Kahneman, “Judgment under uncertainty: Heuristics and biases,” in <i>Judgment under uncertainty: Heuristics and biases</i>, D. Kahneman, P. Slovic, and A. Tversky, Eds., Cambridge: Cambridge University Press, 1982, pp. 3–20. doi: <a href="https://doi.org/10.1017/CBO9780511809477.002">10.1017/CBO9780511809477.002</a>.
+- en-who-2023: [9] World Health Organization, “Depression,” WHO. Accessed: Sep. 01, 2026. [Online]. Available: https://www.who.int/news-room/fact-sheets/detail/depression
+- en-csl-nd: [10] Citation Style Language, “Citation Style Language 1.0.2 specification,” CitationStyles.org. Accessed: Oct. 01, 2026. [Online]. Available: https://docs.citationstyles.org/en/stable/specification.html
+- en-ipcc-2023: [11] Intergovernmental Panel on Climate Change, “Climate change 2023: Synthesis report,” IPCC, Geneva, 2023. doi: <a href="https://doi.org/10.59327/IPCC/AR6-9789291691647">10.59327/IPCC/AR6-9789291691647</a>.
+- en-iso-690: [12] International Organization for Standardization, <i>Information and documentation — Guidelines for bibliographic references and citations to information resources</i>, ISO 690:2021, Geneva., Jun. 2021.
+- en-gdpr-2016: [13] <i>Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)</i>, vol. L 119. 2016, pp. 1–88. [Online].  Available: http://data.europa.eu/eli/reg/2016/679/oj
+- en-nature-2023: [14] “Tools such as ChatGPT threaten transparent science; here are our ground rules for their use,” <i>Nature</i>, vol. 613, no. 7945, p. 612, Jan. 2023, doi: <a href="https://doi.org/10.1038/d41586-023-00191-1">10.1038/d41586-023-00191-1</a>.
+- en-oecd-2019a: [15] OECD, <i>OECD skills outlook 2019: Thriving in a digital world</i>. Paris: OECD Publishing, 2019. doi: <a href="https://doi.org/10.1787/df80bc12-en">10.1787/df80bc12-en</a>.
+- en-oecd-2019b: [16] OECD, <i>PISA 2018 results (Volume I): What students know and can do</i>. Paris: OECD Publishing, 2019. doi: <a href="https://doi.org/10.1787/5f07c754-en">10.1787/5f07c754-en</a>.
+- zh-qian-1990: [17] 钱学森, 于景元, and 戴汝为, “一个科学新领域——开放的复杂巨系统及其方法论,” 自然杂志, vol. 13, no. 1, pp. 3–10, 1990.
+- zh-liu-2016: [18] 刘知远, 孙茂松, 林衍凯, and 谢若冰, “知识表示学习研究进展,” 计算机研究与发展, vol. 53, no. 2, pp. 247–261, 2016, doi: <a href="https://doi.org/10.7544/issn1000-1239.2016.20160020">10.7544/issn1000-1239.2016.20160020</a>.
+- zh-fei-2012: [19] 费孝通, 乡土中国. 北京: 北京大学出版社, 2012.
+- zh-zhou-2016: [20] 周志华, 机器学习. 北京: 清华大学出版社, 2016.
+- zh-bai-1998: [21] 白书农, “植物开花研究,” in 植物科学进展, 李承森, Ed., 北京: 高等教育出版社, 1998, pp. 146–163.
+- zh-wu-2003: [22] 吴云芳, “面向中文信息处理的现代汉语并列结构研究,” 博士学位论文, 北京大学, 北京, 2003. Accessed: Oct. 14, 2013. [Online].  Available: http://thesis.lib.pku.edu.cn/dlib/List.asp?lang=gb&amp;type=Reader&amp;DocGroupID=4&amp;DocID=6328
+- zh-jia-2011: [23] 贾东琴 and 柯平, “面向数字素养的高校图书馆数字服务体系研究,” in 中国图书馆学会年会论文集：2011年卷, 中国图书馆学会, Ed., 北京: 国家图书馆出版社,  2011, pp. 45–52.
+- zh-cnnic-2012: [24] 中国互联网络信息中心, “第29次中国互联网络发展状况统计报告,” Jan. 2012. Accessed: Mar. 26, 2013. [Online].  Available: http://www.cnnic.net.cn/hlwfzyj/hlwxzbg/201201/P020120709345264469680.pdf
+- zh-gbt7714-2015: [25] 中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会, 信息与文献 参考文献著录规则, GB/T 7714—2015, 北京., May 15, 2015.
+- zh-pipl-2021: [26] 全国人民代表大会常务委员会, 中华人民共和国个人信息保护法. 2021.
+- zh-xiao-2001: [27] 萧钰, “出版业信息化迈入快车道.” Accessed: Apr. 15, 2002. [Online]. Available: http://www.creader.com/news/20011219/200112190019.html
+- zh-ding-2000: [28] 丁文祥, “数字革命与竞争国际化,” 中国青年报, p. 15, Nov. 20, 2000.
+- zh-unwin-1988: [29] 昂温G and 昂温P S, 外国出版史. 北京: 中国书籍出版社, 1988.
+- zh-mechanics-1990: [30] 中国力学学会, 第3届全国实验流体力学学术会议论文集. 天津, 1990.

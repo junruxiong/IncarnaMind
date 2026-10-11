@@ -40,7 +40,14 @@ extraResources:
     to: examples
     filter:
       - "**/*"
-  # The licence notices of what the model catalog is generated from (scripts/catalogModels.ts).
+  # The citation-style engine (wasm/citation-styles, built and committed) and the CSL styles and
+  # locales, as unmodified plain files, as their licence asks (ADR-0016).
+  - from: resources/citation-styles
+    to: citation-styles
+    filter:
+      - "**/*"
+  # The licence notices: what the model catalog is generated from (scripts/catalogModels.ts),
+  # and the citation-style engine's crates and the CSL styles and locales.
   - from: resources/notices
     to: notices
     filter:
