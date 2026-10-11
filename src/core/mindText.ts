@@ -24,9 +24,10 @@
  *   a heading is level 1, a list starts at 1, a text attribute is "".
  */
 import * as Y from "yjs";
+import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
-import { ANSWER_BLOCK, CITATION_NODE, QUESTION_BLOCK } from "./api";
+import { ANSWER_BLOCK, CITATION_NODE, type CitedWork, QUESTION_BLOCK, type StyledRun } from "./api";
 
 export interface Marks {
   bold: boolean;
@@ -56,8 +57,19 @@ export type Inline =
   | { kind: "text"; text: string; marks: Marks }
   | { kind: "math"; latex: string }
   | { kind: "break" }
-  | { kind: "citation"; footnote: Footnote }
-  | { kind: "image"; image: Image };
+  | { kind: "citation"; footnote: Footnote; work: CitedWork }
+  | { kind: "image"; image: Image }
+  /**
+   * Citations written in a citation style (#289) by the exports (./exports/citations), never
+   * read from a Mind: one Citation, or several side by side, in the text, or as a note.
+   */
+  | { kind: "cite"; runs: StyledRun[]; note: boolean; unverified: boolean };
+
+/** A Bibliography entry, as a citation style writes it: its number set apart, if any, then its text. */
+export interface BibliographyItem {
+  label: StyledRun[] | null;
+  runs: StyledRun[];
+}
 
 export interface TableCell {
   header: boolean;
@@ -91,7 +103,9 @@ export type Block =
   | { kind: "rule" }
   | { kind: "table"; rows: TableCell[][] }
   | { kind: "image"; image: Image }
-  | { kind: "question"; content: Inline[] };
+  | { kind: "question"; content: Inline[] }
+  /** The Bibliography a citation style adds at the end of an export (./exports/citations). */
+  | { kind: "bibliography"; heading: string; items: BibliographyItem[]; hangingIndent: boolean };
 
 export interface ReadOptions {
   includeQuestions: boolean;
@@ -383,13 +397,16 @@ function readInline(
         case "image":
           content.push({ kind: "image", image: readImage(child) });
           break;
-        case CITATION_NODE:
+        case CITATION_NODE: {
           if (options.trimBeforeCitation) trimTrailingSpace(content);
+          const attributes = child.getAttributes() as Record<string, unknown>;
           content.push({
             kind: "citation",
-            footnote: options.footnote(child.getAttributes() as Record<string, unknown>),
+            footnote: options.footnote(attributes),
+            work: citedWork(attributes),
           });
           break;
+        }
         default: {
           // Inline content this version doesn't know: its text.
           const text = plainText(child);
@@ -401,8 +418,18 @@ function readInline(
   return content;
 }
 
+/** What a citation style needs of a Citation: its Document and its Location. */
+function citedWork(attributes: Record<string, unknown>): CitedWork {
+  const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : null);
+  return {
+    documentId: text(attributes.documentId),
+    documentName: text(attributes.documentName),
+    location: citationLocation(attributes),
+  };
+}
+
 /** Drops the space the editor keeps before a Citation (see `ReadOptions.trimBeforeCitation`). */
-function trimTrailingSpace(content: Inline[]): void {
+export function trimTrailingSpace(content: Inline[]): void {
   const last = content.at(-1);
   if (last?.kind !== "text") return;
   const text = last.text.replace(/[ \t ]+$/, "");

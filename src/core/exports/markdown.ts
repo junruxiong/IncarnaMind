@@ -5,6 +5,7 @@
  * markdown-it-mark read them), and each Citation as its own footnote.
  */
 import type { TableAlign } from "../../shared/markdownTables";
+import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
 
 export interface MarkdownLabels {
@@ -19,12 +20,18 @@ interface Context {
   table: boolean;
 }
 
+/** A footnote's text, already Markdown, and whether it is marked unverified. */
+interface Note {
+  markdown: string;
+  unverified: boolean;
+}
+
 export function renderMarkdown(
   title: string,
   blocks: readonly Block[],
   labels: MarkdownLabels,
 ): string {
-  const footnotes: Footnote[] = [];
+  const footnotes: Note[] = [];
   const writer = new MarkdownWriter(labels, (footnote) => {
     footnotes.push(footnote);
     return footnotes.length;
@@ -38,7 +45,7 @@ export function renderMarkdown(
       footnotes
         .map((footnote, index) => {
           const marker = footnote.unverified ? ` ${labels.unverified}` : "";
-          return `[^${index + 1}]: ${escapeText(footnote.source, false)}${marker}`;
+          return `[^${index + 1}]: ${footnote.markdown}${marker}`;
         })
         .join("\n"),
     );
@@ -46,11 +53,38 @@ export function renderMarkdown(
   return `${parts.join("\n\n")}\n`;
 }
 
+/** A Citation's footnote naming its Document and Location, in Numbered. */
+const noteOf = (footnote: Footnote): Note => ({
+  markdown: escapeText(footnote.source, false),
+  unverified: footnote.unverified,
+});
+
+/**
+ * Text a citation style formatted: italics, bold and links as Markdown has them, raised and
+ * lowered text as HTML (`<sup>`), which CommonMark keeps; small capitals and underlining have
+ * no Markdown and are left as text.
+ */
+function runsMarkdown(runs: readonly StyledRun[], table: boolean): string {
+  return runs
+    .map((run) => {
+      if (run.text === "") return "";
+      let text = escapeText(run.text, table);
+      if (run.script) text = `<${run.script}>${text}</${run.script}>`;
+      if (run.bold) text = `**${text}**`;
+      if (run.italic) text = `*${text}*`;
+      if (run.link && /^(https?:|mailto:)/i.test(run.link)) {
+        text = `[${text}](${destination(run.link)})`;
+      }
+      return text;
+    })
+    .join("");
+}
+
 class MarkdownWriter {
   constructor(
     private readonly labels: MarkdownLabels,
-    /** Numbers a Citation's footnote: 1, 2, 3… in the order they are written. */
-    private readonly number: (footnote: Footnote) => number,
+    /** Numbers a footnote: 1, 2, 3… in the order they are written. */
+    private readonly number: (note: Note) => number,
   ) {}
 
   blocks(blocks: readonly Block[], context: Context): string {
@@ -92,6 +126,14 @@ class MarkdownWriter {
         return this.table(block.rows);
       case "image":
         return image(block.image.src, block.image.alt, context);
+      case "bibliography":
+        return [
+          `## ${escapeText(block.heading, false)}`,
+          ...block.items.map((item) => {
+            const label = item.label ? `${runsMarkdown(item.label, false)} ` : "";
+            return escapeLineStart(label + runsMarkdown(item.runs, false));
+          }),
+        ].join("\n\n");
     }
   }
 
@@ -204,9 +246,18 @@ class MarkdownWriter {
       case "math":
         return `$${item.latex}$`;
       case "citation":
-        return `[^${this.number(item.footnote)}]`;
+        return `[^${this.number(noteOf(item.footnote))}]`;
       case "image":
         return image(item.image.src, item.image.alt, context);
+      case "cite": {
+        const text = runsMarkdown(item.runs, context.table);
+        if (item.note) {
+          return `[^${this.number({ markdown: runsMarkdown(item.runs, false), unverified: item.unverified })}]`;
+        }
+        return item.unverified
+          ? `${text} ${escapeText(this.labels.unverified, context.table)}`
+          : text;
+      }
     }
   }
 }

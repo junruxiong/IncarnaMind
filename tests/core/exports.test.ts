@@ -17,7 +17,11 @@ import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { heading, note, question, writeMind } from "../helpers/minds";
 import { zipFingerprint } from "../helpers/zip";
 
-/** A core with one Document ("Tides") and a Mind titled "Tides", with a client. */
+/**
+ * A core with one Document ("Tides") and a Mind titled "Tides", with a client. The Mind is in
+ * Numbered, IncarnaMind's own citation style, whose footnotes these tests are about; the other
+ * styles' exports are in citationStyles.test.ts.
+ */
 async function setUp(title = "Tides") {
   const dataDir = await createTempDataFolder();
   const sources = await createTempDataFolder();
@@ -25,6 +29,7 @@ async function setUp(title = "Tides") {
   const path = await writeSourceFile(sources, "Tides.txt", "Spring tides happen at new moon.");
   const [tides] = await addAndProcess(core, [path]);
   const mind = await core.createMind({ title });
+  await core.setMindCitationStyle(mind.id, "numbered");
   const client = await connectToMind(core, mind.id);
   return { core, mind, client, tides: tides as Document };
 }

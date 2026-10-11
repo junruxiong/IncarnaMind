@@ -2,7 +2,13 @@ import { mkdirSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
+import { isCitationStyleId } from "../shared/citationStyles";
 import { translate } from "../shared/i18n";
+import {
+  chosenCitationStyle,
+  citationStyleIn,
+  setCitationStyle,
+} from "../shared/mindCitationStyle";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiUse } from "./aiUse";
@@ -20,15 +26,18 @@ import type {
   ChatModelChoice,
   CoreApi,
   CoreEventSource,
+  Document,
   EmbeddingSettings,
   ExportMindOptions,
   Mind,
+  MindCitationStyle,
   ProviderError,
   SearchScope,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
+import { createCitationStyles } from "./citationStyles";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
 import { createConversations } from "./conversations";
@@ -731,12 +740,32 @@ export function createCore(adapters: CoreAdapters): Core {
     reportError: (error) => console.error(error),
   });
 
+  // Citation styles (#289): formatted on their own thread, from the Documents' reference records.
+  const citationStyles = createCitationStyles({
+    folder: adapters.paths.citationStyles,
+    document: (id): Document | undefined => {
+      try {
+        return documents.get(id);
+      } catch (error) {
+        if (error instanceof NotFoundError) return undefined;
+        throw error;
+      }
+    },
+  });
+  const mindCitationStyle = (mindId: string): MindCitationStyle =>
+    content.readSettings(mindId, (mindSettings) => ({
+      style: citationStyleIn(mindSettings, settings.get().language),
+      chosen: chosenCitationStyle(mindSettings) !== null,
+    }));
+
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
     liveDocuments: () => documents.list(),
     keptCitationTexts: () => documents.keptCitationTexts(),
     language: () => settings.get().language,
+    citationStyle: (mindId) => mindCitationStyle(mindId).style,
+    formatCitations: (request) => citationStyles.format(request),
     now,
   });
   /** Usage data: which format, and whether Questions went with it. */
@@ -1680,12 +1709,12 @@ export function createCore(adapters: CoreAdapters): Core {
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
     exportMind: async (mindId, options) => {
-      const exported = mindExports.export(mindId, options);
+      const exported = await mindExports.export(mindId, options);
       recordExport(options);
       return exported;
     },
     saveMindExport: async (mindId, options) => {
-      const { fileName, data } = mindExports.export(mindId, options);
+      const { fileName, data } = await mindExports.export(mindId, options);
       try {
         const file = await outputs.save({ name: fileName, data });
         recordExport(options);
@@ -1701,6 +1730,16 @@ export function createCore(adapters: CoreAdapters): Core {
         }
         throw error;
       }
+    },
+    formatCitations: (request) => citationStyles.format(request),
+    getMindCitationStyle: async (mindId) => mindCitationStyle(minds.get(mindId).id),
+    setMindCitationStyle: async (mindId, style) => {
+      if (style !== null && !isCitationStyleId(style)) {
+        throw new InvalidInputError(`"${String(style)}" isn't a citation style.`);
+      }
+      const id = writableMind(mindId).id;
+      content.editSettings(id, (mindSettings) => setCitationStyle(mindSettings, style));
+      return mindCitationStyle(id);
     },
     getOutputSettings: async () => outputs.settings(),
     setOutputLocation: (path) => outputs.setLocation(path),
@@ -1768,6 +1807,7 @@ export function createCore(adapters: CoreAdapters): Core {
       stopTrackingUsage();
       consent.close();
       outputs.close();
+      citationStyles.close();
       documents.close();
       embeddingModel.close();
       rerankingModel.close();
