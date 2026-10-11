@@ -1,14 +1,20 @@
 import { createHash } from "node:crypto";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { vi } from "vitest";
 import type { Core, Document, DocumentStatus } from "../../src/core";
 import { normaliseText } from "../../src/shared/text";
 import { createTempDataFolder } from "./core";
 
+/** When the last file `writeSourceFile` wrote was modified, in milliseconds. */
+let lastModified = 0;
+
 /**
  * Writes a file the User might add, in a folder outside the data folder (and
- * any folders on the way), and returns its path.
+ * any folders on the way), and returns its path. Each file written is newer
+ * than the one before, as when a person writes them one after another: a
+ * Linked folder is read newest file first, and Linux stamps files written
+ * within the same few milliseconds with the same time.
  */
 export async function writeSourceFile(
   folder: string,
@@ -18,6 +24,12 @@ export async function writeSourceFile(
   const path = join(folder, name);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents);
+  const { mtimeMs } = await stat(path);
+  if (mtimeMs <= lastModified) {
+    const later = new Date(lastModified + 1);
+    await utimes(path, later, later);
+    lastModified += 1;
+  } else lastModified = mtimeMs;
   return path;
 }
 

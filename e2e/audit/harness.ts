@@ -60,7 +60,7 @@ export interface Launched {
 export interface LaunchOptions {
   fakeChat?: boolean;
   examples?: boolean;
-  /** Wait for this test id before returning (default "new-mind"); null: don't wait. */
+  /** Wait for this test id before returning (default "plus-menu"); null: don't wait. */
   readyTestId?: string | null;
   /** More environment variables, e.g. NODE_OPTIONS for the startup hook. */
   extraEnv?: Record<string, string>;
@@ -79,7 +79,7 @@ export async function launch(
   {
     fakeChat = false,
     examples = false,
-    readyTestId = "new-mind",
+    readyTestId = "plus-menu",
     extraEnv = {},
     appPath = appDir,
     extraArgs = [],
