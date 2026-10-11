@@ -247,18 +247,30 @@ describe("outside agents", () => {
 
     await core.setLocalOnly(true);
     expect((await core.getAgents()).paused).toBe("local-mode");
-    const paused = await agent.callTool({ name: "search", arguments: { query: "tides" } });
-    expect(paused.isError).toBe(true);
-    expect(resultText(paused)).toMatch(/Connected agents are paused/);
-    const ask = await agent.callTool({ name: "ask", arguments: { question: "When?" } });
-    expect(resultText(ask)).toMatch(/Connected agents are paused/);
+    // Every Tool, `ask` too: nothing is read, and no Question goes to any model.
+    const calls: Record<string, Record<string, unknown>> = {
+      search: { query: "tides" },
+      read_passages: { documentId: "any" },
+      cite: { citations: [{ passageId: "any", quote: "Spring tides" }] },
+      check_citations: { text: "Spring tides [cite:abcdefgh]." },
+      list_minds: {},
+      read_mind: { mindId: "any" },
+      ask: { question: "When are spring tides?" },
+    };
+    for (const [name, args] of Object.entries(calls)) {
+      const paused = await agent.callTool({ name, arguments: args });
+      expect(paused.isError, name).toBe(true);
+      expect(resultText(paused), name).toMatch(/Connected agents are paused/);
+    }
 
     await core.setLocalOnly(false);
     const resumed = await agent.callTool({ name: "search", arguments: { query: "tides" } });
     expect(resumed.isError ?? false).toBe(false);
 
     const activity = await core.listAgentActivity(pairing.id);
-    expect(activity.filter((each) => each.problem === "local-mode")).toHaveLength(2);
+    expect(activity.filter((each) => each.problem === "local-mode")).toHaveLength(
+      Object.keys(calls).length,
+    );
 
     // Turned off: the listener goes, and the connection with it.
     await core.setAgentsEnabled(false);
