@@ -146,10 +146,15 @@ export async function launchApp(
   return { app, window };
 }
 
-/** "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind in no Folder. */
+/**
+ * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
+ * in no Folder. Returns once the menu has gone: keys a test presses a
+ * millisecond apart can outrun the editor while frames are busy.
+ */
 export async function newMind(window: Page): Promise<void> {
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-new-mind").click();
+  await motionSettled(window);
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
