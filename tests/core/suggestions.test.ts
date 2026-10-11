@@ -9,7 +9,13 @@ import type {
   SuggestionRequest,
 } from "../../src/core";
 import { isStrongMatch, queryOf } from "../../src/core/suggestions";
-import { continuationOf, numbersBacked, readReply } from "../../src/core/suggestions/prompt";
+import {
+  continuationOf,
+  numbersBacked,
+  readReply,
+  suggestionPrompt,
+  unfinishedSentence,
+} from "../../src/core/suggestions/prompt";
 import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
@@ -487,6 +493,17 @@ describe("what a suggestion rests on", () => {
     expect(
       numbersBacked("为41%，是最高的。", "西湖区绿地率最高，达到38%", "而西湖区的绿地率"),
     ).toBe(false);
+  });
+
+  test("the model is told which sentence the paragraph stops in the middle of", () => {
+    expect(unfinishedSentence("The tides rise. Twice a month the spring tides")).toBe(
+      "Twice a month the spring tides",
+    );
+    expect(unfinishedSentence("The tides rise. They fall again.")).toBe("");
+    expect(unfinishedSentence("港口测量要看潮汐。每个月有两次大潮，")).toBe("每个月有两次大潮，");
+    expect(suggestionPrompt("The tides rise. And the", [])).toContain(
+      "The paragraph's last sentence is unfinished: “And the”. Your text finishes it.",
+    );
   });
 
   test("a reply that starts by repeating the paragraph's end goes on from there", () => {
