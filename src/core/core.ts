@@ -130,7 +130,7 @@ import { createScriptRunner } from "./skills/scripts";
 import { createSources, FIND_SOURCES_SENDS } from "./sources";
 import { createSourceHttp } from "./sources/http";
 import { createPace, realTimers } from "./sources/pace";
-import { createSourceProviders } from "./sources/providers";
+import { createSourceProviders, sourceKeySecret } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
@@ -699,7 +699,10 @@ export function createCore(adapters: CoreAdapters): Core {
     clock: () => paceTimers.now(),
     consent,
     localOnly: () => embedding.localOnly(),
-    providers: createSourceProviders(adapters.sourceProviders),
+    secrets,
+    providers: createSourceProviders(adapters.sourceProviders, (id) =>
+      secrets.tryGet(sourceKeySecret(id)),
+    ),
     http: createSourceHttp(pace, paceTimers),
     folder: join(dataDir, "Sources"),
     checkFolder: (folderId) => {
@@ -1609,7 +1612,8 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
-    listSourceProviders: async () => sources.list(),
+    listSourceProviders: () => sources.list(),
+    setSourceProviderKey: (providerId, key) => sources.setKey(providerId, key),
     findSources: (input) => sources.search(input),
     addFoundSource: (input) => sources.add(input),
     importReferences: (path) => referenceImport.run(path),
