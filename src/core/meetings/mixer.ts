@@ -51,21 +51,28 @@ export function createMixer(startMs: number) {
     return { atMs, samples };
   }
 
-  return {
-    /** Adds a source's samples, which start at `atMs` in the Meeting's time; returns what is ready. */
-    add(samples: Int16Array, atMs: number): MixedAudio | null {
-      let start = sampleAt(atMs);
-      const end = start + samples.length;
-      if (end > out) {
-        const skip = Math.max(0, out - start);
-        start += skip;
-        room(end);
-        for (let i = skip; i < samples.length; i++) {
-          const at = start - out + (i - skip);
-          sums[at] = (sums[at] as number) + (samples[i] as number);
-        }
+  /** Adds a source's samples, which start at `atMs` in the Meeting's time. */
+  function put(samples: Int16Array, atMs: number): void {
+    let start = sampleAt(atMs);
+    const end = start + samples.length;
+    if (end > out) {
+      const skip = Math.max(0, out - start);
+      start += skip;
+      room(end);
+      for (let i = skip; i < samples.length; i++) {
+        const at = start - out + (i - skip);
+        sums[at] = (sums[at] as number) + (samples[i] as number);
       }
-      newest = Math.max(newest, end);
+    }
+    newest = Math.max(newest, end);
+  }
+
+  return {
+    put,
+
+    /** Adds a source's samples, as `put`, and returns what is ready to go. */
+    add(samples: Int16Array, atMs: number): MixedAudio | null {
+      put(samples, atMs);
       return take(newest - sampleAt(DELAY_MS));
     },
 

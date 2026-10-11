@@ -1244,6 +1244,9 @@ export const zhCN = {
   "privacy.traffic.reranking-model": "下载重排序模型",
   "privacy.traffic.reranking-model.description":
     "内置重排序模型只下载一次，在有文档可搜索时下载，除非重新排序已关闭或使用了在线服务。",
+  "privacy.traffic.transcription-model": "下载语音模型",
+  "privacy.traffic.transcription-model.description":
+    "在本机转写会议的语音模型只下载一次，在第一次转写会议时下载。你说的内容不会发送出去。",
   "privacy.traffic.ollama-pull": "下载本地模型",
   "privacy.traffic.ollama-pull.description":
     "当你选择本地模型时，Ollama 会从它的模型库下载这个模型。",
@@ -1973,6 +1976,7 @@ export const zhCN = {
     "正在准备转写稿：正在下载语音模型（{percent}%，共 {size}）。会议照常录制。",
   "meetings.transcript.starting": "正在启动实时转写…",
   "meetings.transcript.behind": "录制中… 实时转写跟不上，停止录制后会补全转写稿。",
+  "meetings.transcript.behindPaused": "部分会议内容尚未转写，停止录制后会补全转写稿。",
   "meetings.transcript.finishing": "正在完成转写稿…",
   "meetings.transcript.finishingDownload":
     "正在完成转写稿：正在下载语音模型（{percent}%，共 {size}）…",

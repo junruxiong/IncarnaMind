@@ -3,16 +3,17 @@ import { parseCueTarget } from "../../shared/units";
 import type { PageText } from "../documents/passages";
 
 /**
- * A Transcript's Passage with each cue's time before it ("[14:26] …"), so
- * the model can say when something was said (#136). Each cue is a line of its
- * own, found by its start, in order. Any other Passage is returned as it is.
+ * A Transcript's Passage with each cue's time, and who said it where known,
+ * before it ("[14:26 Dana] …"), so the model can say when something was said
+ * and by whom (#136). Each cue is a line of its own, found by its start, in
+ * order. Any other Passage is returned as it is.
  */
 export function withCueMarks(text: string, units: readonly PageText[]): string {
   let marked = "";
   let from = 0;
   for (const unit of units) {
     if (unit.kind !== "cues") continue;
-    for (const anchor of unit.anchors ?? []) {
+    for (const [index, anchor] of (unit.anchors ?? []).entries()) {
       const cue = parseCueTarget(anchor.target);
       const head = unit.text.slice(anchor.start, anchor.end).trim().slice(0, 200);
       if (!cue || !head) continue;
@@ -27,7 +28,8 @@ export function withCueMarks(text: string, units: readonly PageText[]): string {
         line = next < 0 ? -1 : next + 1;
       }
       if (at < 0) continue;
-      marked += `${text.slice(from, at)}[${clockTime(cue.startMs)}] `;
+      const speaker = unit.label?.speakers?.[index]?.replace(/[\]\n]+/g, " ");
+      marked += `${text.slice(from, at)}[${clockTime(cue.startMs)}${speaker ? ` ${speaker}` : ""}] `;
       from = at;
     }
   }

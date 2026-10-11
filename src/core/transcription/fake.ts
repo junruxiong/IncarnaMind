@@ -61,8 +61,13 @@ export function createFakeSpeechEngine(options: FakeSpeechOptions = {}): SpeechE
     };
     return {
       accept(samples) {
-        waiting.push(...samples);
-        while (waiting.length >= FRAME) frame(waiting.splice(0, FRAME));
+        for (const sample of samples) {
+          waiting.push(sample);
+          if (waiting.length === FRAME) {
+            frame(waiting);
+            waiting = [];
+          }
+        }
       },
       speaking: () => speech !== null,
       next: () => ended.shift() ?? null,

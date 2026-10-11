@@ -137,7 +137,11 @@ import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
-import { createTranscriptionModel, TRANSCRIPTION_SPEED } from "./transcription/model";
+import {
+  createTranscriptionModel,
+  QWEN3_ASR_0_6B,
+  TRANSCRIPTION_SPEED,
+} from "./transcription/model";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
 
@@ -1184,6 +1188,20 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     // While the built-in reranking model reranks: by default, unless the User chose otherwise.
     listed: () => rerankingSource.files.length > 0 && rerank.usesBuiltIn(),
+  });
+  const transcriptionSource = adapters.transcriptionModelSource?.model ?? QWEN3_ASR_0_6B.source;
+  const transcriptionHost = new URL(transcriptionSource.baseUrl);
+  privacy.traffic.register({
+    id: "transcription-model",
+    service: {
+      id: transcriptionHost.origin,
+      name: transcriptionHost.host === "huggingface.co" ? "Hugging Face" : transcriptionHost.host,
+    },
+    // Where this copy transcribes, once Meetings are on.
+    listed: () =>
+      transcriber !== undefined &&
+      transcriptionSource.files.length > 0 &&
+      settings.get().device.meetingsEnabled,
   });
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(

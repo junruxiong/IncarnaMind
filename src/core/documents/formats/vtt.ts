@@ -164,7 +164,8 @@ export function writeVtt(transcript: Transcript): string {
 
 /**
  * A Transcript's Units: blocks of up to `CUES_PER_BLOCK` cues and about
- * `CUE_BLOCK_CHARACTERS` characters, a cue a line, each anchored by its times.
+ * `CUE_BLOCK_CHARACTERS` characters, a cue a line, each anchored by its times,
+ * and who said each, where the file says (`UnitLabel.speakers`).
  */
 export function transcriptUnits(transcript: Transcript): TextUnit[] {
   const units: TextUnit[] = [];
@@ -172,18 +173,24 @@ export function transcriptUnits(transcript: Transcript): TextUnit[] {
   let first: Cue | null = null;
   let last: Cue | null = null;
   let count = 0;
+  let speakers: (string | null)[] = [];
   const flush = () => {
     if (!first || !last || builder.empty) return;
     units.push({
       page: units.length + 1,
       kind: "cues",
-      label: { from: first.startMs, to: last.endMs },
+      label: {
+        from: first.startMs,
+        to: last.endMs,
+        ...(speakers.some((speaker) => speaker !== null) && { speakers }),
+      },
       text: builder.text,
       anchors: builder.anchors,
     });
     builder = new UnitBuilder();
     first = null;
     count = 0;
+    speakers = [];
   };
   for (const cue of transcript.cues) {
     if (
@@ -195,6 +202,7 @@ export function transcriptUnits(transcript: Transcript): TextUnit[] {
     first ??= cue;
     last = cue;
     builder.add(cue.text, cueTarget(cue.startMs, cue.endMs));
+    speakers.push(cue.speaker);
     count++;
   }
   flush();

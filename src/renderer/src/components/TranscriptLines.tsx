@@ -71,7 +71,14 @@ export function TranscriptLines({
       role: "status",
     };
   } else if (state === "behind") {
-    line = { text: t("meetings.transcript.behind"), role: "status" };
+    line = {
+      text: t(
+        meeting.status === "recording"
+          ? "meetings.transcript.behind"
+          : "meetings.transcript.behindPaused",
+      ),
+      role: "status",
+    };
   } else if (state === "finishing") {
     line = {
       text: downloading

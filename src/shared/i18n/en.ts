@@ -1311,6 +1311,9 @@ export const en = {
   "privacy.traffic.reranking-model": "Reranking model download",
   "privacy.traffic.reranking-model.description":
     "The built-in reranking model is downloaded once, when there are Documents to search, unless reranking is off or uses a service.",
+  "privacy.traffic.transcription-model": "Speech model download",
+  "privacy.traffic.transcription-model.description":
+    "The speech model that transcribes meetings on this computer is downloaded once, when a meeting is first transcribed. Nothing you say is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.description":
     "When you choose a local model, Ollama downloads it from its library.",
@@ -2079,6 +2082,8 @@ export const en = {
   "meetings.transcript.starting": "Starting the transcript…",
   "meetings.transcript.behind":
     "Recording… Live text fell behind; the transcript catches up when you stop.",
+  "meetings.transcript.behindPaused":
+    "Part of the meeting isn’t transcribed yet; the transcript catches up when you stop.",
   "meetings.transcript.finishing": "Finishing the transcript…",
   "meetings.transcript.finishingDownload":
     "Finishing the transcript: downloading the speech model, {percent}% of {size}…",
