@@ -24,7 +24,11 @@ import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
+import {
+  ReadinessExplanation,
+  readinessAction,
+  type settingsPageFor,
+} from "../components/providers/ChatReadinessNotice";
 import {
   chosenScope,
   composerKey,
@@ -730,10 +734,7 @@ function ComposerProblem({
         role="status"
         testId="composer-not-ready"
         className="composer-problem"
-        action={{
-          label: t("question.setUp"),
-          onClick: () => onSetUp(settingsPageFor(problem.readiness)),
-        }}
+        action={readinessAction(problem.readiness, t, onSetUp, "question.setUp")}
       >
         <ReadinessExplanation readiness={problem.readiness} inLine />
       </ProblemLine>

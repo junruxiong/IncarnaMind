@@ -13,7 +13,8 @@ import { useOllama } from "./OllamaCard";
  * First-run setup: shown while no chat provider is configured, until the User
  * sets one up or chooses "set up later". Notes and Documents work either way.
  * Where Answers come from is one choice among rows (none preselected): local
- * models with Ollama, an API key, or the experimental ChatGPT plan.
+ * models with Ollama, an API key, or the User's ChatGPT plan, which signs in
+ * from its row ("Continue with ChatGPT").
  */
 export function ChatSetupDialog() {
   const readiness = useAppStore((state) => state.chatReadiness);
@@ -58,7 +59,6 @@ export function ChatSetupDialog() {
 function ChatSetup() {
   const t = useT();
   const updateSettings = useAppStore((state) => state.updateSettings);
-  const openSettings = useAppStore((state) => state.openSettings);
   const [providers, setProviders] = useState<ChatProvider[]>([]);
   const [choice, setChoice] = useState<ChatProviderChoice | null>(null);
   const ollama = useOllama(() => undefined);
@@ -103,19 +103,6 @@ function ChatSetup() {
         <div className="ml-auto flex items-center gap-2">
           {/* The button says what was chosen: none is until the User picks a row. */}
           {choice === "ollama" && <OllamaAction ollama={ollama} large />}
-          {choice === "chatgpt" && (
-            <button
-              type="button"
-              data-testid="chat-setup-chatgpt"
-              onClick={() => {
-                later();
-                openSettings("models");
-              }}
-              className={buttonStyle("primary", "lg")}
-            >
-              {t("providers.choice.continue")}
-            </button>
-          )}
         </div>
       </div>
     </div>

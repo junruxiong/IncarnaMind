@@ -1,46 +1,60 @@
 /**
- * The experimental "ChatGPT plan (via Codex sign-in)" provider: the switch
- * that turns it on (per device, off by default), the sign-in, and its status.
- * Chat providers (`../chat.ts`) use it for readiness, the connection test and
- * the model factory; the endpoint adapter does the requests.
+ * The ChatGPT plan provider ("Continue with ChatGPT"): the sign-in, its
+ * status, the account's models, and the clean-up of the experimental
+ * provider it replaces. Chat providers (`../chat.ts`) use it for readiness,
+ * the connection test and the model factory; the endpoint adapter does the
+ * requests.
  */
 import { translate } from "../../../shared/i18n";
 import type { Browser } from "../../adapters";
-import type { ChatGptPlanStatus, ChatGptSignInErrorKind, ChatGptSignInResult } from "../../api";
-import { InvalidInputError, SecretStorageError } from "../../errors";
+import type {
+  ChatGptPlanModel,
+  ChatGptPlanStatus,
+  ChatGptSignInErrorKind,
+  ChatGptSignInResult,
+  ChatGptSignOutResult,
+} from "../../api";
+import { SecretStorageError } from "../../errors";
 import { DEFAULT_SIGN_IN_TIMEOUT_MS, OAuthFlowError } from "../../oauth";
 import type { Secrets } from "../../secrets";
 import type { SettingsStore } from "../../settings";
-import { CHATGPT_PLAN_MODELS, CODEX_BASE_URL } from "./codexEndpoint";
+import { ChatGptOtherAccountError, ChatGptPlanNotAllowedError } from "./errors";
+import { CHATGPT_PLAN_BASE_URL, KNOWN_PLAN_MODELS, listPlanModels } from "./planEndpoint";
 import {
-  CODEX_AUTHORIZE_URL,
-  CODEX_CALLBACK_PORT,
-  CODEX_TOKEN_URL,
-  type CodexSignInEndpoints,
-  createCodexSignIn,
-} from "./codexSignIn";
+  type ChatGptSignInEndpoints,
+  createChatGptSignIn,
+  OPENAI_AUTH,
+  type RefreshLock,
+} from "./signIn";
 
 /** Where the provider signs in and sends Questions. */
-export interface ChatGptPlanEndpoints extends CodexSignInEndpoints {
-  /** The model endpoint's base URL; requests go to `<base>/responses`. */
-  codexBaseUrl: string;
+export interface ChatGptPlanEndpoints extends ChatGptSignInEndpoints {
+  /** The API's base URL; requests go to `<base>/responses`, the model list to `<base>/models`. */
+  apiBaseUrl: string;
 }
 
 export const CHATGPT_PLAN_ENDPOINTS: Readonly<ChatGptPlanEndpoints> = {
-  authorizeUrl: CODEX_AUTHORIZE_URL,
-  tokenUrl: CODEX_TOKEN_URL,
-  callbackPort: CODEX_CALLBACK_PORT,
+  ...OPENAI_AUTH,
   signInTimeoutMs: DEFAULT_SIGN_IN_TIMEOUT_MS,
-  codexBaseUrl: CODEX_BASE_URL,
+  apiBaseUrl: CHATGPT_PLAN_BASE_URL,
 };
 
-/** Per-device: the User turned the experimental provider on. */
-const ENABLED = "chatGptPlanEnabled";
+/** The account's model list is read again after this long. */
+const MODEL_LIST_TTL_MS = 10 * 60_000;
+const MODEL_LIST_TIMEOUT_MS = 5_000;
+
+/** What the experimental "ChatGPT plan (via Codex sign-in)" provider left on a device. */
+const CODEX_TOKENS_SECRET = "chatgpt-plan:tokens";
+const CODEX_DEVICE_VALUES = ["chatGptPlanEnabled", "chatGptSignInExpired"];
 
 function signInError(error: unknown): { kind: ChatGptSignInErrorKind; message: string } {
   const message = error instanceof Error ? error.message : String(error);
-  if (error instanceof OAuthFlowError) return { kind: error.reason, message };
+  if (error instanceof OAuthFlowError) {
+    return { kind: error.reason === "port-in-use" ? "failed" : error.reason, message };
+  }
   if (error instanceof SecretStorageError) return { kind: "secret-storage", message };
+  if (error instanceof ChatGptPlanNotAllowedError) return { kind: "plan-not-allowed", message };
+  if (error instanceof ChatGptOtherAccountError) return { kind: "other-account", message };
   return { kind: "failed", message };
 }
 
@@ -48,74 +62,94 @@ export type ChatGptPlan = ReturnType<typeof createChatGptPlan>;
 
 export function createChatGptPlan(options: {
   endpoints: ChatGptPlanEndpoints;
+  /** The device's secret store. */
   secrets: Secrets;
+  /**
+   * Where the sign-in is kept, when not in the device's secret store: a store
+   * shared by several data folders on this computer (a test profile), with a
+   * lock that keeps their refreshes apart.
+   */
+  sharedStore?: { secrets: Secrets; refreshLock: RefreshLock };
   settings: SettingsStore;
   browser: Browser;
   /** Milliseconds since the epoch. */
   now: () => number;
-  /** The provider was turned on or off, or its sign-in changed. */
+  /** Its sign-in changed. */
   onChange: () => void;
+  fetch?: typeof globalThis.fetch;
 }) {
   const { endpoints, settings, onChange } = options;
 
-  const signIn = createCodexSignIn({
+  const signIn = createChatGptSignIn({
     endpoints,
-    secrets: options.secrets,
-    settings,
+    secrets: options.sharedStore?.secrets ?? options.secrets,
+    ...(options.sharedStore && { refreshLock: options.sharedStore.refreshLock }),
     browser: options.browser,
     now: options.now,
     onChange,
+    ...(options.fetch && { fetch: options.fetch }),
     pages: () => {
       const { language } = settings.get();
       return {
         success: {
-          title: translate(language, "codex.page.success.title"),
-          body: translate(language, "codex.page.success.body"),
+          title: translate(language, "chatgpt.page.success.title"),
+          body: translate(language, "chatgpt.page.success.body"),
         },
         failure: {
-          title: translate(language, "codex.page.failure.title"),
-          body: translate(language, "codex.page.failure.body"),
+          title: translate(language, "chatgpt.page.failure.title"),
+          body: translate(language, "chatgpt.page.failure.body"),
         },
       };
     },
   });
 
-  const enabled = () => settings.readDeviceValue(ENABLED) === true;
+  let listed: { at: number; models: ChatGptPlanModel[] } | null = null;
+
+  /**
+   * The account's models, read with its token and kept a few minutes; the
+   * known ones while signed out, or when OpenAI can't say.
+   */
+  const models = async (): Promise<ChatGptPlanModel[]> => {
+    if (!(await signIn.hasSignIn())) return KNOWN_PLAN_MODELS.map((model) => ({ ...model }));
+    if (listed && options.now() - listed.at < MODEL_LIST_TTL_MS) return listed.models;
+    try {
+      const fresh = await listPlanModels({
+        baseUrl: endpoints.apiBaseUrl,
+        credentials: signIn.credentials,
+        signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
+        ...(options.fetch && { fetch: options.fetch }),
+      });
+      if (fresh.length > 0) {
+        listed = { at: options.now(), models: fresh };
+        return fresh;
+      }
+    } catch (error) {
+      console.error("The ChatGPT plan's model list couldn't be read.", error);
+    }
+    return KNOWN_PLAN_MODELS.map((model) => ({ ...model }));
+  };
 
   const status = async (): Promise<ChatGptPlanStatus> => {
     // Read before awaiting the keychain, so the status describes the moment it was asked for.
-    const on = enabled();
     const signingIn = signIn.signingIn();
-    return {
-      enabled: on,
-      account: await signIn.account(),
-      signingIn,
-      models: CHATGPT_PLAN_MODELS.map((model) => ({ ...model })),
-    };
+    return { account: await signIn.account(), signingIn, models: await models() };
   };
 
   return {
-    enabled,
     status,
     credentials: signIn.credentials,
-    codexBaseUrl: endpoints.codexBaseUrl,
+    apiBaseUrl: endpoints.apiBaseUrl,
     hasSignIn: signIn.hasSignIn,
+    /** Whether the sign-in's traffic can happen on this device: it has signed in, or is signing in. */
+    used: signIn.used,
+    /** The account's model ids, for a Question's model picker. */
+    modelIds: async () => (await models()).map((model) => model.id),
 
-    /** Turning it off signs out, so no tokens stay behind. The caller removes the provider. */
-    async setEnabled(value: unknown): Promise<void> {
-      if (typeof value !== "boolean") throw new InvalidInputError("enabled must be true or false.");
-      settings.writeDeviceValue(ENABLED, value);
-      if (value) onChange();
-      else await signIn.signOut();
-    },
-
-    async signIn(): Promise<ChatGptSignInResult> {
-      if (!enabled()) {
-        throw new InvalidInputError("Turn on the ChatGPT plan provider in Settings first.");
-      }
+    async signIn(input: { anotherAccount?: boolean } = {}): Promise<ChatGptSignInResult> {
       try {
-        await signIn.signIn();
-        return { ok: true, status: await status() };
+        const { firstTime } = await signIn.signIn(input);
+        listed = null;
+        return { ok: true, firstTime, status: await status() };
       } catch (error) {
         return { ok: false, error: signInError(error) };
       }
@@ -123,9 +157,23 @@ export function createChatGptPlan(options: {
 
     cancelSignIn: () => signIn.cancelSignIn(),
 
-    async signOut(): Promise<ChatGptPlanStatus> {
-      await signIn.signOut();
-      return status();
+    async signOut(): Promise<ChatGptSignOutResult> {
+      const { revoked } = await signIn.signOut();
+      listed = null;
+      return { revoked, status: await status() };
+    },
+
+    /**
+     * Forgets what the experimental provider kept on this device: its tokens,
+     * which belong to another app's sign-in and can't be used here, and its
+     * switch (migration 51 already kept or removed its providers by it).
+     * Does nothing on a device that never had it.
+     */
+    async forgetCodexSignIn(): Promise<void> {
+      const left = CODEX_DEVICE_VALUES.filter((key) => settings.readDeviceValue(key) !== undefined);
+      if (left.length === 0) return;
+      await options.secrets.delete(CODEX_TOKENS_SECRET);
+      for (const key of left) settings.deleteDeviceValue(key);
     },
   };
 }

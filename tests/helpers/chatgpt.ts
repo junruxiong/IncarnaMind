@@ -1,26 +1,31 @@
 /**
- * A local stand-in for OpenAI, for the ChatGPT plan provider: an OAuth
- * authorization server (code exchange with PKCE, refresh) and the Codex model
- * endpoint, on one HTTP server on 127.0.0.1. Plus a fake browser that plays
+ * A local stand-in for OpenAI, for the ChatGPT plan provider: Sign in with
+ * ChatGPT's authorization server (dynamic registration, code exchange with
+ * PKCE, refresh, revocation, signing keys) and the Responses API with its
+ * model list, on one HTTP server on 127.0.0.1. Plus a fake browser that plays
  * the User signing in. No real account and no network.
  */
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { onTestFinished } from "vitest";
 import type { Browser, ChatGptPlanEndpoints } from "../../src/core";
 
-export const ACCOUNT_ID = "chatgpt-account-0001";
+export const SUBJECT = "user-0001";
 export const EMAIL = "reader@example.com";
 export const ANSWER = "Hello from your plan.";
+export const RESOURCE = "https://api.openai.com/v1";
+export const PLAN_SCOPE = "chatgpt.tokens.use.direct";
+export const FULL_SCOPE = `openid profile email offline_access resource.invoke ${PLAN_SCOPE}`;
 
-const AUTH_CLAIM = "https://api.openai.com/auth";
+/** The account's models, as `GET /v1/models` lists them. */
+export const ACCOUNT_MODELS = [
+  { slug: "gpt-6.1-sol", display_name: "GPT-6.1 Sol", visibility: "list" },
+  { slug: "gpt-6-luna", display_name: "GPT-6 Luna", visibility: "list" },
+  { slug: "codex-auto-review", display_name: "Auto review", visibility: "hide" },
+];
 
-/** An unsigned JWT: the app only reads the claims of tokens it got straight from the server. */
-function jwt(claims: Record<string, unknown>): string {
-  const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  return `${part({ alg: "none", typ: "JWT" })}.${part(claims)}.signature`;
-}
+const KEY_ID = "test-key-1";
 
 const readBody = (request: IncomingMessage) =>
   new Promise<string>((resolve, reject) => {
@@ -37,23 +42,45 @@ const sendJson = (response: ServerResponse, status: number, body: unknown) => {
   response.end(JSON.stringify(body));
 };
 
+const part = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+
+/** A JWT signed with RS256 by `key`. */
+export function signJwt(claims: Record<string, unknown>, key: KeyObject, kid = KEY_ID): string {
+  const signingInput = `${part({ alg: "RS256", kid, typ: "JWT" })}.${part(claims)}`;
+  const signature = sign("RSA-SHA256", Buffer.from(signingInput), key).toString("base64url");
+  return `${signingInput}.${signature}`;
+}
+
 export interface IssuedTokens {
+  clientId: string;
   accessToken: string;
   refreshToken: string;
   idToken: string;
 }
 
-export interface CodexRequest {
+export interface ApiRequest {
+  path: string;
   headers: Record<string, string | undefined>;
   body: Record<string, unknown>;
 }
 
-/** What the fake Codex endpoint answers with, when the token is good. */
-export type CodexReply =
+/** What the fake Responses API answers with, when the token is good. */
+export type ApiReply =
   | { kind: "answer"; text: string }
+  /** A stream that starts, then fails with this error, as a usage limit can mid-answer. */
+  | { kind: "fails-midway"; error: { code: string; message: string } }
   | { kind: "error"; status: number; body: unknown };
 
-/** Server-sent events of a streamed Responses API answer, as the Codex endpoint sends them. */
+/** What the User does on OpenAI's page. */
+export interface Approval {
+  /** The account they sign in with. */
+  subject?: string;
+  email?: string;
+  /** False: they don't allow IncarnaMind to use their plan. */
+  allowPlan?: boolean;
+}
+
+/** Server-sent events of a streamed Responses API answer. */
 function answerEvents(text: string, model: string): object[] {
   const response = { id: "resp_1", object: "response", created_at: 1_790_000_000, model };
   const words = text.split(/(?<= )/);
@@ -90,7 +117,7 @@ function answerEvents(text: string, model: string): object[] {
       },
     },
     {
-      // Like the real endpoint, the final event can come without the output items.
+      // The final event can come without the output items.
       type: "response.completed",
       response: {
         ...response,
@@ -109,65 +136,115 @@ function answerEvents(text: string, model: string): object[] {
 }
 
 export interface FakeOpenAI {
-  /** Point the core's `chatGptPlan` adapter here. The callback port is any free one. */
+  /** Point the core's `chatGptPlan` adapter here. */
   endpoints: ChatGptPlanEndpoints;
+  /** Every authorization request the browser was sent to, as its query parameters. */
+  authorizations: Record<string, string>[];
   /** Every request to the token endpoint, as its form fields. */
   tokenRequests: Record<string, string>[];
-  /** Every request that reached the Codex endpoint. */
-  codexRequests: CodexRequest[];
+  /** Every request to the revocation endpoint, as its form fields. */
+  revocations: Record<string, string>[];
+  /** Every request that reached the Responses API or the model list. */
+  apiRequests: ApiRequest[];
   /** Tokens handed out, oldest first. */
   issued: IssuedTokens[];
+  /** Client IDs issued by dynamic registration, oldest first. */
+  clients: string[];
   /** Access-token lifetime in seconds for the next tokens. */
   expiresIn: number;
   /** Milliseconds each refresh takes. */
   refreshDelayMs: number;
   /** When set, refreshes are refused with this status and body. */
   refreshRefusal: { status: number; body: unknown } | null;
-  /** How the Codex endpoint answers a request with a valid token. */
-  codexReply: CodexReply;
-  /** Makes every access token issued so far invalid, as if OpenAI revoked them. */
+  /** How the revocation endpoint answers. */
+  revokeStatus: number;
+  /** How the model list answers: its models, or an HTTP status. */
+  modelList: typeof ACCOUNT_MODELS | number;
+  /** How the Responses API answers a request with a valid token. */
+  reply: ApiReply;
+  /** Changes the next ID token, to check that a bad one is refused. */
+  tamperIdToken: ((claims: Record<string, unknown>) => Record<string, unknown>) | null;
+  /** Signs the next ID token with a key OpenAI doesn't publish. */
+  foreignSigner: boolean;
+  /** Makes every access token issued so far invalid, as if the User disconnected the app. */
   revokeAccessTokens(): void;
-  /** What OpenAI's authorization page does when the User approves: a code bound to the request. */
-  approve(authorizeUrl: string): string;
+  /** The responses requests only (not the model list). */
+  responses(): ApiRequest[];
 }
 
 /** Starts the fake on a free port; stopped when the test finishes. */
-export async function startFakeOpenAI(): Promise<FakeOpenAI> {
-  const codes = new Map<string, { challenge: string; redirectUri: string; clientId: string }>();
+export async function startFakeOpenAI(options: { now?: () => number } = {}): Promise<FakeOpenAI> {
+  const now = options.now ?? (() => Date.now());
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const foreign = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey;
+  const jwk = publicKey.export({ format: "jwk" });
+
+  interface PendingCode {
+    challenge: string;
+    redirectUri: string;
+    clientId: string;
+    nonce: string;
+    subject: string;
+    email: string;
+    scope: string;
+    resource: string;
+  }
+  const codes = new Map<string, PendingCode>();
   const validAccessTokens = new Set<string>();
+  /** The newest refresh token of each client: refresh tokens rotate. */
+  const refreshTokens = new Map<string, { token: string; subject: string; email: string }>();
   let codeCount = 0;
 
-  const issue = (): IssuedTokens => {
+  const issue = (code: Pick<PendingCode, "clientId" | "subject" | "email" | "nonce">) => {
     const n = fake.issued.length + 1;
-    const tokens = {
-      accessToken: jwt({
-        n,
-        exp: Math.floor(Date.now() / 1000) + fake.expiresIn,
-        [AUTH_CLAIM]: { chatgpt_account_id: ACCOUNT_ID },
-      }),
+    const seconds = Math.floor(now() / 1000);
+    let claims: Record<string, unknown> = {
+      iss: origin,
+      aud: code.clientId,
+      sub: code.subject,
+      email: code.email,
+      nonce: code.nonce,
+      iat: seconds,
+      exp: seconds + 3600,
+    };
+    if (fake.tamperIdToken) {
+      claims = fake.tamperIdToken(claims);
+      fake.tamperIdToken = null;
+    }
+    const idToken = signJwt(claims, fake.foreignSigner ? foreign : privateKey);
+    fake.foreignSigner = false;
+    const tokens: IssuedTokens = {
+      clientId: code.clientId,
+      accessToken: `access-token-${n}-${"a".repeat(24)}`,
       refreshToken: `refresh-token-${n}-${"r".repeat(24)}`,
-      idToken: jwt({
-        n,
-        email: EMAIL,
-        [AUTH_CLAIM]: { chatgpt_account_id: ACCOUNT_ID, chatgpt_plan_type: "plus" },
-      }),
+      idToken,
     };
     fake.issued.push(tokens);
     validAccessTokens.add(tokens.accessToken);
+    refreshTokens.set(code.clientId, {
+      token: tokens.refreshToken,
+      subject: code.subject,
+      email: code.email,
+    });
     return tokens;
   };
 
-  const tokenResponse = (tokens: IssuedTokens) => ({
+  const tokenResponse = (tokens: IssuedTokens, scope: string) => ({
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
     id_token: tokens.idToken,
     token_type: "Bearer",
     expires_in: fake.expiresIn,
+    scope,
   });
 
   const handleToken = async (request: IncomingMessage, response: ServerResponse) => {
     const form = Object.fromEntries(new URLSearchParams(await readBody(request)));
     fake.tokenRequests.push(form);
+    if (form.resource !== RESOURCE) {
+      sendJson(response, 400, { error: "invalid_target" });
+      return;
+    }
     if (form.grant_type === "authorization_code") {
       const pending = codes.get(form.code ?? "");
       codes.delete(form.code ?? "");
@@ -183,7 +260,7 @@ export async function startFakeOpenAI(): Promise<FakeOpenAI> {
         sendJson(response, 400, { error: "invalid_grant" });
         return;
       }
-      sendJson(response, 200, tokenResponse(issue()));
+      sendJson(response, 200, tokenResponse(issue(pending), pending.scope));
       return;
     }
     if (form.grant_type === "refresh_token") {
@@ -192,36 +269,85 @@ export async function startFakeOpenAI(): Promise<FakeOpenAI> {
         sendJson(response, fake.refreshRefusal.status, fake.refreshRefusal.body);
         return;
       }
-      // Refresh tokens rotate: only the newest one works.
-      if (form.refresh_token !== fake.issued.at(-1)?.refreshToken) {
-        sendJson(response, 400, { error: "invalid_grant", error_description: "reused" });
+      const current = refreshTokens.get(form.client_id ?? "");
+      if (!current || form.refresh_token !== current.token) {
+        sendJson(response, 400, { error: "refresh_token_reused" });
         return;
       }
-      sendJson(response, 200, tokenResponse(issue()));
+      const tokens = issue({
+        clientId: form.client_id ?? "",
+        subject: current.subject,
+        email: current.email,
+        nonce: "",
+      });
+      sendJson(response, 200, tokenResponse(tokens, FULL_SCOPE));
       return;
     }
     sendJson(response, 400, { error: "unsupported_grant_type" });
   };
 
-  const handleCodex = async (request: IncomingMessage, response: ServerResponse) => {
-    const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
+  const handleRevoke = async (request: IncomingMessage, response: ServerResponse) => {
+    const form = Object.fromEntries(new URLSearchParams(await readBody(request)));
+    fake.revocations.push(form);
+    if (fake.revokeStatus !== 200) {
+      sendJson(response, fake.revokeStatus, { error: "temporarily_unavailable" });
+      return;
+    }
+    const current = refreshTokens.get(form.client_id ?? "");
+    if (current?.token === form.token) refreshTokens.delete(form.client_id ?? "");
+    response.writeHead(200).end();
+  };
+
+  const record = async (request: IncomingMessage, path: string) => {
+    const text = request.method === "POST" ? await readBody(request) : "";
     const headers: Record<string, string | undefined> = {};
     for (const [name, value] of Object.entries(request.headers)) {
       headers[name] = Array.isArray(value) ? value.join(", ") : value;
     }
-    fake.codexRequests.push({ headers, body });
+    const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    fake.apiRequests.push({ path, headers, body });
     const token = headers.authorization?.replace(/^Bearer /, "") ?? "";
-    if (!validAccessTokens.has(token) || headers["chatgpt-account-id"] !== ACCOUNT_ID) {
-      sendJson(response, 401, { error: { message: "Your authentication token is invalid." } });
+    return { body, authorized: validAccessTokens.has(token) };
+  };
+
+  const handleModels = async (request: IncomingMessage, response: ServerResponse) => {
+    const { authorized } = await record(request, "/v1/models");
+    if (!authorized) {
+      sendJson(response, 401, { error: { message: "Invalid token." } });
       return;
     }
-    const reply = fake.codexReply;
+    if (typeof fake.modelList === "number") {
+      sendJson(response, fake.modelList, { error: { message: "Unavailable." } });
+      return;
+    }
+    sendJson(response, 200, { models: fake.modelList });
+  };
+
+  const handleResponses = async (request: IncomingMessage, response: ServerResponse) => {
+    const { body, authorized } = await record(request, "/v1/responses");
+    if (!authorized) {
+      sendJson(response, 401, {
+        error: { code: "subscription_sharing_invalid_user", message: "Invalid token." },
+      });
+      return;
+    }
+    const { reply } = fake;
     if (reply.kind === "error") {
       sendJson(response, reply.status, reply.body);
       return;
     }
     response.writeHead(200, { "content-type": "text/event-stream" });
-    for (const event of answerEvents(reply.text, String(body.model))) {
+    const events =
+      reply.kind === "answer"
+        ? answerEvents(reply.text, String(body.model))
+        : [
+            ...answerEvents("Partly", String(body.model)).slice(0, 4),
+            {
+              type: "response.failed",
+              response: { id: "resp_1", status: "failed", error: reply.error },
+            },
+          ];
+    for (const event of events) {
       response.write(
         `event: ${(event as { type: string }).type}\ndata: ${JSON.stringify(event)}\n\n`,
       );
@@ -231,12 +357,22 @@ export async function startFakeOpenAI(): Promise<FakeOpenAI> {
 
   const server = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    const post = request.method === "POST";
     const handler =
-      request.method === "POST" && path === "/oauth/token"
+      post && path === "/api/accounts/oauth/token"
         ? handleToken
-        : request.method === "POST" && path === "/backend-api/codex/responses"
-          ? handleCodex
-          : null;
+        : post && path === "/api/accounts/oauth/revoke"
+          ? handleRevoke
+          : post && path === "/v1/responses"
+            ? handleResponses
+            : request.method === "GET" && path === "/v1/models"
+              ? handleModels
+              : request.method === "GET" && path === "/.well-known/jwks.json"
+                ? async (_request: IncomingMessage, reply: ServerResponse) =>
+                    sendJson(reply, 200, {
+                      keys: [{ ...jwk, kid: KEY_ID, alg: "RS256", use: "sig" }],
+                    })
+                : null;
     if (!handler) {
       response.writeHead(404).end();
       return;
@@ -255,32 +391,62 @@ export async function startFakeOpenAI(): Promise<FakeOpenAI> {
   );
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-  const fake: FakeOpenAI = {
+  const fake: FakeOpenAI & {
+    approve(authorizeUrl: string, approval: Approval): { code: string; issued: string | null };
+  } = {
     endpoints: {
-      authorizeUrl: `${origin}/oauth/authorize`,
-      tokenUrl: `${origin}/oauth/token`,
-      callbackPort: 0,
+      issuer: origin,
+      authorizeUrl: `${origin}/api/accounts/authorize`,
+      tokenUrl: `${origin}/api/accounts/oauth/token`,
+      revokeUrl: `${origin}/api/accounts/oauth/revoke`,
+      jwksUrl: `${origin}/.well-known/jwks.json`,
       signInTimeoutMs: 10_000,
-      codexBaseUrl: `${origin}/backend-api/codex`,
+      apiBaseUrl: `${origin}/v1`,
     },
+    authorizations: [],
     tokenRequests: [],
-    codexRequests: [],
+    revocations: [],
+    apiRequests: [],
     issued: [],
+    clients: [],
     expiresIn: 3600,
     refreshDelayMs: 0,
     refreshRefusal: null,
-    codexReply: { kind: "answer", text: ANSWER },
+    revokeStatus: 200,
+    modelList: ACCOUNT_MODELS,
+    reply: { kind: "answer", text: ANSWER },
+    tamperIdToken: null,
+    foreignSigner: false,
     revokeAccessTokens: () => validAccessTokens.clear(),
-    approve(authorizeUrl) {
-      const params = new URL(authorizeUrl).searchParams;
+    responses: () => fake.apiRequests.filter((each) => each.path === "/v1/responses"),
+    /** What OpenAI's page does when the User approves: a code, and a client for a new registration. */
+    approve(authorizeUrl, approval) {
+      const params = Object.fromEntries(new URL(authorizeUrl).searchParams);
+      const subject = approval.subject ?? SUBJECT;
+      let clientId = params.client_id ?? "";
+      let issued: string | null = null;
+      if (clientId === "dynamic_agent_client") {
+        clientId = `oaiapp_test_${fake.clients.length + 1}`;
+        fake.clients.push(clientId);
+        issued = clientId;
+      }
       codeCount += 1;
       const code = `code-${codeCount}`;
+      const requested = (params.scope ?? "").split(" ");
+      const scope = requested
+        .filter((each) => approval.allowPlan !== false || each !== PLAN_SCOPE)
+        .join(" ");
       codes.set(code, {
-        challenge: params.get("code_challenge") ?? "",
-        redirectUri: params.get("redirect_uri") ?? "",
-        clientId: params.get("client_id") ?? "",
+        challenge: params.code_challenge ?? "",
+        redirectUri: params.redirect_uri ?? "",
+        clientId,
+        nonce: params.nonce ?? "",
+        subject,
+        email: approval.email ?? EMAIL,
+        scope,
+        resource: params.resource ?? "",
       });
-      return code;
+      return { code, issued };
     },
   };
   return fake;
@@ -301,22 +467,31 @@ export interface FakeBrowser extends Browser {
    * refuses, "ignore" walks away.
    */
   behaviour: "approve" | "decline" | "ignore";
+  /** How the User approves: which account, and whether they allow plan use. */
+  approval: Approval;
 }
 
 /** A browser in which the User signs in to the fake OpenAI, redirecting back like the real page. */
 export function createFakeBrowser(fake: FakeOpenAI): FakeBrowser {
+  const openai = fake as FakeOpenAI & {
+    approve(url: string, approval: Approval): { code: string; issued: string | null };
+  };
   const browser: FakeBrowser = {
     opened: [],
     visits: [],
     behaviour: "approve",
+    approval: {},
     async open(url) {
       browser.opened.push(url);
+      fake.authorizations.push(Object.fromEntries(new URL(url).searchParams));
       if (browser.behaviour === "ignore") return;
       const params = new URL(url).searchParams;
       const redirect = new URL(params.get("redirect_uri") ?? "");
       redirect.searchParams.set("state", params.get("state") ?? "");
       if (browser.behaviour === "approve") {
-        redirect.searchParams.set("code", fake.approve(url));
+        const { code, issued } = openai.approve(url, browser.approval);
+        redirect.searchParams.set("code", code);
+        if (issued) redirect.searchParams.set("client_id", issued);
       } else {
         redirect.searchParams.set("error", "access_denied");
         redirect.searchParams.set("error_description", "The User declined.");
@@ -331,12 +506,4 @@ export function createFakeBrowser(fake: FakeOpenAI): FakeBrowser {
     },
   };
   return browser;
-}
-
-/** A free port that something else is listening on, until the test finishes. */
-export async function occupiedPort(): Promise<number> {
-  const server = createServer((_request, response) => response.end());
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
-  return (server.address() as AddressInfo).port;
 }

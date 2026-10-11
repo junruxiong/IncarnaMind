@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from "react";
-import type { ChatGptAccount, ChatGptPlanStatus, ConnectionTestResult } from "../../../../core/api";
+import { useState } from "react";
+import type { ChatGptAccount, ConnectionTestResult } from "../../../../core/api";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
@@ -13,47 +13,43 @@ import {
   noticeClass,
   primaryButtonClass,
   rowTextClass,
-  rowTitleClass,
-  ruledListClass,
-  ruledRowClass,
   sectionTitleClass,
-  successTextClass,
 } from "../ui";
+import {
+  ChatGptSignInState,
+  ChatGptStorageNotice,
+  ContinueWithChatGptButton,
+  ManageUsageLink,
+  useChatGptPlan,
+  useContinueWithChatGpt,
+} from "./ChatGptSignIn";
 import { TestResult } from "./ProviderForm";
 
-/** The ChatGPT plan provider's status, kept up to date with the core's event. */
-export function useChatGptPlan(): [ChatGptPlanStatus | null, (status: ChatGptPlanStatus) => void] {
-  const [status, setStatus] = useState<ChatGptPlanStatus | null>(null);
-  useEffect(() => {
-    core.getChatGptPlan().then(setStatus, () => undefined);
-    return core.on("chatGptPlan.changed", setStatus);
-  }, []);
-  return [status, setStatus];
-}
-
 /**
- * Settings → Models → ChatGPT plan: the "ChatGPT plan (via Codex sign-in)" provider.
- * Off by default. Turning it on shows what it is (not an official OpenAI
- * integration, may be blocked, counts against the plan's limits) and the
- * sign-in; turning it off signs out and removes the provider.
+ * Settings → Models → ChatGPT plan: "Continue with ChatGPT" (Sign in with
+ * ChatGPT), then the plan's model for Questions, a test, and Sign out. Signing
+ * in here doesn't change the default model unless there is none yet.
  */
 export function ChatGptPlanSettings() {
   const t = useT();
-  const id = useId();
   const [status, setStatus] = useChatGptPlan();
   const readiness = useAppStore((state) => state.chatReadiness);
   const chatModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const [model, setModel] = useState("");
-  const [busy, setBusy] = useState<"switching" | "testing" | "saving" | null>(null);
+  const [busy, setBusy] = useState<"testing" | "saving" | "signing-out" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const sign = useContinueWithChatGpt({ keepDefault: true });
 
   const inUse =
     readiness !== null && "provider" in readiness && readiness.provider.kind === "chatgpt";
   const models = status?.models ?? [];
   const chosen = model || (inUse && chatModel ? chatModel.modelId : "") || (models[0]?.id ?? "");
+  const signedIn = status?.account.state === "signed-in";
+  const waiting = sign.waiting || status?.signingIn === true;
 
-  const run = async (action: "switching" | "testing" | "saving", task: () => Promise<void>) => {
+  const run = async (action: "testing" | "saving" | "signing-out", task: () => Promise<void>) => {
     setBusy(action);
     setError(null);
     try {
@@ -65,31 +61,18 @@ export function ChatGptPlanSettings() {
     }
   };
 
-  const toggle = (enabled: boolean) =>
-    run("switching", async () => {
-      setTest(null);
-      setStatus(await core.setChatGptPlanEnabled(enabled));
-    });
-
-  const signIn = async () => {
-    setError(null);
+  const signIn = () => {
     setTest(null);
-    try {
-      const result = await core.signInToChatGpt();
-      if (result.ok) setStatus(result.status);
-      // Cancelling is the User's own doing: nothing to explain.
-      else if (result.error.kind !== "cancelled") {
-        setError(t(`codex.signIn.error.${result.error.kind}`));
-      }
-    } catch (failure) {
-      setError(errorMessage(failure));
-    }
+    setUnconfirmed(false);
+    void sign.run();
   };
 
   const signOut = () =>
-    run("switching", async () => {
+    run("signing-out", async () => {
       setTest(null);
-      setStatus(await core.signOutOfChatGpt());
+      const result = await core.signOutOfChatGpt();
+      setStatus(result.status);
+      setUnconfirmed(!result.revoked);
     });
 
   const testConnection = () =>
@@ -104,128 +87,94 @@ export function ChatGptPlanSettings() {
     });
 
   return (
-    <section data-testid="experimental-settings" className="flex flex-col">
-      <h4 className={`mb-2 ${sectionTitleClass}`}>{t("codex.experimental.title")}</h4>
-      <div className={ruledListClass}>
-        <div className={ruledRowClass}>
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <label htmlFor={id} className={rowTitleClass}>
-              {t("codex.provider.name")}
-            </label>
-            <span id={`${id}-description`} className={rowTextClass}>
-              {t("codex.switch.description")}
-            </span>
-          </div>
-          <input
-            id={id}
-            type="checkbox"
-            role="switch"
-            aria-checked={status?.enabled ?? false}
-            data-testid="codex-switch"
-            className="switch"
-            checked={status?.enabled ?? false}
-            disabled={status === null || busy === "switching"}
-            aria-describedby={`${id}-description`}
-            onChange={(event) => void toggle(event.target.checked)}
-          />
-        </div>
+    <section data-testid="chatgpt-settings" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <h4 className={sectionTitleClass}>{t("chatgpt.title")}</h4>
+        <p className={rowTextClass}>{t("chatgpt.description")}</p>
       </div>
 
-      {status?.enabled && (
-        <div className="mt-3 flex flex-col gap-3">
-          <div role="note" data-testid="codex-warning" className={noticeClass}>
-            <p className="font-semibold text-ink">{t("codex.warning.title")}</p>
-            <p className="mt-1">{t("codex.warning.body")}</p>
-          </div>
+      {status && (
+        <p data-testid="chatgpt-account" className="text-ui text-ink-secondary">
+          <AccountLine account={status.account} />
+        </p>
+      )}
 
-          <p data-testid="codex-account" className="text-ui text-ink-secondary">
-            <AccountLine account={status.account} />
-          </p>
-
-          {status.signingIn ? (
-            <div className="flex items-center gap-2 text-ui text-ink-secondary">
-              <span className="flex-1">{t("codex.signingIn")}</span>
-              <button
-                type="button"
-                data-testid="codex-cancel"
-                onClick={() => void core.cancelChatGptSignIn()}
-                className={buttonClass}
-              >
-                {t("codex.cancel")}
-              </button>
-            </div>
-          ) : status.account.state !== "signed-in" ? (
-            <div>
-              <button
-                type="button"
-                data-testid="codex-sign-in"
-                onClick={() => void signIn()}
-                className={primaryButtonClass}
-              >
-                {status.account.state === "expired" ? t("codex.signInAgain") : t("codex.signIn")}
-              </button>
-            </div>
-          ) : (
-            <>
-              <label className={fieldLabelClass}>
-                {t("codex.model")}
-                <select
-                  data-testid="codex-model"
-                  value={chosen}
-                  onChange={(event) => {
-                    setModel(event.target.value);
-                    setTest(null);
-                  }}
-                  className={inputClass}
-                >
-                  {models.map((each) => (
-                    <option key={each.id} value={each.id}>
-                      {each.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {inUse && <p className={successTextClass}>{t("codex.inUse")}</p>}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-testid="codex-use"
-                  disabled={
-                    busy !== null || chosen === "" || (inUse && chosen === chatModel?.modelId)
-                  }
-                  onClick={() => void use()}
-                  className={primaryButtonClass}
-                >
-                  {t("codex.use")}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy !== null || chosen === ""}
-                  onClick={() => void testConnection()}
-                  className={buttonClass}
-                >
-                  {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
-                </button>
-                <button
-                  type="button"
-                  data-testid="codex-sign-out"
-                  disabled={busy !== null}
-                  onClick={() => void signOut()}
-                  className={ghostButtonClass}
-                >
-                  {t("codex.signOut")}
-                </button>
-              </div>
-            </>
-          )}
-
-          {test && <TestResult result={test} onRetry={() => void testConnection()} />}
-          {error && (
-            <p role="alert" data-testid="codex-error" className={errorTextClass}>
-              {error}
+      {waiting ? (
+        <ChatGptSignInState sign={sign} />
+      ) : !signedIn ? (
+        <div className="flex flex-col items-start gap-2">
+          <ChatGptStorageNotice />
+          <ContinueWithChatGptButton onClick={signIn} disabled={status === null} />
+          <ChatGptSignInState sign={sign} />
+        </div>
+      ) : (
+        <>
+          <label className={fieldLabelClass}>
+            {t("chatgpt.model")}
+            <select
+              data-testid="chatgpt-model"
+              value={chosen}
+              onChange={(event) => {
+                setModel(event.target.value);
+                setTest(null);
+              }}
+              className={inputClass}
+            >
+              {models.map((each) => (
+                <option key={each.id} value={each.id}>
+                  {each.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {inUse && (
+            <p data-testid="chatgpt-in-use" className="text-[13px] leading-5 text-ink-secondary">
+              {t("chatgpt.inUse")}
+              <span aria-hidden="true"> · </span>
+              <ManageUsageLink />
             </p>
           )}
-        </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-testid="chatgpt-use"
+              disabled={busy !== null || chosen === "" || (inUse && chosen === chatModel?.modelId)}
+              onClick={() => void use()}
+              className={primaryButtonClass}
+            >
+              {t("chatgpt.use")}
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null || chosen === ""}
+              onClick={() => void testConnection()}
+              className={buttonClass}
+            >
+              {busy === "testing" ? t("providers.form.testing") : t("providers.form.test")}
+            </button>
+            <button
+              type="button"
+              data-testid="chatgpt-sign-out"
+              disabled={busy !== null}
+              onClick={() => void signOut()}
+              className={ghostButtonClass}
+            >
+              {t("chatgpt.signOut")}
+            </button>
+          </div>
+        </>
+      )}
+
+      {unconfirmed && !signedIn && (
+        <p role="note" data-testid="chatgpt-sign-out-unconfirmed" className={noticeClass}>
+          {t("chatgpt.signedOut.unconfirmed")} <ManageUsageLink />
+        </p>
+      )}
+      {test && <TestResult result={test} onRetry={() => void testConnection()} />}
+      {error && (
+        <p role="alert" data-testid="chatgpt-settings-error" className={errorTextClass}>
+          {error}
+        </p>
       )}
     </section>
   );
@@ -233,13 +182,9 @@ export function ChatGptPlanSettings() {
 
 function AccountLine({ account }: { account: ChatGptAccount }) {
   const t = useT();
-  if (account.state === "signed-out") return <>{t("codex.account.signedOut")}</>;
-  if (account.state === "expired") return <>{t("codex.account.expired")}</>;
-  const plan = account.plan ? account.plan.charAt(0).toUpperCase() + account.plan.slice(1) : null;
+  if (account.state === "signed-out") return <>{t("chatgpt.account.signedOut")}</>;
+  if (account.state === "expired") return <>{t("chatgpt.account.expired")}</>;
   return (
-    <>
-      {t("codex.account.signedIn", { account: account.email ?? t("codex.account.unknown") })}
-      {plan && <span className="ml-2 text-ink-meta">{t("codex.account.plan", { plan })}</span>}
-    </>
+    <>{t("chatgpt.account.signedIn", { account: account.email ?? t("chatgpt.account.unknown") })}</>
   );
 }

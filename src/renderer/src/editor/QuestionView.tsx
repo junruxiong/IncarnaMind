@@ -11,7 +11,7 @@ import { useAnswers } from "../answers";
 import { SkillIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
+import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon, RemoveIcon } from "./icons";
@@ -123,10 +123,7 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
           <ProblemLine
             role="status"
             testId="question-not-ready"
-            action={{
-              label: t("question.setUp"),
-              onClick: () => openSettings(settingsPageFor(blocked.readiness)),
-            }}
+            action={readinessAction(blocked.readiness, t, openSettings, "question.setUp")}
           >
             <ReadinessExplanation readiness={blocked.readiness} inLine />
           </ProblemLine>

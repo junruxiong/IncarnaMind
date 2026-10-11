@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   createDataFolder,
   dismissChatSetup,
+  interceptOpenExternal,
   launchApp,
   linkFolderFromSidebar,
   newMind,
@@ -15,6 +17,7 @@ import {
   setWindowSize,
   showSettingsPage,
   showSourceLocations,
+  urlsOpened,
 } from "./app";
 
 let dataDir: string;
@@ -154,27 +157,39 @@ test("added files are processed, show as ready in the sidebar, and can be delete
   }
 });
 
-test("the experimental ChatGPT plan is off by default, and turning it on shows the warning and the sign-in", async () => {
+test("Continue with ChatGPT opens OpenAI's sign-in for IncarnaMind's own registration, and can be cancelled", async () => {
   const { app, window } = await launchApp(dataDir);
-  await dismissChatSetup(window);
+  await interceptOpenExternal(app);
+
+  // First run offers the ChatGPT plan beside local models and a key, with its own button.
+  const setup = window.getByTestId("chat-setup");
+  await setup.getByTestId("chat-choice-chatgpt").check();
+  await expect(setup.getByTestId("chatgpt-continue")).toHaveText("Continue with ChatGPT");
+  await setup.getByTestId("chat-setup-later").click();
+
+  // Settings → Models has it too. Nothing is signed in here: the browser is stood in for.
   await openSettings(window, "models");
+  const section = window.getByTestId("chatgpt-settings");
+  await expect(section.getByTestId("chatgpt-account")).toHaveText("Not signed in.");
+  await acceptPlainTextKeys(window, section);
+  await section.getByTestId("chatgpt-continue").click();
+  await expect(section.getByTestId("chatgpt-cancel")).toBeVisible();
+  await expect.poll(() => urlsOpened(app)).toHaveLength(1);
+  const [opened] = await urlsOpened(app);
+  const authorize = new URL(opened ?? "");
+  expect(`${authorize.origin}${authorize.pathname}`).toBe(
+    "https://auth.openai.com/api/accounts/authorize",
+  );
+  expect(authorize.searchParams.get("client_id")).toBe("dynamic_agent_client");
+  expect(authorize.searchParams.get("agent_name_hint")).toBe("IncarnaMind");
+  expect(authorize.searchParams.get("redirect_uri")).toMatch(
+    /^http:\/\/127\.0\.0\.1:\d+\/auth\/callback$/,
+  );
 
-  const experimental = window.getByTestId("experimental-settings");
-  const toggle = experimental.getByTestId("codex-switch");
-  await expect(toggle).toBeVisible();
-  await expect(toggle).not.toBeChecked();
-  await expect(experimental.getByTestId("codex-warning")).toHaveCount(0);
-  await expect(experimental.getByTestId("codex-sign-in")).toHaveCount(0);
-
-  // Turning it on explains what it is before anything can be signed in. Nothing is signed in here.
-  await toggle.check();
-  const warning = experimental.getByTestId("codex-warning");
-  await expect(warning).toBeVisible();
-  await expect(warning).toContainText("isn't an official OpenAI integration");
-  await expect(warning).toContainText("may block it");
-  await expect(warning).toContainText("usage limits");
-  await expect(experimental.getByTestId("codex-sign-in")).toBeVisible();
-  await expect(experimental.getByTestId("codex-account")).toHaveText("Not signed in.");
+  // Cancelling is the User's own doing: the button comes back, with nothing to explain.
+  await section.getByTestId("chatgpt-cancel").click();
+  await expect(section.getByTestId("chatgpt-continue")).toBeVisible();
+  await expect(section.getByTestId("chatgpt-error")).toHaveCount(0);
   await app.close();
 });
 

@@ -478,11 +478,17 @@ export interface CoreAdapters {
    */
   ollamaModels?: OllamaModels;
   /**
-   * Where the experimental ChatGPT plan provider signs in and sends Questions.
-   * Defaults to OpenAI's servers and the Codex CLI's callback port; tests
-   * point it at a local fake authorization server and endpoint.
+   * Where the ChatGPT plan provider signs in and sends Questions. Defaults to
+   * OpenAI's servers; tests point it at a local fake authorization server and API.
    */
   chatGptPlan?: Partial<ChatGptPlanEndpoints>;
+  /**
+   * Where the ChatGPT sign-in is kept instead of `keychain`: a store that
+   * several data folders on this computer share, and a lock file that keeps
+   * their token refreshes apart. Only a development or test build passes one
+   * (a ChatGPT test profile, see docs/agents/testing.md); release builds never do.
+   */
+  chatGptStore?: { keychain: Keychain; lockFile: string };
   /**
    * How long a remote Connector's browser sign-in waits for the User.
    * Defaults to five minutes; tests shorten it.

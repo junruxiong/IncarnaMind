@@ -17,7 +17,7 @@ import type { ChatProviderKind } from "../api";
 import { isRecord } from "../errors";
 import type { ModelFactsLayer } from "./capabilities";
 import { isNonChatModel, type ModelInput, modelsProviderOfKind } from "./catalog";
-import { CHATGPT_PLAN_MODELS } from "./chatgpt/codexEndpoint";
+import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
 import { endpointUrl } from "./kinds";
 
 const LIST_TIMEOUT_MS = 5_000;
@@ -156,8 +156,8 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
   const hosted = endpointUrl(kind, endpoint);
   switch (kind) {
     case "chatgpt":
-      // The plan's endpoint has no model list: these are the ones the Codex CLI offers.
-      return CHATGPT_PLAN_MODELS.map((model) => ({ id: model.id }));
+      // Read with the sign-in by the plan itself (see ./chatgpt/plan); these are its fallback.
+      return KNOWN_PLAN_MODELS.map((model) => ({ id: model.id }));
     case "ollama": {
       const body = await getJson(`${baseUrl}/api/tags`, {});
       const models = isRecord(body) && Array.isArray(body.models) ? body.models : [];

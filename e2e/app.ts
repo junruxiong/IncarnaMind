@@ -120,6 +120,8 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
+  // A test never uses the ChatGPT sign-in an agent's shell may point at for checks by hand.
+  delete env.INCARNAMIND_CHATGPT_PROFILE;
   env.INCARNAMIND_TEST_AUDIO = "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
