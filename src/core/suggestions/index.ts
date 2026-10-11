@@ -5,13 +5,14 @@
  *
  * 1. The end of the paragraph is searched as an Answer's Question is (see
  *    ../answers/citing), in the composer's Search scope.
- * 2. Unless the best Passage holds enough of its words (`isStrongMatch`), it
- *    stops there: no request.
+ * 2. Unless the best Passage is a strong match (`isStrongMatch`: as the
+ *    reranker judges it, or by the words it shares), it stops there: no request.
  * 3. The default chat model (thinking off, a short reply; the quick-tasks
  *    model once Settings have one, #180) gets the paragraph and the Passages,
  *    and gives the words to add, the Passage they rest on and a quote from it.
  * 4. The quote is cited and checked (`citeQuote`); a quote that isn't found
- *    gives nothing.
+ *    gives nothing, and nor does a number in the words that isn't in the
+ *    quote or the paragraph (`numbersBacked`).
  *
  * Nothing leaves the computer unless the User turned suggestions on and
  * allowed the "suggestions" flow to the model's service (ADR-0014), which is
@@ -31,6 +32,7 @@ import { createWindowBudget } from "../answers/window";
 import type {
   ChatModelChoice,
   ChatReadiness,
+  Citation,
   ExternalService,
   SearchScope,
   Suggestion,
@@ -47,6 +49,7 @@ import { givesStructuredOutput } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
 import {
   continuationOf,
+  numbersBacked,
   readReply,
   SUGGESTION_INSTRUCTIONS,
   suggestionPrompt,
@@ -65,13 +68,22 @@ const MAX_QUERY_CHARACTERS = 400;
 /** The most Passages the model is given. */
 export const MAX_PASSAGES = 8;
 /**
- * A strong match: the best Passage holds at least this many of the searched
- * words (not stopwords, nor single letters or characters), and this share of
- * them, though never more than `MATCHED_WORDS_ENOUGH` are needed: a long
- * sentence says much that no Passage repeats. Below it, the Documents don't
- * clearly speak to what is being written, and nothing is asked. (The model is
- * told to give nothing when no Passage supports a way on, and the quote check
- * comes after it.)
+ * A strong match, when search reranked: the reranker's score of the best
+ * Passage (from 0 to 1) is at least this. In the hand check with the
+ * built-in reranking model (#282), paragraphs the Documents support scored
+ * 0.78 to 0.98, and those they don't 0.001 to 0.03.
+ */
+const MIN_RELEVANCE = 0.5;
+/**
+ * A strong match, when search didn't rerank (the User turned it off): the
+ * best Passage holds at least this many of the searched words (not
+ * stopwords, nor single letters or characters), and this share of them,
+ * though never more than `MATCHED_WORDS_ENOUGH`: a long sentence says much
+ * that no Passage repeats.
+ *
+ * Below a strong match, the Documents don't clearly speak to what is being
+ * written, and nothing is asked. (Above it, the model is told to give
+ * nothing when no Passage supports a way on, and the quote check follows.)
  */
 const MIN_MATCHED_WORDS = 2;
 const MIN_MATCHED_SHARE = 1 / 3;
@@ -105,11 +117,16 @@ const telling = (term: string) =>
   /\p{Script=Han}/u.test(term) ? term.replaceAll(" ", "").length >= 2 : term.length >= 3;
 
 /**
- * Whether the best Passage found for `query` holds enough of its telling
- * words: `MIN_MATCHED_WORDS`, and a third of them for a short query, up to
- * `MATCHED_WORDS_ENOUGH`.
+ * Whether the best Passage found for `query` is a strong match: the reranker
+ * scored it `MIN_RELEVANCE` or more, or, without a reranker, it holds enough
+ * of the query's telling words (`MIN_MATCHED_WORDS`, a third of them for a
+ * short query, up to `MATCHED_WORDS_ENOUGH`).
  */
-export function isStrongMatch(query: string, best: Pick<FoundPassage, "matches">): boolean {
+export function isStrongMatch(
+  query: string,
+  best: Pick<FoundPassage, "matches" | "relevance">,
+): boolean {
+  if (best.relevance !== null) return best.relevance >= MIN_RELEVANCE;
   const terms = keywordTerms(query).filter(telling).length;
   const matched = best.matches.filter(telling).length;
   const needed = Math.min(
@@ -317,9 +334,18 @@ export function createSuggestions(options: SuggestionsOptions) {
     // A reply that only repeats what the paragraph says already is no way on.
     const text = continuationOf(paragraph, reply.text);
     if (text === "" || paragraph.includes(text)) return NONE;
-    const passage = passages[reply.passage];
-    const citation = passage && citing.citeQuote(passage.passageId, reply.quote);
-    if (citation?.check !== "found") return NONE;
+    // The quote is cited where it is found: in the Passage the reply names, or else, as a model
+    // quoting one Passage may name another, the first other one it was given that holds it.
+    const named = passages[reply.passage];
+    let citation: Citation | null = null;
+    for (const passage of named ? [named, ...passages.filter((each) => each !== named)] : []) {
+      const cited = citing.citeQuote(passage.passageId, reply.quote);
+      if (cited?.check === "found") {
+        citation = cited;
+        break;
+      }
+    }
+    if (!citation || !numbersBacked(text, citation.quote, paragraph)) return NONE;
 
     const suggestion: Suggestion = {
       suggestionId: randomUUID(),

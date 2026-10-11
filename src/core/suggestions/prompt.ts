@@ -5,6 +5,7 @@
  */
 import { jsonSchema } from "ai";
 import { englishLocation } from "../../shared/locations";
+import { normaliseText } from "../../shared/text";
 import type { FoundPassage } from "../answers/citing";
 
 /** The most words a suggestion may have, and the most CJK characters: one short sentence. */
@@ -15,13 +16,32 @@ const TOLERANCE = 1.5;
 
 export const SUGGESTION_INSTRUCTIONS = [
   "You help the User write. They paused at the end of the paragraph they are writing. Suggest how it goes on, using only the Passages from their Documents below.",
-  "- Your text is added right after the paragraph's last character, and the two must read as one text. If the paragraph stops in the middle of a sentence, your text completes that very sentence, so it reads correctly from its start (after “the survey found that”, say what the survey found). If the paragraph ends with a full sentence, write the next one. Never repeat the paragraph's words.",
+  "- Your text is added right after the paragraph's last character, and the two must read as one text. If the paragraph stops in the middle of a sentence, your text completes that very sentence, so it reads correctly from its start: after “…and the report found that”, write the rest, such as “most delays came from one supplier.”; after “…调查发现，大多数居民”, such as “每天步行上班。”. If the paragraph ends with a full sentence, write the next one. Never repeat the paragraph's words.",
   `- One sentence at most: no more than ${MAX_WORDS} words, or ${MAX_CJK_CHARACTERS} Chinese characters.`,
   "- Write in the paragraph's language and tone, as the User would go on.",
-  "- Rest it on one Passage, and copy from that Passage a short quote that supports it, character for character.",
+  "- Rest it on one Passage, and say nothing that Passage doesn't say. Copy from it a short quote that supports what you wrote, character for character.",
   "- If no Passage supports a way on, give empty text.",
   'Reply with JSON only: {"text": the words to add after the paragraph, "passage": the id of the Passage, such as P1, "quote": the quote}.',
 ].join("\n");
+
+/** A number as written: digits, with the points and commas between them. */
+const NUMBER = /\d+(?:[.,]\d+)*/g;
+
+/** The numbers in a text, compared without thousands separators ("1,240,000" is 1240000). */
+const numbersIn = (text: string) =>
+  (normaliseText(text).match(NUMBER) ?? []).map((number) =>
+    number.replace(/,(?=\d{3}(?!\d))/g, ""),
+  );
+
+/**
+ * Whether every number in a suggestion is in its quote, or in the User's own
+ * paragraph: the quote is found on the page, but nothing else checks the
+ * words around it, and a figure the model got wrong would read as cited.
+ */
+export function numbersBacked(text: string, quote: string, paragraph: string): boolean {
+  const backed = new Set([...numbersIn(quote), ...numbersIn(paragraph)]);
+  return numbersIn(text).every((number) => backed.has(number));
+}
 
 /** The fewest characters a reply must repeat of the paragraph's end before they are taken off it. */
 const MIN_OVERLAP = 8;

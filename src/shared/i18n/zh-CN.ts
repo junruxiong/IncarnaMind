@@ -1379,6 +1379,8 @@ export const zhCN = {
   "command.group.close": "关闭这一栏",
   "command.group.equalize": "各栏等宽",
   "command.composer.focus": "提问",
+  "command.suggestions.on": "开启写作建议",
+  "command.suggestions.off": "关闭写作建议",
 
   "update.available.message": "IncarnaMind {version} 已发布",
   "update.available.detail": "当前安装的 IncarnaMind 无法自动更新。请下载新版本，替换当前版本。",

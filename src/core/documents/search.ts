@@ -212,6 +212,14 @@ export interface WindowedPassage extends PassageSearchResult {
    * most relevant (see ../answers/window).
    */
   rank?: number;
+  /**
+   * How relevant the reranker found it, when search reranked and it was one
+   * of the hits: the reranker's score, from 0 to 1 (the built-in model's,
+   * Cohere's and Voyage's), higher is better. None when search kept its own
+   * order: reranking off, the built-in model not downloaded yet, or a
+   * reranking service that couldn't be used. Set by the search Tool only.
+   */
+  relevance?: number;
 }
 
 interface WindowedRow extends ResultRow {
