@@ -191,12 +191,49 @@ describe("keys", () => {
     expect(pressed("CmdOrCtrl+\\", press("#", "Backslash", { meta: true }), true)).toBe(true);
   });
 
+  test("a sign typed with AltGr is text, though Windows reports AltGr as Ctrl+Alt", async () => {
+    // The keymap reaches the store, which reads the bridge set up above.
+    const { runShortcut } = await import("../../src/renderer/src/commands/keymap");
+    let ran = 0;
+    const stop = commands.register({
+      id: "test.altGr",
+      label: "menu.newMind",
+      group: "main",
+      reversible: true,
+      shortcut: { keys: "Ctrl+Alt+\\" },
+      run: () => {
+        ran += 1;
+      },
+    });
+    const globals = globalThis as unknown as { document?: unknown };
+    const page = globals.document;
+    globals.document = { querySelector: () => null };
+    // A German keyboard types \ with AltGr+ß.
+    const typed = (altGr: boolean) =>
+      ({
+        ...press("\\", "Minus", { ctrl: true, alt: true }),
+        target: null,
+        getModifierState: (key: string) => altGr && key === "AltGraph",
+        preventDefault: () => undefined,
+      }) as unknown as KeyboardEvent;
+    try {
+      expect(runShortcut(typed(true), NOWHERE)).toBe(false);
+      expect(runShortcut(typed(false), NOWHERE)).toBe(true);
+      expect(ran).toBe(1);
+    } finally {
+      stop();
+      globals.document = page;
+    }
+  });
+
   test("are written as each system writes them", () => {
     expect(keysLabel("CmdOrCtrl+J", true)).toBe("⌘J");
     expect(keysLabel("CmdOrCtrl+J", false)).toBe("Ctrl+J");
     expect(keysLabel("CmdOrCtrl+\\", true)).toBe("⌘\\");
     expect(keysLabel("CmdOrCtrl+\\", false)).toBe("Ctrl+\\");
-    expect(keysLabel("CmdOrCtrl+Shift+Backspace", true)).toBe("⌘⇧⌫");
+    expect(keysLabel("CmdOrCtrl+Shift+Backspace", true)).toBe("⇧⌘⌫");
+    expect(keysLabel("CmdOrCtrl+Alt+\\", true)).toBe("⌥⌘\\");
+    expect(keysLabel("CmdOrCtrl+Alt+\\", false)).toBe("Ctrl+Alt+\\");
     expect(keysLabel("CmdOrCtrl+Shift+Backspace", false)).toBe("Ctrl+Shift+Backspace");
     expect(keysLabel("Ctrl+Tab", true)).toBe("⌃⇥");
   });

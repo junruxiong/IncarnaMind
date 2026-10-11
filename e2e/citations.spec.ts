@@ -102,6 +102,12 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   const highlights = viewer.locator('[data-page-number="2"] [data-quote-highlight]');
   await expect(highlights).toHaveText(["Spring tides happen at new moon and at full moon."]);
   await expect(highlights.first()).toBeInViewport();
+  // It opened as a preview in a group right of the Mind, which stays where it was, in front.
+  const groups = window.getByTestId("tab-group");
+  await expect(groups).toHaveCount(2);
+  await expect(groups.first().getByTestId("mind-tab")).toHaveAttribute("aria-selected", "true");
+  await expect(groups.first()).toHaveAttribute("data-focused", "true");
+  await expect(groups.nth(1).getByTestId("document-tab")).toHaveAttribute("data-preview", "true");
   await app.close();
 });
 
