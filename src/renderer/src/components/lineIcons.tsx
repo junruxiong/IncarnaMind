@@ -61,6 +61,18 @@ export function FolderPlusLineIcon(props: IconProps) {
   );
 }
 
+/** Find sources: a page with a magnifying glass over its corner. */
+export function FindSourcesLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M11 20H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l4 4v3" />
+      <path d="M8 8h4M8 12h2" />
+      <circle cx="16" cy="16" r="3.25" />
+      <path d="m18.5 18.5 2.5 2.5" />
+    </LineIcon>
+  );
+}
+
 /** Other Documents, the files added on their own: two pages, one behind the other. */
 export function LooseDocumentsLineIcon(props: IconProps) {
   return (

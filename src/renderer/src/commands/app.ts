@@ -1,4 +1,5 @@
 import { noteHolding } from "../editor/noteKeymap";
+import { useFindSources } from "../findSources";
 import { useAppStore } from "../store";
 import { composerHandle, sidebarHandle } from "./handles";
 import { type Command, commands, fromMenu } from "./registry";
@@ -25,6 +26,14 @@ const appCommands: readonly Command[] = [
     reversible: true,
     when: () => sidebarHandle.current !== null,
     run: () => sidebarHandle.current?.toggle(),
+  },
+  {
+    id: "sources.find",
+    label: "command.sources.find",
+    keywords: ["command.sources.find.keywords"],
+    group: "main",
+    reversible: true,
+    run: () => useFindSources.getState().show(),
   },
   {
     id: "composer.focus",

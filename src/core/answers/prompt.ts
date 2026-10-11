@@ -45,6 +45,18 @@ export function connectorInstructions(
 }
 
 /**
+ * Find sources' Tool, when offered (#296): when to call it, and that what it
+ * finds isn't the User's Documents, so it is never cited with a marker.
+ */
+export function sourcesInstructions(offered: boolean): string {
+  if (!offered) return "";
+  return [
+    "You can also call find_sources to search scholarly databases for published papers outside the User's Documents. Call it only when the Question asks you to find papers, articles, studies or other sources.",
+    "- Name what it found by title, first author and year, and say which are open access; never put a citation marker on them. The User adds the ones they want from the search's results, under your Answer.",
+  ].join("\n");
+}
+
+/**
  * Connectors that are on but can't be used until the User signs in to them
  * again: their Tools aren't offered, and the Answer says so if it needed them.
  */

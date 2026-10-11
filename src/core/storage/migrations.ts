@@ -841,6 +841,41 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL AND document_id IS NOT NULL;
     `,
   },
+  {
+    version: 46,
+    description: "Found sources: where a Document or reference Find sources added came from (#296)",
+    sql: `
+      -- One row per Document, or reference record with no Document, that Find
+      -- sources added (src/core/sources, ADR-0018): the Source provider whose
+      -- copy or record it is (its id, e.g. "openalex"), the work's key
+      -- ("doi:10.1038/…", "arxiv:1706.03762"), the provider's name as it was
+      -- then ("OpenAlex"), the address its text was
+      -- fetched from (its page at the publisher, for a reference alone), the
+      -- licence and version of that text ("cc-by"; "published", "accepted"
+      -- or "submitted") and the version's date (ISO 8601 at the precision
+      -- known), and when it was fetched (NULL for a reference alone). No
+      -- foreign keys: a later sync may deliver a row before its Document.
+      CREATE TABLE found_sources (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT,
+        reference_record_id TEXT,
+        provider TEXT NOT NULL,
+        provider_name TEXT NOT NULL,
+        work_key TEXT NOT NULL,
+        address TEXT,
+        licence TEXT,
+        version TEXT,
+        version_date TEXT,
+        fetched_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX found_sources_by_work ON found_sources (work_key) WHERE deleted_at IS NULL;
+      CREATE UNIQUE INDEX found_sources_by_document ON found_sources (document_id)
+        WHERE deleted_at IS NULL AND document_id IS NOT NULL;
+    `,
+  },
 ];
 
 /**

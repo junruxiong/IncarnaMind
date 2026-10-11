@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { shortcutLabel } from "../commands/keymap";
+import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { useMeetings } from "../meetings";
 import { useAppStore } from "../store";
@@ -7,6 +8,7 @@ import { DocumentsSection } from "./DocumentsSection";
 import { GetStartedCard } from "./GettingStarted";
 import {
   AppMark,
+  FindSourcesLineIcon,
   FolderLineIcon,
   FolderPlusLineIcon,
   MindLineIcon,
@@ -107,7 +109,8 @@ export function PlusMenuPlaceholder() {
 
 /**
  * The one "+" menu, the one place to add: New Mind, Record a meeting (once
- * Meetings are turned on), New Folder…, Add Documents… and Link a folder….
+ * Meetings are turned on), New Folder…, Add Documents…, Find sources… and
+ * Link a folder….
  * Opened by keyboard or mouse, its items are menu items reached with the
  * arrow keys.
  */
@@ -192,6 +195,16 @@ function PlusMenu() {
         >
           <PlusLineIcon className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.plus.addDocuments")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-find-sources"
+          onClick={choose(() => useFindSources.getState().show())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <FindSourcesLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("sidebar.plus.findSources")}</span>
         </button>
         <button
           type="button"
