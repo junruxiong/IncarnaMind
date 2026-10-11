@@ -4,7 +4,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { createDataFolder, expectReadyDocuments, launchApp, removeDataFolder } from "./app";
+import {
+  acceptPlainTextKeys,
+  createDataFolder,
+  expectReadyDocuments,
+  launchApp,
+  removeDataFolder,
+} from "./app";
 
 /*
  * Outside agents (#351): an agent's MCP client starts IncarnaMind's server as
@@ -31,6 +37,8 @@ test("an agent reaches the app through the shipped shim, and cites only its Fold
     "# Tides\n\nSpring tides happen twice a month, at new moon and full moon, when the sun and the moon pull in line.\n",
   );
   const { window } = await launchApp(dataDir);
+  // Linux with no keyring running (CI): the pairing's key is kept as other keys are, once allowed.
+  await acceptPlainTextKeys(window);
   const launch = await window.evaluate(async (path) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const coast = await bridge.createLibraryGroup({ name: "Coast", description: "The sea." });

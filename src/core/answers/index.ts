@@ -128,6 +128,8 @@ type Outcome = { status: "done" | "stopped" } | { status: "failed"; error: Provi
 
 interface Generation {
   home: AnswerHome;
+  /** The model writing it. */
+  model: ChatModelChoice;
   /** Writes what has arrived with the final status, now. Later calls do nothing. */
   finish(outcome: Outcome): void;
 }
@@ -173,10 +175,11 @@ type NotAsked = Extract<AskResult, { reason: "not-ready" | "skill-unavailable" }
 /**
  * An Answer written for an outside agent (see `answerOutside`): its Markdown
  * with Citation markers and its Citations, each checked; or why it wasn't
- * asked: the default chat model isn't ready, or the User has yet to allow it.
+ * asked: the default chat model isn't ready, Local mode keeps the Question
+ * from a model off this computer, or the User has yet to allow the model.
  */
 export type OutsideAnswer =
-  | { asked: false; reason: "not-ready" | "consent-needed" }
+  | { asked: false; reason: "not-ready" | "consent-needed" | "local-mode" }
   | {
       asked: true;
       status: "done" | "stopped" | "failed";
@@ -376,7 +379,11 @@ function failureOf(error: unknown): ProviderError {
   if (error instanceof ChatNotReadyError) {
     const { reason } = error.readiness;
     const kind =
-      reason === "consent-declined" ? reason : reason === "missing-api-key" ? "auth" : "model";
+      reason === "consent-declined" || reason === "local-mode"
+        ? reason
+        : reason === "missing-api-key"
+          ? "auth"
+          : "model";
     return { kind, message: error.message };
   }
   return classifyProviderError(error);
@@ -549,7 +556,7 @@ export function createAnswers(options: AnswersOptions) {
       }, ANSWER_WRITE_INTERVAL_MS);
     };
 
-    active.set(answerId, { home, finish });
+    active.set(answerId, { home, model, finish });
     if (active.size === 1) options.onWritingChange?.(true);
     announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
@@ -1299,7 +1306,12 @@ export function createAnswers(options: AnswersOptions) {
       signal: AbortSignal,
     ): Promise<OutsideAnswer> {
       const readiness = await options.readiness(undefined);
-      if (!readiness.ready) return { asked: false, reason: "not-ready" };
+      if (!readiness.ready) {
+        return {
+          asked: false,
+          reason: readiness.reason === "local-mode" ? "local-mode" : "not-ready",
+        };
+      }
       if (readiness.consent === "needed") return { asked: false, reason: "consent-needed" };
       const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
       const { service } = readiness.provider;
@@ -1349,6 +1361,22 @@ export function createAnswers(options: AnswersOptions) {
 
     /** Call before a Mind is opened: Answers a quit or crash left "streaming" become "stopped". */
     settleOrphans,
+
+    /**
+     * Local mode just turned on: stops every Answer being written by a model that isn't on
+     * this computer, keeping what was written. It ends as failed with the "local-mode"
+     * reason, so the Answer says why.
+     */
+    async stopCloud(): Promise<void> {
+      for (const generation of [...active.values()]) {
+        const readiness = await options.readiness(generation.model);
+        if (readiness.ready || readiness.reason !== "local-mode") continue;
+        generation.finish({
+          status: "failed",
+          error: { kind: "local-mode", message: "Stopped: local mode is on." },
+        });
+      }
+    },
 
     /** Stops every Answer, keeping what was written, e.g. when the app quits. */
     stopAll(): void {

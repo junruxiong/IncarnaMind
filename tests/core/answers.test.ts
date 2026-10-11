@@ -910,3 +910,98 @@ describe("Temperature", () => {
     ]);
   });
 });
+
+describe("Local mode", () => {
+  const CLOUD: CloudProvider = { kind: "openai", modelId: "gpt-4.1" };
+
+  test("a cloud model gets nothing, in a Mind or in a conversation, and says why", async () => {
+    const model = streamingModel("Never sent.");
+    const { core, models, provider, mind, writer } = await setUpCloud(model, CLOUD);
+    await core.setLocalOnly(true);
+    const asked = question("What is a Mind?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+
+    const result = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+    expect(result).toMatchObject({
+      asked: false,
+      reason: "not-ready",
+      readiness: { ready: false, reason: "local-mode", provider: { id: provider.id } },
+    });
+    const inConversation = await core.askInConversation({ text: "What is a Mind?" });
+    expect(inConversation).toMatchObject({
+      asked: false,
+      reason: "not-ready",
+      readiness: { reason: "local-mode" },
+    });
+
+    expect(models.specs).toEqual([]);
+    expect(model.doStreamCalls).toEqual([]);
+    expect(outline(writer)).toEqual(["question"]);
+    expect(await core.getChatReadiness()).toMatchObject({ ready: false, reason: "local-mode" });
+  });
+
+  test("a model on this computer answers as usual, and the cloud model again once local mode is off", async () => {
+    const { core, mind, writer, reader } = await setUp(streamingModel("Twice a day."));
+    await core.setLocalOnly(true);
+    const asked = question("How often are high tides?");
+    writeMind(writer, [asked]);
+
+    const answerId = await askAndWait(core, writer, mind.id, asked.attrs.id);
+    expect(answerText(reader, answerId)).toBe("Twice a day.");
+
+    const cloud = await setUpCloud(streamingModel("From the cloud."), CLOUD);
+    await cloud.core.setLocalOnly(true);
+    await cloud.core.setLocalOnly(false);
+    const again = question("And the cloud?");
+    writeMind(cloud.writer, [again]);
+    const cloudAnswer = await askAndWait(cloud.core, cloud.writer, cloud.mind.id, again.attrs.id);
+    expect(answerText(cloud.reader, cloudAnswer)).toBe("From the cloud.");
+  });
+
+  test("turning it on stops an Answer on its way to a cloud model, keeps what was written and says why", async () => {
+    const controlled = controlledModel();
+    const { core, mind, writer, reader } = await setUpCloud(controlled.model, CLOUD);
+    const asked = question("What is a Mind?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    await controlled.requested();
+    controlled.push("A Mind is ");
+    await vi.waitFor(() => expect(answerText(reader, answerId)).toBe("A Mind is"));
+    const readiness = nextEvent(core, "chatReadiness.changed");
+    const ended = answerEnded(core, answerId);
+
+    await core.setLocalOnly(true);
+
+    expect(await ended).toMatchObject({
+      event: "failed",
+      payload: { answerId, error: { kind: "local-mode" } },
+    });
+    expect(controlled.aborted).toBe(true);
+    expect(answerIn(reader, answerId).attrs).toMatchObject({
+      status: "failed",
+      errorKind: "local-mode",
+    });
+    expect(answerText(reader, answerId)).toBe("A Mind is");
+    expect(await readiness).toMatchObject({ ready: false, reason: "local-mode" });
+  });
+
+  test("an Answer being written by a model on this computer carries on", async () => {
+    const controlled = controlledModel();
+    const { core, mind, writer, reader } = await setUp(controlled.model);
+    const asked = question("What is a Mind?");
+    writeMind(writer, [asked]);
+    await writer.settled();
+    const answerId = await ask(core, mind.id, asked.attrs.id);
+    await controlled.requested();
+    const ended = answerEnded(core, answerId);
+
+    await core.setLocalOnly(true);
+    controlled.push("A notebook.");
+    controlled.finish();
+
+    expect((await ended).event).toBe("finished");
+    expect(answerText(reader, answerId)).toBe("A notebook.");
+  });
+});
