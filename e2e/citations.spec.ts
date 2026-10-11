@@ -64,6 +64,14 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
 
   const answer = await ask(window, "When do spring tides happen?");
 
+  // It shows that it searched the Documents, and what for.
+  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
+  await answer.getByTestId("answer-tools-toggle").click();
+  await expect(answer.getByTestId("answer-tool-call")).toContainText(
+    "When do spring tides happen?",
+  );
+
   // Added to a Note, the sentence keeps its Citation, check result and all.
   const editor = window.getByTestId("mind-editor");
   await pointAt(window, answer.locator(".assistant-answer-text p").first());
@@ -72,14 +80,6 @@ test("an Answer cites a PDF: its badge says the quote was found, and clicking it
   await expect(note).toContainText("Your Documents answer this");
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
   await expect(editor.getByTestId("answer")).toHaveCount(0);
-
-  // It shows that it searched the Documents, and what for.
-  await pointAt(window, answer.locator(".assistant-answer-text p").first());
-  await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
-  await answer.getByTestId("answer-tools-toggle").click();
-  await expect(answer.getByTestId("answer-tool-call")).toContainText(
-    "When do spring tides happen?",
-  );
 
   // The marker became a Citation whose quote was found on page 2: numbered 1 in the text,
   // its label naming the Document, the page and the check.

@@ -791,6 +791,7 @@ describe("The evaluation's settings for a model in Ollama", () => {
       parameters: 9_653_104_368,
       support: "tools",
       chat: true,
+      remote: false,
       settings: { numCtx: 16_384, outputTokens: 4_096, keepAlive: "30m", think: false },
     };
     const app: OllamaModels = { describe: async () => profile, loaded: async () => true };

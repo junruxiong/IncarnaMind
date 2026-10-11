@@ -3,6 +3,8 @@ import {
   type ChatModelChoice,
   type DeviceSettings,
   type GettingStarted,
+  MOTION_PREFERENCES,
+  type MotionPreference,
   type SandboxLevel,
   type Settings,
   SKILL_SCRIPT_LIMITS,
@@ -41,12 +43,18 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
 const userScope: Scope<UserSettings> = {
   name: "user",
   table: "user_settings",
-  defaults: { language: "system", chatModel: null, suggestWhileWriting: false },
+  defaults: {
+    language: "system",
+    chatModel: null,
+    suggestWhileWriting: false,
+    leaveOutOwnFiles: true,
+  },
   validators: {
     language: isLanguagePreference,
     chatModel: (value): value is ChatModelChoice | null =>
       value === null || isChatModelChoice(value),
     suggestWhileWriting: isBoolean,
+    leaveOutOwnFiles: isBoolean,
   },
 };
 
@@ -84,6 +92,7 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
+    motion: "system",
   },
   validators: {
     sidebarWidth: isPaneWidth,
@@ -97,6 +106,8 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,
+    motion: (value): value is MotionPreference =>
+      MOTION_PREFERENCES.some((preference) => preference === value),
   },
 };
 

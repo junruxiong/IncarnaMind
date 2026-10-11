@@ -75,18 +75,22 @@ test("Shorten comes back as changes with their own bars: one accepted by mouse, 
   const editor = window.getByTestId("mind-editor");
   await editor.click();
 
-  // An Answer with a checked Citation, added to the note.
+  // An Answer with a checked Citation, added to the note under a line of the User's.
+  await window.keyboard.type("Tides at the harbour.");
+  await window.keyboard.press("Enter");
   const answer = await askInAssistant(window, "When do spring tides happen?");
   await addToNote(window, answer);
-  const note = editor.locator(":scope > p").first();
+  const note = editor.locator(":scope > p").nth(1);
   await expect(note.getByTestId("citation")).toHaveAttribute("data-check", "found");
   await slideSelect(window, note, "Your Documents answer this");
   await window.keyboard.type("The tides here are very strong and really regular");
   await expect(note).toContainText("The tides here are very strong and really regular");
 
   // Selected, the menu offers the AI's actions; Shorten comes back as two changes.
-  // The words, then the space, the Citation and the full stop after them.
-  await selectWords(window, note, "The tides here are very strong and really regular", 3);
+  // The words, then to the end of their line: the space, the Citation and the full stop after
+  // them (the Answer's last line, under it, left out).
+  await slideSelect(window, note, "The tides here are very strong and really regular");
+  await window.keyboard.press("Shift+End");
   const menu = window.getByTestId("selection-menu");
   await expect(menu.getByTestId("selection-action-shorten")).toBeVisible();
   await expect(menu.getByTestId("selection-action-edit")).toContainText("Edit with AI…");

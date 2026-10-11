@@ -7,7 +7,12 @@ describe("Settings", () => {
     const core = startCore(await createTempDataFolder());
 
     expect(await core.getSettings()).toEqual({
-      user: { language: "system", chatModel: null, suggestWhileWriting: false },
+      user: {
+        language: "system",
+        chatModel: null,
+        suggestWhileWriting: false,
+        leaveOutOwnFiles: true,
+      },
       device: {
         sidebarWidth: 248,
         sidebarHidden: false,
@@ -25,6 +30,7 @@ describe("Settings", () => {
         meetingsEnabled: false,
         meetingSystemAudio: true,
         meetingNoticeAccepted: false,
+        motion: "system",
       },
       language: "en",
       scriptSandbox: "none",
@@ -94,6 +100,7 @@ describe("Settings", () => {
       language: "zh-CN",
       chatModel: null,
       suggestWhileWriting: false,
+      leaveOutOwnFiles: true,
     });
     expect(settings.device).toEqual({
       sidebarWidth: 320,
@@ -112,6 +119,7 @@ describe("Settings", () => {
       meetingsEnabled: false,
       meetingSystemAudio: true,
       meetingNoticeAccepted: false,
+      motion: "system",
     });
   });
 
@@ -143,14 +151,23 @@ describe("Settings", () => {
       meetingsEnabled: true,
       meetingSystemAudio: false,
       meetingNoticeAccepted: true,
+      motion: "reduced" as const,
     };
-    await before.updateSettings({ user: { language: "zh-CN", suggestWhileWriting: true }, device });
+    await before.updateSettings({
+      user: { language: "zh-CN", suggestWhileWriting: true, leaveOutOwnFiles: false },
+      device,
+    });
     before.close();
 
     const after = startCore(dataDir);
 
     expect(await after.getSettings()).toEqual({
-      user: { language: "zh-CN", chatModel: null, suggestWhileWriting: true },
+      user: {
+        language: "zh-CN",
+        chatModel: null,
+        suggestWhileWriting: true,
+        leaveOutOwnFiles: false,
+      },
       device,
       language: "zh-CN",
       scriptSandbox: "none",
@@ -183,6 +200,7 @@ describe("Settings", () => {
       name: "a script timeout in part seconds",
       patch: { device: { skillScriptTimeoutSeconds: 1.5 } },
     },
+    { name: "an unknown motion choice", patch: { device: { motion: "slow" } } },
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },

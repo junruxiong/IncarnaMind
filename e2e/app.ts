@@ -61,6 +61,11 @@ export interface LaunchOptions {
    */
   referenceLookup?: string;
   /**
+   * Where Find sources asks its providers: a local server standing in for
+   * all of them (tests/helpers/sourceServices.ts). A test build honours it.
+   */
+  sources?: string;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -109,6 +114,7 @@ export async function launchApp(
     examples = false,
     home,
     referenceLookup,
+    sources,
     keepWindow = false,
     computerSound = "allowed",
   }: LaunchOptions = {},
@@ -125,6 +131,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
+  delete env.INCARNAMIND_TEST_SOURCES;
   env.INCARNAMIND_TEST_AUDIO = "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
@@ -136,6 +143,7 @@ export async function launchApp(
   }
   if (home) env.HOME = home;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
+  if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -159,10 +167,15 @@ export async function launchApp(
   return { app, window };
 }
 
-/** "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind in no Folder. */
+/**
+ * "New Mind" from the sidebar header's "+" menu, the one place to add: a Mind
+ * in no Folder. Returns once the menu has gone: keys a test presses a
+ * millisecond apart can outrun the editor while frames are busy.
+ */
 export async function newMind(window: Page): Promise<void> {
   await window.getByTestId("plus-menu").click();
   await window.getByTestId("plus-new-mind").click();
+  await motionSettled(window);
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
@@ -563,6 +576,90 @@ export async function setWindowSize(
     { width, height },
   );
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+}
+
+/** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
+export function motionRunning(window: Page): Promise<number> {
+  return window.evaluate(
+    () =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.motionRunning() ??
+      0,
+  );
+}
+
+/** The copies of closed menus and popovers still fading where they were, which nothing else can see. */
+export function leavingCopies(window: Page) {
+  return window.evaluate(
+    () =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.leavingCopies() ??
+      [],
+  );
+}
+
+/**
+ * How an element shows now: its opacity, its transform's scale and vertical
+ * shift, its transform origin, and where it is laid out without the transform.
+ */
+export function motionLook(target: Locator) {
+  return target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
+    const [originX = "0", originY = "0"] = style.transformOrigin.split(" ");
+    const box = element.getBoundingClientRect();
+    return {
+      opacity: Number(style.opacity),
+      scale: matrix.a,
+      y: matrix.f,
+      originX: Number.parseFloat(originX),
+      originY: Number.parseFloat(originY),
+      left: box.left - matrix.e - (1 - matrix.a) * Number.parseFloat(originX),
+      top: box.top - matrix.f - (1 - matrix.d) * Number.parseFloat(originY),
+    };
+  });
+}
+
+/**
+ * Waits until nothing moves (src/renderer/src/motion.ts): no animation
+ * running, and no closed menu still fading where it was. For a test that
+ * measures or pictures what just opened, closed or moved.
+ */
+export async function motionSettled(window: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      window.evaluate(
+        () =>
+          (
+            globalThis as { incarnamindTestHooks?: TestHooks }
+          ).incarnamindTestHooks?.motionRunning() ?? 0,
+      ),
+    )
+    .toBe(0);
+}
+
+/**
+ * Clicks `target` where it is now, as a person does, without waiting for it to
+ * stop moving (a menu still growing from its button): the app takes a click
+ * during an animation. For a test that races work in the background, which
+ * waiting would let finish first.
+ */
+export async function clickNow(window: Page, target: Locator): Promise<void> {
+  await expect(target).toBeVisible();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't on screen.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await window.mouse.down();
+  await window.mouse.up();
+}
+
+/** Plays every animation at `speed` (0.2: five times slower), so a test can look, or act, during one. */
+export async function setMotionSpeed(window: Page, speed: number): Promise<void> {
+  await window.evaluate(
+    (value) =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.setMotionSpeed(
+        value,
+      ),
+    speed,
+  );
 }
 
 /**

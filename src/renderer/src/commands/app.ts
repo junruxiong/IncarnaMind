@@ -1,7 +1,9 @@
 import { noteHolding } from "../editor/noteKeymap";
+import { useFindSources } from "../findSources";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
+import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
@@ -21,6 +23,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...evidenceCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -34,6 +37,14 @@ const appCommands: readonly Command[] = [
     reversible: true,
     when: () => sidebarHandle.current !== null,
     run: () => sidebarHandle.current?.toggle(),
+  },
+  {
+    id: "sources.find",
+    label: "command.sources.find",
+    keywords: ["command.sources.find.keywords"],
+    group: "main",
+    reversible: true,
+    run: () => useFindSources.getState().show(),
   },
   ...assistantCommands,
   {

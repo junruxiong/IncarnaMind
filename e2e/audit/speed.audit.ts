@@ -1245,3 +1245,56 @@ test("B4 the viewer: a 300-page PDF, a 50k-cell sheet, a Word file with images (
     removeDir(root);
   }
 });
+
+test("B5 motion: frames while a menu opens and closes (on, reduced, off), and typing with motion on and off", async () => {
+  test.setTimeout(10 * 60_000);
+  const dataDir = tempDir("data");
+  const app = await launch(dataDir, { readyTestId: "chat-setup" });
+  const { window } = app;
+  const chooseMotion = async (motion: "on" | "reduced" | "off") => {
+    await window.evaluate(async (chosen) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ device: { motion: chosen } });
+    }, motion);
+    await expect(window.locator("html")).toHaveAttribute("data-motion", motion);
+  };
+  try {
+    await sealShell(app.app);
+    await click(window, window.getByTestId("chat-setup-later"));
+    const plus = window.getByTestId("plus-menu");
+    const menus: Record<string, unknown> = {};
+    for (const motion of ["on", "reduced", "off"] as const) {
+      await chooseMotion(motion);
+      // The + menu opened, read and closed ten times, as a person does; frames counted throughout.
+      const stop = await startFrames(window);
+      for (let i = 0; i < 10; i++) {
+        await click(window, plus);
+        await window.waitForTimeout(400);
+        await window.keyboard.press("Escape");
+        await window.waitForTimeout(300);
+      }
+      menus[motion] = await stop();
+    }
+    record("speed.motion.menu", menus);
+
+    // Typing in a Mind: nothing moves while the User types, so motion on and off type alike.
+    await click(window, plus);
+    await click(window, window.getByTestId("plus-new-mind"));
+    await click(window, window.getByTestId("mind-editor"));
+    await installKeyLatency(window);
+    const typing: Record<string, unknown> = {};
+    for (const motion of ["on", "off"] as const) {
+      await chooseMotion(motion);
+      await takeKeyLatency(window);
+      const stop = await startFrames(window);
+      await typeFor(window, 160);
+      const frames = await stop();
+      typing[motion] = { ...(await takeKeyLatency(window)), frames };
+      await window.keyboard.press("Enter");
+    }
+    record("speed.motion.typing", typing);
+  } finally {
+    await close(app);
+    removeDir(dataDir);
+  }
+});

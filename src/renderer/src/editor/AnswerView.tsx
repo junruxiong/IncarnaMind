@@ -14,7 +14,9 @@ import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
+import { FindSourcesLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
+import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { ANSWER_PROBLEMS } from "../problems";
 import type { SettingsPage } from "../settingsPages";
@@ -277,11 +279,15 @@ export function CallRows({
     .filter(
       (call) =>
         !waitingIds.has(call.id) &&
-        (call.source === "connector" || (call.source === "skill" && call.tool === RUN_SCRIPT)),
+        (call.source === "connector" ||
+          call.source === "sources" ||
+          (call.source === "skill" && call.tool === RUN_SCRIPT)),
     )
     .map((call) =>
       call.source === "connector" ? (
         <ConnectorCall key={call.id} call={call} />
+      ) : call.source === "sources" ? (
+        <SourcesCall key={call.id} call={call} />
       ) : (
         <ScriptCall key={call.id} call={call} />
       ),
@@ -691,6 +697,62 @@ function ConnectorCall({ call }: { call: AnswerToolCall }) {
           <pre data-testid="answer-connector-arguments">{JSON.stringify(call.input, null, 2)}</pre>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Find sources, as an Answer called it: what it searched for and how many
+ * works it found, with "Show results", which opens them in the Library to
+ * add (the same search, answered from what was found, so nothing is sent again).
+ */
+function SourcesCall({ call }: { call: AnswerToolCall }) {
+  const t = useT();
+  const query = field(call, "query");
+  const year = (name: string) => {
+    const value = call.input[name];
+    return typeof value === "number" && Number.isInteger(value) ? value : null;
+  };
+  const running = call.status === "running";
+  const failed = call.status === "failed";
+  const summary = t(
+    running ? "sources.call.running" : failed ? "sources.call.failed" : "sources.call.done",
+    { query },
+  );
+  const count = call.resultCount;
+  return (
+    <div
+      contentEditable={false}
+      data-testid="answer-sources-call"
+      data-status={call.status}
+      className="answer-call"
+    >
+      <span className="answer-call-summary answer-call-summary--static">
+        <FindSourcesLineIcon className={`answer-call-icon ${running ? "animate-pulse" : ""}`} />
+        <span className="answer-call-text">{summary}</span>
+        {!running && !failed && count !== null && (
+          <span className="answer-call-note">
+            · {t(count === 1 ? "sources.call.found.one" : "sources.call.found", { count })}
+          </span>
+        )}
+        {!running && !failed && query && (
+          <button
+            type="button"
+            data-testid="answer-sources-show"
+            onClick={() =>
+              useFindSources.getState().show({
+                query,
+                fromYear: year("from_year"),
+                toYear: year("to_year"),
+                openAccessOnly: call.input.open_access_only === true,
+              })
+            }
+            className="answer-action"
+          >
+            {t("sources.call.show")}
+          </button>
+        )}
+      </span>
     </div>
   );
 }

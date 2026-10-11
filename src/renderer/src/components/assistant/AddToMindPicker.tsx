@@ -46,7 +46,8 @@ export function AddToMindPicker({
 }) {
   const t = useT();
   const minds = useAppStore((state) => state.minds);
-  const tabs = useAppStore((state) => state.layout?.groups.flatMap((group) => group.tabs));
+  // The groups as stored, not a list made from them: a new list each time would never settle.
+  const tabGroups = useAppStore((state) => state.layout?.groups);
   const groups = useAppStore((state) => state.library?.groups);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -59,7 +60,9 @@ export function AddToMindPicker({
     return folder ? folder.name : t("library.unsorted");
   };
   const isOpen = (mind: Mind) =>
-    tabs?.some((tab) => tab.item.kind === "mind" && tab.item.mindId === mind.id) ?? false;
+    tabGroups?.some((group) =>
+      group.tabs.some((tab) => tab.item.kind === "mind" && tab.item.mindId === mind.id),
+    ) ?? false;
   const typed = query.trim().toLocaleLowerCase();
   const matches = (mind: Mind) => nameOf(mind).toLocaleLowerCase().includes(typed);
   const focused = minds.find((mind) => mind.id === focusedMindId && mind.kind === "mind");

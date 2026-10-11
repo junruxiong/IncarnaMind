@@ -401,9 +401,10 @@ export interface AnswerToolCall {
   /**
    * Where the Tool comes from: "documents" is IncarnaMind's own document
    * search; "skill", the Skill Tools; "connector", one of the User's
-   * Connectors (see `connector`).
+   * Connectors (see `connector`); "sources", Find sources (`find_sources`,
+   * `{ query, from_year?, to_year?, open_access_only? }`).
    */
-  source: "documents" | "skill" | "connector";
+  source: "documents" | "skill" | "connector" | "sources";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -675,6 +676,12 @@ export interface UserSettings {
    * flow first, when the default chat model sends to a service.
    */
   suggestWhileWriting: boolean;
+  /**
+   * Checks and comparison tables leave the files IncarnaMind wrote out of
+   * their evidence (#80, see `OwnFile`): on by default. Off, they count
+   * everywhere. Copies of the document being checked are left out either way.
+   */
+  leaveOutOwnFiles: boolean;
 }
 
 /**
@@ -736,7 +743,17 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
+  motion: MotionPreference;
 }
+
+/**
+ * How the window moves on a device (DESIGN.md, Motion): as the system's own
+ * Reduce motion setting says ("system", until the User chooses), on,
+ * reduced (movement becomes short fades) or off (every change is instant).
+ */
+export const MOTION_PREFERENCES = ["system", "on", "reduced", "off"] as const;
+export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
 
 /**
  * How the programs Tools start (Skill scripts) are confined:
@@ -1149,10 +1166,77 @@ export interface Document {
    * from its file and edited by the User. Null until its file has been read.
    */
   reference: ReferenceRecord | null;
+  /**
+   * Set when IncarnaMind wrote the Document's file (#80): see `OwnFile`.
+   * Null for the User's own files, and for the sources IncarnaMind saves
+   * (web pages, Transcripts), which count as evidence as usual.
+   */
+  ownFile: OwnFile | null;
+  /** Where its text came from, when Find sources added it (#296); null for any other Document. */
+  found: DocumentFoundSource | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** What IncarnaMind writes that checks leave out of their evidence (#80): a Mind's export, or a source pack. */
+export const ownFileKinds = ["export", "source-pack"] as const;
+export type OwnFileKind = (typeof ownFileKinds)[number];
+
+/**
+ * A Document whose file IncarnaMind wrote (#80): an export or a source pack
+ * it saved, found by the file's content fingerprint, e.g. once saved into a
+ * Linked folder. It stays one when the User edits the file, since what it
+ * says still came from the Mind. Checks and comparison tables leave it out of
+ * their evidence, so a note can't support itself, unless the User counts it
+ * ("Count it"), its Folder counts IncarnaMind's files (`LibraryGroup.countsOwnFiles`),
+ * or Settings does (`UserSettings.leaveOutOwnFiles` off). Ordinary Answers search it as usual.
+ */
+export interface OwnFile {
+  kind: OwnFileKind;
+  /** The User counts it as evidence all the same, until they take that back (`setCountedAsEvidence`). */
+  counted: boolean;
+}
+
+/**
+ * Why a check leaves a Document out of its evidence (#80):
+ * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "checked-document": it is the document being checked, an earlier version
+ *   of it, or a copy of either (the same content fingerprint, at any path).
+ *   Never evidence for that check.
+ */
+export type EvidenceExclusion = "own-file" | "checked-document";
+
+/** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
+export interface CheckedDocument {
+  /** Its Documents. */
+  documentIds?: string[];
+  /** The content fingerprints (SHA-256, hex) of a checked file that isn't a Document, e.g. an imported .docx. */
+  contentHashes?: string[];
+}
+
+export interface SearchEvidenceOptions {
+  /** The check's Search scope. None: every Document. */
+  scope?: SearchScope;
+  checked?: CheckedDocument;
+}
+
+/** A Document a check left out of its evidence, where it matched: a result names it, never hides it. */
+export interface ExcludedEvidence {
+  documentId: string;
+  documentName: string;
+  reason: EvidenceExclusion;
+  /** Its Passages that matched, in reading order: where it would have been evidence. */
+  passages: PassageSearchResult[];
+}
+
+/** What a check's search found (`searchEvidence`). */
+export interface EvidenceSearchResult {
+  /** The evidence: what the search Tool gives an Answer, from the Documents a check may use. */
+  passages: PassageSearchResult[];
+  /** The Documents left out that matched too, the best first. */
+  excluded: ExcludedEvidence[];
 }
 
 /**
@@ -1346,6 +1430,165 @@ export type ReferenceLookupResult =
       message: string;
     };
 
+// ---------------------------------------------------------------------------
+// Find sources (#296, ADR-0018)
+
+/**
+ * A Source provider (CONTEXT.md): a public service Find sources searches for
+ * works to add, as Documents when their full text is open, else as reference
+ * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up. Laws,
+ * filings and drug labels come later, each one more provider.
+ */
+export interface SourceProviderInfo {
+  /**
+   * "openalex", "arxiv", "pubmed", "crossref". The UI says what each covers
+   * and what its records are licensed under (`sources.provider.<id>.about`).
+   */
+  id: string;
+  /** As its operator names it. */
+  name: string;
+  /** Where searches go: consent is asked per service, once ("find-sources" flow). */
+  service: ExternalService;
+  /** It searches by words; false for one that only looks a work up by its identifier (Crossref, by DOI). */
+  searches: boolean;
+  /** The User's decision on sending it searches. */
+  consent: DataFlowStatus["consent"];
+  /** Where its operator states its terms and limits. */
+  termsUrl: string;
+}
+
+/** What Find sources looks for. */
+export interface FindSourcesInput {
+  /** Words, a title, or an identifier: a DOI, an arXiv ID or a PubMed ID. */
+  query: string;
+  /** Only works published in or after this year. */
+  fromYear?: number | null;
+  /** Only works published in or before this year. */
+  toYear?: number | null;
+  /** Only works whose full text is open. */
+  openAccessOnly?: boolean;
+  /** The providers to ask, by id; every one that searches, when left out. */
+  providers?: string[];
+}
+
+/**
+ * Why a provider gave no results:
+ * - "declined": the User didn't allow sending it searches;
+ * - "unreachable": it couldn't be reached, or took too long;
+ * - "rate-limited": it asked IncarnaMind to slow down (429), or its free daily allowance is used up;
+ * - "service-error": it answered with an error, or with something unreadable.
+ */
+export type SourceFailureReason = "declined" | "unreachable" | "rate-limited" | "service-error";
+
+/** How one provider's part of a search went. */
+export interface SourceProviderOutcome {
+  id: string;
+  name: string;
+  /** How many works it gave, before they were merged with the others'. */
+  count: number;
+  /** Null when it answered. */
+  failure: { reason: SourceFailureReason; message: string } | null;
+}
+
+/** The versions an open full text can be, as repositories label them. */
+export type SourceVersion = "published" | "accepted" | "submitted";
+
+/** The licence an open text is under, and whether it allows commercial use. */
+export interface SourceLicence {
+  /** As the provider writes it, in lower case: "cc-by", "cc-by-nc-nd", "public-domain". */
+  id: string;
+  /** "CC BY", "CC BY-NC-ND", "CC0"; the id for any other, which the UI names. */
+  label: string;
+  /** False for a licence that rules out commercial use (an NC licence); null when unknown. */
+  commercial: boolean | null;
+}
+
+/**
+ * How a found work's full text can be had: "open", downloaded and processed
+ * into a Document when added (a PDF, text the provider gives by section, or a
+ * "web-page" at its publisher's, saved as `saveWebPage` saves one); or
+ * "closed" when no open copy is known, so adding keeps its reference record
+ * only. Nothing is ever downloaded from behind a paywall.
+ */
+export type SourceAccess =
+  | {
+      kind: "open";
+      format: "pdf" | "text" | "web-page";
+      /** Which version the open copy is: a preprint can differ from what was published. */
+      version: SourceVersion | null;
+      licence: SourceLicence | null;
+    }
+  | { kind: "closed" };
+
+/** A work Find sources found: a paper now; later a law, a filing or a label. */
+export interface FoundSource {
+  /**
+   * Its identity across providers, for `addFoundSource`: "doi:10.1038/…", else
+   * "arxiv:1706.03762", "pmid:36970624" or "openalex:W4362665266".
+   */
+  key: string;
+  /** Its reference record, as the providers give it. */
+  fields: ReferenceFields;
+  /** The providers that found it, best first. */
+  foundBy: { id: string; name: string }[];
+  /** How many works cite it, when a provider counts them. */
+  citedBy: number | null;
+  /**
+   * The date of the version described, ISO 8601 at the precision known: what
+   * a Document added from it holds, as laws and preprints change.
+   */
+  versionDate: string | null;
+  access: SourceAccess;
+  /** Its page at its publisher or registry, for "Get the PDF…" in the User's browser. */
+  landingUrl: string | null;
+  /** Already in the Library: as a Document, or as a reference record without one. */
+  inLibrary: { documentId: string | null; recordId: string } | null;
+}
+
+export type FindSourcesResult =
+  | {
+      outcome: "found";
+      /** Best first: found by more providers, and higher in each, ranks higher. */
+      works: FoundSource[];
+      /** Each provider asked, in the order asked. */
+      providers: SourceProviderOutcome[];
+    }
+  /** "Keep everything on this computer" is on: nothing was sent. */
+  | { outcome: "local-mode" };
+
+export interface AddFoundSourceInput {
+  /** `FoundSource.key`, from a search this session. */
+  key: string;
+  /** The Folder to add it to; Not in a Folder when null or left out. */
+  folderId?: string | null;
+}
+
+/** What adding a found work came to. */
+export type AddFoundSourceResult =
+  | {
+      outcome: "document";
+      /** The Document, being processed; or the one added before (`existing`). */
+      document: Document;
+      existing: boolean;
+    }
+  | {
+      outcome: "reference";
+      /** The reference record kept, with no Document. */
+      recordId: string;
+      /** Why no Document: "closed", no open full text; "download-failed", no open copy could be had. */
+      reason: "closed" | "download-failed";
+      /** For the User's browser: the open copy that couldn't be had, else the work's page at its publisher. */
+      landingUrl: string | null;
+      existing: boolean;
+    }
+  | {
+      outcome: "failed";
+      /** "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search again. */
+      reason: "local-mode" | "declined" | "not-found";
+      /** Technical detail in English, for logs and tooltips. */
+      message: string;
+    };
+
 /** An entry of a reference export that couldn't be imported. The rest of the file still is. */
 export interface ReferenceImportProblem {
   /** The entry's cite key or id, else its place in the file ("line 12", "item 3"). */
@@ -1399,6 +1642,20 @@ export type ReferenceImportResult =
       /** Technical detail in English, for logs and tooltips. */
       message: string;
     };
+
+/** Where a Document Find sources added came from: what its text is, and when it was fetched. */
+export interface DocumentFoundSource {
+  /** The provider whose open copy it is. */
+  provider: { id: string; name: string };
+  /** The address its text was fetched from. */
+  address: string;
+  licence: SourceLicence | null;
+  version: SourceVersion | null;
+  /** The date of the version its text is, ISO 8601 at the precision known. */
+  versionDate: string | null;
+  /** When it was fetched. ISO 8601, UTC. */
+  fetchedAt: string;
+}
 
 /** What `addImportedReferenceFiles` added. */
 export interface ReferenceFilesResult {
@@ -2041,6 +2298,12 @@ export interface ChatModelGroup {
    * out as it goes.
    */
   unknown: string[];
+  /**
+   * The ids in `models` that run in the cloud although the provider is on this
+   * computer: an Ollama cloud model, which Ollama forwards to ollama.com. Asking
+   * with one needs consent to send to that service, and local mode refuses it.
+   */
+  cloud: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -2740,8 +3003,10 @@ export type OllamaStatus =
   | {
       running: true;
       baseUrl: string;
-      /** Models already pulled, e.g. "qwen3:4b". */
+      /** Models already pulled that run on this computer, e.g. "qwen3:4b". */
       models: string[];
+      /** Cloud models Ollama lists (e.g. "gpt-oss:120b-cloud"): they run on ollama.com, so they are never offered as local. */
+      cloudModels: string[];
       /** The model one click pulls and selects. */
       recommendedModel: string;
     };
@@ -2783,6 +3048,8 @@ export const dataKinds = [
   "writing",
   "writing-passages",
   "identifiers",
+  "search-terms",
+  "work-ids",
   "selection",
 ] as const;
 
@@ -2808,6 +3075,11 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "find-sources": what the User (or an Answer, for them) searches for, with
+ *   its filters, to each Source provider searched, and the identifier of a
+ *   work they add, to the provider that gives its full text or record (#296).
+ *   Nothing from their Documents or Minds. Asked once per provider; none in
+ *   local mode.
  * - "edits": when the User asks Edit with AI (#93), the text they selected
  *   and the paragraphs it is in, to the chat model's provider. None in local mode.
  */
@@ -2820,6 +3092,7 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "find-sources",
   "edits",
 ] as const;
 
@@ -4080,6 +4353,30 @@ export interface CoreApi {
    */
   addReferenceFile(recordId: string, path: string): Promise<Document>;
 
+  /** The Source providers Find sources can ask, each with the User's consent decision (#296). */
+  listSourceProviders(): Promise<SourceProviderInfo[]>;
+  /**
+   * Find sources (#296): searches the providers asked (every one that
+   * searches, by default) for works, and merges what they find, best first.
+   * An identifier (a DOI, an arXiv ID, a PubMed ID) is looked up instead.
+   * Each provider is sent only the query and its filters, after the User has
+   * allowed the "find-sources" flow to it (asked once; a provider declined
+   * is skipped, and says so); nothing at all in local mode. The same search
+   * again soon after is answered from what was found, without asking again.
+   * Throws InvalidInputError for an empty query or a year that can't be one.
+   */
+  findSources(input: FindSourcesInput): Promise<FindSourcesResult>;
+  /**
+   * Adds a found work (by its key, from a search this session) to the
+   * Library, in the Folder given: its open full text, downloaded (only an
+   * open-access copy, never from behind a paywall) and processed into a
+   * Document with its reference record filled; or, with no open copy, its
+   * reference record alone. A work added before gives what it was added as.
+   * A download goes to the provider that gives the copy only once the User
+   * has allowed it; nothing in local mode.
+   */
+  addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
+
   /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
@@ -4122,6 +4419,21 @@ export interface CoreApi {
    * model isn't ready, and InvalidInputError while embeddings are off.
    */
   searchPassages(query: string, options?: SearchPassagesOptions): Promise<PassageSearchResult[]>;
+  /**
+   * Searches as a check or a comparison table does (#80): as the search Tool
+   * searches for an Answer, reranked as the User chose, but without the
+   * Documents a check leaves out of its evidence (see `EvidenceExclusion`).
+   * Those that match are named in `excluded`, with where, so the result can
+   * say so and offer Count it.
+   */
+  searchEvidence(query: string, options?: SearchEvidenceOptions): Promise<EvidenceSearchResult>;
+  /**
+   * Counts a Document IncarnaMind wrote as evidence from now on ("Count it"),
+   * or, with false, leaves it out again: its Undo, and its menu. Returns it,
+   * and "document.status" says so. InvalidInputError for a Document
+   * IncarnaMind didn't write.
+   */
+  setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -4845,6 +5157,9 @@ const methods: Record<CoreApiMethod, true> = {
   updateReference: true,
   restoreReference: true,
   lookUpReference: true,
+  listSourceProviders: true,
+  findSources: true,
+  addFoundSource: true,
   importReferences: true,
   undoReferenceImport: true,
   addImportedReferenceFiles: true,
@@ -4855,6 +5170,8 @@ const methods: Record<CoreApiMethod, true> = {
   downloadOnlineOnlyFiles: true,
   recheckCitation: true,
   searchPassages: true,
+  searchEvidence: true,
+  setCountedAsEvidence: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
