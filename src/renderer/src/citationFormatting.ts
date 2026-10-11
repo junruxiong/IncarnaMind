@@ -6,6 +6,7 @@
  * answer meanwhile.
  */
 import type { Editor } from "@tiptap/core";
+import type { EditorState } from "@tiptap/pm/state";
 import { useEffect, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { create } from "zustand";
@@ -13,6 +14,7 @@ import {
   type CitationFormatRequest,
   type FormattedCitations,
   MIND_SETTINGS_FIELD,
+  type StyledRun,
 } from "../../core/api";
 import type { CitationStyleId } from "../../shared/citationStyles";
 import { citationStyleIn } from "../../shared/mindCitationStyle";
@@ -88,8 +90,11 @@ const SETTLE_MS = 150;
  * when the clusters, the cited Documents' records or the style change, and keeps the newest
  * answer. Mounted once per open Mind.
  */
-export function useCitationFormattingFor(editor: Editor, doc: Y.Doc, mindId: string): void {
-  const style = useMindCitationStyle(doc);
+export function useCitationFormattingFor(
+  editor: Editor,
+  style: CitationStyleId,
+  mindId: string,
+): void {
   const documents = useAppStore((state) => state.documents);
   /** What was asked last, kept across the effect's runs (Documents change often). */
   const last = useRef({ asked: "", latest: 0 });
@@ -163,6 +168,25 @@ export function useCitationFormattingFor(editor: Editor, doc: Y.Doc, mindId: str
       useCitationFormatting.getState().forget(mindId);
     };
   }, [mindId]);
+}
+
+/**
+ * In a note style, the note a Citation's cluster is written as, by the key of the cluster's
+ * first Citation (`NumberedCitation.key`), once it is formatted as it is now; null otherwise.
+ */
+export function noteOfCitation(
+  state: EditorState,
+  formatting: MindFormatting | undefined,
+  key: string,
+): StyledRun[] | null {
+  if (!formatting) return null;
+  const { formatted } = formatting;
+  if (formatted?.form !== "note") return null;
+  const clusters = citationClusters(state);
+  const index = clusters.findIndex((cluster) => cluster.members[0]?.key === key);
+  const cluster = clusters[index];
+  if (!cluster || formatting.signatures[index] !== cluster.signature) return null;
+  return (formatted.clusters[index]?.runs ?? []).map(({ work: _, ...run }) => run);
 }
 
 /** How to ask again for each open Mind, for its problem line's Try again. */

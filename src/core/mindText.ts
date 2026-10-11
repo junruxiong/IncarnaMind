@@ -5,7 +5,9 @@
  * read; whatever copies a Mind's text out reads the same way. A rule about
  * what counts as the Mind's text is made here, once, and applies to all of
  * them. Exports read once, so the two formats always agree on what is
- * exported, and on the order (and so the numbers) of the footnotes.
+ * exported, and on the order (and so the numbers) of the footnotes: a
+ * Citation's and those the User wrote are numbered together, in the order
+ * they appear.
  *
  * Node types are those the editor stores (Tiptap's names, see `noteSchema`),
  * plus Tiptap's tables and images, which are read when a Mind has them.
@@ -27,7 +29,14 @@ import * as Y from "yjs";
 import { citationLocation } from "../shared/locations";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
-import { ANSWER_BLOCK, CITATION_NODE, type CitedWork, QUESTION_BLOCK, type StyledRun } from "./api";
+import {
+  ANSWER_BLOCK,
+  CITATION_NODE,
+  type CitedWork,
+  FOOTNOTE_NODE,
+  QUESTION_BLOCK,
+  type StyledRun,
+} from "./api";
 
 export interface Marks {
   bold: boolean;
@@ -58,6 +67,11 @@ export type Inline =
   | { kind: "math"; latex: string }
   | { kind: "break" }
   | { kind: "citation"; footnote: Footnote; work: CitedWork }
+  /**
+   * A footnote the User wrote, at its marker: its text. A Citation in it is
+   * part of that text (written as its source), not a footnote of its own.
+   */
+  | { kind: "footnote"; content: Inline[] }
   | { kind: "image"; image: Image }
   /**
    * Citations written in a citation style (#289) by the exports (./exports/citations), never
@@ -112,10 +126,17 @@ export interface ReadOptions {
   /** The footnote for a Citation, from its node's attributes. */
   footnote(attributes: Record<string, unknown>): Footnote;
   /**
-   * Drop the space the editor keeps before a Citation, so that a footnote's
-   * number goes right after the word it follows, as in print.
+   * Drop the space the editor keeps before a Citation, or the User left before
+   * a footnote, so that a footnote's number goes right after the word it
+   * follows, as in print. Inside a footnote's text, spaces stay.
    */
   trimBeforeCitation: boolean;
+  /**
+   * Drop the space before a footnote but not before a Citation, whatever `trimBeforeCitation`
+   * says: in a citation style (#289), a Citation may be words in the text, and the style
+   * decides (./exports/citations).
+   */
+  trimBeforeFootnote?: boolean;
 }
 
 /** A stretch of text with one set of marks, as `Y.XmlText.toDelta()` gives it. */
@@ -172,11 +193,14 @@ export function countQuestions(blocks: Y.XmlFragment): number {
     .filter((child) => child instanceof Y.XmlElement && child.nodeName === QUESTION_BLOCK).length;
 }
 
-/** Every footnote in the Blocks, in order. */
+/** Every Citation's footnote in the Blocks, in order, those inside the User's footnotes too. */
 export function footnotesIn(blocks: readonly Block[]): Footnote[] {
   const found: Footnote[] = [];
   const inInline = (content: readonly Inline[]) => {
-    for (const inline of content) if (inline.kind === "citation") found.push(inline.footnote);
+    for (const inline of content) {
+      if (inline.kind === "citation") found.push(inline.footnote);
+      else if (inline.kind === "footnote") inInline(inline.content);
+    }
   };
   const visit = (block: Block) => {
     switch (block.kind) {
@@ -221,6 +245,7 @@ const INLINE_TYPES: ReadonlySet<string> = new Set([
   "hardBreak",
   "image",
   CITATION_NODE,
+  FOOTNOTE_NODE,
 ]);
 
 const hasBlockChildren = (element: Y.XmlElement) =>
@@ -377,6 +402,7 @@ function marksOf(attributes: Record<string, unknown> = {}): Marks {
 function readInline(
   children: readonly (Y.XmlElement | Y.XmlText | Y.XmlHook)[],
   options: ReadOptions,
+  inFootnote = false,
 ): Inline[] {
   const content: Inline[] = [];
   for (const child of children) {
@@ -398,13 +424,24 @@ function readInline(
           content.push({ kind: "image", image: readImage(child) });
           break;
         case CITATION_NODE: {
-          if (options.trimBeforeCitation) trimTrailingSpace(content);
+          if (options.trimBeforeCitation && !inFootnote) trimTrailingSpace(content);
           const attributes = child.getAttributes() as Record<string, unknown>;
           content.push({
             kind: "citation",
             footnote: options.footnote(attributes),
             work: citedWork(attributes),
           });
+          break;
+        }
+        case FOOTNOTE_NODE: {
+          // A footnote in a footnote, which the editor never makes, is read as its text.
+          if (inFootnote) {
+            const text = plainText(child, true);
+            if (text) content.push({ kind: "text", text, marks: NO_MARKS });
+            break;
+          }
+          if (options.trimBeforeFootnote ?? options.trimBeforeCitation) trimTrailingSpace(content);
+          content.push({ kind: "footnote", content: readInline(child.toArray(), options, true) });
           break;
         }
         default: {
@@ -442,17 +479,23 @@ function stringAttribute(element: Y.XmlElement, name: string): string {
   return typeof value === "string" ? value : "";
 }
 
-/** All the text in an element, without marks or structure. */
-export function plainText(element: Y.XmlElement | Y.XmlText): string {
+/**
+ * All the text in an element, without marks or structure. A footnote's text
+ * isn't part of the line its marker is in, so it is left out, unless `footnotes`.
+ */
+export function plainText(element: Y.XmlElement | Y.XmlText, footnotes = false): string {
   if (element instanceof Y.XmlText) {
     return (element.toDelta() as Run[])
       .map((run) => (typeof run.insert === "string" ? run.insert : ""))
       .join("");
   }
+  if (!footnotes && element.nodeName === FOOTNOTE_NODE) return "";
   return element
     .toArray()
     .map((child) =>
-      child instanceof Y.XmlElement || child instanceof Y.XmlText ? plainText(child) : "",
+      child instanceof Y.XmlElement || child instanceof Y.XmlText
+        ? plainText(child, footnotes)
+        : "",
     )
     .join("");
 }

@@ -71,11 +71,17 @@ export function createExports(deps: ExportsDependencies) {
     const kept = deps.keptCitationTexts();
     const footnote = (attributes: Record<string, unknown>): Footnote =>
       footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
-    // Numbered's footnotes go right after the word; a style decides for itself (./citations).
+    // Footnotes go right after the word, and so do Numbered's Citations; a style decides for
+    // its own (./citations).
     const trimBeforeCitation = style.form === "numbered";
 
     const { blocks, questions } = deps.read(mind.id, (fragment) => ({
-      blocks: readBlocks(fragment, { includeQuestions, footnote, trimBeforeCitation }),
+      blocks: readBlocks(fragment, {
+        includeQuestions,
+        footnote,
+        trimBeforeCitation,
+        trimBeforeFootnote: true,
+      }),
       questions: countQuestions(fragment),
     }));
     const footnotes = footnotesIn(blocks);

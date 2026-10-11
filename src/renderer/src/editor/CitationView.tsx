@@ -1,5 +1,5 @@
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ANSWER_BLOCK,
@@ -26,7 +26,7 @@ import {
 } from "./citationClusters";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
-import { useMindId } from "./mindContext";
+import { InFootnoteContext, useMindId } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek, peekCitation } from "./peek";
 import { StyledRuns, StyledRunView } from "./StyledRuns";
@@ -62,14 +62,16 @@ function answerAround(
  * A Citation in the text: in the Mind's citation style (#289), a chip in the
  * style's words, "(Bowler et al., 2010, p. 4)" or "[1]", which the first of
  * Citations side by side draws for all of them (see `CitationClusters`); in a
- * note style, or in Numbered, an 18px marker with its number (the note's, or
- * the Citation's order within its Answer, see `CitationNumbers`). It stays neutral unless the
+ * note style, or in Numbered, an 18px marker with its number, its place among
+ * the Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
  * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
- * or, in a narrow Mind, as an icon inside the marker. Hovering or focusing it
- * (or its mark in the margin) shows its card: the check in words, the quote,
- * and Open; Esc closes it. Clicking it opens the cited page and keeps the
- * card; when the quote wasn't found, the card offers ways on: open the page
- * anyway, remove the Citation, or regenerate the Answer.
+ * or, in a narrow Mind, as an icon inside the marker. In a footnote's text
+ * it is part of the footnote: the marker shows where it points and its
+ * check's icon instead of a number. Hovering or focusing it (or its mark in
+ * the margin) shows its card: the check in words, the quote, and Open; Esc
+ * closes it. Clicking it opens the cited page and keeps the card; when the
+ * quote wasn't found, the card offers ways on: open the page anyway, remove
+ * the Citation, or regenerate the Answer.
  */
 export function CitationView({
   node,
@@ -95,6 +97,11 @@ export function CitationView({
   const badgeText = t(badge.key, badge.params);
   const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
+  // In a footnote's text it is part of the footnote: it shows where it points, not a number.
+  const inFootnote = useContext(InFootnoteContext);
+  const pointsTo = where
+    ? t("citation.where", { document: documentName, location: where })
+    : documentName;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -189,13 +196,9 @@ export function CitationView({
   }, [open]);
 
   // The number, the Document, where it points and the check: the marker only shows the number.
-  const label = t("citation.label", {
-    number,
-    document: where
-      ? t("citation.where", { document: documentName, location: where })
-      : documentName,
-    badge: badgeText,
-  });
+  const label = inFootnote
+    ? t("citation.inFootnote.label", { document: pointsTo, badge: badgeText })
+    : t("citation.label", { number, document: pointsTo, badge: badgeText });
 
   // In the Mind's citation style (#289): the first Citation of a cluster draws it whole.
   const inCluster = clusterPlaceOf(decorations);
@@ -237,11 +240,13 @@ export function CitationView({
         data-check={state.check}
         data-number={number || undefined}
         className={`citation-marker ${
-          styled.kind === "joined"
-            ? "citation-marker--joined"
-            : styled.kind === "runs"
-              ? `citation-marker--styled ${styled.raised ? "citation-marker--raised" : ""}`
-              : ""
+          inFootnote
+            ? "citation-marker--source"
+            : styled.kind === "joined"
+              ? "citation-marker--joined"
+              : styled.kind === "runs"
+                ? `citation-marker--styled ${styled.raised ? "citation-marker--raised" : ""}`
+                : ""
         }`}
         aria-label={label}
         title={styled.kind === "runs" ? undefined : label}
@@ -261,7 +266,9 @@ export function CitationView({
         }}
       >
         <CheckMarkIcon check={state.check} className="citation-marker-icon" />
-        {styled.kind === "runs" ? (
+        {inFootnote ? (
+          <span>{pointsTo}</span>
+        ) : styled.kind === "runs" ? (
           <ClusterRuns
             runs={styled.runs}
             checks={members.map((member) =>
@@ -270,8 +277,6 @@ export function CitationView({
                 : citationState(member.attributes, documents, kept).check,
             )}
           />
-        ) : styled.kind === "note" ? (
-          <span>{styled.note}</span>
         ) : styled.kind === "joined" ? null : (
           <span>{number || "·"}</span>
         )}
@@ -331,8 +336,8 @@ type StyledMarker =
    * raises all of it (GB/T 7714's "[1]"), which the chip then does instead of its text.
    */
   | { kind: "runs"; runs: FormattedCluster["runs"]; raised: boolean }
-  /** A note style's note number, through the Mind. */
-  | { kind: "note"; note: number }
+  /** A note style: the note's number among the Mind's footnotes (`CitationNumbers`). */
+  | { kind: "note" }
   /** A later Citation of a cluster its first one draws: nothing of its own to show. */
   | { kind: "joined" };
 
@@ -354,7 +359,7 @@ function styledMarker(
     return { kind: "numbered" };
   }
   if (place.member > 0) return { kind: "joined" };
-  if (formatted.form === "note") return { kind: "note", note: place.cluster + 1 };
+  if (formatted.form === "note") return { kind: "note" };
   const raised =
     cluster.runs.length > 0 &&
     cluster.runs.every((run) => run.script === "sup" || run.text.trim() === "");

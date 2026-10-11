@@ -4,9 +4,11 @@
  * read by the one reader (../mindText); this only writes them.
  *
  * It shows bold, italic, strikethrough, inline code and links, math as `$…$`
- * and `$$…$$`, tables as pipe tables, and Citations as plain references like "[Attention Is All You
- * Need, p. 3]", not as markers the model could reuse. Underline and highlight
- * add nothing, and an image adds nothing (the model can't see it).
+ * and `$$…$$`, tables as pipe tables, Citations as plain references like
+ * "[Attention Is All You Need, p. 3]", not as markers the model could reuse,
+ * and the User's footnotes where their markers are, as Pandoc's inline notes:
+ * "^[…]". Underline and highlight add nothing, and an image adds nothing (the
+ * model can't see it).
  */
 
 import type * as Y from "yjs";
@@ -174,6 +176,8 @@ function inlineText(inline: Inline): string {
       return "\n";
     case "citation":
       return inline.footnote.source ? `[${inline.footnote.source}]` : "";
+    case "footnote":
+      return `^[${inlineMarkdown(inline.content)}]`;
     case "cite":
       return inline.runs.map((run) => run.text).join("");
     case "image":
