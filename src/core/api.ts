@@ -4343,6 +4343,8 @@ export interface AgentSettings {
    */
   paused: "local-mode" | null;
   pairings: AgentPairing[];
+  /** The pairings whose agent has IncarnaMind's Skill installed, as IncarnaMind wrote it. */
+  skills: string[];
 }
 
 export interface ConnectAgentInput {
@@ -4418,6 +4420,8 @@ export interface AgentClient {
   /** It looks installed on this computer: such agents are listed first. */
   installed: boolean;
   setup: AgentSetupKind;
+  /** Where setting it up puts the Skill that tells it when to use IncarnaMind; null if it reads none. */
+  skillPath: string | null;
 }
 
 /** What setting an agent up will change in its settings file, the pairing's key hidden. */
@@ -4438,7 +4442,19 @@ export interface AgentSetupPreview {
 export type AgentSetupResult =
   | { kind: "opened"; how: "bundle" | "link" }
   | { kind: "wrote"; path: string }
-  | { kind: "copy"; how: "command" | "settings"; text: string; shown: string; path?: string };
+  | {
+      kind: "copy";
+      how: "command" | "settings";
+      text: string;
+      shown: string;
+      path?: string;
+      /**
+       * The Skill (SKILL.md) for the User to add to the agent's own skills
+       * folder, when IncarnaMind can't install it there. Apart from `text`,
+       * which is pasted into a settings field that takes only the settings.
+       */
+      skill: string | null;
+    };
 
 export interface SetUpAgentInput {
   client: AgentClientId;

@@ -18,6 +18,7 @@
  */
 import { join } from "node:path";
 import type { AgentClientId, AgentLaunch, AgentSetupKind } from "../api";
+import { SKILL_NAME } from "./skill";
 
 /** The name IncarnaMind has in every agent's settings. */
 export const SERVER_KEY = "incarnamind";
@@ -44,6 +45,13 @@ export interface ClientDefinition {
    * write a second file (an Agent Skill, #378) beside the server's entry.
    */
   files?: readonly SettingsFile[];
+  /**
+   * The folder under the home folder whose subfolders are the agent's own
+   * Agent Skills (#378), cited beside each agent below. Left out where the
+   * agent's docs give no such folder: it gets the workflow from the server's
+   * instructions, and "Copy settings" carries the Skill for the User to add.
+   */
+  skills?: readonly string[];
 }
 
 export const AGENT_CLIENT_DEFINITIONS: readonly ClientDefinition[] = [
@@ -63,6 +71,8 @@ export const AGENT_CLIENT_DEFINITIONS: readonly ClientDefinition[] = [
     name: "Claude Code",
     setup: "command",
     home: [[".claude.json"], [".claude"]],
+    // https://code.claude.com/docs/en/skills (personal skills).
+    skills: [".claude", "skills"],
   },
   {
     // One entry for both: the ChatGPT desktop app's Work and Codex modes read Codex's file.
@@ -72,8 +82,19 @@ export const AGENT_CLIENT_DEFINITIONS: readonly ClientDefinition[] = [
     apps: ["Codex.app", "ChatGPT.app"],
     home: [[".codex"]],
     files: [{ path: [".codex", "config.toml"], format: "codex-toml" }],
+    // https://learn.chatgpt.com/docs/build-skills (user skills). The page doesn't name the
+    // ChatGPT app's Codex mode, which reads Codex's settings, so it is assumed to read these too.
+    skills: [".agents", "skills"],
   },
-  { id: "cursor", name: "Cursor", setup: "link", apps: ["Cursor.app"], home: [[".cursor"]] },
+  {
+    id: "cursor",
+    name: "Cursor",
+    setup: "link",
+    apps: ["Cursor.app"],
+    home: [[".cursor"]],
+    // https://cursor.com/docs/context/skills (user-level skills).
+    skills: [".cursor", "skills"],
+  },
   {
     // https://www.antigravity.google/docs/mcp/ gives ~/.gemini/config/mcp_config.json.
     id: "antigravity",
@@ -85,6 +106,8 @@ export const AGENT_CLIENT_DEFINITIONS: readonly ClientDefinition[] = [
       [".gemini", "antigravity"],
     ],
     files: [{ path: [".gemini", "config", "mcp_config.json"], format: "mcp-servers-json" }],
+    // https://www.antigravity.google/docs/skills (global skills, Antigravity 2.0 and the IDE).
+    skills: [".gemini", "config", "skills"],
   },
   {
     // https://www.codebuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/MCP-Guide
@@ -120,6 +143,12 @@ export function settingsFilesFor(client: string | null): readonly SettingsFile[]
     (Object.hasOwn(RETIRED_SETTINGS_FILES, client) ? RETIRED_SETTINGS_FILES[client] : undefined) ??
     []
   );
+}
+
+/** The Agent Skill's file in an agent's skills folder, or null if the agent has none. */
+export function skillPathFor(home: string, client: string | null): string | null {
+  const folder = clientDefinition(client)?.skills;
+  return folder ? join(home, ...folder, SKILL_NAME, "SKILL.md") : null;
 }
 
 export function clientDefinition(id: unknown): ClientDefinition | null {
@@ -180,7 +209,11 @@ export function cursorLink(launch: AgentLaunch): string {
 /** A TOML basic string: JSON's escapes are TOML's. */
 const tomlString = (value: string) => JSON.stringify(value);
 
-/** Codex's table for IncarnaMind. `ask` writes a whole Answer, so its Tools get 5 minutes. */
+/**
+ * Codex's table for IncarnaMind. `ask` writes a whole Answer (47 s at the
+ * 95th percentile under load in the agent evaluation), close to Codex's
+ * default Tool timeout of 60 s, so IncarnaMind's Tools get 2 minutes.
+ */
 export function codexTable(launch: AgentLaunch): string {
   const env = Object.entries(launch.env)
     .map(([name, value]) => `${name} = ${tomlString(value)}`)
@@ -190,7 +223,7 @@ export function codexTable(launch: AgentLaunch): string {
     `command = ${tomlString(launch.command)}`,
     `args = [${launch.args.map(tomlString).join(", ")}]`,
     `env = { ${env} }`,
-    "tool_timeout_sec = 300",
+    "tool_timeout_sec = 120",
     "",
   ].join("\n");
 }
