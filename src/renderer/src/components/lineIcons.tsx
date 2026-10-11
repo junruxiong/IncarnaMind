@@ -237,22 +237,12 @@ export function SidebarLineIcon(props: IconProps) {
   );
 }
 
-/**
- * A Meeting recording (DESIGN.md, While recording): a ring and a dot, in ink,
- * never red. `live`: the dot pulses slowly, unless motion is reduced.
- */
-export function RecordingLineIcon({ live = false, ...props }: IconProps & { live?: boolean }) {
+/** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
+export function RecordingLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
       <circle cx="12" cy="12" r="8.25" />
-      <circle
-        cx="12"
-        cy="12"
-        r="3.75"
-        fill="currentColor"
-        stroke="none"
-        className={live ? "motion-safe:animate-pulse" : undefined}
-      />
+      <circle cx="12" cy="12" r="3.75" fill="currentColor" stroke="none" />
     </LineIcon>
   );
 }

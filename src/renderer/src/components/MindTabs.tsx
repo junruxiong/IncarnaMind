@@ -355,7 +355,7 @@ function MindTab(props: MindTabProps) {
               aria-label={t(
                 live.status === "recording" ? "meetings.bar.recording" : "meetings.bar.paused",
               )}
-              className="mind-tab-recording"
+              className="recording-dot"
             />
           ) : status === null ? (
             <MindLineIcon />

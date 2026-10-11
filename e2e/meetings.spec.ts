@@ -135,6 +135,8 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   const bar = await startRecording(window, start, { notice: true });
   await expect(start).toBeHidden();
   await expect(bar).toContainText("Recording");
+  // Live, its dot is red, as on the tab.
+  await expect(bar.getByTestId("meeting-dot")).toHaveCSS("background-color", "rgb(180, 35, 24)");
   await expect(window.getByTestId("meeting-time")).toHaveText(/^0:0[2-9]$/);
   // The bar sits at the top of the Mind, under its title and above the notes; the composer
   // stays for asking.
@@ -178,6 +180,10 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(bar).toHaveAttribute("data-status", "paused");
   await expect(bar).toContainText("Paused");
+  await expect(bar.getByTestId("meeting-dot")).not.toHaveCSS(
+    "background-color",
+    "rgb(180, 35, 24)",
+  );
   await expect(window.getByTestId("meeting-resume")).toHaveAccessibleName(/Resume recording/);
   await shot(window, "meeting-paused-en");
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
