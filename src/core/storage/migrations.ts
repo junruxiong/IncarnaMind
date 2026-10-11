@@ -1115,6 +1115,72 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE library_groups ADD COLUMN counts_own_files INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 51,
+    description: "Outside agents: pairings, the Citations minted for them, and what they did",
+    sql: `
+      -- Each outside agent the User connected (#351), on this device only: the agent runs on
+      -- this computer, so these rows never sync. folder_ids is the Folders it may read (a JSON
+      -- list of ids), none by default. client is the agent it was set up in (e.g. "codex"), so
+      -- disconnecting can take IncarnaMind out of that agent's settings too; NULL for one set
+      -- up by hand. Its token is kept by secrets.ts, never here.
+      CREATE TABLE agent_pairings (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        folder_ids TEXT NOT NULL DEFAULT '[]',
+        client TEXT,
+        last_used_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+
+      -- A Citation minted for an outside agent: its token ("[cite:k3x9a2b7]") stands for one
+      -- quote, checked as found at one Location of one version of a Document, so a later check
+      -- and opening it read the same. location is a Citation's Location (JSON), or NULL.
+      -- The same quote of the same Passage for the same pairing keeps its token.
+      CREATE TABLE agent_citations (
+        id TEXT PRIMARY KEY NOT NULL,
+        token TEXT NOT NULL,
+        pairing_id TEXT NOT NULL,
+        passage_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        document_name TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        page_from INTEGER,
+        page_to INTEGER,
+        location TEXT,
+        quote TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX agent_citations_by_token ON agent_citations (token)
+        WHERE deleted_at IS NULL;
+      CREATE INDEX agent_citations_by_quote ON agent_citations (pairing_id, passage_id)
+        WHERE deleted_at IS NULL;
+
+      -- Every call an outside agent made, for its activity list: summary is what it asked, as
+      -- the list shows it; document_ids and effects are JSON. No Document text is kept here.
+      CREATE TABLE agent_activity (
+        id TEXT PRIMARY KEY NOT NULL,
+        pairing_id TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        problem TEXT,
+        result_count INTEGER,
+        document_ids TEXT NOT NULL DEFAULT '[]',
+        effects TEXT NOT NULL DEFAULT '[]',
+        duration_ms INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX agent_activity_by_pairing ON agent_activity (pairing_id, created_at)
+        WHERE deleted_at IS NULL;
+    `,
+  },
 ];
 
 /**
