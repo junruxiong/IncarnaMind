@@ -38,13 +38,19 @@ jobs:
 
   # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
-  smoke:
-    name: Electron smoke test (Linux)
+  # The suite is split into shards that run at once: as one job it took about 20 minutes, and
+  # pull requests merge one at a time, each up to date with main, so that time sets the pace.
+  smoke-shard:
+    name: Smoke shard ${{ matrix.shard }}/4 (Linux)
     # A pull request merges only when it is up to date with main and this passed, so the merge
     # commit's tree is the one already tested. Running it again on main tests nothing new.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -54,11 +60,21 @@ jobs:
       - run: npm ci
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
-      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke
+      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --shard=${{ matrix.shard }}/4
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: smoke-test-results-linux
+          name: smoke-test-results-linux-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
+
+  # Branch protection requires this name, so the shards can change without touching it.
+  smoke:
+    name: Electron smoke test (Linux)
+    if: always() && github.event_name == 'pull_request'
+    needs: smoke-shard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        run: test "${{ needs.smoke-shard.result }}" = success
