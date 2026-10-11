@@ -1037,7 +1037,7 @@ export const zhCN = {
   "chatgpt.signIn.error.other-account":
     "这不是这台电脑之前使用的 ChatGPT 账号。请用原来的账号登录，或使用其他账号。",
   "chatgpt.signIn.error.failed": "未能登录，请重试。",
-  "chatgpt.test.not-signed-in": "你尚未登录 ChatGPT。请先登录，然后重试。",
+  "chatgpt.test.not-signed-in": "你尚未登录 ChatGPT。请选择“使用 ChatGPT 继续”，然后重试。",
   "chatgpt.test.plan-limit": "ChatGPT 订阅的用量已达上限，或已达到你为 IncarnaMind 设置的上限。",
   "chatgpt.test.blocked":
     "OpenAI 不允许 IncarnaMind 使用你的 ChatGPT 订阅。请选择其他模型，或在 ChatGPT 中查看你的订阅。",
