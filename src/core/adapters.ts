@@ -533,7 +533,7 @@ export interface CoreAdapters {
   referenceLookup?: { crossref?: string; arxiv?: string };
   /**
    * Where Find sources (#296) asks each Source provider, by its id
-   * ("openalex", "arxiv", "pubmed", "crossref"). Defaults to the real
+   * ("openalex", "arxiv", "pubmed", "crossref", "openfda", "dailymed", "clinicaltrials"). Defaults to the real
    * services; tests point them at a local stand-in. Consent still treats the
    * requests as going to each provider.
    */

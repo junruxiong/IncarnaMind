@@ -88,7 +88,21 @@ test("Add Documents ▾ → Find sources… asks each provider once, then adds a
       "OpenAlex",
       "arXiv",
       "PubMed",
+      "openFDA",
+      "DailyMed",
+      "ClinicalTrials.gov",
     ]);
+    // Papers are searched; drug labels and trials only when chosen.
+    for (const [name, pressed] of [
+      ["OpenAlex", "true"],
+      ["PubMed", "true"],
+      ["openFDA", "false"],
+      ["ClinicalTrials.gov", "false"],
+    ] as const) {
+      await expect(
+        panel.getByTestId("find-sources-provider").filter({ hasText: name }),
+      ).toHaveAttribute("aria-pressed", pressed);
+    }
 
     // Words, a year and the Folder to add to; Enter searches.
     const since = new Date().getFullYear() - 5;
@@ -277,6 +291,62 @@ test("an Answer asked to find papers searches the providers, and Show results op
     expect(services.requests).toHaveLength(sent);
     // The Mind stays open in its tab beside the Library.
     await expect(window.getByTestId("mind-tab")).toHaveCount(1);
+  } finally {
+    await app.close();
+  }
+});
+
+test("choosing openFDA finds a drug label and shows its disclaimer; an openFDA key is kept without being shown again", async () => {
+  const { app, window } = await launchApp(dataDir, { sources: services.url });
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1280, 800);
+    await window.getByTestId("open-library").click();
+    const add = window.getByTestId("library-add-documents");
+    await add.hover();
+    await add.click();
+    await window.getByTestId("library-find-sources").click();
+    const panel = window.getByTestId("find-sources");
+    const openfda = panel.getByTestId("find-sources-provider").filter({ hasText: "openFDA" });
+
+    // The key line shows once openFDA is chosen, and keeps what is typed out of sight.
+    await expect(panel.getByTestId("find-sources-key-open")).toHaveCount(0);
+    await openfda.hover();
+    await openfda.click();
+    await expect(openfda).toHaveAttribute("aria-pressed", "true");
+    // A drug is searched for in the label providers alone: the paper providers are turned off.
+    for (const name of ["OpenAlex", "arXiv", "PubMed"]) {
+      const toggle = panel.getByTestId("find-sources-provider").filter({ hasText: name });
+      await toggle.hover();
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    }
+    await panel.getByTestId("find-sources-key-open").click();
+    const key = panel.getByTestId("find-sources-key");
+    await expect(key).toHaveAttribute("type", "password");
+    await key.fill("not-a-real-key-123");
+    await panel.getByTestId("find-sources-key-save").click();
+    await expect(panel.getByTestId("find-sources-key-set")).toHaveText("Key saved");
+    await expect(key).toHaveCount(0);
+
+    await panel.getByTestId("find-sources-query").fill("metformin");
+    await panel.getByTestId("find-sources-query").press("Enter");
+    const consent = window.getByTestId("consent-dialog");
+    await expect(consent).toContainText("openFDA");
+    await window.getByTestId("consent-allow").click();
+    const label = result(panel, "Zituvimet");
+    await expect(label).toBeVisible();
+    await expect(label.getByTestId("find-sources-result-notice")).toContainText(
+      "Do not rely on openFDA to make decisions regarding medical care.",
+    );
+    // The key went in a header, never in the address, and nothing else was asked.
+    const asked = services.requests.filter((request) => request.path.startsWith("/openfda/"));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.headers["x-api-key"]).toBe("not-a-real-key-123");
+    expect(asked[0]?.path).not.toContain("not-a-real-key");
+    expect(services.requests.filter((request) => request.path.startsWith("/openalex/"))).toEqual(
+      [],
+    );
   } finally {
     await app.close();
   }
