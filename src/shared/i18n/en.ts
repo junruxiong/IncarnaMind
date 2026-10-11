@@ -33,17 +33,14 @@ export const en = {
   "library.deleteNotice":
     "Its Documents and Minds move to Not in a Folder. Their original files and Tags are kept.",
   "library.cancel": "Cancel",
-  "library.modelSettings": "Organization settings",
   "library.search": "Find by name or tag",
   "library.classify": "Organize",
-  "library.reclassify": "Organize this folder",
   "library.progress": "Organizing {count} Documents…",
   "library.waiting":
     "{count} Documents need text, a model or permission. Open their details to check.",
   "library.failed": "{count} Documents need attention. Open their details, then retry Organize.",
   "library.count": "{count} Documents",
   "library.count.one": "1 Document",
-  "library.manualHint": "Choose a folder and tags, or use Organize to suggest them.",
   "library.empty": "Add Documents from the sidebar to start organising them.",
   "library.noMatches": "No Documents here yet.",
   "library.manual": "Your choice",
@@ -196,9 +193,6 @@ export const en = {
 
   "mind.untitled": "Untitled",
   "conversation.untitled": "New chat",
-  "object.renamed": "Renamed to “{name}”",
-  "object.deleted": "Deleted “{name}”",
-  "object.deleted.conversations": "Deleted {count} conversations",
   "mind.noneOpen.title": "Start a Mind",
   "mind.noneOpen.body": "A Mind is a notebook for a topic or project.",
   "mind.title.label": "Mind title",
@@ -325,7 +319,6 @@ export const en = {
   "editor.ai.improve": "Improve writing",
   "editor.ai.shorten": "Shorten",
   "editor.ai.translate": "Translate…",
-  "editor.ai.translateTo": "Translate into",
   "editor.ai.explain": "Explain",
   "editor.ai.edit": "Edit with AI…",
   "edit.pending.improve": "Improving the writing…",
@@ -474,7 +467,6 @@ export const en = {
   "viewer.markdown.imageWeb": "Images from the web aren't loaded",
   "viewer.markdown.imageMissing": "Image not found",
   "viewer.docx.comment": "Comment by {author}",
-  "viewer.section.start": "Start",
 
   "location.page": "p. {range}",
   "location.slide.one": "slide {range}",
@@ -889,9 +881,7 @@ export const en = {
   "tags.chip.automatic": "{tag}: added automatically",
   "tags.chip.user": "{tag}: added by you",
   "tags.menu.open": "Tags of {name}",
-  "tags.menu.title": "Tags",
   "tags.menu.none": "No Tags yet.",
-  "tags.menu.confirm": "Confirm {tag}",
   "tags.menu.retag": "Re-tag automatically",
   "tags.menu.manage": "Manage Tags…",
   "tags.state.pending": "Waiting to be tagged",
@@ -1186,7 +1176,8 @@ export const en = {
   "consent.flow.find-sources": "Find sources",
   "consent.flow.find-sources.purpose": "find papers and other sources, and add the ones you choose",
   "consent.data.search-terms": "What you search for: the words and filters, such as years",
-  "consent.data.work-ids": "The DOI, arXiv ID or PubMed ID of each work you add",
+  "consent.data.work-ids":
+    "The DOI, arXiv ID, PubMed ID, label set ID or NCT number of each work you add",
   "consent.flow.edits": "Edit with AI",
   "consent.flow.edits.purpose": "change the text you select as you ask",
   "consent.data.selection": "The text you select, with the paragraphs it is in, each time you ask",
@@ -1307,7 +1298,6 @@ export const en = {
   "consent.settings.revoke": "Revoke",
   "consent.settings.askAgain": "Ask again",
 
-  "privacy.tabs.label": "Settings pages",
   "privacy.tabs.general": "General",
   "privacy.tabs.privacy": "Privacy",
   "privacy.intro":
@@ -1451,7 +1441,6 @@ export const en = {
   "scope.picker.documents": "Documents",
   "scope.picker.empty": "No Folders, Tags or Documents match",
   "scope.picker.none": "Add Documents, Folders or Tags to choose what a Question searches.",
-  "scope.label": "Search only",
   "scope.chip.folder": "Folder “{name}”, with its sub-Folders",
   "scope.chip.tag": "Documents tagged “{name}”",
   "scope.chip.document": "Document “{name}”",
@@ -1954,6 +1943,20 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
+  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
+  "approvals.thirdParty.read.checkedDocument":
+    "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
+  "approvals.thirdParty.mind.webPage":
+    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.mind.checkedDocument":
+    "This Mind contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.conversation.imported":
+    "This conversation contains imported text, so it asks you first.",
+  "approvals.thirdParty.conversation.webPage":
+    "This conversation contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "This conversation contains text from the document being checked, so it asks you first.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",
@@ -2115,9 +2118,9 @@ export const en = {
 
   "sources.title": "Find sources",
   "sources.intro":
-    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references.",
+    "Search OpenAlex, arXiv and PubMed for papers. Open-access ones are added as Documents, the others as references. Choose openFDA, DailyMed or ClinicalTrials.gov below to find drug labels and clinical trials.",
   "sources.search.label": "Search for sources",
-  "sources.search.placeholder": "Topic, title, DOI or arXiv ID",
+  "sources.search.placeholder": "Topic, title, DOI, arXiv ID or NCT number",
   "sources.search": "Search",
   "sources.searching": "Searching…",
   "sources.close": "Close Find sources",
@@ -2175,6 +2178,22 @@ export const en = {
   "sources.provider.pubmed.about":
     "Biomedical and life-science papers, with open full text from PubMed Central.",
   "sources.provider.crossref.about": "Looks up a DOI you type.",
+  "sources.provider.openfda.about":
+    "FDA drug labels, section by section. Search by drug name or set id. Its records are CC0; it says not to rely on it for decisions about medical care. Asked only when you choose it.",
+  "sources.provider.dailymed.about":
+    "The full drug labels filed with the FDA, from the National Library of Medicine, with their section numbers. Search by drug name or set id. Asked only when you choose it.",
+  "sources.provider.clinicaltrials.about":
+    "Clinical trial records: arms, outcomes, eligibility criteria and posted results. Search by condition or drug, or type an NCT number. Asked only when you choose it.",
+  "sources.notice": "The source says: {notice}",
+  "sources.key.open": "{provider} key…",
+  "sources.key.title": "Your own {provider} key",
+  "sources.key.hint":
+    "Optional. A key gives {provider} a higher daily limit. It is kept in your keychain and sent only to {provider}.",
+  "sources.key.placeholder": "Paste your key",
+  "sources.key.save": "Save key",
+  "sources.key.remove": "Remove key",
+  "sources.key.set": "Key saved",
+  "sources.key.failed": "Couldn't save the key",
   "sources.call.running": "Finding sources for “{query}”…",
   "sources.call.done": "Found sources for “{query}”",
   "sources.call.found.one": "1 found",

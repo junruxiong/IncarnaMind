@@ -12,7 +12,13 @@
  *   Connector Tool asks first, unless the User always allows it.
  * - Skill scripts (#41) always ask, unless the User chose "always run" for
  *   the Skill, which they must confirm after a risk warning (`riskAccepted`):
- *   a script runs on this computer with no sandbox.
+ *   a script runs on this computer, in the OS sandbox on macOS and Linux
+ *   (#65) and with none on Windows, and its Effects say what it can reach.
+ * - Once a Run has read third-party text (a saved web page, the document
+ *   being checked, or a Block from someone else in its Question context;
+ *   #78, ADR-0013), a Tool-level "always" no longer covers a call that writes
+ *   or sends data: someone else's words could have steered it. Such a call
+ *   asks, and its request says why (`thirdParty`).
  * - Policies replace the default for one subject: a Connector's Tool, or a
  *   Skill's scripts. They are rows in SQLite, sync-ready (ADR-0003): UUIDs,
  *   timestamps, soft deletes, and no secrets.
@@ -22,6 +28,7 @@
  *   Closing the core denies whatever is still waiting.
  */
 import { randomUUID } from "node:crypto";
+import { asksAfterThirdParty, runsByDefault } from "../shared/approvalRules";
 import type {
   ApprovalDecision,
   ApprovalPolicy,
@@ -29,7 +36,6 @@ import type {
   ApprovalRequest,
   ApprovalSubject,
   ApprovalSubjectKind,
-  Effect,
   SkillScriptApprovalRequest,
   ToolApprovalRequest,
 } from "./api";
@@ -59,19 +65,13 @@ export type ToolCallToApprove =
 
 /**
  * What decides whether a call asks: what it is (for the User's policy), what
- * it can do, and whether its Run had read untrusted content first.
+ * it can do, whether its Run had read untrusted content first, and why it
+ * counts as having read third-party text, if it does.
  */
-export type CallToDecide = Pick<ToolCallToApprove, "subject" | "effects" | "tainted">;
-
-/**
- * Whether an Effect runs without asking: reading the Documents, a Skill, or
- * a Connector's service; sending to a Connector's service, which the User's
- * consent to it covers (the call asks for that first).
- */
-const runsByDefault = ({ action, scope }: Effect): boolean =>
-  scope.kind === "service"
-    ? action === "read" || action === "network"
-    : action === "read" && (scope.kind === "documents" || scope.kind === "skill");
+export type CallToDecide = Pick<
+  ToolCallToApprove,
+  "subject" | "effects" | "tainted" | "thirdParty"
+>;
 
 const RISK_NOT_ACCEPTED =
   "Always running a Skill's scripts needs the User to confirm the risk warning first (riskAccepted).";
@@ -206,6 +206,31 @@ export function createApprovals(options: ApprovalsOptions) {
     if (!closed) events.emit("approvals.changed", list());
   };
 
+  /**
+   * Whether a call runs or asks the User first. The first rule that applies wins:
+   * 1. it asks if the User chose to be asked about it ("ask");
+   * 2. it runs if each of its Effects runs without asking (`runsByDefault`);
+   * 3. it asks if its Run had read third-party text (`thirdParty`) and it
+   *    writes or sends data (`asksAfterThirdParty`): the User's "always" was
+   *    given for calls their own words lead to, not someone else's (#78,
+   *    ADR-0013);
+   * 4. it runs if the User always allows it ("always");
+   * 5. otherwise it asks.
+   *
+   * A tainted Run that read no third-party text (Passages of the User's own
+   * Documents, a Connector's reply) changes nothing for these subjects, a
+   * Connector's Tool and a Skill's scripts: their "always" keeps counting
+   * (ADR-0013). Side-effecting Tools of providers to come have no Tool-level
+   * "always" at all: they ask unless a scope grant covers the call.
+   */
+  const decide = (call: CallToDecide): "run" | "ask" => {
+    const policy = policyOf(call.subject);
+    if (policy === "ask") return "ask";
+    if (call.effects.every(runsByDefault)) return "run";
+    if (asksAfterThirdParty(call)) return "ask";
+    return policy === "always" ? "run" : "ask";
+  };
+
   /** Writes a policy (null removes it); true if anything changed. Doesn't announce it. */
   const store = (subject: ApprovalSubject, policy: ApprovalPolicyValue | null): boolean =>
     db.transaction(() => {
@@ -278,24 +303,7 @@ export function createApprovals(options: ApprovalsOptions) {
   return {
     list,
 
-    /**
-     * Whether a call runs or asks the User first. The first rule that applies wins:
-     * 1. it asks if the User chose to be asked about it ("ask");
-     * 2. it runs if the User always allows it ("always"), or if each of its
-     *    Effects runs without asking (`runsByDefault`);
-     * 3. otherwise it asks.
-     *
-     * A tainted Run (one that had read untrusted content) changes nothing for
-     * these subjects, a Connector's Tool and a Skill's scripts: their
-     * "always" keeps counting (decision D3, docs/designs/agent-extensibility.md
-     * §4.6). It is recorded on the request; side-effecting subjects to come
-     * will ask after it unless a scope grant covers the call.
-     */
-    decide(call: CallToDecide): "run" | "ask" {
-      const policy = policyOf(call.subject);
-      if (policy === "ask") return "ask";
-      return policy === "always" || call.effects.every(runsByDefault) ? "run" : "ask";
-    },
+    decide,
 
     /**
      * Asks the User about a call, and waits: resolves true if they allow it,
@@ -344,9 +352,12 @@ export function createApprovals(options: ApprovalsOptions) {
         throw new InvalidInputError(RISK_NOT_ACCEPTED);
       }
       const stored = store(subject, "always");
-      // Calls of the same Tool waiting elsewhere, e.g. in another Answer, are allowed too.
+      // Calls of the same Tool waiting elsewhere, e.g. in another Answer, are allowed too, unless
+      // they still ask with the new policy: their Run had read third-party text.
       for (const other of [...pending.values()]) {
-        if (sameSubject(other.request.subject, subject)) settle(other, "always-allow");
+        if (sameSubject(other.request.subject, subject) && decide(other.request) === "run") {
+          settle(other, "always-allow");
+        }
       }
       if (stored) changed();
     },

@@ -7,8 +7,10 @@ import {
   type ProviderErrorKind,
   SKILL_SCRIPT_LIMITS,
   type SkillScriptApprovalRequest,
+  SOURCE_KIND_PROVIDERS,
   type ToolApprovalRequest,
 } from "../../../core/api";
+import { asksAfterThirdParty } from "../../../shared/approvalRules";
 import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
@@ -24,6 +26,7 @@ import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 import { ChevronRightSmallIcon, RegenerateSmallIcon } from "./icons";
 import { useMindId } from "./mindContext";
+import { ThirdPartyLine } from "./ThirdPartyLine";
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
 
@@ -311,8 +314,10 @@ function TitleWithCode({ title, code }: { title: string; code: string }) {
 /**
  * A Tool call waiting for the User: a ruled block in three sections. Which
  * Tool of which Connector, and whether it may change something or the User
- * asked to approve it every time; the arguments it would send; and three
- * choices. The Answer waits meanwhile.
+ * asked to approve it every time, and why it asks when its Answer had read
+ * third-party text; the arguments it would send; and three choices, or two
+ * when its Answer had read third-party text: "Always allow" wouldn't cover
+ * such a call, so it isn't offered. The Answer waits meanwhile.
  */
 function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
   const t = useT();
@@ -320,6 +325,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
   const titleId = useId();
   const params = { connector: request.connector.name, tool: request.tool };
   const decide = (decision: Parameters<typeof respond>[1]) => respond(request.requestId, decision);
+  const thirdParty = asksAfterThirdParty(request);
   return (
     <div
       contentEditable={false}
@@ -346,6 +352,7 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
             ? t("approvals.card.readOnly", params)
             : t("approvals.card.changes", params)}
         </p>
+        <ThirdPartyLine request={request} />
       </div>
       <ApprovalArguments input={request.input} />
       <div className="approval-actions">
@@ -357,15 +364,17 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
         >
           {t("approvals.card.allowOnce")}
         </button>
-        <button
-          type="button"
-          data-testid="approval-always-allow"
-          title={t("approvals.card.alwaysAllowHint", params)}
-          onClick={() => decide("always-allow")}
-          className="approval-button"
-        >
-          {t("approvals.card.alwaysAllow")}
-        </button>
+        {!thirdParty && (
+          <button
+            type="button"
+            data-testid="approval-always-allow"
+            title={t("approvals.card.alwaysAllowHint", params)}
+            onClick={() => decide("always-allow")}
+            className="approval-button"
+          >
+            {t("approvals.card.alwaysAllow")}
+          </button>
+        )}
         <button
           type="button"
           data-testid="approval-deny"
@@ -382,9 +391,11 @@ function ToolApprovalCard({ request }: { request: ToolApprovalRequest }) {
 /**
  * A Skill script waiting for the User, in the same three sections: which
  * script of which Skill, and what it can reach (in the OS sandbox, or with
- * no sandbox: `Settings.scriptSandbox`); the Skill, script and arguments it
- * would run with; and three choices. "Always run" first shows a warning in
- * the last section, which must be confirmed. The Answer waits meanwhile.
+ * no sandbox: `Settings.scriptSandbox`), and why it asks when its Answer had
+ * read third-party text; the Skill, script and arguments it would run with;
+ * and three choices, without "Always run" when its Answer had read
+ * third-party text. "Always run" first shows a warning in the last section,
+ * which must be confirmed. The Answer waits meanwhile.
  */
 function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }) {
   const t = useT();
@@ -419,6 +430,7 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
         >
           {t(sandboxed ? "scripts.card.sandboxed" : "scripts.card.noSandbox")}
         </p>
+        <ThirdPartyLine request={request} />
       </div>
       <div className="approval-details">
         <p className="approval-label">{t("scripts.card.wouldRun")}</p>
@@ -488,15 +500,17 @@ function ScriptApprovalCard({ request }: { request: SkillScriptApprovalRequest }
           >
             {t("scripts.card.allowOnce")}
           </button>
-          <button
-            type="button"
-            data-testid="approval-always-run"
-            title={t("scripts.card.alwaysRunHint", params)}
-            onClick={() => setWarning(true)}
-            className="approval-button"
-          >
-            {t("scripts.card.alwaysRun")}
-          </button>
+          {!asksAfterThirdParty(request) && (
+            <button
+              type="button"
+              data-testid="approval-always-run"
+              title={t("scripts.card.alwaysRunHint", params)}
+              onClick={() => setWarning(true)}
+              className="approval-button"
+            >
+              {t("scripts.card.alwaysRun")}
+            </button>
+          )}
           <button
             type="button"
             data-testid="approval-deny"
@@ -725,6 +739,10 @@ function SourcesCall({ call }: { call: AnswerToolCall }) {
                 fromYear: year("from_year"),
                 toYear: year("to_year"),
                 openAccessOnly: call.input.open_access_only === true,
+                ...(typeof call.input.kind === "string" &&
+                  SOURCE_KIND_PROVIDERS[call.input.kind] && {
+                    providers: SOURCE_KIND_PROVIDERS[call.input.kind],
+                  }),
               })
             }
             className="answer-action"

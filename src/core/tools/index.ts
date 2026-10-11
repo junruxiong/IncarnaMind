@@ -19,7 +19,7 @@
  * turns Tools into its library's own (see `toToolSet` in ../runs/aiSdkEngine),
  * so that library can change without the Tools or their providers.
  */
-import type { Effect } from "../api";
+import type { Effect, ReadThirdPartySource } from "../api";
 
 /** v1's providers, and Find sources; later ones add their kind here. */
 export type ToolProviderKind = "documents" | "skills" | "connector" | "sources";
@@ -41,6 +41,12 @@ export interface ToolCallContext {
   signal: AbortSignal;
   /** Says how many things the call found, for its Tool-call card: Find sources' works. */
   counted?(count: number): void;
+  /**
+   * Says the call read third-party text (CONTEXT.md), such as a search that
+   * found a saved web page's Passages: from then on the Run asks before a
+   * write or a send a Tool-level "always" would let through (#78, ../approvals).
+   */
+  readThirdParty?(source: ReadThirdPartySource): void;
 }
 
 /** A Tool (CONTEXT.md) as a Run offers it to the model. */
