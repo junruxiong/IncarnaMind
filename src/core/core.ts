@@ -1358,8 +1358,12 @@ export function createCore(adapters: CoreAdapters): Core {
       saveFile: (file) => outputs.save(file),
       name: (meetingId) => {
         const meeting = listMeetings?.().find((each) => each.id === meetingId);
-        const title = meeting ? minds.get(meeting.mindId).title : "";
-        return translate(settings.get().language, "meetings.transcript.name", { meeting: title });
+        const mind = meeting ? minds.get(meeting.mindId) : null;
+        const title = mind ? mind.title || mind.autoTitle : "";
+        const language = settings.get().language;
+        return title
+          ? translate(language, "meetings.transcript.name", { meeting: title })
+          : translate(language, "meetings.transcript.nameAlone");
       },
       folderOf: (meetingId) => {
         const meeting = listMeetings?.().find((each) => each.id === meetingId);

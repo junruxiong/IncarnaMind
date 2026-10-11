@@ -4,7 +4,11 @@ import { describe, expect, test, vi } from "vitest";
 import type { Core, Meeting, MeetingTranscript } from "../../src/core";
 import { readVtt } from "../../src/core/documents/formats/vtt";
 import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
-import { FAKE_LINES, type FakeSpeechOptions } from "../../src/core/transcription/fake";
+import {
+  createFakeSpeechEngine,
+  FAKE_LINES,
+  type FakeSpeechOptions,
+} from "../../src/core/transcription/fake";
 import { askAndFinish, citingModel, onlyCitation, type ShownPassage } from "../helpers/citations";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
@@ -24,11 +28,20 @@ async function transcribingCore(
   {
     engine = {},
     model,
-  }: { engine?: FakeSpeechOptions; model?: Parameters<typeof scriptedModels>[0] } = {},
+    loads,
+  }: {
+    engine?: FakeSpeechOptions;
+    model?: Parameters<typeof scriptedModels>[0];
+    /** The engine starts once this resolves, as a model loading slowly does. */
+    loads?: Promise<void>;
+  } = {},
 ) {
   const clock = manualClock();
   const capture = createFakeCapture();
-  const engineHost = inProcessTranscriber(engine);
+  const engineHost = inProcessTranscriber(engine, async () => {
+    await loads;
+    return createFakeSpeechEngine(engine);
+  });
   const models = model ? scriptedModels(model) : undefined;
   const core = startCore(dataDir, {
     audioCapture: capture,
@@ -229,6 +242,60 @@ describe("A Meeting's live Transcript", { timeout: 60_000 }, () => {
     );
     const final = readVtt(readFileSync(saved.savedPath as string, "utf8"));
     expect(final.cues.at(-1)?.endMs).toBeGreaterThanOrEqual(18 * SECOND);
+  });
+
+  test("audio that waited for a slow engine goes to it when it starts, and live text doesn't fall behind for it", async () => {
+    const dataDir = await createTempDataFolder();
+    const loaded = Promise.withResolvers<void>();
+    const { core, record } = await transcribingCore(dataDir, { loads: loaded.promise });
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id });
+    // Fifty seconds while the engine starts: more than live text may lag, less than is kept for it.
+    record(50 * SECOND);
+    expect((await transcriptOf(core, meeting.id)).state).toBe("preparing");
+    loaded.resolve();
+    await until(
+      core,
+      meeting.id,
+      (transcript) => transcript.state === "live" && transcript.lines >= 20,
+    );
+    record(5 * SECOND);
+    const live = await until(core, meeting.id, (transcript) => transcript.lines >= 22);
+    expect(live.state).toBe("live");
+  });
+
+  test("a Meeting in a Mind with no title yet names its Transcript plainly", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, record } = await transcribingCore(dataDir);
+    const mind = await core.createMind({ title: "" });
+    const meeting = await core.createMeeting({ mindId: mind.id });
+    await core.startMeeting({ meetingId: meeting.id });
+    record(3 * SECOND);
+    const live = await until(core, meeting.id, (transcript) => transcript.documentId !== null);
+    expect((await documentOf(core, live.documentId as string)).name).toBe("Transcript");
+  });
+
+  test("IncarnaMind closing while a Transcript is being finished leaves it to finish at the next start", async () => {
+    const dataDir = await createTempDataFolder();
+    const first = await transcribingCore(dataDir, { engine: { decodeMs: 30 } });
+    const meeting = await first.core.createMeeting();
+    await first.core.startMeeting({ meetingId: meeting.id });
+    await until(first.core, meeting.id, (transcript) => transcript.state === "live");
+    first.record(40 * SECOND);
+    await first.core.stopMeeting(meeting.id);
+    expect((await transcriptOf(first.core, meeting.id)).state).toBe("finishing");
+    first.core.close();
+    // Nothing reaches the closed core; the next start finishes what was left.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const second = await transcribingCore(dataDir);
+    const saved = await until(
+      second.core,
+      meeting.id,
+      (transcript) => transcript.state === "saved",
+    );
+    expect(readVtt(readFileSync(saved.savedPath as string, "utf8")).cues.length).toBeGreaterThan(
+      10,
+    );
   });
 
   test("a Chinese interface names the Transcript 转写稿", async () => {
