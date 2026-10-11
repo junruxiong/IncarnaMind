@@ -20,7 +20,7 @@ import { CitationNumbers } from "../editor/citationNumbers";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
-import { ComposerDockContext, MindIdContext } from "../editor/mindContext";
+import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { QuestionView } from "../editor/QuestionView";
@@ -34,6 +34,7 @@ import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
+import { WordCount } from "../editor/WordCount";
 import { useT } from "../i18n";
 import { useMeetingOf } from "../meetings";
 import { isWritingIn } from "../mindStatus";
@@ -166,6 +167,7 @@ function MindEditorView({
   const t = useT();
   const isExample = useIsExample(mindId);
   const dock = useContext(ComposerDockContext);
+  const countSlot = useContext(CountSlotContext);
   const composer = useRef<ComposerHandle>(null);
   /**
    * Whether the Mind's cursor is where the next Question goes: since the
@@ -315,6 +317,7 @@ function MindEditorView({
 
   return (
     <MindIdContext.Provider value={mindId}>
+      {countSlot && createPortal(<WordCount editor={editor} doc={doc} />, countSlot)}
       {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
         <EditorContent editor={editor} />
