@@ -44,12 +44,6 @@
   .viewer-tags {
     @apply max-w-[45%];
   }
-  @container viewer (width < 560px) {
-    .viewer-tags [data-testid="tag-chip"],
-    .viewer-tags [data-testid="tag-chip-more"] {
-      @apply hidden;
-    }
-  }
   .viewer-icon-button {
     @apply flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary;
 
@@ -752,4 +746,18 @@
   color: var(--color-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/*
+ * Too narrow for the chips, the Tags' header keeps only their button. The chips set their
+ * display with utility classes, which sit in the utilities layer and beat anything in
+ * components, so this rule lives in that layer too, where its selector's weight wins.
+ */
+@layer utilities {
+  @container viewer (width < 560px) {
+    .viewer-tags [data-testid="tag-chip"],
+    .viewer-tags [data-testid="tag-chip-more"] {
+      @apply hidden;
+    }
+  }
 }
