@@ -705,6 +705,35 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 40,
+    description: "Reference records: what a citation style needs to cite a Document (#286)",
+    sql: `
+      -- A Document's reference record (src/core/references): its type, title,
+      -- authors, date, venue, volume, issue, pages, publisher, DOI, URL and
+      -- language. fields is JSON, one entry per field that has a value or
+      -- that the User cleared: { "<field>": { "value": …, "source": "file" |
+      -- "lookup" | "user" } }, checked in code, so a field a later version
+      -- adds needs no migration. Reading the file again replaces only "file"
+      -- values; the User's edits ("user") are never replaced. looked_up_at:
+      -- when Look up last filled it, NULL if never. document_id is NULL for
+      -- a reference with no Document yet (an imported one, #287), and stays
+      -- set when its Document leaves the index, so the Citations that quote
+      -- it can still be listed in a Bibliography. No foreign key: a later
+      -- sync may deliver a record before its Document.
+      CREATE TABLE reference_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT,
+        fields TEXT NOT NULL,
+        looked_up_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX reference_records_by_document ON reference_records (document_id)
+        WHERE deleted_at IS NULL AND document_id IS NOT NULL;
+    `,
+  },
 ];
 
 /**

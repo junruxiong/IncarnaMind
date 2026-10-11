@@ -438,6 +438,12 @@ export interface CoreAdapters {
    */
   jevHostedUrl?: string;
   /**
+   * Where Look up (#286) asks Crossref's and arXiv's APIs. Defaults to
+   * theirs; tests point them at a local fake server. Consent still treats
+   * the requests as going to Crossref and arXiv.
+   */
+  referenceLookup?: { crossref?: string; arxiv?: string };
+  /**
    * Turns Question context into a streamed Answer. Defaults to the AI SDK
    * engine; an alternative agent layer plugs in here.
    */
