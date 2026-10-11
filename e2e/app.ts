@@ -587,6 +587,17 @@ export async function setWindowSize(
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
 }
 
+/** Switches the interface's language, as Settings does. */
+export function setLanguage(window: Page, language: "en" | "zh-CN"): Promise<unknown> {
+  return window.evaluate(
+    (value) =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: value },
+      }),
+    language,
+  );
+}
+
 /** How many animations are running (src/renderer/src/motion.ts), leaving copies included. */
 export function motionRunning(window: Page): Promise<number> {
   return window.evaluate(

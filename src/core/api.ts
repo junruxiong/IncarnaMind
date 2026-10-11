@@ -276,6 +276,7 @@ export const NOTE_BLOCK_TYPES = [
   "bulletList",
   "orderedList",
   "blockquote",
+  "taskList",
   "horizontalRule",
   "table",
 ] as const;
