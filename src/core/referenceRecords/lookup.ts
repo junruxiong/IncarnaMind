@@ -7,16 +7,10 @@
  * copyright", https://www.crossref.org/documentation/retrieve-metadata/rest-api/),
  * arXiv's is CC0 (https://info.arxiv.org/help/api/tou.html).
  */
-import { arxivUrl, parseIssued, parseName } from "../../shared/references";
-import type {
-  ExternalService,
-  ReferenceFields,
-  ReferenceLookupFailureReason,
-  ReferenceName,
-} from "../api";
-import { descendants, elements, parseXml, textOf } from "../documents/formats/xml";
+import type { ExternalService, ReferenceFields, ReferenceLookupFailureReason } from "../api";
 import { isRecord } from "../errors";
-import { fromCsl, plain } from "./csl";
+import { parseArxivFeed } from "../sources/providers/arxiv";
+import { fromCsl } from "./csl";
 
 export const CROSSREF: ExternalService = { id: "https://api.crossref.org", name: "Crossref" };
 export const ARXIV: ExternalService = { id: "https://export.arxiv.org", name: "arXiv" };
@@ -78,7 +72,7 @@ export async function lookUpDoi(
   return fromCsl(answer.message);
 }
 
-/** A preprint's record from arXiv, by its id: arXiv's API answers in Atom. */
+/** A preprint's record from arXiv, by its id: arXiv's API answers in Atom, read as Find sources reads it. */
 export async function lookUpArxiv(
   baseUrl: string,
   id: string,
@@ -89,35 +83,14 @@ export async function lookUpArxiv(
     "application/atom+xml",
     signal,
   );
-  let feed: ReturnType<typeof parseXml>;
+  let works: ReturnType<typeof parseArxivFeed>;
   try {
-    feed = parseXml(body);
+    works = parseArxivFeed(body);
   } catch {
     throw new LookupError("service-error", "arXiv's answer isn't readable.");
   }
-  const entry = descendants(feed, "entry")[0];
-  const field = (name: string) => {
-    const element = entry && elements(entry).find((each) => each.name === name);
-    return element ? plain(textOf(element)) : "";
-  };
   // An id arXiv doesn't know comes back as an entry titled "Error", or as none.
-  const title = field("title");
-  if (!entry || title === "" || title === "Error") {
-    throw new LookupError("not-found", `arXiv has no record for ${id}.`);
-  }
-  const authors = elements(entry)
-    .filter((each) => each.name === "author")
-    .map((author) => parseName(plain(textOf(elements(author)[0] ?? author))))
-    .filter((name): name is ReferenceName => name !== null);
-  const bare = id.replace(/v\d+$/, "");
-  return {
-    type: "article",
-    title,
-    ...(authors.length > 0 && { authors }),
-    ...(parseIssued(field("published")) && { issued: parseIssued(field("published")) as string }),
-    publisher: "arXiv",
-    // arXiv's own DOI, which DataCite registers for every paper.
-    doi: `10.48550/arXiv.${bare}`,
-    url: arxivUrl(bare),
-  };
+  const work = works[0];
+  if (!work) throw new LookupError("not-found", `arXiv has no record for ${id}.`);
+  return work.fields;
 }

@@ -23,6 +23,8 @@ import type {
 } from "../api";
 import type { Consent } from "../consent";
 import { ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
+import type { Pace } from "../sources/pace";
+import { ARXIV_INTERVAL_MS, ARXIV_LANE } from "../sources/providers/arxiv";
 import type { Database } from "../storage";
 import { ARXIV, CROSSREF, LookupError, lookUpArxiv, lookUpDoi } from "./lookup";
 import {
@@ -47,9 +49,6 @@ export const REFERENCE_SERVICE_URLS = {
   arxiv: "https://export.arxiv.org",
 };
 
-/** arXiv asks for "no more than one request every three seconds" (its API terms). */
-const ARXIV_INTERVAL_MS = 3000;
-
 /** The longest text a field takes: far more than any title or name list needs. */
 const MAX_LENGTH = 5000;
 
@@ -67,6 +66,8 @@ export interface ReferencesOptions {
   changed(documents: Document[]): void;
   /** Aborted when the core closes. */
   signal: AbortSignal;
+  /** Keeps requests to arXiv apart, with Find sources' (see ../sources/pace). */
+  pace: Pace;
 }
 
 const tidyName = (name: ReferenceName): ReferenceName | null => {
@@ -146,24 +147,8 @@ function parseRecord(before: unknown, fields: readonly ReferenceField[]): Refere
   return before as unknown as ReferenceRecord;
 }
 
-const sleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (ms <= 0) return resolve();
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(signal.reason);
-      },
-      { once: true },
-    );
-  });
-
 export function createReferences(options: ReferencesOptions) {
-  const { db, now, consent, urls, signal } = options;
-  /** When arXiv may be asked again. */
-  let arxivFrom = 0;
+  const { db, now, consent, urls, signal, pace } = options;
 
   /** The Document as it is now, and pushed as changed if `changed` says so. */
   const settle = (documentId: string, changed: boolean) => {
@@ -213,9 +198,13 @@ export function createReferences(options: ReferencesOptions) {
         if (identifier.kind === "doi") {
           found = await lookUpDoi(urls.crossref, identifier.id, signal);
         } else {
-          await sleep(arxivFrom - Date.now(), signal);
-          arxivFrom = Date.now() + ARXIV_INTERVAL_MS;
-          found = await lookUpArxiv(urls.arxiv, identifier.id, signal);
+          // arXiv asks for "no more than one request every three seconds", from all of one's machines.
+          found = await pace.run(
+            ARXIV_LANE,
+            ARXIV_INTERVAL_MS,
+            () => lookUpArxiv(urls.arxiv, identifier.id, signal),
+            signal,
+          );
         }
       } catch (error) {
         if (error instanceof LookupError) return failed(error.reason, error.message);

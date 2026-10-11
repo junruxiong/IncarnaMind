@@ -37,6 +37,7 @@ import {
   type AnswerPhase,
   type AnswerPlace,
   type AnswerToolCall,
+  type AnswerUsage,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
@@ -74,6 +75,7 @@ import {
   scriptResultText,
 } from "../skills/scripts";
 import { scriptCallInput, skillTools } from "../skills/tools";
+import { asksForSources } from "../sources/intent";
 import {
   SKILL_TOOLS,
   type Tool,
@@ -105,9 +107,11 @@ import {
   documentInstructions,
   LISTED_DOCUMENTS,
   type ListedDocuments,
+  languageInstruction,
   loadedSkillText,
   signInNeededInstructions,
   skillInstructions,
+  sourcesInstructions,
 } from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
@@ -123,6 +127,8 @@ type Outcome = { status: "done" | "stopped" } | { status: "failed"; error: Provi
 
 interface Generation {
   home: AnswerHome;
+  /** The model writing it. */
+  model: ChatModelChoice;
   /** Writes what has arrived with the final status, now. Later calls do nothing. */
   finish(outcome: Outcome): void;
 }
@@ -255,6 +261,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   documents: "documents",
   skills: "skill",
   connector: "connector",
+  sources: "sources",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -353,7 +360,11 @@ function failureOf(error: unknown): ProviderError {
   if (error instanceof ChatNotReadyError) {
     const { reason } = error.readiness;
     const kind =
-      reason === "consent-declined" ? reason : reason === "missing-api-key" ? "auth" : "model";
+      reason === "consent-declined" || reason === "local-mode"
+        ? reason
+        : reason === "missing-api-key"
+          ? "auth"
+          : "model";
     return { kind, message: error.message };
   }
   return classifyProviderError(error);
@@ -424,6 +435,13 @@ export function createAnswers(options: AnswersOptions) {
     let placedMarkers = 0;
     /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
     let quoteRetry: QuoteRetry | null = null;
+    /** What the model calls counted, the cached input tokens too. */
+    const usage: AnswerUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+    };
     const toolCalls: AnswerToolCall[] = [];
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
@@ -504,6 +522,7 @@ export function createAnswers(options: AnswersOptions) {
           placedMarkers,
           citationSupport: support,
           quoteRetry,
+          usage,
         });
       }
     };
@@ -516,11 +535,12 @@ export function createAnswers(options: AnswersOptions) {
       }, ANSWER_WRITE_INTERVAL_MS);
     };
 
-    active.set(answerId, { home, finish });
+    active.set(answerId, { home, model, finish });
     if (active.size === 1) options.onWritingChange?.(true);
     events.emit("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
-    const base = answerInstructions(context.question);
+    const base = answerInstructions();
+    const language = languageInstruction(context.question);
     const callStarted = (call: AnswerToolCall) => {
       // A call that asks the User first may already be there (see `ask`).
       if (toolCalls.some((each) => each.id === call.id)) return;
@@ -801,6 +821,8 @@ export function createAnswers(options: AnswersOptions) {
       // (see `gate`).
       const provided: Tool[] = [];
       for (const provider of options.toolProviders) {
+        // Find sources' Tool only for a Question that asks for papers or other sources.
+        if (provider.kind === "sources" && !asksForSources(context.question)) continue;
         try {
           provided.push(...(await provider.tools(controller.signal)));
         } catch (error) {
@@ -881,7 +903,12 @@ export function createAnswers(options: AnswersOptions) {
       for await (const event of engine.generate({
         instructions: (
           mode,
-          { passages, skillTools: withSkillTools = false, connectorTools = false } = {},
+          {
+            passages,
+            skillTools: withSkillTools = false,
+            connectorTools = false,
+            sourceTools = false,
+          } = {},
         ) =>
           [
             base,
@@ -895,7 +922,9 @@ export function createAnswers(options: AnswersOptions) {
                 ),
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
+            sourcesInstructions(sourceTools),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
+            language,
           ]
             .filter(Boolean)
             .join("\n\n"),
@@ -910,6 +939,7 @@ export function createAnswers(options: AnswersOptions) {
         takesTemperature: prepared.capabilities.facts.temperature,
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
+        cacheKey: place.conversationId ?? place.mindId ?? undefined,
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -931,6 +961,12 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "quotes-retried":
             quoteRetry = event.retry;
+            break;
+          case "usage":
+            usage.inputTokens += event.usage.inputTokens ?? 0;
+            usage.outputTokens += event.usage.outputTokens ?? 0;
+            usage.cachedInputTokens += event.usage.cachedInputTokens ?? 0;
+            usage.cacheWriteTokens += event.usage.cacheWriteTokens ?? 0;
             break;
           case "text-delta":
             responded = true;
@@ -1256,6 +1292,22 @@ export function createAnswers(options: AnswersOptions) {
 
     /** Call before a Mind is opened: Answers a quit or crash left "streaming" become "stopped". */
     settleOrphans,
+
+    /**
+     * Local mode just turned on: stops every Answer being written by a model that isn't on
+     * this computer, keeping what was written. It ends as failed with the "local-mode"
+     * reason, so the Answer says why.
+     */
+    async stopCloud(): Promise<void> {
+      for (const generation of [...active.values()]) {
+        const readiness = await options.readiness(generation.model);
+        if (readiness.ready || readiness.reason !== "local-mode") continue;
+        generation.finish({
+          status: "failed",
+          error: { kind: "local-mode", message: "Stopped: local mode is on." },
+        });
+      }
+    },
 
     /** Stops every Answer, keeping what was written, e.g. when the app quits. */
     stopAll(): void {

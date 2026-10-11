@@ -249,6 +249,51 @@ export function fillReference(
   return filled;
 }
 
+/**
+ * A record with no Document (#296): a found work whose full text isn't open,
+ * its fields as a lookup gives them ("lookup"), so a file added for it later
+ * fills only what they leave empty. Returns its id.
+ */
+export function writeUnlinkedReference(
+  db: Database,
+  found: Partial<ReferenceFields>,
+  at: string,
+): string {
+  const stored: StoredFields = {};
+  for (const [field, value] of Object.entries(found) as [ReferenceField, FieldValue][]) {
+    if (isReferenceField(field) && !isEmptyValue(field, value)) {
+      stored[field] = { value, source: "lookup" };
+    }
+  }
+  const id = randomUUID();
+  db.run(
+    `INSERT INTO reference_records (id, document_id, fields, looked_up_at, created_at, updated_at)
+     VALUES (?, NULL, ?, ?, ?, ?)`,
+    [id, JSON.stringify(stored), at, at, at],
+  );
+  return id;
+}
+
+/**
+ * Gives a record with no Document its Document, the file just added for
+ * it, before that file is read: so reading it fills only the empty fields.
+ * False when the Document has a record of its own already.
+ */
+export function linkReference(
+  db: Database,
+  recordId: string,
+  documentId: string,
+  at: string,
+): boolean {
+  if (findRow(db, documentId)) return false;
+  db.run(
+    `UPDATE reference_records SET document_id = ?, updated_at = ?
+     WHERE id = ? AND document_id IS NULL AND deleted_at IS NULL`,
+    [documentId, at, recordId],
+  );
+  return findRow(db, documentId) !== undefined;
+}
+
 /** Puts fields back as they are in `before`, each with its value and source: Undo. */
 export function restoreReference(
   db: Database,

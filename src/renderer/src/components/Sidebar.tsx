@@ -1,6 +1,7 @@
 import type { ClipboardEvent, ReactNode } from "react";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
+import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
 import { canRecordMeetings } from "../meetings";
 import { useAppStore } from "../store";
@@ -10,6 +11,7 @@ import { GetStartedCard } from "./GettingStarted";
 import {
   AppMark,
   DocumentLineIcon,
+  FindSourcesLineIcon,
   FolderLineIcon,
   FolderPlusLineIcon,
   MindLineIcon,
@@ -125,9 +127,9 @@ function pasteLinks(event: ClipboardEvent<HTMLElement>) {
 
 /**
  * The one "+" menu, the one place to add: New Mind, Record a meeting (once
- * Meetings are turned on), New Folder…, Add Documents…, Add a web page… and
- * Link a folder…. Opened by keyboard or mouse, its items are menu items
- * reached with the arrow keys.
+ * Meetings are turned on), New Folder…, Add Documents…, Add a web page…,
+ * Find sources… and Link a folder…. Opened by keyboard or mouse, its items
+ * are menu items reached with the arrow keys.
  */
 function PlusMenu() {
   const t = useT();
@@ -218,6 +220,16 @@ function PlusMenu() {
         >
           <DocumentLineIcon kind="web" className="size-4 shrink-0 text-ink-meta" />
           <span className="flex-1">{t("sidebar.plus.addWebPage")}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="plus-find-sources"
+          onClick={choose(() => useFindSources.getState().show())}
+          className={`${menuItemClass} pl-2`}
+        >
+          <FindSourcesLineIcon className="size-4 shrink-0 text-ink-meta" />
+          <span className="flex-1">{t("sidebar.plus.findSources")}</span>
         </button>
         <button
           type="button"

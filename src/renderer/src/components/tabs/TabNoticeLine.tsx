@@ -42,6 +42,8 @@ export function TabNoticeLine() {
           t("tabs.notice.noGroup", { n: notice.group, shortcut: shortcutLabel("tab.split") })
         ) : notice.kind === "maxGroups" ? (
           t("tabs.notice.maxGroups")
+        ) : notice.kind === "assistantNarrow" ? (
+          t("assistant.narrow")
         ) : (
           t("tabs.notice.merged")
         )}
