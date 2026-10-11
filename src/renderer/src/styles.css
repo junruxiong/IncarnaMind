@@ -4203,6 +4203,17 @@
       font-size: 15px;
       line-height: 22px;
     }
+    /* A code block on its band, as in a Mind, in the compact sizes. */
+    > pre {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--color-frame);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 18px;
+      color: var(--color-ink);
+      overflow-x: auto;
+    }
     .citation-marker {
       min-width: 16px;
       height: 16px;
@@ -4360,7 +4371,8 @@
   }
   .add-to-option {
     display: grid;
-    grid-template-columns: 16px minmax(0, 1fr);
+    /* Its icon, its name and where it goes, and on the chosen one the key that adds. */
+    grid-template-columns: 16px minmax(0, 1fr) auto;
     column-gap: 8px;
     align-items: start;
     padding: 5px 8px;
@@ -4391,6 +4403,12 @@
     line-height: 20px;
   }
   .add-to-option-detail {
+    font-size: var(--text-label);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .add-to-option-key {
+    align-self: center;
     font-size: var(--text-label);
     line-height: 16px;
     color: var(--color-ink-meta);
