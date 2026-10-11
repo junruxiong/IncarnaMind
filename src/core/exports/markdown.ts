@@ -7,6 +7,7 @@
  * inside the User's footnote is written into its text, as its source.
  */
 import type { TableAlign } from "../../shared/markdownTables";
+import type { StyledRun } from "../api";
 import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
 
 export interface MarkdownLabels {
@@ -23,7 +24,10 @@ interface Context {
   note?: boolean;
 }
 
-/** A footnote as written at the end: a Citation's source, or the text of the User's own. */
+/**
+ * A footnote as written at the end: a Citation's source, or the text of the User's own, or a
+ * citation style's note (#289), already Markdown.
+ */
 type Written = { kind: "citation"; footnote: Footnote } | { kind: "note"; text: string };
 
 export function renderMarkdown(
@@ -55,6 +59,27 @@ export function renderMarkdown(
     );
   }
   return `${parts.join("\n\n")}\n`;
+}
+
+/**
+ * Text a citation style formatted: italics, bold and links as Markdown has them, raised and
+ * lowered text as HTML (`<sup>`), which CommonMark keeps; small capitals and underlining have
+ * no Markdown and are left as text.
+ */
+function runsMarkdown(runs: readonly StyledRun[], table: boolean): string {
+  return runs
+    .map((run) => {
+      if (run.text === "") return "";
+      let text = escapeText(run.text, table);
+      if (run.script) text = `<${run.script}>${text}</${run.script}>`;
+      if (run.bold) text = `**${text}**`;
+      if (run.italic) text = `*${text}*`;
+      if (run.link && /^(https?:|mailto:)/i.test(run.link)) {
+        text = `[${text}](${destination(run.link)})`;
+      }
+      return text;
+    })
+    .join("");
 }
 
 class MarkdownWriter {
@@ -103,6 +128,14 @@ class MarkdownWriter {
         return this.table(block.rows);
       case "image":
         return image(block.image.src, block.image.alt, context);
+      case "bibliography":
+        return [
+          `## ${escapeText(block.heading, false)}`,
+          ...block.items.map((item) => {
+            const label = item.label ? `${runsMarkdown(item.label, false)} ` : "";
+            return escapeLineStart(label + runsMarkdown(item.runs, false));
+          }),
+        ].join("\n\n");
     }
   }
 
@@ -223,6 +256,17 @@ class MarkdownWriter {
         return `[^${this.number({ kind: "note", text: this.inline(item.content, { table: false, note: true }) })}]`;
       case "image":
         return image(item.image.src, item.image.alt, context);
+      case "cite": {
+        // A style's note is a footnote of its own; in the text, or in a footnote's text, its words.
+        if (item.note && !context.note) {
+          const marker = item.unverified ? ` ${this.labels.unverified}` : "";
+          return `[^${this.number({ kind: "note", text: runsMarkdown(item.runs, false) + marker })}]`;
+        }
+        const text = runsMarkdown(item.runs, context.table);
+        return item.unverified
+          ? `${text} ${escapeText(this.labels.unverified, context.table)}`
+          : text;
+      }
     }
   }
 }
