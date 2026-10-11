@@ -31,12 +31,14 @@ import { isInside } from "../documents/files";
 import { ConsentDeclinedError, InvalidInputError, isRecord } from "../errors";
 import { safeFileName, writeNewFile } from "../fileNames";
 import { fillReference, linkReference, writeUnlinkedReference } from "../referenceRecords/store";
+import type { Secrets } from "../secrets";
 import type { Database } from "../storage";
 import type { Tool } from "../tools";
 import { downloadOpenPdf, fileOf } from "./fullText";
 import { SourceError, type SourceHttp } from "./http";
 import { licenceOf } from "./licences";
 import { type MergedWork, mergeWorks } from "./merge";
+import { sourceKeySecret } from "./providers";
 import { forgetFoundFile, inLibrary, purgedFoundFiles, recordFoundSource } from "./store";
 import { sourcesTool } from "./tool";
 import type {
@@ -80,6 +82,8 @@ export interface SourcesOptions {
   /** For how long results are kept. */
   clock: () => number;
   consent: Consent;
+  /** Keeps the User's own keys for the providers that take one. */
+  secrets: Secrets;
   /** Local mode is on: nothing is sent. */
   localOnly(): boolean;
   providers: readonly SourceProvider[];
@@ -161,7 +165,7 @@ export function parseFindInput(input: unknown): ParsedInput {
   };
 }
 
-/** A DOI, an arXiv ID or a PubMed ID the User typed, which is looked up rather than searched for. */
+/** A DOI, an arXiv ID, a PubMed ID, an NCT number or a label's set id the User typed, which is looked up rather than searched for. */
 export function identifierOf(query: string): WorkIdentifier | null {
   const doi = normalizeDoi(query);
   if (doi) return { kind: "doi", id: doi.toLowerCase() };
@@ -170,7 +174,11 @@ export function identifierOf(query: string): WorkIdentifier | null {
   if (arxiv) return { kind: "arxiv", id: arxiv };
   const pmid = /^(?:pmid:?\s*(\d{1,9})|(\d{7,9}))$/i.exec(query);
   const id = pmid?.[1] ?? pmid?.[2];
-  return id ? { kind: "pmid", id } : null;
+  if (id) return { kind: "pmid", id };
+  const nct = /^NCT\d{8}$/i.exec(query);
+  if (nct) return { kind: "nct", id: nct[0].toUpperCase() };
+  const setId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.exec(query);
+  return setId ? { kind: "setid", id: setId[0].toLowerCase() } : null;
 }
 
 const FAILURES: Record<SourceError["reason"], SourceFailureReason> = {
@@ -225,6 +233,7 @@ export function createSources(options: SourcesOptions) {
     versionDate: work.versionDate,
     access: accessOf(work),
     landingUrl: work.landingUrl,
+    notice: work.notice,
     inLibrary: inLibrary(db, work.ids),
   });
 
@@ -290,24 +299,24 @@ export function createSources(options: SourcesOptions) {
     }
   }
 
-  /** The providers a search goes to: an identifier to those that look it up, words to those that search. */
+  /**
+   * The providers a search goes to: an identifier to those that look it up,
+   * words to those that search. Words go to the providers named, else to the
+   * ones searched by default (not drug labels or trials); an NCT number or a
+   * set id names its provider, so it is looked up there whatever is chosen.
+   */
   function targets(input: ParsedInput, identifier: WorkIdentifier | null): SourceProvider[] {
-    const wanted = (provider: SourceProvider) =>
-      input.providers === null ||
-      input.providers.includes(provider.id) ||
-      // Crossref looks DOIs up, whichever providers are searched.
-      (identifier !== null && provider.search === undefined);
-    if (!identifier) return providers.filter((each) => each.search && wanted(each));
+    const named = (provider: SourceProvider) =>
+      input.providers === null
+        ? provider.searchedByDefault !== false
+        : input.providers.includes(provider.id);
+    if (!identifier) return providers.filter((each) => each.search && named(each));
     return providers.filter(
       (each) =>
         each.resolve &&
-        wanted(each) &&
-        // Each looks up the identifiers it holds.
-        (identifier.kind === "doi"
-          ? each.id !== "arxiv" && each.id !== "pubmed"
-          : identifier.kind === "arxiv"
-            ? each.id === "arxiv" || each.id === "openalex"
-            : each.id === "pubmed" || each.id === "openalex"),
+        each.resolves?.includes(identifier.kind) &&
+        // Crossref looks DOIs up, whichever providers are searched.
+        (named(each) || each.search === undefined || each.searchedByDefault === false),
     );
   }
 
@@ -488,15 +497,40 @@ export function createSources(options: SourcesOptions) {
   }
 
   return {
-    list(): SourceProviderInfo[] {
-      return providers.map((provider) => ({
-        id: provider.id,
-        name: provider.name,
-        service: provider.service,
-        searches: provider.search !== undefined,
-        consent: consent.status("find-sources", provider.service),
-        termsUrl: provider.terms.url,
-      }));
+    async list(): Promise<SourceProviderInfo[]> {
+      return Promise.all(
+        providers.map(async (provider) => ({
+          id: provider.id,
+          name: provider.name,
+          service: provider.service,
+          searches: provider.search !== undefined,
+          consent: consent.status("find-sources", provider.service),
+          termsUrl: provider.terms.url,
+          searchedByDefault: provider.searchedByDefault !== false,
+          key: provider.takesKey
+            ? (await options.secrets.tryGet(sourceKeySecret(provider.id))) === null
+              ? ("unset" as const)
+              : ("set" as const)
+            : ("none" as const),
+        })),
+      );
+    },
+
+    /** See `CoreApi.setSourceProviderKey`. */
+    async setKey(providerId: unknown, key: unknown): Promise<void> {
+      const provider = byId.get(typeof providerId === "string" ? providerId : "");
+      if (!provider?.takesKey) throw new InvalidInputError("That provider takes no key.");
+      if (key !== null && typeof key !== "string") {
+        throw new InvalidInputError("A key must be text, or null to remove it.");
+      }
+      const name = sourceKeySecret(provider.id);
+      const trimmed = key?.trim() ?? "";
+      if (trimmed === "") return options.secrets.delete(name);
+      // A key is one token: anything else is a paste gone wrong, and it isn't echoed back.
+      if (trimmed.length > 200 || /\s/.test(trimmed)) {
+        throw new InvalidInputError("That doesn't look like a key.");
+      }
+      await options.secrets.set(name, trimmed);
     },
 
     /** See `CoreApi.findSources`. */

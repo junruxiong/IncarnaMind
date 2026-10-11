@@ -9,96 +9,27 @@
  */
 import { readdir, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { describe, expect, onTestFinished, test } from "vitest";
-import type {
-  AnswerToolCall,
-  ConsentRequest,
-  Core,
-  CoreAdapters,
-  Document,
-  FindSourcesResult,
-  FoundSource,
-} from "../../src/core";
+import { describe, expect, test } from "vitest";
+import type { AnswerToolCall } from "../../src/core";
 import { asksForSources } from "../../src/core/sources/intent";
 import { licenceOf } from "../../src/core/sources/licences";
-import { createPace, type PaceTimers } from "../../src/core/sources/pace";
+import { createPace } from "../../src/core/sources/pace";
 import { askAndFinish } from "../helpers/citations";
-import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
-import { waitForProcessing } from "../helpers/documents";
+import { queryDatabase } from "../helpers/core";
+import {
+  add,
+  answerConsent,
+  found,
+  requestsTo,
+  searchOf,
+  setUp,
+  USER_AGENT,
+  virtualTimers,
+  work,
+} from "../helpers/findSourcesTesting";
 import { connectToMind } from "../helpers/mindClient";
 import { answerIn, answerText } from "../helpers/minds";
 import { type ModelCall, scriptedModel, scriptedModels } from "../helpers/models";
-import { type SourceServices, startSourceServices } from "../helpers/sourceServices";
-
-const USER_AGENT = "IncarnaMind (https://github.com/junruxiong/IncarnaMind)";
-
-/** A clock that moves only when the core waits: how long it waited is kept. */
-function virtualTimers() {
-  let time = Date.parse("2026-10-11T09:00:00.000Z");
-  const waits: number[] = [];
-  const timers: PaceTimers = {
-    now: () => time,
-    async sleep(ms, signal) {
-      signal.throwIfAborted();
-      if (ms <= 0) return;
-      waits.push(ms);
-      time += ms;
-    },
-  };
-  return { timers, waits };
-}
-
-async function setUp(adapters: Partial<CoreAdapters> = {}) {
-  const services = await startSourceServices();
-  onTestFinished(() => services.close());
-  const dataDir = await createTempDataFolder();
-  const { timers, waits } = virtualTimers();
-  const core = startCore(dataDir, {
-    sourceProviders: services.providers,
-    paceTimers: timers,
-    ...adapters,
-  });
-  return { core, services, dataDir, waits };
-}
-
-/** Answers every consent request: allows each service, except those named in `decline`. */
-function answerConsent(core: Core, decline: readonly string[] = []): ConsentRequest[] {
-  const asked: ConsentRequest[] = [];
-  const stop = core.on("consent.requested", (request) => {
-    asked.push(request);
-    void core.respondToConsent(request.requestId, !decline.includes(request.flow.service.name));
-  });
-  onTestFinished(stop);
-  return asked;
-}
-
-const found = (result: FindSourcesResult) => {
-  if (result.outcome !== "found") throw new Error("Find sources was off.");
-  return result;
-};
-
-const work = (works: readonly FoundSource[], title: RegExp): FoundSource => {
-  const match = works.find((each) => title.test(each.fields.title));
-  if (!match) throw new Error(`No work titled ${title}.`);
-  return match;
-};
-
-const requestsTo = (services: SourceServices, provider: string) =>
-  services.requests.filter((request) => request.path.startsWith(`/${provider}/`));
-
-const searchOf = (services: SourceServices, provider: string) => {
-  const request = requestsTo(services, provider)[0];
-  if (!request) throw new Error(`Nothing was asked of ${provider}.`);
-  return new URL(request.path, services.url).searchParams;
-};
-
-/** Adds a found work and, if it became a Document, waits until it is read. */
-async function add(core: Core, key: string, folderId: string | null = null) {
-  const result = await core.addFoundSource({ key, folderId });
-  if (result.outcome !== "document") return { result, document: null };
-  const [document] = await waitForProcessing(core, [result.document.id]);
-  return { result, document: document as Document };
-}
 
 describe("Find sources: searching", () => {
   test("a search returns ranked results from OpenAlex, arXiv and PubMed, sending only the words and the filters", async () => {
@@ -332,6 +263,21 @@ describe("Find sources: consent and local mode", () => {
       { id: "arxiv", searches: true, consent: "declined" },
       { id: "pubmed", searches: true, consent: "accepted" },
       { id: "crossref", searches: false, consent: "not-asked" },
+      {
+        id: "openfda",
+        searches: true,
+        consent: "not-asked",
+        searchedByDefault: false,
+        key: "unset",
+      },
+      {
+        id: "dailymed",
+        searches: true,
+        consent: "not-asked",
+        searchedByDefault: false,
+        key: "none",
+      },
+      { id: "clinicaltrials", searches: true, consent: "not-asked", searchedByDefault: false },
     ]);
   });
 

@@ -1436,11 +1436,25 @@ export interface SourceProviderInfo {
   consent: DataFlowStatus["consent"];
   /** Where its operator states its terms and limits. */
   termsUrl: string;
+  /** Searched when a search names no providers: false for drug labels and trials, which are asked only when chosen. */
+  searchedByDefault: boolean;
+  /** An optional key of the User's: "none" for a provider that takes none, else whether one is set. The key itself is never given out. */
+  key: "none" | "unset" | "set";
 }
+
+/**
+ * What an Answer's search can ask for besides papers (`find_sources`' `kind`),
+ * and the providers each is looked up in. Drug labels and trials aren't
+ * searched with a search for papers.
+ */
+export const SOURCE_KIND_PROVIDERS: Readonly<Record<string, readonly string[]>> = {
+  drug_labels: ["openfda", "dailymed"],
+  clinical_trials: ["clinicaltrials"],
+};
 
 /** What Find sources looks for. */
 export interface FindSourcesInput {
-  /** Words, a title, or an identifier: a DOI, an arXiv ID or a PubMed ID. */
+  /** Words, a title, or an identifier: a DOI, an arXiv ID, a PubMed ID, a label's set id or an NCT number. */
   query: string;
   /** Only works published in or after this year. */
   fromYear?: number | null;
@@ -1448,7 +1462,7 @@ export interface FindSourcesInput {
   toYear?: number | null;
   /** Only works whose full text is open. */
   openAccessOnly?: boolean;
-  /** The providers to ask, by id; every one that searches, when left out. */
+  /** The providers to ask, by id; every one that searches by default (not drug labels or trials), when left out. */
   providers?: string[];
 }
 
@@ -1522,6 +1536,8 @@ export interface FoundSource {
   access: SourceAccess;
   /** Its page at its publisher or registry, for "Get the PDF…" in the User's browser. */
   landingUrl: string | null;
+  /** What the source says about relying on it, when it says (openFDA's disclaimer); shown with the result. */
+  notice: string | null;
   /** Already in the Library: as a Document, or as a reference record without one. */
   inLibrary: { documentId: string | null; recordId: string } | null;
 }
@@ -4647,6 +4663,13 @@ export interface CoreApi {
   /** The Source providers Find sources can ask, each with the User's consent decision (#296). */
   listSourceProviders(): Promise<SourceProviderInfo[]>;
   /**
+   * Sets, or with null removes, the User's own key for a provider that takes
+   * one (openFDA's). It is kept only in the keychain, sent only to that
+   * provider in a header, and never given back. Throws InvalidInputError for
+   * a provider that takes none, and SecretStorageError when it can't be kept.
+   */
+  setSourceProviderKey(providerId: string, key: string | null): Promise<void>;
+  /**
    * Find sources (#296): searches the providers asked (every one that
    * searches, by default) for works, and merges what they find, best first.
    * An identifier (a DOI, an arXiv ID, a PubMed ID) is looked up instead.
@@ -5512,6 +5535,7 @@ const methods: Record<CoreApiMethod, true> = {
   restoreReference: true,
   lookUpReference: true,
   listSourceProviders: true,
+  setSourceProviderKey: true,
   findSources: true,
   addFoundSource: true,
   importReferences: true,
