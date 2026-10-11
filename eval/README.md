@@ -191,6 +191,7 @@ Each run writes a folder `eval/results/<start time>/` (gitignored) with:
 - `report.json`: everything, including the top 5 of each search and each Answer's sentences, Citations and searches.
 - `reviewer-sheet.csv`: only when Citations were scored. One row per "found" quote: the Question, the Answer sentence, the quote, the Document and the page.
 - `reviewer-sheet-formats.csv`: the same for the every-format set; its "page" is the cited Unit.
+- `answers.md` (`answers-formats.md` for the every-format set): each Answer's full text, under its Question, with each Citation as its marker. `report.json` holds the same text as `text`.
 
 The terminal summary at the end gives the same headline numbers.
 
@@ -247,6 +248,8 @@ The run gates on the first three targets for a cloud model. Support is judged by
 1. Open `reviewer-sheet.csv` in a spreadsheet app. It is UTF-8 with a byte-order mark, so the Chinese text shows correctly.
 2. In the `supports (y/n)` column, write `y` when the quote supports the Answer sentence and `n` when it doesn't.
 3. Count the `y` rows. The target is at least 80% of the rows in each language.
+
+The hard tier's unanswerable Questions have a second check, on whether the Answer declines: it says the Documents don't answer the Question (`eval/hard/README.md`). A phrase rule in English and Chinese (`eval/lib/declines.ts`) decides first. The sheet adds a row, with the Answer's text, for each Answer to an unanswerable Question the rule didn't take as a decline; write `y` in `decline missed by the rule (y/n)` when it does decline.
 
 ### Every format
 
