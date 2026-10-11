@@ -19,6 +19,7 @@ import { buttonStyle } from "./components/ui";
 import { files } from "./core";
 import { useLanguage, useT } from "./i18n";
 import { useMeetings } from "./meetings";
+import { setMotionPreference } from "./motion";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
 import { useAppStore } from "./store";
 import { useWindowWidth } from "./useWindowWidth";
@@ -43,6 +44,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
+
+  // How the window moves: the User's choice, kept on this device, once the settings have loaded.
+  const motion = useAppStore((state) => state.settings?.device.motion ?? "system");
+  useEffect(() => setMotionPreference(motion), [motion]);
 
   // The frame shows at once; the data fills it in as it arrives.
   if (status.kind === "loading") return <AppShell />;

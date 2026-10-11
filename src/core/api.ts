@@ -597,7 +597,17 @@ export interface DeviceSettings {
    * that the other people should be told. Recording waits for it.
    */
   meetingNoticeAccepted: boolean;
+  /** How the window moves here (Settings → General → Motion): see `MotionPreference`. */
+  motion: MotionPreference;
 }
+
+/**
+ * How the window moves on a device (DESIGN.md, Motion): as the system's own
+ * Reduce motion setting says ("system", until the User chooses), on,
+ * reduced (movement becomes short fades) or off (every change is instant).
+ */
+export const MOTION_PREFERENCES = ["system", "on", "reduced", "off"] as const;
+export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
 
 /**
  * How the programs Tools start (Skill scripts) are confined:

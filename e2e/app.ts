@@ -504,6 +504,35 @@ export async function setWindowSize(
 }
 
 /**
+ * Waits until nothing moves (src/renderer/src/motion.ts): no animation
+ * running, and no closed menu still fading where it was. For a test that
+ * measures or pictures what just opened, closed or moved.
+ */
+export async function motionSettled(window: Page): Promise<void> {
+  await expect
+    .poll(() =>
+      window.evaluate(
+        () =>
+          (
+            globalThis as { incarnamindTestHooks?: TestHooks }
+          ).incarnamindTestHooks?.motionRunning() ?? 0,
+      ),
+    )
+    .toBe(0);
+}
+
+/** Plays every animation at `speed` (0.2: five times slower), so a test can look, or act, during one. */
+export async function setMotionSpeed(window: Page, speed: number): Promise<void> {
+  await window.evaluate(
+    (value) =>
+      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.setMotionSpeed(
+        value,
+      ),
+    speed,
+  );
+}
+
+/**
  * Waits until the core has this many Documents ready, wherever the sidebar
  * lists them (a Folder starts closed, and lists its first few).
  */
