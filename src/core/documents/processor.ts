@@ -30,6 +30,8 @@ export interface Processor {
    * still reports its result, and so does every metadata job.
    */
   cancel(documentId: string): void;
+  /** Holds jobs back, while a Meeting is recorded (#135): the one in the worker finishes, the rest wait. */
+  hold(held: boolean): void;
   /** Stops the worker. Jobs not yet finished are dropped without a result. */
   close(): void;
 }
@@ -44,6 +46,7 @@ export function createProcessor(
   let nextId = 1;
   let pumpScheduled = false;
   let closed = false;
+  let held = false;
 
   const call = (fn: () => void) => {
     try {
@@ -80,7 +83,7 @@ export function createProcessor(
 
   function pump(): void {
     pumpScheduled = false;
-    if (closed || current) return;
+    if (closed || held || current) return;
     const job = queue.shift();
     if (!job) return;
     current = { id: nextId++, job };
@@ -107,6 +110,10 @@ export function createProcessor(
         (job) => job.task === "process" && job.documentId === documentId,
       );
       if (index !== -1) queue.splice(index, 1);
+    },
+    hold(value) {
+      held = value;
+      if (!held) schedulePump();
     },
     close() {
       closed = true;

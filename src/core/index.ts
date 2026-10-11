@@ -3,7 +3,11 @@
  * Hosts construct it with `createCore`, passing platform capabilities as adapters.
  */
 export type {
+  AudioCapture,
+  AudioSink,
   Browser,
+  CaptureSession,
+  CaptureState,
   CoreAdapters,
   CrashReporter,
   CrossEncoder,
@@ -30,6 +34,7 @@ export type {
   UsageDataSender,
   UsageEventMessage,
 } from "./adapters";
+export { MEETING_SAMPLE_RATE } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
 export type { DocumentFile, DocumentImage } from "./documents";
@@ -40,7 +45,9 @@ export {
   ChatNotReadyError,
   ConsentDeclinedError,
   EmbeddingModelNotReadyError,
+  FileWriteCancelledError,
   InvalidInputError,
+  LinkedFolderWritesDeclinedError,
   MindReadOnlyError,
   NotFoundError,
   SecretStorageError,

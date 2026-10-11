@@ -54,10 +54,21 @@ export interface LaunchOptions {
   /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
   home?: string;
   /**
+   * Where Look up asks Crossref and arXiv: a local server standing in for
+   * both (tests/helpers/referenceServices.ts). A test build honours it.
+   */
+  referenceLookup?: string;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
   keepWindow?: boolean;
+  /**
+   * What a Meeting's fake capture does with the computer's sound: plays a
+   * tone (by default), is denied, or gives only silence. The microphone is
+   * always a fake that makes a tone: no test opens a device.
+   */
+  computerSound?: "allowed" | "denied" | "silent";
 }
 
 /**
@@ -84,7 +95,9 @@ export async function launchApp(
     usageData,
     examples = false,
     home,
+    referenceLookup,
     keepWindow = false,
+    computerSound = "allowed",
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -98,6 +111,9 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_POSTHOG_HOST;
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
+  delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
+  env.INCARNAMIND_TEST_AUDIO = "fake";
+  env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   if (usageData) {
@@ -106,6 +122,7 @@ export async function launchApp(
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
   if (home) env.HOME = home;
+  if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -202,6 +219,7 @@ export type SettingsPage =
   | "general"
   | "models"
   | "search"
+  | "meetings"
   | "tools"
   | "connectors"
   | "skills"
@@ -269,27 +287,14 @@ export async function filterByTag(window: Page, name: string): Promise<void> {
 }
 
 /**
- * Test hook for the system save dialog: from now on the main process answers
- * it with `filePath` instead of showing it, and records what each call asked
- * (see `saveDialogsAsked`).
+ * Sets where new files go (the Output location) through the core's bridge, as
+ * Settings › General would, so the next save goes there without asking.
  */
-export async function interceptSaveDialog(app: ElectronApplication, filePath: string) {
-  await app.evaluate(({ dialog }, path) => {
-    const asked: Electron.SaveDialogOptions[] = [];
-    (globalThis as { saveDialogsAsked?: unknown }).saveDialogsAsked = asked;
-    dialog.showSaveDialog = (async (...args: unknown[]) => {
-      asked.push(args.at(-1) as Electron.SaveDialogOptions);
-      return { canceled: false, filePath: path };
-    }) as typeof dialog.showSaveDialog;
-  }, filePath);
-}
-
-/** What the intercepted save dialog was asked, call by call. */
-export function saveDialogsAsked(app: ElectronApplication) {
-  return app.evaluate(
-    () =>
-      (globalThis as { saveDialogsAsked?: Electron.SaveDialogOptions[] }).saveDialogsAsked ?? [],
-  );
+export async function useOutputLocation(window: Page, folder: string): Promise<void> {
+  await window.evaluate(async (path) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.setOutputLocation(path);
+  }, folder);
 }
 
 /**

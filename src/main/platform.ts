@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
+  type AudioCapture,
   type Browser,
   BUILT_IN_SKILLS_PACKAGED,
   BUILT_IN_SKILLS_SOURCE,
@@ -17,8 +18,10 @@ import {
   type Logger,
   type UsageDataSender,
 } from "../core";
+import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
+import { createElectronAudioCapture } from "./meetings/capture";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
@@ -168,6 +171,15 @@ function examplesFolder(): string | undefined {
 }
 
 /**
+ * The User's Documents folder, where the first save offers to put the Output
+ * location. A test build uses one in its data folder, so the smoke tests never
+ * write into the User's.
+ */
+function documentsFolder(dataDir: string): string {
+  return import.meta.env.MODE === "test" ? join(dataDir, "Documents") : app.getPath("documents");
+}
+
+/**
  * Where crash reports go: the Sentry DSN this copy was built with
  * (`MAIN_VITE_SENTRY_DSN`), if any. A test build ignores it, so the smoke
  * tests never reach Sentry; they may point it at a local server instead.
@@ -240,6 +252,34 @@ function createUsageDataSender(): UsageDataSender | undefined {
   });
 }
 
+/**
+ * Test-only launch flag: where Look up asks Crossref and arXiv (#286), a
+ * local server standing in for both, so the smoke tests reach neither. Only
+ * a test build honours it.
+ */
+const referenceLookupUrl =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_REFERENCE_LOOKUP : undefined;
+
+/**
+ * What records Meetings: the hidden capture window (ADR-0015). Test-only
+ * launch flags: the smoke tests record a fake that makes a tone in real time,
+ * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
+ * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM). They reach
+ * it as `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ */
+function audioCapture(log: Logger): AudioCapture {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
+    const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
+    const fake = createFakeCapture({
+      realTime: 100,
+      system: system === "denied" || system === "silent" ? system : "allowed",
+    });
+    (globalThis as { incarnamindFakeAudio?: FakeCapture }).incarnamindFakeAudio = fake;
+    return fake;
+  }
+  return createElectronAudioCapture({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL });
+}
+
 /** Builds the core's adapters, with the log the core writes to. Call after `app` is ready. */
 export function createElectronAdapters(log: Logger): CoreAdapters {
   const dataDir = app.getPath("userData");
@@ -248,8 +288,17 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
   return {
     ...(crashReporter && { crashReporter }),
     ...(usageData && { usageData }),
+    ...(referenceLookupUrl && {
+      referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
+    }),
     log,
-    paths: { dataDir, builtInSkills: builtInSkillsFolder(), examples: examplesFolder() },
+    audioCapture: audioCapture(log),
+    paths: {
+      dataDir,
+      builtInSkills: builtInSkillsFolder(),
+      examples: examplesFolder(),
+      documents: documentsFolder(dataDir),
+    },
     systemLanguages: () => app.getPreferredSystemLanguages(),
     keychain: createSafeStorageKeychain(dataDir),
     browser: systemBrowser,

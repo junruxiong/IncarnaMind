@@ -57,6 +57,7 @@ const assignment = (
   documentId,
   groupId,
   source: "automatic",
+  suggested: false,
   status,
   error: null,
   model: null,
@@ -199,5 +200,41 @@ describe("the store follows the Library's assignments", () => {
     vi.advanceTimersByTime(100);
     expect(useAppStore.getState().library).toBeNull();
     expect(useAppStore.getState().documents[0]?.name).toBe("a v1");
+  });
+});
+
+describe("undoing a move", () => {
+  test("moves each Mind back, and puts each Document's assignment back with who chose it", async () => {
+    const { useUndo } = await import("../../src/renderer/src/undo");
+    const filed = assignment("a", "classified", "g");
+    useAppStore.setState({
+      minds: [
+        {
+          id: "m",
+          title: "Plan",
+          autoTitle: "",
+          kind: "mind",
+          folderId: null,
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
+      library: snapshot([filed]),
+    });
+    method("moveToFolder").mockResolvedValue({
+      folderId: "h",
+      minds: [{ id: "m", from: null }],
+      documents: [{ id: "a", from: "g", previous: filed }],
+    });
+
+    await useAppStore.getState().moveToFolder({ mindIds: ["m"], documentIds: ["a"] }, "h");
+    await useUndo.getState().undo();
+
+    expect(method("moveToFolder")).toHaveBeenLastCalledWith({
+      mindIds: ["m"],
+      documentIds: [],
+      folderId: null,
+    });
+    expect(method("restoreAssignment")).toHaveBeenCalledWith("a", filed);
   });
 });

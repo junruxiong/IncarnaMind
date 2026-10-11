@@ -42,6 +42,7 @@ import type {
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Folders } from "../folders";
+import { referenceOf, writeFileReference } from "../referenceRecords/store";
 import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
@@ -329,6 +330,8 @@ export interface DocumentsOptions {
   linkedFoldersChanged: LibraryHooks["linkedFoldersChanged"];
   /** A Document just became ready, i.e. searchable: called before its status is pushed. */
   onReady?: (documentId: string) => void;
+  /** A scan found a new Document, announced but not yet queued for processing. */
+  onFound?: (documentId: string) => void;
   /** Asks iCloud Drive to download a file an ".icloud" stub stands for. */
   downloadStub?: (path: string) => Promise<void>;
   /**
@@ -423,6 +426,7 @@ export function createDocuments(options: DocumentsOptions) {
           : null,
       creationDate: row.creation_date,
       title: row.title,
+      reference: referenceOf(db, row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -668,6 +672,8 @@ export function createDocuments(options: DocumentsOptions) {
           job.documentId,
         ],
       );
+      // What the User edited, or Look up filled, stays; the rest is this version's.
+      writeFileReference(db, job.documentId, result.reference, at);
       return { status, replaced: true };
     });
   }
@@ -714,24 +720,27 @@ export function createDocuments(options: DocumentsOptions) {
       metadataQueued = false;
       if (result.outcome === "read") {
         // Only for the version read, and unless processing it again read it meanwhile.
-        const written = db.get<{ id: string }>(
-          `UPDATE documents SET creation_date = ?, title = ?, metadata_version = ?, updated_at = ?
-           WHERE id = ? AND content_hash = ? AND metadata_version < ? AND deleted_at IS NULL
-           RETURNING id`,
-          [
-            result.creationDate,
-            result.title,
-            BigInt(METADATA_VERSION),
-            now(),
-            job.documentId,
-            job.contentHash,
-            BigInt(METADATA_VERSION),
-          ],
-        );
-        const row =
-          written && (result.creationDate !== null || result.title !== null)
-            ? find(job.documentId)
-            : undefined;
+        const written = db.transaction(() => {
+          const at = now();
+          const updated = db.get<{ id: string }>(
+            `UPDATE documents SET creation_date = ?, title = ?, metadata_version = ?, updated_at = ?
+             WHERE id = ? AND content_hash = ? AND metadata_version < ? AND deleted_at IS NULL
+             RETURNING id`,
+            [
+              result.creationDate,
+              result.title,
+              BigInt(METADATA_VERSION),
+              at,
+              job.documentId,
+              job.contentHash,
+              BigInt(METADATA_VERSION),
+            ],
+          );
+          if (updated) writeFileReference(db, job.documentId, result.reference, at);
+          return updated !== undefined;
+        });
+        // Its reference record is new, whatever else was found.
+        const row = written ? find(job.documentId) : undefined;
         if (row) emitStatus(toDocument(row));
       } else {
         // The file changed (processing the new version reads its date), can't
@@ -873,7 +882,8 @@ export function createDocuments(options: DocumentsOptions) {
   /**
    * Soft-deletes Documents, their Passages, Tags and page text, at `at`.
    * Unlinking with their Linked folder, the Units Citations point to are
-   * given in `keep`: they stay, and the text kept is pushed.
+   * given in `keep`: they stay, and the text kept is pushed. Otherwise the
+   * User deleted them: their vectors stay too, for `restore`.
    */
   function removeFromIndex(ids: readonly string[], at: string, keep?: readonly CitedUnits[]) {
     if (ids.length === 0) return;
@@ -885,7 +895,7 @@ export function createDocuments(options: DocumentsOptions) {
         [at, at, list],
       );
       db.run(
-        `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
+        `UPDATE passages SET deleted_at = ?, updated_at = ?${keep ? ", embedding = NULL" : ""}
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
         [at, at, list],
       );
@@ -941,6 +951,7 @@ export function createDocuments(options: DocumentsOptions) {
     hooks: {
       process,
       announce,
+      added: (id) => options.onFound?.(id),
       moved: (ids) => {
         const moved = ids.flatMap((id) => {
           const row = find(id);
@@ -1543,9 +1554,13 @@ export function createDocuments(options: DocumentsOptions) {
       };
     },
 
-    async add(input: unknown): Promise<AddDocumentsResult> {
+    /** `added` hears of each new Document as it is stored, before it is processed. */
+    async add(
+      input: unknown,
+      added?: (documentId: string) => void,
+    ): Promise<Omit<AddDocumentsResult, "batchId">> {
       const paths = parsePaths(input);
-      const results = await library.addFiles(paths);
+      const results = await library.addFiles(paths, added);
       const documents: Document[] = [];
       const skipped: SkippedFile[] = [];
       results.forEach((result, at) => {
@@ -1609,8 +1624,71 @@ export function createDocuments(options: DocumentsOptions) {
       if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
         await rm(row.path, { force: true }).catch(reportError);
       }
-      // Its Folder may hold nothing now.
-      library.documentRemoved(row.linked_folder_id);
+      library.documentsChanged(row.linked_folder_id);
+    },
+
+    /**
+     * Brings back Documents the User deleted (the caller checks they may), with the
+     * Passages, text and Tags deleted with them, without reading their files. Run in the
+     * caller's transaction, then `restored`.
+     */
+    restore(ids: readonly string[]): void {
+      const at = now();
+      for (const id of ids) {
+        const row = db.get<DocumentRow & { deleted_at: string }>(
+          `SELECT ${COLUMNS}, deleted_at FROM documents WHERE id = ? AND deleted_at IS NOT NULL`,
+          [id],
+        );
+        if (!row) continue;
+        const deleted = [at, id, row.deleted_at] as const;
+        db.run("UPDATE documents SET deleted_at = NULL, updated_at = ? WHERE id = ?", [at, id]);
+        db.run(
+          `UPDATE passages SET deleted_at = NULL, updated_at = ?
+           WHERE document_id = ? AND deleted_at = ? AND content_hash IS ?`,
+          [...deleted, row.content_hash],
+        );
+        db.run(
+          "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
+          deleted,
+        );
+        db.run(
+          `UPDATE document_tags SET deleted_at = NULL, updated_at = ?
+           WHERE document_id = ? AND deleted_at = ?
+             AND NOT EXISTS (SELECT 1 FROM document_tags live
+                             WHERE live.document_id = document_tags.document_id
+                               AND live.tag_id = document_tags.tag_id AND live.deleted_at IS NULL)`,
+          deleted,
+        );
+        reindexName(id, row.name);
+        if (row.status === "extracting") setStatus(id, "queued");
+        else if (["ready", "embedding", "waiting-for-model"].includes(row.status)) {
+          const status = indexedStatus(row);
+          if (status !== null && status !== row.status) setStatus(id, status);
+        }
+      }
+    },
+
+    /** Picks up Documents `restore` brought back where they were, and announces them. */
+    restored(ids: readonly string[]): void {
+      const linkedFolders = new Set<string | null>();
+      for (const id of ids) {
+        const row = find(id);
+        if (!row) continue;
+        linkedFolders.add(row.linked_folder_id);
+        vectors.restoreDocument(id);
+        // Its processing was cut short by the delete: it carries on, from its file.
+        if (row.status === "queued") process(id);
+        else if (row.status === "ready") {
+          try {
+            options.onReady?.(id);
+          } catch (error) {
+            reportError(error);
+          }
+        }
+        if (!(row.status === "embedding" && embedding.enqueue(id))) announce(id);
+        if (row.status === "waiting-for-model") model.ensure();
+      }
+      for (const linkedFolderId of linkedFolders) library.documentsChanged(linkedFolderId);
     },
 
     /**
@@ -1769,6 +1847,15 @@ export function createDocuments(options: DocumentsOptions) {
            LIMIT 1`,
         ) !== undefined
       );
+    },
+
+    /**
+     * While a Meeting is recorded (#135), Documents wait to be read and
+     * embedded: the one being read finishes, the rest go on afterwards.
+     */
+    hold(held: boolean): void {
+      processor.hold(held);
+      embedding.hold(held);
     },
 
     close(): void {
