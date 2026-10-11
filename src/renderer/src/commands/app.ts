@@ -5,6 +5,7 @@ import { footnoteCommands } from "./footnotes";
 import { composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
+import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 
 const appCommands: readonly Command[] = [
@@ -83,6 +84,7 @@ const appCommands: readonly Command[] = [
     },
   },
   ...footnoteCommands,
+  ...tableCommands,
 ];
 
 for (const command of appCommands) commands.register(command);
