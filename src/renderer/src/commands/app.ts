@@ -1,5 +1,6 @@
 import { noteHolding } from "../editor/noteKeymap";
 import { useAppStore } from "../store";
+import { footnoteCommands } from "./footnotes";
 import { composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
@@ -50,6 +51,7 @@ const appCommands: readonly Command[] = [
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },
   },
+  ...footnoteCommands,
 ];
 
 for (const command of appCommands) commands.register(command);
