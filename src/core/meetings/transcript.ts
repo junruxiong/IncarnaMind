@@ -52,8 +52,12 @@ import { createMixer, type MixedAudio, type Mixer } from "./mixer";
 export const BEHIND_MS = 30_000;
 /** While the engine starts, at most this much audio waits for it; older audio is transcribed after Stop. */
 const HELD_MS = 60_000;
-/** The Document is indexed again at most this often while lines come. */
-const INDEX_EVERY_MS = 20_000;
+/**
+ * The Document is indexed again at most this often while lines come: every
+ * 20 seconds at first, then less often as it grows, to two minutes, as each
+ * indexing keeps a version until the next start (unless a Citation quotes it).
+ */
+const indexEvery = (lines: number) => Math.min(120_000, Math.max(20_000, lines * 100));
 /** The engine started again this many times within `RESTARTS_WITHIN_MS` isn't started again until Stop. */
 const MAX_RESTARTS = 3;
 const RESTARTS_WITHIN_MS = 5 * 60_000;
@@ -280,7 +284,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       return;
     }
     if (!documents.find(state.documentId)) return;
-    const wait = state.lastIndexed + INDEX_EVERY_MS - Date.now();
+    const wait = state.lastIndexed + indexEvery(state.cues.length) - Date.now();
     if (now || wait <= 0) {
       if (state.indexTimer) clearTimeout(state.indexTimer);
       state.indexTimer = null;
