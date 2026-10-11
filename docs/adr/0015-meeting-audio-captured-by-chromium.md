@@ -1,6 +1,6 @@
 # Meeting audio: Chromium captures it in a hidden window, the core writes it in 10-second parts
 
-A Meeting (#135) records the microphone and the computer's own sound, which carries the other people on a call. The audio has to reach the disk as it is recorded, so a crash, sleep or device change loses at most the last few seconds. Live transcription (#136) reads the same audio later. The core owns the recording's state and its files, and never imports Electron (ADR-0004, ADR-0006), so the Electron shell passes capture in as an adapter (`AudioCapture` in `src/core/adapters.ts`).
+A Meeting (#135) records the microphone and the computer's own sound, which carries the other people in the Meeting. The audio has to reach the disk as it is recorded, so a crash, sleep or device change loses at most the last few seconds. Live transcription (#136) reads the same audio later. The core owns the recording's state and its files, and never imports Electron (ADR-0004, ADR-0006), so the Electron shell passes capture in as an adapter (`AudioCapture` in `src/core/adapters.ts`).
 
 We use what Electron 44 and its Chromium 152 give us, with no native addon:
 
@@ -11,7 +11,7 @@ We use what Electron 44 and its Chromium 152 give us, with no native addon:
 - **The computer's sound.** The window calls `getDisplayMedia`. Our `setDisplayMediaRequestHandler` answers it with `audio: "loopback"`. Chromium won't grant audio without a video track, so the video is the capture window's own blank page, and the window stops it at once. No screen is captured, so Screen Recording isn't asked for on macOS 14.2 or later. Chromium then does the work:
   - **macOS 14.2 or later:** a Core Audio process tap. `MacCatapLoopbackAudioForScreenShare` is on by default since Chromium 142. It needs the "System Audio Recording Only" permission and the `NSAudioCaptureUsageDescription` key.
   - **macOS 13 to 14.1:** ScreenCaptureKit, which needs Screen Recording.
-  - **Windows:** WASAPI loopback of the default output, with no permission prompt. We use `loopback`, never `loopbackWithMute`, which mutes the speakers and would leave the User unable to hear the call.
+  - **Windows:** WASAPI loopback of the default output, with no permission prompt. We use `loopback`, never `loopbackWithMute`, which mutes the speakers and would leave the User unable to hear the Meeting.
   - **Linux:** the microphone only, for now. Chromium's PulseAudio loopback, which also serves PipeWire through pipewire-pulse, probably works. But the video Chromium needs goes through the desktop portal's screen picker, a second dialog at every recording.
 - **What is written.** The audio is 16 kHz, mono, 16-bit PCM, which is what speech-to-text reads.
   - Chromium resamples each track into an `AudioContext` at 16 kHz. An AudioWorklet mixes the track to mono and sends it to the main process in frames of about 100 ms.
@@ -25,7 +25,7 @@ macOS has no public way to ask whether the computer's sound may be recorded. A d
 - **A screen from `desktopCapturer` as the video.** This is the common pattern. Rejected: on macOS it needs Screen Recording, a stronger permission than the audio one, which macOS 15 also asks the User to confirm again from time to time.
 - **`useSystemPicker`.** Rejected. It works on macOS 15 and later only, and asks the User to pick a screen at every recording.
 - **The `electron-audio-loopback` package.** Rejected. It only turns on Chromium flags, which are gone or on by default in Electron 44. Its README says Electron 39 and later don't need it.
-- **A native Core Audio tap.** Either the MIT `audiotee` command-line tool, which writes PCM to its output, or our own N-API addon. Not now: either is one more binary to build, sign and ship for each architecture. It would become necessary to check the audio permission before recording, to record one app's sound only (just the call), or if Electron's open report is confirmed on the macOS versions people use. That report, electron/electron#52738, says a loopback track granted with an app-chosen source ends at once on macOS 26.5. If so, a helper of this kind replaces the system half of the capture behind the same adapter.
+- **A native Core Audio tap.** Either the MIT `audiotee` command-line tool, which writes PCM to its output, or our own N-API addon. Not now: either is one more binary to build, sign and ship for each architecture. It would become necessary to check the audio permission before recording, to record one app's sound only (just the meeting app), or if Electron's open report is confirmed on the macOS versions people use. That report, electron/electron#52738, says a loopback track granted with an app-chosen source ends at once on macOS 26.5. If so, a helper of this kind replaces the system half of the capture behind the same adapter.
 - **MediaRecorder, writing WebM/Opus in 10-second slices.** About a tenth of the size. Rejected: the recording spec says the slices "need not be playable" on their own, so a crash could leave parts that can't be read.
 
 ## Consequences
@@ -33,7 +33,7 @@ macOS has no public way to ask whether the computer's sound may be recorded. A d
 - `electron-builder.yml` gives the macOS app our own `NSMicrophoneUsageDescription` and `NSAudioCaptureUsageDescription`.
 - `build/entitlements.mac.plist` adds `com.apple.security.device.audio-input` to electron-builder's default entitlements. Without it, a hardened-runtime build can't open the microphone.
 - macOS keeps the microphone and audio permissions across updates only for a build signed with the same identity (#46). It ties each permission to the app's code signature. In development it gives them to the terminal or editor that started the app.
-- Pure digital silence can't be told apart from a call where no one speaks. So the "silent" line says what may be wrong rather than saying the permission was refused.
+- Pure digital silence can't be told apart from a Meeting where no one speaks. So the "silent" line says what may be wrong rather than saying the permission was refused.
 - Audio takes about 115 MB per source per hour. It is kept until the notes are reviewed, at most a day (#142 will shorten that), and the User can delete it at any time.
 - Tests never open a device. The core's tests and the smoke tests use a fake `AudioCapture` that makes a tone or silence (`src/core/meetings/fakeCapture.ts`). Capture with real audio is checked by hand on each OS.
 

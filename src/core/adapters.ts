@@ -397,7 +397,7 @@ export interface CaptureSession {
 
 /**
  * Records a Meeting's audio: the microphone, and the computer's own sound (the
- * other people on a call) where the OS lets an app hear it. The desktop app
+ * other people in the Meeting) where the OS lets an app hear it. The desktop app
  * captures in a hidden window of its own (src/main/meetings, ADR-0015); tests
  * pass a fake that makes a tone or silence. The core keeps the recording's
  * state and writes what comes in to disk.

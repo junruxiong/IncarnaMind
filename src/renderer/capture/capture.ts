@@ -115,7 +115,7 @@ async function openMicrophone(): Promise<void> {
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      // No echo cancellation: the call's sound comes from another app, which it can't see.
+      // No echo cancellation: the others' voices come from another app, which it can't see.
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
     });
   } catch (error) {
