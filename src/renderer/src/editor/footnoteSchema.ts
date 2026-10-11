@@ -92,7 +92,7 @@ export const Footnote = Node.create<FootnoteOptions>({
           const [typed, text] = match;
           if (!typed || !text) return null;
           // The rule runs as "]" is typed, before it is in the text, or as an input method commits it.
-          const written = state.doc.textBetween(range.from, range.to, undefined, "￼");
+          const written = state.doc.textBetween(range.from, range.to, undefined, "\uFFFC");
           if (written !== typed && written !== typed.slice(0, -1)) return null;
           const $from = state.doc.resolve(range.from);
           if (!canHoldFootnote($from)) return null;
@@ -159,7 +159,7 @@ export function canInsertFootnote(state: EditorState): boolean {
   return selectedFootnote(state) !== null || footnotePlace(state) !== null;
 }
 
-/** The footnote the selection is on, as a node, if it is. */
+/** The ID of the footnote the selection is on, if it is on one. */
 function selectedFootnote(state: EditorState): string | null {
   const { selection } = state;
   if (!(selection instanceof NodeSelection) || selection.node.type.name !== FOOTNOTE_NODE) {
@@ -230,7 +230,8 @@ function openFootnotePlugin(): Plugin<string | null> {
       init: () => null,
       apply: (tr, open) => {
         const asked: unknown = tr.getMeta(openKey);
-        return asked === undefined ? open : (asked as string | null);
+        if (asked === undefined) return open;
+        return typeof asked === "string" ? asked : null;
       },
     },
   });

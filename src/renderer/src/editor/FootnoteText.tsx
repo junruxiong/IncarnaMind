@@ -136,6 +136,20 @@ function difference(from: Fragment, to: Fragment) {
 const contentIn = (schema: Schema, node: ProseMirrorNode) =>
   Fragment.fromJSON(schema, node.content.toJSON());
 
+/** The attributes of a footnote's text: what it is, its name, and what to write while it is empty. */
+const textAttributes = (
+  variant: FootnoteTextProps["variant"],
+  label: string,
+  placeholder: string,
+) => ({
+  class: `footnote-text footnote-text--${variant}`,
+  role: "textbox",
+  "aria-multiline": "true",
+  "aria-label": label,
+  "data-testid": "footnote-text",
+  "data-placeholder": placeholder,
+});
+
 /** What a footnote's text offers the place it is shown in. */
 export interface FootnoteTextHandle {
   focus(): void;
@@ -196,16 +210,7 @@ export function FootnoteText({
       onCreate: () => {
         seen.current = initial;
       },
-      editorProps: {
-        attributes: {
-          class: `footnote-text footnote-text--${variant}`,
-          role: "textbox",
-          "aria-multiline": "true",
-          "aria-label": label,
-          "data-testid": "footnote-text",
-          "data-placeholder": placeholder,
-        },
-      },
+      editorProps: { attributes: textAttributes(variant, label, placeholder) },
       onUpdate: ({ editor: text, transaction }) => {
         if (transaction.getMeta(FROM_MIND) || mind.isDestroyed) return;
         const found = footnoteIn(mind, id);
@@ -271,16 +276,8 @@ export function FootnoteText({
 
   // The label follows the number, and the interface's language.
   useEffect(() => {
-    editor.setOptions({
-      editorProps: {
-        attributes: {
-          ...(editor.options.editorProps.attributes as Record<string, string>),
-          "aria-label": label,
-          "data-placeholder": placeholder,
-        },
-      },
-    });
-  }, [editor, label, placeholder]);
+    editor.setOptions({ editorProps: { attributes: textAttributes(variant, label, placeholder) } });
+  }, [editor, variant, label, placeholder]);
 
   const empty = useEditorState({ editor, selector: ({ editor: text }) => text.isEmpty });
 

@@ -25,7 +25,7 @@ const markerOf = (editor: Editor, id: string) =>
  * in place (`FootnoteText`), open while the editor says so (`openFootnote`):
  * at once for a footnote just inserted, or when its marker is clicked or, by
  * keyboard, selected and Enter pressed. Enter or Esc puts the cursor back
- * after the marker; a click elsewhere just closes it. "Remove" deletes the
+ * after the marker; a click elsewhere just closes it. "Remove footnote" deletes the
  * footnote, which Undo brings back.
  */
 export function FootnotePopover({
