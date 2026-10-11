@@ -1,0 +1,606 @@
+{
+  "meta": {
+    "count": 50618,
+    "db_response_time_ms": 63,
+    "page": 1,
+    "per_page": 10,
+    "groups_count": null,
+    "x_query": {
+      "oql": "get works where published since 2021-01-01\n  and full text has (CRISPR off-target detection)",
+      "oqo": {
+        "get_rows": "works",
+        "filter_rows": [
+          {
+            "column_id": "from_publication_date",
+            "value": "2021-01-01"
+          },
+          {
+            "column_id": "fulltext.search",
+            "value": "CRISPR off-target detection",
+            "operator": "has"
+          }
+        ]
+      },
+      "url": "/works?filter=from_publication_date:2021-01-01,fulltext.search:CRISPR off-target detection&per_page=10"
+    },
+    "cost_usd": 0.001
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W4362665266",
+      "doi": "https://doi.org/10.1038/s41592-023-01840-z",
+      "display_name": "Improving the sensitivity of in vivo CRISPR off-target detection with DISCOVER-Seq+",
+      "publication_date": "2023-04-06",
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5088011621",
+            "display_name": "Roger S. Zou"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5100355912",
+            "display_name": "Yang Liu"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5040858722",
+            "display_name": "Oscar E. Reyes Gaido"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5048442212",
+            "display_name": "Maximilian F. Konig"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5066066900",
+            "display_name": "Brian J. Mog"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5039217746",
+            "display_name": "Leo L. Shen"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5037720542",
+            "display_name": "Franklin J. Avilés-Vázquez"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5070681047",
+            "display_name": "Alberto Marín-González"
+          }
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5090048523",
+            "display_name": "Taekjip Ha"
+          }
+        }
+      ],
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1038/s41592-023-01840-z",
+        "pdf_url": "http://STANDIN/files/nature-methods.pdf",
+        "source": {
+          "id": "https://openalex.org/S127827428",
+          "display_name": "Nature Methods",
+          "type": "journal",
+          "host_organization_name": "Nature Portfolio"
+        },
+        "license": "cc-by",
+        "version": "publishedVersion"
+      },
+      "locations": [
+        {
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1038/s41592-023-01840-z",
+          "pdf_url": "http://STANDIN/files/nature-methods.pdf",
+          "source": {
+            "id": "https://openalex.org/S127827428",
+            "display_name": "Nature Methods",
+            "type": "journal",
+            "host_organization_name": "Nature Portfolio"
+          },
+          "license": "cc-by",
+          "version": "publishedVersion"
+        },
+        {
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1101/2022.10.29.514376",
+          "pdf_url": "http://STANDIN/files/biorxiv-preprint.pdf",
+          "source": {
+            "id": "https://openalex.org/S4306402567",
+            "display_name": "bioRxiv (Cold Spring Harbor Laboratory)",
+            "type": "repository",
+            "host_organization_name": "Cold Spring Harbor Laboratory"
+          },
+          "license": "cc-by-nc-nd",
+          "version": "acceptedVersion"
+        },
+        {
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/37024653",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "type": "repository",
+            "host_organization_name": "National Institutes of Health"
+          },
+          "license": null,
+          "version": "publishedVersion"
+        },
+        {
+          "is_oa": true,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/10172116",
+          "pdf_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10172116/pdf/41592_2023_Article_1840.pdf",
+          "source": {
+            "id": "https://openalex.org/S2764455111",
+            "display_name": "PubMed Central",
+            "type": "repository",
+            "host_organization_name": "National Institutes of Health"
+          },
+          "license": "cc-by",
+          "version": "submittedVersion"
+        }
+      ],
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1038/s41592-023-01840-z",
+        "pdf_url": "http://STANDIN/files/nature-methods.pdf",
+        "source": {
+          "id": "https://openalex.org/S127827428",
+          "display_name": "Nature Methods",
+          "type": "journal",
+          "host_organization_name": "Nature Portfolio"
+        },
+        "license": "cc-by",
+        "version": "publishedVersion"
+      },
+      "cited_by_count": 51,
+      "type": "article",
+      "language": "en",
+      "ids": {
+        "openalex": "https://openalex.org/W4362665266",
+        "doi": "https://doi.org/10.1038/s41592-023-01840-z",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/37024653"
+      },
+      "biblio": {
+        "volume": "20",
+        "issue": "5",
+        "first_page": "706",
+        "last_page": "713"
+      }
+    },
+    {
+      "id": "https://openalex.org/W4406109179",
+      "doi": "https://doi.org/10.1101/2025.01.06.603201",
+      "display_name": "CHOPOFF: symbolic alignments enable fast and sensitive CRISPR off-target detection",
+      "publication_date": "2025-01-06",
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5051303193",
+            "display_name": "Kornel Labun"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5115787065",
+            "display_name": "Oline Rio"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5061529338",
+            "display_name": "Håkon Tjeldnes"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5056481681",
+            "display_name": "Michał I. Świrski"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5107059249",
+            "display_name": "Anna Zofia Komisarczuk"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5079666901",
+            "display_name": "Emma Maria Haapaniemi"
+          }
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5067360861",
+            "display_name": "Eivind Valen"
+          }
+        }
+      ],
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "http://STANDIN/files/chopoff.html",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4306402567",
+          "display_name": "bioRxiv (Cold Spring Harbor Laboratory)",
+          "type": "repository",
+          "host_organization_name": "Cold Spring Harbor Laboratory"
+        },
+        "license": "cc-by-nc-nd",
+        "version": "acceptedVersion"
+      },
+      "locations": [
+        {
+          "is_oa": true,
+          "landing_page_url": "http://STANDIN/files/chopoff.html",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306402567",
+            "display_name": "bioRxiv (Cold Spring Harbor Laboratory)",
+            "type": "repository",
+            "host_organization_name": "Cold Spring Harbor Laboratory"
+          },
+          "license": "cc-by-nc-nd",
+          "version": "acceptedVersion"
+        }
+      ],
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "http://STANDIN/files/chopoff.html",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4306402567",
+          "display_name": "bioRxiv (Cold Spring Harbor Laboratory)",
+          "type": "repository",
+          "host_organization_name": "Cold Spring Harbor Laboratory"
+        },
+        "license": "cc-by-nc-nd",
+        "version": "acceptedVersion"
+      },
+      "cited_by_count": 4,
+      "type": "preprint",
+      "language": "en",
+      "ids": {
+        "openalex": "https://openalex.org/W4406109179",
+        "doi": "https://doi.org/10.1101/2025.01.06.603201"
+      },
+      "biblio": {
+        "volume": null,
+        "issue": null,
+        "first_page": null,
+        "last_page": null
+      }
+    },
+    {
+      "id": "https://openalex.org/W4310565018",
+      "doi": "https://doi.org/10.1089/hum.2022.198",
+      "display_name": "Advances in Off-Target Detection for CRISPR-Based Genome Editing",
+      "publication_date": "2022-12-01",
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5023328655",
+            "display_name": "Haozheng Wang"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5012491375",
+            "display_name": "Yangmin Wang"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5005400352",
+            "display_name": "Zhongtao Luo"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5101041991",
+            "display_name": "Xinjian Lin"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": null,
+            "display_name": "Meilin Liu"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5048034673",
+            "display_name": "Fenglin Wu"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5109989738",
+            "display_name": "Hongwei Shao"
+          }
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5100751244",
+            "display_name": "Wenfeng Zhang"
+          }
+        }
+      ],
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.1089/hum.2022.198",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S39730559",
+          "display_name": "Human Gene Therapy",
+          "type": "journal",
+          "host_organization_name": "Mary Ann Liebert, Inc."
+        },
+        "license": null,
+        "version": "publishedVersion"
+      },
+      "locations": [
+        {
+          "is_oa": false,
+          "landing_page_url": "https://doi.org/10.1089/hum.2022.198",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S39730559",
+            "display_name": "Human Gene Therapy",
+            "type": "journal",
+            "host_organization_name": "Mary Ann Liebert, Inc."
+          },
+          "license": null,
+          "version": "publishedVersion"
+        },
+        {
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/36453226",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "type": "repository",
+            "host_organization_name": "National Institutes of Health"
+          },
+          "license": null,
+          "version": "publishedVersion"
+        }
+      ],
+      "best_oa_location": null,
+      "cited_by_count": 3,
+      "type": "article",
+      "language": "en",
+      "ids": {
+        "openalex": "https://openalex.org/W4310565018",
+        "doi": "https://doi.org/10.1089/hum.2022.198",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/36453226"
+      },
+      "biblio": {
+        "volume": "34",
+        "issue": "3-4",
+        "first_page": "112",
+        "last_page": "128"
+      }
+    },
+    {
+      "id": "https://openalex.org/W4399380610",
+      "doi": "https://doi.org/10.1038/s42003-024-06360-w",
+      "display_name": "OliTag-seq enhances in cellulo detection of CRISPR-Cas9 off-targets",
+      "publication_date": "2024-06-06",
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5040728148",
+            "display_name": "Zhi-Xue Yang"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5082815142",
+            "display_name": "Dong-Hao Deng"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5086129556",
+            "display_name": "Zhu-Ying Gao"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5000620240",
+            "display_name": "Zhi-Kang Zhang"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5043039819",
+            "display_name": "Ya-Wen Fu"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5104667051",
+            "display_name": "Wei Wen"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5104668679",
+            "display_name": "Feng Zhang"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5100432204",
+            "display_name": "Xiang Li"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5019817669",
+            "display_name": "Huayu Li"
+          }
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5104668666",
+            "display_name": "Jianping Zhang"
+          }
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5100381509",
+            "display_name": "Xiao‐Bing Zhang"
+          }
+        }
+      ],
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1038/s42003-024-06360-w",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4210225776",
+          "display_name": "Communications Biology",
+          "type": "journal",
+          "host_organization_name": "Nature Portfolio"
+        },
+        "license": "cc-by",
+        "version": "publishedVersion"
+      },
+      "locations": [
+        {
+          "is_oa": true,
+          "landing_page_url": "https://doi.org/10.1038/s42003-024-06360-w",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4210225776",
+            "display_name": "Communications Biology",
+            "type": "journal",
+            "host_organization_name": "Nature Portfolio"
+          },
+          "license": "cc-by",
+          "version": "publishedVersion"
+        },
+        {
+          "is_oa": false,
+          "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/38844522",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306525036",
+            "display_name": "PubMed",
+            "type": "repository",
+            "host_organization_name": "National Institutes of Health"
+          },
+          "license": null,
+          "version": "publishedVersion"
+        },
+        {
+          "is_oa": true,
+          "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/11156888",
+          "pdf_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11156888/pdf/42003_2024_Article_6360.pdf",
+          "source": {
+            "id": "https://openalex.org/S2764455111",
+            "display_name": "PubMed Central",
+            "type": "repository",
+            "host_organization_name": "National Institutes of Health"
+          },
+          "license": "cc-by",
+          "version": "submittedVersion"
+        },
+        {
+          "is_oa": false,
+          "landing_page_url": "https://doaj.org/article/ca2357b3dbc94140bda92191948be5cd",
+          "pdf_url": null,
+          "source": {
+            "id": "https://openalex.org/S4306401280",
+            "display_name": "DOAJ (DOAJ: Directory of Open Access Journals)",
+            "type": "repository",
+            "host_organization_name": null
+          },
+          "license": null,
+          "version": "submittedVersion"
+        }
+      ],
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.1038/s42003-024-06360-w",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4210225776",
+          "display_name": "Communications Biology",
+          "type": "journal",
+          "host_organization_name": "Nature Portfolio"
+        },
+        "license": "cc-by",
+        "version": "publishedVersion"
+      },
+      "cited_by_count": 12,
+      "type": "article",
+      "language": "en",
+      "ids": {
+        "openalex": "https://openalex.org/W4399380610",
+        "doi": "https://doi.org/10.1038/s42003-024-06360-w",
+        "pmid": "https://pubmed.ncbi.nlm.nih.gov/38844522"
+      },
+      "biblio": {
+        "volume": "7",
+        "issue": "1",
+        "first_page": "696",
+        "last_page": "696"
+      }
+    }
+  ],
+  "group_by": []
+}

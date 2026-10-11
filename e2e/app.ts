@@ -59,6 +59,11 @@ export interface LaunchOptions {
    */
   referenceLookup?: string;
   /**
+   * Where Find sources asks its providers: a local server standing in for
+   * all of them (tests/helpers/sourceServices.ts). A test build honours it.
+   */
+  sources?: string;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -107,6 +112,7 @@ export async function launchApp(
     examples = false,
     home,
     referenceLookup,
+    sources,
     keepWindow = false,
     computerSound = "allowed",
   }: LaunchOptions = {},
@@ -123,6 +129,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
+  delete env.INCARNAMIND_TEST_SOURCES;
   env.INCARNAMIND_TEST_AUDIO = "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
@@ -134,6 +141,7 @@ export async function launchApp(
   }
   if (home) env.HOME = home;
   if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
+  if (sources) env.INCARNAMIND_TEST_SOURCES = sources;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
