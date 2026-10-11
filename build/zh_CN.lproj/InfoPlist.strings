@@ -1,0 +1,3 @@
+/* Meetings (ADR-0015): what macOS shows, in Chinese, when IncarnaMind first asks to record. */
+"NSMicrophoneUsageDescription" = "录制会议时，IncarnaMind 会录制你的麦克风。音频只保存在这台 Mac 上。";
+"NSAudioCaptureUsageDescription" = "录制会议时，IncarnaMind 会录制电脑声音，也就是会议中其他人的声音。音频只保存在这台 Mac 上。";

@@ -5,5 +5,5 @@
     "types": ["vite/client"],
     "jsx": "react-jsx"
   },
-  "include": ["src/renderer/src/**/*", "src/shared/**/*"]
+  "include": ["src/renderer/src/**/*", "src/renderer/capture/**/*", "src/shared/**/*"]
 }

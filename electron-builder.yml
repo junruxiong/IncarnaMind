@@ -62,6 +62,18 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 mac:
   category: public.app-category.productivity
+  # Meetings (ADR-0015): what macOS says when IncarnaMind first asks to record, in English here
+  # and in Chinese from zh_CN.lproj (tests/main/meetingPermissions.test.ts checks both).
+  extendInfo:
+    NSMicrophoneUsageDescription: "When you record a meeting, IncarnaMind records your microphone. The audio stays on this Mac."
+    NSAudioCaptureUsageDescription: "When you record a meeting, IncarnaMind records the computer's sound: the other people in the meeting. The audio stays on this Mac."
+  extraResources:
+    - from: build/zh_CN.lproj
+      to: zh_CN.lproj
+  # electron-builder's default entitlements, and the microphone, which a hardened-runtime build
+  # can't open without it.
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   files:
     - out/**/*
     # The arm64 and x64 apps are built separately: each keeps its own architecture.
