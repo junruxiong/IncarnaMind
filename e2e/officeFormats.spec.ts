@@ -142,10 +142,12 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
 
   const viewer = window.getByTestId("viewer");
   const mark = viewer.getByTestId("viewer-quote-mark");
+  // Side by side, the four Citations are one chip in the Mind's style: a click on a work's
+  // words there opens its Citation.
   const open = async (document: string) => {
     await window.keyboard.press("Escape");
     const index = labels.findIndex((label) => label.includes(document));
-    await chips.nth(index).click();
+    await answer.locator(`[data-styled="runs"] [data-work="${index}"]`).first().click();
     await expect(window.getByTestId("viewer-title")).toHaveText(document);
   };
 
