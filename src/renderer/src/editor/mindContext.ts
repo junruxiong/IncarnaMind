@@ -9,6 +9,12 @@ export const MindIdContext = createContext<string | null>(null);
  */
 export const ComposerDockContext = createContext<HTMLElement | null>(null);
 
+/**
+ * Where the open Mind's word count is drawn: right under its title, above any
+ * notice (see `MindPane`). Null until it is there.
+ */
+export const CountSlotContext = createContext<HTMLElement | null>(null);
+
 export function useMindId(): string {
   const mindId = useContext(MindIdContext);
   if (!mindId) throw new Error("A node view is drawn outside a Mind's editor.");
