@@ -844,12 +844,11 @@
     border-radius: 1px;
     background: var(--color-rule);
     overflow: hidden;
-
-    > span {
-      display: block;
-      height: 100%;
-      background: var(--color-accent);
-    }
+  }
+  .mind-count-fill {
+    display: block;
+    height: 100%;
+    background: var(--color-accent);
   }
   .count-menu {
     width: 280px;
@@ -863,35 +862,33 @@
     border-top: 1px solid var(--color-rule);
     font-size: 13px;
     line-height: 20px;
+  }
+  .count-target-field {
+    min-width: 0;
+    padding: 2px 6px;
+    border: 1px solid var(--color-rule);
+    border-radius: 6px;
+    background: var(--color-sheet);
+    outline: none;
 
-    > input {
-      min-width: 0;
-      padding: 2px 6px;
-      border: 1px solid var(--color-rule);
-      border-radius: 6px;
-      background: var(--color-sheet);
-      outline: none;
-
-      &:focus-visible {
-        border-color: var(--color-accent);
-      }
-
-      &[aria-invalid="true"] {
-        border-color: var(--color-danger);
-      }
+    &:focus-visible {
+      border-color: var(--color-accent);
     }
 
-    > button {
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-weight: 600;
-      color: var(--color-accent);
-      outline: none;
+    &[aria-invalid="true"] {
+      border-color: var(--color-danger);
+    }
+  }
+  .count-target-set {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    color: var(--color-accent);
+    outline: none;
 
-      &:hover,
-      &:focus-visible {
-        background: var(--color-hover);
-      }
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
     }
   }
   .count-target-problem {

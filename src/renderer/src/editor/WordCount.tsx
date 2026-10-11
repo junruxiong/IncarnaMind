@@ -162,7 +162,7 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
           data-testid="mind-count-progress"
           className="mind-count-progress"
         >
-          <span style={{ width: `${percent}%` }} />
+          <span className="mind-count-fill" style={{ width: `${percent}%` }} />
         </span>
       )}
       <div
@@ -203,6 +203,7 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
               <input
                 id={`${menu.menuProps.id}-target`}
                 type="text"
+                className="count-target-field"
                 inputMode="numeric"
                 data-testid="mind-count-target"
                 value={draft}
@@ -217,7 +218,12 @@ export function WordCount({ editor, doc }: { editor: Editor; doc: Y.Doc }) {
                   if (event.key !== "Escape") event.stopPropagation();
                 }}
               />
-              <button type="submit" role="menuitem" data-testid="mind-count-set">
+              <button
+                type="submit"
+                role="menuitem"
+                data-testid="mind-count-set"
+                className="count-target-set"
+              >
                 {t("wordCount.target.set")}
               </button>
               {invalid && (
