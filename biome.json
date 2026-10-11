@@ -79,6 +79,29 @@
           }
         }
       }
+    },
+    {
+      "includes": ["src/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": "src/shared is pure: the core, the renderer and the workers all use it. Pass the capability in from the caller."
+                },
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "src/shared is pure: the core, the renderer and the workers all use it. Pass what needs Node in from the caller."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }
