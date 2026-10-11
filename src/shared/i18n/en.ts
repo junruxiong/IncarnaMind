@@ -937,6 +937,7 @@ export const en = {
   "tagging.cost.dollars": "About {dollars} per 100 Documents",
   "tagging.cost.underYuan": "Under ¥0.01 per 100 Documents",
   "tagging.cost.yuan": "About ¥{amount} per 100 Documents",
+  "tagging.decision.auto": "Tev1 and Clef-Flash, picked per Document",
   "tagging.other": "Other model…",
   "tagging.other.hint": "A model the list doesn't have, by its name",
   "tagging.other.decision": "{model}, a local decision model",
@@ -949,9 +950,9 @@ export const en = {
   "tagging.plan.useLocal": "Use {model}",
   "tagging.plan.paused": "Your ChatGPT plan's limit is reached: tagging goes on at {time}.",
   "tagging.review.marked":
-    "{model} says how sure it is: Tags it isn't sure of are marked for you to review.",
+    "This model says how likely each Tag is, and marks the ones it isn't sure of for you to review.",
   "tagging.review.kept":
-    "{model} doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
+    "This model doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
   "status.taggingPaused": "Tagging waits for your ChatGPT plan",
   "status.taggingPaused.full":
     "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
