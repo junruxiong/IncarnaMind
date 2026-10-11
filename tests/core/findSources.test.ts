@@ -573,13 +573,14 @@ describe("Find sources: adding", () => {
     });
   });
 
-  test("a web page that can't be saved leaves the reference record, with its page", async () => {
+  test("a web page that can't be saved leaves the reference record, with its page; tried again, it is saved", async () => {
     const { core, services } = await setUp();
     answerConsent(core);
     const result = found(await core.findSources({ query: "CRISPR off-target detection" }));
+    const key = work(result.works, /^CHOPOFF/).key;
     services.fail("files", 403);
 
-    const added = await core.addFoundSource({ key: work(result.works, /^CHOPOFF/).key });
+    const added = await core.addFoundSource({ key });
 
     expect(added).toMatchObject({
       outcome: "reference",
@@ -588,6 +589,12 @@ describe("Find sources: adding", () => {
       existing: false,
     });
     expect(await core.listDocuments()).toEqual([]);
+
+    // Tried again once the site answers, the page is saved, and the record kept is its record.
+    services.fail("files", null);
+    const { result: again, document } = await add(core, key);
+    expect(again).toMatchObject({ outcome: "document", existing: false });
+    expect(document?.reference?.id).toBe(added.outcome === "reference" ? added.recordId : "");
   });
 
   test("a found paper or web page deleted permanently has its copy removed at once", async () => {

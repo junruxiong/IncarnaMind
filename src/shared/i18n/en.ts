@@ -2083,6 +2083,7 @@ export const en = {
   "sources.addReference": "Add reference",
   "sources.adding": "Adding…",
   "sources.getPdf": "Get the PDF…",
+  "sources.openPage": "Open the free text…",
   "sources.inLibrary": "In your Library",
   "sources.inLibrary.reference": "In your Library as a reference",
   "sources.open": "Open",

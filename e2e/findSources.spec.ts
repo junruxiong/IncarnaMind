@@ -2,8 +2,9 @@
  * Find sources (#296), in the built app: from the Library's "Add Documents ▾"
  * and the sidebar's "+", search OpenAlex, arXiv and PubMed (a local stand-in
  * answering with recorded responses), allow each provider once, add an
- * open-access paper as a Document in a Folder and a paywalled one as a
- * reference; in Chinese at the narrowest window; and from an Answer that
+ * open-access paper as a Document in a Folder, a paywalled one as a
+ * reference and one open as a web page as a web page Document, tried again
+ * when its site turned IncarnaMind away; in Chinese at the narrowest window; and from an Answer that
  * found papers, "Show results". Local mode blocks every provider.
  */
 import { join } from "node:path";
@@ -64,7 +65,7 @@ async function allowProviders(
   }
 }
 
-test("Add Documents ▾ → Find sources… asks each provider once, then adds an open-access paper as a Document in the Folder and a paywalled one as a reference", async () => {
+test("Add Documents ▾ → Find sources… asks each provider once, then adds an open-access paper as a Document in the Folder, a paywalled one as a reference and one open as a web page as a web page", async () => {
   const { app, window } = await launchApp(dataDir, { sources: services.url });
   try {
     await dismissChatSetup(window);
@@ -146,6 +147,27 @@ test("Add Documents ▾ → Find sources… asks each provider once, then adds a
     expect(services.requests.filter((request) => request.path.startsWith("/files/"))).toHaveLength(
       1,
     );
+
+    // A paper whose open text is a web page is saved as one. While its site turns IncarnaMind
+    // away, its reference is kept, with the page to open and another try.
+    const page = result(panel, "CHOPOFF");
+    await expect(page.getByTestId("find-sources-result-facts")).toContainText(
+      "Open access · web page",
+    );
+    services.fail("files", 403);
+    await page.getByTestId("find-sources-add").click();
+    await expect(page.getByTestId("find-sources-added")).toHaveText(
+      "Couldn't download the open copy, so its reference was added",
+    );
+    await expect(page.getByTestId("find-sources-get-pdf")).toHaveText("Open the free text…");
+    services.fail("files", null);
+    await expect(page.getByTestId("find-sources-add")).toHaveText("Try again");
+    await page.getByTestId("find-sources-add").click();
+    await expect(page.getByTestId("find-sources-added")).toHaveText("Added to “Thesis” · Open");
+    await expect(page.getByTestId("find-sources-get-pdf")).toHaveCount(0);
+    await expect(
+      window.getByTestId("library-document").filter({ hasText: "CHOPOFF" }),
+    ).toBeVisible();
 
     // Asked once: another search asks nothing more. Esc closes the panel.
     await panel.getByTestId("find-sources-query").fill("base editing");

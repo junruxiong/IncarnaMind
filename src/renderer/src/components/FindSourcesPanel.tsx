@@ -310,6 +310,13 @@ function ResultRow({ work }: { work: FoundSource }) {
     }),
   ];
   const open = access.kind === "open";
+  const done = add?.status === "done" ? add.result : null;
+  const inLibrary = add ? null : work.inLibrary;
+  const hasDocument = done?.outcome === "document" || Boolean(inLibrary?.documentId);
+  // Kept as its reference alone: an open copy can still be tried again.
+  const referenceOnly =
+    done?.outcome === "reference" || Boolean(inLibrary && !inLibrary.documentId);
+  const page = (done?.outcome === "reference" ? done.landingUrl : null) ?? work.landingUrl;
   return (
     <li
       data-testid="find-sources-result"
@@ -334,36 +341,42 @@ function ResultRow({ work }: { work: FoundSource }) {
         <AddLine work={work} add={add} />
       </div>
       <div className="flex flex-col items-end gap-1">
-        <AddButton work={work} add={add} open={open} />
-        {!open &&
-          work.landingUrl &&
-          !(add?.status === "done" && add.result.outcome === "document") && (
-            <a
-              href={work.landingUrl}
-              target="_blank"
-              rel="noreferrer"
-              data-testid="find-sources-get-pdf"
-              className={buttonStyle("ghost")}
-            >
-              {t("sources.getPdf")}
-            </a>
-          )}
+        {!hasDocument && (open || !referenceOnly) && (
+          <AddButton work={work} add={add} open={open} again={done?.outcome === "reference"} />
+        )}
+        {page && !hasDocument && (!open || referenceOnly) && (
+          <a
+            href={page}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="find-sources-get-pdf"
+            className={buttonStyle("ghost")}
+          >
+            {t(
+              access.kind === "open" && access.format === "web-page"
+                ? "sources.openPage"
+                : "sources.getPdf",
+            )}
+          </a>
+        )}
       </div>
     </li>
   );
 }
 
+/** Add; or, `again` after its open copy couldn't be had and its reference was kept, another try. */
 function AddButton({
   work,
   add,
   open,
+  again,
 }: {
   work: FoundSource;
   add: AddState | undefined;
   open: boolean;
+  again: boolean;
 }) {
   const t = useT();
-  if (add?.status === "done" || (!add && work.inLibrary)) return null;
   const adding = add?.status === "adding";
   return (
     <button
@@ -373,7 +386,15 @@ function AddButton({
       onClick={() => void useFindSources.getState().add(work)}
       className={buttonStyle(open ? "secondary" : "ghost")}
     >
-      {t(adding ? "sources.adding" : open ? "sources.add" : "sources.addReference")}
+      {t(
+        adding
+          ? "sources.adding"
+          : again
+            ? "sources.retry"
+            : open
+              ? "sources.add"
+              : "sources.addReference",
+      )}
     </button>
   );
 }

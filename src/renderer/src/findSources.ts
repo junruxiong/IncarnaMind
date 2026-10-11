@@ -117,7 +117,8 @@ export const useFindSources = create<FindSourcesState>()((set, get) => ({
       // A search started since has the last word.
       if (ticket === searchTicket) set({ result, adds: {} });
     } catch (error) {
-      if (ticket === searchTicket) set({ error: errorMessage(error) });
+      // The last search's results aren't this one's: they go with it.
+      if (ticket === searchTicket) set({ error: errorMessage(error), result: null, adds: {} });
     } finally {
       if (ticket === searchTicket) set({ searching: false });
       // A consent decision may have changed what each provider shows.
