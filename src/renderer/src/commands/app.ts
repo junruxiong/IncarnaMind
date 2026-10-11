@@ -5,6 +5,7 @@ import { assistantCommands } from "./assistant";
 import { sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
+import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 
 const appCommands: readonly Command[] = [
@@ -74,6 +75,7 @@ const appCommands: readonly Command[] = [
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },
   },
+  ...tableCommands,
 ];
 
 for (const command of appCommands) commands.register(command);

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import * as Y from "yjs";
-import type { CoreBridge } from "../src/core/api";
+import { CONTENT_SCHEMA_VERSION, type CoreBridge } from "../src/core/api";
 import { openDatabase } from "../src/core/storage";
 import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
 
@@ -27,7 +27,7 @@ function newerContent(): number[] {
   const future = new Y.XmlElement("futureWidget");
   future.setAttribute("layout", "grid");
   doc.getXmlFragment("blocks").push([paragraph, future]);
-  doc.getMap("settings").set("schemaVersion", 2);
+  doc.getMap("settings").set("schemaVersion", CONTENT_SCHEMA_VERSION + 1);
   return Array.from(Y.encodeStateAsUpdate(doc));
 }
 
@@ -54,8 +54,9 @@ test("a Mind written by a newer version opens read-only with a notice, and its s
   await expect(window.getByTestId("mind-notice-read-only")).toContainText("Read-only");
   await expect(window.getByTestId("mind-notice-read-only")).toContainText("Update IncarnaMind");
   await expect(editor).toHaveAttribute("contenteditable", "false");
-  // No composer: nothing can be asked in it.
-  await expect(window.getByTestId("composer-dock").getByRole("textbox")).toHaveCount(0);
+  // No composer in the assistant: nothing can be asked in it.
+  await expect(window.getByTestId("assistant")).toBeVisible();
+  await expect(window.getByTestId("composer")).toHaveCount(0);
 
   // Typing does nothing, and the stored state is exactly what it was.
   await editor.click();

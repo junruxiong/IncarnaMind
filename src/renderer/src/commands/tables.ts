@@ -1,0 +1,57 @@
+import type { Editor } from "@tiptap/core";
+import { isInTable } from "@tiptap/pm/tables";
+import { noteHolding } from "../editor/noteKeymap";
+import {
+  menuKeyApplies,
+  runTableAction,
+  TABLE_ACTIONS,
+  TABLE_MENU_KEYS,
+  tableSpot,
+  unavailable,
+} from "../editor/tableCommands";
+import type { Command, CommandContext } from "./registry";
+
+/** The note's keymap gives a command the Block at the cursor as its focus. */
+function tableNote(ctx: CommandContext): Editor | null {
+  const editor = ctx.focus?.kind === "block" ? noteHolding(ctx.focus.id) : null;
+  return editor && !editor.isDestroyed && isInTable(editor.state) ? editor : null;
+}
+
+export const tableCommands: readonly Command[] = [
+  ...TABLE_ACTIONS.map(
+    (action): Command => ({
+      id: action.command,
+      label: action.label,
+      ...(action.keys && { shortcut: { keys: action.keys } }),
+      group: action.id.startsWith("delete") ? "danger" : "main",
+      appliesTo: ["block"],
+      // The note's own undo (⌘Z) takes it back.
+      reversible: true,
+      when: (ctx) => tableNote(ctx) !== null,
+      enabled(ctx) {
+        const editor = tableNote(ctx);
+        const spot = editor && tableSpot(editor.state);
+        const reason = spot && unavailable(action.id, spot);
+        return reason ? { reason } : true;
+      },
+      run(ctx) {
+        const editor = tableNote(ctx);
+        if (editor) runTableAction(editor, action);
+      },
+    }),
+  ),
+  {
+    id: "table.menu",
+    label: "editor.table.menu",
+    shortcut: { keys: TABLE_MENU_KEYS },
+    palette: false,
+    group: "main",
+    appliesTo: ["block"],
+    reversible: true,
+    when(ctx) {
+      const editor = tableNote(ctx);
+      return editor !== null && menuKeyApplies(editor.state) && !!editor.storage.tableKeys.openMenu;
+    },
+    run: (ctx) => tableNote(ctx)?.storage.tableKeys.openMenu?.(0),
+  },
+];
