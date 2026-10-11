@@ -3,6 +3,7 @@
  * the Documents' reference records, formatted on the style thread, and the exports in the style.
  */
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import type {
@@ -18,7 +19,7 @@ import { type CslItem, locatorOf } from "../../src/core/citationStyles/csl";
 import { createWorkerEngine } from "../../src/core/citationStyles/engine";
 import { fixtureReferences, markup } from "../helpers/citationStyles";
 import { CITATION_STYLES, createTempDataFolder, manualClock, startCore } from "../helpers/core";
-import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, paragraphsOf, part, textOf, unzip } from "../helpers/docx";
 import { connectToMind } from "../helpers/mindClient";
 import { writeMind } from "../helpers/minds";
@@ -217,6 +218,29 @@ describe("formatting a Mind's Citations", () => {
     expect(
       formatted.bibliography.find((each) => each.documentId === prospect.id)?.needsDetails,
     ).toBe(false);
+  });
+
+  test("a web page is cited by its section and paragraph, and listed with its site and address", async () => {
+    const { core } = await setUp();
+    const html = readFileSync(new URL("../fixtures/web/article.html", import.meta.url), "utf8");
+    const saved = await core.saveWebPage({ address: "https://encyclopedia.example/tea", html });
+    if (saved.outcome !== "saved") throw new Error(saved.failure.message);
+    const [tea] = await waitForProcessing(core, [saved.document.id]);
+    if (!tea) throw new Error("It went.");
+    const history: CitationLocation = {
+      kind: "section",
+      heading: "History",
+      paragraphs: { from: 2, to: 2 },
+    };
+    const formatted = await format(core, "apa", [work(tea, history)]);
+    expect(plain(formatted.clusters[0]?.runs)).toBe("(Lee, 2024, § History, ¶\u00a02)");
+    // Its record has the page's author, date, site and address, so it needs no details.
+    expect(formatted.bibliography.map((entry) => [plain(entry.runs), entry.needsDetails])).toEqual([
+      [
+        "Lee, A. (2024, May 1). Tea - The Open Encyclopedia. The Open Encyclopedia. https://encyclopedia.example/tea",
+        false,
+      ],
+    ]);
   });
 
   test("a deleted Document's Citation is still listed, by the name it had", async () => {
