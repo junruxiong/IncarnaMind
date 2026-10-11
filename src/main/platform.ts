@@ -66,7 +66,7 @@ export const systemBrowser: Browser = {
 };
 
 /** The apps whose install links Settings → Agents opens (#351), and no others. */
-const AGENT_LINK_SCHEMES = new Set(["cursor:", "vscode:"]);
+const AGENT_LINK_SCHEMES = new Set(["cursor:"]);
 
 /** Opens an agent's install link in its app: its app shows what it installs, and asks. */
 async function openAgentLink(url: string): Promise<void> {

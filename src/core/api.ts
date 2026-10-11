@@ -4265,30 +4265,18 @@ export const AGENT_TOOLS = [
   "ask",
 ] as const;
 
-/** The agents Settings → Agents can set IncarnaMind up in (see src/core/agents/clients.ts). */
+/**
+ * The agents Settings → Agents sets IncarnaMind up in, and "other" for the
+ * rest (see src/core/agents/clients.ts). A pairing made before an agent
+ * stopped being listed keeps its own id, so a pairing's `client` is any text.
+ */
 export const AGENT_CLIENT_IDS = [
   "claude-desktop",
   "claude-code",
   "codex",
   "cursor",
-  "vscode",
-  "gemini-cli",
-  "kimi-code",
-  "qwen-code",
-  "codebuddy",
-  "minimax-code",
-  "trae",
-  "qoder",
-  "comate",
-  "cherry-studio",
-  "chatbox",
-  "deepchat",
-  "goose",
-  "opencode",
-  "cline",
-  "kilo",
-  "openclaw",
-  "pi",
+  "antigravity",
+  "workbuddy",
   "other",
 ] as const;
 
@@ -4296,7 +4284,7 @@ export type AgentClientId = (typeof AGENT_CLIENT_IDS)[number];
 
 /**
  * How an agent takes IncarnaMind: "bundle", a file its app installs when
- * opened (Claude); "link", a link its app installs from (Cursor, VS Code);
+ * opened (Claude); "link", a link its app installs from (Cursor);
  * "file", IncarnaMind adds itself to the agent's settings file; "command", one
  * line to paste into a terminal (Claude Code); "manual", settings to paste
  * into the agent's own screen.
@@ -4336,6 +4324,8 @@ export interface SetUpAgentInput {
   client: AgentClientId;
   /** The Folders it may read; the User picks at least one. */
   folderIds: string[];
+  /** The name the User gave it ("Other agent" only); otherwise its own name. */
+  name?: string;
 }
 
 export interface SetUpAgent {

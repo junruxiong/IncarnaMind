@@ -58,6 +58,17 @@ Use at least three of these, including one from Anthropic and one from OpenAI, a
 
 Use a temporary data folder and test Documents, never your own files. Say in the pull request which models you used and what you checked with each: that the Answer cites, the quotes are found, the feature reads well in Chinese, and it copes with a slow or failing model.
 
+### Outside agents before a release
+
+Settings → Agents sets IncarnaMind up in a few first-class agents (`src/core/agents/clients.ts`). Before a release, try each by hand with a temporary HOME and a test Folder: connect it, ask it something the Folder answers, and check the answer carries Citations that IncarnaMind finds. Disconnect afterwards.
+
+- the Claude desktop app (one click, a Free plan is enough), and Claude Code;
+- the ChatGPT desktop app (in its Work or Codex mode) and Codex, which share one configuration;
+- Cursor;
+- Antigravity, and in China WorkBuddy.
+
+"Other agent" is tried with any one agent that takes pasted settings. The agents' own configuration formats change under us: when one stops working, fix it here or move it to "Other agent" (ADR-0019).
+
 ### The ChatGPT test profile
 
 The owner signs in with ChatGPT once, in a test profile; agents then use that sign-in for checks by hand on the owner's ChatGPT plan, without signing in themselves and without ever seeing a token.
