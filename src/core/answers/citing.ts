@@ -77,6 +77,13 @@ export interface Citing {
    * "checking"); null for a Passage that doesn't exist.
    */
   citeQuote(passageId: string, quote: string): Citation | null;
+  /** Where a Passage is, as a Citation of all of it would say; null as for `FoundPassage.location`. */
+  locate(
+    passage: Pick<
+      WindowedPassage,
+      "documentId" | "documentKind" | "contentHash" | "pageFrom" | "pageTo"
+    >,
+  ): CitationLocation | null;
 }
 
 /** How many Document versions' matching rules (see `matchingOf`) are kept, the latest used. */
@@ -121,7 +128,7 @@ export function createCiting(documents: CitingDocuments): Citing {
     documents.pageTexts(source.documentId, source.contentHash, range.pageFrom, range.pageTo);
 
   /** Where a Passage is, as a Citation of all of it would say. */
-  const passageLocation = (passage: WindowedPassage): CitationLocation | null => {
+  const passageLocation: Citing["locate"] = (passage) => {
     if (passage.pageFrom === null || passage.pageTo === null) return null;
     const units = documents.pageTexts(
       passage.documentId,
@@ -196,5 +203,7 @@ export function createCiting(documents: CitingDocuments): Citing {
         ...result,
       };
     },
+
+    locate: passageLocation,
   };
 }

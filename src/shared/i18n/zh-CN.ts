@@ -2089,4 +2089,31 @@ export const zhCN = {
   "command.assistant.fold": "助手：收起",
   "command.assistant.unfold": "助手：展开",
   "command.assistant.history": "历史对话",
+  "consent.flow.agents": "你的 AI 智能体",
+  "consent.flow.agents.purpose": "让你使用的 AI 智能体（例如 Claude 或 Codex）读取并引用你的文档",
+  "consent.data.scoped-passages": "你选择的文件夹中文档的段落，在智能体搜索和读取时发送",
+  "consent.data.scoped-minds": "这些文件夹中的 Mind，在智能体读取时发送",
+  "consent.data.answers": "IncarnaMind 对智能体所提问题的回答，以及其中的引文",
+  "agents.problem.unpaired":
+    "这个智能体已不再连接 IncarnaMind。在 IncarnaMind 的“设置 → 智能体”中重新连接它。",
+  "agents.problem.off": "IncarnaMind 已关闭智能体连接。在“设置 → 智能体”中开启。",
+  "agents.problem.local-mode":
+    "IncarnaMind 开启了“所有内容都留在这台电脑上”，已连接的智能体暂停使用：智能体会把读到的内容发送给它自己的 AI 模型。要继续使用，在 IncarnaMind 的“设置 → 搜索”中关闭此项。",
+  "agents.problem.consent":
+    "这个智能体已无权读取你的文档。在 IncarnaMind 的“设置 → 智能体”中重新允许它。",
+  "agents.problem.no-folders":
+    "这个智能体还不能读取任何文档。在 IncarnaMind 的“设置 → 智能体”中为它选择文件夹。",
+  "agents.problem.outside-scope":
+    "这个文件夹没有共享给此智能体。在 IncarnaMind 的“设置 → 智能体”中为它共享更多文件夹。",
+  "agents.problem.not-found": "共享给此智能体的文件夹中没有这个段落、文档、Mind 或引用。",
+  "agents.problem.chat-not-ready":
+    "IncarnaMind 还没有可用的对话模型。在 IncarnaMind 的“设置 → 模型”中设置一个，或改为搜索并引用。",
+  "agents.problem.chat-consent":
+    "IncarnaMind 的对话模型尚未获得允许。先在 IncarnaMind 中提一个问题来允许它，或改为搜索并引用。",
+  "agents.problem.answer-failed": "IncarnaMind 无法回答：{message}",
+  "agents.problem.invalid": "IncarnaMind 无法读取这个请求。",
+  "agents.problem.failed": "IncarnaMind 出了点问题。再试一次。",
+  "agents.answer.notFound": "[未找到引文]",
+  "agents.answer.cantCheck": "[无法核对]",
+  "agents.mind.outsideCitation": "未共享给此智能体的文件夹中的文档",
 } satisfies Dictionary;
