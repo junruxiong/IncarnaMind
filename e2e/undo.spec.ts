@@ -413,6 +413,12 @@ const editItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
     return item ? { label: item.label, enabled: item.enabled } : null;
   }, id);
 
+/** Chooses the Edit menu's Undo or Redo. */
+const clickEditItem = (app: ElectronApplication, id: "edit.undo" | "edit.redo") =>
+  app.evaluate(({ Menu }, itemId) => {
+    Menu.getApplicationMenu()?.getMenuItemById(itemId)?.click();
+  }, id);
+
 test("⌘Z goes to the note's own undo in the note, to a field's in a field, and to the last change elsewhere; the Edit menu too, naming it", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
@@ -443,6 +449,12 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   await undo(window);
   await expect(editor).not.toContainText("Ask about ferries");
   expect(await mindFolder(window, "Shortlist")).toBe(finance);
+  // The Edit menu's Undo, chosen there, is the note's too.
+  await window.keyboard.type("Ferries at noon");
+  await expect(editor).toContainText("Ferries at noon");
+  await clickEditItem(app, "edit.undo");
+  await expect(editor).not.toContainText("Ferries at noon");
+  expect(await mindFolder(window, "Shortlist")).toBe(finance);
 
   // In a field: only the field's text goes.
   const composer = window.getByTestId("composer-input");
@@ -453,6 +465,13 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
   // The field's own undo takes its typing back, as far as it groups it.
   await expect(composer).not.toHaveValue("How cold");
   expect("How cold".startsWith(await composer.inputValue())).toBe(true);
+  expect(await mindFolder(window, "Shortlist")).toBe(finance);
+  // And the Edit menu's, chosen there.
+  await composer.fill("");
+  await window.keyboard.type("Tides");
+  await expect.poll(() => editItem(app, "edit.undo")).toEqual({ label: "Undo", enabled: true });
+  await clickEditItem(app, "edit.undo");
+  await expect(composer).not.toHaveValue("Tides");
   expect(await mindFolder(window, "Shortlist")).toBe(finance);
 
   // Anywhere else: the last change, and the Edit menu names it.
@@ -467,13 +486,9 @@ test("⌘Z goes to the note's own undo in the note, to a field's in a field, and
     .poll(() => editItem(app, "edit.redo"))
     .toEqual({ label: "Redo Move “Shortlist”", enabled: true });
   // The menu's Redo goes the same way.
-  await app.evaluate(({ Menu }) =>
-    Menu.getApplicationMenu()?.getMenuItemById("edit.redo")?.click(),
-  );
+  await clickEditItem(app, "edit.redo");
   await expect.poll(() => mindFolder(window, "Shortlist")).toBe(finance);
-  await app.evaluate(({ Menu }) =>
-    Menu.getApplicationMenu()?.getMenuItemById("edit.undo")?.click(),
-  );
+  await clickEditItem(app, "edit.undo");
   await expect.poll(() => mindFolder(window, "Shortlist")).toBeNull();
 });
 

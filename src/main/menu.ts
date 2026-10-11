@@ -4,10 +4,15 @@ import { type EditMenuState, FILES_CHANNELS, type MenuCommand } from "../shared/
 import { MENU_COMMANDS } from "../shared/commands";
 import { type MessageKey, translate } from "../shared/i18n";
 
+/** The window the menu acts on: the one in front, or else the only one. */
+function front(): BrowserWindow | null {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  return window && !window.isDestroyed() ? window : null;
+}
+
 /** Asks the window in front to run a menu item's command (see `files.onMenuCommand`). */
 function send(command: MenuCommand): void {
-  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-  if (window && !window.isDestroyed()) window.webContents.send(FILES_CHANNELS.menuCommand, command);
+  front()?.webContents.send(FILES_CHANNELS.menuCommand, command);
 }
 
 /**
@@ -90,9 +95,8 @@ function buildMenu(): void {
       registerAccelerator: false,
       enabled: editMenu.text !== null || action !== null,
       click: () => {
-        if (editMenu.text !== "field") return send(id);
-        const window = BrowserWindow.getFocusedWindow();
-        if (window && !window.isDestroyed()) window.webContents[step]();
+        if (editMenu.text === "field") front()?.webContents[step]();
+        else send(id);
       },
     };
   };
