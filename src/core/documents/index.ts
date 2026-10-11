@@ -23,7 +23,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
 import { rm, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
-import type { Anchor, UnitKind, UnitLabel } from "../../shared/units";
+import { quoteInUnits } from "../../shared/locations";
+import type { Anchor, TextUnit, UnitKind, UnitLabel } from "../../shared/units";
+import { cleanQuote } from "../answers/citations";
 import type { CitedUnits } from "../answers/citedVersions";
 import type {
   AddDocumentsResult,
@@ -31,12 +33,16 @@ import type {
   DocumentFailureReason,
   DocumentFileStatus,
   DocumentKind,
+  DocumentScanProgress,
   DocumentStatus,
   DocumentText,
   KeptCitationText,
   OwnFile,
   PassageSearchResult,
   ProviderErrorKind,
+  ScannedQuote,
+  ScannedQuoteInput,
+  ScannedText,
   SearchMode,
   SkippedFile,
   TaggingState,
@@ -64,8 +70,13 @@ import {
   type ProcessedPassage,
   type ProcessingJob,
   type ProcessingResult,
+  SCAN_CURRENT_SINCE,
+  type ScanJob,
+  unreadMessage,
 } from "./processing";
 import { createProcessor } from "./processor";
+import { type TextRecognitionModel, TextRecognitionUnavailableError } from "./scan";
+import { MIN_PAGE_TEXT } from "./scan/pages";
 import {
   distinctPassages,
   fuseRankingScores,
@@ -130,6 +141,7 @@ interface DocumentRow {
   title: string | null;
   own_file: string | null;
   counted_as_evidence: number;
+  processing_version: number;
   created_at: string;
   updated_at: string;
 }
@@ -164,7 +176,7 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, title, own_file, counted_as_evidence, created_at, updated_at`;
+  creation_date, title, own_file, counted_as_evidence, processing_version, created_at, updated_at`;
 
 /** What IncarnaMind wrote the file as (#80), from its stored kind; a kind a newer version wrote counts as an export. */
 const ownFileOf = (row: Pick<DocumentRow, "own_file" | "counted_as_evidence">): OwnFile | null =>
@@ -360,6 +372,11 @@ export interface DocumentsOptions {
    * Linked folder. None if not given.
    */
   citedUnits?: (documentIds: readonly string[]) => CitedUnits[];
+  /**
+   * Reads scanned pages (#397). Absent (tests that don't need it): a PDF's
+   * scanned pages are left with the little text they have, as before.
+   */
+  textRecognition?: TextRecognitionModel;
   linkedFolders: {
     watch: WatchFolder;
     retryMs: number;
@@ -387,6 +404,27 @@ export function createDocuments(options: DocumentsOptions) {
   const reportError = options.reportError ?? ((error: unknown) => console.error(error));
   const vectors = createVectorIndex(db, model);
   const legacyFolder = join(dataDir, "documents");
+  const { textRecognition } = options;
+  /** Where reading each Document's scanned pages is, while its job reads them (#397). */
+  const scanProgress = new Map<string, DocumentScanProgress>();
+  /**
+   * Scanned pages read by a job that didn't finish (stopped, paused, or the
+   * worker crashed), by Document, with their version: the next job uses
+   * them rather than reading them again. Kept for this session only.
+   */
+  const partialScans = new Map<string, { contentHash: string; units: Map<number, TextUnit> }>();
+
+  /** The scanned pages of a Document's current version that couldn't be read (see "pages-unread"). */
+  const unreadPages = (row: Pick<DocumentRow, "id" | "content_hash">): number[] =>
+    db
+      .all<{ page: number }>(
+        `SELECT page FROM document_pages
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL
+           AND json_extract(label, '$.scan.unread') = 1
+         ORDER BY page`,
+        [row.id, row.content_hash],
+      )
+      .map((each) => each.page);
 
   /**
    * The share of a Document's Passages embedded so far with the current model:
@@ -429,10 +467,12 @@ export function createDocuments(options: DocumentsOptions) {
       pageCount: row.page_count,
       status,
       progress: status === "embedding" ? progressOf(row) : null,
+      scan: status === "extracting" ? (scanProgress.get(row.id) ?? null) : null,
       failure: failed
         ? {
             reason: (row.failure_reason ?? "processing-error") as DocumentFailureReason,
             message: row.failure_message ?? "",
+            ...(row.failure_reason === "pages-unread" && { pages: unreadPages(row) }),
           }
         : null,
       folderId: row.folder_id,
@@ -471,11 +511,68 @@ export function createDocuments(options: DocumentsOptions) {
     progressed(row.linked_folder_id);
   };
 
-  const jobFor = (row: Pick<DocumentRow, "id" | "kind" | "path">): ProcessingJob => ({
+  /**
+   * The scanned pages a job keeps as they were read (see `ScanJob.keep`):
+   * those of the version indexed read by today's reader, those a Citation
+   * quotes or a feature retains, and those a job read before it was stopped.
+   */
+  function keptScans(row: Pick<DocumentRow, "id" | "content_hash">): ScanJob["keep"] {
+    const reader = textRecognition?.reader;
+    const stored = db
+      .all<UnitRow>(
+        `SELECT page, text, kind, label, anchors FROM document_pages
+         WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL
+           AND json_extract(label, '$.scan.reader') IS NOT NULL
+           AND json_extract(label, '$.scan.unread') IS NOT 1
+         ORDER BY page`,
+        [row.id, row.content_hash],
+      )
+      .map(toUnitText);
+    // Only when a page was read by an older reader do Citations need looking for.
+    const older = stored.some((unit) => unit.label?.scan?.reader !== reader);
+    const cited = new Set<number>();
+    if (older) {
+      for (const units of options.citedUnits?.([row.id]) ?? []) {
+        if (units.contentHash !== null && units.contentHash !== row.content_hash) continue;
+        for (const unit of stored) {
+          const page = unit.page ?? 0;
+          if (units.pageFrom === null || units.pageTo === null) cited.add(page);
+          else if (page >= units.pageFrom && page <= units.pageTo) cited.add(page);
+        }
+      }
+    }
+    const keep = new Map<number, TextUnit>();
+    for (const unit of stored) {
+      const page = unit.page ?? 0;
+      if (unit.label?.scan?.reader === reader || cited.has(page)) {
+        keep.set(page, {
+          page,
+          kind: unit.kind ?? "page",
+          label: unit.label ?? null,
+          text: unit.text,
+          anchors: unit.anchors ?? null,
+        });
+      }
+    }
+    const partial = partialScans.get(row.id);
+    if (partial && partial.contentHash !== row.content_hash) {
+      return { contentHash: partial.contentHash, units: [...partial.units.values()] };
+    }
+    for (const [page, unit] of partial?.units ?? []) keep.set(page, unit);
+    return keep.size > 0 ? { contentHash: row.content_hash, units: [...keep.values()] } : null;
+  }
+
+  const jobFor = (
+    row: Pick<DocumentRow, "id" | "kind" | "path" | "content_hash">,
+  ): ProcessingJob => ({
     task: "process",
     documentId: row.id,
     kind: row.kind as DocumentKind,
     file: row.path,
+    scan:
+      textRecognition && row.kind === "pdf"
+        ? { reader: textRecognition.reader, keep: keptScans(row) }
+        : null,
   });
 
   const setStatus = (id: string, status: DocumentStatus) =>
@@ -573,6 +670,36 @@ export function createDocuments(options: DocumentsOptions) {
     }
   }
 
+  /** Whether a Document's live Passages are exactly these, in order. */
+  function samePassages(documentId: string, passages: readonly ProcessedPassage[]): boolean {
+    const live = db.all<{
+      position: number;
+      page_from: number | null;
+      page_to: number | null;
+      window_from: number;
+      window_to: number;
+      text: string;
+    }>(
+      `SELECT position, page_from, page_to, window_from, window_to, text FROM passages
+       WHERE document_id = ? AND deleted_at IS NULL ORDER BY position`,
+      [documentId],
+    );
+    return (
+      live.length === passages.length &&
+      live.every((stored, index) => {
+        const passage = passages[index] as ProcessedPassage;
+        return (
+          stored.position === passage.position &&
+          stored.page_from === passage.pageFrom &&
+          stored.page_to === passage.pageTo &&
+          stored.window_from === passage.windowFrom &&
+          stored.window_to === passage.windowTo &&
+          stored.text === passage.text
+        );
+      })
+    );
+  }
+
   /**
    * The status of a Document whose new version couldn't be indexed (its file
    * couldn't be read, or what was read couldn't be processed): the version
@@ -611,6 +738,7 @@ export function createDocuments(options: DocumentsOptions) {
    * or queued again meanwhile. Returns what it wrote, if it did.
    */
   function record(job: ProcessingJob, result: ProcessingResult): Recorded | undefined {
+    if (result.outcome === "stopped") return undefined;
     return db.transaction(() => {
       const row = find(job.documentId);
       if (row?.status !== "extracting") return undefined;
@@ -645,11 +773,21 @@ export function createDocuments(options: DocumentsOptions) {
           return { status: kept, replaced: false };
         }
       }
-      db.run(
-        `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
-         WHERE document_id = ? AND deleted_at IS NULL`,
-        [at, at, job.documentId],
-      );
+      // The same version processed again into the same Passages (a PDF whose short pages
+      // turned out not to be scans, #397) keeps them, their vectors and their keywords,
+      // which were built as they would be now since version 6: nothing to embed again.
+      const unchanged =
+        result.outcome === "ready" &&
+        result.contentHash === row.content_hash &&
+        row.processing_version >= HAN_CURRENT_SINCE &&
+        samePassages(row.id, result.passages);
+      if (!unchanged) {
+        db.run(
+          `UPDATE passages SET deleted_at = ?, updated_at = ?, embedding = NULL
+           WHERE document_id = ? AND deleted_at IS NULL`,
+          [at, at, job.documentId],
+        );
+      }
       if (result.outcome === "crashed") {
         db.run(
           `UPDATE documents SET status = 'failed', failure_reason = 'processing-error',
@@ -665,16 +803,32 @@ export function createDocuments(options: DocumentsOptions) {
       );
       let status: DocumentStatus;
       if (result.outcome === "ready") {
-        insertPassages(job.documentId, result.contentHash, row.name, result.passages);
+        if (!unchanged) {
+          insertPassages(job.documentId, result.contentHash, row.name, result.passages);
+        }
         insertPages(job.documentId, result.contentHash, result.pages);
         // Searchable now, by its words: while embeddings are off, that is all there is to do.
-        status = !model.enabled() ? "ready" : model.isReady() ? "embedding" : "waiting-for-model";
+        status = unchanged
+          ? (indexedStatus(row) ?? "ready")
+          : !model.enabled()
+            ? "ready"
+            : model.isReady()
+              ? "embedding"
+              : "waiting-for-model";
       } else {
         status = result.outcome;
       }
+      // Scanned pages that couldn't be read are this version's failure: the rest is searched (#397).
+      const failure =
+        result.outcome === "failed"
+          ? { reason: result.reason, message: result.message }
+          : result.outcome === "ready" && result.unread
+            ? { reason: "pages-unread", message: unreadMessage(result.unread) }
+            : null;
       db.run(
         `UPDATE documents SET status = ?, page_count = ?, failure_reason = ?, failure_message = ?,
-           processing_version = ?, embedding_model = ?, embedding_dimensions = NULL,
+           processing_version = ?, embedding_model = ?,
+           embedding_dimensions = CASE WHEN ? THEN embedding_dimensions END,
            content_hash = ?, size = ?, file_status = 'available', creation_date = ?,
            title = ?, metadata_version = ?, updated_at = ?
          WHERE id = ?`,
@@ -683,10 +837,11 @@ export function createDocuments(options: DocumentsOptions) {
           result.outcome === "failed" || result.pageCount === null
             ? null
             : BigInt(result.pageCount),
-          result.outcome === "failed" ? result.reason : null,
-          result.outcome === "failed" ? result.message : null,
+          failure?.reason ?? null,
+          failure?.message ?? null,
           BigInt(PROCESSING_VERSION),
-          status === "embedding" ? model.id : null,
+          unchanged ? row.embedding_model : status === "embedding" ? model.id : null,
+          unchanged ? 1 : 0,
           result.contentHash,
           result.size,
           result.creationDate,
@@ -698,7 +853,7 @@ export function createDocuments(options: DocumentsOptions) {
       );
       // What the User edited, or Look up filled, stays; the rest is this version's.
       writeFileReference(db, job.documentId, result.reference, at);
-      return { status, replaced: true };
+      return { status, replaced: !unchanged };
     });
   }
 
@@ -711,7 +866,32 @@ export function createDocuments(options: DocumentsOptions) {
       setStatus(job.documentId, "extracting");
       announce(job.documentId);
     },
+    onProgress(job, { contentHash, read, of, unit }) {
+      scanProgress.set(job.documentId, { pages: of, read });
+      if (unit) {
+        let partial = partialScans.get(job.documentId);
+        if (partial?.contentHash !== contentHash) {
+          partial = { contentHash, units: new Map() };
+          partialScans.set(job.documentId, partial);
+        }
+        // A page that couldn't be read is read again by the next job.
+        if (!unit.label?.scan?.unread) partial.units.set(unit.page, unit);
+      }
+      announce(job.documentId);
+    },
+    read(_job, page, picture) {
+      if (!textRecognition) {
+        return Promise.reject(new TextRecognitionUnavailableError("Scanned pages can't be read."));
+      }
+      return textRecognition.read(picture, page);
+    },
+    isUnavailable: (error) => error instanceof TextRecognitionUnavailableError,
     onResult(job, result) {
+      scanProgress.delete(job.documentId);
+      // Pages read by a job that stopped or crashed wait for the next; any other result has them.
+      if (result.outcome !== "stopped" && result.outcome !== "crashed") {
+        partialScans.delete(job.documentId);
+      }
       const recorded = record(job, result);
       if (recorded === undefined) return; // deleted, or queued again, while processing
       const { status, replaced } = recorded;
@@ -872,6 +1052,33 @@ export function createDocuments(options: DocumentsOptions) {
       for (const row of rows) ids.add(row.id);
     }
     return [...ids];
+  }
+
+  /**
+   * The stored text of one version of a live Document, Units (pages,
+   * slides, sections, rows, lines) `from` to `to`, in order, as its
+   * Passages were built from it, with their kinds, labels and anchors. With
+   * both null, every Unit. Empty if the Document was deleted, or that
+   * version's text is gone.
+   */
+  function pageTexts(
+    documentId: string,
+    contentHash: string,
+    from: number | null,
+    to: number | null,
+  ): PageText[] {
+    const range = from === null || to === null ? "" : "AND dp.page BETWEEN ? AND ?";
+    const params = from === null || to === null ? [] : [BigInt(from), BigInt(to)];
+    return db
+      .all<UnitRow>(
+        `SELECT dp.page, dp.text, dp.kind, dp.label, dp.anchors FROM document_pages dp
+         JOIN documents d ON d.id = dp.document_id
+         WHERE dp.document_id = ? AND dp.content_hash = ? AND dp.deleted_at IS NULL
+           AND d.deleted_at IS NULL ${range}
+         ORDER BY dp.page`,
+        [documentId, contentHash, ...params],
+      )
+      .map(toUnitText);
   }
 
   /**
@@ -1052,12 +1259,41 @@ export function createDocuments(options: DocumentsOptions) {
                                        AND p.deleted_at IS NULL AND p.text GLOB ?))`,
       [now(), BigInt(HAN_CURRENT_SINCE), HAS_HAN, HAS_HAN],
     );
+    // PDFs with a page of little or no text, or one read from its picture by an older
+    // reader, are processed again, so their scanned pages are read (#397): only when there is
+    // a model to read them. A page of text comes out as it was (see `samePassages`).
+    if (textRecognition) {
+      db.run(
+        `UPDATE documents SET status = 'queued', updated_at = ?
+         WHERE deleted_at IS NULL AND kind = 'pdf' AND processing_version < ?
+           AND status IN ('ready', 'embedding', 'waiting-for-model', 'no-text')
+           AND (status = 'no-text' OR EXISTS (
+             SELECT 1 FROM document_pages dp
+             WHERE dp.document_id = documents.id AND dp.content_hash = documents.content_hash
+               AND dp.deleted_at IS NULL
+               AND (length(trim(dp.text)) < ? OR json_extract(dp.label, '$.scan') IS NOT NULL)))`,
+        [now(), BigInt(SCAN_CURRENT_SINCE), BigInt(MIN_PAGE_TEXT * 2)],
+      );
+    }
     db.run(
       `UPDATE documents SET processing_version = ?
        WHERE deleted_at IS NULL AND processing_version < ?
          AND status IN ('ready', 'embedding', 'waiting-for-model')`,
       [BigInt(PROCESSING_VERSION), BigInt(PROCESSING_VERSION)],
     );
+  });
+  // Once the text recognition model is downloaded, the scanned pages that couldn't be read
+  // for want of it are read (#397).
+  textRecognition?.onReady(() => {
+    if (closed) return;
+    for (const { id } of db.all<{ id: string }>(
+      `SELECT id FROM documents
+       WHERE deleted_at IS NULL AND failure_reason = 'pages-unread' AND file_status = 'available'
+         AND status NOT IN ('queued', 'extracting')
+       ORDER BY created_at DESC, rowid DESC`,
+    )) {
+      process(id);
+    }
   });
   // Pick up work a quit interrupted, in the order it was queued (newest files first).
   const unfinished = db.all<DocumentRow>(
@@ -1514,32 +1750,7 @@ export function createDocuments(options: DocumentsOptions) {
       };
     },
 
-    /**
-     * The stored text of one version of a live Document, Units (pages,
-     * slides, sections, rows, lines) `from` to `to`, in order, as its
-     * Passages were built from it, with their kinds, labels and anchors. With
-     * both null, every Unit. Empty if the Document was deleted, or that
-     * version's text is gone.
-     */
-    pageTexts(
-      documentId: string,
-      contentHash: string,
-      from: number | null,
-      to: number | null,
-    ): PageText[] {
-      const range = from === null || to === null ? "" : "AND dp.page BETWEEN ? AND ?";
-      const params = from === null || to === null ? [] : [BigInt(from), BigInt(to)];
-      return db
-        .all<UnitRow>(
-          `SELECT dp.page, dp.text, dp.kind, dp.label, dp.anchors FROM document_pages dp
-           JOIN documents d ON d.id = dp.document_id
-           WHERE dp.document_id = ? AND dp.content_hash = ? AND dp.deleted_at IS NULL
-             AND d.deleted_at IS NULL ${range}
-           ORDER BY dp.page`,
-          [documentId, contentHash, ...params],
-        )
-        .map(toUnitText);
-    },
+    pageTexts,
 
     keptCitationTexts,
 
@@ -1588,6 +1799,56 @@ export function createDocuments(options: DocumentsOptions) {
           label: unit.label ?? null,
         })),
       };
+    },
+
+    /** The scanned pages of a live Document's current version (see `CoreApi.readScannedText`). */
+    readScannedText(idInput: unknown): ScannedText {
+      const row = find(parseId(idInput));
+      if (!row) throw new NotFoundError("There is no such Document.");
+      const units = db
+        .all<UnitRow>(
+          `SELECT page, text, kind, label, anchors FROM document_pages
+           WHERE document_id = ? AND content_hash = ? AND deleted_at IS NULL
+             AND json_extract(label, '$.scan.reader') IS NOT NULL
+           ORDER BY page`,
+          [row.id, row.content_hash],
+        )
+        .map(toUnitText);
+      return {
+        documentId: row.id,
+        contentHash: row.content_hash,
+        pages: units.map((unit) => ({
+          page: unit.page ?? 1,
+          text: unit.text,
+          label: unit.label ?? null,
+          anchors: unit.anchors ?? [],
+        })),
+      };
+    },
+
+    /** A Citation's quote read from a scan (see `CoreApi.readScannedQuote`). */
+    readScannedQuote(input: ScannedQuoteInput): ScannedQuote | null {
+      const row = find(parseId(input.documentId));
+      if (!row) return null;
+      const units = pageTexts(
+        row.id,
+        input.contentHash ?? row.content_hash,
+        input.pageFrom,
+        input.pageTo ?? input.pageFrom,
+      );
+      if (!units.some((unit) => unit.label?.scan && !unit.label.scan.unread)) return null;
+      const ranges = quoteInUnits(units, cleanQuote(input.quote)) ?? [];
+      const unsure: string[] = [];
+      let start = 0;
+      for (const unit of units) {
+        for (const [from, to] of unit.label?.scan?.unsure ?? []) {
+          if (ranges.some((range) => range.start < start + to && range.end > start + from)) {
+            unsure.push(unit.text.slice(from, to));
+          }
+        }
+        start += unit.text.length + 1;
+      }
+      return { unsure };
     },
 
     /** `added` hears of each new Document as it is stored, before it is processed. */
