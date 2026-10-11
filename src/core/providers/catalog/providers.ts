@@ -474,8 +474,8 @@ const PROVIDERS = [
     dataUse: {
       training: "no",
       summary: {
-        en: "Downloaded models run on this computer: what you ask stays on it.",
-        zh: "下载的模型在本机运行，你的问题不会离开本机。",
+        en: "Downloaded models run on this computer: what you ask stays on it. Ollama cloud models (their names end in cloud, or Ollama marks them as remote) run on ollama.com instead, so your Questions and Passages are sent there.",
+        zh: "下载的模型在本机运行，你的问题不会离开本机。名称以 cloud 结尾或被 Ollama 标为远程的云端模型则在 ollama.com 运行，你的问题和相关段落会发送到那里。",
       },
     },
     checked: "2026-10-10",

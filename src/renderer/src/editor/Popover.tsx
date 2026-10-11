@@ -14,6 +14,7 @@ import {
   useLayoutEffect,
   useRef,
 } from "react";
+import { enterFrom, useExitToward } from "../motion";
 
 interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
   /** What the popover sits next to. It follows it as the Mind scrolls. */
@@ -32,7 +33,12 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
 /** The editor's popovers that are open, in the order they opened. */
 const openPopovers: HTMLElement[] = [];
 
-/** A native popover in the top layer, next to `anchor`, for the editor's small menus and fields. */
+/**
+ * A native popover in the top layer, next to `anchor`, for the editor's small
+ * menus and fields, and a Citation's card: it grows from `anchor`, and goes
+ * back toward it when it closes (`../motion`), each of several open from its
+ * own anchor.
+ */
 export function Popover({
   anchor,
   placement = "bottom-start",
@@ -50,6 +56,9 @@ export function Popover({
   const focusFirst = useRef(initialFocus);
   focusFirst.current = initialFocus;
 
+  // First, so it is copied while it still shows: closed, it shrinks back toward its anchor.
+  useExitToward(ref, () => (anchor instanceof Element ? anchor : anchor.getBoundingClientRect()));
+
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -62,8 +71,16 @@ export function Popover({
         middleware: [offset(4), flip(), shift({ padding: 8 })],
       }).then(({ x, y }) => {
         Object.assign(element.style, { left: `${x}px`, top: `${y}px`, visibility: "visible" });
-        // Hidden until placed, so it can only take the focus now.
-        if (!shown) focusFirst.current?.current?.focus();
+        if (!shown) {
+          // Hidden until placed, so it can only grow from its anchor and take the focus now.
+          enterFrom(element, anchor.getBoundingClientRect(), {
+            left: x,
+            top: y,
+            width: element.offsetWidth,
+            height: element.offsetHeight,
+          });
+          focusFirst.current?.current?.focus();
+        }
         shown = true;
       });
     };

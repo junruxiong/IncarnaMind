@@ -8,10 +8,13 @@ import "./fonts.css";
 import "./styles.css";
 import "./viewer/viewer.css";
 import { installErrorLog } from "./errorLog";
+import { installMotion } from "./motion";
 import { installTestHooks } from "./viewerControls";
 
 installErrorLog();
 installTestHooks();
+// Before the first paint: the system's Reduce motion holds until the settings say the User's choice.
+installMotion();
 
 // Which title bar the window has, and whether it's full screen, for styles.css ("The title bar").
 document.documentElement.dataset.titleBar = files.titleBar;

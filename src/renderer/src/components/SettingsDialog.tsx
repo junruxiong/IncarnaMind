@@ -10,6 +10,7 @@ import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { EvidenceSettings } from "./EvidenceSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { MeetingsSettings } from "./MeetingsSettings";
+import { MotionSettings } from "./MotionSettings";
 import { OrganizationSettings } from "./OrganizationSettings";
 import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
@@ -153,6 +154,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <MotionSettings />
           <SuggestionSettings />
           <OutputLocationSettings />
           <DataFolderSettings />
