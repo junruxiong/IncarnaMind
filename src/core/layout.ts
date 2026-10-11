@@ -50,7 +50,14 @@ const isId = (value: unknown): value is string =>
 const isUnit = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1;
 
-const CHECKS: readonly CitationCheck[] = ["checking", "found", "not-found", "cant-check"];
+const CHECKS: readonly CitationCheck[] = [
+  "checking",
+  "found",
+  "not-found",
+  "cant-check",
+  "unsupported",
+  "contradicted",
+];
 
 function parseItem(value: unknown): TabItem {
   if (isRecord(value)) {

@@ -16,7 +16,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { parseLocation } from "../../shared/locations";
-import type { CitedUnits, CitedVersions } from "../answers/citedVersions";
+import {
+  addCitedUnit,
+  addCitedVersion,
+  type CitedUnits,
+  type CitedVersions,
+} from "../answers/citedVersions";
 import { type CitationLocation, RECENTLY_DELETED_DAYS } from "../api";
 import { InvalidInputError, isRecord } from "../errors";
 import type { Database } from "../storage";
@@ -208,10 +213,8 @@ export function createVersionRetention(db: Database, now: () => string) {
         `SELECT DISTINCT document_id, content_hash FROM retained_versions
          WHERE deleted_at IS NULL`,
       );
-      for (const { document_id: documentId, content_hash: contentHash } of rows) {
-        const versions = cited.get(documentId);
-        if (versions === undefined) cited.set(documentId, new Set([contentHash]));
-        else if (versions !== "any") versions.add(contentHash);
+      for (const row of rows) {
+        addCitedVersion({ documentId: row.document_id, contentHash: row.content_hash }, cited);
       }
     },
 
@@ -223,12 +226,13 @@ export function createVersionRetention(db: Database, now: () => string) {
         [JSON.stringify([...documentIds])],
       );
       for (const row of rows) {
-        cited.push({
+        const units = {
           documentId: row.document_id,
           contentHash: row.content_hash,
           pageFrom: row.page_from,
           pageTo: row.page_to,
-        });
+        };
+        addCitedUnit(units, documentIds, cited);
       }
     },
 

@@ -12,6 +12,7 @@ import {
   MIND_CONTENT_FIELD,
   MIND_SETTINGS_FIELD,
   MindReadOnlyError,
+  messageReference,
   parseReference,
 } from "../../src/core";
 import { migrate, migrations, openDatabase } from "../../src/core/storage";
@@ -65,16 +66,17 @@ const storedRows = (dataDir: string, mindId: string) =>
   ).map((row) => ({ ...row, data: Array.from(row.data) }));
 
 describe("the kind of a Mind", () => {
-  test("a Mind is of kind mind unless made as another kind", async () => {
+  test("a Mind is of kind mind, and a conversation is not a kind of Mind", async () => {
     const core = startCore(await createTempDataFolder());
 
     const plain = await core.createMind({ title: "Notes" });
-    const chat = await core.createMind({ title: "Ask", kind: "chat" });
 
     expect(plain.kind).toBe("mind");
-    expect(chat.kind).toBe("chat");
-    expect((await core.listMinds()).map((mind) => mind.kind).sort()).toEqual(["chat", "mind"]);
-    await expect(core.openMind(chat.id)).resolves.toMatchObject({ access: "edit" });
+    // Conversations are the assistant's, kept apart from Minds (ADR-0017).
+    await expect(core.createMind({ title: "Ask", kind: "chat" as never })).rejects.toThrow(
+      InvalidInputError,
+    );
+    expect((await core.listMinds()).map((mind) => mind.kind)).toEqual(["mind"]);
   });
 
   test("creating a Mind of a kind this version doesn't know is refused", async () => {
@@ -235,19 +237,34 @@ describe("the content schema version of a Mind", () => {
 });
 
 describe("a reference from one artifact to another", () => {
-  test("is the artifact's ID and an anchor, a block anchor holding the Block's ID", () => {
-    const reference: ArtifactReference = blockReference("chat-1", "block-9");
+  test("is the artifact's kind and ID and an anchor: a Mind's Block, or a conversation's message", () => {
+    const reference: ArtifactReference = blockReference("mind-1", "block-9");
 
     expect(reference).toEqual({
-      artifactId: "chat-1",
+      artifactKind: "mind",
+      artifactId: "mind-1",
       anchor: { kind: "block", blockId: "block-9" },
+    });
+    expect(messageReference("conversation-1", "answer-3")).toEqual({
+      artifactKind: "conversation",
+      artifactId: "conversation-1",
+      anchor: { kind: "message", messageId: "answer-3" },
     });
   });
 
   test("survives being stored as JSON", () => {
-    const reference = blockReference("chat-1", "block-9");
+    for (const reference of [
+      blockReference("mind-1", "block-9"),
+      messageReference("conversation-1", "answer-3"),
+    ]) {
+      expect(parseReference(JSON.parse(JSON.stringify(reference)))).toEqual(reference);
+    }
+  });
 
-    expect(parseReference(JSON.parse(JSON.stringify(reference)))).toEqual(reference);
+  test("stored before conversations, without its artifact's kind, is a Mind's", () => {
+    expect(
+      parseReference({ artifactId: "mind-1", anchor: { kind: "block", blockId: "b" } }),
+    ).toEqual(blockReference("mind-1", "b"));
   });
 
   test("is not read from anything else", () => {
@@ -257,5 +274,27 @@ describe("a reference from one artifact to another", () => {
     expect(parseReference({ artifactId: "a", anchor: { kind: "block", blockId: "" } })).toBeNull();
     // A position is not an anchor.
     expect(parseReference({ artifactId: "a", anchor: { kind: "position", offset: 4 } })).toBeNull();
+    // An anchor of another kind of artifact, or an artifact this version doesn't know.
+    expect(
+      parseReference({
+        artifactKind: "conversation",
+        artifactId: "a",
+        anchor: { kind: "block", blockId: "b" },
+      }),
+    ).toBeNull();
+    expect(
+      parseReference({
+        artifactKind: "mind",
+        artifactId: "a",
+        anchor: { kind: "message", messageId: "m" },
+      }),
+    ).toBeNull();
+    expect(
+      parseReference({
+        artifactKind: "deck",
+        artifactId: "a",
+        anchor: { kind: "block", blockId: "b" },
+      }),
+    ).toBeNull();
   });
 });
