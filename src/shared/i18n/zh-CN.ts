@@ -1115,6 +1115,12 @@ export const zhCN = {
   "privacy.skills.title": "技能脚本",
   "privacy.skills.body":
     "技能脚本在这台电脑上运行，可以自行发起网络请求，发送它能读取的任何内容。本页的设置对它们不起作用：它们只受每次运行前你的批准控制。你也可以在“设置”的“技能”中关闭它们。",
+  "privacy.aiUse.title": "AI 使用记录",
+  "privacy.aiUse.body":
+    "IncarnaMind 会记录 AI 向你的 Mind 写入了什么，以及你保留、修改还是删除了它，方便你说明自己如何使用 AI。记录不含你或 AI 的任何文字，只保存在这台电脑上；无论你如何设置使用数据，都不会发送到任何地方。",
+  "privacy.aiUse.entries": "共 {count} 条",
+  "privacy.aiUse.clear": "清除记录",
+  "privacy.aiUse.cleared": "已清除 AI 使用记录。",
   "privacy.crashReports.title": "崩溃报告",
   "privacy.crashReports.toggle": "发送崩溃报告",
   "privacy.crashReports.body":
