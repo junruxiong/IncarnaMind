@@ -2227,6 +2227,8 @@ export const en = {
   "answer.addTo.newIn": "In “{folder}”",
   "command.answer.addToNote": "Add the Answer to note",
   "command.answer.copy": "Copy the Answer",
+  "command.answer.stop": "Stop the Answer",
+  "command.answer.stop.unavailable": "No Answer is being written",
   "origin.from": "From the conversation “{title}”",
   "origin.open": "Open the conversation this came from",
   "origin.deleted": "From the conversation “{title}”, now in Recently deleted",

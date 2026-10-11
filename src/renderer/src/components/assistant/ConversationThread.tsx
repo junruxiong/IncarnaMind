@@ -4,12 +4,20 @@ import { mindName } from "../../../../shared/naming";
 import { type AddTarget, addAnswer } from "../../addToNote";
 import { answerBlocks } from "../../answerBlocks";
 import { selectedNotes } from "../../answerEditors";
+import { AnswerWriting } from "../../answerPhase";
 import { readMindHandle } from "../../commands/handles";
-import { conversationLabel, useConversations, useOpenConversation } from "../../conversations";
+import {
+  conversationLabel,
+  stopWriting,
+  useAnswerOnItsWay,
+  useConversations,
+  useOpenConversation,
+} from "../../conversations";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
+import { WritingLine } from "./AnswerActions";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
 
 /** How long an Answer a link back led to stays flashed. */
@@ -24,14 +32,18 @@ const notesOf = (answer: ConversationAnswer) =>
 /**
  * The conversation the assistant shows (#201): the Questions as bubbles at the
  * right, as in Claude and ChatGPT, and the Answers with their Citations, checks
- * and actions (`AssistantAnswer`); empty, what asking here does. It keeps up
- * with an Answer being written while the User is at its foot, and brings an
- * Answer a link back led to into view, flashed.
+ * and actions (`AssistantAnswer`); empty, what asking here does. A Question
+ * shows the moment it is sent, with its Answer's "Writing…" and Stop under it
+ * before the core has checked the model, so asking never looks like nothing
+ * happened. It keeps up with an Answer being written while the User is at its
+ * foot, and brings an Answer a link back led to into view, flashed.
  */
 export function ConversationThread({ focusedMindId }: { focusedMindId: string | null }) {
   const t = useT();
   const messages = useConversations((state) => state.messages);
   const asking = useConversations((state) => state.asking);
+  const onItsWay = useAnswerOnItsWay();
+  const stopWanted = useConversations((state) => state.stopWanted);
   const sought = useConversations((state) => state.sought);
   const conversation = useOpenConversation();
   const focusedMind = useAppStore((state) => state.minds.find((mind) => mind.id === focusedMindId));
@@ -127,6 +139,26 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
         ),
       )}
       {asking !== null && <QuestionBubble text={asking} />}
+      {onItsWay && (
+        // Its line shows at rest, as an Answer's being written does.
+        <div
+          data-testid="assistant-answer-on-its-way"
+          data-status="streaming"
+          className="assistant-answer"
+        >
+          {stopWanted ? (
+            // Stopped before it started: it says so at once, and stops as it starts.
+            <WritingLine
+              writing={<span data-testid="answer-stopped">{t("answer.status.stopped")}</span>}
+            />
+          ) : (
+            <WritingLine
+              writing={<AnswerWriting answerId={null} waitingForApproval={false} />}
+              onStop={stopWriting}
+            />
+          )}
+        </div>
+      )}
       {picking && (
         <AddToMindPicker
           anchor={picking.anchor}

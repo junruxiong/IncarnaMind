@@ -2112,6 +2112,8 @@ export const zhCN = {
   "answer.addTo.newIn": "在“{folder}”中",
   "command.answer.addToNote": "将回答添加到笔记",
   "command.answer.copy": "复制回答",
+  "command.answer.stop": "停止生成回答",
+  "command.answer.stop.unavailable": "当前没有正在生成的回答",
   "origin.from": "来自对话“{title}”",
   "origin.open": "打开这段内容来自的对话",
   "origin.deleted": "来自对话“{title}”，已移到回收站",

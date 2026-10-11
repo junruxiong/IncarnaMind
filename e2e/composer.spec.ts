@@ -25,8 +25,9 @@ import {
  * The composer at the foot of the assistant (DESIGN.md, Composer; #253, #201):
  * asking shows the Question in the assistant's conversation and streams its
  * Answer under it, with checked Citations, and leaves the Mind as it was;
- * Stop keeps what streamed; ⌘J, Enter, Shift+Enter and Esc; the model chip,
- * remembered per Mind; Minds written before. Driven as a person would, with
+ * Stop keeps what streamed; sending shows at once, and the send button is
+ * Stop while an Answer is written, so nothing is asked twice; ⌘J, Enter,
+ * Shift+Enter and Esc; the model chip, remembered per Mind; Minds written before. Driven as a person would, with
  * the mouse slid onto what it clicks and the keys typed. Set
  * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
@@ -88,7 +89,79 @@ const bridge = (window: Page) => ({
         }),
       language,
     ),
+  /** The chat model: one in Ollama at `baseUrl`. */
+  ollama: (baseUrl: string) =>
+    window.evaluate(async (url) => {
+      await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
+        kind: "ollama",
+        baseUrl: url,
+        modelId: "fake-model",
+      });
+    }, baseUrl),
+  /** "Keep everything on this computer", as its switch in Settings sets it. */
+  localOnly: (on: boolean) =>
+    window.evaluate(
+      (value) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.setLocalOnly(value),
+      on,
+    ),
 });
+
+/** The scripted Answer repeats the Question: a long one keeps it streaming for a few seconds. */
+const LONG_QUESTION =
+  "What is IncarnaMind, how does it read my Documents, where does it keep them, which models can it use, how does it cite a page, and what happens to my files when I close it?";
+
+/**
+ * Ollama, with "fake-model", which the app asks where the model runs before
+ * each Question is asked. While held, it answers only once released, as an
+ * Ollama busy loading a model does: the Question waits on it, on its way.
+ * In the cloud, it says the model runs on ollama.com.
+ */
+async function busyOllama() {
+  const waiting: (() => void)[] = [];
+  let holding = false;
+  let cloud = false;
+  const server: Server = createServer((request, response) => {
+    request.resume();
+    if (request.url !== "/api/tags") {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    const listing = {
+      name: "fake-model",
+      model: "fake-model",
+      // What the app learnt of a model is kept by its digest.
+      digest: cloud ? "in-the-cloud" : "on-this-computer",
+      ...(cloud && { remote_host: "https://ollama.com:443" }),
+    };
+    const answer = () => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ models: [listing] }));
+    };
+    if (holding) waiting.push(answer);
+    else answer();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    hold() {
+      holding = true;
+    },
+    release() {
+      holding = false;
+      for (const answer of waiting.splice(0)) answer();
+    },
+    inTheCloud(on: boolean) {
+      cloud = on;
+    },
+    close() {
+      server.closeAllConnections();
+      server.close();
+    },
+  };
+}
 
 test("typing in the composer and pressing Enter shows the Question in the assistant as a bubble, and its Answer streams in under it with checked Citations, the Mind as it was", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
@@ -200,11 +273,9 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
   const composer = window.getByTestId("composer");
   await pointAndClick(window, composer.getByTestId("composer-input"));
-  // The scripted Answer repeats the Question: a long one keeps it streaming while the
-  // pointer slides to Stop, even on a slow runner.
-  await window.keyboard.type(
-    "What is IncarnaMind, how does it read my Documents, where does it keep them, which models can it use, how does it cite a page, and what happens to my files when I close it?",
-  );
+  // A long Question keeps its Answer streaming while the pointer slides to Stop, even on a
+  // slow runner.
+  await window.keyboard.type(LONG_QUESTION);
   await window.keyboard.press("Enter");
 
   const answer = assistantAnswers(window).first();
@@ -232,6 +303,171 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await expect(assistantAnswers(window)).toHaveCount(1);
   await expect(window.getByTestId("mind-editor").getByTestId("answer")).toHaveCount(0);
   await app.close();
+});
+
+test("sending empties the composer and shows the Question with its Answer on its way at once; until it is written the send button is Stop, so a second Enter, a double click, or Enter then a click never asks twice, and the same Question can be asked again once it is done", async () => {
+  const ollama = await busyOllama();
+  try {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await bridge(window).ollama(ollama.url);
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-new-mind"));
+    const composer = window.getByTestId("composer");
+    const input = composer.getByTestId("composer-input");
+    const ask = composer.getByTestId("composer-ask");
+    const stop = composer.getByTestId("composer-stop");
+    const assistant = window.getByTestId("assistant");
+    const questions = assistant.getByTestId("assistant-question");
+    const onItsWay = assistant.getByTestId("assistant-answer-on-its-way");
+    const answers = assistantAnswers(window);
+    await pointAndClick(window, input);
+
+    // Ollama is slow to say where the model runs, so the Question waits on it. Meanwhile, at
+    // once: the composer is empty, the Question is in the assistant with "Writing…" and Stop
+    // under it, and the send button is Stop. A second Enter, in the empty composer, does nothing.
+    ollama.hold();
+    await window.keyboard.type(LONG_QUESTION);
+    await window.keyboard.press("Enter");
+    await window.keyboard.press("Enter");
+    await expect(input).toHaveValue("");
+    await expect(input).toBeFocused();
+    await expect(questions).toHaveCount(1);
+    await expect(questions).toContainText(LONG_QUESTION);
+    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("Writing…");
+    await expect(onItsWay.getByTestId("answer-stop")).toBeVisible();
+    await expect(stop).toHaveAccessibleName("Stop the Answer");
+    await expect(ask).toHaveCount(0);
+    await expect(answers).toHaveCount(0);
+    await screenshot(window, "composer-stop-on-its-way-en");
+
+    // Once Ollama answers, the Answer streams in where "Writing…" was, Stop still under it and
+    // in the composer; then it is written. One Question, one Answer.
+    ollama.release();
+    const first = answers.first();
+    await expect(first).toHaveAttribute("data-status", "streaming");
+    await expect(onItsWay).toHaveCount(0);
+    await expect(stop).toBeVisible();
+    await screenshot(window, "composer-stop-en");
+    await expect(first).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(first).toContainText("That is all.");
+    await expect(questions).toHaveCount(1);
+    await expect(answers).toHaveCount(1);
+    // The send button is back, quiet in the empty composer.
+    await expect(stop).toHaveCount(0);
+    await expect(ask).toBeDisabled();
+
+    // The same Question again, asked with a double click on the button: it is asked once, and
+    // the double click's second click, which lands on Stop, leaves its Answer be.
+    await window.keyboard.type(LONG_QUESTION);
+    await expect(ask).toBeEnabled();
+    await pointAt(window, ask);
+    const button = await ask.boundingBox();
+    if (!button) throw new Error("The send button isn't visible.");
+    await window.mouse.dblclick(button.x + button.width / 2, button.y + button.height / 2);
+    await expect(questions).toHaveCount(2);
+    await expect(input).toHaveValue("");
+    const second = answers.nth(1);
+    await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(second).toContainText("That is all.");
+    await expect(questions).toHaveCount(2);
+    await expect(answers).toHaveCount(2);
+
+    // Enter, then a click on the button: the click is on Stop, which stops the Answer, keeping
+    // what it wrote. Nothing is asked again.
+    await window.keyboard.type(LONG_QUESTION);
+    await window.keyboard.press("Enter");
+    const third = answers.nth(2);
+    await expect(third).toContainText("scripted");
+    await pointAndClick(window, stop);
+    await expect(third).toHaveAttribute("data-status", "stopped");
+    await expect(third.getByTestId("answer-stopped")).toHaveText("Stopped");
+    await expect(questions).toHaveCount(3);
+    await expect(answers).toHaveCount(3);
+    await expect(ask).toBeDisabled();
+    await expect(input).toBeFocused();
+    await app.close();
+  } finally {
+    ollama.close();
+  }
+});
+
+test("Stop works before the Answer has started; a Question that can't be asked puts its words back in the composer; in Chinese too", async () => {
+  const ollama = await busyOllama();
+  try {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await bridge(window).ollama(ollama.url);
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-new-mind"));
+    const composer = window.getByTestId("composer");
+    const input = composer.getByTestId("composer-input");
+    const ask = composer.getByTestId("composer-ask");
+    const stop = composer.getByTestId("composer-stop");
+    const assistant = window.getByTestId("assistant");
+    const questions = assistant.getByTestId("assistant-question");
+    const onItsWay = assistant.getByTestId("assistant-answer-on-its-way");
+    const answers = assistantAnswers(window);
+    await pointAndClick(window, input);
+
+    // Stop while the Question is on its way: it says "Stopped" at once, and the Answer stops as
+    // soon as it starts.
+    ollama.hold();
+    await window.keyboard.type(LONG_QUESTION);
+    await window.keyboard.press("Enter");
+    await expect(onItsWay.getByTestId("answer-writing")).toBeVisible();
+    await pointAndClick(window, stop);
+    await expect(onItsWay.getByTestId("answer-stopped")).toHaveText("Stopped");
+    await expect(onItsWay.getByTestId("answer-stop")).toHaveCount(0);
+    ollama.release();
+    const first = answers.first();
+    await expect(first).toHaveAttribute("data-status", "stopped");
+    await expect(first).not.toContainText("That is all.");
+    await expect(onItsWay).toHaveCount(0);
+    await expect(questions).toHaveCount(1);
+    await expect(ask).toBeDisabled();
+
+    // The model turns out to run on ollama.com, and "Keep everything on this computer" is on:
+    // the Question shows at once, then isn't asked. Its words come back in the composer, with
+    // why, and the assistant is as it was.
+    await bridge(window).localOnly(true);
+    ollama.inTheCloud(true);
+    ollama.hold();
+    await window.keyboard.type("Is anyone there?");
+    await window.keyboard.press("Enter");
+    await expect(input).toHaveValue("");
+    await expect(questions).toHaveCount(2);
+    await expect(onItsWay).toBeVisible();
+    ollama.release();
+    const refusal = composer.getByTestId("composer-not-ready");
+    await expect(refusal).toContainText("Keep everything on this computer");
+    await expect(input).toHaveValue("Is anyone there?");
+    await expect(questions).toHaveCount(1);
+    await expect(onItsWay).toHaveCount(0);
+    await expect(answers).toHaveCount(1);
+    await expect(ask).toBeEnabled();
+
+    // In Chinese, on this computer again: "Writing…" and Stop say so in Chinese.
+    await bridge(window).localOnly(false);
+    ollama.inTheCloud(false);
+    await bridge(window).language("zh-CN");
+    ollama.hold();
+    await pointAndClick(window, input);
+    await window.keyboard.press("Enter");
+    await expect(input).toHaveValue("");
+    await expect(refusal).toHaveCount(0);
+    await expect(onItsWay.getByTestId("answer-writing")).toHaveText("正在回答…");
+    await expect(onItsWay.getByTestId("answer-stop")).toHaveText("停止");
+    await expect(stop).toHaveAccessibleName("停止生成回答");
+    await screenshot(window, "composer-stop-on-its-way-zh");
+    ollama.release();
+    await expect(answers.nth(1)).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+    await expect(questions).toHaveCount(2);
+    await expect(composer.getByTestId("composer-ask")).toHaveAccessibleName("提问（Enter）");
+    await app.close();
+  } finally {
+    ollama.close();
+  }
 });
 
 test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's line; Esc folds the assistant and a second Esc goes back to the note, where the cursor was", async () => {
@@ -616,11 +852,15 @@ test("after the consent dialog closes, the caret is back in the composer, and bo
   await consent.getByTestId("consent-allow").click();
   await expect(consent).toBeHidden();
 
-  // Typed straight away, with no click: it reaches the composer.
+  // Typed straight away, with no click: it reaches the composer. It is sent once the first
+  // Answer is written; until then the send button is Stop.
   const input = window.getByTestId("composer-input");
   await expect(input).toBeFocused();
   await window.keyboard.type("A follow-up?");
   await expect(input).toHaveValue("A follow-up?");
+  await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
   await window.keyboard.press("Enter");
   await expect(assistantAnswers(window).nth(1)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,

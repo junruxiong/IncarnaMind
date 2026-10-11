@@ -6,10 +6,12 @@ import { copyAnswer, selectedNotes } from "../answerEditors";
 import { shownDock } from "../assistantPlace";
 import { useComposer } from "../composer";
 import {
+  answerBeingWritten,
   clearConversation,
   conversationById,
   lastAnswer,
   startNewChat,
+  stopWriting,
   useConversations,
 } from "../conversations";
 import { startEditing } from "../editWithAi";
@@ -20,8 +22,8 @@ import type { Command } from "./registry";
 
 /*
  * The assistant's commands (#253, #201): where it sits, folding it, ⌘J to its
- * composer, New chat and History; adding and copying an Answer, the last
- * Answer to a new Mind, and clearing the conversation. Its ⋯ menu, its header
+ * composer, New chat and History; adding, copying and stopping an Answer, the
+ * last Answer to a new Mind, and clearing the conversation. Its ⋯ menu, its header
  * and rail, its Answers' buttons and ⌘K run these, so each has a keyboard and
  * a menu way beside the drag.
  */
@@ -204,6 +206,18 @@ export const assistantCommands: readonly Command[] = [
       const answer = answerInFocus();
       if (keepable(answer)) void copyAnswer(answer.id);
     },
+  },
+  {
+    // The composer's Stop, which its send button is while an Answer is written.
+    id: "answer.stop",
+    label: "command.answer.stop",
+    group: "main",
+    // What was written stays, and Regenerate writes it again.
+    reversible: true,
+    when: isThere,
+    enabled: () =>
+      answerBeingWritten() !== null ? true : { reason: "command.answer.stop.unavailable" },
+    run: stopWriting,
   },
   {
     id: "assistant.lastToNewMind",

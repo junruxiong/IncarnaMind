@@ -7,7 +7,7 @@ import type {
   ConversationQuestion,
 } from "../../core/api";
 import { conversationName } from "../../shared/naming";
-import { settleAsk } from "./answers";
+import { settleAsk, useAnswers } from "./answers";
 import { composerKey } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
@@ -29,6 +29,8 @@ interface ConversationsState {
   messages: readonly ConversationMessage[];
   /** A Question on its way to the core, shown at once until the core has it. */
   asking: string | null;
+  /** Stop was pressed while that Question was on its way: its Answer stops as it starts. */
+  stopWanted: boolean;
   /** An Answer to bring into view and flash once it shows: a link back from a Note leads there. */
   sought: string | null;
 }
@@ -38,6 +40,7 @@ export const useConversations = create<ConversationsState>()(() => ({
   openId: null,
   messages: [],
   asking: null,
+  stopWanted: false,
   sought: null,
 }));
 
@@ -138,7 +141,7 @@ export async function askInAssistant(
   input: Omit<AskInConversationInput, "conversationId"> & { mindId: string },
 ): Promise<boolean> {
   const key = composerKey(input.mindId);
-  useConversations.setState({ asking: input.text, sought: null });
+  useConversations.setState({ asking: input.text, stopWanted: false, sought: null });
   try {
     const result = await core.askInConversation({
       ...input,
@@ -147,6 +150,9 @@ export async function askInAssistant(
     settleAsk(key, result);
     if (!result.asked) return false;
     const id = result.conversation.id;
+    if (useConversations.getState().stopWanted) {
+      core.stopConversationAnswer({ conversationId: id, answerId: result.answerId }).catch(report);
+    }
     if (useConversations.getState().openId !== id) {
       // A new conversation: its messages as they are now; each write after this comes as an event.
       useConversations.setState({ openId: id, messages: [] });
@@ -158,7 +164,7 @@ export async function askInAssistant(
     settleAsk(key, null, error);
     return false;
   } finally {
-    useConversations.setState({ asking: null });
+    useConversations.setState({ asking: null, stopWanted: false });
   }
 }
 
@@ -178,6 +184,53 @@ export async function regenerateAnswer(answerId: string): Promise<void> {
 export function stopAnswer(answerId: string): void {
   const conversationId = useConversations.getState().openId;
   if (conversationId) core.stopConversationAnswer({ conversationId, answerId }).catch(report);
+}
+
+/**
+ * A Question has been asked and its Answer isn't here yet: until the core has
+ * the Question, and between its two events (the Question, then its Answer),
+ * which can be drawn apart.
+ */
+const answerOnItsWay = (state: ConversationsState): boolean =>
+  state.asking !== null || state.messages.at(-1)?.kind === "question";
+
+/** Whether an Answer is on its way (see `answerOnItsWay`), as it changes. */
+export const useAnswerOnItsWay = (): boolean => useConversations(answerOnItsWay);
+
+/**
+ * What the composer waits on before it asks again: the open conversation's
+ * Answer being written, by id, or "" while a Question is on its way and its
+ * Answer not here yet; null when it can ask. Meanwhile its send button is
+ * Stop, as in ChatGPT and Claude, so a Question is never sent twice by a
+ * second press.
+ */
+function writingIn(state: ConversationsState, writing: ReadonlySet<string>): string | null {
+  const answer = state.messages.find(
+    (each) => each.kind === "answer" && (each.status === "streaming" || writing.has(each.id)),
+  );
+  if (answer) return answer.id;
+  return answerOnItsWay(state) ? "" : null;
+}
+
+/** What the composer waits on now (see `writingIn`). */
+export const answerBeingWritten = (): string | null =>
+  writingIn(useConversations.getState(), useAnswers.getState().writing);
+
+/** What the composer waits on, as it changes (see `writingIn`). */
+export function useAnswerBeingWritten(): string | null {
+  const writing = useAnswers((state) => state.writing);
+  return useConversations((state) => writingIn(state, writing));
+}
+
+/**
+ * Stop, in the composer and on the Answer on its way: stops the open
+ * conversation's Answer being written, keeping what it has; one whose
+ * Question is still on its way stops as soon as it starts.
+ */
+export function stopWriting(): void {
+  const answerId = answerBeingWritten();
+  if (answerId) stopAnswer(answerId);
+  else if (answerId === "") useConversations.setState({ stopWanted: true });
 }
 
 /**
