@@ -20,6 +20,7 @@ import type {
   FoundSource,
 } from "../../src/core";
 import { asksForSources } from "../../src/core/sources/intent";
+import { licenceOf } from "../../src/core/sources/licences";
 import { createPace, type PaceTimers } from "../../src/core/sources/pace";
 import { askAndFinish } from "../helpers/citations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
@@ -658,6 +659,32 @@ describe("Find sources: the Answer's Tool", { timeout: 30_000 }, () => {
 
     expect(model.doStreamCalls[0]?.tools ?? []).toEqual([]);
     expect(services.requests).toEqual([]);
+  });
+});
+
+describe("Licences, as providers write them", () => {
+  test("an id or a Creative Commons address is a licence; words about reuse are none", () => {
+    expect(licenceOf("cc-by-nc-nd")).toEqual({
+      id: "cc-by-nc-nd",
+      label: "CC BY-NC-ND",
+      commercial: false,
+    });
+    expect(licenceOf("https://creativecommons.org/licenses/by/4.0/")).toEqual({
+      id: "cc-by",
+      label: "CC BY",
+      commercial: true,
+    });
+    expect(licenceOf("https://creativecommons.org/publicdomain/zero/1.0/")).toMatchObject({
+      id: "cc0",
+      commercial: true,
+    });
+    expect(licenceOf("other-oa")).toEqual({ id: "other-oa", label: "other-oa", commercial: null });
+    expect(
+      licenceOf(
+        "This file is available for text mining. It may also be used consistent with the principles of fair use under the copyright law.",
+      ),
+    ).toBeNull();
+    expect(licenceOf(null)).toBeNull();
   });
 });
 

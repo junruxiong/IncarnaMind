@@ -136,13 +136,17 @@ export function readJats(xml: string): JatsArticle {
   if (opening.length > 0) sections.push({ heading: "Main text", level: 1, paragraphs: opening });
   sectionsOf(body, 1, sections);
   const licence = meta ? descendants(meta, "license")[0] : undefined;
-  // ALI's <license_ref> holds the licence's address; older articles put it on <license> itself.
+  // ALI's <license_ref> holds the licence's address; older articles put it on <license>, or link
+  // it in the licence's words. Words alone ("available for text mining…") name no licence.
   const reference = licence ? elements(licence).find((each) => is(each, "license_ref")) : undefined;
+  const links = licence
+    ? [licence, ...descendants(licence, "ext-link")]
+        .map((each) => each.attrs["xlink:href"] ?? "")
+        .filter(Boolean)
+    : [];
   const licenceText = reference
     ? tidy(textOf(reference))
-    : licence
-      ? licence.attrs["xlink:href"] || tidy(textOf(licence))
-      : "";
+    : (links.find((link) => /creativecommons\.org/i.test(link)) ?? links[0] ?? "");
   const dates = meta ? descendants(meta, "pub-date") : [];
   const published =
     dates.find(
