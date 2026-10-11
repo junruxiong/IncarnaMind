@@ -1,0 +1,43 @@
+[package]
+name = "csl-spike"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "csl-spike-cli"
+path = "src/bin/cli.rs"
+
+[[bin]]
+name = "csl-spike-bench"
+path = "src/bin/bench.rs"
+
+[dependencies]
+# Hayagriva's main branch, pinned: 0.10.1 (the latest release) drops every author in the
+# NLM/Vancouver style (typst/hayagriva#519, fixed after the release by #520).
+# For the release instead: hayagriva = { version = "=0.10.1", default-features = false, features = ["csl-json"] }
+# No default features: BibLaTeX parsing and the bundled style archive are left out,
+# because the app passes CSL JSON and ships the style and locale XML itself.
+hayagriva = { git = "https://github.com/typst/hayagriva", rev = "546c7c721bbb5539f96ce458df5d4bb3f97c11e9", default-features = false, features = ["csl-json"] }
+citationberg = { version = "0.7", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.129"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# For comparing speed against size: PROFILE=release-o3 OPT=-O3 ./build.sh
+[profile.release-o3]
+inherits = "release"
+opt-level = 3

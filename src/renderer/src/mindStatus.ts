@@ -28,7 +28,8 @@ core.on("answer.failed", ({ answerId }) => setWriting(answerId, null));
 core.on("answer.phase", ({ answerId, mindId, phase }) =>
   useWritingAnswers.setState((state) => {
     const consenting = { ...state.consenting };
-    if (phase === "waiting-for-consent") consenting[answerId] = mindId;
+    // An Answer in a conversation (no Mind) is the assistant's to show, not a Mind's.
+    if (phase === "waiting-for-consent" && mindId !== null) consenting[answerId] = mindId;
     else delete consenting[answerId];
     return { consenting };
   }),
@@ -50,3 +51,7 @@ export function useMindStatus(mindId: string): MindStatus {
   const writing = useWritingAnswers((state) => Object.values(state.minds).includes(mindId));
   return approving || consenting ? "waiting-for-approval" : writing ? "writing" : null;
 }
+
+/** Whether an Answer is being written into the Mind now: for what runs outside React, such as the editor's plugins. */
+export const isWritingIn = (mindId: string): boolean =>
+  Object.values(useWritingAnswers.getState().minds).includes(mindId);

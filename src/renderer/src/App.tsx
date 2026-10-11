@@ -20,6 +20,7 @@ import { buttonStyle } from "./components/ui";
 import { files } from "./core";
 import { useLanguage, useT } from "./i18n";
 import { useMeetings } from "./meetings";
+import { importReferenceFile, isReferenceFile } from "./referenceImport";
 import { useAppStore } from "./store";
 import { useWindowWidth } from "./useWindowWidth";
 import { useWebPages } from "./webPages";
@@ -150,7 +151,14 @@ function Workspace() {
   const updateSettings = useAppStore((state) => state.updateSettings);
   const addDropped = useAppStore((state) => state.addDropped);
   const fileDrop = useFileDrop(
-    (files, folders) => void addDropped(files, folders),
+    (dropped, folders) => {
+      // A reference export (CSL JSON, BibTeX, RIS) is imported, not added as a Document (#287).
+      const exported = dropped.find((file) => isReferenceFile(file.name));
+      const path = exported ? files.pathForFile(exported) : "";
+      if (path) void importReferenceFile(path);
+      const rest = path ? dropped.filter((file) => file !== exported) : dropped;
+      if (rest.length > 0 || folders.length > 0) void addDropped(rest, folders);
+    },
     (addresses) => void useWebPages.getState().add(addresses),
   );
   const windowWidth = useWindowWidth();

@@ -72,7 +72,14 @@ const PROVIDER_KINDS = [
   "ollama",
   "chatgpt",
 ] as const;
-const CITATION_CHECKS = ["checking", "found", "not-found", "cant-check"] as const;
+const CITATION_CHECKS = [
+  "checking",
+  "found",
+  "not-found",
+  "cant-check",
+  "unsupported",
+  "contradicted",
+] as const;
 const EXPORT_FORMATS = ["markdown", "docx"] as const;
 
 /** The Settings pages (src/renderer/src/settingsPages.ts; a test keeps them the same). */

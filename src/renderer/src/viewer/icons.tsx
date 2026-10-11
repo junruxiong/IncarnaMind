@@ -80,6 +80,15 @@ export const TickIcon = (props: IconProps) => (
   </Stroke>
 );
 
+/** The Citation check's "≠": the claim is contradicted. */
+export const NotEqualIcon = (props: IconProps) => (
+  <Stroke strokeWidth={2.5} {...props}>
+    <path d="M6 9.5h12" />
+    <path d="M6 14.5h12" />
+    <path d="m15 5-6 14" />
+  </Stroke>
+);
+
 /** The Citation check's exclamation mark: the quote wasn't found. */
 export const ExclamationIcon = (props: IconProps) => (
   <Stroke strokeWidth={3} {...props}>

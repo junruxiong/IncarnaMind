@@ -1,8 +1,10 @@
 import { noteHolding } from "../editor/noteKeymap";
+import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
-import { composerHandle, sidebarHandle } from "./handles";
+import { citationHandle, composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
+import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { webPageCommands } from "./webPages";
 
@@ -40,6 +42,46 @@ const appCommands: readonly Command[] = [
     run: () => composerHandle.current?.focus(),
   },
   {
+    id: "citation.open",
+    label: "command.citation.open",
+    shortcut: { keys: "CmdOrCtrl+Alt+O" },
+    group: "open",
+    reversible: true,
+    // While a Citation's card shows (hovered, focused or clicked).
+    when: () => citationHandle.current !== null,
+    run: () => citationHandle.current?.open(),
+  },
+  {
+    id: "references.import",
+    label: "references.import.menu",
+    group: "file",
+    // The import is taken back with Undo.
+    reversible: true,
+    enabled: () =>
+      useReferenceImport.getState().phase === "running"
+        ? { reason: "references.import.running.reason" }
+        : true,
+    run: () => useReferenceImport.getState().start(),
+  },
+  {
+    // Suggest as I write (#282): on asks for consent first, as the switch in Settings does.
+    id: "suggestions.toggle",
+    label: (_ctx, t) =>
+      t(
+        useAppStore.getState().settings?.user.suggestWhileWriting
+          ? "command.suggestions.off"
+          : "command.suggestions.on",
+      ),
+    keywords: ["suggestions.settings.switch"],
+    group: "main",
+    reversible: true,
+    when: () => useAppStore.getState().settings !== null,
+    run: () => {
+      const on = useAppStore.getState().settings?.user.suggestWhileWriting ?? false;
+      return useAppStore.getState().updateSettings({ user: { suggestWhileWriting: !on } });
+    },
+  },
+  {
     id: "block.delete",
     label: "editor.block.delete",
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
@@ -52,6 +94,7 @@ const appCommands: readonly Command[] = [
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },
   },
+  ...tableCommands,
 ];
 
 for (const command of appCommands) commands.register(command);

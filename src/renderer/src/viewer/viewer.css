@@ -44,12 +44,6 @@
   .viewer-tags {
     @apply max-w-[45%];
   }
-  @container viewer (width < 560px) {
-    .viewer-tags [data-testid="tag-chip"],
-    .viewer-tags [data-testid="tag-chip-more"] {
-      @apply hidden;
-    }
-  }
   .viewer-icon-button {
     @apply flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary;
 
@@ -172,6 +166,18 @@
   }
   [data-quote-tone="not-found"] {
     --quote-wash: var(--color-warning-wash);
+  }
+  /* Contradicted is never green: no fill, the words outlined in red. */
+  [data-quote-tone="contradicted"] {
+    --quote-wash: transparent;
+    .quote-highlight,
+    .highlight {
+      box-shadow: 0 0 0 1.5px var(--color-danger);
+    }
+    td.viewer-cell--quote {
+      outline: 1.5px solid var(--color-danger);
+      outline-offset: -1.5px;
+    }
   }
   .viewer-page {
     @apply bg-sheet;
@@ -402,6 +408,10 @@
   }
   .quote-mark--not-found {
     @apply bg-warning-wash text-warning;
+  }
+  .quote-mark--contradicted {
+    @apply bg-sheet text-danger;
+    box-shadow: inset 0 0 0 1.5px var(--color-danger);
   }
   /* Where the Citation points ("slide 4"), after its number. */
   .quote-mark-label {
@@ -775,4 +785,18 @@
   color: var(--color-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/*
+ * Too narrow for the chips, the Tags' header keeps only their button. The chips set their
+ * display with utility classes, which sit in the utilities layer and beat anything in
+ * components, so this rule lives in that layer too, where its selector's weight wins.
+ */
+@layer utilities {
+  @container viewer (width < 560px) {
+    .viewer-tags [data-testid="tag-chip"],
+    .viewer-tags [data-testid="tag-chip-more"] {
+      @apply hidden;
+    }
+  }
 }

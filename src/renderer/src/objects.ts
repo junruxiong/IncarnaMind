@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 
-/** The kinds of thing the User works with, the same for every gesture: menus, selection, drag and ⌘K. */
+/**
+ * The kinds of thing the User works with, the same for every gesture: menus, selection,
+ * drag and ⌘K. A conversation is the assistant's, never a Mind (ADR-0017).
+ */
 export type ObjectKind =
   | "mind"
-  | "chat"
+  | "conversation"
   | "document"
   | "folder"
   | "tag"
