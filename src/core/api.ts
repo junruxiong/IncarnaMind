@@ -284,9 +284,10 @@ export interface AnswerToolCall {
   /**
    * Where the Tool comes from: "documents" is IncarnaMind's own document
    * search; "skill", the Skill Tools; "connector", one of the User's
-   * Connectors (see `connector`).
+   * Connectors (see `connector`); "sources", Find sources (`find_sources`,
+   * `{ query, from_year?, to_year?, open_access_only? }`).
    */
-  source: "documents" | "skill" | "connector";
+  source: "documents" | "skill" | "connector" | "sources";
   /** A Connector's Tool: which Connector, with its name when the call was made. */
   connector?: { id: string; name: string };
   /** What the model asked, e.g. `{ query }` for a search, or the arguments sent to a Connector. */
@@ -944,6 +945,8 @@ export interface Document {
    * from its file and edited by the User. Null until its file has been read.
    */
   reference: ReferenceRecord | null;
+  /** Where its text came from, when Find sources added it (#296); null for any other Document. */
+  found: DocumentFoundSource | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
@@ -1067,6 +1070,183 @@ export type ReferenceLookupResult =
       /** Technical detail in English, for logs and tooltips. */
       message: string;
     };
+
+// ---------------------------------------------------------------------------
+// Find sources (#296, ADR-0018)
+
+/**
+ * A Source provider (CONTEXT.md): a public service Find sources searches for
+ * works to add, as Documents when their full text is open, else as reference
+ * records. OpenAlex, arXiv and PubMed search; Crossref looks a DOI up. Laws,
+ * filings and drug labels come later, each one more provider.
+ */
+export interface SourceProviderInfo {
+  /**
+   * "openalex", "arxiv", "pubmed", "crossref". The UI says what each covers
+   * and what its records are licensed under (`sources.provider.<id>.about`).
+   */
+  id: string;
+  /** As its operator names it. */
+  name: string;
+  /** Where searches go: consent is asked per service, once ("find-sources" flow). */
+  service: ExternalService;
+  /** It searches by words; false for one that only looks a work up by its identifier (Crossref, by DOI). */
+  searches: boolean;
+  /** The User's decision on sending it searches. */
+  consent: DataFlowStatus["consent"];
+  /** Where its operator states its terms and limits. */
+  termsUrl: string;
+}
+
+/** What Find sources looks for. */
+export interface FindSourcesInput {
+  /** Words, a title, or an identifier: a DOI, an arXiv ID or a PubMed ID. */
+  query: string;
+  /** Only works published in or after this year. */
+  fromYear?: number | null;
+  /** Only works published in or before this year. */
+  toYear?: number | null;
+  /** Only works whose full text is open. */
+  openAccessOnly?: boolean;
+  /** The providers to ask, by id; every one that searches, when left out. */
+  providers?: string[];
+}
+
+/**
+ * Why a provider gave no results:
+ * - "declined": the User didn't allow sending it searches;
+ * - "unreachable": it couldn't be reached, or took too long;
+ * - "rate-limited": it asked IncarnaMind to slow down (429), or its free daily allowance is used up;
+ * - "service-error": it answered with an error, or with something unreadable.
+ */
+export type SourceFailureReason = "declined" | "unreachable" | "rate-limited" | "service-error";
+
+/** How one provider's part of a search went. */
+export interface SourceProviderOutcome {
+  id: string;
+  name: string;
+  /** How many works it gave, before they were merged with the others'. */
+  count: number;
+  /** Null when it answered. */
+  failure: { reason: SourceFailureReason; message: string } | null;
+}
+
+/** The versions an open full text can be, as repositories label them. */
+export type SourceVersion = "published" | "accepted" | "submitted";
+
+/** The licence an open text is under, and whether it allows commercial use. */
+export interface SourceLicence {
+  /** As the provider writes it, in lower case: "cc-by", "cc-by-nc-nd", "public-domain". */
+  id: string;
+  /** "CC BY", "CC BY-NC-ND", "CC0"; the id for any other, which the UI names. */
+  label: string;
+  /** False for a licence that rules out commercial use (an NC licence); null when unknown. */
+  commercial: boolean | null;
+}
+
+/**
+ * How a found work's full text can be had: "open", downloaded and processed
+ * into a Document when added (a PDF, or text the provider gives by section);
+ * open only as a "web-page" at its publisher, which adding keeps as a
+ * reference record with the page to open (until web pages can be saved as
+ * Documents, #261); or "closed" when no open copy is known, so adding keeps
+ * its reference record only. Nothing is ever downloaded from behind a paywall.
+ */
+export type SourceAccess =
+  | {
+      kind: "open";
+      format: "pdf" | "text" | "web-page";
+      /** Which version the open copy is: a preprint can differ from what was published. */
+      version: SourceVersion | null;
+      licence: SourceLicence | null;
+    }
+  | { kind: "closed" };
+
+/** A work Find sources found: a paper now; later a law, a filing or a label. */
+export interface FoundSource {
+  /**
+   * Its identity across providers, for `addFoundSource`: "doi:10.1038/…", else
+   * "arxiv:1706.03762", "pmid:36970624" or "openalex:W4362665266".
+   */
+  key: string;
+  /** Its reference record, as the providers give it. */
+  fields: ReferenceFields;
+  /** The providers that found it, best first. */
+  foundBy: { id: string; name: string }[];
+  /** How many works cite it, when a provider counts them. */
+  citedBy: number | null;
+  /**
+   * The date of the version described, ISO 8601 at the precision known: what
+   * a Document added from it holds, as laws and preprints change.
+   */
+  versionDate: string | null;
+  access: SourceAccess;
+  /** Its page at its publisher or registry, for "Get the PDF…" in the User's browser. */
+  landingUrl: string | null;
+  /** Already in the Library: as a Document, or as a reference record without one. */
+  inLibrary: { documentId: string | null; recordId: string } | null;
+}
+
+export type FindSourcesResult =
+  | {
+      outcome: "found";
+      /** Best first: found by more providers, and higher in each, ranks higher. */
+      works: FoundSource[];
+      /** Each provider asked, in the order asked. */
+      providers: SourceProviderOutcome[];
+    }
+  /** "Keep everything on this computer" is on: nothing was sent. */
+  | { outcome: "local-mode" };
+
+export interface AddFoundSourceInput {
+  /** `FoundSource.key`, from a search this session. */
+  key: string;
+  /** The Folder to add it to; Not in a Folder when null or left out. */
+  folderId?: string | null;
+}
+
+/** What adding a found work came to. */
+export type AddFoundSourceResult =
+  | {
+      outcome: "document";
+      /** The Document, being processed; or the one added before (`existing`). */
+      document: Document;
+      existing: boolean;
+    }
+  | {
+      outcome: "reference";
+      /** The reference record kept, with no Document. */
+      recordId: string;
+      /**
+       * Why no Document: "closed", no open full text; "web-page", its open
+       * text is a web page at `landingUrl`; "download-failed", the open copy
+       * couldn't be had.
+       */
+      reason: "closed" | "web-page" | "download-failed";
+      landingUrl: string | null;
+      existing: boolean;
+    }
+  | {
+      outcome: "failed";
+      /** "local-mode": nothing may be sent; "declined": the provider isn't allowed; "not-found": search again. */
+      reason: "local-mode" | "declined" | "not-found";
+      /** Technical detail in English, for logs and tooltips. */
+      message: string;
+    };
+
+/** Where a Document Find sources added came from: what its text is, and when it was fetched. */
+export interface DocumentFoundSource {
+  /** The provider whose open copy it is. */
+  provider: { id: string; name: string };
+  /** The address its text was fetched from. */
+  address: string;
+  licence: SourceLicence | null;
+  version: SourceVersion | null;
+  /** The date of the version its text is, ISO 8601 at the precision known. */
+  versionDate: string | null;
+  /** When it was fetched. ISO 8601, UTC. */
+  fetchedAt: string;
+}
 
 export interface ListDocumentsOptions {
   /** Only Documents in this Folder. Omitted: every Document, in a Folder or not. */
@@ -2116,6 +2296,8 @@ export const dataKinds = [
   "document-text",
   "queries",
   "identifiers",
+  "search-terms",
+  "work-ids",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -2137,6 +2319,11 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "find-sources": what the User (or an Answer, for them) searches for, with
+ *   its filters, to each Source provider searched, and the identifier of a
+ *   work they add, to the provider that gives its full text or record (#296).
+ *   Nothing from their Documents or Minds. Asked once per provider; none in
+ *   local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -2146,6 +2333,7 @@ export const dataFlowIds = [
   "embeddings",
   "rerank",
   "reference-lookup",
+  "find-sources",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -3219,6 +3407,30 @@ export interface CoreApi {
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
 
+  /** The Source providers Find sources can ask, each with the User's consent decision (#296). */
+  listSourceProviders(): Promise<SourceProviderInfo[]>;
+  /**
+   * Find sources (#296): searches the providers asked (every one that
+   * searches, by default) for works, and merges what they find, best first.
+   * An identifier (a DOI, an arXiv ID, a PubMed ID) is looked up instead.
+   * Each provider is sent only the query and its filters, after the User has
+   * allowed the "find-sources" flow to it (asked once; a provider declined
+   * is skipped, and says so); nothing at all in local mode. The same search
+   * again soon after is answered from what was found, without asking again.
+   * Throws InvalidInputError for an empty query or a year that can't be one.
+   */
+  findSources(input: FindSourcesInput): Promise<FindSourcesResult>;
+  /**
+   * Adds a found work (by its key, from a search this session) to the
+   * Library, in the Folder given: its open full text, downloaded (only an
+   * open-access copy, never from behind a paywall) and processed into a
+   * Document with its reference record filled; or, with no open copy, its
+   * reference record alone. A work added before gives what it was added as.
+   * A download goes to the provider that gives the copy only once the User
+   * has allowed it; nothing in local mode.
+   */
+  addFoundSource(input: AddFoundSourceInput): Promise<AddFoundSourceResult>;
+
   /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
   /**
@@ -3904,6 +4116,9 @@ const methods: Record<CoreApiMethod, true> = {
   updateReference: true,
   restoreReference: true,
   lookUpReference: true,
+  listSourceProviders: true,
+  findSources: true,
+  addFoundSource: true,
   setLinkedFolderLayout: true,
   setLinkedFolderPaused: true,
   downloadOnlineOnlyFiles: true,

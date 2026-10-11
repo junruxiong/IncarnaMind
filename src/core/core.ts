@@ -99,6 +99,10 @@ import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
 import { createScriptRunner } from "./skills/scripts";
+import { createSources, FIND_SOURCES_SENDS } from "./sources";
+import { createSourceHttp } from "./sources/http";
+import { createPace, realTimers } from "./sources/pace";
+import { createSourceProviders } from "./sources/providers";
 import { migrate, openDatabase } from "./storage";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
@@ -580,6 +584,48 @@ export function createCore(adapters: CoreAdapters): Core {
   // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
+  // Requests to one service kept apart, as its operator asks: Look up and Find sources share them.
+  const paceTimers = adapters.paceTimers ?? realTimers;
+  const pace = createPace(paceTimers);
+  // Find sources (#296): searches Source providers with consent, never in local mode, and adds
+  // what the User chooses to the Library, as Documents (open copies) or reference records.
+  const sources = createSources({
+    db,
+    now,
+    clock: () => paceTimers.now(),
+    consent,
+    localOnly: () => embedding.localOnly(),
+    providers: createSourceProviders(adapters.sourceProviders),
+    http: createSourceHttp(pace, paceTimers),
+    folder: join(dataDir, "Sources"),
+    checkFolder: (folderId) => {
+      library.target({ groupId: folderId });
+    },
+    async addFile(path, folderId, added) {
+      const batchId = batches.begin(folderId);
+      try {
+        const result = await documents.add([path], (documentId) => {
+          batches.added(batchId, documentId);
+          added(documentId);
+        });
+        return result.documents[0] ?? null;
+      } finally {
+        batches.done(batchId);
+      }
+    },
+    document: (id) => documents.get(id),
+    signal: lifetime.signal,
+    reportError: (error) => console.error(error),
+  });
+  // A provider is asked only once the User searches it, as Look up's services are: the Privacy
+  // page lists each one the User has decided on, to revoke.
+  consent.registry.register({
+    id: "find-sources",
+    sends: FIND_SOURCES_SENDS,
+    services: async () => [],
+  });
+  void sources.dropPurged();
+
   const answers = createAnswers({
     content,
     events,
@@ -611,7 +657,10 @@ export function createCore(adapters: CoreAdapters): Core {
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
     },
-    toolProviders: [{ kind: "connector", tools: (signal) => connectors.tools(signal) }],
+    toolProviders: [
+      { kind: "connector", tools: (signal) => connectors.tools(signal) },
+      { kind: "sources", tools: async () => sources.tools() },
+    ],
     connectorsNeedingSignIn: () => connectors.needingSignIn(),
     approvals: {
       decide: (call) => approvals.decide(call),
@@ -830,6 +879,7 @@ export function createCore(adapters: CoreAdapters): Core {
     document: (id) => documents.get(id),
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
+    pace,
   });
   // Look up goes to Crossref or arXiv only when the User asks, so the flow goes nowhere until
   // then; the Privacy page lists each service once the User has decided on it.
@@ -1180,6 +1230,9 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    listSourceProviders: async () => sources.list(),
+    findSources: (input) => sources.search(input),
+    addFoundSource: (input) => sources.add(input),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
     createExamples: async (group) => examples.create(group),

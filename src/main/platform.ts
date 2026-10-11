@@ -261,6 +261,15 @@ const referenceLookupUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_REFERENCE_LOOKUP : undefined;
 
 /**
+ * Test-only launch flag: where Find sources asks its providers (#296), a
+ * local server standing in for OpenAlex, arXiv, PubMed and Crossref, each
+ * under its own path, so the smoke tests reach none of them. Only a test
+ * build honours it.
+ */
+const sourceProvidersUrl =
+  import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_SOURCES : undefined;
+
+/**
  * What records Meetings: the hidden capture window (ADR-0015). Test-only
  * launch flags: the smoke tests record a fake that makes a tone in real time,
  * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
@@ -290,6 +299,14 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     ...(usageData && { usageData }),
     ...(referenceLookupUrl && {
       referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
+    }),
+    ...(sourceProvidersUrl && {
+      sourceProviders: {
+        openalex: `${sourceProvidersUrl}/openalex`,
+        arxiv: `${sourceProvidersUrl}/arxiv`,
+        pubmed: `${sourceProvidersUrl}/pubmed`,
+        crossref: `${sourceProvidersUrl}/crossref`,
+      },
     }),
     log,
     audioCapture: audioCapture(log),
