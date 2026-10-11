@@ -1848,6 +1848,79 @@
       margin-block: 28px;
     }
 
+    /*
+     * A table: the measure wide, ruled in `rule` with a radius of 8, its
+     * heading row on the frame in Sans, its cells in the writing's face a
+     * step smaller. Columns size to their text, never under 6rem so Chinese
+     * keeps a few characters a line; a table wider than the measure scrolls
+     * sideways inside the note, never the page.
+     */
+    .tableWrapper {
+      overflow-x: auto;
+      overflow-y: hidden;
+      /* Room for the scrollbar under the table's bottom rule. */
+      padding-bottom: 1px;
+    }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+    }
+    :where(th, td) {
+      position: relative;
+      min-width: 6rem;
+      padding: 6px 12px;
+      border-right: 1px solid var(--color-rule);
+      border-bottom: 1px solid var(--color-rule);
+      vertical-align: top;
+      text-align: start;
+      font-size: 15px;
+      line-height: 24px;
+    }
+    :where(th) {
+      background: var(--color-frame);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 24px;
+      font-weight: 600;
+      color: var(--color-ink-secondary);
+    }
+    :where(tr > :last-child) {
+      border-right: 0;
+    }
+    :where(tr:last-child > *) {
+      border-bottom: 0;
+    }
+    :where(tr:first-child > :first-child) {
+      border-top-left-radius: 7px;
+    }
+    :where(tr:first-child > :last-child) {
+      border-top-right-radius: 7px;
+    }
+    :where(tr:last-child > :first-child) {
+      border-bottom-left-radius: 7px;
+    }
+    :where(tr:last-child > :last-child) {
+      border-bottom-right-radius: 7px;
+    }
+    :where(th > * + *, td > * + *) {
+      margin-top: 8px;
+    }
+    /* Cells selected together (a drag across cells, or Shift and the arrows). */
+    .selectedCell::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--color-accent-wash);
+      mix-blend-mode: multiply;
+      pointer-events: none;
+    }
+    &.ProseMirror .selectedCell ::selection {
+      background: transparent;
+    }
+
     /* A Note switched out of Question context: still there, but muted. */
     > .context-off {
       opacity: 0.45;
@@ -2999,6 +3072,29 @@
   }
   .block-handle[data-dragging="true"] > button {
     cursor: grabbing;
+  }
+
+  /* The table menu's ⋯ button, inside the top-right corner of the cell the cursor is in (TableMenu). */
+  .table-menu-button {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    color: var(--color-ink-meta);
+
+    &:is(:hover, [aria-expanded="true"]) {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[hidden] {
+      display: none;
+    }
   }
 
   /* The editor's popovers sit where Popover puts them, not where [popover] would. */

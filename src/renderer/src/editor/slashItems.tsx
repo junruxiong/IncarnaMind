@@ -1,8 +1,11 @@
 import type { Editor, JSONContent, Range } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import type { ReactNode } from "react";
 import { QUESTION_BLOCK, type Skill } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { SkillIcon } from "../components/icons";
+import { TableIcon } from "./icons";
+import { emptyTable } from "./tableCommands";
 
 /**
  * One entry of the slash menu. To add one, add it to `noteSlashItems`, or
@@ -82,6 +85,23 @@ export const noteSlashItems: readonly SlashItem[] = [
     keywords: ["h3"],
     icon: "H3",
     run: turnInto("heading", { level: 3 }),
+  },
+  {
+    id: "table",
+    label: "editor.slash.table",
+    keywords: ["grid", "columns", "rows"],
+    icon: <TableIcon className="size-3.5" />,
+    run(editor, range) {
+      const pos = insertBlock(editor, range, emptyTable());
+      // Into its first cell, to start typing the first heading.
+      if (pos !== null) {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection(TextSelection.near(editor.state.doc.resolve(pos + 1)).from)
+          .run();
+      }
+    },
   },
   {
     id: "code",

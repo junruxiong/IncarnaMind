@@ -102,6 +102,14 @@ export function CheckStateIcon({ check, ...props }: IconProps & { check: Citatio
   );
 }
 
+/** A ruled grid with a heading row: a table. */
+export const TableIcon = (props: IconProps) => (
+  <Stroke weight={2} {...props}>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10M14.5 9.5v10" />
+  </Stroke>
+);
+
 export const ChevronDownSmallIcon = (props: IconProps) => (
   <Stroke weight={2} {...props}>
     <path d="m6 9 6 6 6-6" />

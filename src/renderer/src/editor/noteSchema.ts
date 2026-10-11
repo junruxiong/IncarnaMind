@@ -2,6 +2,7 @@ import type { Extensions, NodeViewRenderer } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Highlight from "@tiptap/extension-highlight";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
+import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import UniqueID from "@tiptap/extension-unique-id";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -43,13 +44,14 @@ export interface NoteSchemaOptions {
 }
 
 /**
- * What a Mind can hold, and how it is stored. Notes: headings, bold, italic, underline, links,
- * strikethrough, highlight, lists, code blocks highlighted by lowlight, and
- * inline and block math rendered by KaTeX, each with an "include in Question
- * context" flag. Questions and Answers, top-level only. Citations, inline in
- * Answers and in whatever they are copied into. Every Block has a UUID. The
- * editor adds its interface on top (collaboration, menus, the drag handle,
- * smart typography); tests use this alone.
+ * What a Mind can hold, and how it is stored. Notes: headings, bold, italic,
+ * underline, links, strikethrough, highlight, lists, code blocks highlighted
+ * by lowlight, inline and block math rendered by KaTeX, and tables, each with
+ * an "include in Question context" flag. Questions and Answers, top-level
+ * only. Citations, inline in Answers and in whatever they are copied into,
+ * table cells included. Every Block has a UUID. The editor adds its interface
+ * on top (collaboration, menus, the drag handle, smart typography); tests use
+ * this alone.
  */
 export function noteExtensions({
   onEditMath,
@@ -81,6 +83,12 @@ export function noteExtensions({
     CodeBlock.configure({ lowlight }),
     BlockMath.configure({ katexOptions: { displayMode: true, throwOnError: false }, onClick }),
     InlineMath.configure({ katexOptions: { throwOnError: false }, onClick }),
+    // Columns size to their text: dragging their edges would need a way by keyboard too.
+    // Tab and Shift-Tab move between cells; Tab in the last cell adds a row.
+    Table.configure({ resizable: false }),
+    TableRow,
+    TableHeader,
+    TableCell,
     Question.configure({ view: questionView ?? null }),
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
