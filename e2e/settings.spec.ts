@@ -17,7 +17,12 @@ const PAGES = [
   {
     page: "general",
     name: "General",
-    sections: ["language-settings", "data-folder-settings", "about-settings"],
+    sections: [
+      "language-settings",
+      "output-location-settings",
+      "data-folder-settings",
+      "about-settings",
+    ],
   },
   {
     page: "models",
@@ -30,6 +35,7 @@ const PAGES = [
     ],
   },
   { page: "search", name: "Search", sections: ["embedding-settings", "rerank-settings"] },
+  { page: "meetings", name: "Meetings", sections: ["meetings-settings"] },
   { page: "tools", name: "Tools", sections: ["approvals-settings"] },
   { page: "connectors", name: "Connectors", sections: ["connectors-settings"] },
   { page: "skills", name: "Skills", sections: ["skills-settings", "skill-scripts-settings"] },
@@ -54,7 +60,7 @@ async function shot(window: Page, name: string) {
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 }
 
-test("Settings lists seven pages, and each holds its settings", async () => {
+test("Settings lists eight pages, and each holds its settings", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);
@@ -136,12 +142,22 @@ test("the pages are named in Chinese too", async () => {
       "通用",
       "模型",
       "搜索",
+      "会议",
       "工具",
       "连接器",
       "技能",
       "隐私",
     ]);
-    const names = ["general", "models", "search", "tools", "connectors", "skills", "privacy"];
+    const names = [
+      "general",
+      "models",
+      "search",
+      "meetings",
+      "tools",
+      "connectors",
+      "skills",
+      "privacy",
+    ];
     for (const page of names) {
       await window.getByTestId(`settings-nav-${page}`).click();
       await expect(window.getByTestId("settings")).toHaveAttribute("data-page", page);

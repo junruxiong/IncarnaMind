@@ -5,6 +5,7 @@ import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
+import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
 import { buttonStyle } from "../ui";
@@ -30,6 +31,7 @@ export function MindTab({ mindId }: { mindId: string }) {
             {isExample && <ExampleBanner />}
             <MindTitle mind={mind} />
             <div ref={setCountSlot} data-testid="mind-count-slot" />
+            <MeetingInMind mindId={mind.id} />
             {/* The example works without a chat model: it says so in its Answer instead. */}
             {!isExample && <ChatReadinessNotice />}
             <ComposerDockContext.Provider value={dock}>
@@ -142,7 +144,7 @@ function MindTitle({ mind }: { mind: Mind }) {
         rows={1}
         data-testid="mind-title"
         aria-label={t("mind.title.label")}
-        placeholder={t("mind.untitled")}
+        placeholder={mind.autoTitle || t("mind.untitled")}
         value={draft ?? mind.title}
         onFocus={() => setDraft(mind.title)}
         onBlur={() => setDraft(null)}

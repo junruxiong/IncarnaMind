@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { translate } from "../shared/i18n";
@@ -19,6 +19,7 @@ import type {
   CoreApi,
   CoreEventSource,
   EmbeddingSettings,
+  ExportMindOptions,
   Mind,
   ProviderError,
   Unsubscribe,
@@ -36,20 +37,31 @@ import {
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
-import { InvalidInputError, isRecord, MindReadOnlyError, TaggingNotReadyError } from "./errors";
+import {
+  FileWriteCancelledError,
+  InvalidInputError,
+  isRecord,
+  LinkedFolderWritesDeclinedError,
+  MindReadOnlyError,
+  NotFoundError,
+  TaggingNotReadyError,
+} from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
-import { safeFileName } from "./fileNames";
+import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
+import { createBatches } from "./library/batches";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
+import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+
 import {
   createMinds,
   parseCreateMindInput,
@@ -57,6 +69,8 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
+import { firstLineOf } from "./mindText";
+import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
@@ -73,6 +87,12 @@ import {
 } from "./providers/ollama";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
+import {
+  createReferences,
+  REFERENCE_LOOKUP_SENDS,
+  REFERENCE_SERVICE_URLS,
+} from "./referenceRecords";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -119,10 +139,20 @@ export interface Core extends CoreApi, CoreEventSource {
    */
   showDocumentInFolder(documentId: string): Promise<void>;
   /**
+   * Shows a file IncarnaMind saved since it started (e.g. by
+   * `saveMindExport`) selected in the system's file manager, through the
+   * `shell` adapter. Throws NotFoundError for any other path.
+   */
+  showSavedFile(path: string): Promise<void>;
+  /**
    * Reconciles every Linked folder and single file with the disk now, and
    * resolves once that, and any change already reported, has been taken in.
    */
   reconcileDocuments(): Promise<void>;
+  /** The computer is about to sleep: a Meeting recording saves what it has and stops capturing. */
+  systemSleeping(): void;
+  /** The computer woke: a Meeting the sleep stopped records again, the sleep marked as a gap. */
+  systemAwake(): void;
   /** Every event the core emits, for the host to forward to the UI. */
   onAnyEvent(listener: AnyEventListener): Unsubscribe;
   /** Every external data flow. Core modules register theirs here; consent covers each one. */
@@ -158,6 +188,12 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  try {
+    purgeExpired(db, now());
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   const events = createEventHub();
   // Logs what happens from here on, from the events: never the User's content.
   const activity = logActivity(events, adapters.log ?? silentLogger);
@@ -183,11 +219,19 @@ export function createCore(adapters: CoreAdapters): Core {
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
-    if (minds.markEdited(mindId)) mindsChanged();
+    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+    if (minds.markEdited(mindId) || renamed) mindsChanged();
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
-  const settings = createSettings(db, now, adapters.systemLanguages, scriptSandbox);
+  const capture = adapters.audioCapture;
+  const settings = createSettings(
+    db,
+    now,
+    adapters.systemLanguages,
+    scriptSandbox,
+    !capture ? "none" : capture.systemAudio ? "both" : "microphone",
+  );
   const folders = createFolders(db, now);
   const foldersChanged = () => events.emit("folders.changed", folders.list());
   const tags = createTags(db, now);
@@ -199,6 +243,11 @@ export function createCore(adapters: CoreAdapters): Core {
   /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
   let prepareRerank = () => {};
   let libraryDocumentChanged = (_documentId: string) => {};
+  const batches = createBatches({
+    db,
+    emit: (batch) => events.emit("documents.batch", batch),
+    file: (documentId, groupId) => library.file(documentId, groupId),
+  });
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
@@ -246,13 +295,21 @@ export function createCore(adapters: CoreAdapters): Core {
       emitStatus: (document) => {
         events.emit("document.status", document);
         libraryDocumentChanged(document.id);
+        batches.changed([document.id]);
         rebuildMayHaveProgressed();
       },
       emitMoved: (moved) => events.emit("documents.moved", moved),
-      emitRemoved: (ids) => events.emit("documents.removed", ids),
+      emitRemoved: (ids) => {
+        events.emit("documents.removed", ids);
+        batches.changed(ids);
+      },
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
-      linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
+      linkedFoldersChanged: (list) => {
+        events.emit("linkedFolders.changed", list);
+        batches.linkedFoldersChanged(list);
+      },
+      onFound: (documentId) => batches.found(documentId),
       onReady: (documentId) => {
         // There is something to search now: the built-in reranking model downloads, if it reranks.
         prepareRerank();
@@ -590,6 +647,32 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     now,
   });
+  /** Usage data: which format, and whether Questions went with it. */
+  const recordExport = (options: ExportMindOptions) =>
+    usageData.record({
+      event: "mind_exported",
+      fields: {
+        format: options.format,
+        // Questions are in a Markdown export unless left out, and in a .docx only if asked for.
+        questions:
+          typeof options.includeQuestions === "boolean"
+            ? options.includeQuestions
+            : options.format === "markdown",
+      },
+    });
+  // New files: in the Output location, or inside a Linked folder the User allowed.
+  const outputs = createOutputFiles({
+    db,
+    events,
+    now,
+    settings,
+    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    linkedFolders: () => documents.linkedFolders.list(),
+  });
+  const unlinkFolder = (linkedFolderId: string) => {
+    documents.linkedFolders.remove(linkedFolderId);
+    outputs.forgetLinkedFolder(linkedFolderId);
+  };
 
   // Automatic tagging: Jev when it is set up on this device, otherwise the
   // default chat model; either way its own data flow and consent.
@@ -659,8 +742,14 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     settings,
     background,
-    changed: () => events.emit("library.changed", null),
-    assigned: (assignments) => events.emit("library.assignments", assignments),
+    changed: () => {
+      events.emit("library.changed", null);
+      batches.libraryChanged();
+    },
+    assigned: (assignments) => {
+      events.emit("library.assignments", assignments);
+      batches.changed(assignments.map((each) => each.documentId));
+    },
     providerExists: (id) => chat.exists(id),
     chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
@@ -729,6 +818,40 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
+
+  // Reference records (#286): read from files as they're processed, edited by the User, and
+  // filled by Look up, which sends a DOI or an arXiv id only, with consent, never in local mode.
+  const references = createReferences({
+    db,
+    now,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    urls: { ...REFERENCE_SERVICE_URLS, ...adapters.referenceLookup },
+    document: (id) => documents.get(id),
+    changed: (list) => events.emit("references.changed", list),
+    signal: lifetime.signal,
+  });
+  // Look up goes to Crossref or arXiv only when the User asks, so the flow goes nowhere until
+  // then; the Privacy page lists each service once the User has decided on it.
+  consent.registry.register({
+    id: "reference-lookup",
+    sends: REFERENCE_LOOKUP_SENDS,
+    services: async () => [],
+  });
+
+  const recentlyDeleted = createRecentlyDeleted({
+    db,
+    now,
+    say: (key, params) => translate(settings.get().language, key, params),
+    minds,
+    content,
+    documents,
+    tags,
+    library,
+    mindsChanged,
+    tagsChanged,
+    tagged: announceTagged,
+  });
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
@@ -881,7 +1004,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     editMind: (mindId, change) => content.edit(mindId, change),
     linkFolder: (path) => documents.linkedFolders.add(path),
-    unlinkFolder: (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    unlinkFolder,
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
@@ -896,6 +1019,37 @@ export function createCore(adapters: CoreAdapters): Core {
     if (input !== undefined && !isRecord(input)) throw new InvalidInputError("Expected an object.");
     return ollamaBaseUrl(input?.baseUrl);
   };
+
+  // Meetings (#135): while audio is being captured, background model work holds back.
+  const meetings = createMeetings({
+    db,
+    dataDir,
+    now,
+    capture: adapters.audioCapture,
+    enabled: () => settings.get().device.meetingsEnabled,
+    noticeAccepted: () => settings.get().device.meetingNoticeAccepted,
+    systemAudioByDefault: () => settings.get().device.meetingSystemAudio,
+    language: () => settings.get().language,
+    createMind: (title) => {
+      const mind = minds.create(parseCreateMindInput({ title }));
+      mindsChanged();
+      return mind;
+    },
+    mindExists: (mindId) => {
+      try {
+        minds.get(mindId);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    changed: (list) => events.emit("meetings.changed", list),
+    onCapturingChange: (capturing) => {
+      background.setRecording(capturing);
+      documents.hold(capturing);
+    },
+    log: adapters.log ?? silentLogger,
+  });
 
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
@@ -915,10 +1069,12 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     deleteMind: async (mindId) => {
       const at = now();
-      db.transaction(() => {
+      const deleted = db.transaction(() => {
         const mind = minds.delete(mindId, at);
         content.remove(mind.id, at);
+        return mind;
       });
+      meetings.mindDeleted(deleted.id);
       mindsChanged();
       layouts.forgetDeletedMinds();
     },
@@ -961,11 +1117,14 @@ export function createCore(adapters: CoreAdapters): Core {
       if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
-    addDocuments: async (paths) => {
+    addDocuments: async (paths, options) => {
+      const batchId = batches.begin(library.target(options));
       const since = now();
-      const result = await documents.add(paths);
+      const result = await documents
+        .add(paths, (documentId) => batches.added(batchId, documentId))
+        .finally(() => batches.done(batchId));
       usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
-      return result;
+      return { ...result, batchId };
     },
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -974,11 +1133,13 @@ export function createCore(adapters: CoreAdapters): Core {
       const title = typeof input.name === "string" ? input.name : "";
       const folder = join(dataDir, "Saved text");
       mkdirSync(folder, { recursive: true });
-      const base = safeFileName(title, "Pasted text");
-      let path = join(folder, `${base}.md`);
-      for (let n = 2; existsSync(path); n++) path = join(folder, `${base} ${n}.md`);
-      writeFileSync(path, input.text.endsWith("\n") ? input.text : `${input.text}\n`);
-      const { documents: added } = await documents.add([path]);
+      const text = input.text.endsWith("\n") ? input.text : `${input.text}\n`;
+      const name = await writeNewFile(
+        folder,
+        `${safeFileName(title, "Pasted text")}.md`,
+        new TextEncoder().encode(text),
+      );
+      const { documents: added } = await documents.add([join(folder, name)]);
       const saved = added[0];
       if (!saved) throw new InvalidInputError("The text couldn't be saved.");
       return saved;
@@ -1000,14 +1161,25 @@ export function createCore(adapters: CoreAdapters): Core {
     retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
-    addLinkedFolder: async (path) => {
+    addLinkedFolder: async (path, options) => {
+      const groupId = library.target(options);
+      const known = new Set(documents.linkedFolders.list().map((each) => each.id));
       const linked = await documents.linkedFolders.add(path);
+      // Its first scan only starts adding Documents once this has returned.
+      const batchId = batches.begin(groupId);
+      // A folder inside one already linked adds nothing: its scans aren't this batch.
+      if (known.has(linked.id)) batches.done(batchId);
+      else batches.linking(batchId, linked);
       usageData.record({ event: "folder_linked", fields: {} });
-      return linked;
+      return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
+    updateReference: async (documentId, patch) => references.update(documentId, patch),
+    restoreReference: async (documentId, before, fields) =>
+      references.restore(documentId, before, fields),
+    lookUpReference: (documentId) => references.lookUp(documentId),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
     createExamples: async (group) => examples.create(group),
@@ -1159,12 +1331,17 @@ export function createCore(adapters: CoreAdapters): Core {
     createLibraryGroup: async (input) => library.create(input),
     updateLibraryGroup: async (id, input) => library.update(id, input),
     deleteLibraryGroup: async (id) => {
-      // Its Minds go to Not in a Folder with it, as its Documents do.
-      const moved = db.transaction(() => {
-        library.delete(id);
-        return minds.leaveFolder(id as string);
+      const deletion = db.transaction(() => {
+        const folder = library.folder(id);
+        const left = minds.leaveFolder(folder.id);
+        const { assignments } = library.delete(
+          folder.id,
+          left.map((mind) => mind.id),
+        );
+        return { assignments, mindIds: left.filter((mind) => mind.live).map((mind) => mind.id) };
       });
-      if (moved) mindsChanged();
+      if (deletion.mindIds.length > 0) mindsChanged();
+      return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => library.saveSettings(input),
@@ -1183,6 +1360,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
+    restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
+    restore: async (refs) => recentlyDeleted.restore(refs),
+    listDeleted: async () => recentlyDeleted.list(),
+    deletePermanently: async (refs) => recentlyDeleted.deletePermanently(refs),
+    acceptAssignments: async (ids) => library.accept(ids),
+    rejectAssignments: async (ids) => library.reject(ids),
     moveToFolder: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("moveToFolder expects an object.");
       const folderId = parseFolderChoice(input.folderId);
@@ -1243,12 +1426,17 @@ export function createCore(adapters: CoreAdapters): Core {
       tagMany(documentIds, (id) => tags.addToDocument(id, tagId)),
     removeTagFromDocuments: async (documentIds, tagId) =>
       tagMany(documentIds, (id) => tags.removeFromDocument(id, tagId)),
+    revertDocumentTags: async (links) => {
+      const changed = recentlyDeleted.revertTags(links);
+      if (changed.length > 0) announceTagged(changed);
+      return documents.getMany([...new Set(links.map((link) => link.documentId))]);
+    },
     mergeTags: async (tagId, intoTagId) => {
-      const documentIds = tags.merge(tagId, intoTagId, now());
+      const { documentIds, links } = tags.merge(tagId, intoTagId, now());
       // Tags first, so a listener filtering by the merged Tag hears it's gone before it refreshes.
       tagsChanged();
       announceTagged(documentIds);
-      return tags.get(intoTagId);
+      return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
       if (organizationConfigured()) return library.classify(documentIds);
@@ -1323,20 +1511,44 @@ export function createCore(adapters: CoreAdapters): Core {
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
     exportMind: async (mindId, options) => {
-      const exported = await mindExports.export(mindId, options);
-      usageData.record({
-        event: "mind_exported",
-        fields: {
-          format: options.format,
-          // Questions are in a Markdown export unless left out, and in a .docx only if asked for.
-          questions:
-            typeof options.includeQuestions === "boolean"
-              ? options.includeQuestions
-              : options.format === "markdown",
-        },
-      });
+      const exported = mindExports.export(mindId, options);
+      recordExport(options);
       return exported;
     },
+    saveMindExport: async (mindId, options) => {
+      const { fileName, data } = mindExports.export(mindId, options);
+      try {
+        const file = await outputs.save({ name: fileName, data });
+        recordExport(options);
+        return { status: "saved", file };
+      } catch (error) {
+        if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
+        if (error instanceof LinkedFolderWritesDeclinedError) {
+          return {
+            status: "not-allowed",
+            linkedFolderId: error.linkedFolderId,
+            linkedFolderPath: error.linkedFolderPath,
+          };
+        }
+        throw error;
+      }
+    },
+    getOutputSettings: async () => outputs.settings(),
+    setOutputLocation: (path) => outputs.setLocation(path),
+    setLinkedFolderWriting: async (linkedFolderId, allowed) =>
+      outputs.setLinkedFolderWriting(linkedFolderId, allowed),
+    listFileWriteRequests: async () => outputs.requests(),
+    respondToFileWrite: (requestId, accept) => outputs.respond(requestId, accept),
+
+    listMeetings: async () => meetings.list(),
+    createMeeting: async (input) => meetings.create(input),
+    discardMeeting: async (meetingId) => meetings.discard(meetingId),
+    startMeeting: async (input) => meetings.start(input),
+    pauseMeeting: async (meetingId) => meetings.pause(meetingId),
+    resumeMeeting: async (meetingId) => meetings.resume(meetingId),
+    stopMeeting: async (meetingId) => meetings.stop(meetingId),
+    deleteMeetingAudio: async (meetingId) => meetings.deleteAudio(meetingId),
+    openAudioSettings: (source) => meetings.openSettings(source),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
@@ -1351,7 +1563,15 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
+    showSavedFile: async (path) => {
+      if (!outputs.saved(path))
+        throw new NotFoundError("Only a file IncarnaMind saved can be shown.");
+      if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
+      adapters.shell.showItemInFolder(path);
+    },
     reconcileDocuments: () => documents.linkedFolders.sync(),
+    systemSleeping: () => meetings.sleeping(),
+    systemAwake: () => meetings.awake(),
     on: (event, listener) => events.on(event, listener),
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
@@ -1360,6 +1580,8 @@ export function createCore(adapters: CoreAdapters): Core {
     close: () => {
       if (lifetime.signal.aborted) return;
       lifetime.abort();
+      // What a Meeting has captured is saved before anything else stops.
+      meetings.close();
       // First, so stopping the Answers below starts no background work.
       background.close();
       void chatGpt.cancelSignIn();
@@ -1371,9 +1593,11 @@ export function createCore(adapters: CoreAdapters): Core {
       connectors.close();
       tagger.close();
       library.close();
+      batches.close();
       skills.close();
       stopTrackingUsage();
       consent.close();
+      outputs.close();
       documents.close();
       embeddingModel.close();
       rerankingModel.close();

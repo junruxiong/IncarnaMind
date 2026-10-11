@@ -212,7 +212,11 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await pointAndClick(window, window.getByTestId("plus-new-mind"));
   const composer = window.getByTestId("composer");
   await pointAndClick(window, composer.getByTestId("composer-input"));
-  await window.keyboard.type("What is IncarnaMind?");
+  // The scripted Answer repeats the Question: a long one keeps it streaming while the
+  // pointer slides to Stop, even on a slow runner.
+  await window.keyboard.type(
+    "What is IncarnaMind, how does it read my Documents, where does it keep them, which models can it use, how does it cite a page, and what happens to my files when I close it?",
+  );
   await window.keyboard.press("Enter");
 
   const editor = window.getByTestId("mind-editor");

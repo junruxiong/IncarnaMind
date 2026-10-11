@@ -6,6 +6,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  powerMonitor,
 } from "electron";
 import {
   type ChatModelFactory,
@@ -21,6 +22,7 @@ import { translate } from "../shared/i18n";
 import { registerDocumentScheme, serveDocumentFiles } from "./documentProtocol";
 import { serveFileActions } from "./files";
 import { startLogging } from "./logging";
+import { isCaptureWindow } from "./meetings/capture";
 import { installAppMenu } from "./menu";
 import { chooseExecutor, createElectronAdapters, systemBrowser } from "./platform";
 import { reportFullScreen, titleBarOptions } from "./titleBar";
@@ -61,6 +63,9 @@ async function testChatModel(): Promise<ChatModelFactory | undefined> {
 
 let core: Core | undefined;
 
+/** The app's windows: not the hidden one that records a Meeting's audio. */
+const appWindows = () => BrowserWindow.getAllWindows().filter((window) => !isCaptureWindow(window));
+
 function isFromOurRenderer(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   const url = event.senderFrame?.url ?? "";
   return rendererUrl ? url.startsWith(rendererUrl) : url.startsWith("file://");
@@ -78,7 +83,7 @@ function exposeCore(core: Core): void {
     });
   }
   core.onAnyEvent((name, payload) => {
-    for (const window of BrowserWindow.getAllWindows()) {
+    for (const window of appWindows()) {
       if (!window.isDestroyed()) window.webContents.send(EVENT_CHANNEL, name, payload);
     }
   });
@@ -113,6 +118,11 @@ function createWindow(): BrowserWindow {
   });
   keepWindowPlace(window, dataDir);
   reportFullScreen(window);
+  // A Meeting's hidden capture window doesn't keep the app running once its last window
+  // closes, where closing the last window quits (Windows, Linux): quitting saves the recording.
+  window.on("closed", () => {
+    if (process.platform !== "darwin" && appWindows().length === 0) app.quit();
+  });
 
   // Links open in the User's browser, never inside the app.
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -197,8 +207,12 @@ app.whenReady().then(async () => {
   if (!testHooks) startAutoUpdates(core);
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (appWindows().length === 0) createWindow();
   });
+
+  // A Meeting saves what it has before the computer sleeps, and records again when it wakes.
+  powerMonitor.on("suspend", () => core?.systemSleeping());
+  powerMonitor.on("resume", () => core?.systemAwake());
 });
 
 app.on("window-all-closed", () => {

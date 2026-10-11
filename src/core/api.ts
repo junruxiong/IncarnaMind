@@ -1,4 +1,6 @@
 import type {
+  AssignmentChange,
+  DocumentBatch,
   DocumentGroupAssignment,
   LibraryGroup,
   LibraryGroupInput,
@@ -8,7 +10,9 @@ import type {
 import type { UiUsageEvent } from "./usageEvents";
 
 export type {
+  AssignmentChange,
   ClassificationStatus,
+  DocumentBatch,
   DocumentGroupAssignment,
   LibraryClassifier,
   LibraryGroup,
@@ -33,8 +37,10 @@ import type { Language, LanguagePreference } from "./language";
 export interface Mind {
   /** A random UUID generated on this device. */
   id: string;
-  /** May be empty: the UI shows an "Untitled" placeholder. */
+  /** The title the User typed. May be empty: the Mind is then named by `autoTitle`. */
   title: string;
+  /** The Mind's first line of text, cut as a title; empty for a Mind with no text. */
+  autoTitle: string;
   /**
    * What the Mind is: a `MindKind` this version knows, or the name of a kind a
    * newer version wrote, which is listed but not opened (see `MindAccess`).
@@ -131,12 +137,17 @@ export interface MovedItem {
 /**
  * What a move did: each Mind and Document it moved, with where it was. Those
  * already in the Folder are listed too, with the Folder as `from`. Undoing
- * moves each back to its `from`.
+ * moves each Mind back to its `from`, and puts back each Document's `previous`.
  */
 export interface FolderMove {
   folderId: string | null;
   minds: MovedItem[];
-  documents: MovedItem[];
+  documents: MovedDocument[];
+}
+
+/** A Document a move moved, with its assignment before (null: none), for `restoreAssignment`. */
+export interface MovedDocument extends MovedItem {
+  previous: DocumentGroupAssignment | null;
 }
 
 /**
@@ -562,6 +573,19 @@ export interface DeviceSettings {
    * `maxTimeoutSeconds`, `defaultTimeoutSeconds` by default.
    */
   skillScriptTimeoutSeconds: number;
+  /**
+   * Meetings can be recorded on this device (Settings → Meetings). Off by
+   * default while recording is new: transcription and telling speakers apart
+   * come after it.
+   */
+  meetingsEnabled: boolean;
+  /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
+  meetingSystemAudio: boolean;
+  /**
+   * The User has read, once on this device, what a recording captures and
+   * that the other people should be told. Recording waits for it.
+   */
+  meetingNoticeAccepted: boolean;
 }
 
 /**
@@ -586,6 +610,12 @@ export interface Settings {
    * a setting. The approval card and Settings say what a script can reach by it.
    */
   scriptSandbox: SandboxLevel;
+  /**
+   * What this copy can record for a Meeting, found out when the app starts:
+   * not a setting. "both": the microphone and the computer's sound; "microphone":
+   * the microphone only (Linux, for now); "none": nothing (no capture).
+   */
+  meetingAudio: "both" | "microphone" | "none";
 }
 
 export interface SettingsPatch {
@@ -909,11 +939,134 @@ export interface Document {
    * heading, else its first line. Null if it has none, or until it is read.
    */
   title: string | null;
+  /**
+   * What a Citation of it needs to say (#286): its reference record, read
+   * from its file and edited by the User. Null until its file has been read.
+   */
+  reference: ReferenceRecord | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
+
+/**
+ * The kinds of work a reference record describes (#286), by their Citation
+ * Style Language names, so citation styles (#289) and CSL JSON (#287, #302)
+ * read them as they are: a journal article, a conference paper, a book
+ * chapter, a book, a thesis, a report, a web page, a preprint ("article").
+ * "document" is Other: nothing more is known.
+ */
+export const referenceTypes = [
+  "article-journal",
+  "paper-conference",
+  "chapter",
+  "book",
+  "thesis",
+  "report",
+  "webpage",
+  "article",
+  "document",
+] as const;
+
+export type ReferenceType = (typeof referenceTypes)[number];
+
+/**
+ * A name in a reference record, as CSL JSON writes it: a person's family and
+ * given names, or a name kept whole, as written: a Chinese, Japanese or
+ * Korean name (family name first, never split as a Western name is) or an
+ * organisation.
+ */
+export type ReferenceName = { family: string; given: string } | { literal: string };
+
+/**
+ * A reference record's fields (#286): what a citation style needs to cite a
+ * Document. An empty string, or no names, is an empty field.
+ */
+export interface ReferenceFields {
+  type: ReferenceType;
+  title: string;
+  /** In the order the work gives them; never re-ordered. */
+  authors: ReferenceName[];
+  /** When it was published, ISO 8601 at the precision known: "2010", "2010-08" or "2010-08-04". */
+  issued: string;
+  /** Where it was published: the journal, the book a chapter is in, the conference, the website. */
+  containerTitle: string;
+  volume: string;
+  issue: string;
+  /** Its pages in that: "456" or "456–470". */
+  pages: string;
+  publisher: string;
+  /** Without "https://doi.org/": "10.1186/1471-2458-10-456". */
+  doi: string;
+  /** A web page's address, or a preprint's ("https://arxiv.org/abs/1706.03762"). */
+  url: string;
+  /** What it is written in, as a BCP 47 tag: "en", "zh". */
+  language: string;
+}
+
+export type ReferenceField = keyof ReferenceFields;
+
+/**
+ * Where a field's value came from:
+ * - "file": read from the file (its properties, or a DOI or arXiv id in its
+ *   first pages). Reading the file again, as a new version is processed,
+ *   replaces it.
+ * - "lookup": filled by Look up (Crossref or arXiv), into a field that was empty.
+ * - "user": the User typed it, or cleared it. Nothing replaces it.
+ */
+export type ReferenceSource = "file" | "lookup" | "user";
+
+/** A reference record: a Document's fields as a citation style needs them (#286). */
+export interface ReferenceRecord {
+  /** A random UUID generated on this device. */
+  id: string;
+  fields: ReferenceFields;
+  /** Where each field's value came from; a field with no value and no source is empty. */
+  sources: Partial<Record<ReferenceField, ReferenceSource>>;
+  /** When Look up last filled it. ISO 8601, UTC. Null if never. */
+  lookedUpAt: string | null;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+/** Fields the User typed: each replaces its value, and is theirs ("user"). "" or no names clears one. */
+export type ReferencePatch = Partial<ReferenceFields>;
+
+/**
+ * Why Look up didn't fill a reference record:
+ * - "no-identifier": it has no DOI, and no arXiv address, to look up.
+ * - "local-mode": "Keep everything on this computer" is on.
+ * - "declined": the User didn't allow sending the identifier.
+ * - "not-found": the service has no record for it.
+ * - "unreachable": the service couldn't be reached, or took too long.
+ * - "service-error": the service answered with an error, or with something unreadable.
+ */
+export type ReferenceLookupFailureReason =
+  | "no-identifier"
+  | "local-mode"
+  | "declined"
+  | "not-found"
+  | "unreachable"
+  | "service-error";
+
+/** What Look up came to. */
+export type ReferenceLookupResult =
+  | {
+      outcome: "filled";
+      /** The Document, its record filled. */
+      document: Document;
+      /** The fields filled, which were empty: none if the service had nothing new. */
+      filled: ReferenceField[];
+      /** Where the record came from. */
+      service: ExternalService;
+    }
+  | {
+      outcome: "failed";
+      reason: ReferenceLookupFailureReason;
+      /** Technical detail in English, for logs and tooltips. */
+      message: string;
+    };
 
 export interface ListDocumentsOptions {
   /** Only Documents in this Folder. Omitted: every Document, in a Folder or not. */
@@ -1112,6 +1265,23 @@ export interface AddDocumentsResult {
   documents: Document[];
   /** Files that were not added. */
   skipped: SkippedFile[];
+  /** The batch of the new Documents: "documents.batch" events report its progress. */
+  batchId: string;
+}
+
+/** Where `addDocuments` and `addLinkedFolder` put the Documents they add. */
+export interface AddDocumentsOptions {
+  /**
+   * The Folder they were dropped on: each new Document is filed there as the
+   * User's choice, and Organize suggests only its Tags. Omitted: Organize
+   * suggests their Folders.
+   */
+  groupId?: string;
+}
+
+/** A Linked folder just linked, with the batch of the Documents its first scan adds. */
+export interface AddedLinkedFolder extends LinkedFolder {
+  batchId: string;
 }
 
 /**
@@ -1945,6 +2115,7 @@ export const dataKinds = [
   "tool-arguments",
   "document-text",
   "queries",
+  "identifiers",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -1963,6 +2134,9 @@ export type DataKind = (typeof dataKinds)[number];
  * - "rerank": each search query and its candidate Passages, to Cohere or
  *   Voyage, when a rerank key is set up. The built-in reranking model sends
  *   nothing: with it, the flow has no service.
+ * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
+ *   arXiv, when the User asks Look up to fill its reference record (#286).
+ *   Nothing else: no file, text or name. None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -1971,6 +2145,7 @@ export const dataFlowIds = [
   "connectors",
   "embeddings",
   "rerank",
+  "reference-lookup",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -2559,6 +2734,66 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
 }
 
 // ---------------------------------------------------------------------------
+// Recently deleted (CONTEXT.md)
+
+/** How many days deleted things wait in Recently deleted before they are deleted permanently. */
+export const RECENTLY_DELETED_DAYS = 30;
+
+/** What deleting puts in Recently deleted. A Chat is a Mind of kind "chat"; a Folder is an in-app one. */
+export type DeletedKind = "mind" | "chat" | "document" | "folder" | "tag";
+
+export interface DeletedRef {
+  kind: DeletedKind;
+  id: string;
+}
+
+export interface RestoreRef extends DeletedRef {
+  /** Tag links to put back as they were with it: what `mergeTags` changed in the other Tag. */
+  links?: TagLinkState[];
+}
+
+export interface DeletedItem {
+  kind: DeletedKind;
+  id: string;
+  /** Its name when deleted. May be empty for a Mind: the UI shows "Untitled". */
+  name: string;
+  /** ISO 8601, UTC. */
+  deletedAt: string;
+  /** A Document's kind; null for the others. */
+  documentKind: DocumentKind | null;
+  /** The in-app Folder (`LibraryGroup`) a Mind or Document was in, or null: none, and for the others. */
+  groupId: string | null;
+  /** A Document's Linked folder, or null: a file added on its own, and for the others. */
+  linkedFolderId: string | null;
+}
+
+/** What a deleted Folder held: its Documents, as they were filed, and its Minds. Restoring it puts back each one still in no Folder. */
+export interface FolderDeletion {
+  assignments: DocumentGroupAssignment[];
+  mindIds: string[];
+}
+
+/** How a Document carried a Tag before a change, for `revertDocumentTags`. */
+export interface TagLinkState {
+  documentId: string;
+  tagId: string;
+  /** As `Document.tags` listed it, or null: the Document didn't carry the Tag. */
+  link: Pick<DocumentTag, "source" | "confidence" | "needsReview"> | null;
+  /**
+   * With `link` null: whether the User had taken the Tag off, so automatic tagging left it
+   * off. False forgets a removal recorded since; left out, every removal stays.
+   */
+  removedByUser?: boolean;
+}
+
+export interface TagMerge {
+  /** The Tag merged into, unchanged. */
+  tag: Tag;
+  /** Restoring it undoes the merge: the merged Tag comes back, and both Tags' links are as they were. */
+  merged: RestoreRef;
+}
+
+// ---------------------------------------------------------------------------
 // Export
 
 /** What a Mind exports to: Markdown, for an archive, or Word (.docx), for the deliverable. */
@@ -2600,27 +2835,244 @@ export interface MindExport extends MindExportPreview {
   data: Uint8Array;
 }
 
+/** What `saveMindExport` did. */
+export type SavedMindExport =
+  | { status: "saved"; file: SavedFile }
+  /** The User didn't choose where new files go, so nothing was saved. */
+  | { status: "cancelled" }
+  /** The Output location is inside a Linked folder the User said IncarnaMind may not add files to. */
+  | { status: "not-allowed"; linkedFolderId: string; linkedFolderPath: string };
+
+// ---------------------------------------------------------------------------
+// Files IncarnaMind creates
+
+/**
+ * Where the files IncarnaMind creates go (exports, and later transcripts,
+ * saved web pages and what Tasks make): the Output location, and the Linked
+ * folders the User has said it may or may not add files to. It never changes,
+ * renames or deletes a file that is already there.
+ */
+export interface OutputSettings {
+  /** The folder the User chose, absolute, symbolic links resolved; null until they choose (the first save asks). */
+  location: string | null;
+  /** The folder the first save offers: "IncarnaMind" in the User's Documents folder. */
+  suggested: string;
+  /** The Linked folders the User has answered about, oldest answer first. */
+  linkedFolders: LinkedFolderWriting[];
+}
+
+/** Whether IncarnaMind may add new files inside a Linked folder, which it otherwise only reads. */
+export interface LinkedFolderWriting {
+  linkedFolderId: string;
+  /** The Linked folder's path. */
+  path: string;
+  allowed: boolean;
+  /** ISO 8601, UTC: when the User last answered. */
+  decidedAt: string;
+}
+
+/**
+ * A save waiting for the User's answer (`respondToFileWrite`), asked once:
+ * - "output-location": no Output location is chosen yet. Accepting saves in
+ *   the suggested folder; `setOutputLocation` answers with another one.
+ * - "linked-folder": the file would go inside a Linked folder. Accepting lets
+ *   IncarnaMind add files there from now on; declining stops it, until the
+ *   User changes it in Settings (`setLinkedFolderWriting`).
+ */
+export type FileWriteRequest =
+  | { requestId: string; kind: "output-location"; suggested: string; fileName: string }
+  | {
+      requestId: string;
+      kind: "linked-folder";
+      linkedFolderId: string;
+      linkedFolderPath: string;
+      fileName: string;
+    };
+
+/** A new file IncarnaMind saved. */
+export interface SavedFile {
+  /** Absolute. */
+  path: string;
+  /** Its name: the one asked for, or, when that was taken, the next free one ("Tides 2.docx"). */
+  name: string;
+}
+
+// ---------------------------------------------------------------------------
+// Meetings
+
+/** Where a Meeting's audio comes from: the microphone, or the computer's own sound (the other people in the Meeting). */
+export type AudioSource = "microphone" | "system";
+
+/**
+ * A Meeting's state:
+ * - "ready": its Mind shows the start block; nothing is recorded yet.
+ * - "recording": its audio goes to disk as it is captured, in 10-second parts.
+ * - "paused": by the User, or because IncarnaMind closed while it was recording.
+ * - "stopped": over. Its audio is kept until it expires.
+ */
+export type MeetingStatus = "ready" | "recording" | "paused" | "stopped";
+
+/**
+ * How one source is recorded right now:
+ * - "off": not asked for ("Only me"), or the Meeting isn't recording.
+ * - "starting": asked for, not heard from yet.
+ * - "recording": its audio is coming in.
+ * - "silent": the computer's sound has been nothing but silence for a minute,
+ *   which is what macOS gives when IncarnaMind isn't allowed to record it.
+ * - "denied": this computer doesn't allow IncarnaMind to record it.
+ * - "unavailable": there is none (no microphone), or this computer can't
+ *   record it (the computer's sound on Linux, for now).
+ * - "ended": it stopped part way, e.g. its device went, and couldn't start again.
+ */
+export type MeetingSourceState =
+  | "off"
+  | "starting"
+  | "recording"
+  | "silent"
+  | "denied"
+  | "unavailable"
+  | "ended";
+
+/**
+ * A stretch the User didn't choose not to record: IncarnaMind wasn't running
+ * (it closed or crashed while recording), or the computer slept.
+ */
+export interface MeetingGap {
+  /** Where it falls, in the Meeting's time: ms of recording before it (pauses and gaps take none). */
+  atMs: number;
+  /** How long nothing was recorded, in ms. */
+  missedMs: number;
+  reason: "interrupted" | "sleep";
+}
+
+export interface Meeting {
+  id: string;
+  /** The Mind it belongs to, where its notes are written. */
+  mindId: string;
+  status: MeetingStatus;
+  /** Why it is paused: the User did, or IncarnaMind closed while it was recording. Null unless paused. */
+  pausedBy: "user" | "interrupted" | null;
+  /** The computer's sound is recorded too ("Me and them"), not only the microphone ("Only me"). */
+  systemAudio: boolean;
+  sources: Record<AudioSource, MeetingSourceState>;
+  /**
+   * How much has been recorded, in ms: in all, or, while `recordingSince` is
+   * set, up to then. The Meeting's time now is `recordedMs` plus the time
+   * since `recordingSince`. Pauses and gaps don't count.
+   */
+  recordedMs: number;
+  /** While audio is being captured, when this stretch began (ISO 8601); otherwise null. */
+  recordingSince: string | null;
+  gaps: MeetingGap[];
+  /** When recording first started, and when it was stopped (ISO 8601). */
+  startedAt: string | null;
+  stoppedAt: string | null;
+  /** Its audio on this computer, which is deleted at most a day after the Meeting. */
+  audio: MeetingAudio;
+  /** Why the latest audio couldn't be saved (e.g. the disk is full), until a part is saved again. */
+  saveError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingAudio {
+  /** Some audio is on this computer. */
+  kept: boolean;
+  /** When it will be deleted, once the Meeting is paused or stopped; null while recording. */
+  expiresAt: string | null;
+  /** When the User, or the day's limit, last deleted it. */
+  deletedAt: string | null;
+}
+
+/** How long a Meeting's audio is kept after its last recording, at most. */
+export const MEETING_AUDIO_KEPT_MS = 24 * 60 * 60 * 1000;
+
+export interface CreateMeetingInput {
+  /** An empty Mind to hold it. Not given: a new Mind, named for the day. */
+  mindId?: string;
+}
+
+export interface StartMeetingInput {
+  meetingId: string;
+  /** Record the computer's sound too. Defaults to the Settings choice ("What is recorded"). */
+  systemAudio?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 
 export interface CoreApi {
   getLibrary(): Promise<LibrarySnapshot>;
   createLibraryGroup(input: LibraryGroupInput): Promise<LibraryGroup>;
   updateLibraryGroup(groupId: string, input: LibraryGroupInput): Promise<LibraryGroup>;
-  deleteLibraryGroup(groupId: string): Promise<void>;
+  /** Its Minds and Documents go to Not in a Folder. Returns what it held, which restoring it puts back. */
+  deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
-  /** Queues selected documents, or all; manual assignments are preserved. */
+  /**
+   * Queues selected documents, or all. Organize suggests a Folder for each
+   * (a Suggested Folder) and its Tags; manual assignments are preserved, and
+   * only their Tags suggested.
+   */
   classifyDocuments(documentIds?: string[]): Promise<void>;
-  /** A manual choice, including Not in a Folder (null), wins over in-flight classification. */
-  assignDocumentGroup(documentId: string, groupId: string | null): Promise<void>;
+  /**
+   * A manual choice, including Not in a Folder (null), wins over in-flight classification.
+   * Returns the assignment before, for `restoreAssignment` (null: it had none).
+   */
+  assignDocumentGroup(
+    documentId: string,
+    groupId: string | null,
+  ): Promise<DocumentGroupAssignment | null>;
+  /**
+   * Puts a Document's assignment back as it was (null: none), with who chose it, so an
+   * automatic choice stays automatic and Organize may change it again, and a Suggested
+   * Folder is a suggestion again. Rejected suggestions stay rejected.
+   */
+  restoreAssignment(
+    documentId: string,
+    previous: Omit<DocumentGroupAssignment, "documentId"> | null,
+  ): Promise<void>;
+  /**
+   * Makes these Documents' Suggested Folders the User's choices, which
+   * Organize never changes. Documents with none waiting are left alone; an
+   * unknown Document throws and changes nothing. Returns what changed.
+   */
+  acceptAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
+  /**
+   * Turns down these Documents' Suggested Folders: each is left Not in a
+   * Folder, and Organize doesn't suggest that Folder for it again. Documents
+   * with none waiting are left alone; an unknown Document throws and changes
+   * nothing. Returns what changed.
+   */
+  rejectAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
   /**
    * Moves Minds and Documents into a Folder, or out of every Folder (null),
    * all or none: an unknown Mind, Document or Folder changes nothing and
    * throws. A Document's move is a manual choice, which Organize keeps.
-   * Returns where each was, for Undo (a move back to each one's `from`).
+   * Returns where each was, for Undo: each Mind moved back to its `from`, and each
+   * Document's `previous` assignment put back with `restoreAssignment`.
    * "minds.changed" and "library.assignments" follow, once each.
    */
   moveToFolder(move: FolderMoveInput): Promise<FolderMove>;
+
+  /**
+   * Brings back deleted Minds and Chats with their content, Documents with their Passages,
+   * text and Tags, Folders with the Minds and Documents their deletion took out (those in no
+   * Folder since)
+   * and Tags with their links, all or none, and sends the events any change sends. One not
+   * deleted is left as it is. Throws, changing nothing, for one deleted permanently or more
+   * than `RECENTLY_DELETED_DAYS` ago, or that can't come back now (its name taken, its
+   * Linked folder unlinked). Never touches the User's files.
+   */
+  restore(refs: RestoreRef[]): Promise<void>;
+  /** What can be restored: the Minds, Chats, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
+  listDeleted(): Promise<DeletedItem[]>;
+  /**
+   * Drops deleted things' content (a Mind's notes, a Document's Passages and text, a Tag's
+   * links), keeping each one's id and when it was deleted, so a later sync can pass the
+   * deletion on. They can't be restored afterwards. Throws for one not deleted. Never
+   * touches the User's files. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
+   */
+  deletePermanently(refs: DeletedRef[]): Promise<void>;
 
   /** Makes a Mind, in a Folder if given (it must exist), and returns it. */
   createMind(input?: CreateMindInput): Promise<Mind>;
@@ -2664,9 +3116,10 @@ export interface CoreApi {
    * processing; "document.status" events report its progress. A file already
    * indexed at that path gives its Document; a file inside a Linked folder
    * is that Linked folder's Document; a file with the content of a missing
-   * Document is that Document, moved.
+   * Document is that Document, moved. The new Documents are one batch; given
+   * a Folder (see `AddDocumentsOptions`), they are filed there.
    */
-  addDocuments(paths: string[]): Promise<AddDocumentsResult>;
+  addDocuments(paths: string[], options?: AddDocumentsOptions): Promise<AddDocumentsResult>;
   /**
    * Keeps text the User pasted as a Markdown Document, so Answers can cite it.
    * The file is written in the data folder ("Saved text"), never next to the
@@ -2687,7 +3140,8 @@ export interface CoreApi {
    * Removes a Document from the index: soft-deletes it, its Passages and its
    * Tags, so search ignores them. The file isn't touched. A Document in a
    * Linked folder whose file is still there stays out of the index after
-   * later scans, until the Linked folder is removed and linked again.
+   * later scans, until it is restored, or the Linked folder is removed and
+   * linked again.
    */
   deleteDocument(id: string): Promise<void>;
   /**
@@ -2717,9 +3171,10 @@ export interface CoreApi {
    * A folder inside a Linked folder is already linked: that Linked folder is
    * returned. Linked folders inside this one are merged into it, their
    * Documents keeping their ids. Files added on their own that are inside it
-   * become its Documents.
+   * become its Documents. The Documents its first scan adds are one batch;
+   * given a Folder (see `AddDocumentsOptions`), they are filed there.
    */
-  addLinkedFolder(path: string): Promise<LinkedFolder>;
+  addLinkedFolder(path: string, options?: AddDocumentsOptions): Promise<AddedLinkedFolder>;
   /** The Linked folders, in path order. */
   listLinkedFolders(): Promise<LinkedFolder[]>;
   /**
@@ -2731,6 +3186,38 @@ export interface CoreApi {
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** The text kept of Documents unlinked with their Linked folder, for the Citations that quote it. */
   listKeptCitationTexts(): Promise<KeptCitationText[]>;
+  /**
+   * Changes fields of a Document's reference record (#286) as the User typed
+   * them: each becomes theirs, so reading the file again never replaces it.
+   * A field given its value as it is changes nothing. A DOI is kept without
+   * "https://doi.org/", and a date as `ReferenceFields.issued` says. Returns
+   * the Document; "references.changed" carries it too. Throws
+   * InvalidInputError for a field that isn't one, or a value that can't be
+   * (a date or a DOI that isn't one), and NotFoundError for an unknown Document.
+   */
+  updateReference(documentId: string, patch: ReferencePatch): Promise<Document>;
+  /**
+   * Puts these fields of a Document's reference record back as they were in
+   * `before`, a copy of the record from earlier, each with where its value
+   * came from: Undo, after `updateReference` or `lookUpReference`. Returns
+   * the Document; "references.changed" carries it too.
+   */
+  restoreReference(
+    documentId: string,
+    before: ReferenceRecord,
+    fields: ReferenceField[],
+  ): Promise<Document>;
+  /**
+   * Look up (#286): fetches the record for the Document's DOI from Crossref,
+   * or for its arXiv id (from an arXiv address) from arXiv, and fills its
+   * empty fields with it, leaving every other field that has a value. The
+   * type is the one exception: one read from the file is only a guess from a
+   * DOI or an arXiv id, so the service's replaces it, unless the User chose
+   * it. Only the identifier is sent, after the User has allowed the "reference-lookup"
+   * flow to that service (asked once); never in local mode. Only when the
+   * User asks: nothing looks up by itself.
+   */
+  lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
 
   /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
@@ -2994,13 +3481,19 @@ export interface CoreApi {
   /** The User takes a Tag off several Documents at once, as `removeDocumentTag` does on each. */
   removeTagFromDocuments(documentIds: string[], tagId: string): Promise<Document[]>;
   /**
+   * Puts Tags on Documents back as they were, with who chose them, all or none, without
+   * recording a removal: automatic tagging may add a Tag taken off this way. Returns the
+   * Documents, in the order given; one "documents.tagged" event carries those that changed.
+   */
+  revertDocumentTags(links: TagLinkState[]): Promise<Document[]>;
+  /**
    * Merges a Tag into another: every Document carrying `tagId` carries
    * `intoTagId` instead, and `tagId` is deleted. Who chose each Tag is kept
    * (the User's choice wins when a Document had both), and a removal the
-   * User made of the merged Tag carries over to the other. Returns the Tag
-   * merged into, unchanged.
+   * User made of the merged Tag carries over to the other. Returns what it
+   * changed, which `restore` undoes.
    */
-  mergeTags(tagId: string, intoTagId: string): Promise<Tag>;
+  mergeTags(tagId: string, intoTagId: string): Promise<TagMerge>;
   /**
    * Recomputes the automatic Tags of these Documents, or of every Document,
    * e.g. after Tag definitions changed. Tags the User added or removed are
@@ -3163,6 +3656,54 @@ export interface CoreApi {
    * "[unverified]" unless its quote was found. Math stays LaTeX.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
+  /**
+   * Exports a Mind (as `exportMind`) into the Output location, under the
+   * next free name, asking where new files go the first time.
+   */
+  saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+
+  /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
+  getOutputSettings(): Promise<OutputSettings>;
+  /**
+   * Sets the Output location: an absolute path to a folder, made if it is the
+   * suggested one and isn't there yet. A save waiting to know where goes on there.
+   */
+  setOutputLocation(path: string): Promise<OutputSettings>;
+  /**
+   * Allows or stops IncarnaMind adding new files inside a Linked folder (it
+   * never changes the files there). A save waiting for that answer goes on with it.
+   */
+  setLinkedFolderWriting(linkedFolderId: string, allowed: boolean): Promise<OutputSettings>;
+  /** Saves waiting for the User's answer, oldest first. */
+  listFileWriteRequests(): Promise<FileWriteRequest[]>;
+  /** Answers a save's question (see `FileWriteRequest`). One already answered does nothing. */
+  respondToFileWrite(requestId: string, accept: boolean): Promise<void>;
+
+  /** Every Meeting, newest first. */
+  listMeetings(): Promise<Meeting[]>;
+  /**
+   * A Meeting ready to record, in a new Mind named for the day or in an empty
+   * Mind given: its Mind shows the start block. Needs meetings turned on in
+   * Settings, and a Mind with no Meeting.
+   */
+  createMeeting(input?: CreateMeetingInput): Promise<Meeting>;
+  /** Takes back a Meeting that hasn't started ("Don't record; keep this as a note"): its Mind stays. */
+  discardMeeting(meetingId: string): Promise<void>;
+  /**
+   * Starts recording a ready Meeting: the microphone, and the computer's sound
+   * if asked. Needs the one-time recording notice accepted on this device, and
+   * no other Meeting recording.
+   */
+  startMeeting(input: StartMeetingInput): Promise<Meeting>;
+  pauseMeeting(meetingId: string): Promise<Meeting>;
+  /** Records again after a pause, the User's or one IncarnaMind closing made. */
+  resumeMeeting(meetingId: string): Promise<Meeting>;
+  /** Ends the recording. Its audio is kept for at most a day. */
+  stopMeeting(meetingId: string): Promise<Meeting>;
+  /** Deletes the Meeting's audio on this computer now; a recording goes on keeping what comes next. */
+  deleteMeetingAudio(meetingId: string): Promise<Meeting>;
+  /** Opens the system's settings where the User allows IncarnaMind to record this source. */
+  openAudioSettings(source: AudioSource): Promise<void>;
 }
 
 /**
@@ -3174,8 +3715,8 @@ export interface CoreEvents {
   /** The settings in effect changed, e.g. the interface language. */
   "settings.changed": Settings;
   /**
-   * Minds were created, renamed, moved to another Folder, deleted or edited,
-   * or their Folder was deleted: the list as `listMinds` now returns it.
+   * Minds were created, renamed, moved to another Folder, deleted, restored or edited, or
+   * their Folder was deleted or restored: the list as `listMinds` now returns it.
    */
   "minds.changed": Mind[];
   /** A window's tabs and groups changed: by `changeLayout`, or a deleted Mind's tab closed. */
@@ -3184,8 +3725,9 @@ export interface CoreEvents {
   /** A Mind's content changed. Clients editing that Mind apply the update to their `Y.Doc`. */
   "mind.update": MindUpdate;
   /**
-   * A Document was added, or its processing status (or embedding progress)
-   * changed, or its creation date was read in the background. Carries the whole Document.
+   * A Document was added or restored, or its processing status (or embedding
+   * progress) changed, or its creation date, title or reference record was read
+   * in the background. Carries the whole Document.
    */
   "document.status": Document;
   /** The built-in embedding model's state changed, or its download made progress. */
@@ -3202,6 +3744,12 @@ export interface CoreEvents {
   "rerank.changed": RerankSettings;
   /** Whether Questions can be asked may have changed. */
   "chatReadiness.changed": ChatReadiness;
+  /** The Output location, or what IncarnaMind may do in a Linked folder, changed. */
+  "outputSettings.changed": OutputSettings;
+  /** A save waits for the User's answer: where new files go, or whether it may add files to a Linked folder. */
+  "fileWrite.requested": FileWriteRequest;
+  /** A save's question was answered, here or in another window, or withdrawn. */
+  "fileWrite.resolved": { requestId: string };
   /** A data flow needs the User's consent before anything is sent. */
   "consent.requested": ConsentRequest;
   /** A consent request was answered, here or in another window. */
@@ -3232,26 +3780,38 @@ export interface CoreEvents {
    * list as `listKeptCitationTexts` now returns it.
    */
   "keptCitationTexts.changed": KeptCitationText[];
-  /** Tags were created (including the presets), edited or deleted: the list as `listTags` now returns it. */
+  /** Tags were created (including the presets), edited, deleted or restored: the list as `listTags` now returns it. */
   "tags.changed": Tag[];
   /**
    * The Library's Folders or settings changed, or a deleted Folder left its
-   * Documents Not in a Folder: read the current snapshot.
+   * Documents Not in a Folder, or a restored one took them back: read the current snapshot.
    */
   "library.changed": null;
   /**
    * Documents' Library assignments changed: Organize queued, started,
-   * finished or failed on them, or the User put one in a Folder. Carries each
+   * finished or failed on them, or the User put one in a Folder, or accepted
+   * or rejected its Suggested Folder. Carries each
    * one's assignment whole, as `getLibrary` lists it, so the snapshot needn't
    * be read again.
    */
   "library.assignments": DocumentGroupAssignment[];
+  /**
+   * A batch of Documents added together moved on: one joined it, was read
+   * or sorted, or its Suggested Folders changed. Carries the batch whole.
+   */
+  "documents.batch": DocumentBatch;
   /**
    * Documents' Tags changed, or where automatic tagging is for them: the User
    * added or removed a Tag, automatic tagging started, waited, finished or
    * failed, or a deleted Tag left them. Carries each Document whole.
    */
   "documents.tagged": Document[];
+  /**
+   * Documents' reference records changed (#286): the User edited one or put
+   * one back, or Look up filled one. Reading a record from a file comes with
+   * "document.status". Carries each Document whole.
+   */
+  "references.changed": Document[];
   /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
@@ -3291,6 +3851,12 @@ export interface CoreEvents {
   "answer.citationAdded": AnswerCitationAdded;
   "answer.finished": AnswerFinished;
   "answer.failed": AnswerFailed;
+  /**
+   * A Meeting was created, started, paused, resumed, stopped or discarded, a
+   * source's state changed, or its audio was saved or deleted: the list as
+   * `listMeetings` now returns it.
+   */
+  "meetings.changed": Meeting[];
 }
 
 export type CoreEventName = keyof CoreEvents;
@@ -3335,6 +3901,9 @@ const methods: Record<CoreApiMethod, true> = {
   listLinkedFolders: true,
   removeLinkedFolder: true,
   listKeptCitationTexts: true,
+  updateReference: true,
+  restoreReference: true,
+  lookUpReference: true,
   setLinkedFolderLayout: true,
   setLinkedFolderPaused: true,
   downloadOnlineOnlyFiles: true,
@@ -3390,7 +3959,13 @@ const methods: Record<CoreApiMethod, true> = {
   saveLibrarySettings: true,
   classifyDocuments: true,
   assignDocumentGroup: true,
+  acceptAssignments: true,
+  rejectAssignments: true,
   moveToFolder: true,
+  restoreAssignment: true,
+  restore: true,
+  listDeleted: true,
+  deletePermanently: true,
   listTags: true,
   createTag: true,
   updateTag: true,
@@ -3399,6 +3974,7 @@ const methods: Record<CoreApiMethod, true> = {
   removeDocumentTag: true,
   addTagToDocuments: true,
   removeTagFromDocuments: true,
+  revertDocumentTags: true,
   mergeTags: true,
   retagDocuments: true,
   getJevSettings: true,
@@ -3437,6 +4013,21 @@ const methods: Record<CoreApiMethod, true> = {
   restoreBuiltInSkills: true,
   previewMindExport: true,
   exportMind: true,
+  saveMindExport: true,
+  getOutputSettings: true,
+  setOutputLocation: true,
+  setLinkedFolderWriting: true,
+  listFileWriteRequests: true,
+  respondToFileWrite: true,
+  listMeetings: true,
+  createMeeting: true,
+  discardMeeting: true,
+  startMeeting: true,
+  pauseMeeting: true,
+  resumeMeeting: true,
+  stopMeeting: true,
+  deleteMeetingAudio: true,
+  openAudioSettings: true,
 };
 
 /** Every method of CoreApi, used to wire the IPC bridge. */

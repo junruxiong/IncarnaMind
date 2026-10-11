@@ -705,6 +705,142 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX minds_by_folder ON minds (folder_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 35,
+    description: "Whether IncarnaMind may add new files inside a Linked folder (#124)",
+    // Asked at the first save there, and changed in Settings; allowed is 1 or 0. It ends with
+    // its Linked folder: linked again, the folder is asked about again (src/core/outputFiles.ts).
+    sql: `
+      CREATE TABLE linked_folder_writes (
+        id TEXT PRIMARY KEY NOT NULL,
+        linked_folder_id TEXT NOT NULL,
+        allowed INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX linked_folder_writes_by_folder ON linked_folder_writes (linked_folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 36,
+    description: "Suggested Folders wait for the User, and a rejected one isn't suggested again",
+    // Every assignment so far keeps what it was: none of them is a suggestion. No foreign
+    // keys: a later sync may deliver a rejection before its Document or Folder.
+    sql: `
+      ALTER TABLE document_groups ADD COLUMN suggested INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE document_group_rejections (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT NOT NULL,
+        group_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX document_group_rejections_live
+        ON document_group_rejections (document_id, group_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 38,
+    description:
+      "Meetings: a recording's state, its stretches and how long its audio is kept (#135)",
+    // The audio itself is in the data folder, meetings/<id>/, one WAV file per 10 seconds per
+    // source (src/core/meetings/audioFiles.ts): the files are what survives a crash, so they
+    // aren't listed here. periods is JSON, the stretches recorded, in order: each
+    // { start, offsetMs, end, endedBy }, start and end ISO 8601 UTC wall-clock times (end null
+    // while it lasts), offsetMs the Meeting's time when it began, endedBy one of 'pause',
+    // 'stop', 'sleep' or 'interrupted' (IncarnaMind closed while recording).
+    sql: `
+      CREATE TABLE meetings (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL REFERENCES minds(id),
+        status TEXT NOT NULL CHECK (status IN ('ready', 'recording', 'paused', 'stopped')),
+        paused_by TEXT CHECK (paused_by IN ('user', 'interrupted')),
+        system_audio INTEGER NOT NULL DEFAULT 1,
+        periods TEXT NOT NULL DEFAULT '[]',
+        started_at TEXT,
+        stopped_at TEXT,
+        audio_expires_at TEXT,
+        audio_deleted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX meetings_by_mind ON meetings (mind_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 37 and 38 are reserved by work in progress.
+    version: 39,
+    description:
+      "Recently deleted: what was deleted permanently, and what a Folder's deletion took out",
+    // Restoring a deleted row brings back the rows deleted with it: those whose deleted_at is
+    // its own (src/core/recentlyDeleted.ts).
+    sql: `
+      -- When a deleted row's content was dropped, by the User or 30 days after it was
+      -- deleted. The row stays as its tombstone, so a later sync can pass the deletion on.
+      ALTER TABLE minds ADD COLUMN purged_at TEXT;
+      ALTER TABLE documents ADD COLUMN purged_at TEXT;
+      ALTER TABLE tags ADD COLUMN purged_at TEXT;
+      ALTER TABLE library_groups ADD COLUMN purged_at TEXT;
+      CREATE INDEX documents_by_deleted_at ON documents (deleted_at)
+        WHERE deleted_at IS NOT NULL AND purged_at IS NULL;
+
+      -- What deleting a Folder (library_groups) took out of it: one row per Document and Mind
+      -- in it (item_kind 'document' or 'mind', checked in code), so restoring the Folder puts
+      -- back those still in none, a suggested Folder as a suggestion again (suggested is 1).
+      -- Restoring it marks its rows deleted.
+      CREATE TABLE deleted_folder_items (
+        id TEXT PRIMARY KEY NOT NULL,
+        folder_id TEXT NOT NULL,
+        item_kind TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        suggested INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX deleted_folder_items_by_folder ON deleted_folder_items (folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 40,
+    description: "A Mind without a title is named by its first line of text",
+    // Kept up to date by the core as the Mind is edited; the title the User typed stays in `title`.
+    sql: `ALTER TABLE minds ADD COLUMN auto_title TEXT NOT NULL DEFAULT '';`,
+  },
+  {
+    version: 42,
+    description: "Reference records: what a citation style needs to cite a Document (#286)",
+    sql: `
+      -- A Document's reference record (src/core/referenceRecords): its type, title,
+      -- authors, date, venue, volume, issue, pages, publisher, DOI, URL and
+      -- language. fields is JSON, one entry per field that has a value or
+      -- that the User cleared: { "<field>": { "value": …, "source": "file" |
+      -- "lookup" | "user" } }, checked in code, so a field a later version
+      -- adds needs no migration. Reading the file again replaces only "file"
+      -- values; the User's edits ("user") are never replaced. looked_up_at:
+      -- when Look up last filled it, NULL if never. document_id is NULL for
+      -- a reference with no Document yet (an imported one, #287), and stays
+      -- set when its Document leaves the index, so the Citations that quote
+      -- it can still be listed in a Bibliography. No foreign key: a later
+      -- sync may deliver a record before its Document.
+      CREATE TABLE reference_records (
+        id TEXT PRIMARY KEY NOT NULL,
+        document_id TEXT,
+        fields TEXT NOT NULL,
+        looked_up_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE UNIQUE INDEX reference_records_by_document ON reference_records (document_id)
+        WHERE deleted_at IS NULL AND document_id IS NOT NULL;
+    `,
+  },
 ];
 
 /**

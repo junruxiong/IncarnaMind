@@ -49,7 +49,7 @@ A Document whose Linked folder can't be reached for now, such as on an unplugged
 _Avoid_: offline, missing
 
 **Linked folder**:
-A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes anything in it. Files a cloud drive keeps online only are indexed when the User asks.
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks.
 _Avoid_: workspace, vault, source
 
 **Other Documents**:
@@ -64,6 +64,10 @@ _Avoid_: chunk, snippet
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
 _Avoid_: source, reference
 
+**Reference record**:
+What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details".
+_Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
+
 **Location**:
 Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), or a range of lines in plain text.
 _Avoid_: page (for anything that isn't a PDF), position, anchor
@@ -75,6 +79,10 @@ _Avoid_: project (in the interface), group (a Folder's former name; a Group is n
 **Not in a Folder**:
 The one place for every Document and Mind in no Folder. A Mind there searches all Documents.
 _Avoid_: Unsorted, Uncategorised, Inbox
+
+**Suggested Folder**:
+A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Not in a Folder and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
+_Avoid_: automatic Folder, proposed Folder
 
 **Source location**:
 The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.
@@ -126,6 +134,10 @@ _Avoid_: suggestion, edit, draft, diff
 **Checkpoint**:
 A saved copy of a Mind as it was just before an AI change, which the User can compare with another Checkpoint or restore from. Restoring one comes back as a Proposal, not as an overwrite.
 _Avoid_: snapshot, version, backup, undo
+
+**Recently deleted**:
+Where a deleted Mind, Chat, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
+_Avoid_: trash, bin, archive
 
 ### Checks
 

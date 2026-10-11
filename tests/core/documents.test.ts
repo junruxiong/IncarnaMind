@@ -104,6 +104,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         // Read while it's processed.
         creationDate: null,
         title: null,
+        reference: null,
         createdAt: "2026-10-06T12:00:00.000Z",
         updatedAt: "2026-10-06T12:00:00.000Z",
       },
@@ -434,6 +435,7 @@ describe("Documents", { timeout: 30_000 }, () => {
         { path: missing, reason: "unreadable" },
         { path: sources, reason: "unsupported-type" },
       ],
+      batchId: expect.any(String),
     });
     expect(await core.listDocuments()).toEqual([]);
     await expect(core.addDocuments(["relative/notes.txt"])).rejects.toThrow(InvalidInputError);

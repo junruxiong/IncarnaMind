@@ -19,7 +19,7 @@ Settled with the User on 2026-10-07:
 - **Cloud drives.** Online-only placeholder files are never read, because reading downloads them. The Linked folder says how many it skipped, and offers to download and index them.
 - **Flat or nested.** A Linked folder can show its subfolders or a flat list. It starts flat when nearly every subfolder holds one file and there are many of them (at least 20), which is Zotero's `storage/<key>/` layout; a small library keeps its folders. The User picks the layout when linking and can switch it later.
 - **Big folders.** Linking says how many files and roughly how long before indexing starts. Indexing runs newest first, and can be paused and resumed.
-- **Read-only.** IncarnaMind never writes, renames or deletes anything in a Linked folder.
+- **Read-only.** IncarnaMind never writes, renames or deletes anything in a Linked folder. (Amended on 2026-10-10, below: it may add new files there with the folder's permission, and still never changes the files already there.)
 - **Other Documents.** Files added on their own form the "Other Documents" group, below the Linked folders.
 
 This replaces the spec's original choice (issue #20, story 41: "copied into the app's data folder, so that moving or deleting the originals breaks nothing") and narrows ADR-0008: the data folder no longer holds Document files.
@@ -38,3 +38,21 @@ This replaces the spec's original choice (issue #20, story 41: "copied into the 
 - Opening a Document in another app opens the original; no temporary copies.
 - Linked folders on cloud drives can hold placeholder files that aren't downloaded; those wait until they're readable.
 - **Migration 21** from the copy layout drops the in-app Folders: their Documents become unfiled, and Search scopes show those Folders as deleted. Copied Documents become single files at `<data>/documents/<hash>.<ext>` until the User links the folder holding the original; that Linked folder then takes over the Document, keeping its id, and the copy is removed.
+
+## Amendment: new files go to an Output location, and into a Linked folder only with its permission (2026-10-10, #124)
+
+Settled with the User on 2026-10-09: originals are never changed or deleted, and the files IncarnaMind creates (exports, and later transcripts, saved web pages and what Tasks make) go where the User picks. This replaces "IncarnaMind never writes, renames or deletes anything in a Linked folder" with:
+
+- **Originals stay as they are.** IncarnaMind never changes, renames, moves or deletes a file that is already there, in a Linked folder or anywhere else.
+- **The Output location.** New files go to one folder the User picks. The first save asks, offering "IncarnaMind" in the User's Documents folder, and the answer is kept per device (paths belong to one computer, ADR-0003). Settings › General shows it and changes it. IncarnaMind writes nowhere else without asking.
+- **Inside a Linked folder only with its permission.** A new file can go inside a Linked folder, next to the original it was made from or because the Output location is inside one, once the User allows that folder. The first save there asks, once per Linked folder; the answer, yes or no, is remembered (migration 35, `linked_folder_writes`) and changed in Settings › General. Unlinking the folder forgets it. A "no" refuses later saves there without asking again.
+- **Nothing is replaced.** A new file takes its name, or the next free one ("Tides 2.docx"), and each name is created exclusively, so a file or a link already under it is never overwritten or followed.
+- **Path checks resolve links.** The folder a file goes to is resolved, symbolic links followed, and must still be inside the Output location the User chose or inside a Linked folder. A link that leads anywhere else is refused, and nothing is written.
+
+One core call does all of this for every feature that makes a file (`OutputFiles.save` in `src/core/outputFiles.ts`): it finds the folder, asks what hasn't been answered, picks a free name and says where the file went. A file it saves inside a Linked folder is picked up there like any other file and becomes a Document.
+
+### Considered options
+
+- **Overwrite the original, with a backup:** the most convenient, like saving in Word, but it fights cloud-drive sync clients and risks losing the User's file.
+- **Never write inside a Linked folder** (the rule until now): the strictest, but every Word round trip would be saved somewhere away from its original.
+- **Ask before every save into a Linked folder:** safe, but asking again and again teaches the User to click through; adding a file is not destructive, so one answer per folder is enough.
