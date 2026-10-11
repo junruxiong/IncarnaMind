@@ -24,6 +24,7 @@ import type {
   EmbeddingSettings,
   ExportMindOptions,
   Mind,
+  OwnFileKind,
   ProviderError,
   SearchScope,
   Unsubscribe,
@@ -39,6 +40,8 @@ import {
   type DocumentImage,
   parseListOptions,
 } from "./documents";
+import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
@@ -105,7 +108,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
-import { resolveSearchScope } from "./scope";
+import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
@@ -727,6 +730,14 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
+  // files and the document being checked. Answers themselves search everything, as before.
+  const evidence = createEvidence({
+    db,
+    leaveOutOwnFiles: () => settings.get().user.leaveOutOwnFiles,
+    search: (query, options) =>
+      documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
+  });
 
   const answers = createAnswers({
     content,
@@ -841,6 +852,13 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
+  // the same bytes is marked at once, and every window hears of it.
+  const ownFiles = createOwnFiles(db, now);
+  const recordOwnFile = (data: Uint8Array, kind: OwnFileKind) => {
+    const marked = ownFiles.record(data, kind);
+    for (const document of documents.getMany(marked)) events.emit("document.status", document);
+  };
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
@@ -870,6 +888,7 @@ export function createCore(adapters: CoreAdapters): Core {
     settings,
     suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
+    recordOwnFile,
   });
   const unlinkFolder = (linkedFolderId: string) => {
     documents.linkedFolders.remove(linkedFolderId);
@@ -1494,6 +1513,20 @@ export function createCore(adapters: CoreAdapters): Core {
       });
     },
     searchPassages: (query, options) => documents.search(query, options),
+    searchEvidence: async (query, options) => {
+      if (typeof query !== "string") throw new InvalidInputError("A search query must be text.");
+      if (options !== undefined && !isRecord(options)) {
+        throw new InvalidInputError("searchEvidence's options must be an object.");
+      }
+      const scope = parseSearchScope(options?.scope);
+      const found = await evidence.search(
+        query,
+        evidence.scope(scope ? resolveScope(scope) : null, parseCheckedDocument(options?.checked)),
+      );
+      return { passages: found.passages.map(passageResult), excluded: found.excluded };
+    },
+    setCountedAsEvidence: async (documentId, counted) =>
+      documents.setCountedAsEvidence(documentId, counted),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
 
@@ -1815,13 +1848,15 @@ export function createCore(adapters: CoreAdapters): Core {
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
     exportMind: async (mindId, options) => {
       const exported = mindExports.export(mindId, options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
+      recordOwnFile(exported.data, "export");
       recordExport(options);
       return exported;
     },
     saveMindExport: async (mindId, options) => {
       const { fileName, data } = mindExports.export(mindId, options);
       try {
-        const file = await outputs.save({ name: fileName, data });
+        const file = await outputs.save({ name: fileName, data, ownFile: "export" });
         recordExport(options);
         return { status: "saved", file };
       } catch (error) {

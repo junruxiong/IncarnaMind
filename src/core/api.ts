@@ -656,6 +656,12 @@ export interface UserSettings {
    * flow first, when the default chat model sends to a service.
    */
   suggestWhileWriting: boolean;
+  /**
+   * Checks and comparison tables leave the files IncarnaMind wrote out of
+   * their evidence (#80, see `OwnFile`): on by default. Off, they count
+   * everywhere. Copies of the document being checked are left out either way.
+   */
+  leaveOutOwnFiles: boolean;
 }
 
 /**
@@ -1130,12 +1136,77 @@ export interface Document {
    * from its file and edited by the User. Null until its file has been read.
    */
   reference: ReferenceRecord | null;
+  /**
+   * Set when IncarnaMind wrote the Document's file (#80): see `OwnFile`.
+   * Null for the User's own files, and for the sources IncarnaMind saves
+   * (web pages, Transcripts), which count as evidence as usual.
+   */
+  ownFile: OwnFile | null;
   /** Where its text came from, when Find sources added it (#296); null for any other Document. */
   found: DocumentFoundSource | null;
   /** When the Document was added to IncarnaMind. ISO 8601, UTC. */
   createdAt: string;
   /** ISO 8601, UTC. */
   updatedAt: string;
+}
+
+/** What IncarnaMind writes that checks leave out of their evidence (#80): a Mind's export, or a source pack. */
+export const ownFileKinds = ["export", "source-pack"] as const;
+export type OwnFileKind = (typeof ownFileKinds)[number];
+
+/**
+ * A Document whose file IncarnaMind wrote (#80): an export or a source pack
+ * it saved, found by the file's content fingerprint, e.g. once saved into a
+ * Linked folder. It stays one when the User edits the file, since what it
+ * says still came from the Mind. Checks and comparison tables leave it out of
+ * their evidence, so a note can't support itself, unless the User counts it
+ * ("Count it"), its Folder counts IncarnaMind's files (`LibraryGroup.countsOwnFiles`),
+ * or Settings does (`UserSettings.leaveOutOwnFiles` off). Ordinary Answers search it as usual.
+ */
+export interface OwnFile {
+  kind: OwnFileKind;
+  /** The User counts it as evidence all the same, until they take that back (`setCountedAsEvidence`). */
+  counted: boolean;
+}
+
+/**
+ * Why a check leaves a Document out of its evidence (#80):
+ * - "own-file": IncarnaMind wrote it (see `OwnFile`). Counting it lets it count.
+ * - "checked-document": it is the document being checked, an earlier version
+ *   of it, or a copy of either (the same content fingerprint, at any path).
+ *   Never evidence for that check.
+ */
+export type EvidenceExclusion = "own-file" | "checked-document";
+
+/** The document a check verifies (#97, #110): it, its earlier versions and their copies are never its evidence. */
+export interface CheckedDocument {
+  /** Its Documents. */
+  documentIds?: string[];
+  /** The content fingerprints (SHA-256, hex) of a checked file that isn't a Document, e.g. an imported .docx. */
+  contentHashes?: string[];
+}
+
+export interface SearchEvidenceOptions {
+  /** The check's Search scope. None: every Document. */
+  scope?: SearchScope;
+  checked?: CheckedDocument;
+}
+
+/** A Document a check left out of its evidence, where it matched: a result names it, never hides it. */
+export interface ExcludedEvidence {
+  documentId: string;
+  documentName: string;
+  reason: EvidenceExclusion;
+  /** Its Passages that matched, in reading order: where it would have been evidence. */
+  passages: PassageSearchResult[];
+}
+
+/** What a check's search found (`searchEvidence`). */
+export interface EvidenceSearchResult {
+  /** The evidence: what the search Tool gives an Answer, from the Documents a check may use. */
+  passages: PassageSearchResult[];
+  /** The Documents left out that matched too, the best first. */
+  excluded: ExcludedEvidence[];
 }
 
 /**
@@ -4288,6 +4359,21 @@ export interface CoreApi {
    * model isn't ready, and InvalidInputError while embeddings are off.
    */
   searchPassages(query: string, options?: SearchPassagesOptions): Promise<PassageSearchResult[]>;
+  /**
+   * Searches as a check or a comparison table does (#80): as the search Tool
+   * searches for an Answer, reranked as the User chose, but without the
+   * Documents a check leaves out of its evidence (see `EvidenceExclusion`).
+   * Those that match are named in `excluded`, with where, so the result can
+   * say so and offer Count it.
+   */
+  searchEvidence(query: string, options?: SearchEvidenceOptions): Promise<EvidenceSearchResult>;
+  /**
+   * Counts a Document IncarnaMind wrote as evidence from now on ("Count it"),
+   * or, with false, leaves it out again: its Undo, and its menu. Returns it,
+   * and "document.status" says so. InvalidInputError for a Document
+   * IncarnaMind didn't write.
+   */
+  setCountedAsEvidence(documentId: string, counted: boolean): Promise<Document>;
   /** The built-in embedding model and its download. */
   getEmbeddingModel(): Promise<EmbeddingModelStatus>;
   /**
@@ -5022,6 +5108,8 @@ const methods: Record<CoreApiMethod, true> = {
   downloadOnlineOnlyFiles: true,
   recheckCitation: true,
   searchPassages: true,
+  searchEvidence: true,
+  setCountedAsEvidence: true,
   getEmbeddingModel: true,
   downloadEmbeddingModel: true,
   getEmbeddingSettings: true,
