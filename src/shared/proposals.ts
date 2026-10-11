@@ -182,7 +182,10 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   const value = requestsOf(doc).get(request);
   if (typeof value !== "object" || value === null) return null;
   const { source, providerId, modelId, createdAt } = value as Record<string, unknown>;
-  return source === "edit-with-ai" && isText(providerId) && isText(modelId) && isText(createdAt)
+  return (source === "edit-with-ai" || source === "answer") &&
+    isText(providerId) &&
+    isText(modelId) &&
+    isText(createdAt)
     ? { source, providerId, modelId, createdAt }
     : null;
 }
@@ -204,7 +207,8 @@ export function aiUseOfAccepted(
       const made = proposalRequestOf(doc, proposal.request);
       return {
         mindId,
-        kind: "edit-with-ai-accepted",
+        // An Answer made into a new Mind is an Answer added, once it is accepted.
+        kind: made?.source === "answer" ? "answer-added" : "edit-with-ai-accepted",
         providerId: made?.providerId ?? null,
         modelId: made?.modelId ?? null,
         characters: proposal.characters,

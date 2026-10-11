@@ -7,6 +7,9 @@ import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  addToNote,
+  askInAssistant,
+  clickEndOf,
   createDataFolder,
   dismissChatSetup,
   dragBlock,
@@ -70,33 +73,6 @@ async function screenshot(target: Page | Locator, name: string): Promise<void> {
   if (!folder) return;
   await mkdir(folder, { recursive: true });
   await target.screenshot({ path: join(folder, `${name}.png`) });
-}
-
-/**
- * Puts the cursor at the end of a line of text as a person does: slides to
- * the right of its words and clicks there (Home and End don't move the
- * cursor on macOS).
- */
-async function clickEndOf(window: Page, line: Locator): Promise<void> {
-  const box = await line.boundingBox();
-  if (!box) throw new Error("The line isn't visible.");
-  const x = box.x + box.width - 4;
-  const y = box.y + box.height - 10;
-  await window.mouse.move(x, y, { steps: 6 });
-  await window.mouse.click(x, y);
-  // A key pressed next acts where the editor's cursor is: wait until it is in the line.
-  await expect
-    .poll(() =>
-      line.evaluate((element) => {
-        const root = element.closest(".ProseMirror") as (Element & { editor?: Editor }) | null;
-        const view = root?.editor?.view;
-        if (!view) return false;
-        const { from, empty } = view.state.selection;
-        const at = view.domAtPos(from).node;
-        return empty && element.contains(at);
-      }),
-    )
-    .toBe(true);
 }
 
 /** The footnotes' texts in the footnote area, in their order. */
@@ -339,14 +315,12 @@ test("in Chinese: footnotes typed with an input method number together with an A
   await expect(area.getByRole("heading")).toHaveText("脚注");
   await expect(areaTexts(window)).toHaveText(["每月两次。", "小潮在上下弦月"]);
 
-  // An Answer's Citation comes after them, so it is 3, in the text, the margin and the area.
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen?");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  // An Answer's Citation, added to the note after them, is 3, in the text, the margin and the area.
+  await addToNote(window, await askInAssistant(window, "When do spring tides happen?"));
+  const answer = editor.locator(":scope > p").nth(1);
+  const marks = window.locator(".mind-editor-frame").getByTestId("margin-check");
   await expect(answer.getByTestId("citation-chip")).toHaveText("3");
-  await expect(window.getByTestId("margin-check")).toHaveText(["3"]);
+  await expect(marks).toHaveText(["3"]);
   const citationRow = area.getByTestId("footnote-row-citation");
   await expect(citationRow).toHaveAttribute("data-number", "3");
   await expect(citationRow).toHaveAttribute("data-check", "found");
@@ -387,7 +361,7 @@ test("in Chinese: footnotes typed with an input method number together with an A
   // It is footnote 3 now, before the Answer's Citation, which becomes 4; the one inside has no number.
   await expect(markers).toHaveText(["1", "2", "3"]);
   await expect(answer.getByTestId("citation-chip")).toHaveText("4");
-  await expect(window.getByTestId("margin-check")).toHaveText(["4"]);
+  await expect(marks).toHaveText(["4"]);
   await expect(areaTexts(window).nth(2)).toContainText("参见");
   await expect(areaTexts(window).nth(2).getByTestId("citation")).toHaveAttribute(
     "data-check",

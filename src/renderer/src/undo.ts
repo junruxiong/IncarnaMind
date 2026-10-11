@@ -11,7 +11,16 @@ export interface Undoable {
   message: string;
   /** Takes it back. A failure is the caller's to report. */
   undo(): Promise<void>;
+  /**
+   * Where its line shows, when that is where the User acted rather than the
+   * sidebar's foot: under an Answer in the assistant (`answerUndoPlace`). ⌘Z
+   * takes it back all the same.
+   */
+  shownAt?: string;
 }
+
+/** Where the line of what was done with an Answer in the assistant shows: under that Answer. */
+export const answerUndoPlace = (answerId: string) => `answer:${answerId}`;
 
 interface UndoState {
   /** The last action that can be taken back, while its line shows. */

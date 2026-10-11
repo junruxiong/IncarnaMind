@@ -9,23 +9,26 @@ import type { CoreBridge } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
+  assistantAnswers,
   createDataFolder,
   dismissChatSetup,
   enterContent,
   launchApp,
   pointAndClick,
+  pointAt,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
 } from "./app";
 
 /**
- * The composer at the foot of the Mind (DESIGN.md, Composer): asking puts the
- * Question into the note as one grey line and streams its Answer below it,
- * with checked Citations; Stop keeps what streamed; ⌘J, Enter, Shift+Enter
- * and Esc; the model chip, remembered per Mind; Minds written before. Driven
- * as a person would, with the mouse slid onto what it clicks and the keys
- * typed. Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
+ * The composer at the foot of the assistant (DESIGN.md, Composer; #253, #201):
+ * asking shows the Question in the assistant's conversation and streams its
+ * Answer under it, with checked Citations, and leaves the Mind as it was;
+ * Stop keeps what streamed; ⌘J, Enter, Shift+Enter and Esc; the model chip,
+ * remembered per Mind; Minds written before. Driven as a person would, with
+ * the mouse slid onto what it clicks and the keys typed. Set
+ * INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
 async function screenshot(target: Page | Locator, name: string): Promise<void> {
@@ -49,15 +52,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
-
-/** Slides the mouse onto an element and leaves it there. */
-async function pointAt(window: Page, target: Locator): Promise<void> {
-  const box = await target.boundingBox();
-  if (!box) throw new Error("The element isn't visible.");
-  await window.mouse.move(box.x + Math.min(box.width / 2, 40), box.y + box.height / 2, {
-    steps: 8,
-  });
-}
 
 /**
  * The Mind as wide as the approved mockups drew it (a 1440px window's card),
@@ -96,7 +90,7 @@ const bridge = (window: Page) => ({
     ),
 });
 
-test("typing in the composer and pressing Enter puts the Question into the note as one grey line, and its Answer streams in below it with checked Citations", async () => {
+test("typing in the composer and pressing Enter shows the Question in the assistant as a bubble, and its Answer streams in under it with checked Citations, the Mind as it was", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
@@ -141,13 +135,13 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   await screenshot(window, "composer-typed-en");
   await window.keyboard.press("Enter");
 
-  // One grey line at the end of the Mind (the cursor wasn't in it), its Answer under it.
-  const question = editor.getByTestId("question");
+  // A bubble at the right of the assistant, in the compact sizes; its Answer under it.
+  const question = window.getByTestId("assistant-question");
   await expect(question).toHaveCount(1);
-  await expect(question.locator(".question-text")).toHaveText("When do spring tides happen?");
-  await expect(question.locator(".question-text")).toHaveCSS("font-size", "14px");
-  await expect(question.locator(".question-text")).toHaveCSS("color", "rgb(101, 107, 116)");
-  const answer = editor.getByTestId("answer");
+  await expect(question).toContainText("When do spring tides happen?");
+  const bubble = question.locator(".assistant-question-bubble");
+  await expect(bubble).toHaveCSS("font-size", "13px");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "streaming");
   // While it is written: the pulsing dot and Stop show; it is read out in a polite live region.
   await expect(answer.getByTestId("answer-writing")).toBeVisible();
@@ -157,48 +151,44 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   await expect(live).toHaveText(/Writing the Answer…|Your Documents answer this/);
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(live).toHaveText("Your Documents answer this. That is all. The Answer is done.");
-  await expect
-    .poll(() => order(editor))
-    .toEqual(["Spring tides come twice a month.", "question", "answer", ""]);
+  // The Mind is as it was written.
+  await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
 
-  // The Citation is checked: found on page 2.
+  // The Citation is checked: found on page 2, its check in the margin beside it.
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
   await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
     "aria-label",
     "Citation 1: Tides, p. 2. Quote found on p. 2",
   );
+  await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
   // The composer is empty and keeps the focus, for a follow-up.
   await expect(input).toHaveValue("");
   await expect(input).toBeFocused();
   await expect(ask).toBeDisabled();
 
-  // At rest, no label and no meta line; on hover, the model, the search and Regenerate.
+  // The newest Answer shows its actions at rest: Copy, Add to note, Regenerate, its model and
+  // what it searched.
   await window.mouse.move(10, 10);
-  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(0);
-  await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(0);
-  await screenshot(window, "composer-answered-en");
-  await pointAt(window, answer.locator(".answer-content p").first());
   await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
   await expect(answer.getByTestId("answer-model")).toHaveText("fake-model");
+  await expect(answer.getByTestId("answer-scope")).toHaveText("All Documents");
   await expect(answer.getByTestId("answer-tools")).toContainText("Searched your Documents");
   await expect(answer.getByTestId("answer-regenerate")).toBeVisible();
-  await screenshot(window, "answer-hover-en");
-  await pointAt(window, question.locator(".question-text"));
-  await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(1);
-  await expect(question.getByTestId("question-model")).toHaveText("fake-model");
-  await screenshot(window, "question-hover-en");
+  await screenshot(window, "composer-answered-en");
 
-  // Its fold chevron, in the left margin, hides the Answer and shows it again.
-  const fold = question.getByTestId("question-fold");
-  await expect(fold).toHaveAttribute("aria-expanded", "true");
-  await pointAndClick(window, fold);
-  await expect(fold).toHaveAttribute("aria-expanded", "false");
-  await expect(answer).toBeHidden();
-  await expect(window.getByTestId("margin-check")).toHaveCount(0);
-  await pointAndClick(window, fold);
-  await expect(answer).toBeVisible();
-  await expect(window.getByTestId("margin-check")).toHaveCount(1);
+  // An earlier one shows them on hover only.
+  await window.keyboard.type("And neap tides?");
+  await window.keyboard.press("Enter");
+  await expect(assistantAnswers(window).nth(1)).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
+  await window.mouse.move(10, 10);
+  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(0);
+  await pointAt(window, answer.locator(".assistant-answer-text p").first());
+  await expect.poll(() => opacityOf(answer.getByTestId("answer-meta"))).toBe(1);
+  await screenshot(window, "answer-hover-en");
+  await expect.poll(() => order(editor)).toEqual(["Spring tides come twice a month."]);
   await app.close();
 });
 
@@ -217,13 +207,12 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   );
   await window.keyboard.press("Enter");
 
-  const editor = window.getByTestId("mind-editor");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toContainText("scripted");
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await pointAndClick(window, answer.getByTestId("answer-stop"));
   await expect(answer).toHaveAttribute("data-status", "stopped");
-  const kept = await answer.locator(".answer-content").textContent();
+  const kept = await answer.locator(".assistant-answer-text").textContent();
   expect(kept).toContain("scripted");
   expect(kept).not.toContain("That is all.");
   // Stopped: it says so under its last line, at rest too, with Regenerate.
@@ -233,18 +222,19 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   await expect(composer.getByTestId("composer-live")).toContainText("The Answer was stopped.");
   // What streamed stays: a moment later it is still all there is.
   await window.waitForTimeout(800);
-  await expect(answer.locator(".answer-content")).toHaveText(kept ?? "");
+  await expect(answer.locator(".assistant-answer-text")).toHaveText(kept ?? "");
   await screenshot(window, "answer-stopped-en");
 
-  // Regenerate, from its meta line, writes it again in full.
+  // Regenerate, under it, writes it again in full, in its place.
   await pointAndClick(window, answer.getByTestId("answer-regenerate"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(answer).toContainText("That is all.");
-  await expect(editor.getByTestId("answer")).toHaveCount(1);
+  await expect(assistantAnswers(window)).toHaveCount(1);
+  await expect(window.getByTestId("mind-editor").getByTestId("answer")).toHaveCount(0);
   await app.close();
 });
 
-test("⌘J focuses the composer from the note; the Question goes at the cursor; Shift+Enter breaks its line; Esc goes back to the note under the Answer", async () => {
+test("⌘J focuses the composer from the note; Shift+Enter breaks the Question's line; Esc folds the assistant and a second Esc goes back to the note, where the cursor was", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -271,45 +261,35 @@ test("⌘J focuses the composer from the note; the Question goes at the cursor; 
   await expect(input).toHaveValue("Which thought\ncomes first?");
   await window.keyboard.press("Enter");
 
-  const question = editor.getByTestId("question");
-  await expect(question.locator(".question-text br")).toHaveCount(1);
-  await expect(question.locator(".question-text")).toHaveText("Which thoughtcomes first?");
-  const answer = editor.getByTestId("answer");
+  // Its two lines, in one bubble.
+  const bubble = window.getByTestId("assistant-question").locator(".assistant-question-bubble");
+  await expect.poll(() => bubble.textContent()).toContain("Which thought\ncomes first?");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect
-    .poll(() => order(editor))
-    .toEqual(["First thought", "question", "answer", "", "Second thought"]);
+  await expect.poll(() => order(editor)).toEqual(["First thought", "Second thought"]);
 
-  // Esc: back in the note, on the line under the Answer, to write there.
+  // Esc folds the assistant, the focus on what shows it again; a second Esc goes back to the
+  // note, where the cursor was, to write there.
   await expect(input).toBeFocused();
   await window.keyboard.press("Escape");
+  const assistant = window.getByTestId("assistant");
+  await expect(assistant).toHaveAttribute("data-folded", "true");
+  await window.keyboard.press("Escape");
   await expect(editor).toBeFocused();
-  await window.keyboard.type("Noted.");
-  await expect
-    .poll(() => order(editor))
-    .toEqual(["First thought", "question", "answer", "Noted.", "Second thought"]);
+  await window.keyboard.type(" noted");
+  await expect.poll(() => order(editor)).toEqual(["First thought noted", "Second thought"]);
 
-  // From the title, ⌘J too; a Question asked then goes at the end.
+  // From the title, ⌘J too: the assistant unfolds into its composer.
   await pointAndClick(window, window.getByTestId("mind-title"));
   await window.keyboard.press("ControlOrMeta+j");
+  await expect(assistant).not.toHaveAttribute("data-folded");
   await expect(input).toBeFocused();
   await window.keyboard.type("And the last?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+  await expect(assistantAnswers(window).nth(1)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  await expect
-    .poll(() => order(editor))
-    .toEqual([
-      "First thought",
-      "question",
-      "answer",
-      "Noted.",
-      "Second thought",
-      "question",
-      "answer",
-      "",
-    ]);
+  await expect.poll(() => order(editor)).toEqual(["First thought noted", "Second thought"]);
   await app.close();
 });
 
@@ -377,7 +357,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(window.getByTestId("composer-input")).toBeFocused();
     await window.keyboard.type("Which model answers?");
     await window.keyboard.press("Enter");
-    const answer = window.getByTestId("mind-editor").getByTestId("answer");
+    const answer = assistantAnswers(window).first();
     await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(answer.getByTestId("answer-model")).toHaveText("other-model");
 
@@ -409,7 +389,7 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await pointAndClick(window, window.getByTestId("composer-input"));
     await window.keyboard.type("And this one?");
     await window.keyboard.press("Enter");
-    const other = window.getByTestId("mind-editor").getByTestId("answer");
+    const other = assistantAnswers(window).first();
     await expect(other).toHaveAttribute("data-status", "done", { timeout: 15_000 });
     await expect(other.getByTestId("answer-model")).toHaveText("fake-model");
 
@@ -508,7 +488,7 @@ test("a Mind written before opens with its Questions and Answers in the new styl
   await app.close();
 });
 
-test("asking from the composer moves the Mind's cursor below the Answer, without taking the focus from the composer", async () => {
+test("a follow-up asked straight away goes into the same conversation, without taking the focus from the composer or touching the Mind", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -519,24 +499,21 @@ test("asking from the composer moves the Mind's cursor below the Answer, without
   await window.keyboard.type("A first Question?");
   await window.keyboard.press("Enter");
   const editor = window.getByTestId("mind-editor");
-  await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+  await expect(assistantAnswers(window).first()).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  // A follow-up straight away goes after the first Answer.
   await window.keyboard.type("A follow-up?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+  await expect(assistantAnswers(window).nth(1)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  await expect.poll(() => order(editor)).toEqual(["question", "answer", "question", "answer", ""]);
-  const selection = await editor.evaluate((dom) => {
-    const { state } = (dom as unknown as { editor: Editor }).editor;
-    return {
-      parent: state.selection.$from.parent.type.name,
-      index: state.selection.$from.index(0),
-    };
-  });
-  expect(selection).toEqual({ parent: "paragraph", index: 4 });
+  await expect(window.getByTestId("assistant-question")).toHaveCount(2);
+  await expect(window.getByTestId("assistant-title")).toContainText("A first Question");
+  const blocks = await editor.evaluate(
+    (dom) => (dom as unknown as { editor: Editor }).editor.state.doc.childCount,
+  );
+  expect(blocks).toBe(1);
+  await expect(editor.getByTestId("question")).toHaveCount(0);
   await expect(input).toBeFocused();
   await app.close();
 });
@@ -581,21 +558,18 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await window.keyboard.type("大潮什么时候出现？");
   await screenshot(window, "composer-chips-zh");
 
-  // Asked: the Question carries both; the Answer's meta line on hover, in Chinese.
+  // Asked: the Question carries both, its Answer says what it searched, in Chinese.
   await window.keyboard.press("Enter");
-  const editor = window.getByTestId("mind-editor");
-  const answer = editor.getByTestId("answer");
+  const answer = assistantAnswers(window).first();
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(composer.getByTestId("composer-live")).toContainText("回答已生成。");
-  const question = editor.getByTestId("question");
-  await expect(question.getByTestId("scope-chip")).toHaveText("Tides");
-  await expect(question.getByTestId("question-skill")).toHaveText("literature-review");
-  await pointAt(window, answer.locator(".answer-content p").first());
+  const question = window.getByTestId("assistant-question");
+  await expect(question.getByTestId("assistant-question-skill")).toHaveText("literature-review");
+  await expect(answer.getByTestId("answer-scope")).toHaveText("“Tides”");
+  await pointAt(window, answer.locator(".assistant-answer-text p").first());
   await expect(answer.getByTestId("answer-regenerate")).toHaveText("重新生成");
+  await expect(answer.getByTestId("answer-add")).toHaveText("添加到笔记");
   await screenshot(window, "answer-hover-zh");
-  await pointAt(window, question.locator(".question-text"));
-  await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(1);
-  await screenshot(window, "question-hover-zh");
 
   // A narrow window: the assistant goes to the bottom (#253), and the composer spans it there,
   // up to the Mind's column.
@@ -610,7 +584,7 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await app.close();
 });
 
-test("after the consent dialog closes, the caret is back in the composer and the Question still goes at the Mind's cursor", async () => {
+test("after the consent dialog closes, the caret is back in the composer, and both Answers are in the assistant, the Mind as it was", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   // A model on a server elsewhere, so the first Question asks to send first. The scripted model answers.
@@ -628,7 +602,7 @@ test("after the consent dialog closes, the caret is back in the composer and the
   await window.keyboard.press("Enter");
   await window.keyboard.type("Omega");
   const editor = window.getByTestId("mind-editor");
-  // The cursor goes to the end of the first line, so Questions belong before "Omega".
+  // The cursor in the note: the Mind stays as it is, whatever is asked.
   const first = editor.locator(":scope > p").first();
   await pointAndClick(window, first);
   await expect(first).toHaveClass(/has-focus/);
@@ -648,11 +622,10 @@ test("after the consent dialog closes, the caret is back in the composer and the
   await window.keyboard.type("A follow-up?");
   await expect(input).toHaveValue("A follow-up?");
   await window.keyboard.press("Enter");
-  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+  await expect(assistantAnswers(window).nth(1)).toHaveAttribute("data-status", "done", {
     timeout: 15_000,
   });
-  // Both Questions went in before "Omega", which stays the last line.
-  await expect.poll(async () => (await order(editor)).at(-1)).toBe("Omega");
-  expect((await order(editor)).filter((block) => block === "question")).toHaveLength(2);
+  await expect(window.getByTestId("assistant-question")).toHaveCount(2);
+  await expect.poll(() => order(editor)).toEqual(["Alpha", "Omega"]);
   await app.close();
 });

@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import type * as Y from "yjs";
+import { withCitations } from "../shared/blockJson";
 import {
   contentHash,
   createElement,
@@ -24,7 +25,6 @@ import {
   type NodeJSON,
   syncContent,
 } from "./answers/blocks";
-import { withCitations } from "./answers/citations";
 import { markdownToBlocks } from "./answers/markdown";
 import {
   ANSWER_BLOCK,

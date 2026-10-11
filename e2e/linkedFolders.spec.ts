@@ -5,6 +5,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge, LinkedFolder } from "../src/core/api";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
+  askInAssistant,
   confirmLink,
   createDataFolder,
   dismissChatSetup,
@@ -427,13 +428,8 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
   await expect(row).toHaveAttribute("data-state", "idle");
 
   await newMind(window);
-  const editor = window.getByTestId("mind-editor");
-  await editor.click();
-  await window.keyboard.press("ControlOrMeta+j");
-  await window.keyboard.type("When do spring tides happen?");
-  await window.keyboard.press("Enter");
-  const answer = editor.getByTestId("answer");
-  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await window.getByTestId("mind-editor").click();
+  const answer = await askInAssistant(window, "When do spring tides happen?");
   const citation = answer.getByTestId("citation");
   await expect(citation).toHaveAttribute("data-check", "found");
 
@@ -445,7 +441,7 @@ test("after unlinking, a Citation of a Document in the folder still says its quo
 
   // The page it quotes is kept, so its check stands, in the text and in the margin.
   await expect(citation).toHaveAttribute("data-check", "found");
-  await expect(window.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
+  await expect(answer.getByTestId("margin-check")).toHaveAttribute("data-check", "found");
   await citation.getByTestId("citation-chip").click();
   await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
   // The viewer shows the quote, and says the folder was unlinked: the Document wasn't deleted.

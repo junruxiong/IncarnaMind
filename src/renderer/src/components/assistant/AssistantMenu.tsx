@@ -1,5 +1,6 @@
 import { DOCKS, dockCommandId } from "../../commands/assistant";
-import { commands } from "../../commands/registry";
+import { commands, labelOf } from "../../commands/registry";
+import { useConversations } from "../../conversations";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
@@ -74,18 +75,13 @@ export function AssistantMenu() {
               );
             })}
             <div className={menuRuleClass} />
-            {/* What acts on the conversation's Answers comes with them (#201): an empty
-                conversation has none, so these wait, saying why. */}
+            {/* What acts on the conversation: unavailable while it has nothing to act on. */}
             <ConversationItem
+              id="assistant.lastToNewMind"
               testId="assistant-menu-last-to-new-mind"
-              label={t("assistant.lastToNewMind")}
-              reason={t("assistant.lastToNewMind.unavailable")}
+              onRun={run}
             />
-            <ConversationItem
-              testId="assistant-menu-clear"
-              label={t("assistant.clear")}
-              reason={t("assistant.clear.unavailable")}
-            />
+            <ConversationItem id="assistant.clear" testId="assistant-menu-clear" onRun={run} />
           </>
         )}
       </div>
@@ -93,24 +89,38 @@ export function AssistantMenu() {
   );
 }
 
-/** An item that can't be used in an empty conversation: in the arrow keys' reach, greyed, saying why. */
+/**
+ * An item that acts on the conversation, as its command does; while it can't,
+ * it stays in the arrow keys' reach, greyed, saying why.
+ */
 function ConversationItem({
+  id,
   testId,
-  label,
-  reason,
+  onRun,
 }: {
+  id: "assistant.lastToNewMind" | "assistant.clear";
   testId: string;
-  label: string;
-  reason: string;
+  onRun(id: "assistant.lastToNewMind" | "assistant.clear"): void;
 }) {
+  const t = useT();
+  // The conversation's messages decide whether it can be used.
+  useConversations((state) => state.messages);
+  const command = commands.get(id);
+  if (!command) return null;
+  const ctx = { selection: [], focus: null, surface: "mind" } as const;
+  const enabled = command.enabled?.(ctx) ?? true;
+  const label = labelOf(command, ctx, t);
   return (
     <button
       type="button"
       role="menuitem"
-      aria-disabled="true"
+      aria-disabled={enabled === true ? undefined : true}
       data-testid={testId}
-      title={reason}
-      className={`${menuItemClass} ${menuItemUnavailableClass} pl-8`}
+      title={enabled === true ? undefined : t(enabled.reason)}
+      onClick={() => {
+        if (enabled === true) onRun(id);
+      }}
+      className={`${menuItemClass} ${enabled === true ? "" : menuItemUnavailableClass} pl-8`}
     >
       {label}
     </button>
