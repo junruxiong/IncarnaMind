@@ -1,4 +1,4 @@
-/** One `web_pages` row per version of a web page (migration 37). */
+/** One `web_pages` row per version of a web page (migration 41). */
 import { randomUUID } from "node:crypto";
 import type { WebPageInfo } from "../../api";
 import type { Database } from "../../storage";

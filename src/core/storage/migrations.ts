@@ -743,7 +743,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 37,
+    version: 41,
     description: "Web pages saved as Documents: each version's address, site and fetch time",
     // A web page Document's file is its snapshot (src/core/documents/web); a row per
     // version it has had, by the snapshot's content hash, so a Citation of an older
