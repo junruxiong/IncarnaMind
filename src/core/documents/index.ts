@@ -9,14 +9,15 @@
  * its file as read for processing. Passages and page text belong to a
  * version. When the file changes, the new version is processed and its
  * Passages replace the old ones in search; the old version's page text stays
- * for as long as a Citation quotes it (`collectOldVersions`), so the
- * Citation is still checked against the text it quoted. A new version that
- * can't be processed replaces nothing: the last good one stays (`record`).
+ * for as long as a Citation quotes it, or a feature retains it
+ * (./retention), so the Citation is still checked against the text it
+ * quoted (`collectOldVersions`). A new version that can't be processed
+ * replaces nothing: the last good one stays (`record`).
  *
  * A Document removed from the index is deleted with its Passages and text,
  * except when its Linked folder is unlinked: then the Units the Citations in
- * Minds point to stay, the only text a deleted Document keeps
- * (`keptCitationTexts`), so those Citations can still be checked.
+ * Minds point to, and those retained, stay, the only text a deleted Document
+ * keeps (`keptCitationTexts`), so those Citations can still be checked.
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, renameSync } from "node:fs";
@@ -335,8 +336,9 @@ export interface DocumentsOptions {
   /** Asks iCloud Drive to download a file an ".icloud" stub stands for. */
   downloadStub?: (path: string) => Promise<void>;
   /**
-   * The Units the Citations in Minds point to in these Documents: kept when
-   * the Documents leave the index with their Linked folder. None if not given.
+   * The Units the Citations in Minds point to in these Documents, and those
+   * features retain: kept when the Documents leave the index with their
+   * Linked folder. None if not given.
    */
   citedUnits?: (documentIds: readonly string[]) => CitedUnits[];
   linkedFolders: {
@@ -1780,7 +1782,8 @@ export function createDocuments(options: DocumentsOptions) {
     /**
      * Garbage-collects old versions' text: the pages (and replaced Passages)
      * of each version that isn't a live Document's current one, unless
-     * `isCited` says a Citation quotes it. Returns how many versions went.
+     * `isCited` says a Citation quotes it or a feature retains it. Returns
+     * how many versions went.
      */
     collectOldVersions(isCited: (documentId: string, contentHash: string) => boolean): number {
       const versions = db.all<{ document_id: string; content_hash: string | null }>(
@@ -1814,8 +1817,9 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Lets go of the text kept of unlinked Documents (`keptCitationTexts`):
-     * each version's, unless `isCited` says a Citation still quotes it. It is
-     * deleted as their other text was. Returns how many versions went.
+     * each version's, unless `isCited` says a Citation still quotes it or a
+     * feature retains it. It is deleted as their other text was. Returns how
+     * many versions went.
      */
     releaseKeptText(isCited: (documentId: string, contentHash: string) => boolean): number {
       const at = now();

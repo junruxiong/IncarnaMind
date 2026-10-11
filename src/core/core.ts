@@ -36,6 +36,7 @@ import {
   type DocumentImage,
   parseListOptions,
 } from "./documents";
+import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
@@ -167,6 +168,15 @@ export interface Core extends CoreApi, CoreEventSource {
    */
   readonly networkTraffic: NetworkTrafficRegistry;
   /**
+   * The versions of Documents that core features other than Citations still
+   * need (#79): a check result's evidence, a saved page, an unfinished Task's
+   * sources, a Checkpoint's Citations. A retained version keeps its text when
+   * its file changes, and its Units retained when its Linked folder is
+   * unlinked, as a quoted one does. Once its last owner releases it, and no
+   * Citation quotes it, it goes at the next start.
+   */
+  readonly retention: VersionRetention;
+  /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
    */
@@ -286,6 +296,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter, usageData });
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
+  const retention = createVersionRetention(db, now);
   let documents: ReturnType<typeof createDocuments>;
   /** Set once created, so a failure after it can close it. */
   let createdDocuments: ReturnType<typeof createDocuments> | undefined;
@@ -319,13 +330,15 @@ export function createCore(adapters: CoreAdapters): Core {
         prepareRerank();
         documentReady(documentId);
       },
-      // Citations live in Minds, anywhere: in Answers, or copied into Notes.
+      // Citations live in Minds, anywhere: in Answers, or copied into Notes. Features
+      // other than Citations retain what they need too.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
         const cited: CitedUnits[] = [];
         for (const mind of minds.list()) {
           content.peek(mind.id, (fragment) => addCitedUnits(fragment, wanted, cited));
         }
+        retention.addRetainedUnits(wanted, cited);
         return cited;
       },
       // iCloud Drive before macOS 14 downloads a stub's file when asked by its command-line tool.
@@ -346,18 +359,21 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     });
     // Old versions' text, and the text kept of unlinked Documents, that no
-    // Citation quotes any more goes, at startup only: nothing is being
-    // written or undone then, so no Citation is in flight.
+    // Citation quotes and no feature retains any more goes, at startup only:
+    // nothing is being written or undone then, so no Citation is in flight.
+    // The retained versions are one query, whatever their kind.
     if (documents.hasOldVersions() || documents.keptCitationTexts().length > 0) {
       const cited: CitedVersions = new Map();
       for (const mind of minds.list()) {
         content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
       }
+      retention.addRetainedVersions(cited);
       const quoted = (documentId: string, contentHash: string) =>
         isCited(cited, documentId, contentHash);
       documents.collectOldVersions(quoted);
       documents.releaseKeptText(quoted);
     }
+    retention.forgetReleased();
   } catch (error) {
     lifetime.abort();
     // Created, but collecting old versions failed.
@@ -1646,6 +1662,7 @@ export function createCore(adapters: CoreAdapters): Core {
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
     networkTraffic: privacy.traffic,
+    retention,
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;
