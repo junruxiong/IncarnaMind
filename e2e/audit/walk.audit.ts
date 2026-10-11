@@ -891,7 +891,11 @@ test("A6 window sizes, the three steps, the @ and / menus, hover states", async 
           ),
         });
       }
-      await click(window, window.getByTestId("document-tab").getByTestId("tab-close"));
+      // Earlier steps can leave more than one Document open: close them all.
+      const documentTabs = window.getByTestId("document-tab");
+      while (await documentTabs.count()) {
+        await click(window, documentTabs.first().getByTestId("tab-close"));
+      }
       await expect(window.getByTestId("viewer")).toBeHidden();
       for (const [w, h] of sizes) {
         await resize(w, h);
