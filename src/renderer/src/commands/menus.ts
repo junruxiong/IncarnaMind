@@ -16,10 +16,8 @@ export function registerMenu(kind: ObjectKind, ids: readonly CommandId[]): void 
   registered.set(kind, [...held, ...ids.filter((id) => !held.includes(id))]);
 }
 
-/** The kinds that have a menu. */
 export const menuKinds = (): ObjectKind[] => [...registered.keys()];
 
-/** The commands registered for a kind, in the order given. */
 export const menuIds = (kind: ObjectKind): readonly CommandId[] => registered.get(kind) ?? [];
 
 /** An item of a menu: a command that applies here, and whether it can run now (else, why not). */
@@ -28,7 +26,6 @@ export interface MenuItem {
   enabled: true | { reason: MessageKey };
 }
 
-/** What a menu draws: items, with `"rule"` between groups. */
 export type MenuEntry = MenuItem | "rule";
 
 /**
