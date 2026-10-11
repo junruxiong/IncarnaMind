@@ -57,7 +57,7 @@ export interface PostHogSenderOptions {
   projectKey: string;
   /** The PostHog host this build sends to, e.g. its EU cloud or a self-hosted one. */
   host: string;
-  /** A test build (the alpha): see `UsageDataSender.testerBuild`. */
+  /** A test build (for invited testers): see `UsageDataSender.testerBuild`. */
   testerBuild: boolean;
   appVersion: string;
   /** Defaults to 30 seconds; the smoke tests shorten it. */
