@@ -89,6 +89,16 @@ describe("Data-flow consent", () => {
         consent: "accepted",
         decidedAt: expect.any(String),
       },
+      // Suggestions as the User writes go there too, once they are turned on, and ask for themselves.
+      {
+        flow: {
+          id: "suggestions",
+          service: OPENAI_SERVICE,
+          sends: ["writing", "writing-passages"],
+        },
+        consent: "not-asked",
+        decidedAt: null,
+      },
       // Automatic tagging also goes to the default model's service, and asks for itself.
       {
         flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
@@ -171,7 +181,14 @@ describe("Data-flow consent", () => {
         }),
         consent: "declined",
       }),
-      // Tagging goes to the default model's service only: Anthropic, saved last.
+      // Suggestions and tagging go to the default model's service only: Anthropic, saved last.
+      expect.objectContaining({
+        flow: expect.objectContaining({
+          id: "suggestions",
+          service: { id: "https://api.anthropic.com", name: "Anthropic" },
+        }),
+        consent: "not-asked",
+      }),
       expect.objectContaining({
         flow: expect.objectContaining({
           id: "tagging",
@@ -199,6 +216,7 @@ describe("Data-flow consent", () => {
         consent: "not-asked",
         decidedAt: null,
       }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
     ]);
     const second = await testAndWaitForConsent(core);
@@ -263,6 +281,7 @@ describe("Data-flow consent", () => {
     expect(await second.result).toEqual({ ok: true });
     expect(await core.listDataFlows()).toEqual([
       expect.objectContaining({ consent: "accepted" }),
+      expect.objectContaining({ flow: expect.objectContaining({ id: "suggestions" }) }),
       expect.objectContaining({ flow: expect.objectContaining({ id: "tagging" }) }),
     ]);
   });
