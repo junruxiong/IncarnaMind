@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useContext, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../../core/api";
 import { ComposerDockContext, CountSlotContext } from "../../editor/mindContext";
 import { useT } from "../../i18n";
@@ -8,10 +8,14 @@ import { useGroupsMerged } from "../../useWindowWidth";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
 import { MeetingInMind } from "../MeetingInMind";
-import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
 import { buttonStyle } from "../ui";
 import { useTabPlace } from "./tabItems";
+
+// The editor, with KaTeX and code highlighting, loads after the window's first paint (#167).
+const MindEditor = lazy(() =>
+  import("../MindEditor").then((module) => ({ default: module.MindEditor })),
+);
 
 /**
  * A Mind's tab: its title and its Blocks. When it is the Mind the assistant
@@ -40,7 +44,9 @@ export function MindTab({ mindId }: { mindId: string }) {
           {!isExample && <ChatReadinessNotice />}
           <ComposerDockContext.Provider value={read ? assistantSlot : null}>
             <CountSlotContext.Provider value={countSlot}>
-              <MindEditor mindId={mind.id} />
+              <Suspense fallback={null}>
+                <MindEditor mindId={mind.id} />
+              </Suspense>
             </CountSlotContext.Provider>
           </ComposerDockContext.Provider>
         </div>
