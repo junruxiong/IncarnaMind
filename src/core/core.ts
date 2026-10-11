@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Y from "yjs";
 import { translate } from "../shared/i18n";
@@ -19,6 +19,7 @@ import type {
   CoreApi,
   CoreEventSource,
   EmbeddingSettings,
+  ExportMindOptions,
   Mind,
   ProviderError,
   Unsubscribe,
@@ -36,12 +37,20 @@ import {
 import { fsWatchFolder } from "./documents/watcher";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
-import { InvalidInputError, isRecord, MindReadOnlyError, TaggingNotReadyError } from "./errors";
+import {
+  FileWriteCancelledError,
+  InvalidInputError,
+  isRecord,
+  LinkedFolderWritesDeclinedError,
+  MindReadOnlyError,
+  NotFoundError,
+  TaggingNotReadyError,
+} from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports } from "./exports";
-import { safeFileName } from "./fileNames";
+import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
@@ -57,6 +66,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
+import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
@@ -118,6 +128,12 @@ export interface Core extends CoreApi, CoreEventSource {
    * through the `shell` adapter. Throws NotFoundError as `openDocumentFile` does.
    */
   showDocumentInFolder(documentId: string): Promise<void>;
+  /**
+   * Shows a file IncarnaMind saved since it started (e.g. by
+   * `saveMindExport`) selected in the system's file manager, through the
+   * `shell` adapter. Throws NotFoundError for any other path.
+   */
+  showSavedFile(path: string): Promise<void>;
   /**
    * Reconciles every Linked folder and single file with the disk now, and
    * resolves once that, and any change already reported, has been taken in.
@@ -590,6 +606,32 @@ export function createCore(adapters: CoreAdapters): Core {
     language: () => settings.get().language,
     now,
   });
+  /** Usage data: which format, and whether Questions went with it. */
+  const recordExport = (options: ExportMindOptions) =>
+    usageData.record({
+      event: "mind_exported",
+      fields: {
+        format: options.format,
+        // Questions are in a Markdown export unless left out, and in a .docx only if asked for.
+        questions:
+          typeof options.includeQuestions === "boolean"
+            ? options.includeQuestions
+            : options.format === "markdown",
+      },
+    });
+  // New files: in the Output location, or inside a Linked folder the User allowed.
+  const outputs = createOutputFiles({
+    db,
+    events,
+    now,
+    settings,
+    suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
+    linkedFolders: () => documents.linkedFolders.list(),
+  });
+  const unlinkFolder = (linkedFolderId: string) => {
+    documents.linkedFolders.remove(linkedFolderId);
+    outputs.forgetLinkedFolder(linkedFolderId);
+  };
 
   // Automatic tagging: Jev when it is set up on this device, otherwise the
   // default chat model; either way its own data flow and consent.
@@ -881,7 +923,7 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     editMind: (mindId, change) => content.edit(mindId, change),
     linkFolder: (path) => documents.linkedFolders.add(path),
-    unlinkFolder: (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    unlinkFolder,
     linkedFolderExists: (linkedFolderId) =>
       documents.linkedFolders.list().some((folder) => folder.id === linkedFolderId),
     documentsIn: (linkedFolderId) => documents.list({ linkedFolderId }),
@@ -974,11 +1016,13 @@ export function createCore(adapters: CoreAdapters): Core {
       const title = typeof input.name === "string" ? input.name : "";
       const folder = join(dataDir, "Saved text");
       mkdirSync(folder, { recursive: true });
-      const base = safeFileName(title, "Pasted text");
-      let path = join(folder, `${base}.md`);
-      for (let n = 2; existsSync(path); n++) path = join(folder, `${base} ${n}.md`);
-      writeFileSync(path, input.text.endsWith("\n") ? input.text : `${input.text}\n`);
-      const { documents: added } = await documents.add([path]);
+      const text = input.text.endsWith("\n") ? input.text : `${input.text}\n`;
+      const name = await writeNewFile(
+        folder,
+        `${safeFileName(title, "Pasted text")}.md`,
+        new TextEncoder().encode(text),
+      );
+      const { documents: added } = await documents.add([join(folder, name)]);
       const saved = added[0];
       if (!saved) throw new InvalidInputError("The text couldn't be saved.");
       return saved;
@@ -1006,7 +1050,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return linked;
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
-    removeLinkedFolder: async (linkedFolderId) => documents.linkedFolders.remove(linkedFolderId),
+    removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
@@ -1323,20 +1367,34 @@ export function createCore(adapters: CoreAdapters): Core {
 
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
     exportMind: async (mindId, options) => {
-      const exported = await mindExports.export(mindId, options);
-      usageData.record({
-        event: "mind_exported",
-        fields: {
-          format: options.format,
-          // Questions are in a Markdown export unless left out, and in a .docx only if asked for.
-          questions:
-            typeof options.includeQuestions === "boolean"
-              ? options.includeQuestions
-              : options.format === "markdown",
-        },
-      });
+      const exported = mindExports.export(mindId, options);
+      recordExport(options);
       return exported;
     },
+    saveMindExport: async (mindId, options) => {
+      const { fileName, data } = mindExports.export(mindId, options);
+      try {
+        const file = await outputs.save({ name: fileName, data });
+        recordExport(options);
+        return { status: "saved", file };
+      } catch (error) {
+        if (error instanceof FileWriteCancelledError) return { status: "cancelled" };
+        if (error instanceof LinkedFolderWritesDeclinedError) {
+          return {
+            status: "not-allowed",
+            linkedFolderId: error.linkedFolderId,
+            linkedFolderPath: error.linkedFolderPath,
+          };
+        }
+        throw error;
+      }
+    },
+    getOutputSettings: async () => outputs.settings(),
+    setOutputLocation: (path) => outputs.setLocation(path),
+    setLinkedFolderWriting: async (linkedFolderId, allowed) =>
+      outputs.setLinkedFolderWriting(linkedFolderId, allowed),
+    listFileWriteRequests: async () => outputs.requests(),
+    respondToFileWrite: (requestId, accept) => outputs.respond(requestId, accept),
 
     openDocumentFile: (documentId) => documents.openFile(documentId),
     openDocumentImage: (documentId, path) => documents.openImage(documentId, path),
@@ -1348,6 +1406,12 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     showDocumentInFolder: async (documentId) => {
       const path = await documents.filePath(documentId);
+      if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
+      adapters.shell.showItemInFolder(path);
+    },
+    showSavedFile: async (path) => {
+      if (!outputs.saved(path))
+        throw new NotFoundError("Only a file IncarnaMind saved can be shown.");
       if (!adapters.shell) throw new Error("This copy of IncarnaMind can't show files.");
       adapters.shell.showItemInFolder(path);
     },
@@ -1374,6 +1438,7 @@ export function createCore(adapters: CoreAdapters): Core {
       skills.close();
       stopTrackingUsage();
       consent.close();
+      outputs.close();
       documents.close();
       embeddingModel.close();
       rerankingModel.close();
