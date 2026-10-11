@@ -79,6 +79,9 @@ const deviceScope: Scope<DeviceSettings> = {
     },
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
+    meetingsEnabled: false,
+    meetingSystemAudio: true,
+    meetingNoticeAccepted: false,
   },
   validators: {
     sidebarWidth: isPaneWidth,
@@ -87,6 +90,9 @@ const deviceScope: Scope<DeviceSettings> = {
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
+    meetingsEnabled: isBoolean,
+    meetingSystemAudio: isBoolean,
+    meetingNoticeAccepted: isBoolean,
   },
 };
 
@@ -154,18 +160,22 @@ function write(db: Database, table: string, key: string, value: unknown, at: str
 
 export type SettingsStore = ReturnType<typeof createSettings>;
 
-/** `scriptSandbox`: the level of the Executor Skill scripts run on (`Settings.scriptSandbox`). */
+/**
+ * `scriptSandbox`: the level of the Executor Skill scripts run on
+ * (`Settings.scriptSandbox`); `meetingAudio`: what a Meeting can record here.
+ */
 export function createSettings(
   db: Database,
   now: () => string,
   systemLanguages: () => readonly string[],
   scriptSandbox: SandboxLevel,
+  meetingAudio: Settings["meetingAudio"] = "none",
 ) {
   const get = (): Settings => {
     const user = read(db, userScope);
     const device = read(db, deviceScope);
     const language = resolveLanguage(user.language, systemLanguages());
-    return { user, device, language, scriptSandbox };
+    return { user, device, language, scriptSandbox, meetingAudio };
   };
 
   return {
