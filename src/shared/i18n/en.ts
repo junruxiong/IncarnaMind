@@ -1166,6 +1166,12 @@ export const en = {
   "privacy.skills.title": "Skill scripts",
   "privacy.skills.body":
     "Skill scripts run on this computer and can make their own network requests, sending anything they can read. This page doesn't control them: the approval you give before each run does, and you can turn them off in Settings, under Skills.",
+  "privacy.aiUse.title": "AI use record",
+  "privacy.aiUse.body":
+    "IncarnaMind keeps a record of what the AI wrote into your Minds and whether you kept, edited or deleted it, so you can say how you used AI. It holds no text of yours or the AI's, stays on this computer, and is never sent anywhere, whatever you choose about usage data.",
+  "privacy.aiUse.entries": "Entries: {count}",
+  "privacy.aiUse.clear": "Clear record",
+  "privacy.aiUse.cleared": "Cleared the AI use record.",
   "privacy.crashReports.title": "Crash reports",
   "privacy.crashReports.toggle": "Send crash reports",
   "privacy.crashReports.body":
