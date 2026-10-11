@@ -3,6 +3,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  newMind,
   removeDataFolder,
   slideSelect,
 } from "./app";
@@ -26,7 +27,7 @@ async function shiftSelectBack(window: Page, count: number) {
 test("selecting text with the mouse or the keyboard opens a menu: Turn into, formatting, and Undo", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Spring tides are strongest at new moon");
@@ -138,7 +139,7 @@ test("selecting text with the mouse or the keyboard opens a menu: Turn into, for
 test("a Chinese input method composing over a selection doesn't fire the menu's actions", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.type("Tides follow the moon");
