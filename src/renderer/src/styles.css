@@ -304,6 +304,42 @@
         linear-gradient(var(--color-accent), var(--color-accent)) center / 2px 100% no-repeat;
     }
   }
+  /*
+   * A rod between panes above and below each other, such as the gap above the
+   * assistant docked at the bottom: it lies flat, its grip across it.
+   */
+  .pane-divider--y {
+    width: auto;
+    height: 1px;
+    cursor: row-resize;
+
+    &::after {
+      inset: -4px 0;
+    }
+    &::before {
+      content: "• • •";
+      padding: 1px 3px;
+      line-height: 1;
+    }
+  }
+  .pane-divider--gap-y {
+    height: 8px;
+    background: transparent;
+
+    &::after {
+      inset: -2px 0;
+    }
+    &:hover,
+    &:active {
+      background:
+        linear-gradient(var(--color-rule-strong), var(--color-rule-strong)) center / 100% 1px
+        no-repeat;
+    }
+    &:focus-visible {
+      background:
+        linear-gradient(var(--color-accent), var(--color-accent)) center / 100% 2px no-repeat;
+    }
+  }
 
   /*
    * The sidebar's panel (#219). Shown, it has no box of its own (the sidebar
@@ -350,9 +386,9 @@
     z-index: 25;
     width: 6px;
   }
-  /* Hidden, the card goes to the window's left, 8px in like its other edges. */
-  .app-card[data-sidebar-hidden] {
-    margin-left: 8px;
+  /* Hidden, the card (or a left dock) goes to the window's left, 8px in like its other edges. */
+  .workbench[data-sidebar-hidden] {
+    padding-left: 8px;
   }
   /*
    * The sidebar button in the first group's tab strip (src/renderer/src/components/SidebarToggle.tsx):
@@ -372,8 +408,8 @@
     isolation: isolate;
     display: flex;
     flex: 1 1 0;
-    min-width: 300px;
-    margin: 8px 8px 8px 0;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
     border-radius: 10px;
     background: var(--color-sheet);
@@ -387,6 +423,45 @@
       box-shadow: inset 0 0 0 1px var(--color-rule);
       pointer-events: none;
     }
+  }
+
+  /*
+   * Everything right of the sidebar (components/assistant/Workbench.tsx): the
+   * card, and the window's one assistant (#253) docked beside it, with the
+   * 8px line between them that resizes it, or floating over it. The card and
+   * the assistant keep their order in the page; only the direction changes,
+   * so nothing in them is remounted when the assistant moves.
+   */
+  .workbench {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    padding: 8px 8px 8px 0;
+  }
+  .workbench[data-dock="left"] {
+    flex-direction: row-reverse;
+  }
+  .workbench[data-dock="bottom"] {
+    flex-direction: column;
+  }
+  /* Folded beside the card: the gap stays, with nothing to drag in it. */
+  .workbench-gap {
+    flex: none;
+    width: 8px;
+    height: 8px;
+  }
+  /* The assistant docked on the right takes the window's top-right corner, and Windows' buttons with it. */
+  .app-card[data-assistant-right] {
+    --window-buttons-right: max(
+      0px,
+      calc(
+        100vw -
+        env(titlebar-area-x, 0px) -
+        env(titlebar-area-width, 100vw) -
+        var(--assistant-right, 0px)
+      )
+    );
   }
 
   /*
@@ -515,7 +590,8 @@
   :root[data-title-bar="inset"]:not([data-full-screen])
     .app-card[data-sidebar-hidden]
     .tab-strip[data-first-group] {
-    padding-left: calc(var(--window-buttons-left) - 8px);
+    /* Less what the assistant takes on the window's left, when it is docked there. */
+    padding-left: max(0px, calc(var(--window-buttons-left) - 8px - var(--assistant-left, 0px)));
   }
   :root[data-title-bar="inset"] .app-card[data-sidebar-hidden] .tab-strip > .sidebar-toggle {
     margin-left: 0;
@@ -966,13 +1042,12 @@
    * in which every text starts at one edge, and a 48px right margin for the
    * Citation checks; centred. Nothing in a Block may move its text off that
    * edge: boxes that need padding (code blocks, quotes) reach into the margin
-   * instead. The composer, pinned under it, is the measure wide. Under 900px
-   * both margins fold away (see the container query at the end).
+   * instead. Under 900px both margins fold away (see the container query at
+   * the end).
    */
   /*
    * What scrolls the Mind: room is kept for a scrollbar where they always show,
-   * so the column doesn't shift as a Mind grows past the window, and the
-   * composer under it keeps clear of the same width (MindTab).
+   * so the column doesn't shift as a Mind grows past the window.
    */
   .mind-scroller {
     scrollbar-gutter: stable;
@@ -1153,23 +1228,14 @@
   }
 
   /*
-   * The composer (DESIGN.md, Composer), pinned at the foot of the Mind's
-   * column, outside what scrolls: the measure wide, under the text's edge, on
-   * the sheet with a 1px edge and radius 10, which turns accent while its
-   * text has the focus. One row: a Skill chip, the text (it grows a line at a
-   * time up to 8), then the model chip, the Search scope and the Ask button,
-   * which move under the text when the row has no room for them.
+   * The composer (DESIGN.md, Composer), at the foot of the assistant (#253),
+   * its width: on the sheet with a 1px edge and radius 10, which turns accent
+   * while its text has the focus. One row: a Skill chip, the text (it grows a
+   * line at a time up to 8), then the model chip, the Search scope and the
+   * Ask button, which move under the text when the row has no room for them.
    */
-  .composer-dock {
-    container: mind / inline-size;
-    flex-shrink: 0;
-    padding: 8px 0 16px;
-    background: var(--color-sheet);
-  }
   .composer {
     position: relative;
-    width: 680px;
-    margin-left: calc((100% - 784px) / 2 + 56px);
     border: 1px solid var(--color-rule);
     border-radius: 10px;
     background: var(--color-sheet);
@@ -3604,14 +3670,12 @@
   }
 
   /*
-   * A narrow Mind (under 900px): both margins fold away, and the composer
-   * takes the same width as the text. A Question keeps only its fold chevron
+   * A narrow Mind (under 900px): both margins fold away. A Question keeps only its fold chevron
    * in what is left of the margin, and each Citation marker shows its check,
    * since the margin column is gone.
    */
   @container mind (width < 900px) {
-    .mind-measure,
-    .composer {
+    .mind-measure {
       width: auto;
       margin-inline: 24px;
     }
@@ -3649,6 +3713,450 @@
     .citation-marker-icon {
       display: block;
     }
+  }
+
+  /*
+   * Moving it: a short accent bar on each edge it can dock to; the zone the
+   * pointer is near fills and names itself. They fade in, as the stand-in
+   * does, with reduced motion too (a fade isn't movement).
+   */
+  .assistant-snap-zone {
+    position: fixed;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    pointer-events: none;
+    animation: assistant-fade-in 120ms ease-out both;
+
+    &::after {
+      content: "";
+      position: absolute;
+      border-radius: 2px;
+      background: var(--color-accent);
+      opacity: var(--zone-bar, 0.55);
+      transition: opacity 120ms ease-out;
+    }
+    &[data-zone="right"]::after,
+    &[data-zone="left"]::after {
+      top: 50%;
+      width: 4px;
+      height: 96px;
+      margin-top: -48px;
+    }
+    &[data-zone="right"]::after {
+      right: 3px;
+    }
+    &[data-zone="left"]::after {
+      left: 3px;
+    }
+    &[data-zone="bottom"]::after {
+      bottom: 3px;
+      left: 50%;
+      width: 96px;
+      height: 4px;
+      margin-left: -48px;
+    }
+    > span {
+      position: relative;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--color-sheet);
+      box-shadow: var(--shadow-popover);
+      color: var(--color-accent);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 16px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 120ms ease-out;
+    }
+    &[data-active] {
+      --zone-bar: 0;
+      background: color-mix(in srgb, var(--color-accent-wash) 78%, transparent);
+      box-shadow: inset 0 0 0 2px var(--color-accent);
+
+      > span {
+        opacity: 1;
+      }
+    }
+  }
+  .assistant-stand-in {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--color-sheet);
+    box-shadow:
+      0 0 0 2px var(--color-accent),
+      0 12px 32px rgb(23 25 28 / 0.12);
+    opacity: 0.94;
+    pointer-events: none;
+    transition: opacity 80ms ease-out;
+    animation: assistant-fade-in 120ms ease-out both;
+
+    /* Over a zone it gives way, so the zone's name reads through it. */
+    &[data-over-zone] {
+      opacity: 0.4;
+    }
+  }
+  .assistant-stand-in-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--color-rule);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-ink);
+    white-space: nowrap;
+  }
+  .assistant-stand-in-body {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+  @keyframes assistant-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /*
+   * The assistant: a column on the sheet, radius 10 with a 1px rule edge, as
+   * the card is; floating, it has popover depth and radius 12. Its 36px header
+   * ends level with the card's tab strip, at y 44. Folded on a side, it is a
+   * 44px rail; at the bottom or floating, its header.
+   */
+  .assistant {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    container: assistant / inline-size;
+    -webkit-app-region: no-drag;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      border-radius: inherit;
+      box-shadow: inset 0 0 0 1px var(--color-rule);
+      pointer-events: none;
+    }
+  }
+  .assistant[data-dock="float"] {
+    position: fixed;
+    z-index: 28;
+    border-radius: 12px;
+    box-shadow: var(--shadow-popover);
+
+    &::after {
+      display: none;
+    }
+  }
+  .assistant-header {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    height: 36px;
+    padding: 0 4px 0 2px;
+    border-bottom: 1px solid var(--color-rule);
+    /* It looks movable: the move cursor, and a grip while pointed at. */
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+  }
+  .assistant[data-folded] .assistant-header {
+    border-bottom: 0;
+  }
+  .assistant-grip {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    color: var(--color-ink-placeholder);
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+  }
+  .assistant-header:hover .assistant-grip {
+    opacity: 1;
+  }
+  .assistant-header > .assistant-title {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+    color: var(--color-ink);
+    cursor: default;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+    }
+  }
+  .assistant .assistant-button {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--color-ink-meta);
+    cursor: default;
+
+    &:hover,
+    &[data-open] {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+  }
+  .assistant-rail {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+  }
+  /* At the window's top-right corner, clear of Windows' buttons; at its top-left, of macOS's traffic lights. */
+  .assistant[data-dock="right"] .assistant-header {
+    padding-right: max(4px, calc(var(--window-buttons-right) - 8px));
+  }
+  :root[data-title-bar="overlay"] .assistant[data-dock="right"] .assistant-rail {
+    padding-top: 40px;
+  }
+  :root[data-title-bar="inset"]:not([data-full-screen]) .assistant[data-at-window-left] {
+    .assistant-header {
+      padding-left: max(2px, calc(var(--window-buttons-left) - 8px));
+    }
+    .assistant-rail {
+      padding-top: 40px;
+    }
+  }
+
+  .assistant-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+
+    &[hidden] {
+      display: none;
+    }
+  }
+  /* What it reads: one 12px line under the header. */
+  .assistant-reads {
+    flex: none;
+    margin: 0;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--color-rule);
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .assistant-thread {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 12px 14px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .assistant-empty {
+    margin: 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  /* The composer of the Mind it reads is drawn here, the panel's width. */
+  .assistant-composer {
+    flex: none;
+    padding: 0 10px 10px;
+
+    &:empty {
+      display: none;
+    }
+  }
+  .assistant-no-mind {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 10px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-rule);
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  /* At the bottom, the conversation and the composer keep to the Mind's column, 832px. */
+  .assistant[data-dock="bottom"] {
+    .assistant-thread > *,
+    .assistant-composer > .composer,
+    .assistant-no-mind {
+      width: auto;
+      max-width: 812px;
+      margin-inline: auto;
+    }
+    .assistant-no-mind {
+      margin-bottom: 10px;
+    }
+  }
+
+  /* A floating box's edges and corners resize it; its bottom-right corner also takes the keys. */
+  .assistant-resize {
+    position: absolute;
+    z-index: 30;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    touch-action: none;
+
+    &[data-handle="n"],
+    &[data-handle="s"] {
+      inset-inline: 14px;
+      height: 6px;
+      cursor: ns-resize;
+    }
+    &[data-handle="n"] {
+      top: 0;
+    }
+    &[data-handle="s"] {
+      bottom: 0;
+    }
+    &[data-handle="e"],
+    &[data-handle="w"] {
+      inset-block: 14px;
+      width: 6px;
+      cursor: ew-resize;
+    }
+    &[data-handle="e"] {
+      right: 0;
+    }
+    &[data-handle="w"] {
+      left: 0;
+    }
+    &[data-handle="ne"],
+    &[data-handle="nw"],
+    &[data-handle="se"],
+    &[data-handle="sw"] {
+      width: 14px;
+      height: 14px;
+    }
+    &[data-handle="ne"] {
+      top: 0;
+      right: 0;
+      cursor: nesw-resize;
+    }
+    &[data-handle="sw"] {
+      bottom: 0;
+      left: 0;
+      cursor: nesw-resize;
+    }
+    &[data-handle="nw"] {
+      top: 0;
+      left: 0;
+      cursor: nwse-resize;
+    }
+    &[data-handle="se"] {
+      right: 0;
+      bottom: 0;
+      border-radius: 0 0 12px 0;
+      cursor: nwse-resize;
+
+      &:focus-visible {
+        outline-offset: -2px;
+      }
+    }
+  }
+
+  /* History: a popover under its clock or the title. */
+  .assistant-history {
+    width: 320px;
+    max-width: calc(100vw - 16px);
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+  }
+  .assistant-history-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 6px 0 12px;
+    border-bottom: 1px solid var(--color-rule);
+
+    > h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 20px;
+      color: var(--color-ink);
+    }
+  }
+  .assistant-history-list {
+    max-height: min(360px, 60vh);
+    margin: 0;
+    padding: 4px;
+    overflow-y: auto;
+    list-style: none;
+  }
+  .assistant-history-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 28px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink);
+
+    > time {
+      font-size: 12px;
+    }
+  }
+  .assistant-history-empty {
+    margin: 0;
+    padding: 16px 12px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
   }
 }
 
@@ -3699,9 +4207,11 @@
   display: none;
 }
 
-/* While a tab is dragged: no text is selected, and the pointer says so (last, so it wins). */
+/* While a tab or the assistant is dragged: no text is selected, and the pointer says so (last, so it wins). */
 body.tab-dragging,
-body.tab-dragging * {
+body.tab-dragging *,
+body.assistant-dragging,
+body.assistant-dragging * {
   cursor: grabbing;
   user-select: none;
 }

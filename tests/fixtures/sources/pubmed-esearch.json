@@ -1,0 +1,13 @@
+{
+  "header": {
+    "type": "esearch",
+    "version": "0.3"
+  },
+  "esearchresult": {
+    "count": "426",
+    "retmax": "3",
+    "retstart": "0",
+    "idlist": ["36970624", "36424489", "33626327"],
+    "querytranslation": "(\"clustered regularly interspaced short palindromic repeats\"[MeSH Terms] OR (\"clustered\"[All Fields] AND \"regularly\"[All Fields] AND \"interspaced\"[All Fields] AND \"short\"[All Fields] AND \"palindromic\"[All Fields] AND \"repeats\"[All Fields]) OR \"clustered regularly interspaced short palindromic repeats\"[All Fields] OR \"crispr\"[All Fields] OR \"crisprs\"[All Fields]) AND \"off-target\"[All Fields] AND (\"detect\"[All Fields] OR \"detectabilities\"[All Fields] OR \"detectability\"[All Fields] OR \"detectable\"[All Fields] OR \"detectables\"[All Fields] OR \"detectably\"[All Fields] OR \"detected\"[All Fields] OR \"detectible\"[All Fields] OR \"detecting\"[All Fields] OR \"detection\"[All Fields] OR \"detections\"[All Fields] OR \"detects\"[All Fields]) AND 2021/01/01:3000/12/31[Date - Publication]"
+  }
+}

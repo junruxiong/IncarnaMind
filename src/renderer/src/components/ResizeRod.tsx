@@ -3,16 +3,27 @@ import { type KeyboardEvent, type PointerEvent, useRef } from "react";
 interface ResizeRodProps {
   label: string;
   testId?: string;
-  /** Current width of the pane this rod resizes. */
+  /** Current width (or, across the window, height) of the pane this rod resizes. */
   width: number;
   min: number;
   max: number;
-  /** 1 if the pane is left of the rod (dragging right grows it), -1 if it is right of the rod. */
+  /**
+   * 1 if the pane is before the rod (left of it, or above it: dragging right or
+   * down grows it), -1 if it is after the rod.
+   */
   direction: 1 | -1;
+  /**
+   * "x" (the default): a vertical rod between panes side by side, moved with
+   * ← and →. "y": a horizontal one between panes above and below each other,
+   * moved with ↑ and ↓.
+   */
+  axis?: "x" | "y";
   /** Called while dragging. */
   onPreview(width: number): void;
   /** Called once with the final width. */
   onCommit(width: number): void;
+  /** A double-click: the pane goes back to its default size. */
+  onReset?(): void;
   /** Starts below the 44px band the panes' headers share (`.pane-divider--below-band`). */
   belowBand?: boolean;
   /** The 8px gap between the sidebar and the card: no rule, only a grip while pointed at. */
@@ -36,29 +47,32 @@ export function ResizeRod({
   min,
   max,
   direction,
+  axis = "x",
   onPreview,
   onCommit,
+  onReset,
   belowBand = false,
   gap = false,
   onCollapse,
 }: ResizeRodProps) {
   const drag = useRef<{
-    startX: number;
+    start: number;
     startWidth: number;
     latest: number;
     collapse: boolean;
   } | null>(null);
   const clamp = (value: number) => Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
+  const along = (event: PointerEvent) => (axis === "x" ? event.clientX : event.clientY);
 
   const startDrag = (event: PointerEvent<HTMLHRElement>) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { startX: event.clientX, startWidth: width, latest: width, collapse: false };
+    drag.current = { start: along(event), startWidth: width, latest: width, collapse: false };
   };
   const moveDrag = (event: PointerEvent<HTMLHRElement>) => {
     const current = drag.current;
     if (!current) return;
-    const raw = current.startWidth + direction * (event.clientX - current.startX);
+    const raw = current.startWidth + direction * (along(event) - current.start);
     current.collapse = onCollapse !== undefined && raw < min - COLLAPSE_PAST_MIN;
     current.latest = clamp(raw);
     onPreview(current.latest);
@@ -77,9 +91,10 @@ export function ResizeRod({
     drag.current = null;
     if (current) onPreview(current.startWidth);
   };
+  const [less, more] = axis === "x" ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
   const resizeWithKeys = (event: KeyboardEvent<HTMLHRElement>) => {
     const step = event.shiftKey ? 50 : 10;
-    const delta = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
+    const delta = event.key === more ? step : event.key === less ? -step : 0;
     if (delta === 0) return;
     event.preventDefault();
     const next = clamp(width + direction * delta);
@@ -90,7 +105,8 @@ export function ResizeRod({
   return (
     <hr
       data-testid={testId}
-      aria-orientation="vertical"
+      // A rod between panes side by side stands upright; one between panes stacked lies flat.
+      aria-orientation={axis === "x" ? "vertical" : "horizontal"}
       aria-label={label}
       aria-valuenow={width}
       aria-valuemin={min}
@@ -102,12 +118,15 @@ export function ResizeRod({
       onPointerUp={endDrag}
       onPointerCancel={cancelDrag}
       onKeyDown={resizeWithKeys}
+      onDoubleClick={onReset}
       className={
-        gap
-          ? "pane-divider pane-divider--gap"
-          : belowBand
-            ? "pane-divider pane-divider--below-band"
-            : "pane-divider"
+        axis === "y"
+          ? `pane-divider pane-divider--y${gap ? " pane-divider--gap-y" : ""}`
+          : gap
+            ? "pane-divider pane-divider--gap"
+            : belowBand
+              ? "pane-divider pane-divider--below-band"
+              : "pane-divider"
       }
     />
   );
