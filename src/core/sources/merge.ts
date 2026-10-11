@@ -13,7 +13,15 @@ import type { FullTextLocation, ProviderWork, WorkIds } from "./types";
 const K = 60;
 
 /** Whose record wins a field both have: the registries' first, a preprint server's last. */
-const RECORD_ORDER = ["crossref", "openalex", "pubmed", "arxiv"];
+const RECORD_ORDER = [
+  "crossref",
+  "openalex",
+  "pubmed",
+  "arxiv",
+  "dailymed",
+  "openfda",
+  "clinicaltrials",
+];
 
 /** Which open copy is tried first: the published version, then one whose version isn't known, then a manuscript. */
 const VERSION_ORDER: Record<SourceVersion | "unknown", number> = {
@@ -34,6 +42,7 @@ export interface MergedWork {
   /** Every open copy known, the one to try first first. */
   fullText: FullTextLocation[];
   landingUrl: string | null;
+  notice: string | null;
   score: number;
 }
 
@@ -44,7 +53,7 @@ interface Found {
   work: ProviderWork;
 }
 
-const ID_KINDS = ["doi", "arxiv", "pmid", "pmcid", "openalex"] as const;
+const ID_KINDS = ["doi", "arxiv", "pmid", "pmcid", "openalex", "setid", "nct"] as const;
 
 const shares = (a: WorkIds, b: WorkIds) =>
   ID_KINDS.some((kind) => a[kind] !== undefined && a[kind] === b[kind]);
@@ -55,6 +64,8 @@ export function workKey(ids: WorkIds, title: string): string {
   if (ids.arxiv) return `arxiv:${ids.arxiv}`;
   if (ids.pmid) return `pmid:${ids.pmid}`;
   if (ids.openalex) return `openalex:${ids.openalex}`;
+  if (ids.setid) return `setid:${ids.setid}`;
+  if (ids.nct) return `nct:${ids.nct}`;
   return `title:${title.toLowerCase().replace(/\s+/g, " ").trim()}`;
 }
 
@@ -120,6 +131,7 @@ function mergeGroup(group: readonly Found[]): MergedWork {
       null,
     fullText: copies,
     landingUrl: byRecord.find((each) => each.work.landingUrl)?.work.landingUrl ?? null,
+    notice: byRecord.find((each) => each.work.notice)?.work.notice ?? null,
     score: group.reduce((sum, each) => sum + 1 / (K + each.rank), 0),
   };
 }
