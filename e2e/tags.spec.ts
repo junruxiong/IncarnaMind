@@ -9,7 +9,6 @@ import {
   filterByTag,
   launchApp,
   openDocumentTags,
-  openViewer,
   removeDataFolder,
   useLocalChatModel,
 } from "./app";
@@ -173,7 +172,8 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
     }),
   );
   await addDocuments(window, files);
-  await openViewer(window);
+  await window.getByTestId("open-document").first().click();
+  await expect(window.getByTestId("viewer")).toBeVisible();
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 470));
   await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeLessThan(600);
 
@@ -210,7 +210,7 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   // The picker takes the focus into its field, ready to type a Tag.
   await expect(menu.getByTestId("tag-picker-input")).toBeFocused();
 
-  // Esc closes the menu, and leaves the Document viewer open.
+  // Esc closes the menu, and leaves the Document's tab open.
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect(window.getByTestId("viewer")).toBeVisible();

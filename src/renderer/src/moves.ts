@@ -49,6 +49,7 @@ export function movedLocally(
         ...current.get(documentId),
         groupId: folderId,
         source: "user",
+        suggested: false,
         status: "classified",
         error: null,
       },

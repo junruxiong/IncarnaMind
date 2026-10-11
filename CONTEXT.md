@@ -49,7 +49,7 @@ A Document whose Linked folder can't be reached for now, such as on an unplugged
 _Avoid_: offline, missing
 
 **Linked folder**:
-A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes anything in it. Files a cloud drive keeps online only are indexed when the User asks.
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks.
 _Avoid_: workspace, vault, source
 
 **Other Documents**:
@@ -70,11 +70,15 @@ _Avoid_: page (for anything that isn't a PDF), position, anchor
 
 **Folder**:
 A project inside IncarnaMind: a named place for Documents and Minds, with a description of what belongs there. Each Document and each Mind belongs to one Folder or is Not in a Folder; this does not change where a Document's original file is stored. A Mind in a Folder searches the Folder by default; deleting a Folder moves its Documents and Minds to Not in a Folder.
-_Avoid_: project (in the interface), group, collection, category
+_Avoid_: project (in the interface), group (a Folder's former name; a Group is now a column of tabs), collection, category
 
 **Not in a Folder**:
 The one place for every Document and Mind in no Folder. A Mind there searches all Documents.
 _Avoid_: Unsorted, Uncategorised, Inbox
+
+**Suggested Folder**:
+A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Not in a Folder and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
+_Avoid_: automatic Folder, proposed Folder
 
 **Source location**:
 The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.
@@ -86,9 +90,6 @@ _Avoid_: category, label, class
 **Topic**:
 The earlier design for a generated two-level subject tree. The current Library uses flat Folders instead (direction revised 2026-10-08), and the dormant Topic code was removed on 2026-10-10 (ADR-0012).
 _Avoid_: cluster, category, collection, group
-
-**Group**:
-The former name for an in-app Folder. Users now see Folders throughout document organisation.
 
 **Library**:
 The view of all of a User's Documents, organised into Folders with visible Tags. Users can search names or Tags, manage Folders, and organise Documents automatically or correct them by hand; manual choices are kept.
@@ -207,6 +208,16 @@ _Avoid_: export folder, downloads, save path
 **Usage data**:
 Anonymous events about using IncarnaMind, such as "a Question was asked with a local model", sent only while the User agrees, under a random install ID. It never holds a Document's content or name, a Question, an Answer or anything the User typed.
 _Avoid_: telemetry, tracking
+
+### Window
+
+**Tab**:
+What a Mind, the Library or a Document is open in. A preview tab, its title in italics, is replaced by the next Document opened in its group until the User keeps it; a pinned tab stays at the left of its group.
+_Avoid_: pane, page, view
+
+**Group**:
+One of up to three columns of tabs side by side in a window, each with its own tab strip; in Chinese, 栏. A narrow window shows its groups merged into one.
+_Avoid_: pane, split, column
 
 ### People
 

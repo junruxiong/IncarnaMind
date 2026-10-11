@@ -40,6 +40,11 @@ export interface Paths {
    */
   examples?: string;
   /**
+   * The User's Documents folder: the first save offers "IncarnaMind" in it as
+   * the Output location. Defaults to "Documents" in the home folder.
+   */
+  documents?: string;
+  /**
    * Where each program a Tool runs (a Skill script) gets its own temporary
    * working folder from the local `Executor`, removed when the run ends.
    * Defaults to the OS's temporary folder.
@@ -356,7 +361,7 @@ export interface UsageDataSender {
   /** Where events go, for the Privacy page. */
   readonly service: ExternalService;
   /**
-   * A test build (the alpha): usage data is on until the User turns it off,
+   * A test build (for invited testers): usage data is on until the User turns it off,
    * as testers agree to when they join, and a first-run notice says so.
    * Otherwise it is off until the User agrees.
    */
