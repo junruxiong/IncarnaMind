@@ -701,6 +701,8 @@ export const useAppStore = create<AppState>()((set, get) => {
           message,
           undo: async () => {
             for (const back of undoMoves(done)) await move(back.items, back.folderId);
+            for (const document of done.documents)
+              await core.restoreAssignment(document.id, document.previous);
           },
         });
       }),

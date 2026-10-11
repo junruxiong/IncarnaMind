@@ -1,5 +1,5 @@
 /**
- * Reference records in the database (#286, migration 40): one row per
+ * Reference records in the database (#286, migration 42): one row per
  * Document, whose `fields` hold each field's value and where it came from.
  * The rules for who may change a field live here:
  * - reading the file replaces only what an earlier reading gave ("file");

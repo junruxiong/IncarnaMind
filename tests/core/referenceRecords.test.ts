@@ -349,7 +349,7 @@ describe("Reference records, read from the file", () => {
     const { documents } = await addFiles(first, { "s41586-020-2649-2.pdf": numpyPdf() });
     const id = documents["s41586-020-2649-2.pdf"]?.id as string;
     first.close();
-    // As a database from before migration 40 leaves them: read by an older metadata version, no record.
+    // As a database from before migration 42 leaves them: read by an older metadata version, no record.
     const db = openDatabase(join(dataDir, DATABASE_FILE));
     db.run("DELETE FROM reference_records");
     db.run("UPDATE documents SET metadata_version = ?", [BigInt(METADATA_VERSION - 1)]);
