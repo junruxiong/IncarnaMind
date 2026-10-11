@@ -9,15 +9,17 @@ import {
   dismissChatSetup,
   interceptOpenExternal,
   launchApp,
+  newMind,
   openDocumentMenu,
   removeDataFolder,
+  sidebarFolder,
   urlsOpened,
   useLocalChatModel,
 } from "./app";
 
 /*
  * Web pages saved as Documents (#261), from a local test server: added from
- * the "+" menu and by a paste on the sidebar, shown as their snapshot, cited
+ * the "+" menu and by a paste or a drop on a Folder, opened as their snapshot, cited
  * by section and paragraph, and refused, saying why, when they can't be
  * fetched. Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots there.
  */
@@ -34,7 +36,7 @@ test.beforeEach(async () => {
   dataDir = await createDataFolder();
   home = await createDataFolder();
   server = createServer((request, response) => {
-    if (request.url === "/tea" || request.url === "/tea-again") {
+    if (request.url?.startsWith("/tea")) {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       response.end(ARTICLE);
     } else {
@@ -79,6 +81,23 @@ const paste = (window: Page, text: string) =>
     const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true });
     (document.activeElement ?? document.body).dispatchEvent(event);
   }, text);
+
+/** Drags a link from a browser over the element, as the system does, and drops it unless `drop` is false. */
+const dragLink = (target: Locator, address: string, drop = true) =>
+  target.evaluate(
+    (element, [link, dropping]) => {
+      const transfer = new DataTransfer();
+      transfer.setData("text/uri-list", link);
+      transfer.setData("text/plain", link);
+      const types = dropping ? ["dragenter", "dragover", "drop"] : ["dragenter", "dragover"];
+      for (const type of types) {
+        element.dispatchEvent(
+          new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }),
+        );
+      }
+    },
+    [address, drop] as const,
+  );
 
 test("a web page added from the + menu is a Document named by its title, opened as its snapshot; one that can't be fetched says why", async () => {
   const { app, window } = await launchApp(dataDir, { home });
@@ -128,7 +147,7 @@ test("a web page added from the + menu is a Document named by its title, opened 
   await app.close();
 });
 
-test("a link pasted on a Folder in the sidebar is saved there; one that can't be fetched says why below", async () => {
+test("a link pasted or dropped on a Folder in the sidebar is saved there; one that can't be fetched says why below", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await dismissChatSetup(window);
   await window.evaluate(() =>
@@ -137,14 +156,24 @@ test("a link pasted on a Folder in the sidebar is saved there; one that can't be
       description: "",
     }),
   );
-  const folder = window.getByTestId("library-folder").filter({ hasText: "Reading" });
-  await expect(folder).toBeVisible();
+  const folder = sidebarFolder(window, "Reading");
+  const row = folder.getByTestId("folder-row");
+  await row.click();
+  await expect(folder).toHaveAttribute("data-expanded", "true");
 
-  await folder.getByRole("button", { name: "Reading" }).focus();
+  await row.focus();
   await paste(window, `${site}/tea-again`);
-
   await expect(folder).toHaveAttribute("data-count", "1");
   await expect(folder.getByTestId("document-list-item")).toContainText(TITLE);
+
+  // Dragged over the window, the Folders stay in sight; dropped on one, it is saved there.
+  await dragLink(folder, `${site}/tea-dropped`, false);
+  await expect(window.getByTestId("drop-overlay")).toContainText("drop it on a Folder");
+  await expect(folder).toHaveAttribute("data-drop-target", "true");
+  await screenshot(window, "web-page-drag");
+  await dragLink(folder, `${site}/tea-dropped`);
+  await expect(window.getByTestId("drop-overlay")).toBeHidden();
+  await expect(folder).toHaveAttribute("data-count", "2");
 
   await paste(window, `${site}/gone`);
   const problem = window.locator('[data-testid^="web-page-problem"]');
@@ -165,7 +194,7 @@ test("an Answer cites a web page by section and paragraph; its card says the sit
     "ready",
   );
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");

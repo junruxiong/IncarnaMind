@@ -111,7 +111,8 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await atMockupSize(app, window);
 
-  await pointAndClick(window, window.getByTestId("new-mind"));
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
   const title = window.getByTestId("mind-title");
   await title.fill("Reading notes: tides");
   await enterContent(window);
@@ -207,7 +208,8 @@ test("Stop keeps what streamed, and Regenerate writes the Answer again", async (
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await pointAndClick(window, window.getByTestId("new-mind"));
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
   const composer = window.getByTestId("composer");
   await pointAndClick(window, composer.getByTestId("composer-input"));
   await window.keyboard.type("What is IncarnaMind?");
@@ -244,7 +246,8 @@ test("⌘J focuses the composer from the note; the Question goes at the cursor; 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await pointAndClick(window, window.getByTestId("new-mind"));
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
   await enterContent(window);
   await window.keyboard.type("First thought");
   await window.keyboard.press("Enter");
@@ -348,7 +351,8 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await atMockupSize(first.app, window);
 
     // A Mind that chooses another model, with the mouse.
-    await pointAndClick(window, window.getByTestId("new-mind"));
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-new-mind"));
     await window.getByTestId("mind-title").fill("Other model");
     const chip = window.getByTestId("composer-model");
     await expect(chip).toHaveText("fake-model");
@@ -376,7 +380,8 @@ test("the model chip chooses the model for one Mind, which remembers it after a 
     await expect(answer.getByTestId("answer-model")).toHaveText("other-model");
 
     // A new Mind takes the default; by keyboard, the menu opens and closes again.
-    await pointAndClick(window, window.getByTestId("new-mind"));
+    await pointAndClick(window, window.getByTestId("plus-menu"));
+    await pointAndClick(window, window.getByTestId("plus-new-mind"));
     await window.getByTestId("mind-title").fill("Default model");
     await expect(chip).toHaveText("fake-model");
     await chip.focus();
@@ -505,7 +510,8 @@ test("asking from the composer moves the Mind's cursor below the Answer, without
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await pointAndClick(window, window.getByTestId("new-mind"));
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
   const input = window.getByTestId("composer-input");
   await pointAndClick(window, input);
   await window.keyboard.type("A first Question?");
@@ -542,7 +548,8 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await bridge(window).language("zh-CN");
   await atMockupSize(app, window);
 
-  await pointAndClick(window, window.getByTestId("new-mind"));
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
   await window.getByTestId("mind-title").fill("潮汐笔记");
   await enterContent(window);
   await window.keyboard.type("大潮每月出现两次。");
@@ -606,5 +613,52 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   });
   expect(Math.abs(((await composer.boundingBox())?.width ?? 0) - column)).toBeLessThanOrEqual(1);
   await screenshot(window, "composer-narrow-zh");
+  await app.close();
+});
+
+test("after the consent dialog closes, the caret is back in the composer and the Question still goes at the Mind's cursor", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  // A model on a server elsewhere, so the first Question asks to send first. The scripted model answers.
+  await window.evaluate(async () => {
+    await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.saveChatProvider({
+      kind: "openai-compatible",
+      baseUrl: "https://llm.example.com/v1",
+      modelId: "example-model",
+    });
+  });
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-new-mind"));
+  await enterContent(window);
+  await window.keyboard.type("Alpha");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Omega");
+  const editor = window.getByTestId("mind-editor");
+  // The cursor goes to the end of the first line, so Questions belong before "Omega".
+  const first = editor.locator(":scope > p").first();
+  await pointAndClick(window, first);
+  await expect(first).toHaveClass(/has-focus/);
+  await window.keyboard.press("End");
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("A first Question?");
+  await window.keyboard.press("Enter");
+
+  const consent = window.getByTestId("consent-dialog");
+  await expect(consent).toBeVisible();
+  await consent.getByTestId("consent-allow").click();
+  await expect(consent).toBeHidden();
+
+  // Typed straight away, with no click: it reaches the composer.
+  const input = window.getByTestId("composer-input");
+  await expect(input).toBeFocused();
+  await window.keyboard.type("A follow-up?");
+  await expect(input).toHaveValue("A follow-up?");
+  await window.keyboard.press("Enter");
+  await expect(editor.getByTestId("answer").nth(1)).toHaveAttribute("data-status", "done", {
+    timeout: 15_000,
+  });
+  // Both Questions went in before "Omega", which stays the last line.
+  await expect.poll(async () => (await order(editor)).at(-1)).toBe("Omega");
+  expect((await order(editor)).filter((block) => block === "question")).toHaveLength(2);
   await app.close();
 });

@@ -13,6 +13,7 @@ import {
   interceptSaveDialog,
   interceptShowItemInFolder,
   launchApp,
+  newMind,
   openDocumentAt,
   pathsShown,
   removeDataFolder,
@@ -82,7 +83,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
       });
     }, model.url);
 
-    await window.getByTestId("new-mind").click();
+    await newMind(window);
     await window.getByTestId("mind-editor").click();
     await window.keyboard.press("ControlOrMeta+j");
     await window.keyboard.type("What is in my Documents?");
@@ -146,7 +147,7 @@ test("a failed Answer says so under itself with one action: the key's page in Se
 test("asking without a chat model says what to set up, in the composer's row and at the top of the Mind, and its action opens Models", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
 
   // At the top of the Mind: one line and one action, read as a status.
   const top = window.getByTestId("chat-readiness");
@@ -203,7 +204,7 @@ test("a Document whose file moved says so in the viewer with Locate file…, whi
   const moved = join(sources, "Archive", "Amendment 2 (signed).md");
   await rename(original, moved);
   await expect(item).toHaveAttribute("data-file-status", "missing", { timeout: 15_000 });
-  await window.getByTestId("viewer-close").click();
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await item.getByTestId("open-document").click();
   const gone = window.getByTestId("viewer-removed");
   await expect(gone).toHaveAttribute("data-reason", "missing");
@@ -260,7 +261,7 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
   await screenshot(window, "viewer-file-moved-zh");
 
   // Deleted from IncarnaMind: a line and the quote it kept, with no action to take.
-  await window.getByTestId("viewer-close").click();
+  await window.getByTestId("document-tab").getByTestId("tab-close").click();
   await openDocumentAt(window, {
     documentId: `${documentId}-deleted`,
     pageFrom: 1,
@@ -279,7 +280,7 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
 test("an export that can't be saved says why under the format, and Choose another saves it elsewhere; then Saved … shows it in the file manager", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   await window.getByTestId("mind-title").fill("Tides");
   await window.getByTestId("mind-editor").click();
   await window.keyboard.type("Spring tides come twice a month.");

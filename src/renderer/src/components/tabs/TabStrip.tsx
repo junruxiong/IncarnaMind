@@ -1,0 +1,408 @@
+import {
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import type { LayoutGroup, LayoutTab } from "../../../../core/api";
+import { shortcutLabel } from "../../commands/keymap";
+import { useT } from "../../i18n";
+import { focusedGroupOf, groupOfTab } from "../../layoutSlice";
+import { useAppStore } from "../../store";
+import {
+  CloseLineIcon,
+  ExportLineIcon,
+  PinLineIcon,
+  PlusLineIcon,
+  SplitLineIcon,
+} from "../lineIcons";
+import { SidebarToggle } from "../SidebarToggle";
+import { openRowMenu } from "../sidebarRows";
+import { GroupMenu, StripButton, TabMenu } from "./TabMenus";
+import { focusTab, splitToTheRight } from "./tabActions";
+import { TabIcon, useTabTitle } from "./tabItems";
+import type { TabDrag } from "./useTabDrag";
+
+/*
+ * A group's tab strip (DESIGN.md, Components: Mind tabs, which now hold
+ * everything that opens): the tabs, then "+" for a new Mind in this group,
+ * then Export (for a Mind), Split and ⋯. This file is their behaviour and
+ * structure; their whole look is the `.tab-strip` block in styles.css.
+ */
+
+/** The tabs of a group, or, merged, of every group in order, with the one shown. */
+export function TabStrip({
+  group,
+  index,
+  merged,
+  drag,
+  onExport,
+}: {
+  group: LayoutGroup;
+  index: number;
+  merged: boolean;
+  drag: TabDrag;
+  onExport(mindId: string): void;
+}) {
+  const t = useT();
+  const layout = useAppStore((state) => state.layout);
+  const createMind = useAppStore((state) => state.createMind);
+  const list = useRef<HTMLDivElement>(null);
+  const overflow = useOverflow(list);
+  const tabs = merged && layout ? layout.groups.flatMap((each) => each.tabs) : group.tabs;
+  const shownId = group.activeTabId;
+  const shown = group.tabs.find((tab) => tab.id === shownId);
+  const focused = merged || layout?.focusedGroupId === group.id;
+
+  // The shown tab stays in sight when there are more tabs than room.
+  useEffect(() => {
+    if (!shownId) return;
+    list.current
+      ?.querySelector(`[data-tab-id="${CSS.escape(shownId)}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [shownId]);
+
+  /** Arrow keys, Home and End move to another tab of the strip and show it, as in any tab list. */
+  const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (fromInside(event)) return;
+    const current = tabs.findIndex((tab) => tab.id === shownId);
+    const next =
+      event.key === "ArrowRight"
+        ? tabs[(current + 1) % tabs.length]
+        : event.key === "ArrowLeft"
+          ? tabs[(current - 1 + tabs.length) % tabs.length]
+          : event.key === "Home"
+            ? tabs[0]
+            : event.key === "End"
+              ? tabs.at(-1)
+              : undefined;
+    if (!next) return;
+    event.preventDefault();
+    void useAppStore.getState().changeLayout({ type: "show", tabId: next.id });
+    focusTab(next.id);
+  };
+
+  return (
+    <header
+      data-testid="tab-strip"
+      data-group-id={group.id}
+      data-first-group={index === 0 || undefined}
+      className="tab-strip title-bar"
+    >
+      {index === 0 && <SidebarToggle place="band" />}
+      <div
+        ref={list}
+        role="tablist"
+        aria-label={t("tabs.group", { n: index + 1 })}
+        data-testid="tab-list"
+        data-hidden-before={overflow.before || undefined}
+        data-hidden-after={overflow.after || undefined}
+        className="tab-list"
+        onKeyDown={moveFocus}
+        // A mouse wheel turns vertically; the strip scrolls sideways.
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && list.current) {
+            list.current.scrollLeft += event.deltaY;
+          }
+        }}
+      >
+        {tabs.map((tab, position) => {
+          const owner = merged ? groupOfTab(layout, tab.id)?.group : group;
+          const selected = tab.id === shownId;
+          const next = tabs[position + 1];
+          return (
+            <Tab
+              key={tab.id}
+              tab={tab}
+              groupId={owner?.id ?? group.id}
+              selected={selected}
+              focusedGroup={focused}
+              // A divider on a tab's right edge: not on the last, nor next to the shown one.
+              divider={!selected && next !== undefined && next.id !== shownId}
+              dragged={drag.dragged?.tabId === tab.id}
+              drag={drag}
+            />
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        data-testid="new-tab"
+        aria-label={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
+        title={t("tabs.new", { shortcut: shortcutLabel("tab.new") })}
+        onClick={() => void createMind({ groupId: group.id })}
+        className="tab-new"
+      >
+        <PlusLineIcon />
+      </button>
+      <span className="tab-strip-spacer" />
+      {shown?.item.kind === "mind" && (
+        <ExportButton mindId={shown.item.mindId} onExport={onExport} />
+      )}
+      {!merged && (
+        <span className="tab-split">
+          <StripButton
+            testId="split-group"
+            label={t("tabs.split", { shortcut: shortcutLabel("tab.split") })}
+            onClick={() => void splitToTheRight(shown?.id)}
+          >
+            <SplitLineIcon />
+          </StripButton>
+        </span>
+      )}
+      <GroupMenu groupId={group.id} merged={merged} />
+    </header>
+  );
+}
+
+function ExportButton({ mindId, onExport }: { mindId: string; onExport(mindId: string): void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      data-testid="export-mind"
+      aria-label={t("export.action.label")}
+      title={t("export.action.label")}
+      onClick={() => onExport(mindId)}
+      className="tab-export"
+    >
+      <ExportLineIcon />
+      <span>{t("export.action")}</span>
+    </button>
+  );
+}
+
+/**
+ * Whether an event comes from inside a tab's menu or its name being typed,
+ * which sit in the tab but aren't the tab: they keep their keys and clicks.
+ */
+const fromInside = (event: { target: EventTarget }) =>
+  (event.target as Element).closest('[role="menu"], input') !== null;
+
+interface TabProps {
+  tab: LayoutTab;
+  /** The group it is in. */
+  groupId: string;
+  selected: boolean;
+  /** Its group is the one the User is in: its shown tab's title is in ink. */
+  focusedGroup: boolean;
+  divider: boolean;
+  dragged: boolean;
+  drag: TabDrag;
+}
+
+/** One tab: its icon, its title (italic while a preview), and ✕, or a pin for a pinned one. */
+function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: TabProps) {
+  const t = useT();
+  const title = useTabTitle(tab.item);
+  const renaming = useAppStore((state) => state.renamingTabId === tab.id);
+  const { changeLayout, closeTab, renameTab } = useAppStore.getState();
+  const isMind = tab.item.kind === "mind";
+
+  const show = () => {
+    const { layout } = useAppStore.getState();
+    const current = layout ? focusedGroupOf(layout) : null;
+    if (selected && current?.id === groupId) return;
+    void changeLayout({ type: "show", tabId: tab.id });
+  };
+  const rename = () => {
+    if (isMind) renameTab(tab.id);
+  };
+  const tooltip = tab.preview
+    ? t("tabs.preview", { title })
+    : tab.pinned
+      ? t("tabs.pinned", { title })
+      : title;
+
+  return (
+    <div
+      role="tab"
+      id={`tab-${tab.id}`}
+      aria-selected={selected}
+      aria-controls={selected ? `tabpanel-${groupId}` : undefined}
+      tabIndex={selected ? 0 : -1}
+      title={tooltip}
+      // Its name is its title, not its buttons' too; a preview or a pin is said after it.
+      aria-label={title}
+      aria-description={tooltip === title ? undefined : tooltip}
+      data-testid={`${tab.item.kind}-tab`}
+      data-tab-id={tab.id}
+      data-group-id={groupId}
+      data-kind={tab.item.kind}
+      data-mind-id={tab.item.kind === "mind" ? tab.item.mindId : undefined}
+      data-document-id={tab.item.kind === "document" ? tab.item.documentId : undefined}
+      data-preview={tab.preview || undefined}
+      data-pinned={tab.pinned || undefined}
+      data-focused-group={focusedGroup || undefined}
+      data-divider={divider || undefined}
+      data-dragging={dragged || undefined}
+      className="tab"
+      onPointerDown={(event) => {
+        if (!renaming && !fromInside(event)) drag.onTabPointerDown(event, tab.id);
+      }}
+      onClick={(event) => {
+        if (!drag.justDragged() && !renaming && !fromInside(event)) show();
+      }}
+      onDoubleClick={(event) => {
+        if (fromInside(event) || (event.target as Element).closest("button")) return;
+        // A preview is kept; a Mind's tab is renamed in place.
+        if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
+        else rename();
+      }}
+      onContextMenu={(event) => openRowMenu(event, "tab-menu")}
+      onKeyDown={(event) => {
+        if (fromInside(event)) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          if (tab.preview) void changeLayout({ type: "keep", tabId: tab.id });
+          show();
+        } else if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+          event.preventDefault();
+          event.currentTarget.querySelector<HTMLButtonElement>('[data-testid="tab-menu"]')?.click();
+        }
+      }}
+      onMouseDown={(event) => {
+        if (event.button === 1) event.preventDefault(); // no autoscroll
+      }}
+      onAuxClick={(event) => {
+        // A middle click closes it, as in a browser; a pinned tab stays, as with ⌘W.
+        if (event.button === 1 && !tab.pinned && !fromInside(event)) closeTab(tab.id);
+      }}
+    >
+      {/* The shown tab's feet, flaring into the page below; the others hide them. */}
+      <span aria-hidden="true" data-side="left" className="tab-foot" />
+      <span className="tab-inner">
+        <span className="tab-icon">
+          <TabIcon item={tab.item} />
+        </span>
+        {renaming && tab.item.kind === "mind" ? (
+          <RenameTab
+            mindId={tab.item.mindId}
+            title={title}
+            onDone={() => {
+              renameTab(null);
+              focusTab(tab.id);
+            }}
+          />
+        ) : (
+          <span data-testid="tab-title" className="tab-title">
+            {title}
+          </span>
+        )}
+        {tab.pinned ? (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-testid="tab-unpin"
+            aria-label={t("tabs.unpin", { title })}
+            title={t("tabs.unpin", { title })}
+            onClick={(event) => {
+              event.stopPropagation();
+              void changeLayout({ type: "pin", tabId: tab.id, pinned: false });
+            }}
+            className="tab-close"
+          >
+            <PinLineIcon className="size-[13px] [stroke-width:1.75]" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            // The tab is the keyboard stop; ⌘W closes it from there.
+            tabIndex={-1}
+            data-testid="tab-close"
+            aria-label={t("tabs.close", { title })}
+            title={`${t("tabs.close", { title })} (${shortcutLabel("tab.close")})`}
+            onClick={(event) => {
+              event.stopPropagation();
+              closeTab(tab.id);
+            }}
+            className="tab-close"
+          >
+            <CloseLineIcon />
+          </button>
+        )}
+      </span>
+      <span aria-hidden="true" data-side="right" className="tab-foot" />
+      <TabMenu tab={tab} title={title} />
+    </div>
+  );
+}
+
+/**
+ * A Mind's title typed in its tab: Enter or leaving the field saves, Esc
+ * cancels, a blank title changes nothing, and Enter while an input method is
+ * composing doesn't cut the title off.
+ */
+function RenameTab({ mindId, title, onDone }: { mindId: string; title: string; onDone(): void }) {
+  const t = useT();
+  const renameMind = useAppStore((state) => state.renameMind);
+  const [value, setValue] = useState(title);
+  const field = useRef<HTMLInputElement>(null);
+  const finished = useRef(false);
+
+  useLayoutEffect(() => {
+    field.current?.focus();
+    field.current?.select();
+  }, []);
+
+  const finish = (save: boolean) => {
+    if (finished.current) return;
+    finished.current = true;
+    if (save && value.trim() !== "" && value.trim() !== title) void renameMind(mindId, value);
+    onDone();
+  };
+
+  return (
+    <input
+      ref={field}
+      value={value}
+      data-testid="tab-rename"
+      aria-label={t("mind.renameLabel", { title })}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter" || event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          finish(event.key === "Enter");
+        }
+      }}
+      onBlur={() => finish(true)}
+      className="tab-rename"
+    />
+  );
+}
+
+/**
+ * Whether tabs are scrolled out of sight before or after the strip's visible
+ * part: the strip fades out on that side (see `.tab-list`).
+ */
+function useOverflow(list: RefObject<HTMLDivElement | null>) {
+  const [overflow, setOverflow] = useState({ before: false, after: false });
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const measure = () => {
+      const before = element.scrollLeft > 1;
+      const after = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+      setOverflow((current) =>
+        current.before === before && current.after === after ? current : { before, after },
+      );
+    };
+    measure();
+    element.addEventListener("scroll", measure, { passive: true });
+    // The strip's size changes with the window; its width of tabs, as tabs open and close.
+    const resized = new ResizeObserver(measure);
+    resized.observe(element);
+    const changed = new MutationObserver(measure);
+    changed.observe(element, { childList: true });
+    return () => {
+      element.removeEventListener("scroll", measure);
+      resized.disconnect();
+      changed.disconnect();
+    };
+  }, [list]);
+  return overflow;
+}

@@ -1,8 +1,16 @@
-import { access, readdir } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { describe, expect, test, vi } from "vitest";
-import { ANSWER_BLOCK, CITATION_NODE, type Core, QUESTION_BLOCK } from "../../src/core";
+import {
+  ANSWER_BLOCK,
+  CITATION_NODE,
+  type Core,
+  type ExampleGroup,
+  QUESTION_BLOCK,
+} from "../../src/core";
+import { EXAMPLE_SETS } from "../../src/core/exampleSets";
+import type { Language } from "../../src/core/language";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { readMind } from "../helpers/minds";
@@ -10,9 +18,12 @@ import { readMind } from "../helpers/minds";
 /** The example Documents the app ships. */
 const EXAMPLES = resolve(__dirname, "../../resources/examples");
 
-async function startWithExamples() {
+async function startWithExamples(language: Language = "en") {
   const dataDir = await createTempDataFolder();
-  const core = startCore(dataDir, { paths: { dataDir, examples: EXAMPLES } });
+  const core = startCore(dataDir, {
+    paths: { dataDir, examples: EXAMPLES },
+    systemLanguages: () => [language === "zh-CN" ? "zh-CN" : "en-US"],
+  });
   return { core, dataDir };
 }
 
@@ -101,6 +112,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
 
     await core.removeExamples();
     expect(await core.getExamples()).toEqual({
+      group: "tea",
       available: true,
       mindId: null,
       linkedFolderId: null,
@@ -120,6 +132,7 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const made = await core.createExamples();
     await core.deleteMind(made.mindId as string);
     expect(await core.getExamples()).toEqual({
+      group: "tea",
       available: true,
       mindId: null,
       linkedFolderId: made.linkedFolderId,
@@ -145,10 +158,76 @@ describe("the example Mind", { timeout: 30_000 }, () => {
     const without = startCore(dataDir);
     expect(await without.offerExamples()).toBeNull();
     expect(await without.getExamples()).toEqual({
+      group: "tea",
       available: false,
       mindId: null,
       linkedFolderId: null,
       answerId: null,
     });
+  });
+});
+
+const GROUPS = ["papers", "reports", "contracts", "meetings"] as const satisfies ExampleGroup[];
+const LANGUAGES = ["en", "zh-CN"] as const satisfies Language[];
+
+describe("the example Minds of each group", { timeout: 90_000 }, () => {
+  for (const group of GROUPS) {
+    for (const language of LANGUAGES) {
+      test(`${group} in ${language}: every Citation is found in its own Document, and every Document's licence is listed`, async () => {
+        const set = EXAMPLE_SETS[group][language];
+        const { core, dataDir } = await startWithExamples(language);
+
+        const made = await core.createExamples(group);
+        expect(made).toMatchObject({ group, available: true, mindId: expect.any(String) });
+        const [mind] = await core.listMinds();
+        expect(mind).toMatchObject({ id: made.mindId, title: set.title });
+
+        // Its Documents are what the folder holds, plus the licence that travels with them.
+        const shipped = (await readdir(join(EXAMPLES, set.source))).sort();
+        const copied = (await readdir(join(dataDir, set.folder))).sort();
+        expect(copied).toEqual([...shipped, "LICENSE"].sort());
+
+        // Every Document has its source and licence recorded.
+        const licence = (await readFile(join(EXAMPLES, "LICENSE"), "utf8")).replace(/\s+/g, " ");
+        for (const file of shipped) expect(licence, file).toContain(file);
+
+        // All its Documents are read, and every Citation is found.
+        await vi.waitFor(
+          async () => {
+            const documents = await core.listDocuments({ linkedFolderId: made.linkedFolderId });
+            expect(documents).toHaveLength(shipped.length);
+            const checks = citationsOf(await exampleMind(core, made.mindId as string)).map(
+              (each) => each.check,
+            );
+            expect(checks).toEqual(set.quotes.map(() => "found"));
+          },
+          { timeout: 60_000, interval: 200 },
+        );
+        const citations = citationsOf(await exampleMind(core, made.mindId as string));
+        expect(citations.map((each) => each.quote)).toEqual(set.quotes.map((each) => each.quote));
+        expect(citations.map((each) => each.documentName)).toEqual(
+          set.quotes.map((each) => each.document),
+        );
+
+        // The first Question is there for the User to ask.
+        const doc = await exampleMind(core, made.mindId as string);
+        expect(doc.child(1).type.name).toBe(QUESTION_BLOCK);
+        expect(doc.child(1).textContent).toBe(set.question);
+      });
+    }
+  }
+
+  test("each group's example is its own: making one leaves the others alone", async () => {
+    const { core } = await startWithExamples();
+    const papers = await core.createExamples("papers");
+    const meetings = await core.createExamples("meetings");
+    expect(papers.mindId).not.toBe(meetings.mindId);
+    expect(await core.listMinds()).toHaveLength(2);
+    expect((await core.getExamples()).mindId).toBeNull();
+
+    await core.removeExamples("papers");
+    expect((await core.getExamples("papers")).mindId).toBeNull();
+    expect((await core.getExamples("meetings")).mindId).toBe(meetings.mindId);
+    expect(await core.listMinds()).toHaveLength(1);
   });
 });

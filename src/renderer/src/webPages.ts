@@ -61,6 +61,10 @@ export const canTryAgain = (problem: Pick<WebPageProblem, "reason">) =>
 
 export const reasonKey = (reason: WebPageFailureReason): MessageKey => `webPages.reason.${reason}`;
 
+/** A drag of links from a browser, not of files. */
+export const carriesLinks = (event: { dataTransfer: DataTransfer }) =>
+  event.dataTransfer.types.includes("text/uri-list") && !event.dataTransfer.types.includes("Files");
+
 /** Only when the paste or drop is nothing but addresses (see `pastedAddresses`). */
 export function linksIn(data: DataTransfer): string[] {
   const list = data

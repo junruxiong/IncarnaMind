@@ -1,12 +1,13 @@
 import type { Document } from "../../../core/api";
+import type { CommandId } from "../../../shared/commands";
 import { displayName } from "../../../shared/documentNames";
+import { commands } from "../commands/registry";
 import { files } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import type { LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel } from "../linkedFolders";
 import { useAppStore } from "../store";
-import { useWebPages } from "../webPages";
 import { MoreLineIcon } from "./lineIcons";
 import {
   menuClass,
@@ -44,6 +45,12 @@ export function DocumentFileMenu({
   const reason = fileState ? t(fileState.reason) : undefined;
   const canRetry = item.status === "failed" && fileState === null;
   const { web } = item;
+  const runCommand = (id: CommandId) => {
+    menu.close();
+    commands
+      .run(id, { selection: [], focus: { kind: "document", id: item.id }, surface: "sidebar" })
+      .catch(useAppStore.getState().reportError);
+  };
 
   const bridge: LibraryBridge = {
     kind: "documents",
@@ -125,10 +132,7 @@ export function DocumentFileMenu({
             type="button"
             role="menuitem"
             data-testid="fetch-web-page-again"
-            onClick={() => {
-              menu.close();
-              void useWebPages.getState().fetchAgain(item);
-            }}
+            onClick={() => runCommand("document.fetchAgain")}
             className={`${menuItemClass} pl-2`}
           >
             {t("webPages.fetchAgain")}
@@ -155,12 +159,7 @@ export function DocumentFileMenu({
               role="menuitem"
               data-testid="document-open-externally"
               title={web.address}
-              onClick={() => {
-                menu.close();
-                files.openDocumentExternally(item.id).catch((failure: unknown) => {
-                  useAppStore.setState({ actionError: errorMessage(failure) });
-                });
-              }}
+              onClick={() => runCommand("document.openLivePage")}
               className={`${menuItemClass} pl-2`}
             >
               {t("webPages.openLive")}
@@ -170,12 +169,7 @@ export function DocumentFileMenu({
               role="menuitem"
               data-testid="copy-web-address"
               title={web.address}
-              onClick={() => {
-                menu.close();
-                navigator.clipboard.writeText(web.address).catch((failure: unknown) => {
-                  useAppStore.setState({ actionError: errorMessage(failure) });
-                });
-              }}
+              onClick={() => runCommand("document.copyAddress")}
               className={`${menuItemClass} pl-2`}
             >
               {t("webPages.copyAddress")}
