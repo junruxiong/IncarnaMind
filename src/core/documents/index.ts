@@ -46,6 +46,7 @@ import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/act
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Folders } from "../folders";
 import { referenceOf, writeFileReference } from "../referenceRecords/store";
+import { foundSourceOf } from "../sources/store";
 import type { Database, SqlValue } from "../storage";
 import { tagsOfDocument } from "../tags";
 import type { StoredTaggingState } from "../tags/tagger";
@@ -446,6 +447,7 @@ export function createDocuments(options: DocumentsOptions) {
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       ownFile: ownFileOf(row),
+      found: foundSourceOf(db, row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

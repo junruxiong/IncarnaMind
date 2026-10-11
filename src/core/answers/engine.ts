@@ -193,6 +193,8 @@ export interface InstructionOptions {
   skillTools?: boolean;
   /** The model is offered Connectors' Tools. */
   connectorTools?: boolean;
+  /** The model is offered Find sources' Tool. */
+  sourceTools?: boolean;
 }
 
 /** A Tool call at the Answer's gate. */
@@ -994,21 +996,26 @@ async function* toolLoop(
    * Tool with `untrustedResult` that returned some, each call's gate is told.
    */
   let tainted = false;
-  /** A Tool as the engine calls it: one with untrusted results taints the Run once it returns some. */
-  const tracked = (tool: Tool): Tool =>
-    tool.untrustedResult
-      ? {
-          ...tool,
-          async call(input, context) {
-            const result = await tool.call(input, context);
-            // A search that found no Passages read nothing of the Documents.
-            const read =
-              tool === search ? (results.get(context.toolCallId) ?? 0) > 0 : result.trim() !== "";
-            if (read) tainted = true;
-            return result;
-          },
-        }
-      : tool;
+  /**
+   * A Tool as the engine calls it: one with untrusted results taints the Run
+   * once it returns some; one that counts what it found (Find sources) says
+   * so for its card.
+   */
+  const tracked = (tool: Tool): Tool => ({
+    ...tool,
+    async call(input, context) {
+      const result = await tool.call(input, {
+        ...context,
+        counted: (count) => results.set(context.toolCallId, count),
+      });
+      // A search that found nothing (no Passages, no works) read nothing untrusted.
+      const read = results.has(context.toolCallId)
+        ? (results.get(context.toolCallId) ?? 0) > 0
+        : result.trim() !== "";
+      if (tool.untrustedResult && read) tainted = true;
+      return result;
+    },
+  });
   /** The Tools offered, by the name the model calls them; never a Connector's with one of ours. */
   const offered = new Map(
     offeredTools([...(documents ? [documents.search, documents.cite] : []), ...request.tools]).map(
@@ -1019,6 +1026,7 @@ async function* toolLoop(
   const instructions = request.instructions(mode, {
     skillTools: request.tools.some((each) => each.provider.kind === "skills"),
     connectorTools: tools.some((each) => each.provider.kind === "connector"),
+    sourceTools: tools.some((each) => each.provider.kind === "sources"),
   });
 
   // Within a window: the Question context that fits beside the instructions, the Tools and a search.
