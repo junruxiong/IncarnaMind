@@ -1,11 +1,11 @@
 import type { ComputePositionConfig, VirtualElement } from "@floating-ui/dom";
-import { isMacOS } from "@tiptap/core";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
 import { NodeRangeSelection } from "@tiptap/extension-node-range";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
+import { shortcutLabel } from "../commands/keymap";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { findBlock, questionWithAnswer } from "./blockCommands";
@@ -64,8 +64,6 @@ function handleAnchor(
     },
   };
 }
-
-const DELETE_SHORTCUT_LABEL = isMacOS() ? "⌘⇧⌫" : "Ctrl+Shift+Backspace";
 
 const isNote = (node: ProseMirrorNode) =>
   (NOTE_BLOCK_TYPES as readonly string[]).includes(node.type.name);
@@ -277,7 +275,7 @@ function BlockMenu({
           <TrashIcon className="size-4" />
         </span>
         <span className="flex-1">{t("editor.block.delete")}</span>
-        <kbd className="editor-menu-shortcut">{DELETE_SHORTCUT_LABEL}</kbd>
+        <kbd className="editor-menu-shortcut">{shortcutLabel("block.delete")}</kbd>
       </button>
     </Popover>
   );
