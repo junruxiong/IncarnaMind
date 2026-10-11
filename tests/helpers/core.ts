@@ -25,6 +25,9 @@ export const CITATION_STYLES = fileURLToPath(
 /** A model source with nothing to download: the fake embedding model needs no files. */
 export const NO_MODEL_FILES = { baseUrl: "http://127.0.0.1/", files: [] } as const;
 
+/** An address nothing answers at (the discard port), for services a test doesn't stand in for. */
+const NOWHERE = "http://127.0.0.1:9";
+
 /** A fresh, empty data folder, deleted when the current test finishes. */
 export async function createTempDataFolder(): Promise<string> {
   const dataDir = await mkdtemp(join(tmpdir(), "incarnamind-test-"));
@@ -99,6 +102,13 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     embeddingModelSource: NO_MODEL_FILES,
     crossEncoder: createFakeCrossEncoder(),
     rerankingModelSource: NO_MODEL_FILES,
+    // Find sources never reaches the real services from a test: a test that searches gives its stand-in.
+    sourceProviders: {
+      openalex: NOWHERE,
+      arxiv: NOWHERE,
+      pubmed: NOWHERE,
+      crossref: NOWHERE,
+    },
     ...overrides,
     // Linked folders settle and retry quickly in tests.
     linkedFolders: { settleMs: 30, retryMs: 300, ...overrides.linkedFolders },

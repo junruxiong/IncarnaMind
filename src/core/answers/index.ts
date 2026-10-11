@@ -74,6 +74,7 @@ import {
   scriptResultText,
 } from "../skills/scripts";
 import { scriptCallInput, skillTools } from "../skills/tools";
+import { asksForSources } from "../sources/intent";
 import {
   SKILL_TOOLS,
   type Tool,
@@ -108,6 +109,7 @@ import {
   loadedSkillText,
   signInNeededInstructions,
   skillInstructions,
+  sourcesInstructions,
 } from "./prompt";
 
 export type { AnswerDocuments } from "./citations";
@@ -255,6 +257,7 @@ const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
   documents: "documents",
   skills: "skill",
   connector: "connector",
+  sources: "sources",
 };
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -801,6 +804,8 @@ export function createAnswers(options: AnswersOptions) {
       // (see `gate`).
       const provided: Tool[] = [];
       for (const provider of options.toolProviders) {
+        // Find sources' Tool only for a Question that asks for papers or other sources.
+        if (provider.kind === "sources" && !asksForSources(context.question)) continue;
         try {
           provided.push(...(await provider.tools(controller.signal)));
         } catch (error) {
@@ -881,7 +886,12 @@ export function createAnswers(options: AnswersOptions) {
       for await (const event of engine.generate({
         instructions: (
           mode,
-          { passages, skillTools: withSkillTools = false, connectorTools = false } = {},
+          {
+            passages,
+            skillTools: withSkillTools = false,
+            connectorTools = false,
+            sourceTools = false,
+          } = {},
         ) =>
           [
             base,
@@ -895,6 +905,7 @@ export function createAnswers(options: AnswersOptions) {
                 ),
             skillInstructions(listed, forced, withSkillTools, scripts),
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
+            sourcesInstructions(sourceTools),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
           ]
             .filter(Boolean)
