@@ -47,10 +47,30 @@ function place(
       : `${below}px`;
 }
 
-/** The checked item, or the first. */
-function focusFirst(menu: HTMLElement | null): void {
+/** The checked item, or the first; with `first`, the first whatever is checked. */
+function focusFirst(menu: HTMLElement | null, first = false): void {
   const all = itemsOf(menu);
-  (all.find((each) => each.getAttribute("aria-checked") === "true") ?? all[0])?.focus();
+  const checked = first
+    ? undefined
+    : all.find((each) => each.getAttribute("aria-checked") === "true");
+  (checked ?? all[0])?.focus();
+}
+
+/**
+ * Opens a menu from its ⋯ button for a right-click, so the right-click menu
+ * and the ⋯ menu are one: at once, or, with a mouse button still held
+ * (`buttons`, from the event), once it is let go, as letting go outside the
+ * menu would close it. An open menu stays open.
+ */
+export function openMenuFromRightClick(button: HTMLButtonElement, buttons: number): void {
+  if (button.getAttribute("aria-expanded") === "true") return;
+  if (buttons === 0) button.click();
+  else {
+    const open = () => {
+      if (button.isConnected) button.click();
+    };
+    window.addEventListener("pointerup", () => setTimeout(open), { once: true });
+  }
 }
 
 /**
@@ -67,11 +87,15 @@ function focusFirst(menu: HTMLElement | null): void {
  * which also takes `role="menu"`, an `aria-label` and `menuClass` (./ui).
  * `around` names what the button sits in, which the menu then opens above or
  * below rather than covering it (e.g. the composer, for its model chip).
+ * `focus: "first"` focuses the first item even when one is checked: for a
+ * menu of actions with a switch among them, rather than a choice of options.
  */
 export function usePopoverMenu({
   around,
+  focus = "checked",
 }: {
   around?: (button: HTMLElement) => HTMLElement | null;
+  focus?: "checked" | "first";
 } = {}) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -79,6 +103,7 @@ export function usePopoverMenu({
   const [open, setOpen] = useState(false);
   const outer = useRef(around);
   outer.current = around;
+  const first = focus === "first";
   /** Whether the User has pressed a key or the pointer in the menu since it opened. */
   const touched = useRef(false);
 
@@ -91,23 +116,22 @@ export function usePopoverMenu({
     if (!open) return;
     const anchor = button.current;
     place(anchor, menu.current, anchor && outer.current ? outer.current(anchor) : null);
-    if (menu.current?.matches(":popover-open")) focusFirst(menu.current);
-  }, [open]);
+    if (menu.current?.matches(":popover-open")) focusFirst(menu.current, first);
+  }, [open, first]);
 
   // Items that come after it opened, such as models still being listed then: placed again for
   // the menu's new size, and the checked one focused, as it would have been had it been there.
   useEffect(() => {
     const element = menu.current;
     if (!open || !element) return;
-    touched.current = false;
     const observer = new MutationObserver(() => {
       const anchor = button.current;
       place(anchor, element, anchor && outer.current ? outer.current(anchor) : null);
-      if (!touched.current && element.matches(":popover-open")) focusFirst(element);
+      if (!touched.current && element.matches(":popover-open")) focusFirst(element, first);
     });
     observer.observe(element, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [open]);
+  }, [open, first]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     touched.current = true;
@@ -150,11 +174,14 @@ export function usePopoverMenu({
       popover: "auto" as const,
       // Before it shows, so a menu that renders its items only while open has them when it paints.
       onBeforeToggle: (event: ToggleEvent<HTMLDivElement>) => {
+        // Untouched from the moment it opens, not from a render after: keys can come first.
+        if (event.newState === "open") touched.current = false;
         setOpen(event.newState === "open");
       },
-      // Now it shows, where it was placed: it can take the focus.
+      // Now it shows, where it was placed: it can take the focus, unless the User has moved it
+      // already (the event can come after their first keys).
       onToggle: (event: ToggleEvent<HTMLDivElement>) => {
-        if (event.newState === "open") focusFirst(menu.current);
+        if (event.newState === "open" && !touched.current) focusFirst(menu.current, first);
       },
       onKeyDown,
       onPointerDown: () => {

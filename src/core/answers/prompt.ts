@@ -19,7 +19,7 @@ export function answerInstructions(question: string): string {
     "",
     "- Answer in the language the Question is written in, even when the Notes or Documents are in another language.",
     "- If you don't know the answer, or it isn't in what you were given and you aren't sure of it, say so plainly instead of guessing.",
-    "- Write Markdown: paragraphs, headings, lists, fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use tables or HTML.",
+    "- Write Markdown: paragraphs, headings, lists, tables (one row per line, with a heading row), fenced code blocks with a language, and LaTeX math as $…$ inline or $$…$$ on lines of its own. Don't use HTML.",
     ...(language ? [`- The Question is written in ${language}, so answer in ${language}.`] : []),
   ].join("\n");
 }
@@ -141,7 +141,7 @@ export function documentInstructions(
         "Cite every claim you draw from a Passage:",
         `- Before writing the Answer, call cite once with a record for each quote you will use: a marker number (1, 2, …), ${RECORD}.`,
         UNBROKEN_QUOTE,
-        "- In the Answer, put the marker as [^1] right after each claim it supports. Use only markers you recorded, and add no list of sources.",
+        "- In the Answer, put the marker as [^1] right after each claim it supports, in a table's cell too. Use only markers you recorded, and add no list of sources.",
         "- Write nothing before your Tool calls: only the Answer, after them.",
         NOT_COVERED,
       ].join("\n");
@@ -155,7 +155,7 @@ export function documentInstructions(
         "",
         // The example's location is a placeholder: a small model copied a real-looking one ("p. 3") as its own (#67).
         'Reply with one JSON object: {"answer": "…", "citations": [{"marker": 1, "passage": "P1", "location": "…", "quote": "…"}]}.',
-        "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it. Add no list of sources.",
+        "- answer: the Answer, in Markdown. Cite every claim you draw from a Passage by putting a marker such as [^1] right after it, in a table's cell too. Add no list of sources.",
         `- citations: one record for each marker: ${RECORD}.`,
         UNBROKEN_QUOTE,
         NOT_COVERED,

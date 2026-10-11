@@ -1,10 +1,11 @@
 /**
- * Which versions of which Documents the Citations in Minds quote, for the
- * garbage collection of old versions' text (see `collectOldVersions` in
- * ../documents), and which of their Units, for the text kept when a Linked
- * folder is unlinked. Citations live in Minds' Yjs documents, anywhere: in
- * Answers, or copied into Notes, at any depth. Exports read them the same
- * way (../mindText).
+ * Which versions of which Documents the Citations in Minds and conversations
+ * quote, for the garbage collection of old versions' text (see
+ * `collectOldVersions` in ../documents), and which of their Units, for the text
+ * kept when a Linked folder is unlinked. Citations live in Minds' Yjs documents,
+ * anywhere: in Answers, or copied into Notes, at any depth (exports read them
+ * the same way, ../mindText); and in the Answers of the assistant's
+ * conversations (ADR-0017).
  */
 import * as Y from "yjs";
 import { CITATION_NODE } from "../api";
@@ -22,8 +23,30 @@ export interface CitedUnits {
   pageTo: number | null;
 }
 
+/** A Citation's attributes, wherever they are kept: on a node in a Mind, or with an Answer of a conversation. */
+export type CitationFields = Readonly<Record<string, unknown>>;
+
 const unitNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : null;
+
+/** Adds the Units one Citation points to to `cited`, if it is of one of these Documents. */
+export function addCitedUnit(
+  citation: CitationFields,
+  documentIds: ReadonlySet<string>,
+  cited: CitedUnits[],
+): void {
+  const { documentId, contentHash } = citation;
+  if (typeof documentId !== "string" || !documentIds.has(documentId)) return;
+  const from = unitNumber(citation.pageFrom);
+  // Without a first Unit, it points at all of them.
+  const to = from === null ? null : (unitNumber(citation.pageTo) ?? from);
+  cited.push({
+    documentId,
+    contentHash: typeof contentHash === "string" && contentHash !== "" ? contentHash : null,
+    pageFrom: from === null || to === null ? null : Math.min(from, to),
+    pageTo: from === null || to === null ? null : Math.max(from, to),
+  });
+}
 
 /** Adds the Units that the Citations under `fragment` point to in these Documents to `cited`. */
 export function addCitedUnits(
@@ -33,44 +56,31 @@ export function addCitedUnits(
 ): void {
   for (const child of fragment.toArray()) {
     if (!(child instanceof Y.XmlElement)) continue;
-    if (child.nodeName !== CITATION_NODE) {
-      addCitedUnits(child, documentIds, cited);
-      continue;
-    }
-    const documentId = child.getAttribute("documentId");
-    if (typeof documentId !== "string" || !documentIds.has(documentId)) continue;
-    const contentHash = child.getAttribute("contentHash");
-    const from = unitNumber(child.getAttribute("pageFrom"));
-    // Without a first Unit, it points at all of them.
-    const to = from === null ? null : (unitNumber(child.getAttribute("pageTo")) ?? from);
-    cited.push({
-      documentId,
-      contentHash: typeof contentHash === "string" && contentHash !== "" ? contentHash : null,
-      pageFrom: from === null || to === null ? null : Math.min(from, to),
-      pageTo: from === null || to === null ? null : Math.max(from, to),
-    });
+    if (child.nodeName === CITATION_NODE) addCitedUnit(child.getAttributes(), documentIds, cited);
+    else addCitedUnits(child, documentIds, cited);
   }
 }
 
 /** The versions Citations quote: each Document's cited content hashes, or "any" for every version. */
 export type CitedVersions = Map<string, Set<string> | "any">;
 
+/** Adds the version one Citation quotes to `cited`. */
+export function addCitedVersion(citation: CitationFields, cited: CitedVersions): void {
+  const { documentId, contentHash } = citation;
+  if (typeof documentId !== "string" || documentId === "") return;
+  const versions = cited.get(documentId);
+  // A Citation that doesn't say which version it quotes keeps every version.
+  if (typeof contentHash !== "string" || contentHash === "") cited.set(documentId, "any");
+  else if (versions === undefined) cited.set(documentId, new Set([contentHash]));
+  else if (versions !== "any") versions.add(contentHash);
+}
+
 /** Adds the versions the Citations under `fragment` quote to `cited`. */
 export function addCitedVersions(fragment: Y.XmlFragment | Y.XmlElement, cited: CitedVersions) {
   for (const child of fragment.toArray()) {
     if (!(child instanceof Y.XmlElement)) continue;
-    if (child.nodeName === CITATION_NODE) {
-      const documentId = child.getAttribute("documentId");
-      if (typeof documentId !== "string" || documentId === "") continue;
-      const contentHash = child.getAttribute("contentHash");
-      const versions = cited.get(documentId);
-      // A Citation that doesn't say which version it quotes keeps every version.
-      if (typeof contentHash !== "string" || contentHash === "") cited.set(documentId, "any");
-      else if (versions === undefined) cited.set(documentId, new Set([contentHash]));
-      else if (versions !== "any") versions.add(contentHash);
-      continue;
-    }
-    addCitedVersions(child, cited);
+    if (child.nodeName === CITATION_NODE) addCitedVersion(child.getAttributes(), cited);
+    else addCitedVersions(child, cited);
   }
 }
 

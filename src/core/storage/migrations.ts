@@ -842,6 +842,124 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    // 41, 43 and 44 are reserved by work in progress.
+    version: 45,
+    description: "Conversations: the assistant's own history, kept per Folder (ADR-0017)",
+    // No foreign keys: a later sync may bring a message before its conversation, or a
+    // conversation before its Folder or the Mind a Question was asked from.
+    sql: `
+      -- A conversation of the assistant. title is the one the User typed ('' for none);
+      -- auto_title is its name from what was asked (the first Question, cut). folder_id is the
+      -- in-app Folder (library_groups) it belongs to, NULL: Not in a Folder. Deleting a Folder
+      -- sets it back to NULL, recorded in deleted_folder_items as item_kind 'conversation'.
+      -- purged_at: when it was deleted permanently, its messages and titles dropped; the row
+      -- stays as its tombstone.
+      CREATE TABLE conversations (
+        seq INTEGER PRIMARY KEY, -- local key for the keyword index only
+        id TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL DEFAULT '',
+        auto_title TEXT NOT NULL DEFAULT '',
+        folder_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT,
+        purged_at TEXT
+      ) STRICT;
+      CREATE INDEX conversations_by_folder ON conversations (folder_id) WHERE deleted_at IS NULL;
+      CREATE INDEX conversations_by_updated_at ON conversations (updated_at) WHERE deleted_at IS NULL;
+      CREATE INDEX conversations_by_deleted_at ON conversations (deleted_at)
+        WHERE deleted_at IS NOT NULL AND purged_at IS NULL;
+
+      -- Its messages, in order of position (given on the computer that adds one; a sync that
+      -- brings two at one position orders them by created_at, then id). kind: 'question' |
+      -- 'answer', checked in code, so a kind a newer version writes is skipped. A Question
+      -- keeps its text, the Mind in focus when it was asked (asked_from_mind_id, NULL: none),
+      -- its Search scope (JSON { folderIds, tagIds, documentIds }, NULL: none), the model
+      -- picked (provider_id, model_id, NULL: the default) and the Skill forced on it. An
+      -- Answer keeps its Question (question_id), its text (Markdown with a Citation marker
+      -- "[^n]" where each Citation goes), its Citations (a JSON array, each with its marker),
+      -- the model that wrote it, status ('streaming' | 'done' | 'stopped' | 'failed', checked
+      -- in code), why it failed, how the model cited and its Tool calls (a JSON array).
+      CREATE TABLE conversation_messages (
+        seq INTEGER PRIMARY KEY, -- local key for the keyword index only
+        id TEXT NOT NULL UNIQUE,
+        conversation_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        question_id TEXT,
+        text TEXT NOT NULL,
+        asked_from_mind_id TEXT,
+        scope TEXT,
+        provider_id TEXT,
+        model_id TEXT,
+        forced_skill TEXT,
+        status TEXT,
+        error_kind TEXT,
+        error_message TEXT,
+        citation_support TEXT,
+        citations TEXT NOT NULL DEFAULT '[]',
+        tool_calls TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX conversation_messages_by_conversation
+        ON conversation_messages (conversation_id, position) WHERE deleted_at IS NULL;
+
+      -- Keyword indexes, as for Passages (migration 10): the words of each conversation's name
+      -- and of each message's text, segmented by the core; rowid is the row's seq. Only the
+      -- index is stored.
+      CREATE VIRTUAL TABLE conversations_fts USING fts5 (
+        text,
+        content = '',
+        contentless_delete = 1,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+      CREATE VIRTUAL TABLE conversation_messages_fts USING fts5 (
+        text,
+        content = '',
+        contentless_delete = 1,
+        tokenize = 'unicode61 remove_diacritics 2'
+      );
+
+      -- Conversations are no longer Minds of kind 'chat' (ADR-0017). Nothing made one, but
+      -- any that exists becomes a plain Mind rather than one this version can't open.
+      UPDATE minds SET kind = 'mind' WHERE kind = 'chat';
+    `,
+  },
+  {
+    version: 46,
+    description: "The record of AI use: what the AI wrote into a Mind and what became of it (#292)",
+    sql: `
+      -- One row per AI insertion (or rejected proposal) in a Mind (src/core/aiUse).
+      -- Kept on this computer and never sent anywhere (ADR-0014). It holds no
+      -- text of the Mind or of the AI: only the kind of use, the model, the size
+      -- in characters, the Block ids the insertion made, and a hash of each
+      -- Block's text when it was inserted, so a later edit or deletion can be
+      -- told from the Block id alone. kind: answer-added | suggestion-accepted |
+      -- assistant-change-accepted | assistant-change-rejected | edit-with-ai-accepted.
+      -- outcome: kept | edited | deleted | rejected. blocks is JSON:
+      -- [{ "id": "<Block id>", "hash": "<sha-256 of its text>" | null }], hash
+      -- NULL until the Block has been seen in the Mind. No foreign key to
+      -- minds: a later sync may deliver a row before its Mind.
+      CREATE TABLE ai_use (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        provider_id TEXT,
+        model_id TEXT,
+        characters INTEGER NOT NULL,
+        blocks TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX ai_use_by_mind ON ai_use (mind_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
     version: 47,
     description: "Found sources: where a Document or reference Find sources added came from (#296)",
     sql: `

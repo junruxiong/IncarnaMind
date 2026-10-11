@@ -10,7 +10,8 @@
  * at the Location, that line is on), then answers with a marker. A Question
  * with "misquote" in it gets a quote that isn't on the page; one with "each"
  * cites the first Passage of each Document found, with a marker for each; one
- * with "rows" quotes two lines, so a sheet's Citation covers a range of rows.
+ * with "rows" quotes two lines, so a sheet's Citation covers a range of rows; one that
+ * asks for it "as a table" gets a Markdown table with its markers in a cell.
  *
  * With Skills: a Question that names a listed Skill gets it loaded with
  * use_skill first. An Answer that follows a Skill (forced, or loaded) starts
@@ -65,6 +66,20 @@ function fakeAnswer(question: string, skill: string | null = null): string {
 
 /** The scripted Answer when it cited something: one sentence with a marker. */
 const CITED_ANSWER = "Your Documents answer this [^1].\n\nThat is all.";
+
+/** The scripted Answer, as a table, to a Question that asks for one: the markers in a cell. */
+const tableAnswer = (markers: string) =>
+  [
+    "| Claim | Where |",
+    "|:--|--:|",
+    `| Your Documents answer this ${markers} | Documents |`,
+    "| Nothing else <br> is claimed | — |",
+    "",
+    "That is all.",
+  ].join("\n");
+
+/** A Question that asks for its Answer as a table. */
+const AS_A_TABLE = /\bas a table\b/i;
 
 /** The text of the last user message: the Question, at the end of its Question context. */
 function lastQuestion(prompt: Prompt): string {
@@ -397,8 +412,9 @@ function answerReply(prompt: Prompt, tools: readonly string[]): Reply {
   // The markers the last cite call recorded: "Recorded [^1], [^2]." and then any problems.
   const recordedLine = /^Recorded ([^.]*)\./.exec(cites.at(-1) ?? "")?.[1] ?? "";
   const recorded = [...new Set([...recordedLine.matchAll(/\[\^\d+\]/g)].map((match) => match[0]))];
-  const answer =
-    recorded.length > 1
+  const answer = AS_A_TABLE.test(question)
+    ? tableAnswer(recorded.join(" "))
+    : recorded.length > 1
       ? `Your Documents answer this ${recorded.join(" ")}.\n\nThat is all.`
       : CITED_ANSWER;
   return { text: skill ? `Following the Skill ${skill}.\n\n${answer}` : answer };
