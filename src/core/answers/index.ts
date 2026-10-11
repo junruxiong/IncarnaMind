@@ -30,6 +30,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { recordProposalRequest, resolveProposals } from "../../shared/proposals";
 import { searchScopeOf } from "../../shared/searchScope";
 import {
   ANSWER_BLOCK,
@@ -50,6 +51,7 @@ import {
   type Effect,
   type ExternalService,
   type MarkedCitation,
+  MIND_CONTENT_FIELD,
   type ProviderError,
   QUESTION_BLOCK,
   type QuoteRetry,
@@ -66,6 +68,8 @@ import type { createEventHub } from "../events";
 import type { ExecAccess } from "../execution";
 import type { MindContent } from "../mindContent";
 import { plainText } from "../mindText";
+import { docOf } from "../proposals/merge";
+import { proposeBlocks } from "../proposals/write";
 import { givesStructuredOutput } from "../providers/capabilities";
 import type { PreparedChatModel } from "../providers/chat";
 import { classifyProviderError } from "../providers/providerErrors";
@@ -1074,6 +1078,81 @@ export function createAnswers(options: AnswersOptions) {
     },
   });
 
+  /**
+   * An Answer the User edited, written again (#94): nothing is written while
+   * it streams, and once it is finished it goes over the User's version as
+   * Proposals of one request (../proposals/write, `proposeBlocks`), replacing
+   * any still waiting in it. Its model, searches and how it cited are the new
+   * Answer's; it counts as unedited again once every change is accepted.
+   * Stopped, it writes nothing; failed, the Answer says why, as it is.
+   */
+  const changesHome = (mindId: string, answerId: string, model: ChatModelChoice): AnswerHome => ({
+    place: { mindId },
+    write(answer, outcome) {
+      if (!options.mindExists(mindId)) return false;
+      const there = content.read(mindId, (blocks) => !!findBlock(blocks, ANSWER_BLOCK, answerId));
+      if (!there || !outcome || outcome.status === "stopped") return there;
+      if (outcome.status === "failed") {
+        return content.edit(mindId, (blocks) => {
+          const found = findBlock(blocks, ANSWER_BLOCK, answerId);
+          if (found) {
+            setAttributes(found.element, {
+              status: "failed",
+              errorKind: outcome.error.kind,
+              errorMessage: outcome.error.message,
+            });
+          }
+          return !!found;
+        });
+      }
+      const request = randomUUID();
+      const wrote = content.edit(mindId, (blocks) => {
+        const found = findBlock(blocks, ANSWER_BLOCK, answerId);
+        if (!found) return false;
+        const { element } = found;
+        resolveProposals(element, () => true, "reject");
+        const written = proposeBlocks(element, answer.blocks(), request, randomUUID);
+        if (written.proposals.length > 0 && blocks.doc) {
+          recordProposalRequest(blocks.doc, request, {
+            source: "answer",
+            providerId: model.providerId,
+            modelId: model.modelId,
+            createdAt: new Date().toISOString(),
+            answerId,
+          });
+        }
+        setAttributes(element, {
+          status: "done",
+          errorKind: null,
+          errorMessage: null,
+          providerId: model.providerId,
+          modelId: model.modelId,
+          toolCalls: answer.toolCalls.length > 0 ? JSON.stringify(answer.toolCalls) : null,
+          citationSupport: answer.support,
+        });
+        return true;
+      });
+      if (!wrote) return false;
+      // What it holds once every change is accepted is what the model wrote.
+      const generated = docOf(content.state(mindId));
+      try {
+        const blocks = generated.getXmlFragment(MIND_CONTENT_FIELD);
+        generated.transact(() => {
+          resolveProposals(blocks, (ref) => ref.request === request, "accept");
+        });
+        const found = findBlock(blocks, ANSWER_BLOCK, answerId);
+        const generatedHash = found ? contentHash(found.element) : null;
+        content.edit(mindId, (live) => {
+          const element = findBlock(live, ANSWER_BLOCK, answerId)?.element;
+          if (element) setAttributes(element, { generatedHash });
+        });
+      } finally {
+        generated.destroy();
+      }
+      return true;
+    },
+  });
+
   /** An Answer in one of the assistant's conversations: its row, with its Markdown and Citations. */
   const conversationHome = (conversationId: string, answerId: string): AnswerHome => ({
     place: { mindId: null, conversationId },
@@ -1158,16 +1237,9 @@ export function createAnswers(options: AnswersOptions) {
     return { context, documentIds, emptyScope };
   };
 
-  async function ask(
-    mindIdInput: unknown,
-    questionIdInput: unknown,
-    discardEdits: unknown,
-  ): Promise<AskResult> {
+  async function ask(mindIdInput: unknown, questionIdInput: unknown): Promise<AskResult> {
     const mindId = options.requireMind(mindIdInput);
     const questionId = parseId(questionIdInput, "A Question id");
-    if (discardEdits !== undefined && typeof discardEdits !== "boolean") {
-      throw new InvalidInputError("discardEdits must be true or false.");
-    }
 
     const { picked, forcedSkill } = content.read(mindId, (blocks) => {
       const found = findBlock(blocks, QUESTION_BLOCK, questionId);
@@ -1190,7 +1262,7 @@ export function createAnswers(options: AnswersOptions) {
     type Asked = { context: QuestionContext; documentIds: string[] | null; emptyScope: boolean };
     const written = content.edit(
       mindId,
-      (blocks): { edited: string } | ({ answerId: string } & Asked) => {
+      (blocks): { answerId: string; edited: boolean } & Asked => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError("That Question isn't in this Mind.");
         const context = buildQuestionContext(blocks, question.index);
@@ -1211,11 +1283,12 @@ export function createAnswers(options: AnswersOptions) {
         const answer = answerFor(blocks, questionId);
         const answerId = answer && textAttribute(answer, BLOCK_ID_ATTRIBUTE);
         if (answer && answerId) {
-          if (isEdited(answer) && discardEdits !== true) return { edited: answerId };
+          // The User's edits stay: the new Answer comes, once written, as changes over them.
+          if (isEdited(answer)) return { answerId, edited: true, ...asked };
           // Regenerating: the same Block, where it is, with new content.
           setAttributes(answer, attributes);
           syncContent(answer, [{ type: "paragraph" }]);
-          return { answerId, ...asked };
+          return { answerId, edited: false, ...asked };
         }
 
         const id = randomUUID();
@@ -1228,14 +1301,15 @@ export function createAnswers(options: AnswersOptions) {
         blocks.insert(at, [element]);
         // Somewhere to go on writing, or to ask the next Question.
         if (at + 1 === blocks.length) blocks.insert(at + 1, [createElement({ type: "paragraph" })]);
-        return { answerId: id, ...asked };
+        return { answerId: id, edited: false, ...asked };
       },
     );
-    if ("edited" in written) return { asked: false, reason: "edited", answerId: written.edited };
 
     const { consentNeeded } = ready;
     start({
-      home: mindHome(mindId, written.answerId),
+      home: written.edited
+        ? changesHome(mindId, written.answerId, model)
+        : mindHome(mindId, written.answerId),
       questionId,
       model,
       ...written,
@@ -1248,7 +1322,7 @@ export function createAnswers(options: AnswersOptions) {
   return {
     ask(input: unknown): Promise<AskResult> {
       if (!isRecord(input)) throw new InvalidInputError("askQuestion expects an object.");
-      return ask(input.mindId, input.questionId, input.discardEdits);
+      return ask(input.mindId, input.questionId);
     },
 
     regenerate(input: unknown): Promise<AskResult> {
@@ -1264,7 +1338,7 @@ export function createAnswers(options: AnswersOptions) {
         }
         return id;
       });
-      return ask(mindId, questionId, input.discardEdits);
+      return ask(mindId, questionId);
     },
 
     stop(input: unknown): void {

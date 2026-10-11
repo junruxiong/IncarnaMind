@@ -1,16 +1,19 @@
 import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
 import { type Editor, isMacOS, posToDOMRect } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useLayoutEffect, useRef } from "react";
 import { SparkLineIcon } from "../components/lineIcons";
-import { resolveProposalsIn, speak, useEdits } from "../editWithAi";
+import { regenerateChange, resolveProposalsIn, speak, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
+import { useAppStore } from "../store";
 import {
   clearHovered,
+  editorDoc,
   type PendingProposal,
   pendingAtSelection,
   pendingIn,
   shownProposal,
+  sourcesRemoved,
 } from "./proposalReview";
 
 /** How long the bar stays once the pointer leaves its change, so it can reach the bar. */
@@ -31,14 +34,54 @@ const spokenText = (text: string) => {
  *   Accept all · Reject all", which stays in view as the Mind scrolls;
  * - over the change the pointer or the cursor is on, its own bar: "Change 1
  *   of 3 · Accept · Reject" (⌘↵, ⌘⌫), and when it would remove a Citation,
- *   that it does;
+ *   that it does, or when a Document it cites has been deleted, "Source
+ *   removed" (#94);
+ * - under a change out of date, instead of its bar, "Out of date ·
+ *   Regenerate · Reject" (drawn by `ProposalReview`; its buttons are handled
+ *   here): it can't be accepted;
  * - for screen readers, the change the cursor moves into, what it does and
  *   the keys that accept and reject it.
  *
  * The words themselves show what each change does: removed words struck,
- * new words underlined (styles.css), never colour alone.
+ * new words underlined (styles.css), never colour alone. The second click
+ * of a double click does nothing, so a change is never applied twice, nor
+ * the next one that slid under the pointer.
  */
 export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: string }) {
+  // "Regenerate" and "Reject" under a change out of date, in the note's text.
+  useEffect(() => {
+    const dom = editor.view.dom;
+    const buttonOf = (event: Event) =>
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-proposal-regenerate], [data-proposal-reject]")
+        : null;
+    // The text keeps the focus and its selection.
+    const press = (event: MouseEvent) => {
+      if (buttonOf(event)) event.preventDefault();
+    };
+    const click = (event: MouseEvent) => {
+      const button = buttonOf(event);
+      if (!button || repeated(event)) return;
+      event.preventDefault();
+      const rejected = button.dataset.proposalReject;
+      if (rejected) {
+        resolveProposalsIn(editor, mindId, [rejected], "reject");
+        if (!editor.isDestroyed) editor.commands.focus();
+        return;
+      }
+      const proposal = pendingIn(editor.state).find(
+        (each) => each.id === button.dataset.proposalRegenerate,
+      );
+      const doc = editorDoc(editor);
+      if (proposal && doc) void regenerateChange(editor, mindId, doc, proposal);
+    };
+    dom.addEventListener("mousedown", press);
+    dom.addEventListener("click", click);
+    return () => {
+      dom.removeEventListener("mousedown", press);
+      dom.removeEventListener("click", click);
+    };
+  }, [editor, mindId]);
   return (
     <>
       <ProposalsBar editor={editor} mindId={mindId} />
@@ -48,11 +91,20 @@ export function ProposalBars({ editor, mindId }: { editor: Editor; mindId: strin
   );
 }
 
+/** The second click of a double click: it does nothing more. */
+const repeated = (event: MouseEvent) => event.detail > 1;
+
 function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   const t = useT();
-  const ids = useEditorState({
+  const { ids, stale } = useEditorState({
     editor,
-    selector: ({ editor: current }) => pendingIn(current.state).map((each) => each.id),
+    selector: ({ editor: current }) => {
+      const pending = pendingIn(current.state);
+      return {
+        ids: pending.map((each) => each.id),
+        stale: pending.some((each) => each.outOfDate),
+      };
+    },
   });
   if (ids.length === 0) return null;
   const resolveAll = (outcome: "accept" | "reject") => {
@@ -81,7 +133,10 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       <button
         type="button"
         data-testid="proposals-accept-all"
-        onClick={() => resolveAll("accept")}
+        title={stale ? t("proposal.acceptAll.outOfDate") : undefined}
+        onClick={(event) => {
+          if (!repeated(event.nativeEvent)) resolveAll("accept");
+        }}
         className="proposal-action"
       >
         {t("proposal.acceptAll")}
@@ -92,7 +147,9 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
       <button
         type="button"
         data-testid="proposals-reject-all"
-        onClick={() => resolveAll("reject")}
+        onClick={(event) => {
+          if (!repeated(event.nativeEvent)) resolveAll("reject");
+        }}
         className="proposal-action"
       >
         {t("proposal.rejectAll")}
@@ -108,6 +165,7 @@ interface Shown {
   from: number;
   to: number;
   dropped: number;
+  citations: PendingProposal["citations"];
 }
 
 function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
@@ -118,7 +176,8 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
     editor,
     selector: ({ editor: current }): Shown | null => {
       const proposal = shownProposal(current.state);
-      if (!proposal) return null;
+      // One out of date has its line under it instead.
+      if (!proposal || proposal.outOfDate) return null;
       const all = pendingIn(current.state);
       const first = proposal.ranges[0] ?? proposal;
       return {
@@ -128,9 +187,14 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         from: first.from,
         to: first.to,
         dropped: proposal.droppedCitations,
+        citations: proposal.citations,
       };
     },
   });
+  const documents = useAppStore((state) =>
+    state.status.kind === "ready" ? state.documents : null,
+  );
+  const kept = useAppStore((state) => state.keptCitationTexts);
 
   // The pointer leaving a change takes its bar away, unless it went onto the bar.
   useEffect(() => {
@@ -184,7 +248,9 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   }, [editor, shown]);
 
   if (!shown) return null;
-  const resolve = (outcome: "accept" | "reject") => {
+  const removedSources = sourcesRemoved(shown, documents, kept);
+  const resolve = (event: ReactMouseEvent, outcome: "accept" | "reject") => {
+    if (repeated(event.nativeEvent)) return;
     over.current = false;
     resolveProposalsIn(editor, mindId, [shown.id], outcome);
     if (!editor.isDestroyed) editor.commands.focus();
@@ -222,12 +288,21 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
             : t("proposal.dropsCitations", { count: shown.dropped })}
         </span>
       )}
+      {removedSources > 0 && (
+        <span
+          data-testid="change-bar-source-removed"
+          title={t("proposal.sourceRemoved.why")}
+          className="change-bar-drops"
+        >
+          {t("proposal.sourceRemoved")}
+        </span>
+      )}
       <button
         type="button"
         data-testid="change-accept"
         title={`${t("proposal.accept")} (${keys.accept})`}
         aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
-        onClick={() => resolve("accept")}
+        onClick={(event) => resolve(event, "accept")}
         className="proposal-action"
       >
         {t("proposal.accept")}
@@ -240,7 +315,7 @@ function ChangeBar({ editor, mindId }: { editor: Editor; mindId: string }) {
         data-testid="change-reject"
         title={`${t("proposal.reject")} (${keys.reject})`}
         aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
-        onClick={() => resolve("reject")}
+        onClick={(event) => resolve(event, "reject")}
         className="proposal-action"
       >
         {t("proposal.reject")}
@@ -260,6 +335,12 @@ function describe(proposal: PendingProposal, t: ReturnType<typeof useT>): string
         ? t("proposal.announce.add", { added })
         : t("proposal.announce.remove", { removed });
   const platform = isMacOS() ? "mac" : "other";
+  if (proposal.outOfDate) {
+    return t("proposal.announce.outOfDate", {
+      what,
+      reject: t(`proposal.keys.reject.${platform}`),
+    });
+  }
   return t("proposal.announce", {
     what,
     accept: t(`proposal.keys.accept.${platform}`),
