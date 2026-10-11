@@ -955,6 +955,10 @@ export const en = {
   "consent.flow.embeddings.purpose": "search your Documents by their meaning",
   "consent.data.document-text": "The full text of every Document, as it is processed",
   "consent.data.queries": "Your searches: each Question's words, or what an Answer searches for",
+  "consent.flow.suggestions": "Writing suggestions",
+  "consent.flow.suggestions.purpose": "suggest how your writing goes on",
+  "consent.data.writing": "The paragraph you're writing, each time you pause at its end",
+  "consent.data.writing-passages": "Up to 8 Passages from your Documents that match it",
   "consent.flow.rerank": "Reranking",
   "consent.flow.rerank.purpose": "put the best search results first",
   "consent.flow.connectors": "Connectors",
@@ -1397,6 +1401,28 @@ export const en = {
     "Scripts run on this computer in a sandbox: they can't open your home folder or IncarnaMind's data, can only write in their own working folder, and have no internet. Each run asks you first, unless you chose “Always run” for its Skill. Turned off, no Skill script runs at all.",
   "scripts.settings.timeout": "Stop a script that runs longer than",
   "scripts.settings.seconds": "seconds",
+
+  "suggestion.label": "Suggestion: {text}. Tab accepts, Esc dismisses.",
+  "suggestion.citation": "From {document}, {location}: “{quote}”",
+  "suggestion.citationNoLocation": "From {document}: “{quote}”",
+  "suggestion.key": "Tab",
+  "suggestion.offer":
+    "IncarnaMind can suggest the next sentence from your Documents, with a Citation.",
+  "suggestion.offer.turnOn": "Turn on",
+  "suggestion.offer.notNow": "Not now",
+  "suggestion.offer.on":
+    "Suggestions are on: Tab accepts, Esc dismisses. Turn them off in Settings.",
+  "suggestions.settings.title": "Writing",
+  "suggestions.settings.switch": "Suggest as I write, from my Documents",
+  "suggestions.settings.body":
+    "When you pause at the end of a paragraph, grey text shows how it could go on: only when your Documents support it, always with a Citation. Tab accepts, Esc dismisses.",
+  "suggestions.settings.today": "Today: {shown} suggested, {accepted} accepted",
+  "suggestions.settings.paused.no-model": "Paused until a chat model is set up, in Models.",
+  "suggestions.settings.paused.consent":
+    "Paused until you allow sending your writing to {service}.",
+  "suggestions.settings.paused.local-mode":
+    "Paused in local mode: your chat model isn't on this computer.",
+  "suggestions.settings.allow": "Allow…",
   "scripts.card.title": "{skill} wants to run {script}",
   "scripts.card.skill": "Skill",
   "scripts.card.script": "Script",
@@ -1542,6 +1568,8 @@ export const en = {
   "command.group.close": "Close Group",
   "command.group.equalize": "Make Groups Equal Width",
   "command.composer.focus": "Ask a Question",
+  "command.suggestions.on": "Turn On Suggestions as I Write",
+  "command.suggestions.off": "Turn Off Suggestions as I Write",
 
   "update.available.message": "IncarnaMind {version} is available",
   "update.available.detail":
