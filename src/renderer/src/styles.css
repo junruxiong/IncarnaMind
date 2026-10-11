@@ -2851,44 +2851,68 @@
     }
   }
 
-  /* The bubble menu over selected text. */
-  .format-menu {
-    display: flex;
-    gap: 2px;
+  /* The menu under selected text: Turn into, the format buttons, and the AI section. */
+  .selection-menu {
+    width: 280px;
     padding: 4px;
-    border-radius: 8px;
-    background: var(--color-sheet);
-    box-shadow: var(--shadow-popover);
-    font-family: var(--font-sans);
+    border-radius: 10px;
+  }
+  .selection-turn {
+    font-weight: 500;
+  }
+  .selection-rule {
+    margin: 4px -4px;
+    border: 0;
+    border-top: 1px solid var(--color-rule);
+  }
+  .selection-formats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    padding: 2px 4px;
+  }
+  .selection-format {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+    outline: none;
 
-    > button {
-      display: flex;
-      align-items: center;
-      height: 28px;
-      padding: 0 8px;
-      border-radius: 6px;
-      font-size: 13px;
-      line-height: 20px;
-      font-weight: 500;
-      color: var(--color-ink-secondary);
-
-      &:hover {
-        background: var(--color-hover);
-        color: var(--color-ink);
-      }
-      &[aria-pressed="true"] {
-        background: var(--color-chip);
-        color: var(--color-ink);
-      }
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[aria-checked="true"] {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+    &[aria-disabled="true"] {
+      opacity: 0.4;
     }
 
     /* The highlight button's label looks like highlighted text. */
     .format-highlight {
-      padding: 0 2px;
+      padding: 0 3px;
       border-radius: 2px;
       background: #fef08a;
       color: var(--color-ink);
     }
+  }
+  .selection-section {
+    padding: 4px 8px 2px;
+    font-size: var(--text-meta);
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .link-editor {
+    width: 320px;
+    max-width: 90vw;
+    padding: 8px;
   }
 
   /* The handle left of the Block under the mouse: drag it to move the Block, click it for its menu. */
