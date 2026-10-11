@@ -168,7 +168,7 @@ for (const language of ["en", "zh-CN"] as const) {
       // Under the title, inside the card, and nothing scrolls sideways.
       const title = await window.getByTestId("mind-title").boundingBox();
       const count = await window.getByTestId("mind-count").boundingBox();
-      const card = await window.getByTestId("mind-area").boundingBox();
+      const card = await window.getByTestId("mind-pane").boundingBox();
       if (!title || !count || !card) throw new Error("Not laid out.");
       expect(count.y).toBeGreaterThanOrEqual(title.y + title.height - 20);
       expect(count.x + count.width).toBeLessThanOrEqual(card.x + card.width);
