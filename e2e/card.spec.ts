@@ -6,11 +6,13 @@ import {
   confirmLink,
   createDataFolder,
   dismissChatSetup,
+  expectFirstTabAtCardStart,
   interceptOpenDialog,
   launchApp,
   linkedFolderRow,
   previewLink,
   removeDataFolder,
+  setWindowSize,
   showSourceLocations,
   widthOf,
 } from "./app";
@@ -59,12 +61,7 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     [1440, 860],
     [1000, 700],
   ] as const) {
-    await app.evaluate(
-      ({ BrowserWindow }, size) =>
-        BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
-      { width, height: requested },
-    );
-    await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
+    await setWindowSize(app, window, width, requested);
     // The screen may not have room for the height asked for: the card follows the page's.
     await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeGreaterThan(600);
     const height = await window.evaluate(() => globalThis.innerHeight);
@@ -80,13 +77,12 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     expect(style).toBe("10px");
 
     // The band is the card's first 36px, so it ends level with the sidebar header's rule at y 44,
-    // and the tabs sit inside it, the first flush with the card's left edge.
+    // and the tabs sit inside it, the first at the card's left edge.
     const header = await boxOf(window.getByTestId("sidebar-header"));
     const band = await boxOf(window.getByTestId("tab-strip"));
     expect(band).toMatchObject({ x: card.x, y: 8, width: card.width, height: 36 });
     expect(header.y + header.height).toBe(band.y + band.height);
-    const firstTab = await boxOf(window.getByTestId("mind-tab").first());
-    expect(firstTab.x).toBe(card.x);
+    await expectFirstTabAtCardStart(window, window.getByTestId("mind-tab").first());
 
     if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `shell-${width}.png`) });
 

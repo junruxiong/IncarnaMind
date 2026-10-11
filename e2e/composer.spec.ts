@@ -15,6 +15,7 @@ import {
   launchApp,
   pointAndClick,
   removeDataFolder,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -60,8 +61,7 @@ async function pointAt(window: Page, target: Locator): Promise<void> {
 
 /** The size the approved mockups were drawn at. */
 async function atMockupSize(app: ElectronApplication, window: Page) {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(1200);
+  await setWindowSize(app, window, 1440, 900);
   await window.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
@@ -590,11 +590,10 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await screenshot(window, "question-hover-zh");
 
   // A narrow window: the margins fold away, and the composer keeps the text's edge.
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 800));
+  await setWindowSize(app, window, 1000, 800);
   const note = editor.locator(":scope > p").first();
   const offset = async () =>
     Math.round(((await composer.boundingBox())?.x ?? 0) - ((await note.boundingBox())?.x ?? 0));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeLessThan(1100);
   await expect.poll(offset).toBe(0);
   // The editor's text column: the composer is as wide.
   const column = await editor.evaluate((element) => {

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { CoreBridge, EmbeddingSettings } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   closeSettings,
   createDataFolder,
@@ -52,6 +53,7 @@ test("embeddings are off by default; turning them on with a cloud provider warns
   await form.getByLabel("OpenAI", { exact: true }).check();
   await form.getByLabel("API key").fill("sk-smoke-test-key");
   await expect(form.getByLabel("Embedding model name")).toHaveValue("text-embedding-3-small");
+  await acceptPlainTextKeys(window, form);
   await form.getByTestId("embedding-switch").click();
 
   // The warning: every Document is embedded, and OpenAI would receive all their text.
