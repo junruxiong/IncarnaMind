@@ -762,6 +762,10 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
         } finally {
           signal?.removeEventListener("abort", stop);
         }
+        // Local mode turned on while the call was on its way: paused, as every Tool is.
+        if (!outcome.asked && outcome.reason === "local-mode") {
+          throw new AgentRefusedError("local-mode", t("agents.problem.local-mode"));
+        }
         if (!outcome.asked) {
           throw new AgentRefusedError(
             "chat-not-ready",

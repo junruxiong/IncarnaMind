@@ -175,10 +175,11 @@ type NotAsked = Extract<AskResult, { reason: "not-ready" | "skill-unavailable" }
 /**
  * An Answer written for an outside agent (see `answerOutside`): its Markdown
  * with Citation markers and its Citations, each checked; or why it wasn't
- * asked: the default chat model isn't ready, or the User has yet to allow it.
+ * asked: the default chat model isn't ready, Local mode keeps the Question
+ * from a model off this computer, or the User has yet to allow the model.
  */
 export type OutsideAnswer =
-  | { asked: false; reason: "not-ready" | "consent-needed" }
+  | { asked: false; reason: "not-ready" | "consent-needed" | "local-mode" }
   | {
       asked: true;
       status: "done" | "stopped" | "failed";
@@ -1305,7 +1306,12 @@ export function createAnswers(options: AnswersOptions) {
       signal: AbortSignal,
     ): Promise<OutsideAnswer> {
       const readiness = await options.readiness(undefined);
-      if (!readiness.ready) return { asked: false, reason: "not-ready" };
+      if (!readiness.ready) {
+        return {
+          asked: false,
+          reason: readiness.reason === "local-mode" ? "local-mode" : "not-ready",
+        };
+      }
       if (readiness.consent === "needed") return { asked: false, reason: "consent-needed" };
       const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
       const { service } = readiness.provider;
