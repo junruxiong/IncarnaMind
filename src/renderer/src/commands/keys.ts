@@ -127,11 +127,12 @@ export function pressed(keys: Keys, press: KeyPress, mac: boolean): boolean {
   );
 }
 
-/** The keys as this system writes them: "⌘⇧⌫" on macOS, "Ctrl+Shift+Backspace" elsewhere. */
+/** The keys as this system writes them: "⇧⌘⌫" on macOS, "Ctrl+Shift+Backspace" elsewhere. */
 export function keysLabel(keys: Keys, mac: boolean): string {
   const { key, meta, ctrl, alt, shift } = chordOf(keys, mac);
   if (mac) {
-    const modifiers = `${meta ? "⌘" : ""}${ctrl ? "⌃" : ""}${alt ? "⌥" : ""}${shift ? "⇧" : ""}`;
+    // In the order macOS's menus write them.
+    const modifiers = `${ctrl ? "⌃" : ""}${alt ? "⌥" : ""}${shift ? "⇧" : ""}${meta ? "⌘" : ""}`;
     return `${modifiers}${MAC_GLYPHS[key] ?? key}`;
   }
   return [ctrl && "Ctrl", alt && "Alt", shift && "Shift", meta && "Win", key]

@@ -1,38 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sidebarHandle, useHandle } from "./commands/handles";
 import { useKeymap } from "./commands/keymap";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { ConsentDialog } from "./components/ConsentDialog";
 import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
-import { MindPane } from "./components/MindPane";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SidebarControlContext } from "./components/SidebarToggle";
 import { TagsDialog } from "./components/TagsDialog";
+import { TabGroups } from "./components/tabs/TabGroups";
+import { TabNoticeLine } from "./components/tabs/TabNoticeLine";
 import { UsageDataDialog } from "./components/UsageDataDialog";
 import { buttonStyle } from "./components/ui";
-import { ViewerPanel } from "./components/ViewerPanel";
 import { files } from "./core";
 import { useLanguage, useT } from "./i18n";
-import { isNarrow, sidebarIsHidden } from "./sidebarLayout";
 import { useAppStore } from "./store";
+import { useWindowWidth } from "./useWindowWidth";
 
-// Pane limits, from the old frontend's layout store. The divider inside the card is a 1px rule.
-const ROD_WIDTH = 1;
 /** The card's distance from the sidebar, and from the window's top, right and bottom edges. */
 const CARD_GAP = 8;
 const SIDEBAR = { min: 165, max: 480 };
-const VIEWER = { min: 220, max: 900 };
-const CENTRE_MIN = 300;
-
-const subscribeToResize = (onChange: () => void) => {
-  window.addEventListener("resize", onChange);
-  return () => window.removeEventListener("resize", onChange);
-};
-const useWindowWidth = () => useSyncExternalStore(subscribeToResize, () => window.innerWidth);
+/** What the card keeps beside the sidebar, at least. */
+const CARD_MIN = 300;
 
 export function App() {
   const status = useAppStore((state) => state.status);
@@ -61,35 +53,21 @@ export function App() {
 }
 
 /**
- * Hiding and showing the sidebar (#219): Cmd+\ / Ctrl+\ and View > Hide Sidebar
+ * Hiding and showing the sidebar (#219): ⌘\ (Ctrl+\) and View > Hide Sidebar
  * (the "sidebar.toggle" command; the menu's label follows), the title bar's
- * button, dragging the divider shut, and a window too narrow for the viewer.
- * The User's choice is remembered; the narrow window's is not.
+ * button, and dragging the divider shut. The User's choice is remembered.
  */
-function useSidebarControl(
-  userHidden: boolean,
-  viewerOpen: boolean,
-  windowWidth: number,
-  sidebarWidth: number,
-) {
+function useSidebarControl(userHidden: boolean) {
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
-  const narrow = isNarrow(viewerOpen, windowWidth, sidebarWidth);
-  // The User showed it in a window narrow enough to hide it: it stays until there is room again.
-  const [forcedShown, setForcedShown] = useState(false);
-  useEffect(() => {
-    if (!narrow) setForcedShown(false);
-  }, [narrow]);
-  const hidden = sidebarIsHidden({ userHidden, narrow, forcedShown });
-  const state = useRef({ hidden, narrow, userHidden });
-  state.current = { hidden, narrow, userHidden };
+  const hidden = userHidden;
+  const state = useRef({ hidden });
+  state.current = { hidden };
   const refocus = useRef(false);
 
   const setHidden = useCallback(
     (next: boolean) => {
-      const current = state.current;
-      setForcedShown(!next && current.narrow);
-      if (next === current.userHidden) return;
+      if (next === state.current.hidden) return;
       // Updated here before the core confirms, so the sidebar answers at once.
       previewLayout({ sidebarHidden: next });
       void updateSettings({ device: { sidebarHidden: next } });
@@ -154,18 +132,15 @@ function useSidebarPeek(hidden: boolean) {
 }
 
 /**
- * Sidebar with Minds and Documents on the left, on the frame, and the open
- * Mind, or the Library in its tab, filling the rest in a card on the sheet, 8px from the sidebar and from
- * the window's other edges. The Document viewer panel appears on the right,
- * inside the card, only while open, narrowing the Mind area.
- * Files dropped anywhere are added as Documents; a folder dropped is offered
- * for linking.
+ * Sidebar with Minds and Documents on the left, on the frame, and the tabs
+ * filling the rest in a card on the sheet, 8px from the sidebar and from the
+ * window's other edges: up to three groups side by side, each with its tab
+ * strip (see `TabGroups`). Files dropped anywhere are added as Documents; a
+ * folder dropped is offered for linking.
  */
 function Workspace() {
   const t = useT();
   const device = useAppStore((state) => state.settings?.device);
-  const viewerOpen = useAppStore((state) => state.viewerOpen);
-  const closeViewer = useAppStore((state) => state.closeViewer);
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const addDropped = useAppStore((state) => state.addDropped);
@@ -174,12 +149,7 @@ function Workspace() {
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
   useRememberSidebarWidth(device?.sidebarWidth);
-  const sidebar = useSidebarControl(
-    device?.sidebarHidden ?? false,
-    viewerOpen,
-    windowWidth,
-    device?.sidebarWidth ?? 248,
-  );
+  const sidebar = useSidebarControl(device?.sidebarHidden ?? false);
   const peek = useSidebarPeek(sidebar.hidden);
   const [announcement, setAnnouncement] = useState("");
   const announced = useRef(sidebar.hidden);
@@ -201,25 +171,17 @@ function Workspace() {
 
   if (!device) return null;
   const { sidebarWidth } = device;
-  // What the sidebar takes of the window's width: nothing while it is hidden (it peeks over the content).
-  const shownSidebarWidth = sidebar.hidden ? 0 : sidebarWidth;
-  // What the sidebar and the viewer may take, with the card's gap and margin and the Mind's minimum kept.
-  const room = windowWidth - 2 * CARD_GAP - CENTRE_MIN;
-  // Until the User resizes it, the viewer opens at half the card (DESIGN.md).
-  const preferredViewerWidth =
-    device.viewerWidth ??
-    Math.min(VIEWER.max, Math.round((windowWidth - shownSidebarWidth - 2 * CARD_GAP) / 2));
-  // In a window too narrow for the saved width, the viewer gives way to the
-  // Mind (down to its own minimum); the saved width comes back as the window grows.
-  const viewerWidth = Math.max(
-    VIEWER.min,
-    Math.min(preferredViewerWidth, room - ROD_WIDTH - shownSidebarWidth),
-  );
-  const shownViewerWidth = viewerOpen ? viewerWidth + ROD_WIDTH : 0;
+  // What the sidebar may take, with the card's gap and margin and its minimum kept.
+  const room = windowWidth - 2 * CARD_GAP - CARD_MIN;
 
   return (
     <SidebarControlContext.Provider value={control}>
-      <div className="relative flex h-screen overflow-hidden bg-frame" {...fileDrop.handlers}>
+      <div
+        className="relative flex h-screen overflow-hidden bg-frame"
+        // The sidebar's panel, and the line about tabs above its foot, are as wide as it.
+        style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
+        {...fileDrop.handlers}
+      >
         {/* The 8px above the card moves the window like the band does. */}
         <div aria-hidden="true" className="title-bar absolute inset-x-0 top-0 h-2" />
         {/* Shown, this wrapper takes no box of its own; hidden, it is the panel that slides out. */}
@@ -228,7 +190,6 @@ function Workspace() {
           data-hidden={sidebar.hidden || undefined}
           data-open={peek.peeking || undefined}
           className="sidebar-panel"
-          style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
           {...peek.panel}
         >
           <Sidebar width={sidebarWidth} onOpenSettings={openSettings} />
@@ -245,7 +206,7 @@ function Workspace() {
             label={t("sidebar.resize")}
             width={sidebarWidth}
             min={SIDEBAR.min}
-            max={Math.min(SIDEBAR.max, room - shownViewerWidth)}
+            max={Math.min(SIDEBAR.max, room)}
             direction={1}
             gap
             testId="sidebar-resize"
@@ -259,24 +220,9 @@ function Workspace() {
           data-sidebar-hidden={sidebar.hidden || undefined}
           className="app-card"
         >
-          <MindPane />
-          {viewerOpen && (
-            <>
-              <ResizeRod
-                testId="viewer-resize"
-                belowBand
-                label={t("viewer.resize")}
-                width={viewerWidth}
-                min={VIEWER.min}
-                max={Math.min(VIEWER.max, room - ROD_WIDTH - shownSidebarWidth)}
-                direction={-1}
-                onPreview={(width) => previewLayout({ viewerWidth: width })}
-                onCommit={(width) => void updateSettings({ device: { viewerWidth: width } })}
-              />
-              <ViewerPanel width={viewerWidth} onClose={closeViewer} />
-            </>
-          )}
+          <TabGroups />
         </div>
+        <TabNoticeLine />
         <SettingsDialog />
         <TagsDialog />
         <ChatSetupDialog />
