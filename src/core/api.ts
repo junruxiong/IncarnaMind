@@ -1950,7 +1950,7 @@ export interface UsageDataSettings {
   /** Usage data is being sent now. */
   enabled: boolean;
   /**
-   * A test build (the alpha): usage data is on until the User turns it off,
+   * A test build (for invited testers): usage data is on until the User turns it off,
    * and the first run says so. Otherwise it is off until the User agrees.
    */
   testerBuild: boolean;
