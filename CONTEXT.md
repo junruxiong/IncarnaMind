@@ -147,6 +147,10 @@ _Avoid_: plugin, command
 A script that comes with a Skill, which an Answer can run on the User's computer with the User's approval.
 _Avoid_: tool script, code execution
 
+**Outside agent**:
+An AI agent the User runs themselves, such as Claude Code or Codex, connected to IncarnaMind so it can search and read the Folders the User shares with it and cite them with Citations IncarnaMind checks. The User connects each one in Settings, with its own Folders (none until chosen), its own consent and a list of every call it made; disconnecting it stops it at once, and Local mode pauses it.
+_Avoid_: harness, plugin, client, bot
+
 **Built-in Skill**:
 A Skill that ships with IncarnaMind and is updated with it: summarise a Document, a literature review across Documents, and a Mind to report. The User can turn one off, remove it and restore it, or duplicate it as their own, but not change it.
 _Avoid_: default Skill, system Skill
