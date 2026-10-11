@@ -1192,7 +1192,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 53,
+    version: 54,
     description:
       "Answers in conversations keep where the third-party text their Run read came from (#78)",
     sql: `
