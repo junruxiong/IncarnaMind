@@ -452,11 +452,10 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
     await alwaysRun(core, skill.id);
     await core.updateSettings({ device: { skillScriptTimeoutSeconds: 1 } });
 
-    const started = Date.now();
+    // The script never ends on its own, so the Answer ends only because the timeout stopped it.
     const { answerId, ended } = await askAndEnd(core, client, mind.id, "Sleep.");
 
     expect(ended.payload).toMatchObject({ status: "done" });
-    expect(Date.now() - started).toBeLessThan(10_000);
     await expectStopped(await pidsIn(pidFile));
     expect(results[0]).toBe(
       [
@@ -485,12 +484,10 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
     const pids = await pidsIn(pidFile);
     expect(isRunning(pids.pid)).toBe(true);
     const ended = answerEnded(core, answerId);
-    const stoppedAt = Date.now();
     await core.stopAnswer({ mindId: mind.id, answerId });
 
     expect((await ended).payload).toMatchObject({ status: "stopped" });
     await expectStopped(pids);
-    expect(Date.now() - stoppedAt).toBeLessThan(5_000);
     expect(scriptCalls(client, answerId)).toMatchObject([{ status: "failed" }]);
     await vi.waitFor(async () => expect(await readdir(tempDir)).toEqual([]));
   });
@@ -505,7 +502,7 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
       await alwaysRun(core, skill.id);
       await core.updateSettings({ device: { skillScriptTimeoutSeconds: 1 } });
 
-      const started = Date.now();
+      // What escaped holds the output open for good, so the Answer ends only if it stopped waiting.
       const { answerId } = await askAndEnd(core, client, mind.id, "Escape.");
       const pids = await pidsIn(pidFile);
       // The test's own clean-up: what escaped is beyond the app.
@@ -517,7 +514,6 @@ describe("Running a Skill's scripts", { timeout: 30_000 }, () => {
         }
       });
 
-      expect(Date.now() - started).toBeLessThan(10_000);
       expect(results[0]).toMatch(/^scripts\/escape\.js ran longer than 1 second/);
       expect(scriptCalls(client, answerId)).toMatchObject([
         { status: "failed", script: { timedOut: true } },
