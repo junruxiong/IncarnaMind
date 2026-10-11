@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ConsentRequest } from "../../../core/api";
+import { CHATGPT_SERVICE } from "../../../core/providers/chatgpt/service";
 import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
@@ -98,6 +99,11 @@ export function ConsentDialog() {
               {request.flow.service.id.startsWith("connector:")
                 ? t("connectors.consent.note")
                 : t("remoteConnectors.consent.note")}
+            </p>
+          )}
+          {request.flow.service.id === CHATGPT_SERVICE.id && (
+            <p data-testid="consent-chatgpt-note" className={dialogTextClass}>
+              {t("chatgpt.consent.note")}
             </p>
           )}
           <p className={hintClass}>{t("consent.dialog.note")}</p>
