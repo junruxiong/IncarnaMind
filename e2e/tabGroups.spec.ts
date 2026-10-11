@@ -15,6 +15,7 @@ import {
   openDocumentAt,
   removeDataFolder,
   setWindowSize,
+  WINDOW_SIZE,
   widthOf,
 } from "./app";
 
@@ -449,7 +450,7 @@ test("below 1,000px the groups merge into one strip holding every tab, a Citatio
   await expect(window.getByRole("tab")).toHaveCount(3);
   await screenshot(window, "groups-merged-960");
 
-  await setWindowSize(app, window, 1280, 660);
+  await setWindowSize(app, window, WINDOW_SIZE.width, 660);
   await expect(groupsOf(window)).toHaveCount(2);
   await expect(titlesIn(groupAt(window, 0))).toHaveText(["Alpha", "Beta"]);
   await expect(titlesIn(groupAt(window, 1))).toHaveText(["Field notes"]);

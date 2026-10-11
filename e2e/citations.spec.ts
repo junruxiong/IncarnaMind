@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   launchApp,
   newMind,
+  placeAssistant,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -165,6 +166,8 @@ for (const [width, side] of [
     await useLocalChatModel(window);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await setWindowSize(app, window, width, 800);
+    // At 1,000px the page opens beside the Mind with the assistant at the bottom (#253).
+    if (side && width < 1400) await placeAssistant(window, { dock: "bottom" });
 
     const answer = await ask(window, "When do spring tides happen?");
     const chip = answer.getByTestId("citation-chip");
@@ -218,7 +221,8 @@ test("a Citation's mark in the margin opens the same card, and every state has i
   await dismissChatSetup(window);
   await useLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
-  await setWindowSize(app, window, 1440, 800);
+  // The Mind as wide as a 1440px window gave it, beside the assistant (#253): its margin shows.
+  await setWindowSize(app, window, 1600, 800);
 
   const answer = await ask(window, "When do spring tides happen?");
   const mark = window.getByTestId("margin-check");
