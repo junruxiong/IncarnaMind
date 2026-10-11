@@ -64,6 +64,11 @@ test("an agent reaches the app through the shipped shim, and cites only its Fold
       arguments: { text: `Spring tides come at new and full moon ${cite}.` },
     });
     expect(checked.structuredContent).toMatchObject({ citations: [{ check: "found" }] });
+
+    // Chat apps won't open links of IncarnaMind's: the agent asks it to show the Citation.
+    const shown = await agent.callTool({ name: "show_citation", arguments: { cite } });
+    expect(shown.isError ?? false).toBe(false);
+    await expect(window.getByTestId("viewer-title")).toContainText("Tides");
   } finally {
     await agent.close();
   }

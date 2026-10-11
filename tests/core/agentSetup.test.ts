@@ -211,6 +211,17 @@ describe("setting an agent up", () => {
     expect(result.shown).toContain("•••••••");
   });
 
+  it("leaves no pairing when the agent's app can't be opened", async () => {
+    const { core, links, coast } = await started();
+    links.push = () => {
+      throw new Error("No app can open this link.");
+    };
+    await expect(core.setUpAgent({ client: "cursor", folderIds: [coast.id] })).rejects.toThrow(
+      /No app/,
+    );
+    expect((await core.getAgents()).pairings).toEqual([]);
+  });
+
   it("names a second copy of the same agent apart, and needs a Folder", async () => {
     const { core, coast } = await started();
     await core.setUpAgent({ client: "other", folderIds: [coast.id] });

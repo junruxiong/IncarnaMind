@@ -9,6 +9,7 @@ import {
   dialogClass,
   dialogTextClass,
   dialogTitleClass,
+  errorTextClass,
   fieldLabelClass,
   hintClass,
   primaryButtonClass,
@@ -28,12 +29,15 @@ export function ConnectAgentDialog({
   client,
   folders,
   busy,
+  problem,
   onAllow,
   onClose,
 }: {
   client: AgentClient | null;
   folders: readonly LibraryGroup[];
   busy: boolean;
+  /** Why the last try to connect failed, shown here, where it happened. */
+  problem: string | null;
   onAllow(folderIds: string[]): void;
   onClose(): void;
 }) {
@@ -73,7 +77,11 @@ export function ConnectAgentDialog({
     <dialog
       ref={dialog}
       tabIndex={-1}
-      onClose={onClose}
+      onClose={(event) => {
+        // React passes the event on up its tree, to Settings' own dialog, which would close too.
+        event.stopPropagation();
+        onClose();
+      }}
       aria-labelledby={titleId}
       data-testid="connect-agent-dialog"
       className={`${dialogClass} w-[30rem]`}
@@ -120,7 +128,7 @@ export function ConnectAgentDialog({
               <summary className="cursor-pointer text-[13px] leading-5 text-ink-secondary">
                 {t("agents.connect.showChange")}
               </summary>
-              <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-frame p-2 font-mono text-[12px] leading-[18px] whitespace-pre-wrap text-ink">
+              <pre className="mt-1 max-h-48 overflow-auto rounded-md bg-frame p-2 font-mono text-[12px] leading-[18px] break-all whitespace-pre-wrap text-ink">
                 {preview.change}
               </pre>
             </details>
@@ -128,6 +136,11 @@ export function ConnectAgentDialog({
         )}
         {folders.length > 0 && chosen.size === 0 && (
           <p className={hintClass}>{t("agents.connect.pickOne")}</p>
+        )}
+        {problem && (
+          <p data-testid="connect-agent-problem" role="alert" className={errorTextClass}>
+            {problem}
+          </p>
         )}
         <div className={dialogActionsClass}>
           <button type="button" onClick={onClose} className={buttonClass}>

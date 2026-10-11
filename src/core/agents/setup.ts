@@ -14,7 +14,7 @@
  * still its own entry there.
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { AGENT_TOKEN_ENV } from "../../shared/agentSocket";
@@ -51,6 +51,8 @@ import {
 
 /** How long a bundle waits in the temporary folder for the agent's app to install it. */
 const BUNDLE_KEPT_MS = 15 * 60_000;
+/** The folder each bundle waits in, in the temporary folder. */
+const BUNDLE_FOLDER_PREFIX = "incarnamind-agent-";
 
 export interface AgentSetupOptions {
   /** Pairing (see ./index). */
@@ -131,6 +133,16 @@ export function createAgentSetup(options: AgentSetupOptions) {
   const t = options.say;
   /** Settings files written, by pairing, while their Undo stands. */
   const written = new Map<string, Written>();
+  // Bundles a quit left before their time was up hold a key: they go now.
+  readdir(options.tempDir)
+    .then((names) =>
+      Promise.all(
+        names
+          .filter((name) => name.startsWith(BUNDLE_FOLDER_PREFIX))
+          .map((name) => rm(join(options.tempDir, name), { recursive: true, force: true })),
+      ),
+    )
+    .catch(options.reportError);
   const pathOf = (client: ClientDefinition) =>
     client.file ? join(options.home, ...client.file.path) : null;
 
@@ -196,7 +208,7 @@ export function createAgentSetup(options: AgentSetupOptions) {
       ],
       deflateRawSync,
     );
-    const folder = join(options.tempDir, `incarnamind-agent-${pairingId}`);
+    const folder = join(options.tempDir, `${BUNDLE_FOLDER_PREFIX}${pairingId}`);
     await mkdir(folder, { recursive: true, mode: 0o700 });
     const path = join(folder, "IncarnaMind.mcpb");
     await writeFile(path, bundle, { mode: 0o600 });

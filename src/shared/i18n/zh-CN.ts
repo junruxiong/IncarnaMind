@@ -2088,7 +2088,7 @@ export const zhCN = {
   "agents.problem.local-mode":
     "IncarnaMind 开启了“所有内容都留在这台电脑上”，已连接的智能体暂停使用：智能体会把读到的内容发送给它自己的 AI 模型。要继续使用，在 IncarnaMind 的“设置 → 搜索”中关闭此项。",
   "agents.problem.consent":
-    "这个智能体已无权读取你的文档。在 IncarnaMind 的“设置 → 智能体”中重新允许它。",
+    "这个智能体已无权读取你的文档。在 IncarnaMind 的“设置 → 隐私”中重新允许它。",
   "agents.problem.no-folders":
     "这个智能体还不能读取任何文档。在 IncarnaMind 的“设置 → 智能体”中为它选择文件夹。",
   "agents.problem.outside-scope":
@@ -2178,6 +2178,7 @@ export const zhCN = {
   "agents.done.wrote": "已添加到 {agent} 的设置中。开始一个新的 {agent} 会话即可使用。",
   "agents.done.command": "已复制。粘贴到终端中运行。",
   "agents.done.settings": "已复制。在 {agent} 中把它添加为新的服务器，然后重新启动 {agent}。",
+  "agents.done.settings.other": "已复制。在智能体添加服务器的地方粘贴，然后重新启动智能体。",
   "agents.done.unreadable":
     "无法读取 {agent} 的设置文件，IncarnaMind 未作改动。设置已复制：粘贴到 {path} 中。",
   "agents.done.undo": "撤销",

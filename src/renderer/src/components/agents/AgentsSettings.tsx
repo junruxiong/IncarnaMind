@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import type { AgentClient, AgentSettings } from "../../../../core/api";
 import { core } from "../../core";
+import { errorMessage } from "../../errors";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store";
 import {
@@ -39,6 +40,7 @@ export function AgentsSettings() {
   const [clients, setClients] = useState<AgentClient[] | null>(null);
   const [connecting, setConnecting] = useState<AgentClient | null>(null);
   const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const [justSetUp, setJustSetUp] = useState<JustSetUp | null>(null);
   const switchId = useId();
 
@@ -54,13 +56,16 @@ export function AgentsSettings() {
 
   const allow = async (client: AgentClient, folderIds: string[]) => {
     setBusy(true);
+    setProblem(null);
     try {
       const { pairing, result } = await core.setUpAgent({ client: client.id, folderIds });
-      if (result.kind === "copy") await navigator.clipboard.writeText(result.text);
       setJustSetUp({ pairingId: pairing.id, result });
       setConnecting(null);
+      // The agent is connected either way: "Copy settings" in its details copies it again.
+      if (result.kind === "copy")
+        await navigator.clipboard.writeText(result.text).catch(reportError);
     } catch (error) {
-      reportError(error);
+      setProblem(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -181,8 +186,12 @@ export function AgentsSettings() {
         client={connecting}
         folders={folders}
         busy={busy}
+        problem={problem}
         onAllow={(folderIds) => connecting && void allow(connecting, folderIds)}
-        onClose={() => setConnecting(null)}
+        onClose={() => {
+          setConnecting(null);
+          setProblem(null);
+        }}
       />
     </section>
   );

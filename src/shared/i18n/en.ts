@@ -2208,7 +2208,7 @@ export const en = {
   "agents.problem.local-mode":
     "Connected agents are paused while IncarnaMind keeps everything on this computer, because an agent sends what it reads to its own AI model. To go on, turn off “Keep everything on this computer” in IncarnaMind, in Settings → Search.",
   "agents.problem.consent":
-    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Agents.",
+    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Privacy.",
   "agents.problem.no-folders":
     "This agent can’t read any Documents yet. Choose its folders in IncarnaMind, in Settings → Agents.",
   "agents.problem.outside-scope":
@@ -2301,6 +2301,8 @@ export const en = {
   "agents.done.wrote": "Added to {agent}’s settings. Start a new {agent} session to use it.",
   "agents.done.command": "Copied. Paste it into a terminal and run it.",
   "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
+  "agents.done.settings.other":
+    "Copied. Paste it where your agent adds a new server, then restart the agent.",
   "agents.done.unreadable":
     "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
   "agents.done.undo": "Undo",
