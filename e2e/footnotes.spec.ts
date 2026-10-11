@@ -127,6 +127,8 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
   await expect(field).toBeFocused();
   await window.keyboard.type("Twice a month.");
   const marker = editor.getByTestId("footnote-marker").first();
+  // Measured once the popover has grown from its marker.
+  await motionSettled(window);
   const markerBox = await marker.boundingBox();
   const popoverBox = await popover.boundingBox();
   if (!markerBox || !popoverBox) throw new Error("The marker or its popover isn't visible.");
