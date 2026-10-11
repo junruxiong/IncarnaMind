@@ -62,13 +62,21 @@ import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "
 import type { AnswerPhase, CitationSupport, ProviderError, QuoteRetry } from "../api";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
+import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
 import {
   classifyProviderError,
   contextOverflow,
   refusesFeature,
 } from "../providers/providerErrors";
 import { createAiSdkRunEngine } from "../runs/aiSdkEngine";
-import type { GateDecision, RunEngine, RunMessage, RunToolCall, RunWindow } from "../runs/engine";
+import type {
+  GateDecision,
+  RunEngine,
+  RunMessage,
+  RunToolCall,
+  RunWindow,
+  TokenUsage,
+} from "../runs/engine";
 import { DOCUMENT_TOOLS, offeredTools, type Tool, type ToolProviderInfo } from "../tools";
 import { earlierContext } from "./context";
 import { missingMarkerEvents, textEdits } from "./markerPlacement";
@@ -257,6 +265,11 @@ export interface AnswerRequest {
    * doesn't find (see ./quoteRetry): a local model, never a cloud one.
    */
   retryQuotes?: boolean;
+  /**
+   * Names the conversation (a Mind or an assistant's conversation), for
+   * providers that route requests to a prompt cache by a key (see ../providers/promptCache).
+   */
+  cacheKey?: string;
   /** Stops generating. The stream then ends, with neither "finished" nor "failed". */
   signal: AbortSignal;
 }
@@ -294,6 +307,8 @@ export type AnswerEngineEvent =
       input: Record<string, unknown>;
     }
   | { type: "tool-call-finished"; id: string; ok: boolean; resultCount: number | null }
+  /** A model call ended, with the tokens its provider counted, the cached ones too. */
+  | { type: "usage"; usage: TokenUsage }
   /** The Answer is complete. Nothing follows. */
   | { type: "finished" }
   /** The model or its provider failed. Nothing follows. */
@@ -1073,6 +1088,7 @@ async function* toolLoop(
     messages: messages.map(runMessage),
     tools: tools.map(tracked),
     maxSteps,
+    cacheKey: request.cacheKey,
     gate: async (call) => {
       const tool = offered.get(call.tool);
       return tool && request.gate ? request.gate(tool, { ...call, tainted }) : RUN;
@@ -1129,6 +1145,7 @@ async function* toolLoop(
         break;
       }
       case "step-finished": {
+        yield { type: "usage", usage: event.usage };
         // Text before a call with a Tool-call card (a search, a Skill, a Connector's Tool), or
         // before records with no marker in it, was a preamble.
         const preamble =
@@ -1191,6 +1208,7 @@ async function* structured(
     instructions,
     messages: request.messages,
     temperature,
+    providerOptions: cacheProviderOptions(request.cacheKey),
     output: Output.object({
       schema: jsonSchema<{ answer: string; citations: unknown }>({
         type: "object",
@@ -1224,8 +1242,9 @@ async function* structured(
         raw += part.text;
         const { value } = await parseAnswerJson(raw);
         yield* emit((value as { answer?: unknown } | undefined)?.answer);
-      } else if (part.type === "finish-step" && part.usage.inputTokens) {
-        sized?.learn(part.usage.inputTokens);
+      } else if (part.type === "finish-step") {
+        yield { type: "usage", usage: tokenUsageOf(part.usage) };
+        if (part.usage.inputTokens) sized?.learn(part.usage.inputTokens);
       } else if (part.type === "error") {
         const refused = emitted
           ? null
@@ -1281,6 +1300,7 @@ async function* plain(
       instructions,
       messages: request.messages,
       temperature,
+      providerOptions: cacheProviderOptions(request.cacheKey),
       abortSignal: signal,
       onError: () => undefined,
     });
@@ -1290,8 +1310,9 @@ async function* plain(
         if (!part.text) continue;
         produced = true;
         yield { type: "text-delta", text: part.text };
-      } else if (part.type === "finish-step" && part.usage.inputTokens) {
-        sized?.learn(part.usage.inputTokens);
+      } else if (part.type === "finish-step") {
+        yield { type: "usage", usage: tokenUsageOf(part.usage) };
+        if (part.usage.inputTokens) sized?.learn(part.usage.inputTokens);
       } else if (part.type === "error") {
         const refused = produced ? null : refusalOf(part.error, null, temperature, estimated);
         yield refused ?? { type: "failed", error: classifyProviderError(part.error) };
