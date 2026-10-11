@@ -2136,7 +2136,7 @@ export const en = {
   "meetings.settings.title": "Recording",
   "meetings.settings.enabled": "Record meetings",
   "meetings.settings.enabledBody":
-    "Adds “Record a meeting” to the + menu. Recording is new: the audio is saved for now, and live transcripts come next.",
+    "Adds “Record a meeting” to the + menu. A meeting is transcribed on this computer as it records; the speech model (about 1 GB) downloads once, the first time.",
   "meetings.settings.cantRecord": "This copy of IncarnaMind can’t record audio.",
   "meetings.settings.what": "What is recorded",
   "meetings.settings.whatBoth": "Your microphone and the other people (the computer’s sound).",

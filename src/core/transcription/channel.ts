@@ -204,8 +204,12 @@ export function serveTranscriber(
             port.respond({ type: "error", id: request.id, message: "No engine is loaded." });
             return;
           }
-          await host.finish(request.stream);
-          port.respond({ type: "done", id: request.id });
+          try {
+            await host.finish(request.stream);
+            port.respond({ type: "done", id: request.id });
+          } catch (error) {
+            port.respond({ type: "error", id: request.id, message: messageOf(error) });
+          }
         });
         return;
       case "drop":

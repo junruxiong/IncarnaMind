@@ -2020,7 +2020,7 @@ export const zhCN = {
   "meetings.settings.title": "录制",
   "meetings.settings.enabled": "录制会议",
   "meetings.settings.enabledBody":
-    "在 + 菜单中加入“录制会议”。录制是新功能：目前只保存音频，实时转写稿随后推出。",
+    "在 + 菜单中加入“录制会议”。录制时会在这台电脑上实时转写；第一次使用时会下载一次语音模型（约 1 GB）。",
   "meetings.settings.cantRecord": "这个版本的 IncarnaMind 无法录制音频。",
   "meetings.settings.what": "录制内容",
   "meetings.settings.whatBoth": "你的麦克风和其他人（电脑声音）。",
