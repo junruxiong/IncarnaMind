@@ -54,6 +54,10 @@ export const en = {
   "library.name": "Folder name",
   "library.description": "Description",
   "library.descriptionHint": "What belongs in this folder?",
+  "library.countsOwnFiles": "Count files IncarnaMind wrote as evidence in this folder",
+  "library.countsOwnFiles.hint": "Checks leave them out of their evidence in other folders.",
+  "library.countsOwnFiles.everywhere":
+    "Counted in every folder: Settings → Search doesn't leave them out.",
   "library.save": "Save folder",
   "library.startersHint":
     "Start with the folders you need. Rename them or add your own at any time.",
@@ -512,6 +516,27 @@ export const en = {
   "documents.delete.cancel": "Cancel",
   "documents.delete.confirm": "Delete",
   "documents.removeAction": "Remove from IncarnaMind…",
+  // Checks leave the files IncarnaMind wrote out of their evidence (#80).
+  "evidence.ownFile": "IncarnaMind wrote this file, so checks don't count it as evidence",
+  "evidence.countIt": "Count it",
+  "evidence.excluded.ownFile":
+    "Also found in “{name}”, which IncarnaMind wrote, so it isn't counted as evidence",
+  "evidence.excluded.checked":
+    "Also found in “{name}”, a copy of the document being checked, so it isn't counted as evidence",
+  "evidence.count": "Count as evidence",
+  "evidence.countMany": "Count {count} Documents as evidence",
+  "evidence.leaveOut": "Don't count as evidence",
+  "evidence.leaveOutMany": "Don't count {count} Documents as evidence",
+  "evidence.menuHint":
+    "IncarnaMind wrote this file. Checks leave it out of their evidence unless you count it.",
+  "evidence.counted": "“{name}” counts as evidence now",
+  "evidence.countedMany": "{count} Documents count as evidence now",
+  "evidence.leftOut": "“{name}” no longer counts as evidence",
+  "evidence.leftOutMany": "{count} Documents no longer count as evidence",
+  "evidence.settings.title": "Checks",
+  "evidence.settings.switch": "Leave out files IncarnaMind wrote",
+  "evidence.settings.body":
+    "When IncarnaMind checks your writing or compares Documents, the exports and source packs it saved aren't used as evidence, so a note can't support itself. Copies of the document being checked are always left out. Transcripts and saved web pages count as usual.",
   "documents.remove.title": "Remove this Document?",
   "documents.remove.body":
     "“{name}” is no longer in its folder. Removing it drops the text IncarnaMind kept of it, and Citations to it can't be checked any more.",

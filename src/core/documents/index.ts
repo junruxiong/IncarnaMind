@@ -34,12 +34,14 @@ import type {
   DocumentStatus,
   DocumentText,
   KeptCitationText,
+  OwnFile,
   PassageSearchResult,
   ProviderErrorKind,
   SearchMode,
   SkippedFile,
   TaggingState,
 } from "../api";
+import { ownFileKinds } from "../api";
 import { EmbeddingUnavailableError, type SearchEmbedder } from "../embedding/active";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Folders } from "../folders";
@@ -122,6 +124,8 @@ interface DocumentRow {
   file_status: string;
   creation_date: string | null;
   title: string | null;
+  own_file: string | null;
+  counted_as_evidence: number;
   created_at: string;
   updated_at: string;
 }
@@ -156,7 +160,16 @@ const toUnitText = (row: UnitRow): PageText => ({
 const COLUMNS = `id, content_hash, name, kind, size, page_count, status,
   failure_reason, failure_message, folder_id, tagging_status, tagging_error_kind,
   tagging_error_message, embedding_model, path, linked_folder_id, file_status,
-  creation_date, title, created_at, updated_at`;
+  creation_date, title, own_file, counted_as_evidence, created_at, updated_at`;
+
+/** What IncarnaMind wrote the file as (#80), from its stored kind; a kind a newer version wrote counts as an export. */
+const ownFileOf = (row: Pick<DocumentRow, "own_file" | "counted_as_evidence">): OwnFile | null =>
+  row.own_file === null
+    ? null
+    : {
+        kind: ownFileKinds.find((kind) => kind === row.own_file) ?? "export",
+        counted: row.counted_as_evidence === 1,
+      };
 
 function parsePaths(input: unknown): string[] {
   if (!Array.isArray(input)) throw new InvalidInputError("addDocuments expects a list of paths.");
@@ -432,6 +445,7 @@ export function createDocuments(options: DocumentsOptions) {
       title: row.title,
       web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
+      ownFile: ownFileOf(row),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -1654,6 +1668,33 @@ export function createDocuments(options: DocumentsOptions) {
       const row = find(id);
       if (!row) throw new NotFoundError("There is no such Document.");
       return toDocument(row);
+    },
+
+    /**
+     * Counts a Document IncarnaMind wrote as evidence, or leaves it out again
+     * (#80, see `OwnFile`), and says so. InvalidInputError for any other.
+     */
+    setCountedAsEvidence(idInput: unknown, countedInput: unknown): Document {
+      const id = parseId(idInput);
+      if (typeof countedInput !== "boolean") {
+        throw new InvalidInputError("counted must be true or false.");
+      }
+      const row = find(id);
+      if (!row) throw new NotFoundError("There is no such Document.");
+      if (row.own_file === null) {
+        throw new InvalidInputError("Only a file IncarnaMind wrote is left out of evidence.");
+      }
+      if ((row.counted_as_evidence === 1) !== countedInput) {
+        db.run("UPDATE documents SET counted_as_evidence = ?, updated_at = ? WHERE id = ?", [
+          countedInput ? 1 : 0,
+          now(),
+          id,
+        ]);
+        announce(id);
+      }
+      const updated = find(id);
+      if (!updated) throw new NotFoundError("There is no such Document.");
+      return toDocument(updated);
     },
 
     /**

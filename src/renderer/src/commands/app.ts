@@ -1,6 +1,7 @@
 import { noteHolding } from "../editor/noteKeymap";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, composerHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
@@ -20,6 +21,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...evidenceCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
