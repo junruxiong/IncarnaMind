@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
+import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
 import { isMoveToKey, MOVE_TO_SHORTCUT, RENAME_SHORTCUT, TREE_ROW } from "../treeKeys";
@@ -41,7 +42,10 @@ export function MindRow({
   onDelete(mind: Mind): void;
 }) {
   const t = useT();
-  const isOpen = useAppStore((state) => state.openMindId === mind.id && !state.libraryOpen);
+  const isOpen = useAppStore((state) => {
+    const shown = currentTabOf(state.layout)?.item;
+    return shown?.kind === "mind" && shown.mindId === mind.id;
+  });
   const openMind = useAppStore((state) => state.openMind);
   const waiting = useMindStatus(mind.id) === "waiting-for-approval";
   const isExample = useIsExample(mind.id);
@@ -100,13 +104,13 @@ export function MindRow({
         data-mind-id={mind.id}
         aria-current={isOpen ? "page" : undefined}
         title={title}
-        // ⌘-click (Ctrl-click) or a middle click opens it in a new tab, as in a browser.
-        onClick={(event) => openMind(mind.id, { newTab: event.metaKey || event.ctrlKey })}
+        // ⌘-click (Ctrl-click) or a middle click opens it to the side, as in VS Code.
+        onClick={(event) => openMind(mind.id, { side: event.metaKey || event.ctrlKey })}
         onMouseDown={(event) => {
           if (event.button === 1) event.preventDefault(); // no autoscroll
         }}
         onAuxClick={(event) => {
-          if (event.button === 1) openMind(mind.id, { newTab: true });
+          if (event.button === 1) openMind(mind.id, { side: true });
         }}
         onDoubleClick={() => setRenaming(true)}
         onKeyDown={onKeyDown}
@@ -217,11 +221,11 @@ function MindMenu({
         <button
           type="button"
           role="menuitem"
-          data-testid="mind-open-new-tab"
-          onClick={choose(() => openMind(mind.id, { newTab: true }))}
+          data-testid="mind-open-side"
+          onClick={choose(() => openMind(mind.id, { side: true }))}
           className={`${menuItemClass} pl-2`}
         >
-          {t("mind.openNewTab")}
+          {t("mind.openSide")}
         </button>
         <div className={menuRuleClass} />
         <button
