@@ -22,6 +22,7 @@ import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { missingDetails } from "../../../shared/references";
 import { core } from "../core";
 import { errorMessage as messageOf } from "../errors";
+import { useFindSources } from "../findSources";
 import { useLanguage, useT } from "../i18n";
 import { bridgeFrom, type LibraryBridge, type LibraryView } from "../libraryBridges";
 import {
@@ -36,7 +37,9 @@ import {
 import { formatCount } from "../linkedFolders";
 import { missingList } from "../referenceEditing";
 import { useAppStore } from "../store";
+import { AddDocumentsMenu } from "./AddDocumentsMenu";
 import { CiteAsPanel } from "./CiteAsPanel";
+import { FindSourcesPanel } from "./FindSourcesPanel";
 import { LibraryFilterBar } from "./LibraryFilterBar";
 import { LibraryMoreMenu } from "./LibraryMoreMenu";
 import { LibrarySelectBox, LibrarySelectionBar } from "./LibrarySelection";
@@ -72,6 +75,7 @@ export function LibraryPane() {
   const filter = useAppStore((state) => state.libraryFilter);
   const tags = useAppStore((state) => state.tags);
   const tagFilter = useAppStore(useShallow((state) => state.tagFilter));
+  const findingSources = useFindSources((state) => state.open);
   const [search, setSearch] = useState("");
   /** The year, format and status filters' choices (see `LibraryFilterBar`). */
   const [facetFilter, setFacetFilter] = useState<FilterSelection>({});
@@ -211,15 +215,10 @@ export function LibraryPane() {
               }}
               className={`${inputClass} mt-0 min-w-32 flex-1`}
             />
-            <button
-              type="button"
-              className={buttonStyle("secondary")}
-              onClick={() => void useAppStore.getState().pickDocuments()}
-            >
-              {t("documents.add")}
-            </button>
+            <AddDocumentsMenu />
             <LibraryMoreMenu />
           </div>
+          {findingSources && <FindSourcesPanel />}
           {/* The name takes the whole width and wraps by word, two lines at most (#213); the actions sit below it, never beside. */}
           <div className="mb-2">
             <h1
@@ -700,13 +699,18 @@ function GroupForm({
   }, []);
   const [name, setName] = useState(group === "new" ? "" : group.name);
   const [description, setDescription] = useState(group === "new" ? "" : group.description);
+  const [countsOwnFiles, setCountsOwnFiles] = useState(
+    group === "new" ? false : group.countsOwnFiles,
+  );
+  // Settings counts IncarnaMind's files everywhere: there's nothing for a folder to switch.
+  const leftOut = useAppStore((state) => state.settings?.user.leaveOutOwnFiles ?? true);
   return (
     <form
       className="mb-5 max-w-xl border-y border-rule py-4"
       onSubmit={(event) => {
         event.preventDefault();
         void act(async () => {
-          const input = { name, description };
+          const input = { name, description, countsOwnFiles };
           if (group === "new") await core.createLibraryGroup(input);
           else await core.updateLibraryGroup(group.id, input);
           close();
@@ -734,6 +738,23 @@ function GroupForm({
           placeholder={t("library.descriptionHint")}
           className={inputClass}
         />
+      </label>
+      {/* Checks leave the files IncarnaMind wrote out of their evidence; a folder can count them (#80). */}
+      <label className="mt-3 flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          data-testid="folder-counts-own-files"
+          checked={leftOut ? countsOwnFiles : true}
+          disabled={!leftOut}
+          onChange={(event) => setCountsOwnFiles(event.target.checked)}
+          className="mt-1 size-4 shrink-0 accent-ink"
+        />
+        <span>
+          <span className="text-ink">{t("library.countsOwnFiles")}</span>
+          <span className="block text-[13px] text-ink-meta">
+            {t(leftOut ? "library.countsOwnFiles.hint" : "library.countsOwnFiles.everywhere")}
+          </span>
+        </span>
       </label>
       <div className="mt-3 flex gap-2">
         <button type="submit" disabled={busy || !name.trim()} className={buttonStyle("primary")}>

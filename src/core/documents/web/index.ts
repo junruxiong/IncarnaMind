@@ -126,8 +126,11 @@ export function createWebPages(options: WebPagesOptions) {
       await Promise.all(rows.map((row) => rm(row.path, { force: true })));
     },
 
-    /** See `CoreApi.saveWebPage`; the caller files it in its Folder. */
-    save(input: unknown): Promise<WebPageResult> {
+    /**
+     * See `CoreApi.saveWebPage`; the caller files it in its Folder. `added`
+     * hears a new Document's id as it is stored, before it is processed.
+     */
+    save(input: unknown, added?: (documentId: string) => void): Promise<WebPageResult> {
       const { address: typed, html } = parseSaveInput(input);
       const address = normaliseAddress(typed);
       if (!address) {
@@ -149,9 +152,10 @@ export function createWebPages(options: WebPagesOptions) {
           if (meanwhile) return saved(meanwhile);
           const id = randomUUID();
           const file = await write(join(folder, `${id}.html`), snapshot.xhtml);
-          const document = documents.addSnapshot(id, snapshot.title, file, () =>
-            recordVersion(db, version(id, file, address, snapshot), now()),
-          );
+          const document = documents.addSnapshot(id, snapshot.title, file, () => {
+            recordVersion(db, version(id, file, address, snapshot), now());
+            added?.(id);
+          });
           return { outcome: "saved", document, existing: false };
         } catch (error) {
           return failed(address, error);

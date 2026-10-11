@@ -1,0 +1,141 @@
+{
+  "status": "ok",
+  "message-type": "work",
+  "message-version": "1.0.0",
+  "message": {
+    "indexed": {
+      "date-parts": [[2026, 10, 8]],
+      "date-time": "2026-10-08T12:28:49Z",
+      "timestamp": 1791462529137,
+      "version": "4.3.4"
+    },
+    "reference-count": 105,
+    "publisher": "Frontiers Media SA",
+    "license": [
+      {
+        "start": {
+          "date-parts": [[2023, 3, 9]],
+          "date-time": "2023-03-09T00:00:00Z",
+          "timestamp": 1678320000000
+        },
+        "content-version": "vor",
+        "delay-in-days": 0,
+        "URL": "https://creativecommons.org/licenses/by/4.0/"
+      }
+    ],
+    "content-domain": {
+      "domain": ["frontiersin.org"],
+      "crossmark-restriction": true
+    },
+    "short-container-title": ["Front. Bioeng. Biotechnol."],
+    "abstract": "<jats:p>Gene editing stands for the methods to precisely make changes to a specific nucleic acid sequence. With the recent development of the clustered regularly interspaced short palindromic repeats (CRISPR)/Cas9 system, gene editing has become efficient, convenient and programmable, leading to promising translational studies and clinical trials for both genetic and non-genetic diseases. A major concern in the applications of the CRISPR/Cas9 system is about its off-target effects, namely the deposition of unexpected, unwanted, or even adverse alterations to the genome. To date, many methods have been developed to nominate or detect the off-target sites of CRISPR/Cas9, which laid the basis for the successful upgrades of CRISPR/Cas9 derivatives with enhanced precision. In this review, we summarize these technological advancements and discuss about the current challenges in the management of off-target effects for future gene therapy.</jats:p>",
+    "DOI": "10.3389/fbioe.2023.1143157",
+    "type": "journal-article",
+    "created": {
+      "date-parts": [[2023, 3, 9]],
+      "date-time": "2023-03-09T01:12:05Z",
+      "timestamp": 1678324325000
+    },
+    "update-policy": "https://doi.org/10.3389/crossmark-policy",
+    "source": "Crossref",
+    "is-referenced-by-count": 632,
+    "title": ["Off-target effects in CRISPR/Cas9 gene editing"],
+    "prefix": "10.3389",
+    "volume": "11",
+    "author": [
+      {
+        "given": "Congting",
+        "family": "Guo",
+        "sequence": "first",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Xiaoteng",
+        "family": "Ma",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Fei",
+        "family": "Gao",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      },
+      {
+        "given": "Yuxuan",
+        "family": "Guo",
+        "sequence": "additional",
+        "affiliation": [],
+        "role": [
+          {
+            "vocabulary": "crossref",
+            "role": "author"
+          }
+        ]
+      }
+    ],
+    "member": "1965",
+    "published-online": {
+      "date-parts": [[2023, 3, 9]]
+    },
+    "container-title": ["Frontiers in Bioengineering and Biotechnology"],
+    "original-title": [],
+    "link": [
+      {
+        "URL": "https://www.frontiersin.org/articles/10.3389/fbioe.2023.1143157/full",
+        "content-type": "unspecified",
+        "content-version": "vor",
+        "intended-application": "similarity-checking"
+      }
+    ],
+    "deposited": {
+      "date-parts": [[2023, 3, 9]],
+      "date-time": "2023-03-09T01:12:08Z",
+      "timestamp": 1678324328000
+    },
+    "score": 1,
+    "resource": {
+      "primary": {
+        "URL": "https://www.frontiersin.org/articles/10.3389/fbioe.2023.1143157/full"
+      }
+    },
+    "subtitle": [],
+    "short-title": [],
+    "issued": {
+      "date-parts": [[2023, 3, 9]]
+    },
+    "references-count": 105,
+    "alternative-id": ["10.3389/fbioe.2023.1143157"],
+    "URL": "https://doi.org/10.3389/fbioe.2023.1143157",
+    "ISSN": ["2296-4185"],
+    "issn-type": [
+      {
+        "value": "2296-4185",
+        "type": "electronic"
+      }
+    ],
+    "subject": [],
+    "published": {
+      "date-parts": [[2023, 3, 9]]
+    },
+    "article-number": "1143157"
+  }
+}

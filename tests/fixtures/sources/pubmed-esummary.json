@@ -1,0 +1,358 @@
+{
+  "header": {
+    "type": "esummary",
+    "version": "0.3"
+  },
+  "result": {
+    "uids": ["36970624", "36424489", "33626327"],
+    "36970624": {
+      "uid": "36970624",
+      "pubdate": "2023",
+      "epubdate": "2023 Mar 9",
+      "source": "Front Bioeng Biotechnol",
+      "authors": [
+        {
+          "name": "Guo C",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Ma X",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Gao F",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Guo Y",
+          "authtype": "Author",
+          "clusterid": ""
+        }
+      ],
+      "title": "Off-target effects in CRISPR/Cas9 gene editing.",
+      "volume": "11",
+      "issue": "",
+      "pages": "1143157",
+      "lang": ["eng"],
+      "pubtype": ["Journal Article", "Review"],
+      "articleids": [
+        {
+          "idtype": "pubmed",
+          "idtypen": 1,
+          "value": "36970624"
+        },
+        {
+          "idtype": "pmc",
+          "idtypen": 8,
+          "value": "PMC10034092"
+        },
+        {
+          "idtype": "pmcid",
+          "idtypen": 5,
+          "value": "pmc-id: PMC10034092;"
+        },
+        {
+          "idtype": "doi",
+          "idtypen": 3,
+          "value": "10.3389/fbioe.2023.1143157"
+        },
+        {
+          "idtype": "pii",
+          "idtypen": 4,
+          "value": "1143157"
+        }
+      ],
+      "fulljournalname": "Frontiers in bioengineering and biotechnology",
+      "sortpubdate": "2023/03/09 00:00"
+    },
+    "36424489": {
+      "uid": "36424489",
+      "pubdate": "2023 Apr",
+      "epubdate": "2022 Nov 24",
+      "source": "Nat Biotechnol",
+      "authors": [
+        {
+          "name": "Yarnall MTN",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Ioannidi EI",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Schmitt-Ulms C",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Krajeski RN",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Lim J",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Villiger L",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Zhou W",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Jiang K",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Garushyants SK",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Roberts N",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Zhang L",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Vakulskas CA",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Walker JA 2nd",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Kadina AP",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Zepeda AE",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Holden K",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Ma H",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Xie J",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Gao G",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Foquet L",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Bial G",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Donnelly SK",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Miyata Y",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Radiloff DR",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Henderson JM",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Ujita A",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Abudayyeh OO",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Gootenberg JS",
+          "authtype": "Author",
+          "clusterid": ""
+        }
+      ],
+      "title": "Drag-and-drop genome insertion of large sequences without double-strand DNA cleavage using CRISPR-directed integrases.",
+      "volume": "41",
+      "issue": "4",
+      "pages": "500-512",
+      "lang": ["eng"],
+      "pubtype": [
+        "Journal Article",
+        "Research Support, N.I.H., Extramural",
+        "Research Support, N.I.H., Intramural",
+        "Research Support, Non-U.S. Gov't"
+      ],
+      "articleids": [
+        {
+          "idtype": "pubmed",
+          "idtypen": 1,
+          "value": "36424489"
+        },
+        {
+          "idtype": "mid",
+          "idtypen": 8,
+          "value": "NIHMS1902911"
+        },
+        {
+          "idtype": "pmc",
+          "idtypen": 8,
+          "value": "PMC10257351"
+        },
+        {
+          "idtype": "pmcid",
+          "idtypen": 5,
+          "value": "pmc-id: PMC10257351;manuscript-id: NIHMS1902911;"
+        },
+        {
+          "idtype": "doi",
+          "idtypen": 3,
+          "value": "10.1038/s41587-022-01527-4"
+        },
+        {
+          "idtype": "pii",
+          "idtypen": 4,
+          "value": "10.1038/s41587-022-01527-4"
+        }
+      ],
+      "fulljournalname": "Nature biotechnology",
+      "sortpubdate": "2023/04/01 00:00"
+    },
+    "33626327": {
+      "uid": "33626327",
+      "pubdate": "2021 Jun 3",
+      "epubdate": "2021 Feb 23",
+      "source": "Cell Stem Cell",
+      "authors": [
+        {
+          "name": "Turchiano G",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Andrieux G",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Klermund J",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Blattner G",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Pennucci V",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "El Gaz M",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Monaco G",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Poddar S",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Mussolino C",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Cornu TI",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Boerries M",
+          "authtype": "Author",
+          "clusterid": ""
+        },
+        {
+          "name": "Cathomen T",
+          "authtype": "Author",
+          "clusterid": ""
+        }
+      ],
+      "title": "Quantitative evaluation of chromosomal rearrangements in gene-edited human stem cells by CAST-Seq.",
+      "volume": "28",
+      "issue": "6",
+      "pages": "1136-1147.e5",
+      "lang": ["eng"],
+      "pubtype": ["Journal Article", "Research Support, Non-U.S. Gov't"],
+      "articleids": [
+        {
+          "idtype": "pubmed",
+          "idtypen": 1,
+          "value": "33626327"
+        },
+        {
+          "idtype": "doi",
+          "idtypen": 3,
+          "value": "10.1016/j.stem.2021.02.002"
+        },
+        {
+          "idtype": "pii",
+          "idtypen": 4,
+          "value": "S1934-5909(21)00052-7"
+        }
+      ],
+      "fulljournalname": "Cell stem cell",
+      "sortpubdate": "2021/06/03 00:00"
+    }
+  }
+}

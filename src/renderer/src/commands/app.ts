@@ -1,8 +1,11 @@
 import { noteHolding } from "../editor/noteKeymap";
+import { useFindSources } from "../findSources";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
+import { assistantCommands } from "./assistant";
+import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
-import { citationHandle, composerHandle, sidebarHandle } from "./handles";
+import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { proposalCommands } from "./proposals";
 import { type Command, commands, fromMenu } from "./registry";
@@ -20,6 +23,7 @@ const appCommands: readonly Command[] = [
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
+  ...evidenceCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
@@ -35,14 +39,14 @@ const appCommands: readonly Command[] = [
     run: () => sidebarHandle.current?.toggle(),
   },
   {
-    id: "composer.focus",
-    label: "command.composer.focus",
-    shortcut: { keys: "CmdOrCtrl+J" },
+    id: "sources.find",
+    label: "command.sources.find",
+    keywords: ["command.sources.find.keywords"],
     group: "main",
     reversible: true,
-    when: () => composerHandle.current !== null,
-    run: () => composerHandle.current?.focus(),
+    run: () => useFindSources.getState().show(),
   },
+  ...assistantCommands,
   {
     id: "citation.open",
     label: "command.citation.open",

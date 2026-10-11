@@ -28,6 +28,10 @@
  * A Question that names a script and a Connector Tool gets both, the script
  * first, and the Answer starts with what each said.
  *
+ * With Find sources (a Question that names papers): it calls find_sources
+ * once, for the words after "on" (and the year after "since"), then lists
+ * the first three titles it found.
+ *
  * For automatic tagging it tags a Document with every Tag whose name is a word in it.
  * As the User writes, it suggests a Passage's line that shares words with their paragraph.
  *
@@ -332,6 +336,16 @@ function lastResult(prompt: Prompt, tool: string): string | undefined {
   return found;
 }
 
+/**
+ * What a Question asking for papers searches for: the words after "on", and
+ * the year after "since" ("Find papers since 2021 on CRISPR off-target detection").
+ */
+function sourcesQuery(question: string): { query: string; from_year?: number } {
+  const since = /\bsince (\d{4})\b/i.exec(question)?.[1];
+  const topic = /\bon (.+?)[.?!]*$/i.exec(question)?.[1] ?? question;
+  return { query: topic, ...(since && { from_year: Number(since) }) };
+}
+
 /** A Skill script the Question names, with a listed Skill: to run with run_skill_script. */
 function scriptNamed(
   prompt: Prompt,
@@ -367,6 +381,18 @@ function nextReply(prompt: Prompt, tools: readonly OfferedTool[]): Reply {
     const result = lastResult(prompt, named.tool);
     if (result === undefined) return { tool: named.tool, input: named.input };
     said.push(`${named.own} said: ${result}`);
+  }
+  // As a real model does: only a Question that asks for papers searches for them.
+  if (names.includes("find_sources") && /\bpapers?\b/i.test(question)) {
+    const found = lastResult(prompt, "find_sources");
+    if (found === undefined) return { tool: "find_sources", input: sourcesQuery(question) };
+    const titles = [...found.matchAll(/^\d+\. "([^"]+)"/gm)].slice(0, 3).map((match) => match[1]);
+    return {
+      text:
+        titles.length > 0
+          ? ["I found these papers:", "", ...titles.map((title) => `- ${title}`)].join("\n")
+          : "I found no papers.",
+    };
   }
   const reply = answerReply(prompt, names);
   return "text" in reply && said.length > 0 ? { text: [...said, reply.text].join("\n\n") } : reply;
