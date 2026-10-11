@@ -123,7 +123,8 @@ function createWindow(): BrowserWindow {
     if (event.url !== window.webContents.getURL()) event.preventDefault();
   });
 
-  const query: Record<string, string> = testHooks ? { testHooks: "1" } : {};
+  // The window's name: the core keeps each window's tabs and groups under it.
+  const query: Record<string, string> = { window: "main", ...(testHooks && { testHooks: "1" }) };
   if (rendererUrl) {
     const url = new URL(rendererUrl);
     for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);

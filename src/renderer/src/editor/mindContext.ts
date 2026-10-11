@@ -5,7 +5,7 @@ export const MindIdContext = createContext<string | null>(null);
 
 /**
  * Where the open Mind's composer is drawn: the dock at the foot of the Mind's
- * column, outside the part that scrolls (see `MindPane`). Null until it is there.
+ * column, outside the part that scrolls (see `MindTab`). Null until it is there.
  */
 export const ComposerDockContext = createContext<HTMLElement | null>(null);
 
