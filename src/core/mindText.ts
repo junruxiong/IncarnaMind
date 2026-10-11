@@ -25,6 +25,7 @@
  */
 import * as Y from "yjs";
 import type { TableAlign } from "../shared/markdownTables";
+import { cutTitle } from "../shared/naming";
 import { ANSWER_BLOCK, CITATION_NODE, QUESTION_BLOCK } from "./api";
 
 export interface Marks {
@@ -123,6 +124,31 @@ export function readBlocks(parent: Y.XmlFragment | Y.XmlElement, options: ReadOp
  */
 export function readBlock(element: Y.XmlElement, options: ReadOptions): Block[] {
   return readBlockElement(element, options);
+}
+
+/** The first stretch of text in an element: a list's first item, not all its items run together. */
+function firstText(element: Y.XmlElement): string {
+  const children = element.toArray();
+  if (children.some((child) => child instanceof Y.XmlText)) return plainText(element);
+  for (const child of children) {
+    if (!(child instanceof Y.XmlElement)) continue;
+    const text = firstText(child);
+    if (text.trim() !== "") return text;
+  }
+  return "";
+}
+
+/**
+ * What a Mind without a title is called: its first line of text, cut as a title.
+ * An Answer's text is not the User's, so it isn't read.
+ */
+export function firstLineOf(blocks: Y.XmlFragment): string {
+  for (const block of blocks.toArray()) {
+    if (!(block instanceof Y.XmlElement) || block.nodeName === ANSWER_BLOCK) continue;
+    const title = cutTitle(firstText(block));
+    if (title !== "") return title;
+  }
+  return "";
 }
 
 /** How many Question Blocks the Mind has. */
