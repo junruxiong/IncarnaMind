@@ -1,38 +1,27 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Something in IncarnaMind doesn't work as it should
 title: ''
-labels: ''
+labels: needs-triage
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**What happened**
+What you did, what you saw, and what you expected instead.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**Steps to reproduce**
+1.
+2.
+3.
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**Your setup**
+- IncarnaMind version (on a Mac: IncarnaMind › About IncarnaMind; on Windows or Linux: the installer's file name, or the commit if you run it from source):
+- Operating system and version (macOS 15, Windows 11, Ubuntu 24.04…):
+- Language of the app (English or 中文):
+- The model, if an Answer was involved (for example Sonnet 5.5 on your own key, a ChatGPT plan, or a local Ollama model). Never paste a key.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Screenshots or a screen recording**
+If they help. Leave out anything private from your Documents.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
-
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
-
-**Additional context**
-Add any other context about the problem here.
+**Anything else**
