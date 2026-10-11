@@ -38,6 +38,8 @@ export interface ArmSummary {
   medianStartupMs: number | null;
   /** From the agent being ready to its first Tool call: its own thinking before it reaches IncarnaMind. */
   medianFirstCallMs: number | null;
+  /** The computer's one-minute load average at the runs' starts (12 cores). */
+  medianLoad: number | null;
   medianModelCalls: number | null;
   /** Mean per run. */
   agentTokens: { input: number; cached: number; output: number };
@@ -96,6 +98,7 @@ export function summarise(arm: Arm, records: readonly RunRecord[]): ArmSummary {
     medianTaskMs: median(done.map((record) => record.taskMs)),
     medianTotalMs: median(done.map((record) => record.totalMs)),
     medianStartupMs: median(done.map((record) => record.startupMs)),
+    medianLoad: median(records.map((record) => record.load ?? 0)),
     medianFirstCallMs: median(
       done.flatMap((record) => {
         const first = record.calls.find((call) => call.startedMs !== null);
@@ -284,12 +287,14 @@ export async function writeReport(input: ReportInput): Promise<string> {
   for (const [key, value] of Object.entries(input.meta)) lines.push(`- ${key}: ${value}`);
   lines.push("", "## Per contestant", "");
   lines.push(
-    "| Arm | Runs (failed) | Median task s | Median incl. start-up s | To first Tool call s | Model calls | Agent tokens in / cached / out | IncarnaMind tokens in / out | $ (API) | Codex credits | Citations | Found-rate | Invented tokens | Refs without token | Uncited claims | Unmarked | Expected source | Correct | Scope leaks | Injection signs (T9) |",
+    "| Arm | Runs (failed) | Load | Median task s | Median incl. start-up s | To first Tool call s | Model calls | Agent tokens in / cached / out | IncarnaMind tokens in / out | $ (API) | Codex credits | Citations | Found-rate | Invented tokens | Refs without token | Uncited claims | Unmarked | Expected source | Correct | Scope leaks | Injection signs (T9) |",
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push(
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+  );
   for (const s of summaries) {
     lines.push(
-      `| ${s.arm} ${ARM_LABELS[s.arm]} | ${s.runs} (${s.failed}) | ${seconds(s.medianTaskMs)} | ${seconds(s.medianTotalMs)} | ${seconds(s.medianFirstCallMs)} | ${s.medianModelCalls ?? "–"} | ${s.agentTokens.input} / ${s.agentTokens.cached} / ${s.agentTokens.output} | ${s.innerTokens.input} / ${s.innerTokens.output} | ${s.costUsd.toFixed(3)} | ${s.credits.toFixed(3)} | ${s.citations} | ${percent(s.foundRate)} | ${s.inventedTokens} | ${s.inventedRefs} | ${s.uncitedClaims ?? "–"} (${percent(s.uncitedClaimRate)} of sentences) | ${s.unmarkedUncitedClaims ?? "–"} | ${s.expectedHits}/${s.expectedTotal} | ${s.correctScore === null ? "–" : percent(s.correctScore)} | ${s.scopeLeaks.length} | ${s.injection.t9WithSigns}/${s.injection.t9Runs} |`,
+      `| ${s.arm} ${ARM_LABELS[s.arm]} | ${s.runs} (${s.failed}) | ${s.medianLoad?.toFixed(0) ?? "–"} | ${seconds(s.medianTaskMs)} | ${seconds(s.medianTotalMs)} | ${seconds(s.medianFirstCallMs)} | ${s.medianModelCalls ?? "–"} | ${s.agentTokens.input} / ${s.agentTokens.cached} / ${s.agentTokens.output} | ${s.innerTokens.input} / ${s.innerTokens.output} | ${s.costUsd.toFixed(3)} | ${s.credits.toFixed(3)} | ${s.citations} | ${percent(s.foundRate)} | ${s.inventedTokens} | ${s.inventedRefs} | ${s.uncitedClaims ?? "–"} (${percent(s.uncitedClaimRate)} of sentences) | ${s.unmarkedUncitedClaims ?? "–"} | ${s.expectedHits}/${s.expectedTotal} | ${s.correctScore === null ? "–" : percent(s.correctScore)} | ${s.scopeLeaks.length} | ${s.injection.t9WithSigns}/${s.injection.t9Runs} |`,
     );
   }
   lines.push("", "## Gates (B.7)", "");

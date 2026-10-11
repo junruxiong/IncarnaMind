@@ -86,6 +86,10 @@ const LOOSE_TOKEN = /(?<!\[)cite:([a-z0-9]{6,32})(?!\])/g;
 const LOCATION_REF =
   /\b(?:pp?\.\s*\d+|pages?\s+\d+|slides?\s+\d+|sheet\s+\d+|rows?\s+\d+)|第\s*\d+\s*[页頁张]|\[\^?\d+\]/i;
 const HAS_WORD = /[\p{L}\p{N}]/u;
+const ABBREVIATION_END = /\b(?:pp?|e\.g|i\.e|no|vs|fig|cf|approx|ca)\.\s*$/i;
+/** Stands for a token while a line is split into sentences (a private-use character). */
+const MARK = "";
+const MARKS = //g;
 
 /** The text's sentences, line by line; headings and empty lines left out. */
 export function sentencesOf(text: string, language: string): { text: string; cited: boolean }[] {
@@ -94,25 +98,40 @@ export function sentencesOf(text: string, language: string): { text: string; cit
   for (const raw of text.split(/\n+/)) {
     const line = raw.trim();
     if (!line || /^#{1,6}\s/.test(line) || /^[-*_]{3,}$/.test(line)) continue;
-    const plain = line.replace(/^(?:[-*+]|\d+[.)])\s+/, "");
-    const parts = [...segmenter.segment(plain)].map((part) => part.segment);
-    // A token after a full stop belongs to the sentence before it.
-    for (let index = 0; index < parts.length; index++) {
-      let sentence = parts[index] ?? "";
-      while (
-        index + 1 < parts.length &&
-        /^\s*(?:\[cite:[a-z0-9]+\]\s*)+$/.test(parts[index + 1] ?? "")
-      ) {
-        sentence += parts[index + 1];
-        index++;
+    // Each token stands as one placeholder character while the line is split, so the segmenter
+    // can't cut through one (it does, after a Chinese full stop).
+    const tokens: string[] = [];
+    const plain = line.replace(/^(?:[-*+]|\d+[.)])\s+/, "").replace(TOKEN, (token) => {
+      tokens.push(token);
+      return MARK;
+    });
+    // The segmenter ends a sentence at "p." in "p. 12": join an abbreviation to what follows.
+    const parts: string[] = [];
+    for (const { segment } of segmenter.segment(plain)) {
+      const previous = parts.at(-1);
+      if (previous !== undefined && ABBREVIATION_END.test(previous)) {
+        parts[parts.length - 1] = previous + segment;
+      } else parts.push(segment);
+    }
+    let next = 0;
+    const restore = (segment: string) => segment.replace(MARKS, () => tokens[next++] ?? "");
+    for (const part of parts) {
+      // A token right after a full stop belongs to the sentence before it.
+      const leading = /^[\s]*/.exec(part)?.[0] ?? "";
+      const previous = out.at(-1);
+      if (previous && leading.includes(MARK)) {
+        previous.text = `${previous.text} ${restore(leading).trim()}`;
+        previous.cited = true;
       }
-      const words = sentence.replace(TOKEN, "").replace(/\s+/g, " ").trim();
-      if (!HAS_WORD.test(words)) {
-        const previous = out.at(-1);
-        if (previous && new RegExp(TOKEN.source).test(sentence)) previous.cited = true;
+      const rest = part.slice(previous ? leading.length : 0);
+      if (!HAS_WORD.test(rest.replaceAll(MARK, ""))) {
+        if (previous && rest.includes(MARK)) {
+          previous.text = `${previous.text} ${restore(rest).trim()}`;
+          previous.cited = true;
+        } else restore(rest);
         continue;
       }
-      out.push({ text: sentence.trim(), cited: new RegExp(TOKEN.source).test(sentence) });
+      out.push({ text: restore(rest).trim(), cited: rest.includes(MARK) });
     }
   }
   return out;

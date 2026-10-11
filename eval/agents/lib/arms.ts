@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { type Dirent, existsSync, readFileSync } from "node:fs";
 import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { loadavg } from "node:os";
 import { join } from "node:path";
 import type { AgentActivity, ChatProvider, Core } from "../../../src/core";
 import type { Database } from "../../../src/core/storage";
@@ -84,6 +85,9 @@ export interface RunRecord {
   repeat: number;
   runId: string;
   startedAt: string;
+  /** The computer's one-minute load average when the run started, and how long it waited for it. */
+  load: number;
+  waitedMs: number;
   prompt: string;
   status: "done" | "failed" | "timed-out";
   error: string | null;
@@ -241,6 +245,27 @@ function asQuestion(task: Task, prompt: string): EvalQuestion {
 
 const trim = (text: string, max = 6000) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
+/**
+ * Waits, up to `calmWaitMs`, until the computer's one-minute load is at most
+ * `maxLoad` (no wait when it is 0). Returns how long it waited.
+ */
+async function calm(session: Session): Promise<number> {
+  const { maxLoad, calmWaitMs } = session.config;
+  if (maxLoad <= 0) return 0;
+  const started = Date.now();
+  let logged = false;
+  while ((loadavg()[0] ?? 0) > maxLoad && Date.now() - started < calmWaitMs) {
+    if (!logged) {
+      session.log(
+        `  waiting for the load (${(loadavg()[0] ?? 0).toFixed(0)}) to fall to ${maxLoad}`,
+      );
+      logged = true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+  return Date.now() - started;
+}
+
 /** Runs one (arm, task, repeat) and scores it. */
 export async function runOne(
   session: Session,
@@ -250,6 +275,9 @@ export async function runOne(
 ): Promise<RunRecord> {
   const runId = `${arm}-${task.id}-r${repeat}-${randomBytes(3).toString("hex")}`;
   const prompt = promptFor(session.bakeoff, task);
+  // Other work on the computer slows every arm, the reranker most: wait for it to calm down.
+  const waitedMs = await calm(session);
+  const load = loadavg()[0] ?? 0;
   const startedAt = new Date().toISOString();
   const since = Date.now();
   session.meter.take();
@@ -278,6 +306,8 @@ export async function runOne(
     repeat,
     runId,
     startedAt,
+    load,
+    waitedMs,
     prompt,
     sentences,
     metrics: {
@@ -296,7 +326,7 @@ export async function runOne(
 
 type ArmResult = Omit<
   RunRecord,
-  "arm" | "task" | "repeat" | "runId" | "startedAt" | "prompt" | "judgeUsage"
+  "arm" | "task" | "repeat" | "runId" | "startedAt" | "load" | "waitedMs" | "prompt" | "judgeUsage"
 > & { marks: boolean };
 
 async function runBuiltIn(
