@@ -93,7 +93,7 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
-import { createOllamaModels } from "./providers/ollamaModels";
+import { createOllamaModels, isCloudModelName } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
 import {
@@ -1492,6 +1492,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const status = await detectOllama(baseUrl);
       if (!status.running) throw new Error(`Ollama isn't running at ${baseUrl}.`);
+      // One click means a model on this computer; a cloud model is chosen from the model menu.
+      if (isCloudModelName(model) || hasOllamaModel(status.cloudModels, model)) {
+        throw new InvalidInputError(
+          `${model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.`,
+        );
+      }
       if (!hasOllamaModel(status.models, model)) {
         await pullOllamaModel(
           baseUrl,

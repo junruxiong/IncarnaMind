@@ -2021,6 +2021,12 @@ export interface ChatModelGroup {
    * out as it goes.
    */
   unknown: string[];
+  /**
+   * The ids in `models` that run in the cloud although the provider is on this
+   * computer: an Ollama cloud model, which Ollama forwards to ollama.com. Asking
+   * with one needs consent to send to that service, and local mode refuses it.
+   */
+  cloud: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -2691,8 +2697,10 @@ export type OllamaStatus =
   | {
       running: true;
       baseUrl: string;
-      /** Models already pulled, e.g. "qwen3:4b". */
+      /** Models already pulled that run on this computer, e.g. "qwen3:4b". */
       models: string[];
+      /** Cloud models Ollama lists (e.g. "gpt-oss:120b-cloud"): they run on ollama.com, so they are never offered as local. */
+      cloudModels: string[];
       /** The model one click pulls and selects. */
       recommendedModel: string;
     };
