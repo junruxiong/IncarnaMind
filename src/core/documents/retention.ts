@@ -107,6 +107,11 @@ function parseVersion(input: unknown): RetainedVersion {
   return { documentId, contentHash, pageFrom, pageTo, location };
 }
 
+/**
+ * A row as a version. A Location of a kind a newer version wrote reads as
+ * none, so retaining the same version without a Location keeps that row, and
+ * what it stored, as it is.
+ */
 const toVersion = (row: Row): RetainedVersion => ({
   documentId: row.document_id,
   contentHash: row.content_hash,
