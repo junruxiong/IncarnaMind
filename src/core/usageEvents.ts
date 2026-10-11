@@ -80,6 +80,7 @@ export const SETTINGS_PAGES = [
   "general",
   "models",
   "search",
+  "meetings",
   "tools",
   "connectors",
   "skills",
