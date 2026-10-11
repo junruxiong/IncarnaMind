@@ -129,6 +129,23 @@ export function chooseModel(
   return fast[0] ?? fits.at(-1) ?? (models.at(-1) as TranscriptionModelDefinition);
 }
 
+/** Where a model's files are once downloaded into the data folder, as the engine loads them. */
+export function transcriptionModelFiles(
+  dataDir: string,
+  definition: TranscriptionModelDefinition,
+): TranscriptionModelFiles {
+  const folder = join(dataDir, "models", definition.folder);
+  return {
+    engine: definition.engine,
+    files: Object.fromEntries(
+      Object.entries(definition.files).map(([role, path]) => [role, join(folder, path)]),
+    ),
+    vad: join(dataDir, "models", SILERO_VAD.folder, SILERO_VAD.file),
+    // Leaves cores for the app, the capture and the rest of the computer.
+    threads: Math.max(1, Math.min(4, availableParallelism() - 2)),
+  };
+}
+
 export interface TranscriptionModelOptions {
   dataDir: string;
   transcriber: Transcriber;
@@ -226,15 +243,7 @@ export function createTranscriptionModel(options: TranscriptionModelOptions) {
     );
   }
 
-  const files = (): TranscriptionModelFiles => ({
-    engine: definition.engine,
-    files: Object.fromEntries(
-      Object.entries(definition.files).map(([role, path]) => [role, join(modelFolder, path)]),
-    ),
-    vad: join(vadFolder, SILERO_VAD.file),
-    // Leaves cores for the app, the capture and the rest of the computer.
-    threads: Math.max(1, Math.min(4, availableParallelism() - 2)),
-  });
+  const files = () => transcriptionModelFiles(options.dataDir, definition);
 
   return {
     definition,

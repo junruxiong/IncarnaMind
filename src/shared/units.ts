@@ -65,6 +65,8 @@ export interface UnitLabel {
    */
   from?: number;
   to?: number;
+  /** cues: who said each cue, in order, where any is known (null for one not known). */
+  speakers?: (string | null)[];
   /** rows: the row number of each line of the Unit's text, in order. */
   rows?: number[];
   /** rows: the sheet's first column (from 0): each line lists the cells from it, tab-separated. */

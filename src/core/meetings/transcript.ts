@@ -521,8 +521,9 @@ export function createTranscripts(options: TranscriptsOptions) {
           const samples = await samplesOf(part);
           const first = Math.max(0, Math.round((from - part.offsetMs) * SAMPLE_RATE_MS));
           const last = Math.min(samples.length, Math.round((to - part.offsetMs) * SAMPLE_RATE_MS));
-          if (last > first)
-            mixer.add(samples.subarray(first, last), part.offsetMs + first / SAMPLE_RATE_MS);
+          if (last > first) {
+            mixer.put(samples.subarray(first, last), part.offsetMs + first / SAMPLE_RATE_MS);
+          }
         }
         const audio = mixer.flush();
         if (audio) transcriber.push(stream, audio.samples);

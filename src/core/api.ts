@@ -3146,6 +3146,8 @@ export interface RegisteredDataFlow {
  * - "reranking-model": downloads the built-in reranking model's files, once,
  *   when the first Documents are ready to search, unless reranking is off or
  *   uses a service.
+ * - "transcription-model": downloads the speech-to-text model and Silero VAD,
+ *   once, when a Meeting is first transcribed on this computer (#136).
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": the experimental ChatGPT plan's sign-in, and refreshing it.
  * - "remote-connectors": connecting to each remote Connector that is on, and
@@ -3160,6 +3162,7 @@ export const networkTrafficIds = [
   "update-check",
   "embedding-model",
   "reranking-model",
+  "transcription-model",
   "ollama-pull",
   "chatgpt-sign-in",
   "remote-connectors",
