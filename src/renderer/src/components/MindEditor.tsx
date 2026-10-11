@@ -2,11 +2,12 @@ import "katex/dist/katex.min.css";
 import Collaboration from "@tiptap/extension-collaboration";
 import { Focus, Placeholder } from "@tiptap/extensions";
 import { EditorContent, ReactNodeViewRenderer, useEditor, useEditorState } from "@tiptap/react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
+import { noteHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
 import { core } from "../core";
@@ -18,16 +19,19 @@ import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
 import { CitationNumbers } from "../editor/citationNumbers";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
+import { selectionForEdit } from "../editor/editSelection";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
 import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
+import { ProposalBars } from "../editor/ProposalBars";
+import { ProposalReview } from "../editor/proposalReview";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ScopePicker } from "../editor/ScopePicker";
-import { SelectionMenu } from "../editor/SelectionMenu";
+import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
 import { noteSlashItems, skillSlashItems } from "../editor/slashItems";
 import { Suggestions } from "../editor/suggestions";
@@ -35,6 +39,7 @@ import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
 import { SmartTypography } from "../editor/typography";
 import { WordCount } from "../editor/WordCount";
+import { requestEdit, startEditing, TRANSLATE_LANGUAGES } from "../editWithAi";
 import { useT } from "../i18n";
 import { useMeetingOf } from "../meetings";
 import { isWritingIn } from "../mindStatus";
@@ -42,6 +47,7 @@ import { skillDescription } from "../skills";
 import { useAppStore } from "../store";
 import { askForSuggestion, describeSuggestion } from "../suggestions";
 import { StartGuide, useGettingStarted, useIsExample } from "./GettingStarted";
+import { SparkLineIcon } from "./lineIcons";
 import { MindNotice } from "./MindNotice";
 
 /** Stands in for the hint's button in its translated words, which are split around it. */
@@ -248,6 +254,7 @@ function MindEditorView({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),
         QuestionFold.configure({ mindId }),
+        ProposalReview,
         Suggestions.configure({
           request: (request) => askForSuggestion(mindId, doc, request),
           cancel: (requestId) =>
@@ -264,6 +271,54 @@ function MindEditorView({
     },
     [doc, readOnly],
   );
+
+  // The commands on the Mind's text (⌘K, ⌘↵ and ⌘⌫ on its changes) act on the Mind last written in.
+  useEffect(() => {
+    if (readOnly) return;
+    const lend = () => {
+      noteHandle.current = { editor, mindId, doc };
+    };
+    if (!noteHandle.current || noteHandle.current.editor.isDestroyed) lend();
+    editor.on("focus", lend);
+    return () => {
+      editor.off("focus", lend);
+      if (noteHandle.current?.editor === editor) noteHandle.current = null;
+    };
+  }, [editor, mindId, doc, readOnly]);
+
+  // The selection menu's AI section: each comes back as changes to accept or reject.
+  const aiActions = useMemo((): SelectionAction[] => {
+    const available = (current: typeof editor) => selectionForEdit(current.state) !== null;
+    const run = (action: "improve" | "shorten" | "explain") => (current: typeof editor) =>
+      void requestEdit(current, mindId, doc, action);
+    return [
+      { id: "improve", label: "editor.ai.improve", icon: "✎", available, run: run("improve") },
+      { id: "shorten", label: "editor.ai.shorten", icon: "≡", available, run: run("shorten") },
+      {
+        id: "translate",
+        label: "editor.ai.translate",
+        icon: "文",
+        available,
+        choices: TRANSLATE_LANGUAGES.map((language) => ({
+          id: language.id,
+          label: language.name,
+          run: (current) => void requestEdit(current, mindId, doc, "translate", language.prompt),
+        })),
+        run: () => undefined,
+      },
+      { id: "explain", label: "editor.ai.explain", icon: "?", available, run: run("explain") },
+      {
+        id: "edit",
+        label: "editor.ai.edit",
+        icon: <SparkLineIcon className="size-3.5" />,
+        keys: shortcutLabel("composer.focus"),
+        available,
+        run: (current) => {
+          if (startEditing(current, mindId)) useComposer.getState().requestFocus();
+        },
+      },
+    ];
+  }, [mindId, doc]);
 
   // When the language changes: relabel. Setting the props also redraws the placeholder.
   useEffect(() => {
@@ -320,6 +375,7 @@ function MindEditorView({
       {countSlot && createPortal(<WordCount editor={editor} doc={doc} />, countSlot)}
       {readOnly && <MindNotice kind="read-only" />}
       <div className={`mind-editor-frame ${guide ? "mind-editor-frame--guide" : ""}`}>
+        {!readOnly && <ProposalBars editor={editor} mindId={mindId} />}
         <EditorContent editor={editor} />
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
@@ -339,7 +395,7 @@ function MindEditorView({
         )}
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
-      {!readOnly && <SelectionMenu editor={editor} />}
+      {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
       {editingMath !== null && (
         <MathEditor
           key={editingMath}

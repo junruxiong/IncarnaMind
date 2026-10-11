@@ -22,6 +22,7 @@ import { useAnswers } from "../answers";
 import { composerHandle, useHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon } from "../components/icons";
+import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
 import {
@@ -34,6 +35,7 @@ import {
   useComposer,
 } from "../composer";
 import { core } from "../core";
+import { editFromComposer, startEditing, stopEditing, useEdits } from "../editWithAi";
 import { useT } from "../i18n";
 import type { ScopeChoice } from "../scope";
 import { skillDescription } from "../skills";
@@ -47,7 +49,8 @@ import {
   takeBackQuestion,
   whenAnswerShown,
 } from "./composerAsk";
-import { AskArrowIcon, CollapseIcon, ExpandIcon } from "./icons";
+import { EditStatus } from "./EditStatus";
+import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
 import { ModelChip } from "./ModelChip";
 import { PasteChip, usePasteLabel } from "./PasteChip";
 import { SkillChip } from "./QuestionView";
@@ -156,6 +159,8 @@ export function Composer({
   const caret = useRef<number | null>(null);
   const enabledSkills = skills.filter((skill) => skill.enabled);
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
+  /** The selection the composer is saying what to change in (Edit with AI…, ⌘J with a selection). */
+  const editing = useEdits((state) => state.editing[mindId]);
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(mindId, change);
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
@@ -239,17 +244,19 @@ export function Composer({
   }));
 
   // ⌘J, anywhere in the window but a dialog ("composer.focus"): the composer takes the focus.
+  // With text selected in the note, it says what to change in it (Edit with AI…).
   const handle = useMemo(
     () => ({
       focus() {
         const element = field.current;
+        if (!editor.isDestroyed && editor.view.hasFocus()) startEditing(editor, mindId);
         if (element && document.activeElement !== element) {
           element.focus();
           element.setSelectionRange(element.value.length, element.value.length);
         }
       },
     }),
-    [],
+    [editor, mindId],
   );
   useHandle(composerHandle, handle);
 
@@ -374,6 +381,11 @@ export function Composer({
   const ask = async () => {
     // As it is now, not as it was drawn: "Ask without it" has just taken the Skill off.
     const current = useComposer.getState().draft(mindId);
+    if (useEdits.getState().editing[mindId]) {
+      // What to change in the selected text: it comes back as changes in the note.
+      if (editFromComposer(editor, mindId, doc, current.text)) update({ text: "" });
+      return;
+    }
     const typed = current.text.trim();
     // What is pasted, in chips, goes with the words typed.
     const text = [typed, ...current.pastes.map((paste) => paste.text.trim())]
@@ -443,6 +455,12 @@ export function Composer({
       setExpanded(false);
       return;
     }
+    if (event.key === "Escape" && editing) {
+      // Back to asking; the next Esc goes to the note.
+      event.preventDefault();
+      stopEditing(editor, mindId);
+      return;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       // Back to the note, where the cursor was (or at its end), at once: what is typed next
@@ -469,6 +487,7 @@ export function Composer({
       className={expanded ? "composer composer--expanded" : "composer"}
     >
       <SuggestionOffer mindId={mindId} doc={doc} editor={editor} />
+      <EditStatus mindId={mindId} />
       {problem && (
         <ComposerProblem
           problem={problem}
@@ -538,6 +557,28 @@ export function Composer({
             ))}
           </div>
         )}
+        {editing && (
+          <span
+            data-testid="composer-edit-quote"
+            title={t("composer.edit.quote", { text: editing.quote })}
+            className="question-skill composer-quote"
+          >
+            <SparkLineIcon className="question-skill-icon" />
+            <span className="truncate">{t("composer.edit.quote", { text: editing.quote })}</span>
+            <button
+              type="button"
+              data-testid="composer-edit-stop"
+              aria-label={t("composer.edit.stop")}
+              title={t("composer.edit.stop")}
+              // The text keeps the focus.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => stopEditing(editor, mindId)}
+              className="scope-chip-remove"
+            >
+              <RemoveIcon className="size-2.5" />
+            </button>
+          </span>
+        )}
         {draft.skill && (
           <SkillChip
             name={draft.skill}
@@ -553,8 +594,12 @@ export function Composer({
           ref={field}
           rows={1}
           data-testid="composer-input"
-          aria-label={t("composer.label", { shortcut: shortcutLabel("composer.focus") })}
-          placeholder={t("composer.placeholder")}
+          aria-label={
+            editing
+              ? t("composer.edit.label")
+              : t("composer.label", { shortcut: shortcutLabel("composer.focus") })
+          }
+          placeholder={editing ? t("composer.edit.placeholder") : t("composer.placeholder")}
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
           aria-activedescendant={activeOption}
@@ -596,8 +641,8 @@ export function Composer({
           <button
             type="button"
             data-testid="composer-ask"
-            aria-label={t("composer.ask")}
-            title={t("composer.ask")}
+            aria-label={editing ? t("composer.edit.send") : t("composer.ask")}
+            title={editing ? t("composer.edit.send") : t("composer.ask")}
             disabled={!canAsk}
             // The text keeps the focus.
             onMouseDown={(event) => event.preventDefault()}

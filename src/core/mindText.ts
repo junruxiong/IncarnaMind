@@ -22,11 +22,21 @@
  * - An inline node it doesn't know is read as its text, without marks.
  * - An attribute that is missing or of the wrong type reads as its default:
  *   a heading is level 1, a list starts at 1, a text attribute is "".
+ *
+ * Proposals still waiting (see `PROPOSAL_INSERT_MARK`) aren't the Mind's text
+ * yet: what one adds is left out, and what one removes is read as it is.
  */
 import * as Y from "yjs";
 import type { TableAlign } from "../shared/markdownTables";
 import { cutTitle } from "../shared/naming";
-import { ANSWER_BLOCK, CITATION_NODE, QUESTION_BLOCK } from "./api";
+import { readProposalAttribute } from "../shared/proposals";
+import {
+  ANSWER_BLOCK,
+  CITATION_NODE,
+  PROPOSAL_ATTRIBUTE,
+  PROPOSAL_INSERT_MARK,
+  QUESTION_BLOCK,
+} from "./api";
 
 export interface Marks {
   bold: boolean;
@@ -123,7 +133,7 @@ export function readBlocks(parent: Y.XmlFragment | Y.XmlElement, options: ReadOp
  * Answer as its Blocks, and none for a Question that `includeQuestions` leaves out.
  */
 export function readBlock(element: Y.XmlElement, options: ReadOptions): Block[] {
-  return readBlockElement(element, options);
+  return proposedOnly(element) ? [] : readBlockElement(element, options);
 }
 
 /** The first stretch of text in an element: a list's first item, not all its items run together. */
@@ -192,8 +202,9 @@ function readChildren(
 ): Block[] {
   const blocks: Block[] = [];
   for (const child of children) {
-    if (child instanceof Y.XmlElement) blocks.push(...readBlockElement(child, options));
-    else if (child instanceof Y.XmlText) {
+    if (child instanceof Y.XmlElement) {
+      if (!proposedOnly(child)) blocks.push(...readBlockElement(child, options));
+    } else if (child instanceof Y.XmlText) {
       // Text straight in a Block container: keep it as a paragraph.
       const content = readInline([child], options);
       if (content.length > 0) blocks.push({ kind: "paragraph", content });
@@ -201,6 +212,10 @@ function readChildren(
   }
   return blocks;
 }
+
+/** A Block or inline node a Proposal adds, which isn't the Mind's until it is accepted. */
+const proposedOnly = (element: Y.XmlElement) =>
+  readProposalAttribute(element.getAttribute(PROPOSAL_ATTRIBUTE))?.kind === "insert";
 
 const INLINE_TYPES: ReadonlySet<string> = new Set([
   "inlineMath",
@@ -368,11 +383,13 @@ function readInline(
   for (const child of children) {
     if (child instanceof Y.XmlText) {
       for (const run of child.toDelta() as Run[]) {
+        if (run.attributes && PROPOSAL_INSERT_MARK in run.attributes) continue;
         if (typeof run.insert === "string" && run.insert !== "") {
           content.push({ kind: "text", text: run.insert, marks: marksOf(run.attributes) });
         }
       }
     } else if (child instanceof Y.XmlElement) {
+      if (proposedOnly(child)) continue;
       switch (child.nodeName) {
         case "inlineMath":
           content.push({ kind: "math", latex: stringAttribute(child, "latex") });
@@ -419,13 +436,20 @@ function stringAttribute(element: Y.XmlElement, name: string): string {
 export function plainText(element: Y.XmlElement | Y.XmlText): string {
   if (element instanceof Y.XmlText) {
     return (element.toDelta() as Run[])
-      .map((run) => (typeof run.insert === "string" ? run.insert : ""))
+      .map((run) =>
+        typeof run.insert === "string" &&
+        !(run.attributes && PROPOSAL_INSERT_MARK in run.attributes)
+          ? run.insert
+          : "",
+      )
       .join("");
   }
   return element
     .toArray()
     .map((child) =>
-      child instanceof Y.XmlElement || child instanceof Y.XmlText ? plainText(child) : "",
+      child instanceof Y.XmlText || (child instanceof Y.XmlElement && !proposedOnly(child))
+        ? plainText(child)
+        : "",
     )
     .join("");
 }

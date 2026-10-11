@@ -327,8 +327,8 @@ describe("a table in a Mind", { timeout: 30_000 }, () => {
     });
   });
 
-  test("a Mind written with a table records content schema version 2; one written before opens as it was", async () => {
-    expect(CONTENT_SCHEMA_VERSION).toBe(2);
+  test("a Mind written with a table records the content schema version (2 or later); one written before opens as it was", async () => {
+    expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
     const { core, client, mind } = await setUpWithDocuments(tableModel(""), []);
     const old = new Y.Doc();
     const paragraph = new Y.XmlElement("paragraph");
@@ -356,7 +356,9 @@ describe("a table in a Mind", { timeout: 30_000 }, () => {
     await client.settled();
     const after = new Y.Doc();
     Y.applyUpdate(after, (await core.openMind(mind.id)).state);
-    expect(after.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(2);
+    expect(after.getMap(MIND_SETTINGS_FIELD).get(CONTENT_SCHEMA_VERSION_KEY)).toBe(
+      CONTENT_SCHEMA_VERSION,
+    );
     expect(rowsOf(tableIn(client))).toEqual([["#A table"]]);
   });
 });

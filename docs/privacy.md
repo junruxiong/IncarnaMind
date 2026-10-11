@@ -2,7 +2,7 @@
 
 What IncarnaMind sends from your computer, and how to change it. **Settings → Privacy** in the app lists the same, live.
 
-- **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector, and, once you turn on suggestions as you write, the paragraph you pause in with the Passages that match it) goes only to the service you picked, and only after you allow it. Settings → Privacy lists every flow and lets you revoke it.
+- **Your content** (a Question and the Passages found for it, Document text for cloud embeddings, Tool calls to a Connector, the text you select for Edit with AI with the paragraphs it is in, and, once you turn on suggestions as you write, the paragraph you pause in with the Passages that match it) goes only to the service you picked, and only after you allow it. Edit with AI asks once for its own flow, and in local mode uses only a model on this computer. Settings → Privacy lists every flow and lets you revoke it.
 - **Look up** in a Document's "Cite as" sends its DOI to Crossref, or its arXiv ID to arXiv, and nothing else from the Document, only when you click it, after you allow it once. It is off in local mode.
 - **Traffic without your content**: update checks, model downloads, and remote Connectors' sign-in.
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
