@@ -15,6 +15,7 @@ import {
   newMind,
   removeDataFolder,
   setGroupBeside,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -46,8 +47,7 @@ test.afterEach(async () => {
 
 /** The size the approved mockups were drawn at. */
 async function useMockupSize(app: ElectronApplication, window: Page) {
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1440, 900));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(1200);
+  await setWindowSize(app, window, 1440, 900);
   await window.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 

@@ -13,7 +13,8 @@
       "eval/**/*.ts",
       "*.ts",
       "*.json",
-      "!**/package-lock.json"
+      "!**/package-lock.json",
+      "!tests/fixtures/web"
     ]
   },
   "formatter": {

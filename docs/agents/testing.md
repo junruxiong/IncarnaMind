@@ -4,15 +4,17 @@ Read this before writing code or tests, whether you are a person or a coding age
 
 **The bar:** a change is done when its pull request's checks are green on GitHub, not when the tests pass on your computer. CI runs on clean machines that are slower than yours and have a different screen. A test that passes only on your computer is a broken test.
 
-CI (`.github/workflows/ci.yml`) runs three checks on every push and pull request:
+CI (`.github/workflows/ci.yml`) runs three checks on every pull request (a push to `main` runs the first only: the smoke test passed on the pull request, which was up to date with `main`):
 
 | Check | Where | What it runs |
 |---|---|---|
 | Typecheck, lint and unit tests | Ubuntu | `npm ci`, `npm run typecheck`, `npm run lint`, `npm test` |
-| Electron smoke test (macOS) | macOS | `npm ci`, `npm run test:smoke`: builds the app and runs every spec in `e2e/` |
+| Electron smoke test (Linux) | Ubuntu | `npm ci`, then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/` |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`) |
 
 `main` must stay green. A pull request is merged only when all three pass and it is up to date with `main`. If `main` goes red, fixing it comes before new work.
+
+Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`. Until branch protection requires the Linux check, the macOS one also runs on each pull request.
 
 ## Before you open a pull request
 
@@ -25,13 +27,13 @@ CI (`.github/workflows/ci.yml`) runs three checks on every push and pull request
 ## After you open it
 
 - Watch the checks until they finish: `gh pr checks <number> --watch`. Don't report the work as done, or ask for a merge, while a check is red or still running.
-- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the Playwright traces uploaded as the `smoke-test-results` artifact. Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
+- When a check fails, read why: `gh run view <run id> --log-failed`, and for the smoke test, the Playwright traces uploaded as the `smoke-test-results-linux` artifact (`smoke-test-results-macos` from the nightly run). Fix it in this pull request, whether or not your change caused it, and say which in the pull request.
 - "Flaky" is a claim that needs evidence: it failed, then passed on a rerun with nothing changed, and you can say what timing it depends on. Then fix the test. Don't hide it with more retries, longer timeouts or a skip.
 
 ## Tests that pass on any machine
 
 - **Launch through `launchApp` in `e2e/app.ts`.** It gives each test a temporary data folder and home folder, test hooks, the fake embedding model and, with `fakeChat`, the scripted chat model. No test uses the network, an API key or the User's own files.
-- **Set the window size the test needs,** with `setWindowSize` in `e2e/app.ts`. Never depend on the screen's size, the display's scale, the window being in front, or the computer's fonts and language. CI's macOS screen is not yours.
+- **Set the window size the test needs,** with `setWindowSize` in `e2e/app.ts`. Never depend on the screen's size, the display's scale, the window being in front, or the computer's fonts and language. CI's screens, a virtual one on Linux and a small one on macOS, are not yours.
 - **Assert relations, not exact pixels.** For example, "the controls sit under the text", "it wraps by word", or "it fits inside the card". Exact sizes are for what `DESIGN.md` fixes, such as a 44px band.
 - **Wait for a state, not a time.** Use `expect(locator).toBeVisible()`, a test id or a value from the bridge, never `waitForTimeout` in new tests.
 - **Drive the app like a person.** Move the mouse to an element before clicking or dragging it (as `slideToHandle`, `dragBy` and `dragBlock` in `e2e/app.ts` do), and use the keyboard where a person would. A helper needed in a second spec moves into `e2e/app.ts` rather than being copied.
@@ -39,6 +41,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every push and pull request
 - **Make each test stand alone.** It must pass on its own and in any order, and it cleans up what it made.
 - **Unit tests run in plain Node.** They must not need the Electron binary (CI doesn't download it) or a model download.
 - **Write paths and text that work on every platform.** Use `path.join`, never assume `/` or a case-insensitive file system, and give the Chinese strings the same tests as the English ones.
+- **Write each spec for Linux and macOS.** Pull requests run the smoke test on Linux; macOS runs it each night. Press shortcuts with `ControlOrMeta+…`, never `Meta+…`, and expect a shortcut's label in either form (`⌘J` or `Ctrl+J`). A spec for something only macOS has, such as the traffic lights or full screen, skips elsewhere with `test.skip(process.platform !== "darwin", "<why>")`, and the nightly run covers it.
 
 ## Trying AI features by hand
 

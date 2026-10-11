@@ -7,6 +7,7 @@ import {
   launchApp,
   newMind as newMindFromMenu,
   removeDataFolder,
+  setWindowSize,
 } from "./app";
 
 /*
@@ -326,8 +327,7 @@ test("a new Mind's title has the focus, so typing names it instead of making mor
 test("tabs are 220px while there is room, the shown one keeps 132px as they shrink, and a mouse wheel scrolls the strip to tabs out of sight", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 800));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(1280);
+  await setWindowSize(app, window, 1280, 800);
   for (const name of ["Alpha notes", "Beta research", "Gamma draft"]) {
     await newMindFromMenu(window);
     await expect(window.getByTestId("mind-title")).toBeFocused();

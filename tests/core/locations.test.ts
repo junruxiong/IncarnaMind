@@ -9,6 +9,8 @@ import { describe, expect, test } from "vitest";
 import { checkCitation } from "../../src/core/answers/citations";
 import { extractUnits } from "../../src/core/documents/formats";
 import { lineUnits } from "../../src/core/documents/formats/text";
+import { webUnits } from "../../src/core/documents/formats/web";
+import { snapshotOf } from "../../src/core/documents/web/snapshot";
 import {
   englishLocation,
   locationOf,
@@ -205,6 +207,61 @@ describe("The check of a quote of a Word comment (#76)", () => {
     expect(resolve("§ Costs (comment by Reviewer)")).toEqual({ from: 2, to: 2 });
     expect(resolve("§ Costs, comment")).toEqual({ from: 2, to: 2 });
     expect(resolve("§ 运营数据，王丽华 的批注")).toEqual({ from: 3, to: 3 });
+  });
+});
+
+describe("The check of a quote in a web page's sections (#261)", () => {
+  const ARTICLE = webUnits(
+    snapshotOf(
+      readFileSync(new URL("../fixtures/web/article.html", import.meta.url), "utf8"),
+      "https://encyclopedia.example/wiki/Tea",
+      "https://encyclopedia.example/wiki/Tea",
+    ).xhtml,
+  );
+  const locationIn = (from: number, quote: string) => {
+    const cited = units(ARTICLE, from);
+    return locationOf(cited, quoteInUnits(cited, quote));
+  };
+
+  test("finds it in its section, and names the section and the paragraphs it covers", () => {
+    const quote = "In the early 17th century, a ship of the Dutch East India Company";
+    expect(check(ARTICLE, 2, 2, quote)).toEqual(FOUND);
+    expect(locationIn(2, quote)).toEqual({
+      kind: "section",
+      heading: "History",
+      paragraphs: { from: 2, to: 2 },
+    });
+    const across =
+      "brought the first green tea leaves to Amsterdam from China. Tea bushes are pruned";
+    expect(englishLocation(locationIn(2, across) as never)).toBe("§ History, ¶\u00a02–3");
+    expect(locationIn(1, "After plain water, tea is the most widely consumed drink")).toEqual({
+      kind: "section",
+      heading: null,
+      paragraphs: { from: 1, to: 1 },
+    });
+    // The heading itself is no paragraph.
+    expect(locationIn(2, "History")).toEqual({ kind: "section", heading: "History" });
+  });
+
+  test("doesn't find it in another section, or reworded", () => {
+    expect(check(ARTICLE, 1, 1, "Tea was first introduced to Portuguese priests")).toEqual(
+      NOT_FOUND,
+    );
+    expect(check(ARTICLE, 2, 2, "Tea was first brought to Portuguese priests")).toEqual(NOT_FOUND);
+  });
+
+  test("a model's Location with a paragraph names its section", () => {
+    expect(parseRequestedLocation("§ History, ¶ 3")).toEqual({
+      kind: "section",
+      heading: "History",
+    });
+    expect(parseRequestedLocation("§ 唐代的茶，第 2 段")).toEqual({
+      kind: "section",
+      heading: "唐代的茶",
+    });
+    expect(resolveRequested(parseRequestedLocation("§ History, ¶¶ 2–3") as never, ARTICLE)).toEqual(
+      { from: 2, to: 2 },
+    );
   });
 });
 
