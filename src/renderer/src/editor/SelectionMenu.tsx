@@ -11,8 +11,10 @@ import {
   useState,
 } from "react";
 import type { MessageKey } from "../../../shared/i18n";
+import { shortcutLabel } from "../commands/keymap";
 import { ChevronIcon } from "../components/icons";
 import { useT } from "../i18n";
+import { footnotePlace, insertFootnote } from "./footnoteSchema";
 import { Popover } from "./Popover";
 import {
   asOwnUndoStep,
@@ -163,6 +165,8 @@ export function SelectionMenu({
       turn: currentTurnInto(current).label,
       // A formula replaces text in a Note only: not in a Question or an Answer.
       oneLine: inOneTextblock(current) && canTurnInto(current),
+      // A footnote goes after the selection, in text: not in a Question or code.
+      footnote: footnotePlace(current.state) !== null,
     }),
   });
 
@@ -391,6 +395,24 @@ export function SelectionMenu({
             className="selection-format"
           >
             <span aria-hidden="true">∑</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            aria-disabled={!state.footnote}
+            data-testid="format-footnote"
+            title={`${t("editor.format.footnote")} (${shortcutLabel("footnote.insert")})`}
+            aria-label={t("editor.format.footnote")}
+            onMouseDown={keepSelection}
+            onClick={() => {
+              // After the selection, as Word and Google Docs put one, and open to be written.
+              if (state.footnote) act(() => insertFootnote(editor));
+            }}
+            className="selection-format"
+          >
+            <span aria-hidden="true" className="format-footnote">
+              a<sup>1</sup>
+            </span>
           </button>
           {MARKS.slice(5).map((each) => (
             <FormatButton
