@@ -13,6 +13,7 @@ import {
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
+import { isPlanLimit } from "../providers/chatgpt/errors";
 import { normalizeBaseUrl, serviceForUrl } from "../providers/kinds";
 import { classifyProviderError } from "../providers/providerErrors";
 import { isChatModelChoice, type SettingsStore } from "../settings";
@@ -30,7 +31,6 @@ import {
   ROUTING_PAGES,
 } from "./excerpt";
 import type { DocumentPageImage } from "./pdfImages";
-import { isPlanLimit } from "./planPace";
 import type {
   AssignmentChange,
   ClassificationModel,
