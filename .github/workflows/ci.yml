@@ -38,6 +38,10 @@ jobs:
 
   smoke:
     name: Electron smoke test (macOS)
+    # A pull request merges only when it is up to date with main and this passed, so the merge
+    # commit's tree is the one already tested. Running it again on main only takes a macOS
+    # runner from the pull requests waiting for one.
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7

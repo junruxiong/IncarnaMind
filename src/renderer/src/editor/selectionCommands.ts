@@ -1,4 +1,6 @@
 import type { Editor } from "@tiptap/core";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import { NOTE_BLOCK_TYPES } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
@@ -42,7 +44,66 @@ const BLOCK_KINDS: readonly TurnInto[] = [
     active: (editor) => editor.isActive("blockquote"),
     run: (editor) => fresh(editor).setBlockquote().run(),
   },
+  {
+    id: "table",
+    label: "editor.slash.table",
+    active: (editor) => editor.isActive("table"),
+    run: (editor) => turnIntoTable(editor),
+  },
 ];
+
+/** A line's inline content split into cells at its tabs, its marks and Citations kept. */
+function cellsOf(line: Fragment): Fragment[] {
+  const cells: ProseMirrorNode[][] = [[]];
+  line.forEach((node) => {
+    const parts = node.isText ? (node.text ?? "").split("\t") : [null];
+    parts.forEach((part, index) => {
+      if (index > 0) cells.push([]);
+      const cell = cells[cells.length - 1] as ProseMirrorNode[];
+      if (part === null) cell.push(node);
+      else if (part) cell.push(node.type.schema.text(part, node.marks));
+    });
+  });
+  return cells.map((nodes) => Fragment.fromArray(nodes));
+}
+
+/**
+ * Each line of the Blocks the selection touches becomes a row, cut into cells
+ * at tabs, as text copied from a sheet has them. No heading row: whether the
+ * first line is one is the User's call, as in Word's Convert Text to Table.
+ */
+function turnIntoTable(editor: Editor): boolean {
+  const { doc, schema, selection } = editor.state;
+  const { $from, $to } = selection;
+  if ($from.depth === 0 || $to.depth === 0) return false;
+  const from = $from.before(1);
+  const to = $to.after(1);
+  const lines: Fragment[][] = [];
+  doc.nodesBetween(from, to, (node) => {
+    if (!node.isTextblock) return true;
+    const texts = node.type.spec.code
+      ? node.textContent.split("\n").map((line) => Fragment.from(line ? schema.text(line) : null))
+      : [node.content];
+    for (const text of texts) lines.push(cellsOf(text));
+    return false;
+  });
+  const { table, tableRow, tableCell, paragraph } = schema.nodes;
+  if (lines.length === 0 || !table || !tableRow || !tableCell || !paragraph) return false;
+  const columns = Math.max(...lines.map((cells) => cells.length));
+  const rows = lines.map((cells) =>
+    tableRow.create(
+      null,
+      Array.from({ length: columns }, (_, column) =>
+        tableCell.create(null, paragraph.create(null, cells[column] ?? Fragment.empty)),
+      ),
+    ),
+  );
+  return editor.commands.command(({ tr }) => {
+    tr.replaceWith(from, to, table.create(null, rows));
+    tr.setSelection(TextSelection.near(tr.doc.resolve(from + 1)));
+    return true;
+  });
+}
 
 const TEXT: TurnInto = {
   id: "text",
@@ -57,11 +118,11 @@ export const TURN_INTO: readonly TurnInto[] = [TEXT, ...BLOCK_KINDS];
 export const currentTurnInto = (editor: Editor): TurnInto =>
   BLOCK_KINDS.find((kind) => kind.active(editor)) ?? TEXT;
 
-const NOT_TURNED: readonly string[] = ["codeBlock", "blockMath"];
+const NOT_TURNED: readonly string[] = ["codeBlock", "blockMath", "table"];
 
 /**
  * Whether the selection lies in Notes of text: Questions and Answers are not
- * turned into anything else, and neither are code blocks and formulas.
+ * turned into anything else, and neither are code blocks, formulas and tables.
  */
 export function canTurnInto(editor: Editor): boolean {
   const { doc, selection } = editor.state;

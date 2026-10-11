@@ -14,8 +14,17 @@
  */
 
 import { deflateRawSync } from "node:zlib";
+import type { TableAlign } from "../../shared/markdownTables";
 import { writeZip } from "../documents/formats/zip";
-import type { Block, Footnote, Image, Inline, Marks, TableCell } from "../mindText";
+import {
+  type Block,
+  type Footnote,
+  type Image,
+  type Inline,
+  type Marks,
+  type TableCell,
+  tableLayout,
+} from "../mindText";
 import { latexToOmml, MATH_NAMESPACE } from "./math";
 import {
   escapeXml,
@@ -148,6 +157,8 @@ interface Context {
   bold: boolean;
   /** The width available, in twips. */
   width: number;
+  /** How their paragraphs are aligned, e.g. in a table's cell; null: as the text flows. */
+  align: TableAlign;
 }
 
 interface List {
@@ -179,6 +190,7 @@ class DocxWriter {
       listDepth: 0,
       bold: false,
       width: this.textWidth,
+      align: null,
     });
     // The body's last element before its section properties must be a paragraph.
     return xml.endsWith("</w:p>") ? xml : `${xml}<w:p/>`;
@@ -199,10 +211,13 @@ class DocxWriter {
     const { indent } = context;
     switch (block.kind) {
       case "paragraph":
-        return paragraph({ style: context.style, indent }, this.inline(block.content, context));
+        return paragraph(
+          { style: context.style, indent, align: context.align },
+          this.inline(block.content, context),
+        );
       case "heading":
         return paragraph(
-          { style: `Heading${block.level}`, indent },
+          { style: `Heading${block.level}`, indent, align: context.align },
           this.inline(block.content, context),
         );
       case "question":
@@ -270,41 +285,55 @@ class DocxWriter {
     return xml;
   }
 
+  /**
+   * A Word table on an even grid. A cell over several rows is merged down
+   * (`w:vMerge`): it starts in its first row and continues, empty, in the
+   * others, as Word writes one.
+   */
   private table(rows: readonly TableCell[][], context: Context): string {
     if (rows.length === 0) return "";
-    const columns = Math.max(
-      1,
-      ...rows.map((row) => row.reduce((count, cell) => count + cell.colspan, 0)),
-    );
+    const layout = tableLayout(rows);
+    const { columns } = layout;
     const column = Math.floor((context.width - context.indent) / columns);
-    const cell = (content: string, span: number, header: boolean) =>
-      `<w:tc><w:tcPr><w:tcW w:w="${column * span}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ""}${header ? '<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/>' : ""}</w:tcPr>${content}</w:tc>`;
+    const cell = (content: string, span: number, header: boolean, merge: string) =>
+      `<w:tc><w:tcPr><w:tcW w:w="${column * span}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ""}${merge}${header ? '<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/>' : ""}</w:tcPr>${content}</w:tc>`;
 
     let xml = `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="${column * columns}" w:type="dxa"/>${context.indent ? `<w:tblInd w:w="${context.indent}" w:type="dxa"/>` : ""}</w:tblPr>`;
     xml += `<w:tblGrid>${`<w:gridCol w:w="${column}"/>`.repeat(columns)}</w:tblGrid>`;
-    for (const row of rows) {
-      const header = row.every((each) => each.header);
+    layout.rows.forEach((slots, index) => {
+      const header = (rows[index] as TableCell[]).every((each) => each.header);
       xml += `<w:tr>${header ? "<w:trPr><w:tblHeader/></w:trPr>" : ""}`;
       let filled = 0;
-      for (const each of row) {
-        const content = this.blocks(each.content, {
-          indent: 0,
-          style: null,
-          listDepth: 0,
-          bold: each.header,
-          width: column * each.colspan,
-        });
+      for (const { cell: each, continued } of slots) {
+        if (!each) {
+          xml += cell("<w:p/>", 1, false, "");
+          filled++;
+          continue;
+        }
+        const merge =
+          each.rowspan > 1 ? (continued ? "<w:vMerge/>" : '<w:vMerge w:val="restart"/>') : "";
+        const content = continued
+          ? "<w:p/>"
+          : this.blocks(each.content, {
+              indent: 0,
+              style: null,
+              listDepth: 0,
+              bold: each.header,
+              width: column * each.colspan,
+              align: each.align,
+            });
         // A cell ends with a paragraph.
         xml += cell(
           content.endsWith("</w:p>") ? content : `${content}<w:p/>`,
           each.colspan,
           each.header,
+          merge,
         );
         filled += each.colspan;
       }
-      for (; filled < columns; filled++) xml += cell("<w:p/>", 1, false);
+      for (; filled < columns; filled++) xml += cell("<w:p/>", 1, false, "");
       xml += "</w:tr>";
-    }
+    });
     return `${xml}</w:tbl>`;
   }
 
@@ -410,10 +439,11 @@ interface ParagraphProperties {
   indent?: number;
   /** How far the first line hangs left of `indent`, in twips. */
   hanging?: number;
+  align?: TableAlign;
 }
 
 function paragraph(properties: ParagraphProperties, content: string): string {
-  const { style, numbering, bottomBorder, spacingAfter, indent, hanging } = properties;
+  const { style, numbering, bottomBorder, spacingAfter, indent, hanging, align } = properties;
   // In the order the schema requires.
   const pPr = [
     style ? `<w:pStyle w:val="${style}"/>` : "",
@@ -425,6 +455,7 @@ function paragraph(properties: ParagraphProperties, content: string): string {
       : "",
     spacingAfter !== undefined ? `<w:spacing w:after="${spacingAfter}"/>` : "",
     indent ? `<w:ind w:left="${indent}"${hanging ? ` w:hanging="${hanging}"` : ""}/>` : "",
+    align ? `<w:jc w:val="${align}"/>` : "",
   ].join("");
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${content}</w:p>`;
 }

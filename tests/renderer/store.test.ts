@@ -225,6 +225,7 @@ describe("undoing a move", () => {
       folderId: "h",
       minds: [{ id: "m", from: null }],
       documents: [{ id: "a", from: "g", previous: filed }],
+      conversations: [],
     });
 
     await useAppStore.getState().moveToFolder({ mindIds: ["m"], documentIds: ["a"] }, "h");
@@ -233,6 +234,7 @@ describe("undoing a move", () => {
     expect(method("moveToFolder")).toHaveBeenLastCalledWith({
       mindIds: ["m"],
       documentIds: [],
+      conversationIds: [],
       folderId: null,
     });
     expect(method("restoreAssignment")).toHaveBeenCalledWith("a", filed);
