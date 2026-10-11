@@ -705,7 +705,6 @@ export const zhCN = {
   "settings.title": "设置",
   "settings.pages.models": "模型",
   "settings.pages.search": "搜索",
-  "settings.pages.tools": "工具",
   "settings.language": "界面语言",
   "settings.language.system": "跟随系统",
   "settings.language.en": "English",
