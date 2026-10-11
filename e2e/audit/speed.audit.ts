@@ -702,7 +702,9 @@ test("B2b typing with 500 changes from Edit with AI waiting in the Mind (#93)", 
       [25, 49, 500],
     ] as const) {
       // In the middle of the view: the bar of changes at the Mind's top covers its first lines.
-      await paragraphs.nth(first).evaluate((element) => element.scrollIntoView({ block: "center" }));
+      await paragraphs
+        .nth(first)
+        .evaluate((element) => element.scrollIntoView({ block: "center" }));
       await click(window, paragraphs.nth(first), { x: 1, y: 12 });
       await paragraphs.nth(end).evaluate((element) => element.scrollIntoView({ block: "center" }));
       const box = await paragraphs.nth(end).boundingBox();

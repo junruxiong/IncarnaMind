@@ -20,6 +20,7 @@ import {
   type ProposalAttribute,
   type ProposalRef,
   type ProposalRequest,
+  type RecordAiUseInput,
 } from "../core/api";
 
 const isText = (value: unknown): value is string => typeof value === "string" && value !== "";
@@ -180,4 +181,31 @@ export function proposalRequestOf(doc: Y.Doc, request: string): ProposalRequest 
   return source === "edit-with-ai" && isText(providerId) && isText(modelId) && isText(createdAt)
     ? { source, providerId, modelId, createdAt }
     : null;
+}
+
+/**
+ * The record of AI use's entries (#292) for Proposals just accepted: one per
+ * Proposal that added text which stays, with the model that wrote it and the
+ * Blocks holding it. A Proposal that only removed words wrote nothing.
+ */
+export function aiUseOfAccepted(
+  doc: Y.Doc,
+  mindId: string,
+  accepted: readonly ResolvedProposal[],
+  occurredAt: string,
+): RecordAiUseInput[] {
+  return accepted
+    .filter((proposal) => proposal.characters > 0)
+    .map((proposal) => {
+      const made = proposalRequestOf(doc, proposal.request);
+      return {
+        mindId,
+        kind: "edit-with-ai-accepted",
+        providerId: made?.providerId ?? null,
+        modelId: made?.modelId ?? null,
+        characters: proposal.characters,
+        blockIds: proposal.blockIds,
+        occurredAt,
+      };
+    });
 }

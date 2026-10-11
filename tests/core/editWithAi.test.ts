@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
@@ -11,7 +12,12 @@ import {
   MIND_PROPOSAL_REQUESTS_FIELD,
   PROPOSAL_ATTRIBUTE,
 } from "../../src/core";
-import { pendingProposals, proposalRequestOf, resolveProposals } from "../../src/shared/proposals";
+import {
+  aiUseOfAccepted,
+  pendingProposals,
+  proposalRequestOf,
+  resolveProposals,
+} from "../../src/shared/proposals";
 import { setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, startCore } from "../helpers/core";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
@@ -483,27 +489,65 @@ describe("Edit with AI", () => {
     ).toEqual({ kind: "has-proposals" });
   });
 
-  test("a request can be stopped", async () => {
+  test("a request can be stopped, and one still waiting when the app quits writes nothing", async () => {
+    let asked = () => {};
+    const hanging = new MockLanguageModelV4({
+      doGenerate: async ({ prompt, abortSignal }) => {
+        if (textOf(prompt, "user").includes("<passage>")) asked();
+        return new Promise((_resolve, reject) => {
+          abortSignal?.addEventListener("abort", () =>
+            reject(new DOMException("The request was aborted.", "AbortError")),
+          );
+        });
+      },
+    });
+    const { core, mind, client } = await setUp(hanging);
+    const note = paragraph(text("A paragraph to improve."));
+    writeMind(client, [note]);
+    await client.settled();
+
+    const input = wholeParagraph(client, mind.id, note.attrs.id, "improve");
+    const waiting = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    const editing = core.editWithAi(input);
+    await waiting;
+    await core.cancelEdit(input.requestId);
+    expect(await editing).toEqual({ kind: "cancelled" });
+    expect(shown(client)).toEqual(["A paragraph to improve."]);
+
+    // Quitting halfway: the request stops, and nothing is left half written.
+    const again = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    const quitting = core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    await again;
+    core.close();
+    expect(await quitting).toEqual({ kind: "cancelled" });
+    expect(pendingProposals(client.blocks)).toEqual([]);
+  });
+
+  test("a model that fails says why, and nothing is written", async () => {
     const { core, mind, client } = await setUp(
       new MockLanguageModelV4({
-        doGenerate: async ({ abortSignal }) =>
-          new Promise((_resolve, reject) => {
-            abortSignal?.addEventListener("abort", () =>
-              reject(new DOMException("The request was aborted.", "AbortError")),
-            );
-          }),
+        doGenerate: async () => {
+          throw new APICallError({
+            message: "Too many requests",
+            url: "http://127.0.0.1:11434/v1/chat/completions",
+            requestBodyValues: {},
+            statusCode: 429,
+            isRetryable: false,
+          });
+        },
       }),
     );
     const note = paragraph(text("A paragraph to improve."));
     writeMind(client, [note]);
     await client.settled();
 
-    const input = wholeParagraph(client, mind.id, note.attrs.id, "improve");
-    const editing = core.editWithAi(input);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await core.cancelEdit(input.requestId);
-
-    expect(await editing).toEqual({ kind: "cancelled" });
+    expect(
+      await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve")),
+    ).toEqual({ kind: "failed", error: expect.objectContaining({ kind: "rate-limit" }) });
     expect(shown(client)).toEqual(["A paragraph to improve."]);
   });
 
@@ -579,6 +623,38 @@ describe("Edit with AI", () => {
             .join(""),
         ),
     ).toEqual(expected);
+  });
+
+  test("an accepted change goes into the record of AI use with the model that wrote it; a rejected one, or one that only removes words, doesn't", async () => {
+    const { core, mind, client } = await setUp(
+      editingModel(() => "The tides are strong and quite regular."),
+    );
+    const note = paragraph(text("The tides are very strong and regular."));
+    writeMind(client, [note]);
+    await client.settled();
+    await core.editWithAi(wholeParagraph(client, mind.id, note.attrs.id, "improve"));
+    expect(shown(client)).toEqual(["The tides are [-very -]strong and {+quite +}regular."]);
+
+    // As the editor does: accept, send the change, then record what was accepted.
+    const [removing, adding] = pendingProposals(client.blocks).map((proposal) => proposal.id);
+    const accepted = await resolve(client, "accept", (id) => id === adding);
+    await resolve(client, "reject", (id) => id === removing);
+    const entries = aiUseOfAccepted(client.doc, mind.id, accepted, "2026-10-11T09:00:00.000Z");
+    await core.recordAiUse(entries);
+
+    expect(await core.listAiUse(mind.id)).toEqual([
+      expect.objectContaining({
+        kind: "edit-with-ai-accepted",
+        outcome: "kept",
+        providerId: expect.any(String),
+        modelId: "local-model",
+        characters: "quite ".length,
+        blockIds: [note.attrs.id],
+      }),
+    ]);
+    // Removing words writes nothing of the AI's.
+    const removed = { id: removing ?? "", request: adding ?? "", characters: 0, blockIds: [] };
+    expect(aiUseOfAccepted(client.doc, mind.id, [removed], "")).toEqual([]);
   });
 
   test("an accept is one step of Undo, which brings the Proposal back", async () => {

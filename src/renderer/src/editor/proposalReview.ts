@@ -396,6 +396,13 @@ export function clearHovered(editor: Editor): void {
   });
 }
 
+/** The editor's copy of the Mind's Yjs document, and its Blocks, once it is bound. */
+const bindingOf = (editor: Editor): { doc: Y.Doc; type: Y.XmlFragment } | undefined =>
+  ySyncPluginKey.getState(editor.state)?.binding;
+
+/** The editor's copy of the Mind's Yjs document, or null before it is bound. */
+export const editorDoc = (editor: Editor): Y.Doc | null => bindingOf(editor)?.doc ?? null;
+
 /**
  * Accepts or rejects Proposals in the editor's copy of the Mind, as one step
  * of its Undo (⌘Z takes it back), the same way the core does anywhere
@@ -406,9 +413,7 @@ export function resolveInEditor(
   ids: ReadonlySet<string>,
   outcome: "accept" | "reject",
 ): ResolvedProposal[] {
-  const binding: { doc: Y.Doc; type: Y.XmlFragment } | undefined = ySyncPluginKey.getState(
-    editor.state,
-  )?.binding;
+  const binding = bindingOf(editor);
   if (!binding || ids.size === 0) return [];
   const undo: { stopCapturing(): void } | undefined = yUndoPluginKey.getState(
     editor.state,
