@@ -105,6 +105,12 @@ export interface CatalogProvider {
   dataUse: DataUse;
   /** Short notes shown under the key field. */
   notes?: readonly Localized[];
+  /**
+   * Which of the provider's subscription plans include credits a key can
+   * spend, in the provider's own words, and the page that says so: shown
+   * under the key field. Left out where no plan does.
+   */
+  planCredits?: Localized & { url: string };
   /** When a person last checked this entry against the provider's own pages (YYYY-MM-DD). */
   checked: string;
 }
