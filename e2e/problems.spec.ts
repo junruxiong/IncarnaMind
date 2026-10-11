@@ -1,4 +1,4 @@
-import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -10,13 +10,13 @@ import {
   dismissChatSetup,
   documentIdOf,
   interceptOpenDialog,
-  interceptSaveDialog,
   interceptShowItemInFolder,
   launchApp,
   newMind,
   openDocumentAt,
   pathsShown,
   removeDataFolder,
+  useOutputLocation,
 } from "./app";
 
 /**
@@ -277,7 +277,7 @@ test("a Document that is gone says so in the viewer and in Chinese; one that can
   await app.close();
 });
 
-test("an export that can't be saved says why under the format, and Choose another saves it elsewhere; then Saved … shows it in the file manager", async () => {
+test("an export that can't be saved says why under the format, and Change output location… saves it elsewhere; then Saved … shows it in the file manager", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
   await newMind(window);
@@ -288,7 +288,7 @@ test("an export that can't be saved says why under the format, and Choose anothe
   const readOnly = join(sources, "readonly");
   await mkdir(readOnly);
   await chmod(readOnly, 0o555);
-  await interceptSaveDialog(app, join(readOnly, "Tides.docx"));
+  await useOutputLocation(window, readOnly);
   await interceptShowItemInFolder(app);
   await window.getByTestId("export-mind").click();
   const dialog = window.getByTestId("export-dialog");
@@ -296,20 +296,21 @@ test("an export that can't be saved says why under the format, and Choose anothe
 
   // The folder is read-only: the line says so, with its one action, and nothing pops up over the dialog.
   const problem = dialog.getByTestId("export-problem");
-  await expect(problem).toHaveText("Couldn't save: the folder is read-only · Choose another");
+  await expect(problem).toHaveText(
+    "Couldn't save: the folder is read-only · Change output location…",
+  );
   await expect(problem).toHaveAttribute("role", "alert");
   await expect(problem.getByRole("button")).toHaveCount(1);
   await expect(problem).toHaveCSS("color", "rgb(101, 107, 116)");
   await expect(window.getByRole("alert")).toHaveCount(1);
   await screenshot(dialog, "export-cant-save-en");
 
-  // Choose another, by keyboard: asks where again, and saves there.
-  const target = join(sources, "Tides.docx");
-  await interceptSaveDialog(app, target);
+  // Change output location…, by keyboard: the folder picker, then saved there.
+  await interceptOpenDialog(app, sources);
   await dialog.getByRole("button", { name: "Cancel" }).focus();
   await window.keyboard.press("Shift+Tab");
-  await expect(dialog.getByTestId("export-choose-another")).toBeFocused();
-  await expect(dialog.getByTestId("export-choose-another")).toHaveCSS("outline-style", "solid");
+  await expect(dialog.getByTestId("export-change-location")).toBeFocused();
+  await expect(dialog.getByTestId("export-change-location")).toHaveCSS("outline-style", "solid");
   await window.keyboard.press("Enter");
   const done = dialog.getByTestId("export-done");
   await expect(done).toHaveText(/^Saved Tides\.docx · Show in (Finder|folder)$/);
@@ -320,18 +321,16 @@ test("an export that can't be saved says why under the format, and Choose anothe
   // Show in Finder is the line's action.
   await done.getByTestId("export-show").click();
   await expect(dialog).toBeHidden();
-  expect(await pathsShown(app)).toEqual([target]);
+  expect(await pathsShown(app)).toEqual([join(await realpath(sources), "Tides.docx")]);
 
-  // The same two lines in Chinese.
+  // The same two lines in Chinese; the file saved before stays, and this one takes the next name.
   await bridge(window).settings("zh-CN");
-  await chmod(readOnly, 0o555);
-  await interceptSaveDialog(app, join(readOnly, "Tides.docx"));
+  await useOutputLocation(window, readOnly);
   await window.getByTestId("export-mind").click();
   await dialog.getByTestId("export-save").click();
-  await expect(problem).toHaveText("无法保存：这个文件夹是只读的 · 另选位置");
+  await expect(problem).toHaveText("无法保存：这个文件夹是只读的 · 更改保存位置…");
   await screenshot(dialog, "export-cant-save-zh");
-  await interceptSaveDialog(app, join(sources, "Tides 2.docx"));
-  await dialog.getByTestId("export-choose-another").click();
+  await dialog.getByTestId("export-change-location").click();
   await expect(dialog.getByTestId("export-done")).toContainText("已保存“Tides 2.docx”");
   await screenshot(dialog, "export-saved-zh");
   await app.close();
