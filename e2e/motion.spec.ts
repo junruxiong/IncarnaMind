@@ -219,7 +219,9 @@ test("the Citation card grows from its Citation and goes back toward it", async 
   await motionSettled(window);
   await setMotionSpeed(window, 0.2);
 
-  await citation.click();
+  // Pointed at, its card shows over the Mind (a click would also open the page, which may come
+  // to the front in a narrow group and take the Mind, and its card, out of view).
+  await citation.hover();
   const card = window.getByTestId("citation-card");
   await expect(card).toBeVisible();
   const opening = await motionLook(card);
