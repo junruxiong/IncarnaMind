@@ -47,7 +47,7 @@ _Avoid_: chat (except in "New chat"), thread, session
 ### Documents
 
 **Document**:
-A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on, or a Web page. The file stays where the User keeps it; IncarnaMind keeps the text it read from it. The same file in two places is two Documents.
+A file on the User's computer, at its path, that IncarnaMind has indexed for Answers to draw on, or a Web page. A file stays where the User keeps it; IncarnaMind keeps the text it read from it. A Web page's snapshot is kept in IncarnaMind's data folder. The same file in two places is two Documents.
 _Avoid_: file, doc, source
 
 **Web page**:
