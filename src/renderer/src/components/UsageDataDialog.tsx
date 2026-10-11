@@ -34,7 +34,7 @@ const EXAMPLES: readonly MessageKey[] = [
  * The first run's question about usage data, shown once, only by a copy that
  * can send it. A release build asks, with an example of what is sent, and
  * sends nothing unless the User agrees ("Don't send" and Esc decline). A test
- * build (the alpha) says that it sends usage data, as testers agreed, with
+ * build (for invited testers) says that it sends usage data, as testers agreed, with
  * the switch to turn it off. Either way the choice is kept in Settings → Privacy.
  */
 export function UsageDataDialog() {

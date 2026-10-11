@@ -966,7 +966,7 @@ export const en = {
     "Anonymous events, only while this is on: which features are used and where people get stuck, under a random ID for this install. Never your Documents or their names, your Questions, Answers or anything you type.",
   "privacy.traffic.usage-data.toggle": "Send anonymous usage data",
   "privacy.usageData.tester":
-    "On unless you turn it off in this test version, as agreed when you joined the alpha.",
+    "On unless you turn it off in this test version, as agreed when you joined as a tester.",
   "privacy.usageData.localMode":
     "Off while “Keep everything on this computer” is on, in Settings → Search.",
   "privacy.usageData.details": "Every event and field",
@@ -978,7 +978,7 @@ export const en = {
     "IncarnaMind can send anonymous usage data, so we can see which features are used and where people get stuck. Nothing is sent unless you agree.",
   "usageData.dialog.tester.title": "This test version sends usage data",
   "usageData.dialog.tester.body":
-    "As agreed when you joined the alpha, this version sends anonymous usage data, so we can see which features are used and where people get stuck. You can turn it off here.",
+    "As agreed when you joined as a tester, this version sends anonymous usage data, so we can see which features are used and where people get stuck. You can turn it off here.",
   "usageData.dialog.example": "For example:",
   "usageData.example.question": "A Question was asked with a cloud model from Anthropic",
   "usageData.example.answer": "An Answer took 6 seconds and has 3 Citations, each quote found",
@@ -1358,6 +1358,14 @@ export const en = {
   "menu.minimize": "Minimize",
   "menu.zoom": "Zoom",
   "menu.front": "Bring All to Front",
+
+  "command.tab.new": "New Tab",
+  "command.tab.next": "Next Tab",
+  "command.tab.previous": "Previous Tab",
+  "command.tab.show": "Show Tab {number}",
+  "command.tab.showLast": "Show Last Tab",
+  "command.composer.focus": "Ask a Question",
+  "command.viewer.toggle": "Show or Hide the Document Viewer",
 
   "update.available.message": "IncarnaMind {version} is available",
   "update.available.detail":
