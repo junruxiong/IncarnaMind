@@ -89,7 +89,7 @@
   .viewer-meta {
     @apply shrink-0 px-1 text-[12px] leading-5 whitespace-nowrap text-ink-meta;
   }
-  @container viewer (width < 460px) {
+  @container viewer (width < 560px) {
     .viewer-meta {
       @apply sr-only;
     }
