@@ -10,6 +10,7 @@ import {
   launchApp,
   openDocumentTags,
   removeDataFolder,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -174,7 +175,7 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   await addDocuments(window, files);
   await window.getByTestId("open-document").first().click();
   await expect(window.getByTestId("viewer")).toBeVisible();
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 470));
+  await setWindowSize(app, window, 1000, 470);
   await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeLessThan(600);
 
   const last = window.getByTestId("document-list-item").last();

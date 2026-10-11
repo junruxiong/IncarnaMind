@@ -1,0 +1,50 @@
+name: Nightly
+
+# Checks that would slow every pull request, or need runners there are few of, run here: every
+# night on main, and by hand (workflow_dispatch). A failing night is fixed before new work, like
+# a red main. The rest of the scheduled runs planned in #331 (speed, soak, quitting halfway,
+# messy files, journeys, and a weekly Windows smoke test) join this file as more jobs.
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+  # TODO: a follow-up drops pull_request once branch protection on main requires
+  # "Electron smoke test (Linux)" (ci.yml) instead of "Electron smoke test (macOS)". Until
+  # then a pull request can't merge without this job, so it still runs on each one.
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # onnxruntime-node's install script downloads its CUDA libraries on Linux x64. The app runs
+  # the embedding model on the CPU, so skip them.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  # A newer push replaces a pull request's run; a night's run on main always finishes.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The whole smoke suite on macOS, including the specs only macOS has, such as the traffic
+  # lights in the title bar (e2e/titleBar.spec.ts) and full screen.
+  smoke-macos:
+    name: Electron smoke test (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run test:smoke
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-test-results-macos
+          path: test-results/
+          retention-days: 7

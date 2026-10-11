@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
+  acceptPlainTextKeys,
   addDocuments,
   closeSettings,
   createDataFolder,
@@ -87,6 +88,7 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await expect(form.getByLabel("to (%)")).toHaveValue("65");
   await form.getByRole("button", { name: "Test connection" }).click();
   await expect(form.getByTestId("connection-test")).toHaveText("Connected: the provider answered.");
+  await acceptPlainTextKeys(window, form);
   await form.getByRole("button", { name: "Use Jev for tagging" }).click();
   await expect(section).toContainText("TypeSafe Jev tags your Documents.");
   await expect(section).toContainText(`Server: ${jev.url}`);
