@@ -536,6 +536,33 @@ describe("Find sources: adding", () => {
     });
   });
 
+  test("a found paper deleted permanently has its copy removed at the next start, once", async () => {
+    const { core, dataDir, services } = await setUp();
+    answerConsent(core);
+    const result = found(await core.findSources({ query: "CRISPR off-target detection" }));
+    const { document } = await add(core, work(result.works, /^Improving the sensitivity/).key);
+    const path = document?.path ?? "";
+    await core.deleteDocument(document?.id ?? "");
+    await core.deletePermanently([{ kind: "document", id: document?.id ?? "" }]);
+    expect(await readdir(join(dataDir, "Sources"))).toHaveLength(1);
+    core.close();
+
+    const again = startCore(dataDir, { sourceProviders: services.providers });
+    await expect.poll(() => readdir(join(dataDir, "Sources"))).toEqual([]);
+    await expect
+      .poll(
+        () =>
+          queryDatabase<{ deleted_at: string | null }>(
+            dataDir,
+            "SELECT deleted_at FROM found_sources WHERE document_id = ?",
+            [document?.id ?? ""],
+          )[0]?.deleted_at,
+      )
+      .not.toBeNull();
+    expect(path.startsWith(await realpath(dataDir))).toBe(true);
+    again.close();
+  });
+
   test("a work not found this session can't be added: search again", async () => {
     const { core } = await setUp();
     expect(await core.addFoundSource({ key: "doi:10.1000/never-found" })).toMatchObject({
