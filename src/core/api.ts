@@ -4181,7 +4181,7 @@ export interface Meeting {
   audio: MeetingAudio;
   /** Why the latest audio couldn't be saved (e.g. the disk is full), until a part is saved again. */
   saveError: string | null;
-  /** Its Transcript, made on this computer (#136); null where this copy can't transcribe. */
+  /** Its Transcript, made on this computer (#136); null before it starts, or where this copy can't transcribe. */
   transcript: MeetingTranscript | null;
   createdAt: string;
   updatedAt: string;
@@ -4189,7 +4189,7 @@ export interface Meeting {
 
 /**
  * Where a Meeting's Transcript is (#136):
- * - "waiting": the Meeting hasn't recorded anything yet.
+ * - "waiting": nothing has been transcribed or is waiting to be: no audio has come yet.
  * - "preparing": the speech-to-text model is downloading or starting. The
  *   audio is kept meanwhile, and transcribed once it can be.
  * - "live": lines arrive a few seconds behind the Meeting.
