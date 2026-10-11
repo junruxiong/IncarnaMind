@@ -2,6 +2,7 @@ import { isMacOS } from "@tiptap/core";
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
 import type { ChatModelChoice, ChatProvider } from "../../../core/api";
+import { isCloudModelName } from "../../../core/providers/ollamaCloud";
 import type { MessageKey } from "../../../shared/i18n";
 import { mindModelOf, observeMindModel, setMindModel } from "../../../shared/mindModel";
 import { useAnswers } from "../answers";
@@ -12,17 +13,29 @@ import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
 
 /** Where a model runs, as the menu groups them (DESIGN.md, Composer › Model). */
-type ModelGroup = "keys" | "plan" | "local";
+type ModelGroup = "keys" | "plan" | "local" | "cloud";
 
-const GROUPS: readonly ModelGroup[] = ["keys", "plan", "local"];
+const GROUPS: readonly ModelGroup[] = ["keys", "plan", "local", "cloud"];
 
-const groupOf = (provider: ChatProvider): ModelGroup =>
-  provider.kind === "chatgpt" ? "plan" : provider.service === null ? "local" : "keys";
+/**
+ * `cloud`: the model runs on ollama.com though its provider, Ollama, is on this
+ * computer. The provider's own service says so only for the default model, so
+ * the model list's word comes first.
+ */
+const groupOf = (provider: ChatProvider, cloud: boolean): ModelGroup =>
+  provider.kind === "chatgpt"
+    ? "plan"
+    : cloud
+      ? "cloud"
+      : provider.service === null
+        ? "local"
+        : "keys";
 
 const GROUP_NAMES: Record<ModelGroup, MessageKey> = {
   keys: "composer.model.group.keys",
   plan: "composer.model.group.plan",
   local: "composer.model.group.local",
+  cloud: "composer.model.group.cloud",
 };
 
 /** What each group's models are like, on their second line. */
@@ -30,6 +43,7 @@ const HINTS: Record<ModelGroup, MessageKey> = {
   keys: "composer.model.hint.keys",
   plan: "composer.model.hint.plan",
   local: isMacOS() ? "composer.model.hint.localMac" : "composer.model.hint.local",
+  cloud: "composer.model.hint.cloud",
 };
 
 /** How a model is reached, after its name in the chip's tooltip. */
@@ -37,6 +51,7 @@ const VIA: Record<ModelGroup, MessageKey> = {
   keys: "composer.model.via.keys",
   plan: "composer.model.via.plan",
   local: isMacOS() ? "composer.model.via.localMac" : "composer.model.via.local",
+  cloud: "composer.model.via.cloud",
 };
 
 const same = (a: ChatModelChoice | null, b: ChatModelChoice | null) =>
@@ -65,6 +80,7 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   const chosen = useMindModel(doc);
   const defaultModel = useAppStore((state) => state.settings?.user.chatModel ?? null);
   const readiness = useAppStore((state) => state.chatReadiness);
+  const localMode = useAppStore((state) => state.embedding?.localOnly === true);
   const openSettings = useAppStore((state) => state.openSettings);
   const groups = useAnswers((state) => state.models);
   const loadModels = useAnswers((state) => state.loadModels);
@@ -84,7 +100,14 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
       ? readiness.provider
       : null);
   const provider = providerOf(current.providerId);
-  const via = provider ? t(VIA[groupOf(provider)]) : null;
+  const isCloud = (providerId: string, modelId: string) => {
+    const group = groups?.find((each) => each.provider.id === providerId);
+    // A model the provider doesn't list (a Mind's own choice) is cloud by its name, or as the provider says of its default.
+    return group?.models.includes(modelId)
+      ? group.cloud.includes(modelId)
+      : isCloudModelName(modelId) || (provider?.kind === "ollama" && provider.service !== null);
+  };
+  const via = provider ? t(VIA[groupOf(provider, isCloud(provider.id, current.modelId))]) : null;
   const title = via ? `${current.modelId} · ${via}` : current.modelId;
   const label = via
     ? t("composer.model.label", { model: current.modelId, via })
@@ -99,6 +122,12 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   // Each provider's models; the one in use is listed even if its provider didn't list it.
   const offered = (groups ?? []).map((group) => ({
     provider: group.provider,
+    cloud:
+      group.provider.id === current.providerId &&
+      !group.models.includes(current.modelId) &&
+      isCloud(group.provider.id, current.modelId)
+        ? [current.modelId, ...group.cloud]
+        : group.cloud,
     models:
       group.provider.id === current.providerId && !group.models.includes(current.modelId)
         ? [current.modelId, ...group.models]
@@ -132,9 +161,15 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
             <div className="model-menu-list">
               <p className="model-menu-intro">{t("composer.model.intro")}</p>
               {GROUPS.map((group) => {
-                const inGroup = offered.filter(
-                  (each) => groupOf(each.provider) === group && each.models.length > 0,
-                );
+                // A provider can sit in two groups: Ollama's local models and its cloud ones.
+                const inGroup = offered
+                  .map((each) => ({
+                    ...each,
+                    models: each.models.filter(
+                      (modelId) => groupOf(each.provider, each.cloud.includes(modelId)) === group,
+                    ),
+                  }))
+                  .filter((each) => each.models.length > 0);
                 if (inGroup.length === 0) return null;
                 return (
                   // biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold.
@@ -152,16 +187,22 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                       models.map((modelId) => {
                         const choice = { providerId: each.id, modelId };
                         const checked = same(choice, current);
+                        // Local mode: only a model on this computer can be asked.
+                        const unavailable = localMode && group !== "local";
                         return (
                           <button
                             key={`${each.id}\n${modelId}`}
                             type="button"
                             role="menuitemradio"
                             aria-checked={checked}
+                            aria-disabled={unavailable || undefined}
                             data-testid="composer-model-option"
                             data-model={modelId}
                             data-provider={each.id}
-                            onClick={() => choose(choice)}
+                            data-unavailable={unavailable || undefined}
+                            onClick={() => {
+                              if (!unavailable) choose(choice);
+                            }}
                             className="model-menu-item"
                           >
                             <CheckLineIcon
@@ -170,7 +211,9 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                             />
                             <span className="model-menu-name">
                               <span className="truncate">{modelId}</span>
-                              <span className="model-menu-hint">{t(HINTS[group])}</span>
+                              <span className="model-menu-hint">
+                                {unavailable ? t("composer.model.localModeOff") : t(HINTS[group])}
+                              </span>
                             </span>
                             <span className="model-menu-provider">{providerName(each, t)}</span>
                           </button>

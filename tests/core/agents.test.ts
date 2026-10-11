@@ -7,6 +7,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Core } from "../../src/core";
+import { agentSocketPath } from "../../src/core/agents";
 import { estimateTokens } from "../../src/core/answers/context";
 import {
   buildAgentShim,
@@ -98,7 +99,10 @@ describe("outside agents", () => {
   it("are off by default: nothing listens, and the shim says IncarnaMind isn't reachable", async () => {
     const { core } = await startAgentsCore(replyingModel());
     expect(await core.getAgents()).toEqual({ enabled: false, paused: null, pairings: [] });
-    const { launch } = await core.connectAgent({ name: "Codex" });
+    const { launch, pairing } = await core.connectAgent({ name: "Codex", client: "codex" });
+    expect(pairing).toMatchObject({ name: "Codex", client: "codex", folderIds: [] });
+    await expect(core.connectAgent({ name: "Codex" })).rejects.toThrow(/already connected/);
+    await expect(core.connectAgent({ name: "Odd", client: "../codex" })).rejects.toThrow();
 
     await expect(connectLegacyAgent(launch)).rejects.toThrow(/IncarnaMind isn't open/);
   });
@@ -126,7 +130,12 @@ describe("outside agents", () => {
       await agent.callTool({
         name: "check_citations",
         arguments: {
-          text: `Spring tides come at new and full moon ${first?.cite}. The moon is made of cheese and nobody cites it.`,
+          text: [
+            "## When tides are high",
+            `Spring tides come at new and full moon ${first?.cite}. The moon is made of cheese and nobody cites it.`,
+            "| Tide type | When it comes in the month |",
+            "| --- | --- |",
+          ].join("\n"),
         },
       }),
     );
@@ -238,22 +247,50 @@ describe("outside agents", () => {
 
     await core.setLocalOnly(true);
     expect((await core.getAgents()).paused).toBe("local-mode");
-    const paused = await agent.callTool({ name: "search", arguments: { query: "tides" } });
-    expect(paused.isError).toBe(true);
-    expect(resultText(paused)).toMatch(/Connected agents are paused/);
-    const ask = await agent.callTool({ name: "ask", arguments: { question: "When?" } });
-    expect(resultText(ask)).toMatch(/Connected agents are paused/);
+    // Every Tool, `ask` too: nothing is read, and no Question goes to any model.
+    const calls: Record<string, Record<string, unknown>> = {
+      search: { query: "tides" },
+      read_passages: { documentId: "any" },
+      cite: { citations: [{ passageId: "any", quote: "Spring tides" }] },
+      check_citations: { text: "Spring tides [cite:abcdefgh]." },
+      show_citation: { cite: "[cite:abcdefgh]" },
+      list_minds: {},
+      read_mind: { mindId: "any" },
+      ask: { question: "When are spring tides?" },
+    };
+    for (const [name, args] of Object.entries(calls)) {
+      const paused = await agent.callTool({ name, arguments: args });
+      expect(paused.isError, name).toBe(true);
+      expect(resultText(paused), name).toMatch(/Connected agents are paused/);
+    }
 
     await core.setLocalOnly(false);
     const resumed = await agent.callTool({ name: "search", arguments: { query: "tides" } });
     expect(resumed.isError ?? false).toBe(false);
 
     const activity = await core.listAgentActivity(pairing.id);
-    expect(activity.filter((each) => each.problem === "local-mode")).toHaveLength(2);
+    expect(activity.filter((each) => each.problem === "local-mode")).toHaveLength(
+      Object.keys(calls).length,
+    );
 
     // Turned off: the listener goes, and the connection with it.
     await core.setAgentsEnabled(false);
     await expect(connectLegacyAgent(launch)).rejects.toThrow(/IncarnaMind isn't open/);
+  });
+
+  it("listen once however quickly connecting agents is turned on and off", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { core, launch } = await pairedToCoast();
+    await Promise.all([
+      core.setAgentsEnabled(false),
+      core.setAgentsEnabled(true),
+      core.setAgentsEnabled(true),
+    ]);
+    const agent = await connectLegacyAgent(launch);
+    const found = await agent.callTool({ name: "search", arguments: { query: "tides" } });
+    expect(found.isError ?? false).toBe(false);
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 
   it("answer the current protocol (2026-07-28) and the one before it", async () => {
@@ -272,6 +309,7 @@ describe("outside agents", () => {
         "read_mind",
         "read_passages",
         "search",
+        "show_citation",
       ]);
       const found = await agent.callTool({ name: "search", arguments: { query: "spring tides" } });
       expect((found.structuredContent as SearchOut).passages[0]?.cite).toMatch(/^\[cite:/);
@@ -378,5 +416,20 @@ describe("outside agents", () => {
       expect(bytes.includes(token), file.name).toBe(false);
     }
     errors.mockRestore();
+  });
+});
+
+describe("the agents' socket", () => {
+  it("is in the data folder, or in the temporary folder when that path is too long for a socket", () => {
+    expect(agentSocketPath("/Users/ada/Library/Application Support/IncarnaMind", "darwin")).toBe(
+      "/Users/ada/Library/Application Support/IncarnaMind/agents.sock",
+    );
+    const deep = `/Users/ada/${"Very long folder name/".repeat(5)}IncarnaMind`;
+    const fallback = agentSocketPath(deep, "darwin");
+    expect(fallback).toMatch(/incarnamind-[0-9a-f]{16}\.sock$/);
+    expect(agentSocketPath(deep, "darwin")).toBe(fallback);
+    expect(agentSocketPath("C:\\Users\\ada\\AppData\\Roaming\\IncarnaMind", "win32")).toMatch(
+      /^\\\\\.\\pipe\\incarnamind-agents-[0-9a-f]{16}$/,
+    );
   });
 });

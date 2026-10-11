@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, realpath, rename, rm, symlink } from "node:fs
 import { dirname, join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { type Core, type FileWriteRequest, InvalidInputError, NotFoundError } from "../../src/core";
+import { createOwnFiles } from "../../src/core/documents/ownFiles";
 import { createEventHub } from "../../src/core/events";
 import { createOutputFiles } from "../../src/core/outputFiles";
 import { createSettings } from "../../src/core/settings";
@@ -362,9 +363,12 @@ describe("Saving next to an original (the call other features use)", () => {
       settings: createSettings(db, now, () => ["en-US"], "none"),
       suggested: join(await createSourceFolder(), "IncarnaMind"),
       linkedFolders: () => [{ id: "linked-1", path: linked }],
+      recordOwnFile: createOwnFiles(db, now).record,
     });
     outputs.setLinkedFolderWriting("linked-1", true);
-    return { outputs, linked, original };
+    const fingerprints = () =>
+      db.all<{ content_hash: string; kind: string }>("SELECT content_hash, kind FROM own_files");
+    return { outputs, linked, original, fingerprints };
   }
 
   const data = new TextEncoder().encode("A new file.");
@@ -373,27 +377,45 @@ describe("Saving next to an original (the call other features use)", () => {
     const { outputs, linked, original } = await outputsWith();
     const before = sha256(await readFile(original));
     const folder = join(linked, "Leases");
-    expect(await outputs.save({ name: "Lease.docx", data, folder })).toEqual({
+    expect(await outputs.save({ name: "Lease.docx", data, folder, ownFile: "export" })).toEqual({
       path: join(folder, "Lease 2.docx"),
       name: "Lease 2.docx",
     });
     expect(sha256(await readFile(original))).toBe(before);
     // A name can't climb out of its folder.
-    const escaping = await outputs.save({ name: "../../Escape.md", data, folder });
+    const escaping = await outputs.save({
+      name: "../../Escape.md",
+      data,
+      folder,
+      ownFile: "export",
+    });
     expect(dirname(escaping.path)).toBe(folder);
     expect(escaping.name).toMatch(/Escape\.md$/);
     expect(await readdir(linked)).toEqual(["Leases"]);
   });
 
+  test("a file IncarnaMind wrote has its fingerprint recorded, once; an empty one, or a source it saved, has none (#80)", async () => {
+    const { outputs, linked, fingerprints } = await outputsWith();
+    const folder = join(linked, "Leases");
+    await outputs.save({ name: "Lease.md", data, folder, ownFile: "export" });
+    await outputs.save({ name: "Lease.md", data, folder, ownFile: "export" });
+    expect(fingerprints()).toEqual([{ content_hash: sha256(data), kind: "export" }]);
+
+    await outputs.save({ name: "Empty.md", data: new Uint8Array(), folder, ownFile: "export" });
+    const transcript = new TextEncoder().encode("[00:01] The tide turned at noon.");
+    await outputs.save({ name: "Meeting.vtt", data: transcript, folder, ownFile: null });
+    expect(fingerprints()).toHaveLength(1);
+  });
+
   test("a folder outside the Output location and every Linked folder, or a link leading out of one, is refused", async () => {
     const { outputs, linked } = await outputsWith();
     const elsewhere = await createSourceFolder();
-    await expect(outputs.save({ name: "Out.md", data, folder: elsewhere })).rejects.toThrow(
-      InvalidInputError,
-    );
+    await expect(
+      outputs.save({ name: "Out.md", data, folder: elsewhere, ownFile: "export" }),
+    ).rejects.toThrow(InvalidInputError);
     await symlink(elsewhere, join(linked, "Shortcut"), "dir");
     await expect(
-      outputs.save({ name: "Out.md", data, folder: join(linked, "Shortcut") }),
+      outputs.save({ name: "Out.md", data, folder: join(linked, "Shortcut"), ownFile: "export" }),
     ).rejects.toThrow(/only in the output location/);
     expect(await readdir(elsewhere)).toEqual([]);
   });

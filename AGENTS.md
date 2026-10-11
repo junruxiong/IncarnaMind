@@ -79,6 +79,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - one right-click menu order and one selection model;
   - the keyboard and ⌘K reach everything;
   - feedback within 100 ms;
+  - motion only from the shared module (`src/renderer/src/motion.ts`), as `DESIGN.md` › Motion says, with no hand-written transitions;
   - layouts that hold at every width, in English and Chinese.
   - teach features where they live, not in onboarding, which only gets the User to a first checked Answer.
 - A UI pull request ticks the template's interaction checklist, shows before and after screenshots, and sets the built screen beside the design board it implements, explaining every difference.

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "../i18n";
+import { enterFrom, exitToward } from "../motion";
 import { useAppStore } from "../store";
 import { CheckLineIcon, FolderLineIcon } from "./lineIcons";
 import { menuClass, menuTitleClass } from "./ui";
@@ -47,7 +48,8 @@ export function MoveToPicker({
   ].filter((option) => !wanted || option.name.toLocaleLowerCase().includes(wanted));
   const shown = Math.min(active, Math.max(0, options.length - 1));
 
-  // Opens beside its anchor, below it or above if there is no room, and takes the focus.
+  // Opens beside its anchor, below it or above if there is no room, growing from it, and takes
+  // the focus.
   useLayoutEffect(() => {
     const element = panel.current;
     if (!open || !element || !anchor) return;
@@ -63,6 +65,7 @@ export function MoveToPicker({
       below + height > window.innerHeight - EDGE_PX
         ? `${Math.max(EDGE_PX, box.top - GAP_PX - height)}px`
         : `${below}px`;
+    enterFrom(element, anchor);
     field.current?.focus();
   }, [open, anchor]);
 
@@ -108,6 +111,10 @@ export function MoveToPicker({
       data-testid="move-to-picker"
       role="dialog"
       aria-label={t("move.title", { name })}
+      // Closing, it shrinks back toward what it opened beside.
+      onBeforeToggle={(event) => {
+        if (event.newState === "closed") exitToward(event.currentTarget, anchor);
+      }}
       onToggle={(event) => {
         if (event.newState === "closed") {
           onClose();

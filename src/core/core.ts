@@ -6,6 +6,7 @@ import { translate } from "../shared/i18n";
 import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { agentSocketPath, createAgents } from "./agents";
+import { createAgentSetup } from "./agents/setup";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { recheckCitation, recheckKept } from "./answers/citations";
@@ -25,6 +26,7 @@ import type {
   EmbeddingSettings,
   ExportMindOptions,
   Mind,
+  OwnFileKind,
   ProviderError,
   SearchScope,
   Unsubscribe,
@@ -40,6 +42,8 @@ import {
   type DocumentImage,
   parseListOptions,
 } from "./documents";
+import { createEvidence, parseCheckedDocument, passageResult } from "./documents/evidence";
+import { createOwnFiles } from "./documents/ownFiles";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
@@ -95,6 +99,7 @@ import {
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
 } from "./providers/ollama";
+import { isCloudModelName } from "./providers/ollamaCloud";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
@@ -106,7 +111,7 @@ import {
 } from "./referenceRecords";
 import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
-import { resolveSearchScope } from "./scope";
+import { parseSearchScope, resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
 import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
@@ -546,6 +551,10 @@ export function createCore(adapters: CoreAdapters): Core {
       privacyChanged();
       agentsLocalModeChanged();
       await rerankChanged();
+      // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
+      await readinessChanged();
+      // An Answer on its way to a cloud model stops at once, with the reason.
+      if (embedding.localOnly()) await answers.stopCloud();
     }
     return embeddingSettings();
   };
@@ -569,6 +578,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
+    localOnly: () => embedding.localOnly(),
   });
 
   /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */
@@ -720,6 +730,14 @@ export function createCore(adapters: CoreAdapters): Core {
       organizedFolderDocuments: (folderId) => library.documentIds(folderId),
       documentIds: (filter) => documents.ids(filter),
     });
+  // What checks and comparison tables search (#80): as Answers do, without IncarnaMind's own
+  // files and the document being checked. Answers themselves search everything, as before.
+  const evidence = createEvidence({
+    db,
+    leaveOutOwnFiles: () => settings.get().user.leaveOutOwnFiles,
+    search: (query, options) =>
+      documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
+  });
 
   const answers = createAnswers({
     content,
@@ -834,6 +852,13 @@ export function createCore(adapters: CoreAdapters): Core {
     now: () => adapters.now?.() ?? new Date(),
   });
 
+  // The fingerprints of the files IncarnaMind writes (#80). A Document already indexed with
+  // the same bytes is marked at once, and every window hears of it.
+  const ownFiles = createOwnFiles(db, now);
+  const recordOwnFile = (data: Uint8Array, kind: OwnFileKind) => {
+    const marked = ownFiles.record(data, kind);
+    for (const document of documents.getMany(marked)) events.emit("document.status", document);
+  };
   const mindExports = createExports({
     mind: (mindId) => minds.get(mindId),
     read: (mindId, look) => content.read(mindId, look),
@@ -863,6 +888,7 @@ export function createCore(adapters: CoreAdapters): Core {
     settings,
     suggested: join(adapters.paths.documents ?? join(homedir(), "Documents"), "IncarnaMind"),
     linkedFolders: () => documents.linkedFolders.list(),
+    recordOwnFile,
   });
   const unlinkFolder = (linkedFolderId: string) => {
     documents.linkedFolders.remove(linkedFolderId);
@@ -1303,6 +1329,7 @@ export function createCore(adapters: CoreAdapters): Core {
       },
       answer: (question, documentIds, signal) =>
         answers.answerOutside(question, documentIds, signal),
+      show: (place) => events.emit("agents.citationShown", place),
     },
     changed: (value) => events.emit("agents.changed", value),
     called: (activity) => events.emit("agents.activity", activity),
@@ -1310,6 +1337,23 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   agentsLocalModeChanged = () => agents.localModeChanged();
   agents.start().catch((error: unknown) => console.error(error));
+  // Setting IncarnaMind up in the User's agent, from Settings → Agents.
+  const home = adapters.agents?.home ?? homedir();
+  const agentSetup = createAgentSetup({
+    agents,
+    home,
+    applications:
+      adapters.agents?.applications ??
+      (platform === "darwin" ? ["/Applications", join(home, "Applications")] : []),
+    platform,
+    tempDir: adapters.paths.tempDir ?? tmpdir(),
+    shimScript: adapters.agents?.shimScript ?? null,
+    version: adapters.agents?.version ?? "0.0.0",
+    openLink: adapters.agents?.openLink ?? null,
+    openPath: adapters.shell ? (path) => adapters.shell?.openPath(path) ?? Promise.resolve() : null,
+    say: (key, params) => translate(settings.get().language, key, params),
+    reportError: (error) => console.error(error),
+  });
 
   const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
     const batchId = batches.begin(library.target(options));
@@ -1539,6 +1583,20 @@ export function createCore(adapters: CoreAdapters): Core {
       });
     },
     searchPassages: (query, options) => documents.search(query, options),
+    searchEvidence: async (query, options) => {
+      if (typeof query !== "string") throw new InvalidInputError("A search query must be text.");
+      if (options !== undefined && !isRecord(options)) {
+        throw new InvalidInputError("searchEvidence's options must be an object.");
+      }
+      const scope = parseSearchScope(options?.scope);
+      const found = await evidence.search(
+        query,
+        evidence.scope(scope ? resolveScope(scope) : null, parseCheckedDocument(options?.checked)),
+      );
+      return { passages: found.passages.map(passageResult), excluded: found.excluded };
+    },
+    setCountedAsEvidence: async (documentId, counted) =>
+      documents.setCountedAsEvidence(documentId, counted),
     getEmbeddingModel: async () => embeddingModel.status(),
     downloadEmbeddingModel: async () => embeddingModel.retry(),
 
@@ -1607,6 +1665,12 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const status = await detectOllama(baseUrl);
       if (!status.running) throw new Error(`Ollama isn't running at ${baseUrl}.`);
+      // One click means a model on this computer; a cloud model is chosen from the model menu.
+      if (isCloudModelName(model) || hasOllamaModel(status.cloudModels, model)) {
+        throw new InvalidInputError(
+          `${model} runs on ollama.com, not on this computer. Choose a local model, or pick it in the model menu.`,
+        );
+      }
       if (!hasOllamaModel(status.models, model)) {
         await pullOllamaModel(
           baseUrl,
@@ -1869,13 +1933,15 @@ export function createCore(adapters: CoreAdapters): Core {
     previewMindExport: async (mindId, options) => mindExports.preview(mindId, options),
     exportMind: async (mindId, options) => {
       const exported = mindExports.export(mindId, options);
+      // The host saves these bytes as a file: IncarnaMind's, wherever it goes.
+      recordOwnFile(exported.data, "export");
       recordExport(options);
       return exported;
     },
     saveMindExport: async (mindId, options) => {
       const { fileName, data } = mindExports.export(mindId, options);
       try {
-        const file = await outputs.save({ name: fileName, data });
+        const file = await outputs.save({ name: fileName, data, ownFile: "export" });
         recordExport(options);
         return { status: "saved", file };
       } catch (error) {
@@ -1932,7 +1998,15 @@ export function createCore(adapters: CoreAdapters): Core {
     setAgentsEnabled: (enabled) => agents.setEnabled(enabled),
     connectAgent: (input) => agents.connect(input),
     updateAgent: async (pairingId, input) => agents.update(pairingId, input),
-    disconnectAgent: (pairingId) => agents.disconnect(pairingId),
+    disconnectAgent: async (pairingId) => {
+      await agentSetup.removeFromSettings(pairingId);
+      await agents.disconnect(pairingId);
+    },
+    listAgentClients: async () => agentSetup.clients(),
+    previewAgentSetup: async (client) => agentSetup.preview(client),
+    setUpAgent: (input) => agentSetup.setUp(input),
+    undoAgentSetup: (pairingId) => agentSetup.undo(pairingId),
+    copyAgentSetup: (pairingId) => agentSetup.settingsFor(pairingId),
     getAgentLaunch: (pairingId) => agents.launch(pairingId),
     listAgentActivity: async (pairingId) => agents.activity(pairingId),
     reconcileDocuments: () => documents.linkedFolders.sync(),

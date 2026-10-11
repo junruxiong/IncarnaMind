@@ -54,6 +54,11 @@ export const en = {
   "library.name": "Folder name",
   "library.description": "Description",
   "library.descriptionHint": "What belongs in this folder?",
+  "library.countsOwnFiles": "Count files IncarnaMind wrote as evidence in this folder",
+  "library.countsOwnFiles.hint":
+    "Files IncarnaMind wrote that are in other folders stay out of checks' evidence.",
+  "library.countsOwnFiles.everywhere":
+    "Counted in every folder: Settings → Search doesn't leave them out.",
   "library.save": "Save folder",
   "library.startersHint":
     "Start with the folders you need. Rename them or add your own at any time.",
@@ -515,6 +520,27 @@ export const en = {
   "documents.delete.cancel": "Cancel",
   "documents.delete.confirm": "Delete",
   "documents.removeAction": "Remove from IncarnaMind…",
+  // Checks leave the files IncarnaMind wrote out of their evidence (#80).
+  "evidence.ownFile": "IncarnaMind wrote this file, so checks don't count it as evidence",
+  "evidence.countIt": "Count it",
+  "evidence.excluded.ownFile":
+    "Also found in “{name}”, which IncarnaMind wrote, so it isn't counted as evidence",
+  "evidence.excluded.checked":
+    "Also found in “{name}”, a copy of the document being checked, so it isn't counted as evidence",
+  "evidence.count": "Count as evidence",
+  "evidence.countMany": "Count {count} Documents as evidence",
+  "evidence.leaveOut": "Don't count as evidence",
+  "evidence.leaveOutMany": "Don't count {count} Documents as evidence",
+  "evidence.menuHint":
+    "IncarnaMind wrote this file. Checks leave it out of their evidence unless you count it.",
+  "evidence.counted": "“{name}” counts as evidence now",
+  "evidence.countedMany": "{count} Documents count as evidence now",
+  "evidence.leftOut": "“{name}” no longer counts as evidence",
+  "evidence.leftOutMany": "{count} Documents no longer count as evidence",
+  "evidence.settings.title": "Checks",
+  "evidence.settings.switch": "Leave out files IncarnaMind wrote",
+  "evidence.settings.body":
+    "While this is on, the exports and source packs IncarnaMind saved aren't used as evidence when it checks your writing or compares Documents, so a note can't support itself. A folder, or one Document, can still count them. Copies of the document being checked are always left out. Transcripts and saved web pages count as usual.",
   "documents.remove.title": "Remove this Document?",
   "documents.remove.body":
     "“{name}” is no longer in its folder. Removing it drops the text IncarnaMind kept of it, and Citations to it can't be checked any more.",
@@ -737,9 +763,9 @@ export const en = {
   "embeddingProviders.confirm.turnOff": "Turn off",
   "embeddingProviders.localOnly.label": "Keep everything on this computer",
   "embeddingProviders.localOnly.body":
-    "Embeddings, when on, use the built-in model or Ollama, search results aren't sent for reranking, and no usage data is sent. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
+    "Embeddings, when on, use the built-in model or Ollama, search results aren't sent for reranking, Questions are asked only of a model on this computer, and no usage data is sent. Turning it on switches a cloud embedding model back to the built-in one, and processes your Documents again.",
   "embeddingProviders.localOnly.cloudChat":
-    "Your chat model still sends Questions to {service}: choose a local model under Chat model to keep them here too.",
+    "Your chat model is on {service}, so Questions aren't sent while this is on: choose a local model under Chat model to ask them.",
   "embeddingProviders.rebuild.title": "Embedding Documents for search: {done} of {total}",
   "embeddingProviders.rebuild.localMode":
     "To keep everything on this computer, search now uses the built-in model.",
@@ -910,6 +936,13 @@ export const en = {
   "settings.language.system": "Same as system",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
+  "settings.motion": "Motion",
+  "settings.motion.body":
+    "How things move as they open, close and change place. Reduced turns movement into short fades; Off shows every change at once.",
+  "settings.motion.on": "On",
+  "settings.motion.reduced": "Reduced",
+  "settings.motion.off": "Off",
+  "settings.motion.system": "Until you choose, this follows your system's setting.",
   "settings.close": "Close Settings",
   "settings.about.title": "About",
   "settings.about.body": "IncarnaMind is open source, under the Apache 2.0 licence.",
@@ -995,6 +1028,8 @@ export const en = {
   "providers.test.rate-limit": "The provider is limiting requests for this key. Try again shortly.",
   "providers.test.network": "Couldn't reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
+  "providers.test.local-mode":
+    "Nothing was sent: “Keep everything on this computer” is on, and this model isn't on this computer.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
   "providers.test.too-long": "The model's context window is too small for even a short request.",
@@ -1024,12 +1059,20 @@ export const en = {
     "The API key for {service} isn't saved on this device. Add it in Settings to ask Questions.",
   "providers.readiness.consent-declined":
     "You chose not to send data to {service}, so Questions are off. Choose another provider or a local model, or allow it in Settings.",
+  "providers.readiness.local-mode":
+    "“Keep everything on this computer” is on, so Questions aren't sent to {service}.",
   "providers.readiness.setUp": "Set up",
+  "localMode.refused":
+    "“Keep everything on this computer” is on, so this Question wasn't sent to {service}",
+  "localMode.useLocal": "Use a local model",
+  "localMode.turnOff": "Turn off local mode",
+  "localMode.turnedOff": "Turned off “Keep everything on this computer”",
 
   "providers.settings.title": "Chat model",
   "providers.settings.none": "No chat model is set up yet.",
   "providers.settings.provider": "Provider",
   "providers.settings.local": "on this computer",
+  "providers.settings.cloud": "cloud, on ollama.com",
   "providers.settings.defaultModel": "Default model",
   "providers.settings.saveModel": "Save",
   "providers.settings.change": "Change provider",
@@ -1245,7 +1288,7 @@ export const en = {
   "privacy.intro":
     "IncarnaMind collects no usage data. This page lists everything it sends from this computer, and lets you change it.",
   "privacy.flows.intro":
-    "These send your content to a service outside this computer. Nothing is sent on one until you allow it. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
+    "These send your content to a service outside this computer. Nothing is sent on one until you allow it, and nothing at all while “Keep everything on this computer” is on. Where a provider offers the choice, IncarnaMind asks it not to store your requests.",
   "privacy.flows.service": "to {service}",
   "privacy.flows.local": "Stays on this computer",
   "privacy.flows.sends": "Sends:",
@@ -1358,14 +1401,18 @@ export const en = {
   "composer.model.group.plan": "ChatGPT plan",
   "composer.model.group.planNote": "experimental",
   "composer.model.group.local": "On this computer",
+  "composer.model.group.cloud": "Ollama cloud",
   "composer.model.hint.keys": "Uses your API key",
   "composer.model.hint.plan": "Counts against your plan, not a key",
   "composer.model.hint.local": "Stays on this computer",
   "composer.model.hint.localMac": "Stays on this Mac",
+  "composer.model.hint.cloud": "Cloud: sent to ollama.com",
+  "composer.model.localModeOff": "Unavailable: “Keep everything on this computer” is on",
   "composer.model.via.keys": "your key",
   "composer.model.via.plan": "your ChatGPT plan",
   "composer.model.via.local": "on this computer",
   "composer.model.via.localMac": "on this Mac",
+  "composer.model.via.cloud": "cloud, on ollama.com",
   "composer.model.loading": "Looking for models…",
   "composer.model.default": "Default for new Minds: {model}",
   "composer.model.defaultUnset": "No default model yet",
@@ -1418,6 +1465,9 @@ export const en = {
   "answer.error.network": "Couldn't reach the provider",
   "answer.error.provider": "The provider ran into a problem",
   "answer.error.consent-declined": "Nothing was sent: you chose not to send data to this service",
+  "answer.error.local-mode":
+    "Stopped: “Keep everything on this computer” was turned on, and {model} isn't on this computer",
+  "answer.error.useLocal": "Use a local model",
   "answer.error.too-long":
     "This Question is too long for the local model, even without the Notes above it. Shorten it, or pick another model on the Question",
   "answer.error.unknown": "This Answer couldn't be written",
@@ -2171,7 +2221,7 @@ export const en = {
   "agents.problem.local-mode":
     "Connected agents are paused while IncarnaMind keeps everything on this computer, because an agent sends what it reads to its own AI model. To go on, turn off “Keep everything on this computer” in IncarnaMind, in Settings → Search.",
   "agents.problem.consent":
-    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Agents.",
+    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Privacy.",
   "agents.problem.no-folders":
     "This agent can’t read any Documents yet. Choose its folders in IncarnaMind, in Settings → Agents.",
   "agents.problem.outside-scope":
@@ -2188,4 +2238,88 @@ export const en = {
   "agents.answer.notFound": "[quote not found]",
   "agents.answer.cantCheck": "[can’t be checked]",
   "agents.mind.outsideCitation": "a Document in a folder not shared with this agent",
+  // Settings → Agents (#351): plain words for people who never edit a settings file.
+  "settings.pages.agents": "Agents",
+  "agents.settings.experimental": "Experimental",
+  "agents.settings.intro":
+    "Let an AI agent you already use, such as Claude, Codex or Cursor, search the folders you choose and cite them. IncarnaMind checks every quote it gives.",
+  "agents.settings.switch": "Connect AI agents",
+  "agents.settings.switch.off": "Off: no agent can reach your Documents.",
+  "agents.settings.switch.on":
+    "On: while IncarnaMind is open, each agent below can read the folders you gave it.",
+  "agents.settings.paused":
+    "Paused while “Keep everything on this computer” is on, because an agent sends what it reads to its own AI model.",
+  "agents.settings.paused.open": "Search settings",
+  "agents.settings.connected": "Connected agents",
+  "agents.settings.connect": "Connect an agent",
+  "agents.settings.connect.note": "Agents found on this computer come first.",
+  "agents.settings.more": "More agents",
+  "agents.settings.connectButton": "Connect",
+  "agents.settings.help": "Step-by-step help",
+  "agents.setup.bundle": "One click: Claude opens to install it",
+  "agents.setup.link": "One click: {agent} opens to install it",
+  "agents.setup.file": "IncarnaMind adds itself to {agent}’s settings",
+  "agents.setup.command": "Copy one line to run in a terminal",
+  "agents.setup.manual": "Copy the settings to paste into {agent}",
+  "agents.setup.installed": "On this computer",
+  "agents.setup.undoChanged": "{path} has changed since, so IncarnaMind left it as it is.",
+  "agents.client.other": "Another agent",
+  "agents.pairing.reads": "Reads {folders}",
+  "agents.pairing.readsNothing": "Reads no folders yet",
+  "agents.pairing.lastUsed": "Last used {when}",
+  "agents.pairing.notUsed": "Not used yet",
+  "agents.pairing.renameLabel": "Name of {agent}",
+  "agents.pairing.folders": "Folders…",
+  "agents.pairing.foldersTitle": "Folders {agent} may read",
+  "agents.pairing.activity": "Activity",
+  "agents.pairing.disconnect": "Disconnect",
+  "agents.pairing.details": "Details for technical users",
+  "agents.pairing.copySettings": "Copy settings",
+  "agents.pairing.copied": "Copied",
+  "agents.activity.empty": "No calls yet.",
+  "agents.activity.search": "Searched “{text}”",
+  "agents.activity.read_passages": "Read Passages",
+  "agents.activity.cite": "Cited “{text}”",
+  "agents.activity.check_citations": "Checked its Citations",
+  "agents.activity.show_citation": "Showed you a Citation",
+  "agents.activity.list_minds": "Listed your Minds",
+  "agents.activity.read_mind": "Read the Mind “{text}”",
+  "agents.activity.ask": "Asked “{text}”",
+  "agents.activity.count.one": "1 result",
+  "agents.activity.count.other": "{count} results",
+  "agents.activity.refused": "Refused: {reason}",
+  "agents.activity.failed": "Didn’t work: {reason}",
+  "agents.reason.unpaired": "it wasn’t connected",
+  "agents.reason.off": "connecting agents was off",
+  "agents.reason.local-mode": "everything was kept on this computer",
+  "agents.reason.consent": "it wasn’t allowed",
+  "agents.reason.no-folders": "it had no folders to read",
+  "agents.reason.outside-scope": "a folder not shared with it",
+  "agents.reason.not-found": "nothing like that in its folders",
+  "agents.reason.chat-not-ready": "no chat model was ready",
+  "agents.reason.invalid": "a request IncarnaMind couldn’t read",
+  "agents.reason.failed": "something went wrong",
+  "agents.connect.title": "Let {agent} read your Documents?",
+  "agents.connect.body":
+    "{agent} will be able to search and read the Documents in the folders you choose, and your Minds in them. What it reads goes to the AI model {agent} uses, under that service’s terms, not IncarnaMind’s. Some plans may use it to train their models.",
+  "agents.connect.folders": "Folders it may read",
+  "agents.connect.noFolders":
+    "You don’t have any folders yet. Make one in the Library, then come back.",
+  "agents.connect.pickOne": "Choose at least one folder.",
+  "agents.connect.fileChange": "IncarnaMind adds these lines to {path}:",
+  "agents.connect.showChange": "Show the lines",
+  "agents.connect.allow": "Allow and connect",
+  "agents.connect.cancel": "Cancel",
+  "agents.done.bundle": "Claude opened: click Install there to finish.",
+  "agents.done.link": "{agent} opened: click Install there to finish.",
+  "agents.done.wrote": "Added to {agent}’s settings. Start a new {agent} session to use it.",
+  "agents.done.command": "Copied. Paste it into a terminal and run it.",
+  "agents.done.settings": "Copied. In {agent}, add it as a new server, then restart {agent}.",
+  "agents.done.settings.other":
+    "Copied. Paste it where your agent adds a new server, then restart the agent.",
+  "agents.done.unreadable":
+    "{agent}’s settings file couldn’t be read, so IncarnaMind left it alone. The settings are copied: paste them into {path}.",
+  "agents.done.undo": "Undo",
+  "agents.bundle.description":
+    "Search your IncarnaMind Documents and cite them, with every quote checked.",
 } as const satisfies Record<string, string>;

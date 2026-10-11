@@ -11,6 +11,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  motionSettled,
   newMind,
   removeDataFolder,
   setGroupBeside,
@@ -235,6 +236,8 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await setGroupBeside(window, false);
   await expect(window.getByTestId("viewer")).toHaveCount(0);
   await expect(marks.nth(0)).toHaveAttribute("data-open", "true");
+  // Measured once it has grown from its marker.
+  await motionSettled(window);
   expectNear((await box(card.locator(".citation-card"))).width, 360, 1, "the card's width");
   await screenshot(window, "mind-card-found.png");
   await window.mouse.click(away.x, away.y);

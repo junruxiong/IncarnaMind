@@ -54,6 +54,15 @@ function captureLog(): LogCapture {
   return { lines, info: keep("info"), warn: keep("warn"), error: keep("error") };
 }
 
+/** Outside agents for a core on `dataDir`: they start the shim with this Node. */
+export async function agentsAdapter(dataDir: string): Promise<CoreAdapters["agents"]> {
+  return {
+    socketPath: agentSocketPath(dataDir),
+    launcher: { command: process.execPath, args: [await buildAgentShim()] },
+    version: "0.0.0-test",
+  };
+}
+
 /**
  * A core whose outside agents start the shim with this Node, on a temporary
  * data folder, with a local chat model (no consent needed) answering from
@@ -64,17 +73,12 @@ export async function startAgentsCore(
   overrides: Partial<CoreAdapters> = {},
 ) {
   const dataDir = await createTempDataFolder();
-  const shim = await buildAgentShim();
   const log = captureLog();
   const models = scriptedModels(model);
   const core = startCore(dataDir, {
     createChatModel: models.createChatModel,
     log,
-    agents: {
-      socketPath: agentSocketPath(dataDir),
-      launcher: { command: process.execPath, args: [shim] },
-      version: "0.0.0-test",
-    },
+    agents: await agentsAdapter(dataDir),
     ...overrides,
   });
   await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
