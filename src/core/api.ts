@@ -2622,7 +2622,7 @@ export interface MindExport extends MindExportPreview {
 // ---------------------------------------------------------------------------
 // Meetings
 
-/** Where a Meeting's audio comes from: the microphone, or the computer's own sound (the other people on a call). */
+/** Where a Meeting's audio comes from: the microphone, or the computer's own sound (the other people in the Meeting). */
 export type AudioSource = "microphone" | "system";
 
 /**
