@@ -9,6 +9,7 @@ import {
   dismissChatSetup,
   interceptSkillPicker,
   launchApp,
+  newMind,
   openSettings,
   removeDataFolder,
   useLocalChatModel,
@@ -79,7 +80,7 @@ test("a Skill imported from a folder in Settings is forced from the slash menu i
   await closeSettings(window);
 
   // In the composer, "/" offers the Skills only; choosing one shows it as a chip.
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");
@@ -169,7 +170,7 @@ test("a Question can force a Skill and limit its Search scope at once: both chip
     await bridge.importSkill(check.preview.importId);
   }, folder);
 
-  await window.getByTestId("new-mind").click();
+  await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
   await window.keyboard.press("ControlOrMeta+j");

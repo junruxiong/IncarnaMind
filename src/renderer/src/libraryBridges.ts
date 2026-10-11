@@ -9,7 +9,7 @@
 
 import type { Mind, SearchScope } from "../../core/api";
 
-/** What the Library's sheet shows: every Document, the Unsorted ones, or a Folder's. */
+/** What the Library's sheet shows: every Document, those in no Folder, or a Folder's. */
 export type LibraryView =
   | { kind: "all"; name: string }
   | { kind: "unsorted"; name: string }
@@ -22,7 +22,7 @@ export interface LibraryBridge {
   scope: SearchScope;
   /** How many Documents are shown, and so searched (for a Folder, as it is now). */
   count: number;
-  /** The sheet's title: the Folder's name, "Unsorted" or "All Documents". */
+  /** The sheet's title: the Folder's name, "Not in a Folder" or "All Documents". */
   title: string;
 }
 
