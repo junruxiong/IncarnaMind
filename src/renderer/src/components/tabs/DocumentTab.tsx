@@ -19,6 +19,9 @@ const SheetView = lazy(() =>
   import("../../viewer/SheetView").then((m) => ({ default: m.SheetView })),
 );
 const WebView = lazy(() => import("../../viewer/WebView").then((m) => ({ default: m.WebView })));
+const TranscriptView = lazy(() =>
+  import("../../viewer/TranscriptView").then((m) => ({ default: m.TranscriptView })),
+);
 
 /** How far the User scrolls a preview, at least, to keep it: the jump to the quote doesn't count. */
 const KEEP_AFTER_SCROLL_PX = 120;
@@ -28,7 +31,8 @@ const KEEP_AFTER_SCROLL_PX = 120;
  * there is something new to show, so the view reads the file again: a new
  * version, once it is indexed (its `contentHash`), or the file back after it
  * went missing or out of reach. A file that goes while it is shown leaves
- * what was read of it on screen.
+ * what was read of it on screen. A Transcript reads its file again itself as
+ * lines arrive, so a new version doesn't start it afresh (#136).
  */
 function useFileKey(document: Document | undefined): string {
   const id = document?.id;
@@ -40,7 +44,8 @@ function useFileKey(document: Document | undefined): string {
     if (before.id === id && available && !before.available) setReturns((count) => count + 1);
     last.current = { id, available };
   }, [id, available]);
-  return `${id}:${document?.contentHash}:${returns}`;
+  const version = document?.kind === "transcript" ? "" : document?.contentHash;
+  return `${id}:${version}:${returns}`;
 }
 
 /** Keeps a view's place for the open request, while its file is read again (see `PlaceMemory`). */
@@ -75,6 +80,8 @@ function DocumentView({ document, target }: { document: Document; target: Viewer
       return <SheetView document={document} target={target} />;
     case "web":
       return <WebView document={document} target={target} />;
+    case "transcript":
+      return <TranscriptView document={document} target={target} />;
   }
 }
 
