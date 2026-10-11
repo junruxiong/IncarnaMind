@@ -270,8 +270,13 @@ export async function searchDocumentsTool(
         options.documentIds,
       )
     : await sources.candidates(query, parameters.candidates, options.documentIds);
+  let reranked = false;
   if (options.rerank && candidates.length > 0) {
+    const fused = new Map(candidates.map((candidate) => [candidate.passageId, candidate.score]));
     candidates = await options.rerank(query, candidates, options.signal);
+    // A reranker that couldn't rerank (its model not downloaded yet, a service the User
+    // declined) gives search's own scores back.
+    reranked = candidates.some((candidate) => fused.get(candidate.passageId) !== candidate.score);
   }
 
   const byDocument = new Map<string, SearchCandidate[]>();
@@ -321,9 +326,20 @@ export async function searchDocumentsTool(
       ranks.set(passage.passageId, ranks.size);
     }
   }
+  // The reranker's scores of its hits, for how relevant each one is (see `WindowedPassage.relevance`).
+  const relevance = reranked
+    ? new Map(candidates.map((candidate) => [candidate.passageId, candidate.score]))
+    : null;
   return documents.flatMap((documentId) =>
     (passages.get(documentId) ?? [])
       .sort((a, b) => a.position - b.position)
-      .map((passage) => ({ ...passage, rank: ranks.get(passage.passageId) ?? ranks.size })),
+      .map((passage) => {
+        const score = relevance?.get(passage.passageId);
+        return {
+          ...passage,
+          rank: ranks.get(passage.passageId) ?? ranks.size,
+          ...(score !== undefined && { relevance: score }),
+        };
+      }),
   );
 }
