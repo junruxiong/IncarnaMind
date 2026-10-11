@@ -36,9 +36,12 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  # Every pull request runs the smoke test on Linux, where runners are plentiful; macOS runs
+  # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
   smoke:
-    name: Electron smoke test (macOS)
-    runs-on: macos-latest
+    name: Electron smoke test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,11 +49,20 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run test:smoke
+      # Electron downloads its binary the first time it's required, into ~/.cache/electron:
+      # keep it between runs, for each Electron version.
+      - name: Cache the Electron binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/electron/package.json') }}
+      # The app needs a display: a virtual one, bigger than the window the specs set
+      # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
+      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: smoke-test-results
+          name: smoke-test-results-linux
           path: test-results/
           retention-days: 7
