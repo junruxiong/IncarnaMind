@@ -35,6 +35,7 @@ Each rule has a check a reviewer can apply. A UI change that breaks a rule says 
 12. **Match the design.** Every UI issue names its design boards (the design canvas's main page, "IncarnaMind: all screens"). Build to them: layout, labels, chips, states. Where the built screen differs, say why in the pull request, or fix it.
     - Check: the pull request shows the built screen beside each board, with every difference listed.
 13. **Use the shared building blocks.** Selection, drag and drop, undo, the right-click menus, rename in place, the command list behind ⌘K and the menus, and optimistic updates each have one shared implementation, so the same gesture does the same thing everywhere. Where a block doesn't exist yet, don't build a one-off: say so in the pull request and keep the current behaviour, or build the block in its own issue.
+    - Motion comes from the shared module (`src/renderer/src/motion.ts`) and follows `DESIGN.md` › Motion, Reduced and Off included; no hand-written transitions or animations.
     - Check: code review; no `onContextMenu`, `draggable` or undo handling outside the shared blocks.
 14. **Teach in context, not in onboarding.** First run and onboarding cover one thing: getting the User to their first checked Answer. Every other feature is found where it lives:
     - something that looks usable (a grip, a cursor, a chip);

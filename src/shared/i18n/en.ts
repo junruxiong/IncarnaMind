@@ -936,6 +936,13 @@ export const en = {
   "settings.language.system": "Same as system",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
+  "settings.motion": "Motion",
+  "settings.motion.body":
+    "How things move as they open, close and change place. Reduced turns movement into short fades; Off shows every change at once.",
+  "settings.motion.on": "On",
+  "settings.motion.reduced": "Reduced",
+  "settings.motion.off": "Off",
+  "settings.motion.system": "Until you choose, this follows your system's setting.",
   "settings.close": "Close Settings",
   "settings.about.title": "About",
   "settings.about.body": "IncarnaMind is open source, under the Apache 2.0 licence.",
