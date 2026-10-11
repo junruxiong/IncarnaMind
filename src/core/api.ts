@@ -1013,9 +1013,12 @@ export type ReferenceField = keyof ReferenceFields;
  *   first pages). Reading the file again, as a new version is processed,
  *   replaces it.
  * - "lookup": filled by Look up (Crossref or arXiv), into a field that was empty.
+ * - "import": from a reference export (Zotero, EndNote, BibTeX, RIS, CSL JSON,
+ *   #287). Importing again replaces it; reading the file doesn't. It replaces a
+ *   value read from the file, and fills empty fields; Look up's and the User's stay.
  * - "user": the User typed it, or cleared it. Nothing replaces it.
  */
-export type ReferenceSource = "file" | "lookup" | "user";
+export type ReferenceSource = "file" | "lookup" | "import" | "user";
 
 /** A reference record: a Document's fields as a citation style needs them (#286). */
 export interface ReferenceRecord {
@@ -1067,6 +1070,68 @@ export type ReferenceLookupResult =
       /** Technical detail in English, for logs and tooltips. */
       message: string;
     };
+
+/** An entry of a reference export that couldn't be imported. The rest of the file still is. */
+export interface ReferenceImportProblem {
+  /** The entry's cite key or id, else its place in the file ("line 12", "item 3"). */
+  label: string;
+  /** "broken": it is cut off or not valid. "no-title": it has no title. "not-a-reference": it isn't an item. */
+  reason: "broken" | "no-title" | "not-a-reference";
+}
+
+/** One reference of an export, and what the import did with it. */
+export interface ReferenceImportEntry {
+  /** Its reference record. */
+  recordId: string;
+  title: string;
+  /** The Document it was matched to, or null: kept as a record with no Document yet. */
+  documentId: string | null;
+  /** How it was matched: its DOI, its arXiv id, or its title with the year and first author. */
+  matchedBy: "doi" | "arxiv" | "title" | null;
+  /** "added": a new record. "updated": an existing one gained or changed fields. "unchanged": it had all of this already. */
+  change: "added" | "updated" | "unchanged";
+}
+
+/** What `importReferences` came to. */
+export type ReferenceImportResult =
+  | {
+      outcome: "imported";
+      /** For `undoReferenceImport` and `addImportedReferenceFiles`. */
+      importId: string;
+      format: "csl-json" | "bibtex" | "ris";
+      /** References read, with duplicates in the file merged into one. */
+      total: number;
+      /** Matched to a Document. */
+      matched: number;
+      /** Kept as records with no Document yet. */
+      unmatched: number;
+      /** Records made or changed; the rest were already as the file has them. */
+      changed: number;
+      /** Duplicates in the file that were merged into another reference. */
+      merged: number;
+      problems: ReferenceImportProblem[];
+      entries: ReferenceImportEntry[];
+      /** Files the export attaches to unmatched references that exist on this computer and can be added as Documents. */
+      files: number;
+    }
+  | {
+      outcome: "failed";
+      /**
+       * "unreadable": the file can't be read. "too-large": over 50 MB.
+       * "unknown-format": it isn't CSL JSON, BibTeX or RIS. "empty": it holds no references.
+       */
+      reason: "unreadable" | "too-large" | "unknown-format" | "empty";
+      /** Technical detail in English, for logs and tooltips. */
+      message: string;
+    };
+
+/** What `addImportedReferenceFiles` added. */
+export interface ReferenceFilesResult {
+  /** The Documents added or found, each with its reference record. */
+  documents: Document[];
+  /** Files that couldn't be added. */
+  skipped: SkippedFile[];
+}
 
 export interface ListDocumentsOptions {
   /** Only Documents in this Folder. Omitted: every Document, in a Folder or not. */
@@ -3218,6 +3283,32 @@ export interface CoreApi {
    * User asks: nothing looks up by itself.
    */
   lookUpReference(documentId: string): Promise<ReferenceLookupResult>;
+  /**
+   * Imports the references in a CSL JSON, BibTeX or RIS file (#287), from
+   * Zotero, EndNote, Mendeley and others. The format is read from what is in
+   * the file. Each reference is matched to a Document by DOI, then arXiv id,
+   * then title with the year and first author, and written into its reference
+   * record, or into a record with no Document yet if none matches. Fields
+   * the User edited, or that Look up filled, are never replaced; importing
+   * again updates instead of repeating. An entry that can't be read is
+   * reported and the rest are imported. Reads the file only: nothing is sent.
+   * "references.importProgress" reports how far it is.
+   */
+  importReferences(path: string): Promise<ReferenceImportResult>;
+  /** Takes an import back: its new records go, and the fields it wrote, unless the User has edited them since. */
+  undoReferenceImport(importId: string): Promise<void>;
+  /**
+   * Adds the attached files an import found for its unmatched references
+   * (`ReferenceImportResult.files`) as Documents, each taking its reference's record.
+   */
+  addImportedReferenceFiles(importId: string): Promise<ReferenceFilesResult>;
+  /** The references kept with no Document yet, oldest first. */
+  listUnmatchedReferences(): Promise<ReferenceRecord[]>;
+  /**
+   * Adds a file as a Document and gives it a reference record that has none
+   * (`listUnmatchedReferences`): "Add the PDF…". Returns the Document.
+   */
+  addReferenceFile(recordId: string, path: string): Promise<Document>;
 
   /** An example Mind and its Documents, if made (see `Examples`); the tea example by default. */
   getExamples(group?: ExampleGroup): Promise<Examples>;
@@ -3812,6 +3903,8 @@ export interface CoreEvents {
    * "document.status". Carries each Document whole.
    */
   "references.changed": Document[];
+  /** `importReferences` has matched `done` of `total` references. */
+  "references.importProgress": { done: number; total: number };
   /** The ChatGPT plan provider was turned on or off, or its sign-in changed (including expiring). */
   "chatGptPlan.changed": ChatGptPlanStatus;
   /** Jev was set up, changed or removed on this device. */
@@ -3904,6 +3997,11 @@ const methods: Record<CoreApiMethod, true> = {
   updateReference: true,
   restoreReference: true,
   lookUpReference: true,
+  importReferences: true,
+  undoReferenceImport: true,
+  addImportedReferenceFiles: true,
+  listUnmatchedReferences: true,
+  addReferenceFile: true,
   setLinkedFolderLayout: true,
   setLinkedFolderPaused: true,
   downloadOnlineOnlyFiles: true,

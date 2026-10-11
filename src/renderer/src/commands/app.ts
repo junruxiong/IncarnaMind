@@ -1,4 +1,5 @@
 import { noteHolding } from "../editor/noteKeymap";
+import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { composerHandle, sidebarHandle } from "./handles";
 import { type Command, commands, fromMenu } from "./registry";
@@ -34,6 +35,18 @@ const appCommands: readonly Command[] = [
     reversible: true,
     when: () => composerHandle.current !== null,
     run: () => composerHandle.current?.focus(),
+  },
+  {
+    id: "references.import",
+    label: "references.import.menu",
+    group: "file",
+    // The import is taken back with Undo.
+    reversible: true,
+    enabled: () =>
+      useReferenceImport.getState().phase === "running"
+        ? { reason: "references.import.running.reason" }
+        : true,
+    run: () => useReferenceImport.getState().start(),
   },
   {
     id: "block.delete",
