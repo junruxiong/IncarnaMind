@@ -30,6 +30,7 @@ import {
   fillReference,
   isFieldValue,
   isReferenceField,
+  isReferenceSource,
   restoreReference,
 } from "./store";
 
@@ -125,9 +126,21 @@ function parseFields(fields: unknown): ReferenceField[] {
   return fields;
 }
 
-function parseRecord(before: unknown): ReferenceRecord {
+/**
+ * The earlier record Undo puts `fields` back from, checked: each of them
+ * either had no source (it was empty) or a source and a value it can hold,
+ * so Undo can't store what an edit couldn't.
+ */
+function parseRecord(before: unknown, fields: readonly ReferenceField[]): ReferenceRecord {
   if (!isRecord(before) || !isRecord(before.fields) || !isRecord(before.sources)) {
     throw new InvalidInputError("before must be a reference record.");
+  }
+  for (const field of fields) {
+    const source = before.sources[field];
+    if (source === undefined) continue;
+    if (!isReferenceSource(source) || !isFieldValue(field, before.fields[field])) {
+      throw new InvalidInputError(`before has no valid ${field} to put back.`);
+    }
   }
   return before as unknown as ReferenceRecord;
 }
@@ -172,8 +185,8 @@ export function createReferences(options: ReferencesOptions) {
     },
 
     restore(documentId: unknown, before: unknown, fields: unknown): Document {
-      const record = parseRecord(before);
       const list = parseFields(fields);
+      const record = parseRecord(before, list);
       const id = options.document(documentId).id;
       db.transaction(() => restoreReference(db, id, record, list, now()));
       return settle(id, true);

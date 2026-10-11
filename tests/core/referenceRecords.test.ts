@@ -436,6 +436,24 @@ describe("Editing a reference record", () => {
 
     expect(restored.reference?.fields).toEqual(before.fields);
     expect(restored.reference?.sources).toEqual(before.sources);
+
+    // A record that couldn't have been: nothing is put back from it.
+    const malformed = {
+      ...before,
+      fields: { ...before.fields, authors: "Bowler" },
+      sources: { ...before.sources, authors: "user" },
+    };
+    await expect(
+      core.restoreReference(document.id, malformed as never, ["authors"]),
+    ).rejects.toThrow(/authors/);
+    await expect(
+      core.restoreReference(
+        document.id,
+        { ...before, sources: { ...before.sources, title: "guess" } } as never,
+        ["title"],
+      ),
+    ).rejects.toThrow(/title/);
+    expect((await core.listDocuments())[0]?.reference?.fields).toEqual(before.fields);
   });
 });
 
