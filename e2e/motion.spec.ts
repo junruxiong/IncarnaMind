@@ -1,12 +1,14 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import type { TestHooks } from "../src/shared/testHooks";
 import {
   clickNow,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  leavingCopies,
+  motionLook,
+  motionRunning,
   motionSettled,
   openSettings,
   removeDataFolder,
@@ -29,43 +31,6 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
 });
-
-/** How an element shows now: its opacity, its transform's scale and shift, its origin, and where it's laid out. */
-function look(target: Locator) {
-  return target.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
-    const [originX = "0", originY = "0"] = style.transformOrigin.split(" ");
-    // Its box as laid out, without the transform.
-    const box = element.getBoundingClientRect();
-    const left = box.left - matrix.e - (1 - matrix.a) * Number.parseFloat(originX);
-    const top = box.top - matrix.f - (1 - matrix.d) * Number.parseFloat(originY);
-    return {
-      opacity: Number(style.opacity),
-      scale: matrix.a,
-      y: matrix.f,
-      originX: Number.parseFloat(originX),
-      originY: Number.parseFloat(originY),
-      left,
-      top,
-    };
-  });
-}
-
-/** The copies of closed menus still fading where they were, which nothing else can see. */
-const leavingCopies = (window: Page) =>
-  window.evaluate(
-    () =>
-      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.leavingCopies() ??
-      [],
-  );
-
-const running = (window: Page) =>
-  window.evaluate(
-    () =>
-      (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks?.motionRunning() ??
-      0,
-  );
 
 /** The scale a copy's transform says, 1 with none. */
 const scaleOf = (transform: string) => Number(/^matrix\(([^,]+),/.exec(transform)?.[1] ?? 1);
@@ -102,7 +67,7 @@ for (const language of ["en", "zh-CN"] as const) {
 
     await button.click();
     // Opening: under the button, smaller and faint, growing from its top edge at the button's middle.
-    const opening = await look(menu);
+    const opening = await motionLook(menu);
     expect(opening.opacity).toBeLessThan(1);
     expect(opening.scale).toBeLessThan(1);
     expect(opening.scale).toBeGreaterThanOrEqual(0.96);
@@ -115,7 +80,7 @@ for (const language of ["en", "zh-CN"] as const) {
     );
 
     await motionSettled(window);
-    expect(await look(menu)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
+    expect(await motionLook(menu)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
 
     // Closed: gone at once; a copy that nothing can click goes back toward the button as it fades,
     // from the button's side.
@@ -182,11 +147,11 @@ test("Reduced, chosen in Settings, fades a menu without moving it; Off shows and
   const button = window.getByTestId("plus-menu");
   const menu = window.getByTestId("plus-menu-items");
   await button.click();
-  const opening = await look(menu);
+  const opening = await motionLook(menu);
   expect(opening.opacity).toBeLessThan(1);
   expect(opening).toMatchObject({ scale: 1, y: 0 });
   await motionSettled(window);
-  expect((await look(menu)).opacity).toBe(1);
+  expect((await motionLook(menu)).opacity).toBe(1);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await expect
@@ -202,12 +167,12 @@ test("Reduced, chosen in Settings, fades a menu without moving it; Off shows and
   await expect(window.locator("html")).toHaveAttribute("data-motion", "off");
   await closeSettings(window);
   await button.click();
-  expect(await look(menu)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
-  expect(await running(window)).toBe(0);
+  expect(await motionLook(menu)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
+  expect(await motionRunning(window)).toBe(0);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   expect(await leavingCopies(window)).toEqual([]);
-  expect(await running(window)).toBe(0);
+  expect(await motionRunning(window)).toBe(0);
 
   // Kept on this device.
   const kept = await window.evaluate(async () => {
@@ -257,11 +222,11 @@ test("the Citation card grows from its Citation and goes back toward it", async 
   await citation.click();
   const card = window.getByTestId("citation-card");
   await expect(card).toBeVisible();
-  const opening = await look(card);
+  const opening = await motionLook(card);
   expect(opening.opacity).toBeLessThan(1);
   expect(opening.scale).toBeLessThan(1);
   await motionSettled(window);
-  expect(await look(card)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
+  expect(await motionLook(card)).toMatchObject({ opacity: 1, scale: 1, y: 0 });
 
   await window.keyboard.press("Escape");
   await expect(card).toBeHidden();
