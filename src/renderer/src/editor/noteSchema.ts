@@ -8,11 +8,13 @@ import StarterKit from "@tiptap/starter-kit";
 import {
   ANSWER_BLOCK,
   BLOCK_ID_ATTRIBUTE,
+  FOOTNOTE_NODE,
   NOTE_BLOCK_TYPES,
   QUESTION_BLOCK,
 } from "../../../core/api";
 import { Citation } from "./citationSchema";
 import { lowlight } from "./codeLanguages";
+import { Footnote } from "./footnoteSchema";
 import { Answer, MindDocument, Question, QuestionContextFlag } from "./questionSchema";
 
 /** The attribute each Block keeps its UUID in. It is stored in the Mind's Yjs document. */
@@ -23,7 +25,8 @@ export { BLOCK_ID_ATTRIBUTE };
  * UniqueID gives every node of these types a UUID as it is created, and keeps
  * it when the Block is edited, turned into another type or dragged. It can't
  * tell top-level nodes from nested ones, so paragraphs inside lists, quotes
- * and Answers get an ID too; only top-level IDs name Blocks.
+ * and Answers get an ID too; only top-level IDs name Blocks. Footnotes get
+ * one too, which names them across edits and sync; a pasted copy gets a new one.
  */
 const BLOCK_TYPES: readonly string[] = [...NOTE_BLOCK_TYPES, QUESTION_BLOCK, ANSWER_BLOCK];
 
@@ -41,6 +44,8 @@ export interface NoteSchemaOptions {
   answerView?: NodeViewRenderer;
   /** Draws Citations, e.g. as badges that open the cited page. */
   citationView?: NodeViewRenderer;
+  /** Draws the markers of the User's footnotes, e.g. as numbers that open their text. */
+  footnoteView?: NodeViewRenderer;
 }
 
 /**
@@ -49,9 +54,10 @@ export interface NoteSchemaOptions {
  * by lowlight, inline and block math rendered by KaTeX, and tables, each with
  * an "include in Question context" flag. Questions and Answers, top-level
  * only. Citations, inline in Answers and in whatever they are copied into,
- * table cells included. Every Block has a UUID. The editor adds its interface
- * on top (collaboration, menus, the drag handle, smart typography); tests use
- * this alone.
+ * table cells included. Footnotes the User writes, inline, each holding its
+ * text. Every Block and every footnote has a UUID. The editor adds its
+ * interface on top (collaboration, menus, the drag handle, smart typography);
+ * tests use this alone.
  */
 export function noteExtensions({
   onEditMath,
@@ -59,6 +65,7 @@ export function noteExtensions({
   questionView,
   answerView,
   citationView,
+  footnoteView,
 }: NoteSchemaOptions = {}): Extensions {
   const onClick = onEditMath && ((_node: unknown, pos: number) => onEditMath(pos));
   const CodeBlock = codeBlockView
@@ -92,7 +99,11 @@ export function noteExtensions({
     Question.configure({ view: questionView ?? null }),
     Answer.configure({ view: answerView ?? null }),
     Citation.configure({ view: citationView ?? null }),
+    Footnote.configure({ view: footnoteView ?? null }),
     QuestionContextFlag,
-    UniqueID.configure({ attributeName: BLOCK_ID_ATTRIBUTE, types: [...BLOCK_TYPES] }),
+    UniqueID.configure({
+      attributeName: BLOCK_ID_ATTRIBUTE,
+      types: [...BLOCK_TYPES, FOOTNOTE_NODE],
+    }),
   ];
 }

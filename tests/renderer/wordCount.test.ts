@@ -1,7 +1,7 @@
 import { getSchema, type JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
-import { CITATION_NODE } from "../../src/core/api";
+import { CITATION_NODE, FOOTNOTE_NODE } from "../../src/core/api";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { countMind } from "../../src/renderer/src/editor/wordCountText";
 import {
@@ -72,6 +72,18 @@ describe("counting a Mind", () => {
     const b = countMind(without, { from: 0, to: 0 }).total;
     expect(countFor(a, "words")).toBe(6);
     expect(a.characters).toBe(b.characters - 0);
+  });
+
+  test("a footnote's text is not counted with the line its marker is in", () => {
+    const footnote = {
+      type: FOOTNOTE_NODE,
+      content: [text("Twice a month, at new and full moon.")],
+    };
+    const doc = docOf(paragraph(text("Spring tides"), footnote, text(" are strongest.")));
+    expect(countFor(countMind(doc, { from: 0, to: 0 }).total, "words")).toBe(4);
+    // Selected across the marker: the words around it, not run together with the footnote's.
+    const across = countMind(doc, { from: 1, to: doc.content.size - 1 });
+    expect(across.selection && countFor(across.selection, "words")).toBe(4);
   });
 
   test("Blocks are counted, Questions are not", () => {
