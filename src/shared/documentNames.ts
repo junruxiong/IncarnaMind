@@ -52,3 +52,8 @@ export function displayName(document: { name: string; title?: string | null }): 
   const title = document.title?.trim();
   return title && looksMachineMade(document.name) ? title : document.name;
 }
+
+/** Where a Document comes from, as its tooltip names it: its file's name, or a web page's address. */
+export function sourceOf(document: { path: string; web?: { address: string } | null }): string {
+  return document.web?.address ?? fileNameOf(document.path);
+}

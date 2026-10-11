@@ -2,13 +2,15 @@ import type { DragEvent } from "react";
 import { create } from "zustand";
 import { itemsOf, type MoveItems } from "./moves";
 import { useAppStore } from "./store";
+import { carriesLinks, linksIn, useWebPages } from "./webPages";
 
 /**
  * Dragging Minds (and, with #212, Documents) onto a Folder in the sidebar, or
  * onto "Not in a Folder" to take them out of theirs. What is dragged travels
  * as its ids under a type of IncarnaMind's own, so the window's file drop
  * (`useFileDrop`) and the note ignore it. The target under the pointer
- * highlights; dropping moves, as "Move to…" does (`moveToFolder`).
+ * highlights; dropping moves, as "Move to…" does (`moveToFolder`). A link
+ * dragged from a browser is saved there as a web page (#261).
  */
 export const MOVE_TYPE = "application/x-incarnamind-move";
 
@@ -52,25 +54,30 @@ const keyOf = (folderId: string | null) => folderId ?? "not-in-a-folder";
 export function useFolderDrop(folderId: string | null) {
   const key = keyOf(folderId);
   const active = useDropTarget((state) => state.over === key);
+  const accepts = (event: DragEvent) => carriesMove(event) || carriesLinks(event);
   return {
     active,
     handlers: {
       onDragOver(event: DragEvent) {
-        if (!carriesMove(event)) return;
+        if (!accepts(event)) return;
         event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
+        event.dataTransfer.dropEffect = carriesMove(event) ? "move" : "copy";
         if (useDropTarget.getState().over !== key) useDropTarget.setState({ over: key });
       },
       onDragLeave(event: DragEvent) {
-        if (!carriesMove(event)) return;
+        if (!accepts(event)) return;
         // Still over it: only onto one of its own children.
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
         if (useDropTarget.getState().over === key) clear();
       },
       onDrop(event: DragEvent) {
-        if (!carriesMove(event)) return;
+        if (!accepts(event)) return;
         event.preventDefault();
         clear();
+        if (!carriesMove(event)) {
+          void useWebPages.getState().add(linksIn(event.dataTransfer), folderId);
+          return;
+        }
         const items = droppedItems(event);
         if (items) void useAppStore.getState().moveToFolder(items, folderId);
       },

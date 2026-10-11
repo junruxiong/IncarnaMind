@@ -9,6 +9,7 @@ import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
+import { webPageCommands } from "./webPages";
 
 /** The Mind in the tab the User is in, if that tab holds one. */
 function mindInFront(): string | null {
@@ -25,6 +26,7 @@ const appCommands: readonly Command[] = [
   },
   ...tabCommands,
   ...meetingCommands,
+  ...webPageCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",

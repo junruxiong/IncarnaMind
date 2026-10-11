@@ -11,6 +11,7 @@ import {
   pointAndClick,
   removeDataFolder,
   setGroupBeside,
+  setWindowSize,
   useLocalChatModel,
 } from "./app";
 
@@ -49,15 +50,6 @@ test.afterEach(async () => {
   await removeDataFolder(dataDir);
   await removeDataFolder(sources);
 });
-
-async function resize(app: ElectronApplication, window: Page, width: number, height: number) {
-  await app.evaluate(
-    ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
-    { width, height },
-  );
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeLessThan(width + 1);
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeGreaterThan(width - 40);
-}
 
 const bridge = (window: Page) => ({
   language: (language: "en" | "zh-CN") =>
@@ -108,7 +100,7 @@ for (const language of ["en", "zh-CN"] as const) {
     await useLocalChatModel(window);
     await addDocuments(window, [join(sources, "Tides.pdf")]);
     await bridge(window).language(language);
-    await resize(app, window, 1440, 900);
+    await setWindowSize(app, window, 1440, 900);
     await newMind(window, "Long text");
     const composer = window.getByTestId("composer");
     const input = composer.getByTestId("composer-input");
@@ -119,7 +111,7 @@ for (const language of ["en", "zh-CN"] as const) {
       [1000, false],
       [1000, true],
     ] as const) {
-      await resize(app, window, width, 900);
+      await setWindowSize(app, window, width, 900);
       await setGroupBeside(window, viewer);
       await pointAndClick(window, input);
       await window.keyboard.press("ControlOrMeta+a");
@@ -169,7 +161,7 @@ test("the composer grows to 8 lines then scrolls; from 4 lines Expand opens a ta
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await resize(app, window, 1440, 900);
+  await setWindowSize(app, window, 1440, 900);
   await newMind(window, "Growing");
   const composer = window.getByTestId("composer");
   const input = composer.getByTestId("composer-input");
@@ -230,7 +222,7 @@ test("a long paste becomes a chip that can be viewed, put back, or saved as a Do
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await resize(app, window, 1440, 900);
+  await setWindowSize(app, window, 1440, 900);
   await newMind(window, "Pastes");
   const composer = window.getByTestId("composer");
   const input = composer.getByTestId("composer-input");
@@ -295,7 +287,7 @@ test("a pasted chip is asked with: its words go into the Question", async () => 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
-  await resize(app, window, 1440, 900);
+  await setWindowSize(app, window, 1440, 900);
   await newMind(window, "Ask with a chip");
   const composer = window.getByTestId("composer");
   const input = composer.getByTestId("composer-input");

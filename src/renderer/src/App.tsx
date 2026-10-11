@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sidebarHandle, useHandle } from "./commands/handles";
 import { useKeymap } from "./commands/keymap";
+import { AddWebPageDialog } from "./components/AddWebPageDialog";
 import { AppShell, useRememberSidebarWidth } from "./components/AppShell";
 import { CitationStylePickerHost } from "./components/CitationStylePicker";
 import { ConsentDialog } from "./components/ConsentDialog";
@@ -23,6 +24,7 @@ import { useMeetings } from "./meetings";
 import { importReferenceFile, isReferenceFile } from "./referenceImport";
 import { useAppStore } from "./store";
 import { useWindowWidth } from "./useWindowWidth";
+import { useWebPages } from "./webPages";
 
 /** The card's distance from the sidebar, and from the window's top, right and bottom edges. */
 const CARD_GAP = 8;
@@ -141,7 +143,7 @@ function useSidebarPeek(hidden: boolean) {
  * filling the rest in a card on the sheet, 8px from the sidebar and from the
  * window's other edges: up to three groups side by side, each with its tab
  * strip (see `TabGroups`). Files dropped anywhere are added as Documents; a
- * folder dropped is offered for linking.
+ * folder dropped is offered for linking; links dropped are saved as web pages.
  */
 function Workspace() {
   const t = useT();
@@ -149,14 +151,17 @@ function Workspace() {
   const previewLayout = useAppStore((state) => state.previewLayout);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const addDropped = useAppStore((state) => state.addDropped);
-  const fileDrop = useFileDrop((dropped, folders) => {
-    // A reference export (CSL JSON, BibTeX, RIS) is imported, not added as a Document (#287).
-    const exported = dropped.find((file) => isReferenceFile(file.name));
-    const path = exported ? files.pathForFile(exported) : "";
-    if (path) void importReferenceFile(path);
-    const rest = path ? dropped.filter((file) => file !== exported) : dropped;
-    if (rest.length > 0 || folders.length > 0) void addDropped(rest, folders);
-  });
+  const fileDrop = useFileDrop(
+    (dropped, folders) => {
+      // A reference export (CSL JSON, BibTeX, RIS) is imported, not added as a Document (#287).
+      const exported = dropped.find((file) => isReferenceFile(file.name));
+      const path = exported ? files.pathForFile(exported) : "";
+      if (path) void importReferenceFile(path);
+      const rest = path ? dropped.filter((file) => file !== exported) : dropped;
+      if (rest.length > 0 || folders.length > 0) void addDropped(rest, folders);
+    },
+    (addresses) => void useWebPages.getState().add(addresses),
+  );
   const windowWidth = useWindowWidth();
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
@@ -233,10 +238,12 @@ function Workspace() {
           className="app-card"
         >
           <TabGroups />
+          {fileDrop.active && fileDrop.links && <DropOverlay links />}
         </div>
         <TabNoticeLine />
         <SettingsDialog />
         <TagsDialog />
+        <AddWebPageDialog />
         <ChatSetupDialog />
         <UsageDataDialog />
         <CitationStylePickerHost />
@@ -245,7 +252,7 @@ function Workspace() {
         <MeetingNoticeDialog />
         <FileWriteDialog />
         <ActionError />
-        {fileDrop.active && <DropOverlay />}
+        {fileDrop.active && !fileDrop.links && <DropOverlay />}
         <p role="status" data-testid="sidebar-announcement" className="sr-only">
           {announcement}
         </p>

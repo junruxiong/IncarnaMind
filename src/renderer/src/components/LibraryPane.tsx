@@ -17,7 +17,7 @@ import type {
   ReferenceField,
   ReferenceRecord,
 } from "../../../core/api";
-import { displayName, fileNameOf } from "../../../shared/documentNames";
+import { displayName, fileNameOf, sourceOf } from "../../../shared/documentNames";
 import { libraryPresetKeys } from "../../../shared/libraryPresets";
 import { missingDetails } from "../../../shared/references";
 import { core } from "../core";
@@ -456,6 +456,7 @@ const LibraryRow = memo(function LibraryRow({
   const place = useTabPlace();
   const name = displayName(doc);
   const fileName = fileNameOf(doc.path);
+  const source = sourceOf(doc);
   /** "Cite as" open under the row, and the field to start in. */
   const [citing, setCiting] = useState<{ focus: ReferenceField | null } | null>(null);
   const citeToggle = useRef<HTMLButtonElement>(null);
@@ -481,7 +482,7 @@ const LibraryRow = memo(function LibraryRow({
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
-            title={name === fileName ? name : `${name}\n${fileName}`}
+            title={name === source ? name : `${name}\n${source}`}
             className="flex min-w-0 items-center gap-2 text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
             // A preview to the Library's right; ⌘-click (Ctrl-click) opens it here, kept.
             onClick={(event) =>
@@ -515,8 +516,14 @@ const LibraryRow = memo(function LibraryRow({
         <details className="mt-1 text-[12px] text-ink-meta">
           <summary className="w-fit cursor-pointer">{t(status)}</summary>
           <p className="mt-1 break-words">
-            {t("library.file", { name: fileName })} · {doc.kind.toUpperCase()} ·{" "}
-            {t("library.originalsStay")}
+            {doc.web ? (
+              t("library.webAddress", { address: doc.web.address })
+            ) : (
+              <>
+                {t("library.file", { name: fileName })} · {doc.kind.toUpperCase()} ·{" "}
+                {t("library.originalsStay")}
+              </>
+            )}
           </p>
           {item?.model && (
             <p>
