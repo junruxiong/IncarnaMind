@@ -9,6 +9,7 @@ import {
   emptyReferenceFields,
   formatName,
   formatNames,
+  isCitableWork,
   lookupIdentifier,
   missingDetails,
   normalizeDoi,
@@ -157,5 +158,22 @@ describe("What a record needs before it can be cited", () => {
   test("a web page needs only its title, and Other needs nothing", () => {
     expect(missingDetails(record({ type: "webpage" }))).toEqual(["title"]);
     expect(missingDetails(record({ type: "document" }))).toEqual([]);
+  });
+});
+
+describe("What makes a Mind offer a citation style (#289)", () => {
+  test("a paper or a book with its authors or its year, not a file of type Other", () => {
+    const paper = record({ type: "article-journal", authors: [{ literal: "钱学森" }] });
+    expect(isCitableWork(paper)).toBe(true);
+    expect(isCitableWork(record({ type: "book", issued: "1958" }))).toBe(true);
+    // A contract read from its file is Other, even with an author and a date in its metadata.
+    const contract = record({
+      type: "document",
+      authors: [{ literal: "Ann Lee" }],
+      issued: "2024",
+    });
+    expect(isCitableWork(contract)).toBe(false);
+    expect(isCitableWork(record({ type: "report", title: "Q3 review" }))).toBe(false);
+    expect(isCitableWork(null)).toBe(false);
   });
 });
