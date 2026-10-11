@@ -847,25 +847,6 @@ export async function dragBlock(window: Page, block: Locator, target: Locator): 
   await window.mouse.up();
 }
 
-/**
- * Puts the cursor on an empty line as a person does, clicking where its text
- * would start: further along, the hint over the line after an Answer has its
- * "press ⌘J…" link, which starts a Question once the cursor is on the line.
- */
-export async function clickEmptyLine(line: Locator): Promise<void> {
-  await line.click({ position: { x: 4, y: 14 } });
-  // What is typed next goes where the caret is: wait until it is on the line.
-  await expect
-    .poll(() =>
-      line.evaluate((element) => {
-        const caret = element.ownerDocument.getSelection()?.anchorNode;
-        const focused = element.ownerDocument.activeElement;
-        return !!caret && element.contains(caret) && !!focused && focused.contains(element);
-      }),
-    )
-    .toBe(true);
-}
-
 /** Where `words` are drawn in a line of text: their left and right edges, and their middle line. */
 async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
