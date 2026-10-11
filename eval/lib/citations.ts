@@ -28,6 +28,7 @@ import {
   type OllamaModels,
   type ProviderError,
   QUESTION_BLOCK,
+  type QuestionAttributes,
   type QuoteRetry,
   type RejectedRecord,
 } from "../../src/core";
@@ -81,6 +82,8 @@ export interface CitationRecord {
   sentence: string;
   quote: string;
   documentName: string;
+  /** The cited Document's id; null when the Citation names none. */
+  documentId?: string | null;
   pageFrom: number | null;
   pageTo: number | null;
   check: CitationCheck;
@@ -445,12 +448,22 @@ export function evalOllamaModels(
 }
 
 /** Writes a Question into the Mind, as the editor would store it, through the public interface. */
-async function writeQuestion(core: Core, mindId: string, id: string, text: string): Promise<void> {
+async function writeQuestion(
+  core: Core,
+  mindId: string,
+  id: string,
+  text: string,
+  attributes: QuestionExtras = {},
+): Promise<void> {
   const doc = new Y.Doc();
   Y.applyUpdate(doc, (await core.openMind(mindId)).state);
   const before = Y.encodeStateVector(doc);
   const question = new Y.XmlElement(QUESTION_BLOCK);
   question.setAttribute(BLOCK_ID_ATTRIBUTE, id);
+  for (const [key, value] of Object.entries(attributes)) {
+    // biome-ignore lint/suspicious/noExplicitAny: Yjs types attribute values loosely.
+    if (value !== null && value !== undefined) question.setAttribute(key, value as any);
+  }
   question.insert(0, [new Y.XmlText(text)]);
   doc.getXmlFragment(MIND_CONTENT_FIELD).push([question]);
   await core.applyMindUpdate(mindId, Y.encodeStateAsUpdate(doc, before));
@@ -481,18 +494,31 @@ async function readAnswer(
 
 type Ending = { finished: AnswerFinished } | { failed: ProviderError };
 
+/**
+ * More attributes of the Question Block, as the editor stores them: its
+ * Search scope (`scopeFolderIds`…) or the model picked for it (`providerId`
+ * and `modelId`), e.g. for the agent bake-off (eval/agents).
+ */
+export type QuestionExtras = Partial<
+  Pick<
+    QuestionAttributes,
+    "scopeFolderIds" | "scopeTagIds" | "scopeDocumentIds" | "providerId" | "modelId"
+  >
+>;
+
 /** Asks one Question in a new Mind and reads its Answer back. */
-async function askOne(
+export async function askOne(
   library: Library,
   question: EvalQuestion,
   round: number,
   timeoutMs: number,
+  attributes: QuestionExtras = {},
 ): Promise<AnswerRecord> {
   const { core } = library;
   const started = Date.now();
   const mind = await core.createMind({ title: `Evaluation ${question.id}, round ${round}` });
   const questionId = randomUUID();
-  await writeQuestion(core, mind.id, questionId, question.question);
+  await writeQuestion(core, mind.id, questionId, question.question, attributes);
 
   const searches: string[] = [];
   const ended = new Promise<Ending>((resolve) => {
@@ -541,6 +567,7 @@ async function askOne(
       return {
         sentence: sentence.text,
         documentName: citation.documentName ?? "",
+        documentId: citation.documentId ?? null,
         ...checked,
         outcome: outcomeOf(checked, pages),
         passagePages: citation.passageId ? library.passagePages(citation.passageId) : null,
