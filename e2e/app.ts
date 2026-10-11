@@ -220,7 +220,6 @@ export type SettingsPage =
   | "models"
   | "search"
   | "meetings"
-  | "tools"
   | "connectors"
   | "skills"
   | "privacy";
