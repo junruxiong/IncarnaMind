@@ -173,7 +173,7 @@ export function ConversationLinks({ editor }: { editor: Editor }) {
             }}
             className="conversation-link"
           >
-            <ConversationLineIcon className="size-3.5" />
+            <ConversationLineIcon className="size-3" />
           </button>
         );
       })}

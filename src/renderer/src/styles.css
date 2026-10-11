@@ -3278,7 +3278,7 @@
   /*
    * Notes added from an Answer (#201): just added, washed for a moment
    * (DESIGN.md: "a brief wash on text just added"); beside each run of them,
-   * in the left margin clear of the Block handle, a quiet conversation mark
+   * in the left margin beside the Block handle, a quiet conversation mark
    * whose card names the conversation and the Question (`ConversationLinks`).
    */
   .mind-editor > .block-just-added {
@@ -3287,20 +3287,26 @@
   }
   .conversation-links {
     position: absolute;
+    /* Over the Block handle's layer (10, set by Tiptap), where the two meet. */
+    z-index: 11;
     top: 0;
     left: 0;
     width: 0;
     height: 100%;
     pointer-events: none;
   }
+  /*
+   * At the start of the 56px margin. The Block handle takes 48px to 28px left of the text
+   * (--handle-gap), so the two meet over 6px: there the mark is on top, and its click opens
+   * the conversation, never the Block menu; their icons stay apart.
+   */
   .conversation-link {
     position: absolute;
-    /* 8px clear of the Block handle, which takes 48px to 28px left of the text (--handle-gap). */
-    left: -72px;
+    left: -56px;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
+    width: 14px;
     height: 28px;
     border-radius: 4px;
     color: var(--color-ink-placeholder);
