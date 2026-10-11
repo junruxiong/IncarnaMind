@@ -1,6 +1,6 @@
 import { createReadStream, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, extname, join } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
@@ -87,14 +87,32 @@ function fontLicences(): Plugin {
   };
 }
 
-// Entry points follow electron-vite's defaults: src/main, src/preload and src/renderer.
+// Entry points follow electron-vite's defaults (src/main, src/preload and src/renderer), plus the
+// hidden window that records a Meeting's audio: its preload and its page (ADR-0015).
 export default defineConfig({
   main: {},
-  preload: {},
+  preload: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, "src/preload/index.ts"),
+          capture: resolve(__dirname, "src/preload/capture.ts"),
+        },
+      },
+    },
+  },
   renderer: {
     plugins: [react(), tailwindcss(), pdfjsData(), fontLicences()],
     // electron-vite leaves the renderer unminified; minified, its JavaScript is half the size
     // to load and parse at every launch.
-    build: { minify: true },
+    build: {
+      minify: true,
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, "src/renderer/index.html"),
+          capture: resolve(__dirname, "src/renderer/capture.html"),
+        },
+      },
+    },
   },
 });

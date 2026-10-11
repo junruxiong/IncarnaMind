@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage, shell } from "electron";
 import {
+  type AudioCapture,
   type Browser,
   BUILT_IN_SKILLS_PACKAGED,
   BUILT_IN_SKILLS_SOURCE,
@@ -17,8 +18,10 @@ import {
   type Logger,
   type UsageDataSender,
 } from "../core";
+import { createFakeCapture, type FakeCapture } from "../core/meetings/fakeCapture";
 import { createSentryCrashReporter } from "./crashReports";
 import { createUtilityProcessEmbedder } from "./embedder";
+import { createElectronAudioCapture } from "./meetings/capture";
 import { createLoginShellProcesses } from "./processes";
 import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
@@ -257,6 +260,26 @@ function createUsageDataSender(): UsageDataSender | undefined {
 const referenceLookupUrl =
   import.meta.env.MODE === "test" ? process.env.INCARNAMIND_TEST_REFERENCE_LOOKUP : undefined;
 
+/**
+ * What records Meetings: the hidden capture window (ADR-0015). Test-only
+ * launch flags: the smoke tests record a fake that makes a tone in real time,
+ * so no device is ever opened (INCARNAMIND_TEST_AUDIO=fake), its computer's
+ * sound allowed, denied or silent (INCARNAMIND_TEST_AUDIO_SYSTEM). They reach
+ * it as `globalThis.incarnamindFakeAudio`, e.g. to change the microphone.
+ */
+function audioCapture(log: Logger): AudioCapture {
+  if (import.meta.env.MODE === "test" && process.env.INCARNAMIND_TEST_AUDIO === "fake") {
+    const system = process.env.INCARNAMIND_TEST_AUDIO_SYSTEM;
+    const fake = createFakeCapture({
+      realTime: 100,
+      system: system === "denied" || system === "silent" ? system : "allowed",
+    });
+    (globalThis as { incarnamindFakeAudio?: FakeCapture }).incarnamindFakeAudio = fake;
+    return fake;
+  }
+  return createElectronAudioCapture({ log, rendererUrl: process.env.ELECTRON_RENDERER_URL });
+}
+
 /** Builds the core's adapters, with the log the core writes to. Call after `app` is ready. */
 export function createElectronAdapters(log: Logger): CoreAdapters {
   const dataDir = app.getPath("userData");
@@ -269,6 +292,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       referenceLookup: { crossref: referenceLookupUrl, arxiv: referenceLookupUrl },
     }),
     log,
+    audioCapture: audioCapture(log),
     paths: {
       dataDir,
       builtInSkills: builtInSkillsFolder(),

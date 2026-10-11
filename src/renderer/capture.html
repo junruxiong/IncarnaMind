@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The hidden window that records a Meeting's audio (ADR-0015): no network, no content. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'none'; img-src 'none'; connect-src 'none'"
+    />
+    <title>IncarnaMind audio</title>
+  </head>
+  <body>
+    <script type="module" src="./capture/capture.ts"></script>
+  </body>
+</html>

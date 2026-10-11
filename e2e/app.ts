@@ -63,6 +63,12 @@ export interface LaunchOptions {
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
   keepWindow?: boolean;
+  /**
+   * What a Meeting's fake capture does with the computer's sound: plays a
+   * tone (by default), is denied, or gives only silence. The microphone is
+   * always a fake that makes a tone: no test opens a device.
+   */
+  computerSound?: "allowed" | "denied" | "silent";
 }
 
 /**
@@ -91,6 +97,7 @@ export async function launchApp(
     home,
     referenceLookup,
     keepWindow = false,
+    computerSound = "allowed",
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -105,6 +112,8 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
   delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
+  env.INCARNAMIND_TEST_AUDIO = "fake";
+  env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
   if (sentryDsn) env.INCARNAMIND_TEST_SENTRY_DSN = sentryDsn;
   if (usageData) {
@@ -210,6 +219,7 @@ export type SettingsPage =
   | "general"
   | "models"
   | "search"
+  | "meetings"
   | "tools"
   | "connectors"
   | "skills"
