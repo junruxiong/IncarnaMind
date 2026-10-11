@@ -1,11 +1,6 @@
 import { Tokenizer } from "@huggingface/tokenizers";
 import { describe, expect, test } from "vitest";
-import {
-  BUILT_IN_RERANKING_MODEL,
-  type CrossEncoder,
-  DEFAULT_RERANK_MODELS,
-  RERANKING_MODEL_CANDIDATES,
-} from "../../src/core";
+import { BUILT_IN_RERANKING_MODEL, type CrossEncoder, DEFAULT_RERANK_MODELS } from "../../src/core";
 import {
   type CrossEncoderChannel,
   type CrossEncoderRequest,
@@ -58,21 +53,18 @@ function tinyTokenizer(): Tokenizer {
 }
 
 describe("The reranking models", () => {
-  test("every candidate is pinned, has a permissive licence and a multilingual model", () => {
-    for (const candidate of RERANKING_MODEL_CANDIDATES) {
-      expect(candidate.licence).toMatch(/^(Apache-2\.0|MIT)$/);
-      expect(candidate.source.baseUrl).toMatch(/\/resolve\/[0-9a-f]{40}\/$/);
-      const paths = candidate.source.files.map((file) => file.path);
-      expect(paths).toEqual(
-        expect.arrayContaining([
-          candidate.files.model,
-          candidate.files.tokenizer,
-          candidate.files.tokenizerConfig,
-        ]),
-      );
-      for (const file of candidate.source.files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
-    }
-    expect(RERANKING_MODEL_CANDIDATES).toContain(BUILT_IN_RERANKING_MODEL);
+  test("the built-in model is pinned, has a permissive licence and isn't a service", () => {
+    const model = BUILT_IN_RERANKING_MODEL;
+    expect(model.licence).toMatch(/^(Apache-2\.0|MIT)$/);
+    expect(model.source.baseUrl).toMatch(/\/resolve\/[0-9a-f]{40}\/$/);
+    expect(model.source.files.map((file) => file.path)).toEqual(
+      expect.arrayContaining([
+        model.files.model,
+        model.files.tokenizer,
+        model.files.tokenizerConfig,
+      ]),
+    );
+    for (const file of model.source.files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
     // The built-in model isn't a service: it has no default model to name.
     expect(Object.keys(DEFAULT_RERANK_MODELS)).toEqual(["cohere", "voyage"]);
   });

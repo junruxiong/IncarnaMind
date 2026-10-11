@@ -22,10 +22,11 @@ import { SearchIcon } from "../components/icons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
 import {
+  chosenScope,
   composerKey,
+  composerScope,
   type Draft,
   isLongPaste,
-  NO_SCOPE,
   type Paste,
   useComposer,
 } from "../composer";
@@ -98,8 +99,10 @@ export interface ComposerHandle {
  *
  * In its row: a Skill chosen with "/", the text, the quiet model chip, the
  * Search scope (a chip for each Folder, Tag or Document, or "All Documents";
- * "@" adds more), and the Ask button (an up arrow). Why a Question couldn't
- * be asked shows on one line above them, with the one thing that fixes it.
+ * "@" adds more), and the Ask button (an up arrow). A Mind in a Folder starts
+ * with the Folder's chip; taking it out searches everything (see
+ * `composerScope`). Why a Question couldn't be asked shows on one line above
+ * them, with the one thing that fixes it.
  */
 export function Composer({
   editor,
@@ -117,6 +120,11 @@ export function Composer({
 }) {
   const t = useT();
   const draft = useComposer((state) => state.drafts[mindId]) ?? EMPTY;
+  // The Mind's Folder, whose chip its Questions start with.
+  const folderId = useAppStore(
+    (state) => state.minds.find((mind) => mind.id === mindId)?.folderId ?? null,
+  );
+  const scope = composerScope(draft, folderId);
   const problem = useAnswers((state) => state.blocked[composerKey(mindId)]);
   const openSettings = useAppStore((state) => state.openSettings);
   const skills = useAppStore((state) => state.skills);
@@ -145,6 +153,8 @@ export function Composer({
   const skill = draft.skill ? skills.find((each) => each.name === draft.skill) : undefined;
 
   const update = (change: Partial<Draft>) => useComposer.getState().update(mindId, change);
+  /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
+  const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 
   // Single-line text sits beside the controls; once it would run past one line, it takes the
   // full width and they move to a row under it. Decided from the width one line has beside the
@@ -216,8 +226,8 @@ export function Composer({
   };
 
   useImperativeHandle(ref, () => ({
-    focus(scope) {
-      if (scope) update({ scope });
+    focus(given) {
+      if (given) updateScope(given);
       cursorInMind.current = false;
       focus();
     },
@@ -273,11 +283,14 @@ export function Composer({
   };
 
   const chooseScope = (choice: ScopeChoice) => {
-    const ids = scopeIds(draft.scope, choice.kind);
-    const scope = ids.includes(choice.id)
-      ? draft.scope
-      : { ...draft.scope, [SCOPE_LISTS[choice.kind]]: [...ids, choice.id] };
-    update({ scope, ...(picking && { text: withoutTyped(picking) }) });
+    const ids = scopeIds(scope, choice.kind);
+    const next = ids.includes(choice.id)
+      ? scope
+      : { ...scope, [SCOPE_LISTS[choice.kind]]: [...ids, choice.id] };
+    update({
+      scope: chosenScope(next, folderId),
+      ...(picking && { text: withoutTyped(picking) }),
+    });
     setPicking(null);
     field.current?.focus();
   };
@@ -289,9 +302,10 @@ export function Composer({
     field.current?.focus();
   };
 
+  /** A chip's ×. The Folder's own taken out: every Document is searched. */
   const removeFromScope = (kind: ScopeKind, id: string) => {
-    const left = scopeIds(draft.scope, kind).filter((each) => each !== id);
-    update({ scope: { ...draft.scope, [SCOPE_LISTS[kind]]: left } });
+    const left = scopeIds(scope, kind).filter((each) => each !== id);
+    updateScope({ ...scope, [SCOPE_LISTS[kind]]: left });
   };
 
   /** A chip's name, or "All Documents": types the "@" that opens the picker. */
@@ -339,12 +353,13 @@ export function Composer({
         text: paste.text,
       });
       const now = useComposer.getState().draft(mindId);
-      const ids = scopeIds(now.scope, "document");
+      const nowScope = composerScope(now, folderId);
+      const ids = scopeIds(nowScope, "document");
       update({
         pastes: now.pastes.filter((each) => each.id !== paste.id),
         scope: ids.includes(saved.id)
           ? now.scope
-          : { ...now.scope, documentIds: [...ids, saved.id] },
+          : chosenScope({ ...nowScope, documentIds: [...ids, saved.id] }, folderId),
       });
     } catch {
       setSaveFailed(true);
@@ -366,7 +381,7 @@ export function Composer({
       id: crypto.randomUUID(),
       text,
       model: mindModelOf(doc),
-      scope: current.scope,
+      scope: composerScope(current, folderId),
       skill: current.skill,
     };
     const selection = cursorInMind.current ? editor.state.selection : null;
@@ -550,9 +565,10 @@ export function Composer({
         />
         <div ref={controls} className="composer-controls">
           <ModelChip doc={doc} onChosen={() => field.current?.focus()} />
-          {hasSearchScope(draft.scope) ? (
+          {hasSearchScope(scope) ? (
             <ScopeChips
-              scope={draft.scope}
+              scope={scope}
+              ownFolderId={folderId}
               onRemove={removeFromScope}
               onChange={openScopePicker}
               shown={CHIPS_SHOWN}
@@ -611,7 +627,7 @@ export function Composer({
             <ScopeChoiceList
               ref={list}
               id={listId}
-              scope={draft.scope}
+              scope={scope}
               query={picking.query}
               onChoose={chooseScope}
               onSelect={setOption}
@@ -634,7 +650,7 @@ export function Composer({
   );
 }
 
-const EMPTY: Draft = { text: "", scope: NO_SCOPE, skill: null, pastes: [] };
+const EMPTY: Draft = { text: "", scope: null, skill: null, pastes: [] };
 
 const SHORTCUT = isMacOS() ? "⌘J" : "Ctrl+J";
 

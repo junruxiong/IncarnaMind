@@ -123,6 +123,7 @@ describe("applying gathered changes to the Document list", () => {
 describe("applying gathered assignments to the Library", () => {
   const library: LibrarySnapshot = {
     groups: [{ id: "g", name: "Research", description: "", createdAt: "", updatedAt: "" }],
+    deletedGroups: [],
     assignments: [assignment("a"), assignment("b")],
     settings: { classifier: null, automatic: false },
   };

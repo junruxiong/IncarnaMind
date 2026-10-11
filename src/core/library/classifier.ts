@@ -190,12 +190,12 @@ export function decisionGroupClassifier(connection: {
       // Ollama's Choice endpoint supports 26 options, including Unsorted.
       if (connection.local && groups.length > 25)
         throw new Error(
-          "This local decision model supports at most 25 groups plus Unsorted. Use a chat model for more groups.",
+          "This local decision model supports at most 25 Folders plus Not in a Folder. Use a chat model for more Folders.",
         );
       const isTev = /^tev1(?::|$)/i.test(connection.model);
       if (isTev && groups.length > 23)
         throw new Error(
-          "Tev1 supports up to 23 groups plus Unsorted within its trained range. Choose another model for more groups.",
+          "Tev1 supports up to 23 Folders plus Not in a Folder within its trained range. Choose another model for more Folders.",
         );
       const criteria = Object.fromEntries([
         [UNSORTED, "No group fits, or the excerpt does not contain enough information."],
