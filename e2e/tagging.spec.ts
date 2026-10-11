@@ -47,7 +47,7 @@ test.afterEach(async () => {
 });
 
 /** A chat model in the stand-in Ollama, as the setup screen would save it. */
-async function useOllama(window: Page, baseUrl: string): Promise<void> {
+async function addOllama(window: Page, baseUrl: string): Promise<void> {
   await window.evaluate(async (url) => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.saveChatProvider({ kind: "ollama", baseUrl: url, modelId: "fake-model" });
@@ -70,7 +70,7 @@ test("Automatic says which model it uses; another one is chosen from the list an
   try {
     await setWindowSize(app, window, 1440, 900);
     await dismissChatSetup(window);
-    await useOllama(window, ollamaUrl);
+    await addOllama(window, ollamaUrl);
     const section = await tagging(window);
 
     // Automatic is the default, and picks the local decision model over the chat model.
@@ -132,7 +132,7 @@ test("in Chinese: 自动打标签, with the model Automatic uses and the list's 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await dismissChatSetup(window);
-    await useOllama(window, ollamaUrl);
+    await addOllama(window, ollamaUrl);
     await window.evaluate(async () =>
       (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
         user: { language: "zh-CN" },

@@ -41,7 +41,7 @@ async function taggingSettings(window: Page) {
 }
 
 /** "Other model…": fills in a model the list doesn't have, and uses it. */
-async function useOtherModel(section: Locator, fill: (form: Locator) => Promise<void>) {
+async function chooseOtherModel(section: Locator, fill: (form: Locator) => Promise<void>) {
   await section.getByTestId("tagging-other").click();
   const form = section.getByTestId("tagging-other-form");
   await fill(form);
@@ -147,7 +147,7 @@ test("one Organize action assigns folder and tags, preserves corrections and sur
         )[0]?.id,
     );
     if (!providerId) throw new Error("No provider");
-    await useOtherModel(section, async (form) => {
+    await chooseOtherModel(section, async (form) => {
       await form.getByLabel("Connection", { exact: true }).selectOption(providerId);
       await form.getByLabel("Model name", { exact: true }).fill("small-classifier");
     });
@@ -302,7 +302,7 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     await library.getByRole("button", { name: "Add selected folders" }).click();
     const ollama = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     let section = await taggingSettings(window);
-    await useOtherModel(section, async (form) => {
+    await chooseOtherModel(section, async (form) => {
       await form.getByLabel("Connection", { exact: true }).selectOption("auto");
       await expect(form.getByLabel("Model name", { exact: true })).toHaveCount(0);
       await form.getByLabel("Local Ollama address", { exact: true }).fill(ollama);
@@ -344,7 +344,7 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     const form = section.getByTestId("tagging-other-form");
     await expect(form.getByLabel("Connection", { exact: true })).toHaveValue("auto");
     const images = form.getByRole("checkbox", { name: /Include up to 3 PDF page images/ });
-    await useOtherModel(section, async () => {
+    await chooseOtherModel(section, async () => {
       await form.getByLabel("Connection", { exact: true }).selectOption("ollama");
       await form.getByLabel("Model name", { exact: true }).fill("clef-flash");
       await images.check();
@@ -352,7 +352,7 @@ test("Auto routes text and scans with tags, reports failures, retries and preser
     await closeSettings(window);
     section = await taggingSettings(window);
     await expect(images).toBeChecked();
-    await useOtherModel(section, () => images.uncheck());
+    await chooseOtherModel(section, () => images.uncheck());
     await closeSettings(window);
     section = await taggingSettings(window);
     await expect(images).not.toBeChecked();
