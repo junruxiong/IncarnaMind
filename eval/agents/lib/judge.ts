@@ -1,8 +1,9 @@
 /**
  * The cheap judge (the evaluation's chat model, Haiku 5.5): for one run, which
- * uncited sentences make a claim drawn from the Library, and whether the
- * answer is correct against the expected one. It proposes; the owner checks a
- * 10% sample from the reviewer sheet, as the evaluation's Citation sheet works.
+ * uncited sentences make a claim drawn from the Library, which name a source
+ * without a Citation, and whether the answer is correct against the expected
+ * one. It proposes; a person checks a 10% sample from the reviewer sheet, as
+ * the evaluation's Citation sheet works.
  */
 import { generateText } from "ai";
 import { createAiSdkChatModel } from "../../../src/core";
@@ -15,6 +16,8 @@ export interface Verdict {
   correct: "yes" | "partly" | "no";
   /** Indexes (from 0) of uncited sentences that make a claim from the Library. */
   claims: number[];
+  /** Indexes of uncited sentences that name a source (a Document, page, link, "the Library") instead of citing. */
+  sources: number[];
   usage: ModelUsage;
 }
 
@@ -44,12 +47,13 @@ export async function judge(
     prompt: `Task given to the tool: ${prompt}
 Expected answer: ${task.answer}${unanswerable}
 
-The answer, one sentence per line, numbered. [C] marks a sentence with a citation; [ ] one without:
+The answer, one sentence per line, numbered. [C] marks a sentence with a citation token; [ ] one without:
 ${numbered || "(empty)"}
 
-Return {"correct": "yes" | "partly" | "no", "claims": [numbers]}.
+Return {"correct": "yes" | "partly" | "no", "claims": [numbers], "sources": [numbers]}.
 - "correct": does the answer give the expected answer's facts ("partly" if some are missing or slightly off)?
-- "claims": the numbers of [ ] sentences that state a fact taken from the user's documents. Leave out headings, greetings, offers of help, statements that the documents don't say something, questions to the user, notes about how the answer was found, and sentences that only repeat a cited one.`,
+- "claims": the numbers of [ ] sentences that state a fact presented as coming from the user's documents, or that answer the task. Leave out headings, greetings, offers of help, statements that the documents don't say something, questions to the user, notes about how the answer was found, and sentences that only repeat a cited one.
+- "sources": the numbers of [ ] sentences that name where something comes from (a document or paper title, a page or slide, a link, "the library" or "your documents") without a citation token.`,
   });
   const usage: ModelUsage = {
     ...NO_USAGE,
@@ -59,9 +63,9 @@ Return {"correct": "yes" | "partly" | "no", "claims": [numbers]}.
     outputTokens: result.usage.outputTokens ?? 0,
   };
   const json = /\{[\s\S]*\}/.exec(result.text)?.[0] ?? "{}";
-  let parsed: { correct?: unknown; claims?: unknown };
+  let parsed: { correct?: unknown; claims?: unknown; sources?: unknown };
   try {
-    parsed = JSON.parse(json) as { correct?: unknown; claims?: unknown };
+    parsed = JSON.parse(json) as typeof parsed;
   } catch {
     parsed = {};
   }
@@ -69,8 +73,12 @@ Return {"correct": "yes" | "partly" | "no", "claims": [numbers]}.
     parsed.correct === "yes" || parsed.correct === "partly" || parsed.correct === "no"
       ? parsed.correct
       : "no";
-  const claims = (Array.isArray(parsed.claims) ? parsed.claims : [])
-    .map((value) => Number(value) - 1)
-    .filter((index) => Number.isInteger(index) && sentences[index] && !sentences[index].cited);
-  return { correct, claims: [...new Set(claims)], usage };
+  const uncited = (value: unknown) => [
+    ...new Set(
+      (Array.isArray(value) ? value : [])
+        .map((each) => Number(each) - 1)
+        .filter((index) => Number.isInteger(index) && sentences[index] && !sentences[index].cited),
+    ),
+  ];
+  return { correct, claims: uncited(parsed.claims), sources: uncited(parsed.sources), usage };
 }

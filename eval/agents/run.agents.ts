@@ -13,17 +13,17 @@
  * the evaluation does; neither `npm test` nor CI runs it.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { appendFile, mkdir, readdir, rm } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 import { DATABASE_FILE } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
 import { createLog } from "../lib/log";
-import { type RunRecord, runOne, type Session } from "./lib/arms";
-import { loadBakeoff, type Task } from "./lib/bakeoff";
+import { type RunRecord, rescoreRecord, runOne, type Session } from "./lib/arms";
+import { type Bakeoff, loadBakeoff, type Task } from "./lib/bakeoff";
 import { listenForCanary } from "./lib/canary";
-import { type Arm, readAgentsConfig } from "./lib/config";
+import { type AgentsConfig, type Arm, readAgentsConfig } from "./lib/config";
 import { openFixtureLibrary } from "./lib/fixtureLibrary";
 import { type ProbeRow, probeRetrieval } from "./lib/probe";
 import { gatesOf, summarise, writeReport } from "./lib/report";
@@ -102,9 +102,78 @@ const SETUP: Record<string, string> = {
   CC: "As M, in Claude Code.",
 };
 
+/** The report's header lines for a session. */
+function metaOf(
+  config: AgentsConfig,
+  records: readonly RunRecord[],
+  stopped: ReadonlyMap<Arm, string>,
+): Record<string, string> {
+  return {
+    "Codex model": `${config.codexModel}, reasoning ${config.codexEffort}`,
+    "IncarnaMind's model": `${config.chat.kind}/${config.chat.modelId}`,
+    "Local model": `${config.localModel}, num_ctx ${config.localNumCtx}`,
+    Repeats: String(config.repeats),
+    Stopped: [...stopped].map(([arm, why]) => `${arm}: ${why}`).join("; ") || "none",
+    Gates:
+      [...new Set(records.map((record) => record.arm))]
+        .map((arm) => {
+          const g = gatesOf(
+            summarise(
+              arm,
+              records.filter((record) => record.arm === arm),
+            ),
+          );
+          return `${arm} ${g.integrity && g.scope && g.injection ? "pass" : "fail"}`;
+        })
+        .join(", ") || "–",
+  };
+}
+
+/**
+ * Scores a finished session again from its records, without the Library or
+ * any agent: for a change to the scoring after the runs. The old records
+ * are kept beside the new ones.
+ */
+async function rescoreSession(config: AgentsConfig, bakeoff: Bakeoff, dir: string): Promise<void> {
+  const log = createLog(Date.now());
+  const runsFile = join(dir, "runs.jsonl");
+  const records = readRecords(runsFile);
+  log(`Scoring ${records.length} runs again in ${dir}`);
+  const rescored: RunRecord[] = [];
+  // A few judge calls at a time.
+  for (let index = 0; index < records.length; index += 4) {
+    const batch = records.slice(index, index + 4);
+    rescored.push(
+      ...(await Promise.all(
+        batch.map((record) => rescoreRecord(record, bakeoff, config.chat, log)),
+      )),
+    );
+    if (index % 40 === 0) log(`${rescored.length} of ${records.length}`);
+  }
+  await copyFile(runsFile, join(dir, `runs.before-rescore-${Date.now()}.jsonl`));
+  await writeFile(runsFile, `${rescored.map((record) => JSON.stringify(record)).join("\n")}\n`);
+  const previous = join(dir, "report.json");
+  const probe = existsSync(previous)
+    ? ((JSON.parse(readFileSync(previous, "utf8")) as { probe?: ProbeRow[] }).probe ?? [])
+    : [];
+  const markdown = await writeReport({
+    dir,
+    startedAt: rescored[0]?.startedAt ?? "",
+    records: rescored,
+    probe,
+    meta: { ...metaOf(config, rescored, new Map()), Rescored: new Date().toISOString() },
+    setup: SETUP,
+  });
+  console.log(markdown);
+}
+
 test("agent integration bake-off", async () => {
   const config = readAgentsConfig(root);
   const bakeoff = loadBakeoff(root);
+  if (config.rescore) {
+    await rescoreSession(config, bakeoff, config.rescore);
+    return;
+  }
   const tasks: Task[] = config.tasks
     ? bakeoff.tasks.filter((task) => config.tasks?.includes(task.id))
     : bakeoff.tasks;
@@ -316,26 +385,7 @@ test("agent integration bake-off", async () => {
       startedAt: startedAt.toISOString(),
       records,
       probe,
-      meta: {
-        "Codex model": `${config.codexModel}, reasoning ${config.codexEffort}`,
-        "IncarnaMind's model": `${config.chat.kind}/${config.chat.modelId}`,
-        "Local model": `${config.localModel}, num_ctx ${config.localNumCtx}`,
-        Repeats: String(config.repeats),
-        Stopped: [...stopped].map(([arm, why]) => `${arm}: ${why}`).join("; ") || "none",
-        Gates: records.length
-          ? [...new Set(records.map((record) => record.arm))]
-              .map((arm) => {
-                const g = gatesOf(
-                  summarise(
-                    arm,
-                    records.filter((record) => record.arm === arm),
-                  ),
-                );
-                return `${arm} ${g.integrity && g.scope && g.injection ? "pass" : "fail"}`;
-              })
-              .join(", ")
-          : "–",
-      },
+      meta: metaOf(config, records, stopped),
       setup: SETUP,
     });
     console.log(markdown);

@@ -35,6 +35,8 @@ export interface AgentsConfig {
   resultsDir: string;
   /** A session folder to continue: runs already recorded there are skipped. */
   resume: string | null;
+  /** A session folder to score again from its records (sentences, judge), and report again; nothing is run. */
+  rescore: string | null;
   /** The model behind A0, `ask` (Q) and the judge: the evaluation's chat model. */
   chat: ChatSettings;
   arms: Arm[];
@@ -139,6 +141,7 @@ export function readAgentsConfig(root: string, processEnv: Env = process.env): A
     cacheDir: base.cacheDir,
     resultsDir: join(root, "eval", "results"),
     resume: value("AGENTS_RESUME") ? resolve(value("AGENTS_RESUME") as string) : null,
+    rescore: value("AGENTS_RESCORE") ? resolve(value("AGENTS_RESCORE") as string) : null,
     chat: base.chat,
     arms: arms ? list(arms, ARMS, "AGENTS_ARMS") : ARMS.filter((arm) => arm !== "MQ"),
     tasks: tasks
