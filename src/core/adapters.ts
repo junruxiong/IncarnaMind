@@ -462,6 +462,17 @@ export interface CoreAdapters {
     launcher?: AgentLauncher;
     socketPath?: string;
     version?: string;
+    /** The shim's script, built (`out/main/agentShim.js`): Claude's install file carries a copy. */
+    shimScript?: string;
+    /**
+     * Where agents keep their settings (the User's home folder) and where apps
+     * are installed, to tell which agents are on this computer. Default to the
+     * home folder and, on macOS, the Applications folders.
+     */
+    home?: string;
+    applications?: readonly string[];
+    /** Opens an agent's install link (Cursor's, VS Code's) in its app. */
+    openLink?(url: string): Promise<void>;
   };
   /** Runs the built-in embedding model (see `Embedder`). */
   embedder: Embedder;
