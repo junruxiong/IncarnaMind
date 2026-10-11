@@ -301,6 +301,8 @@ test("an Answer goes to another Mind through the ▾, and to a new Mind as chang
       await bridge.deleteConversation(conversation.id);
     }
   });
+  // Onto the added text from outside it, so its card is asked for afresh.
+  await pointAt(window, window.getByTestId("mind-title"));
   await pointAt(window, window.getByTestId("mind-editor").locator(":scope > p").nth(1));
   await expect(window.getByTestId("origin-gone")).toContainText(
     "From the conversation “When do spring tides happen”, now in Recently deleted",
