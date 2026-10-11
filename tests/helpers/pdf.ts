@@ -40,13 +40,14 @@ export interface PdfOptions {
   outline?: readonly PdfOutlineEntry[];
   /**
    * The document information dictionary (the trailer's /Info), each entry
-   * written as a literal string: `{ CreationDate: "D:20190304103000Z" }`.
-   * Latin-1 characters only.
+   * written as a literal string: `{ CreationDate: "D:20190304103000Z" }`. A
+   * value with characters outside Latin-1 (a Chinese title) is written as
+   * UTF-16BE with its byte order mark, as PDF writers do.
    */
   info?: Readonly<Record<string, string>>;
   /** The /Info object as written, in place of `info`: for malformed files. */
   rawInfo?: string;
-  /** An XMP metadata stream, as written, for the catalog's /Metadata. ASCII only. */
+  /** An XMP metadata stream, as written, for the catalog's /Metadata. Stored as UTF-8. */
   xmp?: string;
 }
 
@@ -54,6 +55,10 @@ const LINE_HEIGHT = 14;
 const TOP = 760;
 
 const escapeLatin = (text: string) => text.replace(/[\\()]/g, (char) => `\\${char}`);
+
+/** A text string for /Info: literal for Latin-1, else UTF-16BE hex with its byte order mark. */
+const infoString = (text: string) =>
+  /[^\x20-\xff]/.test(text) ? `<FEFF${toUcs2Hex(text)}>` : `(${escapeLatin(text)})`;
 
 const toUcs2Hex = (text: string) =>
   [...text]
@@ -166,16 +171,17 @@ export function buildPdf(pages: readonly PdfPage[], options: PdfOptions = {}): U
     objects[id] =
       options.rawInfo ??
       `<< ${Object.entries(options.info ?? {})
-        .map(([key, value]) => `/${key} (${escapeLatin(value)})`)
+        .map(([key, value]) => `/${key} ${infoString(value)}`)
         .join(" ")} >>`;
     info = ` /Info ${id} 0 R`;
   }
   let metadata = "";
   if (options.xmp !== undefined) {
     const id = nextId++;
+    // Its UTF-8 bytes, one character each, as the rest of the file is built in Latin-1.
+    const xmp = Buffer.from(options.xmp, "utf8").toString("latin1");
     objects[id] =
-      `<< /Type /Metadata /Subtype /XML /Length ${options.xmp.length} >>\n` +
-      `stream\n${options.xmp}\nendstream`;
+      `<< /Type /Metadata /Subtype /XML /Length ${xmp.length} >>\n` + `stream\n${xmp}\nendstream`;
     metadata = ` /Metadata ${id} 0 R`;
   }
   objects[1] = `<< /Type /Catalog /Pages 2 0 R${outline}${metadata} >>`;
