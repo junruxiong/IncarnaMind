@@ -807,6 +807,12 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 40,
+    description: "A Mind without a title is named by its first line of text",
+    // Kept up to date by the core as the Mind is edited; the title the User typed stays in `title`.
+    sql: `ALTER TABLE minds ADD COLUMN auto_title TEXT NOT NULL DEFAULT '';`,
+  },
+  {
     version: 41,
     description: "Web pages saved as Documents: each version's address, site and fetch time",
     // A web page Document's file is its snapshot (src/core/documents/web); a row per

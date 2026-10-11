@@ -1,5 +1,6 @@
 import type { LayoutTab, TabItem, WindowLayout } from "../../core/api";
 import { displayName } from "../../shared/documentNames";
+import { mindName } from "../../shared/naming";
 import type { Translate } from "./objects";
 import type { useAppStore } from "./store";
 
@@ -17,7 +18,8 @@ export function libraryTitle(state: AppState, t: Translate): string {
 export function tabTitle(state: AppState, item: TabItem, t: Translate): string {
   if (item.kind === "library") return libraryTitle(state, t);
   if (item.kind === "mind") {
-    return state.minds.find((mind) => mind.id === item.mindId)?.title || t("mind.untitled");
+    const mind = state.minds.find((each) => each.id === item.mindId);
+    return (mind && mindName(mind)) || t("mind.untitled");
   }
   const document = state.documents.find((each) => each.id === item.documentId);
   return document ? displayName(document) : t("viewer.label");
