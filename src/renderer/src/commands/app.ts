@@ -1,3 +1,4 @@
+import { signInAgain } from "../chatGptSignIn";
 import { useCitationStylePicker } from "../citationStylePicker";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
@@ -37,6 +38,17 @@ const appCommands: readonly Command[] = [
     group: "open",
     reversible: true,
     run: () => useAppStore.getState().openSettings(),
+  },
+  {
+    id: "chatgpt.continue",
+    label: "chatgpt.continue",
+    group: "main",
+    reversible: true,
+    // Signs in, then shows the plan in Settings → Models, where its model is chosen; a failure says why there.
+    run: async () => {
+      const { openSettings } = useAppStore.getState();
+      if (await signInAgain(openSettings)) openSettings("models");
+    },
   },
   {
     ...fromMenu("sidebar.toggle"),

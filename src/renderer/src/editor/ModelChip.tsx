@@ -1,13 +1,20 @@
 import { isMacOS } from "@tiptap/core";
-import { useEffect, useState } from "react";
+import { Children, type ReactNode, useEffect, useState } from "react";
 import type * as Y from "yjs";
-import type { ChatModelChoice, ChatProvider } from "../../../core/api";
+import type { ChatGptPlanStatus, ChatModelChoice, ChatProvider } from "../../../core/api";
 import { isCloudModelName } from "../../../core/providers/ollamaCloud";
 import type { MessageKey } from "../../../shared/i18n";
 import { mindModelOf, observeMindModel, setMindModel } from "../../../shared/mindModel";
 import { useAnswers } from "../answers";
 import { CheckLineIcon } from "../components/lineIcons";
+import { ChatGptMark } from "../components/providers/ChatGptMark";
+import {
+  ChatGptSignInState,
+  ManageUsageLink,
+  useContinueWithChatGpt,
+} from "../components/providers/ChatGptSignIn";
 import { usePopoverMenu } from "../components/usePopoverMenu";
+import { core } from "../core";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon } from "./icons";
@@ -73,7 +80,9 @@ function useMindModel(doc: Y.Doc): ChatModelChoice | null {
  * by where it runs (your keys, the ChatGPT plan, this computer), each with a
  * one-line hint. A choice is remembered for the Mind (`setMindModel`); a Mind
  * with none uses the default for new Minds, which the menu names at its foot.
- * Not shown before any chat model is set up.
+ * Until the User is signed in with ChatGPT, the plan's group offers "Continue
+ * with ChatGPT"; while its model is chosen, it says the plan is in use, with
+ * "Manage usage". Not shown before any chat model is set up.
  */
 export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   const t = useT();
@@ -86,11 +95,24 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
   const loadModels = useAnswers((state) => state.loadModels);
   // Over the composer, not on it.
   const menu = usePopoverMenu({ around: (chip) => chip.closest<HTMLElement>(".composer") });
+  const [plan, setPlan] = useState<ChatGptPlanStatus | null>(null);
+  const sign = useContinueWithChatGpt({
+    keepDefault: true,
+    onSignedIn: ({ provider, modelId }) => {
+      loadModels();
+      setMindModel(doc, { providerId: provider.id, modelId });
+      menu.close();
+      onChosen();
+    },
+  });
 
   // The menu lists what each provider offers: asked for when it is about to open.
   useEffect(() => {
-    if (menu.open) loadModels();
+    if (!menu.open) return;
+    loadModels();
+    core.getChatGptPlan().then(setPlan, () => undefined);
   }, [menu.open, loadModels]);
+  useEffect(() => core.on("chatGptPlan.changed", setPlan), []);
 
   const current = chosen ?? defaultModel;
   if (!current) return null;
@@ -170,55 +192,50 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
                     ),
                   }))
                   .filter((each) => each.models.length > 0);
+                if (group === "plan") {
+                  return (
+                    <PlanGroup
+                      key={group}
+                      signedIn={plan?.account.state === "signed-in"}
+                      inUse={provider?.kind === "chatgpt"}
+                      sign={sign}
+                    >
+                      {inGroup.flatMap(({ provider: each, models }) =>
+                        models.map((modelId) => (
+                          <ModelItem
+                            key={`${each.id}\n${modelId}`}
+                            provider={each}
+                            modelId={modelId}
+                            hint={t(HINTS[group])}
+                            checked={same({ providerId: each.id, modelId }, current)}
+                            unavailable={localMode}
+                            onChoose={choose}
+                          />
+                        )),
+                      )}
+                    </PlanGroup>
+                  );
+                }
                 if (inGroup.length === 0) return null;
                 return (
                   // biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold.
                   <div key={group} role="group" aria-label={t(GROUP_NAMES[group])}>
                     <p aria-hidden="true" className="model-menu-heading">
                       {t(GROUP_NAMES[group])}
-                      {group === "plan" && (
-                        <span className="model-menu-heading-note">
-                          {" · "}
-                          {t("composer.model.group.planNote")}
-                        </span>
-                      )}
                     </p>
                     {inGroup.flatMap(({ provider: each, models }) =>
-                      models.map((modelId) => {
-                        const choice = { providerId: each.id, modelId };
-                        const checked = same(choice, current);
-                        // Local mode: only a model on this computer can be asked.
-                        const unavailable = localMode && group !== "local";
-                        return (
-                          <button
-                            key={`${each.id}\n${modelId}`}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={checked}
-                            aria-disabled={unavailable || undefined}
-                            data-testid="composer-model-option"
-                            data-model={modelId}
-                            data-provider={each.id}
-                            data-unavailable={unavailable || undefined}
-                            onClick={() => {
-                              if (!unavailable) choose(choice);
-                            }}
-                            className="model-menu-item"
-                          >
-                            <CheckLineIcon
-                              className="model-menu-check"
-                              style={{ visibility: checked ? "visible" : "hidden" }}
-                            />
-                            <span className="model-menu-name">
-                              <span className="truncate">{modelId}</span>
-                              <span className="model-menu-hint">
-                                {unavailable ? t("composer.model.localModeOff") : t(HINTS[group])}
-                              </span>
-                            </span>
-                            <span className="model-menu-provider">{providerName(each, t)}</span>
-                          </button>
-                        );
-                      }),
+                      models.map((modelId) => (
+                        <ModelItem
+                          key={`${each.id}\n${modelId}`}
+                          provider={each}
+                          modelId={modelId}
+                          hint={t(HINTS[group])}
+                          checked={same({ providerId: each.id, modelId }, current)}
+                          // Local mode: only a model on this computer can be asked.
+                          unavailable={localMode && group !== "local"}
+                          onChoose={choose}
+                        />
+                      )),
                     )}
                   </div>
                 );
@@ -251,6 +268,115 @@ export function ModelChip({ doc, onChosen }: { doc: Y.Doc; onChosen(): void }) {
         )}
       </div>
     </span>
+  );
+}
+
+/**
+ * One model in the menu: its id, a hint, and who runs it. `unavailable`: listed
+ * but not chosen, with the reason as its hint (a cloud model in local mode).
+ */
+function ModelItem({
+  provider,
+  modelId,
+  hint,
+  checked,
+  unavailable,
+  onChoose,
+}: {
+  provider: ChatProvider;
+  modelId: string;
+  hint: string;
+  checked: boolean;
+  unavailable: boolean;
+  onChoose(choice: ChatModelChoice): void;
+}) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      aria-disabled={unavailable || undefined}
+      data-testid="composer-model-option"
+      data-model={modelId}
+      data-provider={provider.id}
+      data-unavailable={unavailable || undefined}
+      onClick={() => {
+        if (!unavailable) onChoose({ providerId: provider.id, modelId });
+      }}
+      className="model-menu-item"
+    >
+      <CheckLineIcon
+        className="model-menu-check"
+        style={{ visibility: checked ? "visible" : "hidden" }}
+      />
+      <span className="model-menu-name">
+        <span className="truncate">{modelId}</span>
+        <span className="model-menu-hint">
+          {unavailable ? t("composer.model.localModeOff") : hint}
+        </span>
+      </span>
+      <span className="model-menu-provider">{providerName(provider, t)}</span>
+    </button>
+  );
+}
+
+/**
+ * The ChatGPT plan's group: its models once signed in, with "Using ChatGPT
+ * plan · Manage usage" while one is chosen, as OpenAI's guidelines ask; else
+ * "Continue with ChatGPT", which signs in and chooses the plan for this Mind.
+ */
+function PlanGroup({
+  signedIn,
+  inUse,
+  sign,
+  children,
+}: {
+  signedIn: boolean;
+  inUse: boolean;
+  sign: ReturnType<typeof useContinueWithChatGpt>;
+  children: ReactNode;
+}) {
+  const t = useT();
+  const items = Children.count(children);
+  if (signedIn && items === 0) return null;
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a group of a menu's items, which a fieldset can't hold.
+    <div role="group" aria-label={t(GROUP_NAMES.plan)} data-testid="composer-model-plan">
+      <p aria-hidden="true" className="model-menu-heading">
+        {t(GROUP_NAMES.plan)}
+      </p>
+      {signedIn ? (
+        <>
+          {children}
+          {inUse && (
+            <p data-testid="composer-model-plan-in-use" className="model-menu-intro">
+              {t("chatgpt.inUse")}
+              <span aria-hidden="true"> · </span>
+              <ManageUsageLink />
+            </p>
+          )}
+        </>
+      ) : sign.waiting || sign.failureText ? (
+        <div className="model-menu-intro">
+          <ChatGptSignInState sign={sign} retry />
+        </div>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="composer-model-chatgpt"
+          onClick={() => void sign.run()}
+          className="model-menu-item"
+        >
+          <ChatGptMark className="model-menu-check" />
+          <span className="model-menu-name">
+            <span className="truncate">{t("chatgpt.continue")}</span>
+            <span className="model-menu-hint">{t("chatgpt.menu.hint")}</span>
+          </span>
+        </button>
+      )}
+    </div>
   );
 }
 
