@@ -42,7 +42,7 @@ export interface LaunchOptions {
   /**
    * Where usage data goes: a test build sends it only with this, to a local
    * server standing in for PostHog, and ignores the project a real build is
-   * made with. `testerBuild`: as a test build (the alpha) would, on until the
+   * made with. `testerBuild`: as a test build (for invited testers) would, on until the
    * User turns it off.
    */
   usageData?: { host: string; testerBuild?: boolean };
