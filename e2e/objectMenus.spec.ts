@@ -68,6 +68,8 @@ async function rightClick(window: Page, target: Locator): Promise<{ x: number; y
 /** The commands a menu holds, in order, with its rules as "—". */
 async function commandsIn(menu: Locator): Promise<string[]> {
   await expect(menu).toBeVisible();
+  // Its items draw a moment after the popover shows.
+  await expect(menu.getByRole("menuitem").first()).toBeVisible();
   return menu.evaluate((element) =>
     Array.from(element.children).map((child) =>
       child.getAttribute("role") === "menuitem" ? (child.getAttribute("data-testid") ?? "") : "—",
@@ -90,9 +92,14 @@ async function sameFromBothWays(
   const byRightClick = await commandsIn(menu);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
+  await expect(button).toHaveAttribute("aria-expanded", "false");
   await slideTo(window, hit);
   await row.hover();
-  await button.click();
+  // A click that lands while the first menu is still leaving doesn't open a second: click again.
+  await expect(async () => {
+    if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+    await expect(menu).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10_000 });
   const byButton = await commandsIn(menu);
   expect(byButton).toEqual(byRightClick);
   await window.keyboard.press("Escape");
