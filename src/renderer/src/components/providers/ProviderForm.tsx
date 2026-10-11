@@ -8,7 +8,6 @@ import {
   type TestChatConnectionInput,
 } from "../../../../core/api";
 import { catalogProviderOfKind, endpointOf } from "../../../../core/providers/catalog/providers";
-import { features } from "../../../../shared/features";
 import { core } from "../../core";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
@@ -172,20 +171,6 @@ export function ProviderForm({
               {t(`providers.kind.${option}`)}
             </label>
           ))}
-          {features.signInWithChatGpt && (
-            <label className={compactChoiceRowClass}>
-              <input
-                type="radio"
-                name={`${id}-kind`}
-                disabled
-                className={compactChoiceRadioClass}
-              />
-              <span className="flex min-w-0 flex-1 items-baseline justify-between gap-3">
-                {t("providers.kind.chatgpt")}
-                <span className="text-[12px]">{t("providers.chatgpt.unavailable")}</span>
-              </span>
-            </label>
-          )}
         </div>
       </fieldset>
 
@@ -269,6 +254,21 @@ export function ProviderForm({
               </a>
             )}
           </label>
+
+          {catalog?.planCredits && (
+            // Which of the provider's own plans pay for a key, in its words (#122).
+            <p data-testid="provider-plan-credits" className={`-mt-2 ${hintClass}`}>
+              {catalog.planCredits[language === "zh-CN" ? "zh" : "en"]}{" "}
+              <a
+                href={catalog.planCredits.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                {t("providers.form.planCredits")} ↗
+              </a>
+            </p>
+          )}
 
           {secretStorage && !secretStorage.canSave && (
             <SecretStorageNotice status={secretStorage} onAccept={() => void acceptPlainText()} />
