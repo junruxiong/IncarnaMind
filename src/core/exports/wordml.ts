@@ -44,6 +44,9 @@ export interface RunFormat {
   underline?: boolean;
   /** Monospaced, for code inside a link (code elsewhere uses its character style). */
   monospace?: boolean;
+  smallCaps?: boolean;
+  /** Raised or lowered, as a citation style may write a number or a formula. */
+  script?: "superscript" | "subscript";
 }
 
 /**
@@ -67,9 +70,11 @@ function runOf(text: string, format: RunFormat, textElement: "w:t" | "w:delText"
     format.monospace ? '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>' : "",
     format.bold ? "<w:b/>" : "",
     format.italic ? "<w:i/>" : "",
+    format.smallCaps ? "<w:smallCaps/>" : "",
     format.strike ? "<w:strike/>" : "",
     format.highlight ? '<w:highlight w:val="yellow"/>' : "",
     format.underline ? '<w:u w:val="single"/>' : "",
+    format.script ? `<w:vertAlign w:val="${format.script}"/>` : "",
   ].join("");
   let content = "";
   for (const part of text.split(/(\r\n|\r|\n|\t)/)) {
