@@ -76,9 +76,10 @@ jobs:
           # both variables the build sends no usage data and doesn't ask (src/main/usageData.ts).
           MAIN_VITE_POSTHOG_KEY: ${{ vars.POSTHOG_KEY }}
           MAIN_VITE_POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
-          # An alpha tag (v0.2.0-alpha.1) makes a test build: usage data is on until the
-          # User turns it off, and the first run says so. Every other tag asks first.
-          MAIN_VITE_TESTER_BUILD: ${{ contains(github.ref_name, '-alpha') && '1' || '' }}
+          # Only a tester tag (v0.9.0-tester.1) makes a test build, for invited testers: usage
+          # data is on until the User turns it off, and the first run says so. Every other tag,
+          # -alpha and -beta included, asks first.
+          MAIN_VITE_TESTER_BUILD: ${{ contains(github.ref_name, '-tester') && '1' || '' }}
 
       # Signs with the Developer ID certificate and notarizes when the secrets exist.
       # Without the certificate, the app is ad-hoc signed instead: it still opens (see the
