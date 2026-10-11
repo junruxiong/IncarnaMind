@@ -251,6 +251,17 @@ export function lookupIdentifier(
 }
 
 /**
+ * Whether a record describes a work a citation style would cite well (#289): a paper, a book,
+ * a report or a page of a known type, with its authors or its year. Not a record of type
+ * Other (a contract, a spreadsheet), which Numbered cites as well as any style.
+ */
+export function isCitableWork(record: Pick<ReferenceRecord, "fields"> | null): boolean {
+  if (!record) return false;
+  const { type, authors, issued } = record.fields;
+  return type !== "document" && (authors.length > 0 || issued !== "");
+}
+
+/**
  * What a record still needs before it can be cited: its title, authors and
  * date, of a work of a known type (a web page needs only its title: its
  * site stands in for authors, and it may have no date). Empty for a record
