@@ -15,12 +15,12 @@ fn main() {
     let engine = csl_spike::Engine::new(&style, &locales).expect("engine");
     let parse = t.elapsed();
     let t = Instant::now();
-    engine.render(&items, &cites, "html", None).expect("render");
+    engine.render(&items, &cites, "runs", None).expect("render");
     let first = t.elapsed();
     let mut warm = Vec::with_capacity(runs);
     for _ in 0..runs {
         let t = Instant::now();
-        engine.render(&items, &cites, "html", None).expect("render");
+        engine.render(&items, &cites, "runs", None).expect("render");
         warm.push(t.elapsed().as_secs_f64() * 1000.0);
     }
     warm.sort_by(|a, b| a.partial_cmp(b).unwrap());
