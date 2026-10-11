@@ -140,7 +140,7 @@ const correctionsSchema = jsonSchema<{ quotes: unknown }>({
 });
 
 /** The reply's JSON, even inside a Markdown code fence or after thinking; undefined if there is none. */
-async function replyJson(raw: string): Promise<unknown> {
+export async function replyJson(raw: string): Promise<unknown> {
   const json = raw
     .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "")
     .replace(/^\s*```(?:json)?[ \t]*\n?/i, "")

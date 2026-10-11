@@ -26,6 +26,9 @@ const PROVIDERS = [
     apiKey: "required",
     keyUrl: "https://platform.claude.com/settings/keys",
     docsUrl: "https://docs.anthropic.com/en/docs/about-claude/models",
+    // Claude 5.5 thinks by default (adaptively): a small call with a short reply runs out of room
+    // before it writes anything (#282).
+    request: { thinkingOff: { options: { anthropic: { thinking: { type: "disabled" } } } } },
     roles: {
       answers: "claude-sonnet-5-5",
       strongest: "claude-fable-5-1",
