@@ -1023,8 +1023,8 @@
    * in which every text starts at one edge, and a 48px right margin for the
    * Citation checks; centred. Nothing in a Block may move its text off that
    * edge: boxes that need padding (code blocks, quotes) reach into the margin
-   * instead. Under 900px both margins fold away (see the container query at
-   * the end).
+   * instead. Below 784px both margins narrow to 40px at 760px, and under
+   * 760px they fold away (see the container queries at the end).
    */
   /*
    * What scrolls the Mind: room is kept for a scrollbar where they always show,
@@ -2304,22 +2304,6 @@
       color: var(--color-ink);
     }
   }
-  .answer-notice-action {
-    flex-shrink: 0;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 6px;
-    background: var(--color-sheet);
-    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 600;
-    color: #2e3238;
-
-    &:hover {
-      background: var(--color-frame);
-    }
-  }
 
   /*
    * An Answer: no box, no label. Its text keeps the Mind's edge in ink-answer,
@@ -2568,29 +2552,12 @@
     padding: 0;
     list-style: none;
   }
-  /* A model that can't cite, and an edited Answer about to be replaced. */
+  /* A model that can't cite. */
   .answer-info {
     font-family: var(--font-sans);
     font-size: 13px;
     line-height: 20px;
     color: var(--color-ink-meta);
-  }
-  .answer-notice {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 12px;
-    padding-block: 8px;
-    border-block: 1px solid var(--color-rule);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
-    color: var(--color-ink-secondary);
-    user-select: none;
-  }
-  .answer-notice-text {
-    flex: 1 1 16rem;
-    min-width: 0;
   }
 
   /*
@@ -2969,6 +2936,31 @@
 
     &:hover {
       text-decoration: underline;
+    }
+  }
+  /*
+   * A change out of date (#94; DESIGN.md, AI edits): its new words grey, on a
+   * dashed ink-placeholder underline, and a grey line under its Block, "Out of
+   * date · Regenerate · Reject", in place of its bar. It can't be accepted.
+   */
+  .mind-editor ins.proposal-insert:has(> .proposal-stale),
+  .mind-editor .proposal-node--insert.proposal-stale:not(.citation-marker) {
+    color: var(--color-ink-meta);
+    text-decoration: underline dashed 1px var(--color-ink-placeholder);
+  }
+  .mind-editor .proposal-stale-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    user-select: none;
+
+    & .proposal-action {
+      color: var(--color-ink-secondary);
     }
   }
   /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
@@ -3964,15 +3956,24 @@
     color: var(--color-ink-meta);
   }
 
+  /* The margins narrow, from 56px and 48px to 40px each at 760px, with the measure kept at 680px. */
+  @container mind (width < 784px) {
+    .mind-measure {
+      margin-left: calc(40px + (100% - 760px) * 2 / 3);
+    }
+    .margin-checks {
+      width: 40px;
+    }
+  }
+
   /*
-   * A narrow Mind (under 900px): the right margin folds away and the left keeps the 40px the
-   * block handle and a Question's fold chevron share. Each Citation marker shows
-   * its check, since the margin column is gone.
+   * A folded Mind (under 760px): the right margin's checks move into the text, as each marker's
+   * check, and both sides keep a 40px gutter, so the text edge stays where it was at 760px.
    */
-  @container mind (width < 900px) {
+  @container mind (width < 760px) {
     .mind-measure {
       width: auto;
-      margin-inline: 40px 24px;
+      margin-inline: 40px;
     }
     .mind-editor {
       --editor-gutter: 40px;
@@ -4316,15 +4317,22 @@
   }
   /* At the bottom, the conversation and the composer keep to the Mind's column, 832px. */
   .assistant[data-dock="bottom"] {
+    .assistant-thread {
+      padding-inline: 40px;
+    }
+    .assistant-composer {
+      padding-inline: 40px;
+    }
     .assistant-thread > *,
-    .assistant-composer > .composer,
-    .assistant-no-mind {
+    .assistant-composer > .composer {
       width: auto;
       max-width: 812px;
       margin-inline: auto;
     }
     .assistant-no-mind {
-      margin-bottom: 10px;
+      width: auto;
+      max-width: 812px;
+      margin: 0 max(40px, calc((100% - 812px) / 2)) 10px;
     }
   }
 

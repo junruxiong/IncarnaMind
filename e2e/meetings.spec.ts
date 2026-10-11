@@ -10,6 +10,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openDocumentAt,
   openSettings,
   removeDataFolder,
   setWindowSize,
@@ -286,6 +287,8 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await shot(window, "meeting-transcript-wide-en");
   // A narrow window shows its groups merged: the Transcript is the tab after the Mind's.
   await setWindowSize(app, window, 900, 700);
+  await expect(bar).toBeVisible();
+  await shot(window, "meeting-bar-narrow-en");
   const transcriptTab = window.getByTestId("document-tab").filter({ hasText: "Transcript" });
   await transcriptTab.click();
   await expect(transcript).toBeVisible();
@@ -323,6 +326,9 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await expect(window.getByTestId("transcript-live")).toHaveText("实时");
   await shot(window, "meeting-transcript-wide-zh");
   await setWindowSize(app, window, 900, 700);
+  await window.getByTestId("mind-tab").filter({ hasText: "Meeting" }).click();
+  await expect(bar).toBeVisible();
+  await shot(window, "meeting-bar-narrow-zh");
   // Named when its first line came, the Transcript keeps its name in another language.
   await transcriptTab.click();
   await expect(transcript).toBeVisible();
@@ -344,6 +350,19 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   expect(stopped?.transcript?.savedPath).toMatch(/Transcript · Meeting, .*\.vtt$/);
   expect(existsSync(stopped?.transcript?.savedPath ?? "")).toBe(true);
   await shot(window, "meeting-transcript-saved-en");
+
+  // Opened at a Citation, the quote is washed in the line it was said in.
+  await openDocumentAt(window, {
+    documentId,
+    pageFrom: 1,
+    pageTo: 1,
+    quote: "The launch moves to the eighteenth of November.",
+    citation: { check: "found", number: 1, label: "0:01" },
+  });
+  const washed = window.getByTestId("viewer-transcript").locator("[data-quote-highlight]");
+  await expect(washed.first()).toBeVisible();
+  await expect(washed.first()).toHaveText("The launch moves to the eighteenth of November.");
+  await shot(window, "meeting-transcript-citation-en");
 });
 
 test("with the computer's sound denied, a line says so and opens System Settings; the microphone records on", async () => {

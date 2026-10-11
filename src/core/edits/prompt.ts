@@ -1,9 +1,10 @@
 /**
  * What Edit with AI asks the model (#93), and how its reply is read. The
  * model sees the selected passage with its Citations and footnotes as
- * numbered markers ("[1]", "[^1]"), the paragraphs around it for meaning, and
- * the task; it gives back
- * the passage's new text, which ../proposals/write compares with the old.
+ * numbered markers ("[1]", "[^1]"), the paragraphs around it for meaning, the
+ * words just before and after it when it is part of a sentence (#94: a
+ * change made again is often a few words), and the task; it gives back the
+ * passage's new text, which ../proposals/write compares with the old.
  */
 import type { EditAction } from "../api";
 
@@ -11,8 +12,10 @@ import type { EditAction } from "../api";
 export const EDIT_INSTRUCTIONS = [
   "You edit a passage of the User's own notes, as they ask. The passage is between <passage> and </passage>.",
   "The paragraphs it sits in are between <context> and </context>: they are there for meaning only.",
+  "When the passage is part of a sentence, the words just before it are between <before> and </before>, and the words just after it between <after> and </after>. They stay as they are.",
   "",
   "Reply with the new text of the passage and nothing else: no preamble, no explanation, no quotation marks around it, no code fence, no Markdown formatting.",
+  "- The new text must fit between the words before and after it. Never repeat those words in it.",
   "- Keep every Citation marker, such as [1], and every footnote marker, such as [^1], right after the words it belongs to. Never add a marker the passage doesn't have, and never change a marker's number. Leave a marker out only if the words it belongs to are gone.",
   "- Keep each formula written as $…$ exactly as it is.",
   "- Keep the passage's paragraphs apart with a blank line. Don't join or split them unless the task asks for it.",
@@ -44,22 +47,31 @@ function taskFor(action: EditAction, instruction: string): string {
   }
 }
 
-/** The request: the context, the passage and the task. */
+/**
+ * The request: the context, the words around the passage (each only when
+ * there are any), the passage and the task.
+ */
 export function editPrompt(input: {
   action: EditAction;
   instruction: string;
   passage: string;
   context: string;
+  before?: string;
+  after?: string;
 }): string {
+  const near = (tag: "before" | "after", words: string | undefined) =>
+    words ? [`<${tag}>`, words, `</${tag}>`, ""] : [];
   return [
     "<context>",
     input.context,
     "</context>",
     "",
+    ...near("before", input.before),
     "<passage>",
     input.passage,
     "</passage>",
     "",
+    ...near("after", input.after),
     `<task action="${input.action}">${taskFor(input.action, input.instruction)}</task>`,
   ].join("\n");
 }

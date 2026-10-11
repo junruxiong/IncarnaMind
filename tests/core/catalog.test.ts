@@ -23,7 +23,11 @@ import {
   recommendedLocalModels,
 } from "../../src/core/providers/catalog";
 import { OVERRIDES } from "../../src/core/providers/catalog/overrides";
-import { catalogProvider } from "../../src/core/providers/catalog/providers";
+import {
+  catalogProvider,
+  KEY_PROVIDER_KINDS,
+  keyProviderGroups,
+} from "../../src/core/providers/catalog/providers";
 import {
   baseUrlFor,
   endpointUrl,
@@ -411,6 +415,70 @@ describe("The providers of #178", () => {
         /doesn't take a server URL/,
       );
       expect(baseUrlFor(id as ChatProviderKind, undefined), id).toBeNull();
+    }
+  });
+});
+
+describe("Support tiers (ADR-0019)", () => {
+  const FIRST_CLASS = [
+    "anthropic",
+    "openai",
+    "google",
+    "openrouter",
+    "ollama",
+    "deepseek",
+    "qwen",
+    "siliconflow",
+  ];
+  const BEST_EFFORT = ["mistral", "xai", "kimi", "glm"];
+
+  test("every catalog provider has a support value, as the ADR sets out", () => {
+    for (const each of CATALOG_PROVIDERS) {
+      expect(["first-class", "best-effort"], each.id).toContain(each.support);
+    }
+    const supportOf = (tier: string) =>
+      CATALOG_PROVIDERS.filter((each) => each.support === tier).map((each) => each.id);
+    expect(supportOf("first-class").sort()).toEqual([...FIRST_CLASS].sort());
+    expect(supportOf("best-effort").sort()).toEqual([...BEST_EFFORT, "openai-compatible"].sort());
+  });
+
+  test("the first-run list holds exactly the first-class providers that take a key", () => {
+    const { main, more } = keyProviderGroups();
+    const expected = CATALOG_PROVIDERS.filter(
+      (each) => each.support === "first-class" && each.endpoints.length > 0,
+    ).map((each) => each.id);
+    expect(main).toEqual(expected);
+    // Settings' "More providers" holds the rest, and nothing is lost between the two.
+    expect([...main, ...more].sort()).toEqual([...KEY_PROVIDER_KINDS].sort());
+    expect(more).toEqual(expect.arrayContaining([...BEST_EFFORT, "openai-compatible"]));
+  });
+
+  test("a provider already set up stays among the User's, whatever its tier", () => {
+    const { main, more } = keyProviderGroups(["mistral"]);
+    expect(main).toContain("mistral");
+    expect(more).not.toContain("mistral");
+    expect(more).toContain("xai");
+  });
+
+  test("each first-class provider that needs a key has a key guide in both languages, and the rest have none", () => {
+    for (const each of CATALOG_PROVIDERS) {
+      const needsGuide = each.support === "first-class" && each.apiKey === "required";
+      if (!needsGuide) {
+        expect(each.keyGuide, each.id).toBeUndefined();
+        continue;
+      }
+      expect(each.keyUrl, each.id).toBeDefined();
+      expect(each.keyGuide?.length, each.id).toBeGreaterThan(0);
+      for (const step of each.keyGuide ?? []) {
+        expect(step.en.trim(), each.id).not.toBe("");
+        expect(step.zh.trim(), each.id).not.toBe("");
+      }
+    }
+  });
+
+  test("a best-effort provider keeps its link to the provider's key page", () => {
+    for (const id of BEST_EFFORT) {
+      expect(catalogProvider(id)?.keyUrl, id).toMatch(/^https:\/\//);
     }
   });
 });

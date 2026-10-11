@@ -80,12 +80,12 @@ export function timestamp(ms: number): string {
 function payloadOf(lines: readonly string[]): { text: string; speaker: string | null } {
   const raw = lines.join("\n");
   const voice = /^<v(?:\.[^ \t>]*)?[ \t]+([^>]+)>/.exec(raw);
-  const text = raw
-    .replace(/<[^>]*>/g, "")
-    .replace(/&(amp|lt|gt|nbsp|lrm|rlm);/g, (_, name: string) => ENTITIES[name] ?? "")
+  const decode = (value: string) =>
+    value.replace(/&(amp|lt|gt|nbsp|lrm|rlm);/g, (_, name: string) => ENTITIES[name] ?? "");
+  const text = decode(raw.replace(/<[^>]*>/g, ""))
     .replace(/\s+/g, " ")
     .trim();
-  return { text, speaker: voice?.[1]?.trim() || null };
+  return { text, speaker: voice?.[1] ? decode(voice[1]).trim() || null : null };
 }
 
 /** Reads a WebVTT file. Throws `ExtractionError` when it isn't one. */
@@ -152,7 +152,9 @@ export function writeVtt(transcript: Transcript): string {
     });
   }
   transcript.cues.forEach((cue) => {
-    const speaker = cue.speaker ? `<v ${cue.speaker.replace(/[<>\n]/g, " ")}>` : "";
+    const speaker = cue.speaker
+      ? `<v ${cue.speaker.replace(/&/g, "&amp;").replace(/[<>\n]/g, " ")}>`
+      : "";
     blocks.push({
       at: cue.startMs,
       text: `${timestamp(cue.startMs)} --> ${timestamp(cue.endMs)}\n${speaker}${escapeText(cue.text)}`,

@@ -83,10 +83,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const writing = useAnswers((state) => (answerId ? state.writing.has(answerId) : false));
   // The event says so first; the status says so in windows that opened since.
   const streaming = writing || status === "streaming";
-  const confirming = useAnswers(
-    (state) => questionId !== null && state.blocked[questionId]?.kind === "edited",
-  );
-  const { regenerate, stop, dismiss } = useAnswers.getState();
+  const { regenerate, stop } = useAnswers.getState();
   const openSettings = useAppStore((state) => state.openSettings);
   const toolCalls = toolCallsOf(node.attrs.toolCalls);
   const searches = toolCalls.filter((call) => call.tool === SEARCH);
@@ -97,8 +94,9 @@ export function AnswerView({ node }: ReactNodeViewProps) {
   const approvals = useMemo(() => waitingFor(waiting, answerId), [waiting, answerId]);
   const isExample = useIsExampleAnswer(answerId);
 
-  const writeAgain = (discardEdits = false) => {
-    if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
+  // One the User edited comes back as changes over their version: nothing to confirm.
+  const writeAgain = () => {
+    if (answerId && questionId) void regenerate(mindId, answerId, questionId);
   };
 
   const meta: ReactNode[] = [];
@@ -144,32 +142,6 @@ export function AnswerView({ node }: ReactNodeViewProps) {
         <p contentEditable={false} data-testid="answer-no-citations" className="answer-info">
           {t("citation.unsupported")}
         </p>
-      )}
-
-      {confirming && questionId && (
-        <div
-          contentEditable={false}
-          role="alertdialog"
-          data-testid="answer-confirm"
-          className="answer-notice"
-        >
-          <span className="answer-notice-text">{t("answer.edited.body")}</span>
-          <button
-            type="button"
-            data-testid="answer-confirm-replace"
-            onClick={() => writeAgain(true)}
-            className="answer-notice-action"
-          >
-            {t("answer.edited.replace")}
-          </button>
-          <button
-            type="button"
-            onClick={() => dismiss(questionId)}
-            className="answer-notice-action"
-          >
-            {t("answer.edited.keep")}
-          </button>
-        </div>
       )}
 
       <NodeViewContent className="answer-content" />

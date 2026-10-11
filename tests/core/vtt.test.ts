@@ -81,6 +81,12 @@ describe("Transcripts as WebVTT", () => {
         "NOTE gap 00:00:01.500 to 00:00:02.000 lost\n\n00:00:02.000 --> 00:00:03.000\n第二句。\n",
     );
     expect(readVtt(written)).toEqual(transcript);
+    const ampersand = {
+      cues: [{ startMs: 0, endMs: 900, text: "Yes.", speaker: "R&D" }],
+      gaps: [],
+    };
+    expect(writeVtt(ampersand)).toContain("<v R&amp;D>Yes.");
+    expect(readVtt(writeVtt(ampersand))).toEqual(ampersand);
   });
 
   test("a file that isn't WebVTT is refused", () => {
@@ -183,6 +189,16 @@ describe("Citations of a Transcript", () => {
         "[1:02:03] 发布日期推迟到十一月十八日。",
       ].join("\n"),
     );
+    // A line said twice is marked twice, each time on its own line.
+    const twice = transcriptUnits({
+      cues: [
+        { startMs: 1000, endMs: 2000, text: "Yes.", speaker: null },
+        { startMs: 3000, endMs: 4000, text: "Yes.", speaker: null },
+        { startMs: 5000, endMs: 6000, text: "Yes", speaker: null },
+      ],
+      gaps: [],
+    });
+    expect(withCueMarks(twice[0]?.text ?? "", twice)).toBe("[0:01] Yes.\n[0:03] Yes.\n[0:05] Yes");
     // A Passage that starts part way through keeps the marks of the cues it holds.
     const tail = text.slice(text.indexOf("Two weeks"));
     expect(withCueMarks(tail, units)).toMatch(/^\[12:20\] Two weeks/);
