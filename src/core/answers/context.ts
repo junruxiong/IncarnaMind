@@ -1,12 +1,19 @@
 /**
- * Question context (ADR-0007): what an Answer is generated from. Every Block
- * above the Question, in order, except Notes the User switched off: Notes and
- * earlier Questions as the User's words, earlier Answers as the model's. When
- * that is over the token budget, the oldest content goes first.
+ * Question context (ADR-0007): what an Answer is generated from. In a Mind,
+ * every Block above the Question, in order, except Notes the User switched off:
+ * Notes and earlier Questions as the User's words, earlier Answers as the
+ * model's. In a conversation, its earlier Questions and Answers the same way.
+ * When that is over the token budget, the oldest content goes first.
  */
 import * as Y from "yjs";
-import { ANSWER_BLOCK, INCLUDE_IN_CONTEXT_ATTRIBUTE, QUESTION_BLOCK } from "../api";
+import {
+  ANSWER_BLOCK,
+  type ConversationMessage,
+  INCLUDE_IN_CONTEXT_ATTRIBUTE,
+  QUESTION_BLOCK,
+} from "../api";
 import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks";
+import { answerMarkdown } from "./contextText";
 import type { AnswerMessage } from "./engine";
 
 /** About 12k tokens, the old app's budget for what precedes a Question. */
@@ -114,6 +121,30 @@ export function buildQuestionContext(
   return {
     messages: withinBudget(newestFirst(), questionText, budget - estimateTokens(questionText)),
     question: questionText,
+  };
+}
+
+/**
+ * The Question context of a Question in one of the assistant's conversations
+ * (ADR-0017): the messages before it, Questions as the User's words and Answers
+ * (with their Citations as plain references) as the model's, the oldest left out
+ * first, as in a Mind. A failed Answer adds nothing.
+ */
+export function conversationContext(
+  earlier: readonly ConversationMessage[],
+  question: string,
+  budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+): QuestionContext {
+  const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
+    if (message.kind === "question")
+      return message.text ? [{ role: "user", text: message.text }] : [];
+    if (message.status === "failed") return [];
+    const text = answerMarkdown(message.text, message.citations);
+    return text ? [{ role: "assistant", text }] : [];
+  });
+  return {
+    messages: withinBudget(pieces.reverse(), question, budget - estimateTokens(question)),
+    question,
   };
 }
 

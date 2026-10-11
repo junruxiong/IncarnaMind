@@ -169,11 +169,16 @@ export const zhCN = {
   "move.done.minds": "已将 {count} 个 Mind 移动到“{folder}”",
   "move.done.documents": "已将 {count} 个文档移动到“{folder}”",
   "move.done.items": "已将 {count} 项移动到“{folder}”",
+  "move.done.conversations": "已将 {count} 个对话移动到“{folder}”",
   "move.undo": "撤销",
   "move.undoLabel": "撤销：{message}",
   "move.dismiss": "关闭",
 
   "mind.untitled": "未命名",
+  "conversation.untitled": "新对话",
+  "object.renamed": "已重命名为“{name}”",
+  "object.deleted": "已删除“{name}”",
+  "object.deleted.conversations": "已删除 {count} 个对话",
   "mind.noneOpen.title": "新建一个 Mind",
   "mind.noneOpen.body": "Mind 就是一个笔记本，每个主题或项目一个。",
   "mind.title.label": "Mind 标题",
@@ -1466,7 +1471,7 @@ export const zhCN = {
   "export.unnamedDocument": "未命名文档",
   "export.dataFolder.title": "数据文件夹",
   "export.dataFolder.body":
-    "你的 Mind、文档和设置都保存在这台电脑上的一个文件夹里。如需备份，请先退出 IncarnaMind，再复制这个文件夹。",
+    "你的 Mind、对话、文档和设置都保存在这台电脑上的一个文件夹里。如需备份，请先退出 IncarnaMind，再复制这个文件夹。",
   "export.dataFolder.open": "打开数据文件夹",
   "export.dataFolder.openLogs": "打开日志文件夹",
   "export.dataFolder.logs":
