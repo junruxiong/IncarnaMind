@@ -2,6 +2,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { mindName } from "../../../shared/naming";
 import { useCitationStylePicker } from "../citationStylePicker";
+import { commands } from "../commands/registry";
 import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
@@ -270,6 +271,20 @@ function MindMenu({
         >
           <span className="flex-1">{t("mind.rename")}</span>
           <span className="pl-4 text-[13px] text-ink-meta">{RENAME_SHORTCUT}</span>
+        </button>
+        <div className={menuRuleClass} />
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="mind-make-skill"
+          onClick={choose(() => {
+            commands
+              .run("skill.fromMind", { focus: { kind: "mind", id: mind.id }, surface: "sidebar" })
+              .catch(useAppStore.getState().reportError);
+          })}
+          className={`${menuItemClass} pl-2`}
+        >
+          {t("skills.make.command")}
         </button>
         <div className={menuRuleClass} />
         <button

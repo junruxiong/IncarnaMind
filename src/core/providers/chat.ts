@@ -637,12 +637,14 @@ export function createChat(options: {
     /**
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
-     * `flow` (automatic tagging passes "tagging").
+     * `flow` (automatic tagging passes "tagging"). `thinking: "off"` skips
+     * thinking where the model can, for a short request on the chat flow.
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
       choice?: ChatModelChoice,
       flow: DataFlowId = "chat",
+      thinking?: "off",
     ): Promise<PreparedChatModel> {
       const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
@@ -653,7 +655,13 @@ export function createChat(options: {
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
       const model = createModel(
-        specFor(provider, apiKey, modelId, profile, flow === "chat" ? undefined : "off"),
+        specFor(
+          provider,
+          apiKey,
+          modelId,
+          profile,
+          thinking ?? (flow === "chat" ? undefined : "off"),
+        ),
       );
       const row: ProviderRow = {
         id: provider.id,

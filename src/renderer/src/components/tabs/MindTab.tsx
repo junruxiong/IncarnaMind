@@ -7,6 +7,7 @@ import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
 import { ExampleBanner, useIsExample } from "../GettingStarted";
 import { PlusLineIcon } from "../lineIcons";
+import { MakeSkillCard } from "../MakeSkillCard";
 import { MeetingInMind } from "../MeetingInMind";
 import { MindEditor } from "../MindEditor";
 import { ChatReadinessNotice } from "../providers/ChatReadinessNotice";
@@ -43,6 +44,7 @@ export function MindTab({ mindId }: { mindId: string }) {
               <MindEditor mindId={mind.id} />
             </CountSlotContext.Provider>
           </ComposerDockContext.Provider>
+          <MakeSkillCard mindId={mind.id} />
         </div>
       </article>
     </div>

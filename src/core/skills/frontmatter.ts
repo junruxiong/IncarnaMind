@@ -9,6 +9,8 @@
  * is kept as its raw text, which is fine for fields the format doesn't define.
  */
 
+import { MAX_SKILL_NAME_LENGTH } from "../../shared/skillName";
+
 /** The fields IncarnaMind uses, validated. Unknown fields are allowed and ignored. */
 export interface SkillFrontmatter {
   name: string;
@@ -23,7 +25,7 @@ export type ParsedSkillMd =
   | { ok: false; field: string | null; message: string };
 
 /** The format's limits. */
-export const MAX_NAME_LENGTH = 64;
+export const MAX_NAME_LENGTH = MAX_SKILL_NAME_LENGTH;
 const MAX_DESCRIPTION_LENGTH = 1024;
 const MAX_COMPATIBILITY_LENGTH = 500;
 /** Lowercase letters and digits, in runs joined by single hyphens. */

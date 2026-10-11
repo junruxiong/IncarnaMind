@@ -233,6 +233,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Citation style…$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       /^Rename(↩|F2)$/,
+      /^Make this a Skill$/,
       /^Delete…$/,
     ]);
     await actions.getByTestId("mind-move-to").click();
