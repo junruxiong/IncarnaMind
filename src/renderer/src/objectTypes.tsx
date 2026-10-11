@@ -12,13 +12,10 @@ import { noteHolding } from "./editor/noteKeymap";
 import { folderName } from "./linkedFolders";
 import type { ObjectKind, ObjectType } from "./objects";
 import { useAppStore } from "./store";
-import { LIBRARY_TAB, libraryTitle } from "./tabs";
+import { findTab, tabTitle } from "./tabs";
 
 const state = () => useAppStore.getState();
 const ICON = "size-4 shrink-0 text-ink-meta";
-
-const mindTitle: ObjectType["label"] = (ref, t) =>
-  state().minds.find((mind) => mind.id === ref.id)?.title || t("mind.untitled");
 
 /**
  * How each kind is named and shown. Chats join when they exist (#203), and
@@ -26,7 +23,7 @@ const mindTitle: ObjectType["label"] = (ref, t) =>
  */
 export const objectTypes: Partial<Record<ObjectKind, ObjectType>> = {
   mind: {
-    label: mindTitle,
+    label: (ref, t) => tabTitle(state(), { kind: "mind", mindId: ref.id }, t),
     icon: () => <MindLineIcon className={ICON} />,
   },
   document: {
@@ -68,12 +65,16 @@ export const objectTypes: Partial<Record<ObjectKind, ObjectType>> = {
     icon: () => <GripIcon className={ICON} />,
   },
   tab: {
-    label: (ref, t) => (ref.id === LIBRARY_TAB ? libraryTitle(state(), t) : mindTitle(ref, t)),
-    icon: (ref) =>
-      ref.id === LIBRARY_TAB ? (
-        <LooseDocumentsLineIcon className={ICON} />
-      ) : (
-        <MindLineIcon className={ICON} />
-      ),
+    label: (ref, t) => {
+      const tab = findTab(state().layout, ref.id);
+      return tab ? tabTitle(state(), tab.item, t) : "";
+    },
+    icon: (ref) => {
+      const item = findTab(state().layout, ref.id)?.item;
+      if (item?.kind === "library") return <LooseDocumentsLineIcon className={ICON} />;
+      if (item?.kind !== "document") return <MindLineIcon className={ICON} />;
+      const kind = state().documents.find((each) => each.id === item.documentId)?.kind;
+      return <DocumentLineIcon kind={kind ?? "text"} className={ICON} />;
+    },
   },
 };
