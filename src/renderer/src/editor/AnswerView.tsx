@@ -13,6 +13,7 @@ import {
 import { AnswerWriting } from "../answerPhase";
 import { useAnswers } from "../answers";
 import { useApprovals, waitingFor } from "../approvals";
+import { signInAgain } from "../chatGptSignIn";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { FindSourcesLineIcon } from "../components/lineIcons";
@@ -245,9 +246,23 @@ function AnswerError({
   const action =
     fix.kind === "settings"
       ? { label: t(fix.label), onClick: () => onOpenSettings(fix.page) }
-      : fix.kind === "retry" && onRetry
-        ? { label: t(fix.label), onClick: onRetry }
-        : undefined;
+      : fix.kind === "sign-in"
+        ? {
+            label: t(fix.label),
+            onClick: () =>
+              void signInAgain(onOpenSettings).then((signedIn) => {
+                if (signedIn) onRetry?.();
+              }),
+          }
+        : fix.kind === "link"
+          ? // The main process opens it in the User's browser.
+            {
+              label: `${t(fix.label)} ↗`,
+              onClick: () => window.open(fix.url, "_blank", "noreferrer"),
+            }
+          : fix.kind === "retry" && onRetry
+            ? { label: t(fix.label), onClick: onRetry }
+            : undefined;
   return (
     <div contentEditable={false} data-testid="answer-error" data-error-kind={kind}>
       <ProblemLine
