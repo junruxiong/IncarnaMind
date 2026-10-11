@@ -1,0 +1,36 @@
+{
+  "status": "ok",
+  "message-type": "work",
+  "message-version": "1.0.0",
+  "message": {
+    "publisher": "Springer Science and Business Media LLC",
+    "issue": "7825",
+    "DOI": "10.1038/s41586-020-2649-2",
+    "type": "journal-article",
+    "page": "357-362",
+    "source": "Crossref",
+    "title": ["Array programming with NumPy"],
+    "prefix": "10.1038",
+    "volume": "585",
+    "author": [
+      { "given": "Charles R.", "family": "Harris", "sequence": "first", "affiliation": [] },
+      { "given": "K. Jarrod", "family": "Millman", "sequence": "additional", "affiliation": [] },
+      {
+        "given": "Stéfan J.",
+        "family": "van der Walt",
+        "sequence": "additional",
+        "affiliation": []
+      },
+      { "given": "Ralf", "family": "Gommers", "sequence": "additional", "affiliation": [] }
+    ],
+    "member": "297",
+    "published-online": { "date-parts": [[2020, 9, 16]] },
+    "container-title": ["Nature"],
+    "short-container-title": ["Nature"],
+    "language": "en",
+    "URL": "https://doi.org/10.1038/s41586-020-2649-2",
+    "published-print": { "date-parts": [[2020, 9, 17]] },
+    "published": { "date-parts": [[2020, 9, 16]] },
+    "issued": { "date-parts": [[2020, 9, 16]] }
+  }
+}
