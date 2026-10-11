@@ -90,8 +90,12 @@ export interface CreateMindInput {
  * - 3: footnotes the User writes (`FOOTNOTE_NODE`, with an `id`). Version 2
  *   content is version 3 content as it is: nothing is rewritten, and a Mind
  *   records 3 once this version writes to it.
+ * - 4: Proposals waiting for the User (#93): the `proposalInsert` and
+ *   `proposalDelete` marks on text, and the `proposal` attribute on Blocks and
+ *   on inline nodes (see `PROPOSAL_ATTRIBUTE`). Older content is version 4
+ *   content as it is: nothing is rewritten.
  */
-export const CONTENT_SCHEMA_VERSION = 3;
+export const CONTENT_SCHEMA_VERSION = 4;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -202,6 +206,62 @@ export const MIND_SETTINGS_FIELD = "settings";
 
 /** The attribute every Block keeps its UUID in, in the Mind's Yjs document. */
 export const BLOCK_ID_ATTRIBUTE = "id";
+
+/**
+ * Proposals (CONTEXT.md): changes the AI made to a Mind that wait for the
+ * User to accept or reject them, stored in the Mind's Yjs document so they
+ * survive sync and reload (see `src/shared/proposals.ts`, which reads and
+ * resolves them). Each Proposal is one change in one place, and carries
+ * `ProposalRef`:
+ *
+ * - words it adds are text under the `proposalInsert` mark, and words it
+ *   removes stay, under the `proposalDelete` mark, until it is resolved;
+ * - a whole Block it adds or removes, and an inline node (a Citation, a
+ *   formula, a line break) it adds or removes, has the `proposal` attribute,
+ *   a `ProposalAttribute` (the editor's binding keeps no marks on nodes).
+ *
+ * Until it is accepted a Proposal isn't part of the Mind: what reads the
+ * Mind's text (Question context, exports) leaves its new words out and keeps
+ * the words it would remove.
+ */
+export const PROPOSAL_INSERT_MARK = "proposalInsert";
+export const PROPOSAL_DELETE_MARK = "proposalDelete";
+export const PROPOSAL_ATTRIBUTE = "proposal";
+
+/** Which Proposal a mark or attribute belongs to. */
+export interface ProposalRef {
+  /** The Proposal's random UUID: what is accepted or rejected on its own. */
+  id: string;
+  /**
+   * What asked for it: one Edit with AI, or (later) one reply of the
+   * assistant. Its Proposals are accepted or rejected together from there,
+   * and `MIND_PROPOSAL_REQUESTS_FIELD` says which model made them.
+   */
+  request: string;
+}
+
+/** The `proposal` attribute of a Block or an inline node: it adds it, or removes it. */
+export interface ProposalAttribute extends ProposalRef {
+  kind: "insert" | "delete";
+}
+
+/**
+ * The name of the Y.Map, beside a Mind's Blocks, that says what made each
+ * request's Proposals (`ProposalRequest`, by `ProposalRef.request`): kept
+ * once written, so accepting a Proposal on any device can say which model
+ * wrote it.
+ */
+export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
+
+/** What made a request's Proposals. */
+export interface ProposalRequest {
+  /** Edit with AI (#93); the assistant (#202) and Enhance (#114) add theirs. */
+  source: "edit-with-ai";
+  providerId: string;
+  modelId: string;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+}
 
 /**
  * The node types of a Note: any top-level Block that isn't a Question or an
@@ -2014,6 +2074,72 @@ export interface SuggestionAccepted {
   acceptedAt: string;
 }
 
+/**
+ * A place in a Mind's text: a paragraph or a heading, by its Block id, and a
+ * character offset into its text, where an inline node (a Citation, a
+ * formula, a line break, a footnote with all its text) counts as one
+ * character.
+ */
+export interface TextPlace {
+  blockId: string;
+  offset: number;
+}
+
+/**
+ * What Edit with AI does with the selected text (#93): improve the writing,
+ * shorten it, translate it, explain it in a new paragraph under it, or what
+ * the User asked for in their own words.
+ */
+export const editActions = ["improve", "shorten", "translate", "explain", "instruction"] as const;
+export type EditAction = (typeof editActions)[number];
+
+export interface EditWithAiInput {
+  /** Chosen by the caller, so it can stop the request (`cancelEdit`). */
+  requestId: string;
+  mindId: string;
+  /** Where the selection starts, and where it ends, after it. */
+  from: TextPlace;
+  to: TextPlace;
+  /**
+   * The selected text as the editor read it: an inline node as U+FFFC, and
+   * each paragraph on a line of its own. The core edits it only while the
+   * Mind still holds it.
+   */
+  text: string;
+  action: EditAction;
+  /**
+   * For "translate", the language to translate into, as the User would name
+   * it ("English", "简体中文"); for "instruction", what the User asked for.
+   */
+  instruction?: string;
+  /** The model to use: the Mind's own; none, or null, the default chat model. */
+  model?: ChatModelChoice | null;
+}
+
+/** What Edit with AI did. */
+export type EditWithAiResult =
+  /**
+   * The changes are in the Mind as Proposals: `proposals` of them, all from
+   * `request`. `droppedCitations`: how many Citations they would remove.
+   */
+  | { kind: "proposed"; request: string; proposals: number; droppedCitations: number }
+  /** The model gave the text back as it was: there is nothing to propose. */
+  | { kind: "unchanged" }
+  /** Nothing was sent: the model can't be used now, and `readiness` says why. */
+  | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** Nothing was sent: local mode is on, and the model isn't on this computer. */
+  | { kind: "local-mode" }
+  /** The selected text isn't in the Mind as it was any more: it was edited meanwhile. */
+  | { kind: "changed" }
+  /** Nothing was sent: the selection holds Proposals that are still waiting. */
+  | { kind: "has-proposals" }
+  /** Nothing was sent: the selected text is more than the model can take at once. */
+  | { kind: "too-long" }
+  /** The User stopped it (`cancelEdit`). */
+  | { kind: "cancelled" }
+  /** The model failed, or gave nothing back. */
+  | { kind: "failed"; error: ProviderError };
+
 /** What asking a Question (or regenerating its Answer) did. */
 export type AskResult =
   /** The Answer is being written into the Mind, right after its Question. */
@@ -2569,6 +2695,7 @@ export const dataKinds = [
   "writing",
   "writing-passages",
   "identifiers",
+  "selection",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -2593,6 +2720,8 @@ export type DataKind = (typeof dataKinds)[number];
  * - "reference-lookup": a Document's DOI to Crossref, or its arXiv id to
  *   arXiv, when the User asks Look up to fill its reference record (#286).
  *   Nothing else: no file, text or name. None in local mode.
+ * - "edits": when the User asks Edit with AI (#93), the text they selected
+ *   and the paragraphs it is in, to the chat model's provider. None in local mode.
  */
 export const dataFlowIds = [
   "chat",
@@ -2603,6 +2732,7 @@ export const dataFlowIds = [
   "rerank",
   "suggestions",
   "reference-lookup",
+  "edits",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
@@ -4022,6 +4152,19 @@ export interface CoreApi {
   /** Today's counts, and why suggestions can't be made now. */
   getSuggestionStatus(): Promise<SuggestionStatus>;
 
+  /**
+   * Edit with AI (#93): asks the model to change the selected text as
+   * `action` says, and writes what it gives back into the Mind as Proposals
+   * waiting for the User to accept or reject, never as an edit. Citations the
+   * new text keeps stay, checked again; one it would drop stays in a Proposal
+   * for the User to review. Sends on the "edits" flow once the User allows it
+   * for the model's service; in local mode only a model on this computer is
+   * used. Pushes the Proposals as a "mind.update", like any edit.
+   */
+  editWithAi(input: EditWithAiInput): Promise<EditWithAiResult>;
+  /** Stops an Edit with AI request: it gives "cancelled". Stopping one that ended does nothing. */
+  cancelEdit(requestId: string): Promise<void>;
+
   getSecretStorage(): Promise<SecretStorageStatus>;
   /** The User accepts storing keys without keyring protection on this device. */
   acceptPlainTextSecretStorage(): Promise<SecretStorageStatus>;
@@ -4636,6 +4779,8 @@ const methods: Record<CoreApiMethod, true> = {
   cancelSuggestion: true,
   acceptSuggestion: true,
   getSuggestionStatus: true,
+  editWithAi: true,
+  cancelEdit: true,
   getSecretStorage: true,
   acceptPlainTextSecretStorage: true,
   detectOllama: true,

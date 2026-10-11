@@ -7,7 +7,7 @@ import { logActivity, silentLogger } from "./activityLog";
 import type { CoreAdapters } from "./adapters";
 import { createAiUse } from "./aiUse";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
-import { recheckCitation } from "./answers/citations";
+import { recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
   addCitedVersions,
@@ -39,8 +39,10 @@ import {
   type DocumentImage,
   parseListOptions,
 } from "./documents";
+import { createVersionRetention, type VersionRetention } from "./documents/retention";
 import { fsWatchFolder } from "./documents/watcher";
 import { createWebPages } from "./documents/web";
+import { createEdits } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
 import {
@@ -172,6 +174,15 @@ export interface Core extends CoreApi, CoreEventSource {
    * modules and the host (e.g. its update check) register theirs here.
    */
   readonly networkTraffic: NetworkTrafficRegistry;
+  /**
+   * The versions of Documents that core features other than Citations still
+   * need (#79): a check result's evidence, a saved page, an unfinished Task's
+   * sources, a Checkpoint's Citations. A retained version keeps its text when
+   * its file changes, and its Units retained when its Linked folder is
+   * unlinked, as a quoted one does. Once its last owner releases it, and no
+   * Citation quotes it, it goes at the next start.
+   */
+  readonly retention: VersionRetention;
   /**
    * For Answers (#29): the default chat model (or the one given), once Questions
    * can be asked and the User has accepted its data flow. Throws otherwise.
@@ -320,6 +331,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const privacy = createPrivacy({ settings, crashReporter: adapters.crashReporter, usageData });
   const privacyChanged = () => events.emit("privacy.changed", privacy.status());
   const platform = process.platform;
+  const retention = createVersionRetention(db, now);
   let documents: ReturnType<typeof createDocuments>;
   /** Set once created, so a failure after it can close it. */
   let createdDocuments: ReturnType<typeof createDocuments> | undefined;
@@ -353,7 +365,8 @@ export function createCore(adapters: CoreAdapters): Core {
         prepareRerank();
         documentReady(documentId);
       },
-      // Citations live in Minds, anywhere: in Answers, or copied into Notes; and in conversations.
+      // Citations live in Minds, anywhere: in Answers, or copied into Notes; and in
+      // conversations. Features other than Citations retain what they need too.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
         const cited: CitedUnits[] = [];
@@ -361,6 +374,7 @@ export function createCore(adapters: CoreAdapters): Core {
           content.peek(mind.id, (fragment) => addCitedUnits(fragment, wanted, cited));
         }
         conversations.addCitedUnits(wanted, cited);
+        retention.addRetainedUnits(wanted, cited);
         return cited;
       },
       // iCloud Drive before macOS 14 downloads a stub's file when asked by its command-line tool.
@@ -381,19 +395,22 @@ export function createCore(adapters: CoreAdapters): Core {
       },
     });
     // Old versions' text, and the text kept of unlinked Documents, that no
-    // Citation quotes any more goes, at startup only: nothing is being
-    // written or undone then, so no Citation is in flight.
+    // Citation quotes and no feature retains any more goes, at startup only:
+    // nothing is being written or undone then, so no Citation is in flight.
+    // The retained versions are one query, whatever their kind.
     if (documents.hasOldVersions() || documents.keptCitationTexts().length > 0) {
       const cited: CitedVersions = new Map();
       for (const mind of minds.list()) {
         content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
       }
       conversations.addCitedVersions(cited);
+      retention.addRetainedVersions(cited);
       const quoted = (documentId: string, contentHash: string) =>
         isCited(cited, documentId, contentHash);
       documents.collectOldVersions(quoted);
       documents.releaseKeptText(quoted);
     }
+    retention.forgetReleased();
   } catch (error) {
     lifetime.abort();
     // Created, but collecting old versions failed.
@@ -742,6 +759,20 @@ export function createCore(adapters: CoreAdapters): Core {
     writeValue: (key, value) => settings.writeDeviceValue(key, value),
     now: () => adapters.now?.() ?? new Date(),
     reportError: (error) => console.error(error),
+  });
+
+  // Edit with AI (#93): the change comes back as Proposals; Citations it keeps are checked again.
+  const edits = createEdits({
+    content,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    defaultModel: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    recheck: (attributes) => recheckKept(documents, attributes),
+    now: () => adapters.now?.() ?? new Date(),
   });
 
   const mindExports = createExports({
@@ -1446,6 +1477,8 @@ export function createCore(adapters: CoreAdapters): Core {
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
     acceptSuggestion: async (input) => suggestions.accept(input),
     getSuggestionStatus: () => suggestions.status(),
+    editWithAi: (input) => edits.editWithAi(input),
+    cancelEdit: async (requestId) => edits.cancel(requestId),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -1787,6 +1820,7 @@ export function createCore(adapters: CoreAdapters): Core {
     onAnyEvent: (listener) => events.onAny(listener),
     dataFlows: consent.registry,
     networkTraffic: privacy.traffic,
+    retention,
     prepareChatModel: (choice) => chat.prepareModel(choice),
     close: () => {
       if (lifetime.signal.aborted) return;
@@ -1800,6 +1834,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
       suggestions.stop();
+      edits.stopAll();
       scriptRunner.close();
       approvals.close();
       connectors.close();

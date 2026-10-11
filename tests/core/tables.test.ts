@@ -328,7 +328,7 @@ describe("a table in a Mind", { timeout: 30_000 }, () => {
   });
 
   test("a Mind written with a table records the content schema version (2 since tables); one written before opens as it was", async () => {
-    // Tables came in with version 2; footnotes (#284) raised it again.
+    // Tables came in with version 2; footnotes (#284) and Proposals (#93) raised it again.
     expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
     const { core, client, mind } = await setUpWithDocuments(tableModel(""), []);
     const old = new Y.Doc();

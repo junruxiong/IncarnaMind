@@ -2752,6 +2752,123 @@
     }
   }
   /*
+   * Proposals waiting for the User (#93; DESIGN.md, AI edits): removed words
+   * struck in ink-meta, new words in the Answer's ink with a 1px accent
+   * underline, whole new Blocks the same. Strike and underline say it, not
+   * colour alone. The change the cursor is in is washed in accent-wash, and
+   * so is text the AI is still working on.
+   */
+  .mind-editor ins.proposal-insert,
+  .mind-editor .proposal-node--insert:not(.citation-marker) {
+    color: var(--color-ink-answer);
+    text-decoration: underline 1px var(--color-accent);
+    text-decoration-skip-ink: none;
+    text-underline-offset: 5px;
+  }
+  .mind-editor del.proposal-delete,
+  .mind-editor .proposal-node--delete:not(.citation-marker) {
+    color: var(--color-ink-meta);
+    text-decoration: line-through 1px var(--color-ink-meta);
+  }
+  /* A Citation a change adds or removes: its marker underlined, or struck and faded. */
+  .mind-editor .proposal-node--insert .citation-marker,
+  .mind-editor .citation-marker.proposal-node--insert {
+    box-shadow: inset 0 -1px 0 var(--color-accent);
+  }
+  .mind-editor .proposal-node--delete .citation-marker,
+  .mind-editor .citation-marker.proposal-node--delete {
+    opacity: 0.6;
+    text-decoration: line-through 1px var(--color-ink-meta);
+  }
+  .mind-editor .proposal-current,
+  .mind-editor .proposal-target {
+    background: var(--color-accent-wash);
+    border-radius: 2px;
+  }
+  /* "3 changes from the assistant · Accept all · Reject all": at the top of the Mind, in view as it scrolls. */
+  .proposals-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0 0 12px;
+    padding: 6px 0;
+    background: var(--color-sheet);
+    border-bottom: 1px solid var(--color-rule);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+  }
+  .proposals-bar-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--color-accent);
+  }
+  .proposal-dot {
+    color: var(--color-ink-meta);
+  }
+  .proposal-action {
+    flex-shrink: 0;
+    border-radius: 4px;
+    font-weight: 600;
+    color: var(--color-accent-strong);
+    white-space: nowrap;
+    text-underline-offset: 2px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+  /* One change's own bar, over its first line: "Change 1 of 3 · Accept · Reject". */
+  .change-bar {
+    position: fixed;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: min(420px, calc(100vw - 16px));
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+    white-space: nowrap;
+  }
+  .change-bar-position {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .change-bar-drops {
+    color: var(--color-warning);
+  }
+  /* What the AI is working on: the dot the Answer being written has. */
+  .edit-pending-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    vertical-align: 1px;
+    animation: mind-pulse 1.6s ease-in-out infinite;
+  }
+  .composer-row > .composer-quote {
+    align-self: flex-start;
+    flex-shrink: 1;
+    max-width: 16rem;
+    margin-top: 4px;
+  }
+
+  /*
    * A suggestion as the User writes (#282): grey text after the caret, then
    * its Citation's marker, outlined as one that isn't there yet, and the key
    * that accepts it. It isn't part of the Mind until accepted, and a click
@@ -3549,7 +3666,8 @@
 }
 
 /* Reduced motion: checks appear at once, and nothing pulses. */
-:root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal, .citation-marker-icon),
+:root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
+:root:not([data-motion="on"]) :is(.citation-marker-icon, .edit-pending-dot),
 :root:not([data-motion="on"]) .answer-writing::before {
   animation: none;
 }

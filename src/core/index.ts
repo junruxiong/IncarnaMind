@@ -38,6 +38,13 @@ export { MEETING_SAMPLE_RATE } from "./adapters";
 export * from "./api";
 export { type Core, createCore, DATABASE_FILE } from "./core";
 export type { DocumentFile, DocumentImage } from "./documents";
+export {
+  RETENTION_KINDS,
+  type RetainedVersion,
+  type RetainVersion,
+  type RetentionKind,
+  type VersionRetention,
+} from "./documents/retention";
 export type { Reranker } from "./documents/searchTool";
 export type { FolderWatcher, WatchFolder, WatchListener } from "./documents/watcher";
 export { BUILT_IN_EMBEDDING_MODEL } from "./embedding";
