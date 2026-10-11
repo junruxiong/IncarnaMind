@@ -411,7 +411,7 @@ export function SelectionMenu({
             className="selection-format"
           >
             <span aria-hidden="true" className="format-footnote">
-              1
+              a<sup>1</sup>
             </span>
           </button>
           {MARKS.slice(5).map((each) => (

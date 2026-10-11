@@ -1,8 +1,12 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
+import type { CoreBridge } from "../src/core/api";
+import { footnotesOf, paragraphsOf, part, unzip } from "../tests/helpers/docx";
+import { buildPdf } from "../tests/helpers/pdf";
 import {
+  addDocuments,
   createDataFolder,
   dismissChatSetup,
   dragBlock,
@@ -11,6 +15,7 @@ import {
   removeDataFolder,
   setWindowSize,
   slideSelect,
+  useLocalChatModel,
 } from "./app";
 
 /*
@@ -20,12 +25,43 @@ import {
  * order they appear, as Blocks move; deleted, and back with Undo.
  */
 
+/** Spring tides are on page 2. */
+const TIDES = buildPdf([
+  { lines: ["Tides and the Moon", "The Moon raises two bulges of water on the Earth."] },
+  { lines: ["Spring and neap tides", "Spring tides happen at new moon and at full moon."] },
+]);
+
 let dataDir: string;
+let sources: string;
 test.beforeEach(async () => {
   dataDir = await createDataFolder();
+  sources = await createDataFolder();
 });
 test.afterEach(async () => {
   await removeDataFolder(dataDir);
+  await removeDataFolder(sources);
+});
+
+/** The core's bridge, as the window has it. */
+const bridge = (window: Page) => ({
+  language: (language: "en" | "zh-CN") =>
+    window.evaluate(
+      (value) =>
+        (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+          user: { language: value },
+        }),
+      language,
+    ),
+  /** The open Mind (the only one) as a .docx, as Export would write it. */
+  exportDocx: async () =>
+    new Uint8Array(
+      await window.evaluate(async () => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const [mind] = await core.listMinds();
+        if (!mind) throw new Error("There is no Mind.");
+        return Array.from((await core.exportMind(mind.id, { format: "docx" })).data);
+      }),
+    ),
 });
 
 /** Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots of footnotes. */
@@ -128,6 +164,7 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
   // The selection menu, by mouse: a footnote after the selected words.
   await slideSelect(window, paragraphs.nth(0), "Neap tides");
   await expect(window.getByTestId("selection-menu")).toBeVisible();
+  await screenshot(window, "selection-menu-footnote-en");
   await window.getByTestId("format-footnote").hover();
   await window.getByTestId("format-footnote").click();
   await expect(popover).toBeVisible();
@@ -224,6 +261,12 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
   await expect(areaTexts(window).first()).toHaveText("Less pull.");
   await window.keyboard.press("Escape");
   await expect(popover).toHaveCount(0);
+  // The word count counts the text, not the footnotes the markers stand for.
+  await expect(window.getByTestId("mind-count-button")).toHaveText("16 words");
+  // A narrow window: the area's numbers come in from the margin, and its text still wraps by word.
+  await setWindowSize(app, window, 900, 800);
+  await expect(areaTexts(window).first()).toBeVisible();
+  await screenshot(window, "footnote-area-en-900");
   await app.close();
 
   // After a restart the footnotes are there, in the same order, with their texts.
@@ -242,4 +285,121 @@ test("footnotes by keyboard, the / menu, the selection menu and ^[…], edited i
     "Published each year.",
   ]);
   await again.app.close();
+});
+
+test("in Chinese: footnotes typed with an input method number together with an Answer's Citations, one holds a found Citation, and Word gets them as real footnotes", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await setWindowSize(app, window, 1100, 760);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await bridge(window).language("zh-CN");
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.type("Spring tides 大潮");
+
+  // ⌥⌘F opens the footnote, named in Chinese; an input method writes its text.
+  await window.keyboard.press("ControlOrMeta+Alt+F");
+  const popover = window.getByTestId("footnote-popover");
+  const field = popover.getByTestId("footnote-text");
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute("aria-label", "脚注 1 的内容");
+  await expect(popover.getByTestId("footnote-remove")).toHaveText("删除脚注");
+  const session = await window.context().newCDPSession(window);
+  try {
+    await session.send("Input.imeSetComposition", {
+      text: "meiyue",
+      selectionStart: 6,
+      selectionEnd: 6,
+    });
+    await session.send("Input.insertText", { text: "每月两次。" });
+    await expect(field).toHaveText("每月两次。");
+    await expect(popover).toBeVisible();
+    await window.keyboard.press("Enter");
+    await expect(popover).toHaveCount(0);
+
+    // "^[" then Chinese from the input method, then "]": a footnote too.
+    await window.keyboard.type("^[");
+    await session.send("Input.imeSetComposition", {
+      text: "xiaochao",
+      selectionStart: 8,
+      selectionEnd: 8,
+    });
+    await session.send("Input.insertText", { text: "小潮在上下弦月" });
+    await window.keyboard.type("]");
+  } finally {
+    await session.detach();
+  }
+  const markers = editor.getByTestId("footnote-marker");
+  await expect(markers).toHaveText(["1", "2"]);
+  await expect(markers.nth(1)).toHaveAttribute("aria-label", "脚注 2：小潮在上下弦月");
+  const area = window.getByTestId("footnote-area");
+  await expect(area.getByRole("heading")).toHaveText("脚注");
+  await expect(areaTexts(window)).toHaveText(["每月两次。", "小潮在上下弦月"]);
+
+  // An Answer's Citation comes after them, so it is 3, in the text, the margin and the area.
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("When do spring tides happen?");
+  await window.keyboard.press("Enter");
+  const answer = editor.getByTestId("answer");
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answer.getByTestId("citation-chip")).toHaveText("3");
+  await expect(window.getByTestId("margin-check")).toHaveText(["3"]);
+  const citationRow = area.getByTestId("footnote-row-citation");
+  await expect(citationRow).toHaveAttribute("data-number", "3");
+  await expect(citationRow).toHaveAttribute("data-check", "found");
+  await expect(citationRow).toContainText("Tides");
+
+  // A footnote holding a found Citation: the Answer's, copied into a new footnote's text.
+  const copied = await editor.evaluate((dom) => {
+    const { view } = (dom as unknown as { editor: Editor }).editor;
+    let at = -1;
+    view.state.doc.descendants((node, pos) => {
+      if (at < 0 && node.type.name === "citation") at = pos;
+    });
+    return view.serializeForClipboard(view.state.doc.slice(at, at + 1)).dom.innerHTML;
+  });
+  await clickEndOf(window, editor.locator(":scope > p").first());
+  await window.keyboard.press("ControlOrMeta+Alt+F");
+  await expect(field).toBeFocused();
+  await window.keyboard.type("参见");
+  // Pasted as the editor pastes it (the system clipboard is shared with the machine).
+  await field.evaluate(
+    (dom, html) => (dom as unknown as { editor: Editor }).editor.view.pasteHTML(html),
+    copied,
+  );
+  const held = field.getByTestId("citation");
+  await expect(held).toHaveAttribute("data-check", "found");
+  await expect(held.getByTestId("citation-chip")).toContainText("Tides");
+  await screenshot(window, "footnote-citation-zh");
+  await window.keyboard.press("Enter");
+  // It is footnote 3 now, before the Answer's Citation, which becomes 4; the one inside has no number.
+  await expect(markers).toHaveText(["1", "2", "3"]);
+  await expect(answer.getByTestId("citation-chip")).toHaveText("4");
+  await expect(window.getByTestId("margin-check")).toHaveText(["4"]);
+  await expect(areaTexts(window).nth(2)).toContainText("参见");
+  await expect(areaTexts(window).nth(2).getByTestId("citation")).toHaveAttribute(
+    "data-check",
+    "found",
+  );
+  // The word count counts the text, not the footnotes' text the markers stand for.
+  await expect(window.getByTestId("mind-count-button")).not.toHaveText(/^0/);
+  await screenshot(window, "footnote-area-zh-1100");
+  await setWindowSize(app, window, 900, 760);
+  await expect(area).toBeVisible();
+  await screenshot(window, "footnote-area-zh-900");
+
+  // Word gets real footnotes, numbered as in the Mind.
+  const files = unzip(await bridge(window).exportDocx());
+  const footnotes = footnotesOf(part(files, "word/footnotes.xml"));
+  expect(Object.keys(footnotes)).toEqual(["1", "2", "3", "4"]);
+  expect(footnotes["1"]).toBe("每月两次。");
+  expect(footnotes["2"]).toBe("小潮在上下弦月");
+  expect(footnotes["3"]).toBe("参见 Tides，第 2 页");
+  expect(footnotes["4"]).toBe("Tides，第 2 页");
+  const paragraphs = paragraphsOf(part(files, "word/document.xml")).map((each) => each.text);
+  expect(paragraphs).toContain("Spring tides 大潮[1][2][3]");
+  await app.close();
 });

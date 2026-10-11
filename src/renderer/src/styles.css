@@ -3174,11 +3174,10 @@
       background: #fef08a;
       color: var(--color-ink);
     }
-    /* The footnote button's label is a raised number, as a footnote's marker is. */
-    .format-footnote {
-      font-size: 11px;
+    /* The footnote button's label is a word with a raised number, as Word's is. */
+    .format-footnote > sup {
+      font-size: 10px;
       font-weight: 600;
-      vertical-align: super;
       line-height: 0;
     }
   }
