@@ -11,6 +11,7 @@ import {
   documentIdOf,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -69,7 +70,7 @@ test.afterEach(async () => {
 async function ask(window: Page, text: string): Promise<Locator> {
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
-  await editor.click();
+  await pointAndClick(window, editor);
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type(text);
   await window.keyboard.press("Enter");
@@ -136,7 +137,7 @@ test("a Mind's Citations and References read in its citation style, which the Re
   // "Needs details" opens the Document's "Cite as" right there, at its first gap, its title.
   // Esc leaves the field, then closes the panel, giving the focus back.
   const needs = entries.nth(1).getByTestId("reference-needs-details");
-  await needs.click();
+  await pointAndClick(window, needs);
   const citeAs = window.getByTestId("reference-cite-as");
   await expect(citeAs).toBeVisible();
   await expect(citeAs.locator("input:focus, textarea:focus")).toHaveCount(1);
@@ -153,7 +154,7 @@ test("a Mind's Citations and References read in its citation style, which the Re
   await expect(entries.first()).toContainText("(2011)");
 
   // The style button opens the picker: IEEE numbers them, in the text and the References.
-  await references.getByTestId("references-style").click();
+  await pointAndClick(window, references.getByTestId("references-style"));
   await chooseStyle(window, "ieee", "IEEE");
   await expect(references).toHaveAttribute("data-style", "ieee");
   await expect(chip).toHaveText("[1, p. 2], [2, L. 1]");
@@ -168,7 +169,7 @@ test("a Mind's Citations and References read in its citation style, which the Re
   await expect(chip).toContainText("Bowler & Buyung-Ali, 2011, p. 2");
 
   // A note style: the chip is the note's number, and the card shows the note.
-  await references.getByTestId("references-style").click();
+  await pointAndClick(window, references.getByTestId("references-style"));
   await chooseStyle(window, "notes", "Chicago (notes and bibliography)");
   await expect(answer.locator('[data-testid="citation"][data-styled="note"]')).toHaveCount(1);
   const note = answer.locator('[data-testid="citation"][data-styled="note"]');
@@ -183,20 +184,20 @@ test("a Mind's Citations and References read in its citation style, which the Re
   const target = join(sources, "Untitled.docx");
   await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
-  await references.getByTestId("references-export").click();
+  await pointAndClick(window, references.getByTestId("references-export"));
   const dialog = window.getByTestId("export-dialog");
   await expect(dialog.getByTestId("export-citation-style")).toHaveText(
     "Chicago (notes and bibliography)",
   );
   // The dialog's own style button switches it back to APA 7 for this export, and for the Mind.
-  await dialog.getByTestId("export-citation-style").click();
+  await pointAndClick(window, dialog.getByTestId("export-citation-style"));
   await chooseStyle(window, "apa", "APA 7");
   await expect(dialog.getByTestId("export-citation-style")).toHaveText("APA 7");
   await screenshot(window, "export-dialog-style-en");
-  await dialog.getByTestId("export-save").click();
+  await pointAndClick(window, dialog.getByTestId("export-save"));
   await expect(dialog.getByTestId("export-done")).toBeVisible();
   const saved = (await dialog.getByTestId("export-done").getAttribute("title")) ?? target;
-  await dialog.getByTestId("export-close").click();
+  await pointAndClick(window, dialog.getByTestId("export-close"));
   const text = paragraphsOf(part(unzip(await readFile(saved)), "word/document.xml")).map(
     (each) => each.text,
   );
@@ -247,7 +248,7 @@ test("in Chinese: GB/T 7714—2015 by default, raised numbers, 参考文献, and
 
   // Typed in Chinese, the picker finds the national standard's styles; the author-date one
   // writes an English work with "et al." and a Chinese one with 等.
-  await references.getByTestId("references-style").click();
+  await pointAndClick(window, references.getByTestId("references-style"));
   const picker = window.getByTestId("citation-style-picker");
   await window.keyboard.type("国标");
   await expect(picker.getByTestId("citation-style-option")).toHaveCount(4);

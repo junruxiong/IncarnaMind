@@ -4,8 +4,10 @@
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { cp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
-import { describe, expect, test } from "vitest";
+import { describe, expect, onTestFinished, test } from "vitest";
 import type {
   CitationCheck,
   CitationLocation,
@@ -15,9 +17,7 @@ import type {
   ReferencePatch,
 } from "../../src/core";
 import { FOOTNOTE_NODE } from "../../src/core/api";
-import { type CslItem, locatorOf } from "../../src/core/citationStyles/csl";
-import { createWorkerEngine } from "../../src/core/citationStyles/engine";
-import { fixtureReferences, markup } from "../helpers/citationStyles";
+import { locatorOf } from "../../src/core/citationStyles/csl";
 import { CITATION_STYLES, createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { addAndProcess, waitForProcessing, writeSourceFile } from "../helpers/documents";
 import { footnotesOf, paragraphsOf, part, textOf, unzip } from "../helpers/docx";
@@ -311,53 +311,52 @@ describe("formatting a Mind's Citations", () => {
 });
 
 describe("the style thread", () => {
+  /** A core whose citation styles are a copy the test can break. */
+  async function withStyles(change: (folder: string) => Promise<void> = async () => undefined) {
+    const dataDir = await createTempDataFolder();
+    const folder = await createTempDataFolder();
+    await cp(CITATION_STYLES, folder, { recursive: true });
+    await change(folder);
+    const paths = { dataDir, documents: join(dataDir, "Documents"), citationStyles: folder };
+    const core = startCore(dataDir, { paths });
+    onTestFinished(() => core.close());
+    return core;
+  }
+
+  /** A work cited by its name alone, as a deleted Document's Citation is. */
+  const named = (name: string) => ({ documentId: null, documentName: name, location: null });
+
   test("formats 300 references in a note style while the core's thread keeps running", async () => {
-    const references = fixtureReferences();
-    const items: CslItem[] = [];
-    for (let copy = 0; copy < 10; copy++) {
-      for (const reference of references)
-        items.push({ ...reference, id: `${reference.id}-${copy}` });
-    }
-    const engine = createWorkerEngine(CITATION_STYLES);
+    const core = await withStyles();
+    const clusters = Array.from({ length: 300 }, (_, index) => ({
+      works: [named(`Report ${index + 1}`)],
+    }));
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks++;
+    }, 1);
     try {
-      let ticks = 0;
-      const timer = setInterval(() => {
-        ticks++;
-      }, 1);
-      const { output } = await engine.format("chicago-notes-bibliography.csl", {
-        items,
-        citations: items.map((item, index) => ({ items: [{ id: item.id }], noteIndex: index + 1 })),
-        englishTermsForOthers: false,
-      });
-      clearInterval(timer);
-      expect(output.bibliography).toHaveLength(300);
-      expect(output.citations).toHaveLength(300);
-      // Formatting on this thread would have held every tick back until it was done.
-      expect(ticks).toBeGreaterThan(5);
+      const formatted = await core.formatCitations({ style: "chicago-notes", clusters });
+      expect(formatted.bibliography).toHaveLength(300);
+      expect(formatted.clusters).toHaveLength(300);
+      expect(plain(formatted.clusters[299]?.runs)).toBe("“Report 300,” n.d.");
     } finally {
-      engine.close();
+      clearInterval(timer);
     }
+    // Formatting on this thread would have held every tick back until it was done.
+    expect(ticks).toBeGreaterThan(5);
   });
 
-  test("a style that can't be read fails that request, and the next one still works", async () => {
-    const engine = createWorkerEngine(CITATION_STYLES);
-    try {
-      await expect(
-        engine.format("no-such-style.csl", {
-          items: [],
-          citations: [],
-          englishTermsForOthers: false,
-        }),
-      ).rejects.toThrow();
-      const { output } = await engine.format("apa.csl", {
-        items: [{ id: "a", type: "book", title: "A book" }],
-        citations: [{ items: [{ id: "a" }] }],
-        englishTermsForOthers: false,
-      });
-      expect(markup(output.citations[0] ?? [])).toBe("(<i>A Book</i>, n.d.)");
-    } finally {
-      engine.close();
-    }
+  test("a style that can't be read fails its request, and other styles still format", async () => {
+    const core = await withStyles((folder) =>
+      writeFile(join(folder, "styles", "apa.csl"), "<style>not a whole style"),
+    );
+    const request = (style: FormattedCitations["style"]) =>
+      core.formatCitations({ style, clusters: [{ works: [named("A book")] }] });
+    await expect(request("apa")).rejects.toThrow();
+    expect(plain((await request("ieee")).clusters[0]?.runs)).toBe("[1]");
+    // Asked again, it fails again, rather than giving an answer it doesn't have.
+    await expect(request("apa")).rejects.toThrow();
   });
 });
 

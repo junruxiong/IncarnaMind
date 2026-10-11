@@ -12,6 +12,7 @@ import {
   dragBlock,
   launchApp,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   slideSelect,
@@ -300,8 +301,8 @@ test("in Chinese: footnotes typed with an input method number together with an A
   // chosen from the Mind's menu, in Chinese.
   const row = window.getByTestId("mind-row").first();
   await row.hover();
-  await row.getByTestId("mind-menu").click();
-  await row.getByTestId("mind-citation-style").click();
+  await pointAndClick(window, row.getByTestId("mind-menu"));
+  await pointAndClick(window, row.getByTestId("mind-citation-style"));
   await expect(window.getByTestId("citation-style-search")).toBeFocused();
   await window.keyboard.type("编号");
   await window.keyboard.press("Enter");

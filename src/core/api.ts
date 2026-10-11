@@ -4589,8 +4589,8 @@ export interface CoreApi {
    * included, its Questions, in order. Its Citations are in the Mind's
    * citation style (#289): in the text, or as notes, with the Bibliography at
    * the end; in Numbered, each is its own footnote naming its Document and
-   * pages, e.g. "Tides, p. 12–13". A Citation is marked "[unverified]" unless
-   * its quote was found. Math stays LaTeX.
+   * Location, e.g. "Tides, p. 12–13" or "Deck, slide 4". A Citation is marked
+   * "[unverified]" unless its quote was found. Math stays LaTeX.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
