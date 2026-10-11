@@ -74,6 +74,10 @@ _Avoid_: chunk, snippet
 A reference, anchored in the text of an Answer, to the Passage a claim was drawn from: the Location it cites, and a quote from the Passage that is checked against the text at that Location. Copied into a Note, it stays a Citation; Question context shows it as a plain reference to its Document.
 _Avoid_: source, reference
 
+**Reference record**:
+What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details".
+_Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
+
 **Location**:
 Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), or a range of lines in plain text.
 _Avoid_: page (for anything that isn't a PDF), position, anchor

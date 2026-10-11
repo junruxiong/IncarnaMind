@@ -55,6 +55,9 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Citation | 引用 | The numbered reference in an Answer, as Kimi, Doubao, Qwen, Cherry Studio and Open WebUI show it. |
 | quote (of a Citation) | 引文 | "已在第 3 页找到引文", "未找到引文". |
 | Location | 位置 | "第 3 页", "第 2 张幻灯片", "第 4–6 行", "§ 标题". |
+| Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
+| Needs details (a reference record) | 信息待补充 | |
+| Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |

@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "message-type": "work",
+  "message-version": "1.0.0",
+  "message": {
+    "publisher": "测试出版社",
+    "issue": "1",
+    "DOI": "10.5555/chinese-heat-island",
+    "type": "journal-article",
+    "page": "61-74",
+    "title": ["城市绿地对热岛效应的<i>缓解</i>作用"],
+    "volume": "75",
+    "author": [
+      { "given": "三", "family": "张", "sequence": "first", "affiliation": [] },
+      { "given": "四", "family": "李", "sequence": "additional", "affiliation": [] },
+      { "given": "明", "family": "欧阳", "sequence": "additional", "affiliation": [] }
+    ],
+    "container-title": ["地理学报"],
+    "language": "zh",
+    "URL": "http://dx.doi.org/10.5555/chinese-heat-island",
+    "issued": { "date-parts": [[2020, 1]] }
+  }
+}
