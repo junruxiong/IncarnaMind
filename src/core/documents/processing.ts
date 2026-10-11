@@ -23,7 +23,7 @@ import { creationDate, pdfDate, w3cDate } from "./creationDate";
 import { ExtractionError, extractText, pdfMetadata } from "./extract";
 import { officeProperties } from "./formats/coreProperties";
 import { readWebPage } from "./formats/web";
-import { packageSizeError } from "./formats/zip";
+import { isPackageKind, packageSizeError } from "./formats/zip";
 import { keywordText } from "./keywords";
 import { type BuiltPassage, buildPassages } from "./passages";
 import { documentTitle } from "./title";
@@ -219,8 +219,6 @@ async function readBytes(file: string): Promise<Uint8Array | FileUnreadable> {
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-const isPackage = (kind: DocumentKind) => kind === "docx" || kind === "pptx" || kind === "xlsx";
-
 /**
  * A Word, PowerPoint or Excel file too large to open (see
  * `packageSizeError`), refused before it is read: its bytes are only hashed
@@ -250,7 +248,7 @@ async function refuseTooLarge(file: string, kind: DocumentKind): Promise<Process
 
 /** Never throws: every problem becomes a "failed" result. */
 export async function processFile(job: ProcessingJob): Promise<ProcessingResult> {
-  const refused = isPackage(job.kind) ? await refuseTooLarge(job.file, job.kind) : null;
+  const refused = isPackageKind(job.kind) ? await refuseTooLarge(job.file, job.kind) : null;
   if (refused) return refused;
   const bytes = await readBytes(job.file);
   if (!(bytes instanceof Uint8Array)) return bytes;
