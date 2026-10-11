@@ -145,7 +145,7 @@ test("in Chinese: 自动打标签, with the model Automatic uses and the list's 
     await section.scrollIntoViewIfNeeded();
     await expect(section.getByRole("heading", { name: "自动打标签" })).toBeVisible();
     await expect(section.getByTestId("tagging-automatic-line")).toHaveText(
-      "正在使用本机的本地分类模型（Tev1, Clef-Flash）",
+      "正在使用本地分类模型（Tev1, Clef-Flash）",
     );
     await expect(section.getByText("在本机运行", { exact: true })).toBeVisible();
     await expect(option(section, "Tev1 0.8B")).toContainText("本地分类模型");

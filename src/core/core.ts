@@ -1622,10 +1622,13 @@ export function createCore(adapters: CoreAdapters): Core {
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
     updateSettings: async (patch) => {
-      // The default chat model must be on a saved provider.
-      const chatModel = isRecord(patch) && isRecord(patch.user) ? patch.user.chatModel : undefined;
-      if (isChatModelChoice(chatModel) && !chat.exists(chatModel.providerId)) {
-        throw new InvalidInputError("That chat provider doesn't exist.");
+      // The default chat model, and the quick-tasks and image models, must be on a saved provider.
+      const user = isRecord(patch) && isRecord(patch.user) ? patch.user : {};
+      const chatModel = user.chatModel;
+      for (const choice of [chatModel, user.quickTasksModel, user.imageModel]) {
+        if (isChatModelChoice(choice) && !chat.exists(choice.providerId)) {
+          throw new InvalidInputError("That chat provider doesn't exist.");
+        }
       }
       const scriptsWere = settings.get().device.skillScriptsEnabled;
       let change = patch;
@@ -1646,6 +1649,9 @@ export function createCore(adapters: CoreAdapters): Core {
       }
       const flowChanged = syncChatFlow();
       if (chatModel !== undefined || flowChanged) await readinessChanged();
+      // Automatic may tag with another model now (#180).
+      else if (user.quickTasksModel !== undefined || user.imageModel !== undefined)
+        await taggingChanged();
       return updated;
     },
     addDocuments,
@@ -1927,7 +1933,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
-    saveLibrarySettings: async (input) => library.saveSettings(input),
+    saveLibrarySettings: async (input) => {
+      library.saveSettings(input);
+      await taggingChanged();
+    },
     getTaggingModels: () => tagging.models(),
     classifyDocuments: async (ids) => {
       library.classify(ids);

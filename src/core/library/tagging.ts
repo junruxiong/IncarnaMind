@@ -383,7 +383,11 @@ export function createTagging(options: TaggingOptions) {
         );
       }
       const order: Record<TaggingModelGroup, number> = { keys: 0, plan: 1, local: 2 };
-      list.sort((a, b) => order[a.group] - order[b.group]);
+      // By group, as the chip groups them; in each, the models picked for tagging first.
+      list.sort(
+        (a, b) =>
+          order[a.group] - order[b.group] || Number(b.goodForTagging) - Number(a.goodForTagging),
+      );
       const option = picked && optionOf(picked.classifier, PICKED_FOR_TAGGING.has(picked.reason));
       return {
         automatic: option && picked ? { ...option, reason: picked.reason } : null,

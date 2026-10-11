@@ -8,9 +8,11 @@
 import { describe, expect, test, vi } from "vitest";
 import type { ChatModelFactory, ChatModelSpec, Core, CoreAdapters } from "../../src/core";
 import { type AnswerRequest, createAiSdkAnswerEngine } from "../../src/core/answers/engine";
+import { installedOllamaModels } from "../../src/core/providers/ollama";
 import { answerEnded } from "../helpers/citations";
 import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { startFakeJev } from "../helpers/jev";
 import { connectToMind } from "../helpers/mindClient";
 import { note, question, writeMind } from "../helpers/minds";
 import { scriptedModel } from "../helpers/models";
@@ -172,6 +174,31 @@ describe("Automatic picks the model that tags", () => {
       likelihoods: true,
       cost: { kind: "free" },
     });
+  });
+
+  test("3. with no Folders, a local decision model tags each Tag with how sure it is", async () => {
+    const jev = await startFakeJev({ apiKey: "ollama", ollamaModels: ["tev1:0.8b"] });
+    jev.answer({ Paper: 0.92, Report: 0.55 });
+    const { core, calls } = await start({ localModels: installedOllamaModels });
+    await core.saveChatProvider({ kind: "ollama", baseUrl: jev.url, modelId: "local-model" });
+    expect(await automaticOf(core)).toMatchObject({ reason: "decision-models" });
+
+    const document = await addText(core, "Attention.md", "Attention Is All You Need. A paper.");
+    const [tagged] = await waitForTagging(core, [document.id]);
+
+    expect(jev.requests.map((each) => each.body.model)).toEqual(["tev1:0.8b"]);
+    // Each Tag is a yes or no, with no Folder to choose.
+    expect(Object.values(jev.requests[0]?.body.questions ?? {}).map((q) => q.type)).not.toContain(
+      "choice",
+    );
+    const names = Object.fromEntries((await core.listTags()).map((tag) => [tag.id, tag.name]));
+    expect(tagged?.tags.map((tag) => [names[tag.tagId], tag.confidence, tag.needsReview])).toEqual(
+      expect.arrayContaining([
+        ["Paper", 0.92, false],
+        ["Report", 0.55, true],
+      ]),
+    );
+    expect(calls).toEqual([]);
   });
 
   test("3. a User whose only model is outside IncarnaMind gets an installed decision model", async () => {

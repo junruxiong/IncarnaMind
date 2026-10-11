@@ -5,7 +5,7 @@
  * - "auto": Auto · local models, one controller for the run, as the app keeps
  *   one per Ollama address. Text goes to Tev1 4B (or 0.8B on slow or small
  *   machines), PDFs with sparse text to Clef-Flash with page images.
- * - "tev-0.8b": the local decision model Tev1 0.8B, chosen by name.
+ * - "tev-0.8b", "tev-4b": the local decision model Tev1 0.8B or 4B, chosen by name.
  * - "clef-flash": Clef-Flash chosen by name with PDF page images on.
  * - "chat": the connected chat model, from INCARNAMIND_EVAL_CHAT_* (see eval/lib/config.ts),
  *   with the page images of PDFs without text when the model reads images, and
@@ -41,7 +41,7 @@ import { createFakeChatModel } from "../../../src/main/fakeChatModel";
 import type { ChatSettings } from "../../lib/config";
 import type { TokenCount } from "./scoring";
 
-export const ROUTES = ["auto", "tev-0.8b", "clef-flash", "chat", "scripted"] as const;
+export const ROUTES = ["auto", "tev-0.8b", "tev-4b", "clef-flash", "chat", "scripted"] as const;
 export type RouteName = (typeof ROUTES)[number];
 
 /** Adds up the tokens a model's calls report, until they are taken for the next Document. */
@@ -111,6 +111,19 @@ export function buildRoute(
           baseUrl: ollama,
           apiKey: "ollama",
           model: "tev1:0.8b",
+          local: true,
+        }),
+      };
+    case "tev-4b":
+      return {
+        name,
+        label: "Tev1 4B, chosen by name",
+        models: ["tev1:4b"],
+        local: true,
+        classifier: decisionGroupClassifier({
+          baseUrl: ollama,
+          apiKey: "ollama",
+          model: "tev1:4b",
           local: true,
         }),
       };
