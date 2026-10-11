@@ -154,6 +154,58 @@ describe("Writing a Skill", () => {
     expect(await core.getSkillDraft(tides.id)).toMatchObject({ steps: "1. Read the ports." });
   });
 
+  test("editing keeps every frontmatter field this app doesn't know, as written and in place", async () => {
+    const { core, dataDir } = await setUp();
+    const sources = await createTempDataFolder();
+    const frontmatter = [
+      "name: legal-review",
+      "description: >",
+      "  Reviews a contract.",
+      "  Use for legal questions.",
+      "allowed-tools: Read",
+      "x-team: legal",
+      "license: MIT",
+      "metadata:",
+      '  author: "Dana"',
+    ].join("\n");
+    const folder = await writeFolder(sources, "legal", {
+      "SKILL.md": `---\n${frontmatter}\n---\n\nOld steps.\n`,
+    });
+    const skill = await core.importSkill((await previewOk(core, folder)).importId);
+
+    const result = await core.updateSkill(skill.id, {
+      name: "legal-review",
+      description: "Reviews a supplier contract.",
+      steps: "1. New step.",
+    });
+
+    expect(result.ok).toBe(true);
+    const text = await readFile(join(dataDir, "skills", skill.id, "SKILL.md"), "utf8");
+    expect(text).toBe(
+      `---\nname: legal-review\ndescription: "Reviews a supplier contract."\nallowed-tools: Read\nx-team: legal\nlicense: MIT\nmetadata:\n  author: "Dana"\n---\n\n1. New step.\n`,
+    );
+  });
+
+  test("a rename and an unchanged description leave the other lines alone", async () => {
+    const { core, dataDir } = await setUp();
+    const sources = await createTempDataFolder();
+    const folder = await writeFolder(sources, "legal", {
+      "SKILL.md": `---\nname: legal-review\ndescription: Reviews a contract.\nx-team: legal\n---\n\nSteps.\n`,
+    });
+    const skill = await core.importSkill((await previewOk(core, folder)).importId);
+
+    await core.updateSkill(skill.id, {
+      name: "Contract Review",
+      description: "Reviews a contract.",
+      steps: "Steps.",
+    });
+
+    const text = await readFile(join(dataDir, "skills", skill.id, "SKILL.md"), "utf8");
+    expect(text).toBe(
+      `---\nname: contract-review\ndescription: Reviews a contract.\nx-team: legal\n---\n\nSteps.\n`,
+    );
+  });
+
   test("a built-in Skill can't be edited", async () => {
     const dataDir = await createTempDataFolder();
     const core = startCore(dataDir, { paths: { dataDir, builtInSkills: BUILT_IN_SKILLS_DIR } });

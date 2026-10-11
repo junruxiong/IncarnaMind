@@ -43,7 +43,13 @@ import {
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import type { Database } from "../storage";
 import { type BuiltInSkill, readBuiltInSkills } from "./builtIn";
-import { MAX_NAME_LENGTH, parseSkillMd, renameSkillMd, type SkillFrontmatter } from "./frontmatter";
+import {
+  editSkillMd,
+  MAX_NAME_LENGTH,
+  parseSkillMd,
+  renameSkillMd,
+  type SkillFrontmatter,
+} from "./frontmatter";
 import {
   INSTRUCTIONS_FILE,
   inSkillOrder,
@@ -254,8 +260,11 @@ function checkDraft(
 }
 
 /** A checked draft as a Skill staged to be written: its SKILL.md alone. */
-function stagedFrom(draft: SkillDraft, kept?: SkillFrontmatter): Staged {
-  const text = composeSkillMd(draft, kept);
+function stagedFrom(
+  draft: SkillDraft,
+  kept?: SkillFrontmatter,
+  text = composeSkillMd(draft, kept),
+): Staged {
   const parsed = parseSkillMd(text);
   if (!parsed.ok)
     throw new Error(`The Skill "${draft.name}" couldn't be written: ${parsed.message}`);
@@ -791,9 +800,15 @@ export function createSkills(options: SkillsOptions) {
         if (!checked.ok) return checked;
         const files = await readFiles(row);
         const current = files.find((file) => file.path === INSTRUCTIONS_FILE);
-        const parsed = parseSkillMd(asText(current?.data ?? Buffer.alloc(0)) ?? "");
-        const kept = parsed.ok ? parsed.frontmatter : undefined;
-        const staged = stagedFrom(checked.draft, kept);
+        const currentText = asText(current?.data ?? Buffer.alloc(0)) ?? "";
+        // Edited where it stands, so fields this app doesn't know stay as written.
+        const edited = editSkillMd(currentText, checked.draft);
+        const parsed = parseSkillMd(currentText);
+        const staged = stagedFrom(
+          checked.draft,
+          parsed.ok ? parsed.frontmatter : undefined,
+          edited ?? undefined,
+        );
         staged.files = [
           ...staged.files,
           ...files.filter((file) => file.path !== INSTRUCTIONS_FILE),
