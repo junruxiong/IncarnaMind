@@ -253,6 +253,7 @@ describe("outside agents", () => {
       read_passages: { documentId: "any" },
       cite: { citations: [{ passageId: "any", quote: "Spring tides" }] },
       check_citations: { text: "Spring tides [cite:abcdefgh]." },
+      show_citation: { cite: "[cite:abcdefgh]" },
       list_minds: {},
       read_mind: { mindId: "any" },
       ask: { question: "When are spring tides?" },
@@ -308,6 +309,7 @@ describe("outside agents", () => {
         "read_mind",
         "read_passages",
         "search",
+        "show_citation",
       ]);
       const found = await agent.callTool({ name: "search", arguments: { query: "spring tides" } });
       expect((found.structuredContent as SearchOut).passages[0]?.cite).toMatch(/^\[cite:/);

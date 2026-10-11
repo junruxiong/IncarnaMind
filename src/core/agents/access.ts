@@ -21,6 +21,7 @@ import type { Citing } from "../answers/citing";
 import { matchingTerms } from "../answers/citing";
 import type {
   AgentActivity,
+  AgentCitationShown,
   AgentProblem,
   AgentToolName,
   Citation,
@@ -133,6 +134,17 @@ export interface AgentCheckResult {
   uncited: string[];
 }
 
+export interface AgentShowInput {
+  /** A Citation IncarnaMind gave, e.g. "[cite:k3x9a2b7]". */
+  cite: string;
+}
+
+export interface AgentShown {
+  shown: true;
+  document: string;
+  location: string | null;
+}
+
 export interface AgentMindList {
   folders: {
     id: string;
@@ -182,6 +194,8 @@ export interface AgentAccess {
   readPassages(input: AgentReadInput): Promise<AgentReadResult>;
   cite(input: AgentCiteInput): Promise<AgentCiteResult>;
   checkCitations(input: AgentCheckInput): Promise<AgentCheckResult>;
+  /** Opens a Citation in IncarnaMind's viewer, at its quote, in front: chat apps won't open links. */
+  showCitation(input: AgentShowInput): Promise<AgentShown>;
   listMinds(): Promise<AgentMindList>;
   readMind(input: AgentReadMindInput): Promise<AgentMindText>;
   ask(input: AgentAskInput, signal?: AbortSignal): Promise<AgentAnswer>;
@@ -258,6 +272,8 @@ export interface AgentAccessDeps {
     pageFrom: number | null;
     pageTo: number | null;
   }): CitationRecheck;
+  /** Shows a Citation in the viewer, the app in front. */
+  show(place: AgentCitationShown): void;
   /** The Minds there are. */
   minds(): Mind[];
   /** A Mind as Markdown, each Citation's footnote as `footnote` words it (see ../exports). */
@@ -663,6 +679,44 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
           result: { citations, uncited },
           count: citations.length,
           documentIds: [],
+        };
+      });
+    },
+
+    showCitation(input) {
+      const given = typeof input?.cite === "string" ? input.cite : "";
+      return call("show_citation", given, [READ_DOCUMENTS], (pairing) => {
+        const tag = text(input?.cite, "cite", 100);
+        const token = [...tag.matchAll(CITATION_TOKEN)][0]?.[1] ?? tag;
+        const kept = deps.citations.find(token);
+        if (!kept || !scopeOf(pairing, undefined).includes(kept.documentId)) {
+          throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
+        }
+        const now = deps.recheck({
+          documentId: kept.documentId,
+          quote: kept.quote,
+          pageFrom: kept.pageFrom,
+          pageTo: kept.pageTo,
+        });
+        if (now.contentHash === null) {
+          throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
+        }
+        const where = label(now.location ?? kept.location, now.pageFrom, now.pageTo);
+        deps.show({
+          documentId: kept.documentId,
+          ...(now.pageFrom !== null && { pageFrom: now.pageFrom }),
+          ...(now.pageTo !== null && { pageTo: now.pageTo }),
+          quote: kept.quote,
+          citation: {
+            check: now.check,
+            ...(where && { label: where }),
+            contentHash: now.contentHash,
+          },
+        });
+        return {
+          result: { shown: true as const, document: kept.documentName, location: where },
+          count: 1,
+          documentIds: [kept.documentId],
         };
       });
     },

@@ -10,9 +10,17 @@
  * When the app isn't open, or connecting agents is off in it, the shim
  * answers each request with an error saying so in plain words, rather than
  * leaving the agent waiting. It never writes the token anywhere.
+ *
+ * It imports nothing at all but Node, so its build is one file: Claude's
+ * install bundle carries a copy and runs it on Claude's own Node. The
+ * protocol is src/shared/agentSocket.ts's, written out again here; the
+ * tests run this shim against the core, so the two can't drift apart.
  */
 import { createConnection } from "node:net";
-import { AGENT_SOCKET_ENV, AGENT_TOKEN_ENV, handshakeLine } from "../shared/agentSocket";
+
+const AGENT_TOKEN_ENV = "INCARNAMIND_AGENT_TOKEN";
+const AGENT_SOCKET_ENV = "INCARNAMIND_AGENT_SOCKET";
+const handshakeLine = (token: string) => `${JSON.stringify({ incarnamind: 1, token })}\n`;
 
 /** The shim doesn't know the interface language, so it says this in both. */
 const NOT_OPEN =
