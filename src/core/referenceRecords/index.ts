@@ -34,6 +34,7 @@ import {
   restoreReference,
 } from "./store";
 
+export { createReferenceImport } from "./import";
 export { ARXIV, CROSSREF } from "./lookup";
 export { referenceOf, writeFileReference } from "./store";
 

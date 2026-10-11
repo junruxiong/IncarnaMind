@@ -68,9 +68,13 @@ function names(value: unknown): ReferenceName[] {
 function date(value: unknown): string {
   if (!isRecord(value)) return "";
   const parts = Array.isArray(value["date-parts"]) ? value["date-parts"][0] : undefined;
-  if (Array.isArray(parts) && typeof parts[0] === "number") {
-    return parseIssued(parts.filter((part) => typeof part === "number").join("-")) ?? "";
-  }
+  // Some exports write the parts as strings ("2010", "8").
+  const numbers = Array.isArray(parts)
+    ? parts.filter(
+        (part) => typeof part === "number" || (typeof part === "string" && /^\d+$/.test(part)),
+      )
+    : [];
+  if (numbers.length > 0) return parseIssued(numbers.join("-")) ?? "";
   return parseIssued(text(value.raw) || text(value.literal)) ?? "";
 }
 

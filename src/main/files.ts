@@ -29,6 +29,9 @@ import { rememberPick, startFolder } from "./pickerFolders";
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "markdown"];
 
+/** What "Import references" offers; the core reads the format from what is in the file. */
+const REFERENCE_EXTENSIONS = ["json", "bib", "bibtex", "ris", "txt"];
+
 export interface FileActionsOptions {
   /** The data folder, which "Open data folder" shows. */
   dataDir: string;
@@ -158,6 +161,31 @@ export function serveFileActions(
     if (canceled) return [];
     if (filePaths[0]) rememberPick(dataDir, "documents", filePaths[0]);
     return filePaths;
+  });
+
+  // The core reads the file and sends nothing; this is only the User choosing it (#287).
+  ipcMain.handle(FILES_CHANNELS.pickReferenceFile, async (event): Promise<string | null> => {
+    refuseUnknown(event);
+    const { language } = await core.getSettings();
+    const openOptions: OpenDialogOptions = {
+      title: translate(language, "references.import.pick.title"),
+      message: translate(language, "references.import.pick.message"),
+      properties: ["openFile"],
+      filters: [
+        {
+          name: translate(language, "references.import.pick.filter"),
+          extensions: REFERENCE_EXTENSIONS,
+        },
+      ],
+      defaultPath: startFolder(dataDir, "documents", app.getPath("downloads")),
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = window
+      ? await dialog.showOpenDialog(window, openOptions)
+      : await dialog.showOpenDialog(openOptions);
+    const picked = canceled ? null : (filePaths[0] ?? null);
+    if (picked) rememberPick(dataDir, "documents", picked);
+    return picked;
   });
 
   // Only a folder the User linked: its path comes from the core's list, never from the page.
