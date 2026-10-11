@@ -509,6 +509,18 @@ export interface CoreAdapters {
    */
   ollamaModels?: OllamaModels;
   /**
+   * Where Ollama is for the Tagging setting's Automatic (#180) when no Ollama
+   * provider is saved. Defaults to OLLAMA_HOST, else 127.0.0.1:11434.
+   */
+  ollamaUrl?: string;
+  /**
+   * Which models Ollama has installed at an address, for Automatic tagging's
+   * local decision models (#180). Defaults to asking Ollama (`/api/tags`);
+   * tests, and the smoke tests' scripted model, give their own, so nothing
+   * reaches an Ollama that happens to run on the computer.
+   */
+  localModels?(baseUrl: string): Promise<readonly string[]>;
+  /**
    * Where the experimental ChatGPT plan provider signs in and sends Questions.
    * Defaults to OpenAI's servers and the Codex CLI's callback port; tests
    * point it at a local fake authorization server and endpoint.

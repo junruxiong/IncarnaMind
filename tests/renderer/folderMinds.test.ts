@@ -112,7 +112,7 @@ describe("moving Minds and Documents", () => {
     groups: [group("finance", "Finance"), group("research", "Research")],
     deletedGroups: [],
     assignments: [assignment("moon", "research")],
-    settings: { classifier: null, automatic: false },
+    settings: { classifier: { kind: "automatic" }, automatic: false },
   };
   const minds = [mind("shortlist", null, "Shortlist"), mind("notes", "research", "Notes")];
 

@@ -1,8 +1,9 @@
 /**
- * Automatic tagging (spec #20, "Tagging"): once a Document is ready (embedded,
- * so already searchable), its Tags are decided: by Jev when a Jev key is set
- * up on this device, otherwise by the default chat model. One Document at a
- * time, in the order they became ready.
+ * Automatic tagging (spec #20, "Tagging"), while there are no Folders: once a
+ * Document is ready (embedded, so already searchable), its Tags are decided
+ * by the model the Tagging setting picks (Automatic, or one chosen by hand,
+ * see ../library/tagging), the one Organize uses once there are Folders. One
+ * Document at a time, in the order they became ready.
  *
  * - Each Document takes one turn in the background model queue (see
  *   ../backgroundQueue), which other background model work shares and which
@@ -26,6 +27,7 @@ import {
   NotFoundError,
   TaggingNotReadyError,
 } from "../errors";
+import { isPlanLimit } from "../library/planPace";
 import { classifyProviderError } from "../providers/providerErrors";
 import type { Database } from "../storage";
 import {
@@ -136,9 +138,10 @@ export function createTagger(options: TaggerOptions) {
     if (changed.length > 0) announce(changed);
   };
 
-  /** No tagger can be used: every queued Document waits for one. */
-  function park(): void {
-    setStates(queue.splice(0), "waiting-for-provider");
+  /** No tagger can be used: every queued Document waits for one, with why when known. */
+  function park(error: ProviderError | null = null): void {
+    const changed = queue.splice(0).filter((id) => setState(id, "waiting-for-provider", error));
+    if (changed.length > 0) announce(changed);
   }
 
   function excerptOf(id: string, row: DocumentRow): DocumentExcerpt {
@@ -209,7 +212,15 @@ export function createTagger(options: TaggerOptions) {
           signal: AbortSignal.any([lifetime.signal, call.signal]),
         });
       } catch (error) {
-        if (!stale()) fail(id, error);
+        if (stale()) return;
+        if (isPlanLimit(error)) {
+          // The ChatGPT plan's limit: this and the rest wait for it to reset (see ../library/planPace).
+          const why = classifyProviderError(error);
+          if (setState(id, "waiting-for-provider", why)) announce([id]);
+          park(why);
+        } else {
+          fail(id, error);
+        }
         return;
       }
     }

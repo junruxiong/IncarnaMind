@@ -160,6 +160,13 @@ function errorDetails(value: unknown): { type: string | null; message: string | 
 
 const PLAN_LIMIT_TYPES = new Set(["usage_limit_reached", "usage_not_included"]);
 
+/** The plan's limit reached, with when it resets when the endpoint says. */
+function planLimitError(value: unknown, status: number): ChatGptPlanError {
+  const error = isRecord(value) && isRecord(value.error) ? value.error : {};
+  const resetsAt = typeof error.resets_at === "number" ? error.resets_at * 1000 : null;
+  return new ChatGptPlanError("plan-limit", planLimitMessage(value), status, resetsAt);
+}
+
 /** "Your ChatGPT plan's usage limit is reached (plus plan). It resets at 2026-10-07T12:00:00.000Z." */
 function planLimitMessage(value: unknown): string {
   const error = isRecord(value) && isRecord(value.error) ? value.error : {};
@@ -193,7 +200,7 @@ async function checkRefusal(response: Response): Promise<Response> {
     );
   }
   if (status === 429 && PLAN_LIMIT_TYPES.has(errorDetails(parsed).type ?? "")) {
-    throw new ChatGptPlanError("plan-limit", planLimitMessage(parsed), status);
+    throw planLimitError(parsed, status);
   }
   return new Response(text, {
     status,
@@ -266,7 +273,7 @@ async function collectStream(response: Response, url: string): Promise<Response>
       const source = event.type === "response.failed" ? event.response : event;
       const { type, message } = errorDetails(source);
       if (PLAN_LIMIT_TYPES.has(type ?? "")) {
-        throw new ChatGptPlanError("plan-limit", planLimitMessage(source), 429);
+        throw planLimitError(source, 429);
       }
       throw new APICallError({
         message: message ?? "The ChatGPT plan's endpoint failed to answer.",

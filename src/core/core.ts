@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as Y from "yjs";
 import { isCitationStyleId } from "../shared/citationStyles";
 import { translate } from "../shared/i18n";
+import { supportsLibraryImages } from "../shared/libraryModels";
 import {
   chosenCitationStyle,
   citationStyleIn,
@@ -79,8 +80,17 @@ import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
-import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
+import {
+  chatGroupClassifier,
+  decisionGroupClassifier,
+  type GroupClassifier,
+  pacedBy,
+  withPageReader,
+} from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
+import { createPlanPace } from "./library/planPace";
+import { createTagging } from "./library/tagging";
+import type { TaggingClassifier } from "./library/types";
 import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -99,11 +109,12 @@ import { readsImages } from "./providers/capabilities";
 import { CHAT_FLOW_SENDS, createChat, type PreparedChatModel } from "./providers/chat";
 import { CHATGPT_PLAN_ENDPOINTS, createChatGptPlan } from "./providers/chatgpt/plan";
 import { createAiSdkEmbeddingModel } from "./providers/embeddings";
-import { ollamaBaseUrl } from "./providers/kinds";
+import { defaultOllamaUrl, ollamaBaseUrl } from "./providers/kinds";
 import { createAiSdkChatModel } from "./providers/models";
 import {
   detectOllama,
   hasOllamaModel,
+  installedOllamaModels,
   OLLAMA_REGISTRY,
   pullOllamaModel,
   RECOMMENDED_OLLAMA_MODEL,
@@ -133,7 +144,7 @@ import { migrate, openDatabase } from "./storage";
 import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
-import { createJevTagging } from "./tags/jev";
+import { createJevTagging, decisionModelTagger } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
@@ -764,6 +775,15 @@ export function createCore(adapters: CoreAdapters): Core {
     providerExists: (providerId) => chat.exists(providerId),
     readiness: (choice) => chat.readiness(choice),
     prepareModel: (choice) => chat.prepareModel(choice),
+    async prepareQuickModel(answers, prepared) {
+      const quick = chat.quickTasksModel(answers);
+      if (!quick || (quick.providerId === answers.providerId && quick.modelId === answers.modelId))
+        return prepared.model;
+      // An Answer on this computer keeps its small calls there too.
+      if (prepared.provider.service === null && chat.describeModel(quick)?.service !== null)
+        return prepared.model;
+      return (await chat.prepareModel(quick, "chat", { small: true })).model;
+    },
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
       searchableNames: (documentIds, limit) =>
@@ -935,11 +955,47 @@ export function createCore(adapters: CoreAdapters): Core {
     hostedUrl: adapters.jevHostedUrl,
     signal: lifetime.signal,
   });
+  /** Why a cloud model chosen to tag with waits in local mode (Settings shows it as it is). */
+  const PAUSED_IN_LOCAL_MODE = "Cloud classification is paused in local mode.";
+  // Tagging on a ChatGPT plan goes gently, and waits while the plan's limit holds (#180).
+  const planPace = createPlanPace({
+    pace,
+    timers: paceTimers,
+    resumed: () => {
+      tagger.resume();
+      library.resume();
+    },
+    signal: lifetime.signal,
+  });
+  // The one Tagging setting (#180): the model automatic tagging and Organize use.
+  const tagging = createTagging({
+    setting: () => library.settings().classifier,
+    chat: {
+      list: () => chat.list(),
+      defaultModel: () => settings.get().user.chatModel,
+      describeModel: (choice) => chat.describeModel(choice),
+      quickTasksModel: (answers) => chat.quickTasksModel(answers),
+    },
+    jev,
+    localOnly: () => embedding.localOnly(),
+    ollamaUrl: adapters.ollamaUrl ?? defaultOllamaUrl(),
+    localModels: adapters.localModels ?? installedOllamaModels,
+    planPausedUntil: () => planPace.pausedUntil(),
+    now: () => paceTimers.now(),
+  });
+  /** What the Tagging setting tags with: the model chosen, or Automatic's last pick. */
+  const tagsWith = (): TaggingClassifier | null => {
+    const setting = library.settings().classifier;
+    return setting.kind === "automatic" ? tagging.lastResolved() : setting;
+  };
+  /** Requests to the ChatGPT plan, one at a time and spaced, waiting while its limit holds. */
+  const onPlan = <T>(run: () => Promise<T>, signal: AbortSignal) => planPace.run(run, signal);
   consent.registry.register({
     id: "tagging",
     sends: TAGGING_FLOW_SENDS,
     async services() {
-      const service = jev.enabled() ? jev.service() : chat.defaultService();
+      const classifier = await tagging.resolve();
+      const service = classifier && tagging.service(classifier);
       return service ? [service] : [];
     },
   });
@@ -963,24 +1019,58 @@ export function createCore(adapters: CoreAdapters): Core {
     if (changed.length > 0) events.emit("documents.tagged", documents.getMany(changed));
     return documents.getMany(ids);
   };
-  // Existing installations keep the legacy tagger until organization is configured.
-  // Once folders are in use, only the selected organizer may suggest tags.
-  const organizationConfigured = () =>
-    !!settings.readDeviceValue("library") ||
+  // Until there are Folders, automatic tagging decides Tags alone; then Organize does both.
+  const hasFolders = () =>
     !!db.get("SELECT 1 FROM library_groups WHERE deleted_at IS NULL LIMIT 1");
   const tagger = createTagger({
     db,
     now,
     tags,
-    enabled: () => !organizationConfigured(),
-    canRun: async () =>
-      jev.enabled() ? jev.canRun() : (await chat.readiness(undefined, "tagging")).ready,
-    mightBeReady: () => (jev.enabled() ? jev.mightBeReady() : chat.mightBeReady("tagging")),
+    enabled: () => !hasFolders(),
+    canRun: async () => {
+      const classifier = await tagging.resolve();
+      if (!classifier) return false;
+      if (classifier.kind === "jev") return jev.canRun();
+      if (classifier.kind === "chat") {
+        return (await chat.readiness(classifier.choice, "tagging")).ready;
+      }
+      return true;
+    },
+    mightBeReady: () => {
+      const classifier = tagsWith();
+      if (!classifier) return false;
+      if (embedding.localOnly() && tagging.service(classifier)) return false;
+      if (classifier.kind === "jev") return jev.mightBeReady();
+      if (classifier.kind === "chat") return chat.mightBeReady("tagging", classifier.choice);
+      return true;
+    },
     prepare: async () => {
-      if (jev.enabled()) return jev.prepare();
-      const prepared = await chat.prepareModel(undefined, "tagging");
-      // No service to send to: the model runs on a server on this computer.
-      return chatClassifier(prepared.model, { local: prepared.provider.service === null });
+      const classifier = await tagging.resolve();
+      if (!classifier) throw new TaggingNotReadyError("Choose a model to tag with.");
+      if (embedding.localOnly() && tagging.service(classifier))
+        throw new TaggingNotReadyError(PAUSED_IN_LOCAL_MODE);
+      switch (classifier.kind) {
+        case "jev":
+          return jev.prepare();
+        case "auto": {
+          const model = await tagging.textDecisionModel(classifier.baseUrl);
+          if (!model) throw new TaggingNotReadyError("Install tev1:4b in Ollama, then tag again.");
+          return decisionModelTagger({ baseUrl: classifier.baseUrl, model });
+        }
+        case "ollama":
+          return decisionModelTagger({ baseUrl: classifier.baseUrl, model: classifier.modelId });
+        case "chat": {
+          const prepared = await chat.prepareModel(classifier.choice, "tagging");
+          if (embedding.localOnly() && prepared.provider.service)
+            throw new TaggingNotReadyError(PAUSED_IN_LOCAL_MODE);
+          // No service to send to: the model runs on a server on this computer.
+          const chosen = chatClassifier(prepared.model, {
+            local: prepared.provider.service === null,
+          });
+          if (prepared.provider.kind !== "chatgpt") return chosen;
+          return { ...chosen, decide: (input) => onPlan(() => chosen.decide(input), input.signal) };
+        }
+      }
     },
     announce: announceTagged,
     reportError: (error) => console.error(error),
@@ -1003,7 +1093,19 @@ export function createCore(adapters: CoreAdapters): Core {
       batches.changed(assignments.map((each) => each.documentId));
     },
     providerExists: (id) => chat.exists(id),
-    chatReadsImages: (choice) => chat.readsImages(choice),
+    tagsWith,
+    readsPages: (classifier) => {
+      switch (classifier.kind) {
+        case "auto":
+          return true;
+        case "ollama":
+          return supportsLibraryImages(classifier.modelId) && classifier.usePageImages === true;
+        case "jev":
+          return false;
+        case "chat":
+          return chat.readsImages(classifier.choice) || chat.imageModel(classifier.choice) !== null;
+      }
+    },
     async pageImages(id, contentHash, signal) {
       try {
         return await documentPageImages(await documents.filePath(id), contentHash, signal);
@@ -1012,8 +1114,9 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new Error(error instanceof Error ? error.message : String(error), { cause: error });
       }
     },
-    async prepare({ classifier }) {
-      if (!classifier) throw new TaggingNotReadyError("Choose a classification model.");
+    async prepare({ classifier: setting }) {
+      const classifier = await tagging.resolve(setting);
+      if (!classifier) throw new TaggingNotReadyError("Choose a model to tag with.");
       if (classifier.kind === "auto") {
         let automatic = automaticClassifiers.get(classifier.baseUrl);
         if (!automatic) {
@@ -1032,40 +1135,52 @@ export function createCore(adapters: CoreAdapters): Core {
         });
       if (classifier.kind === "jev") {
         if (embedding.localOnly() && jev.service())
-          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+          throw new TaggingNotReadyError(PAUSED_IN_LOCAL_MODE);
         const prepared = await jev.prepareGroups();
         if (embedding.localOnly() && !prepared.local)
-          throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+          throw new TaggingNotReadyError(PAUSED_IN_LOCAL_MODE);
         return prepared;
       }
-      const ready = await chat.readiness(classifier.choice, "classification");
+      const { choice } = classifier;
+      const ready = await chat.readiness(choice, "classification");
       if (embedding.localOnly() && "provider" in ready && ready.provider.service)
-        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
-      const prepared = await chat.prepareModel(classifier.choice, "classification");
+        throw new TaggingNotReadyError(PAUSED_IN_LOCAL_MODE);
+      const prepared = await chat.prepareModel(choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
-        throw new TaggingNotReadyError("Cloud classification is paused in local mode.");
+        throw new TaggingNotReadyError(PAUSED_IN_LOCAL_MODE);
       // prepareModel got consent for everything the classification flow sends, page images included.
       const images = readsImages(prepared.capabilities);
-      return {
+      let chosen: GroupClassifier = {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
-        model: { id: classifier.choice.modelId, images, reason: "selected" as const },
+        model: { id: choice.modelId, images, reason: "selected" as const },
       };
+      // A scan goes to the image model when this one can't read its pages (#180).
+      const imageModel = images ? null : chat.imageModel(choice);
+      if (imageModel) {
+        chosen = withPageReader(chosen, async () => {
+          const reader = await chat.prepareModel(imageModel, "classification");
+          return {
+            ...chatGroupClassifier(reader.model, reader.provider.service === null, true),
+            model: { id: imageModel.modelId, images: true, reason: "selected" as const },
+          };
+        });
+      }
+      return prepared.provider.kind === "chatgpt" ? pacedBy(chosen, onPlan) : chosen;
     },
   });
   consent.registry.register({
     id: "classification",
     sends: CLASSIFICATION_FLOW_SENDS,
     async services() {
-      const selected = library.settings().classifier;
-      if (selected?.kind === "jev") {
-        const service = jev.service();
-        return service ? [service] : [];
-      }
-      if (selected?.kind === "chat") {
-        const provider = (await chat.list()).find((item) => item.id === selected.choice.providerId);
-        return provider?.service ? [provider.service] : [];
-      }
-      return [];
+      const classifier = await tagging.resolve();
+      const service = classifier && tagging.service(classifier);
+      // The image model reads the scans the model that tags can't.
+      const reader =
+        classifier?.kind === "chat" && !chat.readsImages(classifier.choice)
+          ? chat.imageModel(classifier.choice)
+          : null;
+      const pages = reader && chat.describeModel(reader)?.service;
+      return [...(service ? [service] : []), ...(pages && pages.id !== service?.id ? [pages] : [])];
     },
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
@@ -1118,13 +1233,28 @@ export function createCore(adapters: CoreAdapters): Core {
     tagged: announceTagged,
   });
 
+  /**
+   * What tagging may use changed (a model, a key, local mode): Automatic picks
+   * again, and Documents waiting may go on.
+   */
+  const taggingChanged = async () => {
+    try {
+      await tagging.resolve();
+    } catch (error) {
+      if (lifetime.signal.aborted) return;
+      console.error("The model to tag with couldn't be worked out.", error);
+    }
+    if (lifetime.signal.aborted) return;
+    tagger.resume();
+    library.resume();
+  };
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
     if (lifetime.signal.aborted) return status;
     events.emit("jev.changed", status);
-    tagger.resume();
-    library.resume();
+    await taggingChanged();
     return status;
   };
   documentReady = (documentId) => tagger.documentReady(documentId);
@@ -1139,10 +1269,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!lifetime.signal.aborted) throw error;
     }
     // Documents waiting for a chat model may be able to go on now.
-    if (!lifetime.signal.aborted) {
-      tagger.resume();
-      library.resume();
-    }
+    if (!lifetime.signal.aborted) await taggingChanged();
   };
   chatGptChanged = () => {
     const report = async () => {
@@ -1156,8 +1283,11 @@ export function createCore(adapters: CoreAdapters): Core {
     });
   };
 
-  // Tagging a quit interrupted starts again; Documents waiting for a chat model are checked.
-  tagger.start();
+  // Tagging a quit interrupted starts again, once Automatic knows what it tags with;
+  // Documents waiting for a model are checked.
+  void taggingChanged().then(() => {
+    if (!lifetime.signal.aborted) tagger.start();
+  });
 
   // Traffic that carries nothing of the User's, for the Privacy page.
   const modelSource = adapters.embeddingModelSource ?? BUILT_IN_EMBEDDING_MODEL.source;
@@ -1795,9 +1925,10 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => library.saveSettings(input),
+    getTaggingModels: () => tagging.models(),
     classifyDocuments: async (ids) => {
       library.classify(ids);
-      const classifier = library.settings().classifier;
+      const classifier = tagsWith();
       if (classifier) {
         usageData.record({
           event: "organize_run",
@@ -1896,7 +2027,7 @@ export function createCore(adapters: CoreAdapters): Core {
       return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
-      if (organizationConfigured()) return library.classify(documentIds);
+      if (hasFolders()) return library.classify(documentIds);
       tagger.retag(documentIds);
     },
 

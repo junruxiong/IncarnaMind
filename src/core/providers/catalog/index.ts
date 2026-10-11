@@ -24,8 +24,10 @@ export { LOCAL_MODEL_TIERS, LOCAL_MODELS, recommendedLocalModels } from "./local
 export {
   CATALOG_PROVIDERS,
   type CatalogProviderId,
+  CHATGPT_PLAN_ROLES,
   catalogProvider,
   catalogProviderOfKind,
+  catalogRoleModel,
   endpointOf,
 } from "./providers";
 export type * from "./types";

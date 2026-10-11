@@ -29,7 +29,14 @@ import {
   resolveCapabilities,
   startingSupport,
 } from "./capabilities";
-import { catalogFacts, catalogProviderOfKind, modelsProviderOfKind } from "./catalog";
+import {
+  catalogFacts,
+  catalogModel,
+  catalogProviderOfKind,
+  catalogRoleModel,
+  modelsProviderOfKind,
+  type Price,
+} from "./catalog";
 import { endpointOf } from "./catalog/providers";
 import { isChatGptPlanModel } from "./chatgpt/codexEndpoint";
 import type { ChatGptPlan } from "./chatgpt/plan";
@@ -110,6 +117,23 @@ export interface PreparedChatModel {
    * first wait for it to load; null when that can't be told.
    */
   loaded?: () => Promise<boolean | null>;
+}
+
+/** What is known now of a model on a saved provider (see `describeModel`). */
+export interface DescribedModel {
+  choice: ChatModelChoice;
+  kind: ChatProviderKind;
+  /** Its provider's catalog entry, or null for one the catalog doesn't have (the ChatGPT plan). */
+  catalogId: string | null;
+  /** Where its requests go; null for a model on this computer. */
+  service: ExternalService | null;
+  /** A model in Ollama that runs on ollama.com. */
+  ollamaCloud: boolean;
+  readsImages: boolean;
+  /** Its name in the catalog, else its id. */
+  name: string;
+  /** Its price in the catalog, when known. */
+  price: Price | undefined;
 }
 
 /** A model in Ollama that can't answer Questions, such as an embedding model, fails before anything is sent. */
@@ -382,6 +406,55 @@ export function createChat(options: {
     return toProvider(row, choice.modelId);
   };
 
+  /**
+   * What is known now of a model on a saved provider: its provider's kind and
+   * catalog entry, where its requests go, whether it is an Ollama cloud model,
+   * whether it reads images, its name and its price. Undefined when its
+   * provider is gone.
+   */
+  function describeModel(choice: ChatModelChoice): DescribedModel | undefined {
+    const row = rowById(choice.providerId);
+    if (!row || !isChatProviderKind(row.kind)) return undefined;
+    const kind = row.kind;
+    const set = modelsProviderOfKind(kind, row.endpoint);
+    const capabilities = capabilitiesOf(row, choice.modelId);
+    const service = knownService(row, choice.modelId);
+    return {
+      choice,
+      kind,
+      catalogId: row.catalog_id,
+      service,
+      ollamaCloud: kind === "ollama" && service !== null,
+      readsImages: readsImages(capabilities),
+      name: catalogModel(set, choice.modelId)?.name ?? choice.modelId,
+      price: capabilities.facts.price,
+    };
+  }
+
+  /**
+   * A role's model for Answers asked with `base` (see `quickTasksModel` and
+   * `imageModel`): the User's, else the catalog's for a cloud provider (the
+   * ChatGPT plan's own for the jobs it has), else `base`.
+   */
+  function roleModel(
+    role: "quickTasks" | "images",
+    base: ChatModelChoice | null,
+  ): ChatModelChoice | null {
+    const own = settings.get().user[role === "quickTasks" ? "quickTasksModel" : "imageModel"];
+    const answers = base && describeModel(base);
+    let chosen: ChatModelChoice | null = own && rowById(own.providerId) ? own : null;
+    if (!chosen && answers) {
+      const catalogRole =
+        answers.service === null || answers.ollamaCloud
+          ? undefined
+          : catalogRoleModel(answers.kind, role);
+      chosen = catalogRole ? { providerId: answers.choice.providerId, modelId: catalogRole } : base;
+    }
+    if (!chosen || !options.localOnly()) return chosen;
+    if (describeModel(chosen)?.service === null) return chosen;
+    return answers?.service === null ? answers.choice : null;
+  }
+
   consent.registry.register({
     id: "chat",
     sends: CHAT_FLOW_SENDS,
@@ -549,6 +622,40 @@ export function createChat(options: {
       );
     },
 
+    describeModel,
+
+    /**
+     * The quick-tasks model for Answers asked with `answers` (the default
+     * model when left out), for the calls that don't write the Answer (#180):
+     * the one the User set, else the catalog's for a cloud provider, else the
+     * Answers model itself. A model on this computer does its own small calls,
+     * as a second one would push it out of memory. In local mode a cloud model
+     * gives way to the Answers model, when that is on this computer, or to
+     * none. Null with no Answers model.
+     */
+    quickTasksModel(answers?: ChatModelChoice | null): ChatModelChoice | null {
+      return roleModel(
+        "quickTasks",
+        answers === undefined ? settings.get().user.chatModel : answers,
+      );
+    },
+
+    /**
+     * The model that reads a scan's pages for Answers asked with `answers` (the
+     * default model when left out): the Answers model when it reads images,
+     * else the one the User set, else the catalog's for a cloud provider, when
+     * it reads images. Null when none does, or, in local mode, when the one
+     * that would isn't on this computer.
+     */
+    imageModel(answers?: ChatModelChoice | null): ChatModelChoice | null {
+      const base = answers === undefined ? settings.get().user.chatModel : answers;
+      const described = base && describeModel(base);
+      const chosen = described?.readsImages ? base : roleModel("images", base);
+      const reader = chosen && describeModel(chosen);
+      if (!reader?.readsImages) return null;
+      return options.localOnly() && reader.service !== null ? null : reader.choice;
+    },
+
     /**
      * Whether Questions can be asked with `choice`, or with the default model
      * when it is left out. With another `flow`, whether that flow can use it.
@@ -564,14 +671,15 @@ export function createChat(options: {
     },
 
     /**
-     * A quick check, with nothing to wait for: false when the default chat
-     * model certainly can't be used on `flow` (there is none, or the User
-     * declined the flow to its service). `readiness` checks keys and sign-ins too.
+     * A quick check, with nothing to wait for: false when `model` (the
+     * default chat model when left out) certainly can't be used on `flow`
+     * (there is none, or the User declined the flow to its service).
+     * `readiness` checks keys and sign-ins too.
      */
-    mightBeReady(flow: DataFlowId): boolean {
-      const row = defaultRow();
+    mightBeReady(flow: DataFlowId, model?: ChatModelChoice): boolean {
+      const row = model ? rowById(model.providerId) : defaultRow();
       if (!row) return false;
-      const choice = settings.get().user.chatModel;
+      const choice = model ?? settings.get().user.chatModel;
       const service = choice ? knownService(row, choice.modelId) : rowService(row);
       return !service || consent.status(flow, service) !== "declined";
     },
@@ -675,12 +783,15 @@ export function createChat(options: {
     /**
      * For Answers (#29): the default model, or `choice` from a Question's model
      * picker, after checking readiness and getting consent for its service on
-     * `flow` (automatic tagging passes "tagging").
+     * `flow` (automatic tagging passes "tagging"). `small`: a call that doesn't
+     * write the Answer, which skips thinking where it can; by default, any
+     * call on another flow than "chat".
      * Throws `ChatNotReadyError` or `ConsentDeclinedError`; nothing is sent then.
      */
     async prepareModel(
       choice?: ChatModelChoice,
       flow: DataFlowId = "chat",
+      { small = flow !== "chat" }: { small?: boolean } = {},
     ): Promise<PreparedChatModel> {
       const readiness = await readinessFor(choice ?? settings.get().user.chatModel, flow);
       if (!readiness.ready) throw new ChatNotReadyError(readiness);
@@ -689,9 +800,10 @@ export function createChat(options: {
       const apiKey = acceptsApiKey(provider.kind) ? await secrets.get(keyName(provider.id)) : null;
       const profile = await profileFor(provider.kind, provider.baseUrl, modelId);
       checkCanChat(profile, modelId);
-      // The calls that don't write the Answer (tagging, classifying) skip thinking where they can.
+      // The calls that don't write the Answer (tagging, classifying, an Answer's search query)
+      // skip thinking where they can.
       const model = createModel(
-        specFor(provider, apiKey, modelId, profile, flow === "chat" ? undefined : "off"),
+        specFor(provider, apiKey, modelId, profile, small ? "off" : undefined),
       );
       const row: ProviderRow = {
         id: provider.id,

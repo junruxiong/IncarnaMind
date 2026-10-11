@@ -135,7 +135,7 @@ describe("applying gathered assignments to the Library", () => {
     ],
     deletedGroups: [],
     assignments: [assignment("a"), assignment("b")],
-    settings: { classifier: null, automatic: false },
+    settings: { classifier: { kind: "automatic" }, automatic: false },
   };
 
   test("each changes in place, a Document without one yet gets it at the end, the rest stay", () => {

@@ -8,12 +8,20 @@
  * - "tev-0.8b": the local decision model Tev1 0.8B, chosen by name.
  * - "clef-flash": Clef-Flash chosen by name with PDF page images on.
  * - "chat": the connected chat model, from INCARNAMIND_EVAL_CHAT_* (see eval/lib/config.ts),
- *   with the page images of PDFs without text when the model reads images.
+ *   with the page images of PDFs without text when the model reads images, and
+ *   thinking off, as the app asks for it on every call that doesn't write an
+ *   Answer (OpenAI's small models: reasoning effort "none");
+ * - "scripted": the smoke tests' scripted chat model through the chat route,
+ *   which files a Document in the Folder whose name it contains: no model, no
+ *   network, to check the run itself.
+ *
+ * The chat routes record each call's tokens, so a run says what tagging costs.
  *
  * Local routes share this computer's Ollama with other work, so each waits
  * until no other model is loaded and unloads its own models afterwards.
  */
 
+import { wrapLanguageModel } from "ai";
 import { automaticGroupClassifier } from "../../../src/core/library/automatic";
 import {
   chatGroupClassifier,
@@ -21,14 +29,48 @@ import {
   type GroupClassifier,
 } from "../../../src/core/library/classifier";
 import { readsImages, resolveCapabilities } from "../../../src/core/providers/capabilities";
-import { catalogFacts, modelsProviderOfKind } from "../../../src/core/providers/catalog";
+import {
+  catalogFacts,
+  modelsProviderOfKind,
+  type Price,
+} from "../../../src/core/providers/catalog";
 import { serviceForUrl } from "../../../src/core/providers/kinds";
-import { createAiSdkChatModel } from "../../../src/core/providers/models";
+import { type ChatLanguageModel, createAiSdkChatModel } from "../../../src/core/providers/models";
 import { DEFAULT_OLLAMA_SETTINGS } from "../../../src/core/providers/ollamaModels";
+import { createFakeChatModel } from "../../../src/main/fakeChatModel";
 import type { ChatSettings } from "../../lib/config";
+import type { TokenCount } from "./scoring";
 
-export const ROUTES = ["auto", "tev-0.8b", "clef-flash", "chat"] as const;
+export const ROUTES = ["auto", "tev-0.8b", "clef-flash", "chat", "scripted"] as const;
 export type RouteName = (typeof ROUTES)[number];
+
+/** Adds up the tokens a model's calls report, until they are taken for the next Document. */
+function tokenCounter() {
+  let count: TokenCount = { input: 0, output: 0, reasoning: 0 };
+  return {
+    wrap: (model: ChatLanguageModel): ChatLanguageModel =>
+      wrapLanguageModel({
+        model,
+        middleware: {
+          specificationVersion: "v4",
+          wrapGenerate: async ({ doGenerate }) => {
+            const result = await doGenerate();
+            count = {
+              input: count.input + (result.usage.inputTokens.total ?? 0),
+              output: count.output + (result.usage.outputTokens.total ?? 0),
+              reasoning: count.reasoning + (result.usage.outputTokens.reasoning ?? 0),
+            };
+            return result;
+          },
+        },
+      }),
+    take(): TokenCount {
+      const taken = count;
+      count = { input: 0, output: 0, reasoning: 0 };
+      return taken;
+    },
+  };
+}
 
 export interface Route {
   name: RouteName;
@@ -39,6 +81,10 @@ export interface Route {
   /** Runs on this computer: no data leaves it. */
   local: boolean;
   classifier: GroupClassifier;
+  /** The tokens its model calls reported since the last call, for a chat route. */
+  tokens?(): TokenCount;
+  /** Its model's price in the catalog, for the cost per 100 Documents. */
+  price?: Price;
 }
 
 export function buildRoute(
@@ -92,20 +138,22 @@ export function buildRoute(
       const local =
         chat.kind === "ollama" ||
         (chat.kind === "openai-compatible" && baseUrl !== null && !serviceForUrl(baseUrl));
-      const model = createAiSdkChatModel({
-        kind: chat.kind,
-        baseUrl,
-        apiKey: chat.apiKey,
-        modelId: chat.modelId,
-        // Local chat models keep within an 8K window, like the app's default.
-        ollama: DEFAULT_OLLAMA_SETTINGS,
-      });
-      // As the app knows it before a request: from the catalog.
-      const images = readsImages(
-        resolveCapabilities({
-          catalog: catalogFacts(modelsProviderOfKind(chat.kind), chat.modelId),
+      const counter = tokenCounter();
+      const model = counter.wrap(
+        createAiSdkChatModel({
+          kind: chat.kind,
+          baseUrl,
+          apiKey: chat.apiKey,
+          modelId: chat.modelId,
+          // As the app's `prepareModel` for Organize: thinking off where the provider allows.
+          thinking: "off",
+          // Local chat models keep within an 8K window, like the app's default.
+          ollama: DEFAULT_OLLAMA_SETTINGS,
         }),
       );
+      // As the app knows it before a request: from the catalog.
+      const facts = catalogFacts(modelsProviderOfKind(chat.kind), chat.modelId);
+      const images = readsImages(resolveCapabilities({ catalog: facts }));
       return {
         name,
         label: `Chat model ${chat.kind}/${chat.modelId}${images ? ", with page images of scans" : ""}`,
@@ -115,6 +163,25 @@ export function buildRoute(
           ...chatGroupClassifier(model, local, images),
           model: { id: chat.modelId, images, reason: "selected" },
         },
+        tokens: () => counter.take(),
+        ...(facts?.price && !local && { price: facts.price }),
+      };
+    }
+    case "scripted": {
+      const counter = tokenCounter();
+      const model = counter.wrap(
+        createFakeChatModel({ kind: "ollama", baseUrl: null, apiKey: null, modelId: "scripted" }),
+      );
+      return {
+        name,
+        label: "The smoke tests' scripted chat model (no model, no network)",
+        models: [],
+        local: false,
+        classifier: {
+          ...chatGroupClassifier(model, true),
+          model: { id: "scripted", images: false, reason: "selected" },
+        },
+        tokens: () => counter.take(),
       };
     }
   }

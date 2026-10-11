@@ -15,10 +15,6 @@ export const en = {
   "library.folder": "Folder",
   "library.document": "Document",
   "library.manageTags": "Manage tags",
-  "library.settingsSaved": "Settings saved.",
-  "library.settingsIntro":
-    "Organize assigns one folder and relevant tags to each document. Your files stay at their original locations, and your manual choices are kept.",
-  "library.settingsTitle": "Organization",
   "library.showMore": "Show more Documents",
   "library.file": "File: {name}",
   "library.loading": "Loading Library…",
@@ -33,7 +29,6 @@ export const en = {
   "library.deleteNotice":
     "Its Documents and Minds move to Not in a Folder. Their original files and Tags are kept.",
   "library.cancel": "Cancel",
-  "library.modelSettings": "Organization settings",
   "library.search": "Find by name or tag",
   "library.classify": "Organize",
   "library.reclassify": "Organize this folder",
@@ -63,17 +58,8 @@ export const en = {
   "library.startersHint":
     "Start with the folders you need. Rename them or add your own at any time.",
   "library.addSelected": "Add selected folders",
-  "library.modelHint":
-    "Choose the model that assigns folders and tags. This can be different from your chat model. Cloud models ask before receiving your document text, folder names and tag definitions, and, if they can read images, the first pages of scanned PDFs.",
   "library.connection": "Connection",
-  "library.manualOnly": "Organize manually",
-  "library.jev": "Jev · saved connection",
   "library.ollama": "Local decision model · Ollama",
-  "library.auto": "Auto · local models",
-  "library.autoHint":
-    "Use Tev1 4B for text and Clef-Flash with page images for PDFs with little readable text. Switch to Tev1 0.8B when text classification stays slow or memory is limited; it is faster but may miss more groups. You can select a specific model instead.",
-  "library.autoModels":
-    "Uses installed Ollama models: tev1:4b, tev1:0.8b and clef-flash. Missing models are shown on affected Documents. Nothing is downloaded automatically. Images in Word and PowerPoint files are not included.",
   "library.usedPages": "Text + PDF pages",
   "library.usedText": "Text",
   "library.route.slow": "Faster model after slow calls",
@@ -81,12 +67,9 @@ export const en = {
   "library.route.unavailable": "4B model not installed",
   "library.model": "Model name",
   "library.server": "Local Ollama address",
-  "library.localHint":
-    "Use an installed model: Tev1 for text, or Clef-Flash for text and PDF pages. Clef-Flash needs Ollama 0.35.1 or later. Nothing is downloaded automatically.",
   "library.pageImages":
     "Include up to 3 PDF page images with local Clef-Flash. Other formats use text only.",
   "library.automatic": "Organize new and changed Documents automatically. Keep my manual choices.",
-  "library.saveModel": "Save settings",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
@@ -879,7 +862,7 @@ export const en = {
   "tags.state.tagging": "Tagging…",
   "tags.state.failed": "Tagging failed. Re-tag to try again.",
   "tags.dialog.body":
-    "Organize gives each Document a Folder and Tags, going by these names and descriptions, with the model chosen in Settings → Organization: your connected chat model, Auto · local models (Tev1 on this computer, and Clef-Flash for PDFs that are mostly images), or a local model you name, such as Clef-Flash. Tags you add to or remove from a Document are never changed automatically.",
+    "Documents get their Tags, and once you have Folders a suggested Folder, going by these names and descriptions, from the model chosen in Settings → Models → Tagging: Automatic, unless you choose another. Tags you add to or remove from a Document are never changed automatically.",
   "tags.dialog.preset": "Preset",
   "tags.dialog.empty": "No Tags yet. Add one below.",
   "tags.dialog.name": "Name",
@@ -906,10 +889,10 @@ export const en = {
   "jev.chip.review":
     "{tag}: added automatically, but only {percent}% likely. Confirm it to keep it, or remove it.",
   "jev.chip.confirm": "Confirm {tag} on {name}",
-  "jev.settings.title": "Automatic tagging",
+  "jev.settings.title": "TypeSafe Jev",
   "jev.settings.body":
-    "Documents are tagged with your chat model. With a TypeSafe Jev key, Jev tags them instead: it is quicker and cheaper, and says how likely each Tag is. Tags it isn't sure about are marked for you to review.",
-  "jev.settings.inUse": "TypeSafe Jev tags your Documents.",
+    "With a TypeSafe Jev key, Jev can tag your Documents: it says how likely each Tag is, and marks the ones it isn't sure of for you to review. Automatic uses it first.",
+  "jev.settings.inUse": "Your Jev key is saved.",
   "jev.settings.server": "Server: {server}",
   "jev.settings.hosted": "TypeSafe",
   "jev.settings.keyMissing":
@@ -928,6 +911,49 @@ export const en = {
   "jev.form.reviewHint":
     "Below the first number a Tag isn't applied; from the second it is applied without a mark.",
   "jev.form.save": "Use Jev for tagging",
+  "tagging.title": "Tagging",
+  "tagging.intro":
+    "Tags each Document you add and, once you have Folders, suggests its Folder. Tags and Folders you set yourself are never changed.",
+  "tagging.model": "Model for tagging",
+  "tagging.automatic": "Automatic",
+  "tagging.using.jev": "Using {model}, with your Jev key",
+  "tagging.using.tagging-model": "Using {model}, your {provider} key's tagging model",
+  "tagging.using.quick-model": "Using {model}, your {provider} key's quick model",
+  "tagging.using.answers-model": "Using {model}, your {provider} model for Answers",
+  "tagging.using.plan": "Using {model}, through your ChatGPT plan",
+  "tagging.using.decision-models": "Using the local decision models on this computer ({model})",
+  "tagging.using.local-chat": "Using {model}, on this computer",
+  "tagging.using.none":
+    "No model to tag with yet: set up a chat model, or install Tev1 in Ollama. Documents wait until then.",
+  "tagging.group.plan": "ChatGPT plan",
+  "tagging.group.local": "On this computer",
+  "tagging.label.good": "Good for tagging",
+  "tagging.label.decision": "Local decision model",
+  "tagging.cost.free": "Free, on this computer",
+  "tagging.cost.plan": "Uses your ChatGPT plan",
+  "tagging.cost.unknown": "Cost per 100 Documents unknown",
+  "tagging.cost.underCent": "Under 1¢ per 100 Documents",
+  "tagging.cost.cents": "About {amount}¢ per 100 Documents",
+  "tagging.cost.dollars": "About {dollars} per 100 Documents",
+  "tagging.cost.underYuan": "Under ¥0.01 per 100 Documents",
+  "tagging.cost.yuan": "About ¥{amount} per 100 Documents",
+  "tagging.other": "Other model…",
+  "tagging.other.hint": "A model the list doesn't have, by its name",
+  "tagging.other.decision": "{model}, a local decision model",
+  "tagging.other.save": "Use this model",
+  "tagging.localMode": "Local mode is on, so only models on this computer tag your Documents.",
+  "tagging.plan":
+    "Uses your ChatGPT plan, one Document at a time, so it doesn't use up what you chat with. If the plan's limit is reached, tagging waits for it to reset.",
+  "tagging.plan.local": "To keep your plan for chatting, tag on this computer instead.",
+  "tagging.plan.useLocal": "Use {model}",
+  "tagging.plan.paused": "Your ChatGPT plan's limit is reached: tagging goes on at {time}.",
+  "tagging.review.marked":
+    "{model} says how sure it is: Tags it isn't sure of are marked for you to review.",
+  "tagging.review.kept":
+    "{model} doesn't say how sure it is, so every Tag it adds is kept. Remove any you don't want.",
+  "status.taggingPaused": "Tagging waits for your ChatGPT plan",
+  "status.taggingPaused.full":
+    "Your ChatGPT plan's limit is reached, so tagging waits for it to reset, then goes on by itself.",
 
   "settings.title": "Settings",
   "settings.pages.models": "Models",

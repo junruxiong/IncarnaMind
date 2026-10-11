@@ -68,7 +68,7 @@ export function DocumentTagMenu({
 export function DocumentTagFooter({ item, close }: { item: Document; close(): void }) {
   const t = useT();
   const library = useAppStore((state) => state.library);
-  const organizing = !!library?.groups.length || !!library?.settings.classifier;
+  const organizing = !!library?.groups.length;
   const taggingLine =
     item.status !== "ready" || organizing
       ? null
@@ -100,9 +100,7 @@ export function DocumentTagFooter({ item, close }: { item: Document; close(): vo
           data-testid="retag-document"
           onClick={() => {
             close();
-            if (organizing && !library?.settings.classifier)
-              useAppStore.getState().openSettings("models");
-            else void useAppStore.getState().retagDocuments([item.id]);
+            void useAppStore.getState().retagDocuments([item.id]);
           }}
           className={footerButton}
         >

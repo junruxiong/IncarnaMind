@@ -96,8 +96,10 @@ export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}
     createChatModel: () => {
       throw new Error("This test didn't provide a chat model.");
     },
-    // Nothing asks the Ollama on this computer: its models get the default settings.
+    // Nothing asks the Ollama on this computer: its models get the default settings, and
+    // Automatic tagging finds no local decision models unless a test gives some.
     ollamaModels: { describe: async () => null, loaded: async () => null },
+    localModels: async () => [],
     embedder: createFakeEmbedder(),
     embeddingModelSource: NO_MODEL_FILES,
     crossEncoder: createFakeCrossEncoder(),
