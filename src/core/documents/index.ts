@@ -331,6 +331,8 @@ export interface DocumentsOptions {
   linkedFoldersChanged: LibraryHooks["linkedFoldersChanged"];
   /** A Document just became ready, i.e. searchable: called before its status is pushed. */
   onReady?: (documentId: string) => void;
+  /** A scan found a new Document, announced but not yet queued for processing. */
+  onFound?: (documentId: string) => void;
   /** Asks iCloud Drive to download a file an ".icloud" stub stands for. */
   downloadStub?: (path: string) => Promise<void>;
   /**
@@ -949,6 +951,7 @@ export function createDocuments(options: DocumentsOptions) {
     hooks: {
       process,
       announce,
+      added: (id) => options.onFound?.(id),
       moved: (ids) => {
         const moved = ids.flatMap((id) => {
           const row = find(id);
@@ -1551,9 +1554,13 @@ export function createDocuments(options: DocumentsOptions) {
       };
     },
 
-    async add(input: unknown): Promise<AddDocumentsResult> {
+    /** `added` hears of each new Document as it is stored, before it is processed. */
+    async add(
+      input: unknown,
+      added?: (documentId: string) => void,
+    ): Promise<Omit<AddDocumentsResult, "batchId">> {
       const paths = parsePaths(input);
-      const results = await library.addFiles(paths);
+      const results = await library.addFiles(paths, added);
       const documents: Document[] = [];
       const skipped: SkippedFile[] = [];
       results.forEach((result, at) => {
