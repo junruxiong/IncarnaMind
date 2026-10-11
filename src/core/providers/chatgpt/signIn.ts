@@ -75,6 +75,14 @@ const ASSUMED_LIFETIME_MS = 60 * 60_000;
 /** Waits between tries to revoke the session at sign-out, when OpenAI can't be reached. */
 const REVOKE_RETRIES_MS = [250, 1000];
 
+/**
+ * A refresh or revocation gives up after this long, so a hanging token
+ * endpoint doesn't hold every request; well under the shared refresh lock's
+ * staleness (a minute), so no other process takes the lock over meanwhile.
+ * Giving up counts as a passing failure: the sign-in is kept.
+ */
+const TOKEN_REQUEST_TIMEOUT_MS = 20_000;
+
 const ACCOUNT_SECRET = "chatgpt:account";
 
 /** Refresh-token errors that mean the token can't be used again (OpenAI's errors and recovery). */
@@ -274,6 +282,7 @@ export function createChatGptSignIn(options: {
           refreshToken: tokens.refreshToken,
           // The grant keeps its scopes: `scope` is left out, as OpenAI asks.
           params: { resource: CHATGPT_PLAN_RESOURCE },
+          signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
           ...(options.fetch && { fetch: options.fetch }),
         });
       } catch (error) {
@@ -330,6 +339,7 @@ export function createChatGptSignIn(options: {
           clientId,
           token: refreshToken,
           tokenTypeHint: "refresh_token",
+          signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
           ...(options.fetch && { fetch: options.fetch }),
         });
         return true;

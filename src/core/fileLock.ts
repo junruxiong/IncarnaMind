@@ -1,9 +1,11 @@
 /**
  * A lock that processes on this computer respect: a file created only if it
- * doesn't exist yet, and removed when the work is done. A lock whose process
- * died is taken over once it is older than `staleMs`.
+ * doesn't exist yet, holding its owner's token, and removed by that owner
+ * when the work is done. A lock whose process died is taken over once it is
+ * older than `staleMs`, which must stay well above the longest task it guards.
  */
-import { open, rm, stat } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { open, readFile, rm, stat } from "node:fs/promises";
 
 export interface FileLock {
   /** Runs `task` while holding the lock, waiting for it first. */
@@ -18,12 +20,12 @@ export function createFileLock(
 ): FileLock {
   const { staleMs = 60_000, retryMs = 100, waitMs = 2 * 60_000 } = options;
 
-  const acquire = async () => {
+  const acquire = async (owner: string) => {
     const started = Date.now();
     for (;;) {
       try {
         const handle = await open(path, "wx", 0o600);
-        await handle.writeFile(String(process.pid));
+        await handle.writeFile(owner);
         await handle.close();
         return;
       } catch (error) {
@@ -31,8 +33,12 @@ export function createFileLock(
       }
       const held = await stat(path).catch(() => null);
       if (held && Date.now() - held.mtimeMs > staleMs) {
-        // Left by a process that stopped before it let go.
-        await rm(path, { force: true });
+        // Left by a process that stopped before it let go. Removed only if it is still that
+        // same file: another waiter may have taken it over meanwhile.
+        const again = await stat(path).catch(() => null);
+        if (again && again.ino === held.ino && again.mtimeMs === held.mtimeMs) {
+          await rm(path, { force: true });
+        }
         continue;
       }
       if (Date.now() - started > waitMs) {
@@ -44,11 +50,14 @@ export function createFileLock(
 
   return {
     async run(task) {
-      await acquire();
+      const owner = `${process.pid}:${randomUUID()}`;
+      await acquire(owner);
       try {
         return await task();
       } finally {
-        await rm(path, { force: true });
+        // A lock another process took over as stale is theirs now: it stays.
+        const current = await readFile(path, "utf8").catch(() => null);
+        if (current === owner) await rm(path, { force: true });
       }
     },
   };
