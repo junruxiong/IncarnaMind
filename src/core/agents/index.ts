@@ -100,6 +100,7 @@ interface PairingRow {
   id: string;
   name: string;
   folder_ids: string;
+  client: string | null;
   last_used_at: string | null;
   created_at: string;
 }
@@ -131,6 +132,7 @@ const toPairing = (row: PairingRow): AgentPairing => ({
   id: row.id,
   name: row.name,
   folderIds: parseList<string>(row.folder_ids).filter((id) => typeof id === "string"),
+  client: row.client,
   lastUsedAt: row.last_used_at,
   createdAt: row.created_at,
 });
@@ -164,7 +166,8 @@ export function createAgents(options: AgentsOptions) {
   /** When each pairing's "last used" time was last written. */
   const lastWritten = new Map<string, number>();
   let listener: AgentListener | null = null;
-  let listening: Promise<void> | null = null;
+  /** Starting and stopping the listener, one after another, so two quick toggles can't race. */
+  let listening: Promise<void> = Promise.resolve();
   let closed = false;
   let mcp: Promise<typeof import("./mcp")> | null = null;
 
@@ -174,14 +177,14 @@ export function createAgents(options: AgentsOptions) {
   const livePairings = () =>
     db
       .all<PairingRow>(
-        `SELECT id, name, folder_ids, last_used_at, created_at FROM agent_pairings
+        `SELECT id, name, folder_ids, client, last_used_at, created_at FROM agent_pairings
          WHERE deleted_at IS NULL ORDER BY created_at, rowid`,
       )
       .map(toPairing);
 
   const findPairing = (pairingId: string): AgentPairing | null => {
     const row = db.get<PairingRow>(
-      `SELECT id, name, folder_ids, last_used_at, created_at FROM agent_pairings
+      `SELECT id, name, folder_ids, client, last_used_at, created_at FROM agent_pairings
        WHERE id = ? AND deleted_at IS NULL`,
       [pairingId],
     );
@@ -225,6 +228,14 @@ export function createAgents(options: AgentsOptions) {
     );
     if (taken) throw new InvalidInputError(`An agent named "${name}" is already connected.`);
     return name;
+  };
+
+  const parseClient = (value: unknown): string | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(value)) {
+      throw new InvalidInputError("client must be an agent's id, such as codex.");
+    }
+    return value;
   };
 
   const parseFolders = (value: unknown): string[] => {
@@ -388,22 +399,21 @@ export function createAgents(options: AgentsOptions) {
   };
 
   /** Listens while connecting agents is on; stops when it is turned off. */
-  const syncListening = async () => {
-    await listening;
-    if (closed) return;
-    if (enabled() && !listener) {
-      listening = listenForAgents(options.socketPath, serve).then(
-        (started) => {
-          listener = started;
-          // Turned off, or closed, while it started.
-          if (closed || !enabled()) return stopListening();
-        },
-        (error: unknown) => options.reportError(error),
-      );
-    } else if (!enabled() && listener) {
-      listening = stopListening();
-    }
-    await listening;
+  const syncListening = (): Promise<void> => {
+    listening = listening.then(async () => {
+      if (closed) return;
+      if (enabled() && !listener) {
+        try {
+          listener = await listenForAgents(options.socketPath, serve);
+        } catch (error) {
+          // Another copy of IncarnaMind on this data folder is listening already.
+          options.reportError(error);
+        }
+      } else if (!enabled() && listener) {
+        await stopListening();
+      }
+    });
+    return listening;
   };
 
   const stopListening = async () => {
@@ -419,6 +429,9 @@ export function createAgents(options: AgentsOptions) {
     /** The core interface for a token (see ./access); for transports other than the socket. */
     open,
 
+    /** How the server starts with this token (see `AgentLaunch`). */
+    launchFor,
+
     async setEnabled(value: unknown): Promise<AgentSettings> {
       if (typeof value !== "boolean") throw new InvalidInputError("enabled must be true or false.");
       options.writeValue(ENABLED_KEY, value);
@@ -431,15 +444,16 @@ export function createAgents(options: AgentsOptions) {
       if (!isRecord(input)) throw new InvalidInputError("connectAgent expects an object.");
       const name = parseName(input.name, null);
       const folderIds = parseFolders(input.folderIds);
+      const client = parseClient(input.client);
       const id = randomUUID();
       const token = `im_${randomBytes(32).toString("base64url")}`;
       // The token is stored first: a pairing without one could never be used.
       await options.secrets.set(secretName(id), token);
       const at = options.now();
       db.run(
-        `INSERT INTO agent_pairings (id, name, folder_ids, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, name, JSON.stringify(folderIds), at, at],
+        `INSERT INTO agent_pairings (id, name, folder_ids, client, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [id, name, JSON.stringify(folderIds), client, at, at],
       );
       tokens.set(id, token);
       // The User confirmed what it may read and where that goes before this was called.

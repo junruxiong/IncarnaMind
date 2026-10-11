@@ -21,4 +21,18 @@ export interface TestHooks {
    * does, once their paths are known: a test can't drop a folder.
    */
   addPaths(paths: string[]): Promise<void>;
+  /** How many animations are running, leaving copies of closed menus included: settled at 0. */
+  motionRunning(): number;
+  /** Plays every animation at this speed (0.25: four times slower), so a test can act during one. */
+  setMotionSpeed(speed: number): void;
+  /**
+   * How each leaving copy (a closed menu fading where it was) shows now, as
+   * nothing else can see them: its box, opacity, transform and its origin.
+   */
+  leavingCopies(): {
+    box: { left: number; top: number; width: number; height: number };
+    opacity: number;
+    transform: string;
+    origin: string;
+  }[];
 }

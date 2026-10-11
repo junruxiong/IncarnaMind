@@ -152,6 +152,14 @@
   overscroll-behavior: none;
 }
 
+/*
+ * Tailwind's motion-safe: and motion-reduce: follow the motion module's mode
+ * on <html> (src/renderer/src/motion.ts), the User's choice in Settings, not
+ * only the system's Reduce motion.
+ */
+@custom-variant motion-safe (&:where(:root[data-motion="on"] *));
+@custom-variant motion-reduce (&:where(:root:not([data-motion="on"]) *));
+
 @utility hide-scrollbar {
   scrollbar-width: none;
   overscroll-behavior: none;
@@ -360,18 +368,15 @@
       box-shadow: var(--shadow-popover);
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .sidebar-panel[data-hidden] {
-      transform: none;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 80ms linear;
-
-      &[data-open] {
-        opacity: 1;
-        pointer-events: auto;
-      }
-    }
+  :root:not([data-motion="on"]) .sidebar-panel[data-hidden] {
+    transform: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 80ms linear;
+  }
+  :root:not([data-motion="on"]) .sidebar-panel:is([data-hidden][data-open]) {
+    opacity: 1;
+    pointer-events: auto;
   }
   /* The pointer's hot strip along the window's left edge while the sidebar is hidden. */
   .sidebar-edge {
@@ -519,12 +524,9 @@
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .pane-divider,
-    .pane-divider::before,
-    .switch {
-      transition: none;
-    }
+  :root:not([data-motion="on"]) :is(.pane-divider, .switch),
+  :root:not([data-motion="on"]) .pane-divider::before {
+    transition: none;
   }
 
   /*
@@ -917,10 +919,8 @@
       opacity: 0.35;
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .tab-dot[data-status="writing"] {
-      animation: none;
-    }
+  :root:not([data-motion="on"]) .tab-dot[data-status="writing"] {
+    animation: none;
   }
 
   /* The tab, following the pointer. */
@@ -981,10 +981,8 @@
       white-space: nowrap;
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .tab-drop-zone {
-      transition: none;
-    }
+  :root:not([data-motion="on"]) .tab-drop-zone {
+    transition: none;
   }
 
   /* A line about the tabs, above the sidebar's foot (or the card's corner while the sidebar is hidden). */
@@ -1663,6 +1661,18 @@
     &:hover,
     &:focus-visible {
       background: var(--color-hover);
+    }
+
+    /* Unavailable while local mode is on: still readable, with its reason, but nothing to pick. */
+    &[aria-disabled="true"] {
+      cursor: default;
+
+      &:hover {
+        background: transparent;
+      }
+      .model-menu-name {
+        color: var(--color-ink-meta);
+      }
     }
   }
   .model-menu-check {
@@ -4176,14 +4186,10 @@
 }
 
 /* Reduced motion: checks appear at once, and nothing pulses. */
-@media (prefers-reduced-motion: reduce) {
-  .margin-check-icon,
-  .margin-check--reveal,
-  .answer-writing::before,
-  .citation-marker-icon,
-  .edit-pending-dot {
-    animation: none;
-  }
+:root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
+:root:not([data-motion="on"]) :is(.citation-marker-icon, .edit-pending-dot),
+:root:not([data-motion="on"]) .answer-writing::before {
+  animation: none;
 }
 
 /* Folder contents stay readable beside an open document viewer. */
@@ -4220,4 +4226,18 @@ body.assistant-dragging,
 body.assistant-dragging * {
   cursor: grabbing;
   user-select: none;
+}
+
+/*
+ * The mode the motion module sets on <html> (src/renderer/src/motion.ts):
+ * "on", "reduced" (the system's Reduce motion, or Settings) or "off". What
+ * CSS still moves follows it as it did the system's setting; off, nothing
+ * does, in CSS either. Outside any layer, so it wins over every component and
+ * utility.
+ */
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation: none;
+  transition: none;
 }

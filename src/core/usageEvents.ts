@@ -90,6 +90,7 @@ export const SETTINGS_PAGES = [
   "meetings",
   "connectors",
   "skills",
+  "agents",
   "privacy",
 ] as const;
 
@@ -112,6 +113,7 @@ const ANSWER_ERRORS = [
   "network",
   "provider",
   "consent-declined",
+  "local-mode",
   "not-signed-in",
   "plan-limit",
   "blocked",

@@ -21,6 +21,7 @@ import type { Citing } from "../answers/citing";
 import { matchingTerms } from "../answers/citing";
 import type {
   AgentActivity,
+  AgentCitationShown,
   AgentProblem,
   AgentToolName,
   Citation,
@@ -133,6 +134,17 @@ export interface AgentCheckResult {
   uncited: string[];
 }
 
+export interface AgentShowInput {
+  /** A Citation IncarnaMind gave, e.g. "[cite:k3x9a2b7]". */
+  cite: string;
+}
+
+export interface AgentShown {
+  shown: true;
+  document: string;
+  location: string | null;
+}
+
 export interface AgentMindList {
   folders: {
     id: string;
@@ -182,6 +194,8 @@ export interface AgentAccess {
   readPassages(input: AgentReadInput): Promise<AgentReadResult>;
   cite(input: AgentCiteInput): Promise<AgentCiteResult>;
   checkCitations(input: AgentCheckInput): Promise<AgentCheckResult>;
+  /** Opens a Citation in IncarnaMind's viewer, at its quote, in front: chat apps won't open links. */
+  showCitation(input: AgentShowInput): Promise<AgentShown>;
   listMinds(): Promise<AgentMindList>;
   readMind(input: AgentReadMindInput): Promise<AgentMindText>;
   ask(input: AgentAskInput, signal?: AbortSignal): Promise<AgentAnswer>;
@@ -258,6 +272,8 @@ export interface AgentAccessDeps {
     pageFrom: number | null;
     pageTo: number | null;
   }): CitationRecheck;
+  /** Shows a Citation in the viewer, the app in front. */
+  show(place: AgentCitationShown): void;
   /** The Minds there are. */
   minds(): Mind[];
   /** A Mind as Markdown, each Citation's footnote as `footnote` words it (see ../exports). */
@@ -445,11 +461,11 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     return deps.documentsIn(folderIds);
   };
 
-  /** A live Passage in the pairing's Folders, or a refusal that tells nothing of the others. */
-  const passageInScope = (pairing: AdmittedPairing, passageId: unknown): WindowedPassage => {
+  /** A live Passage of these Documents, or a refusal that tells nothing of the others. */
+  const passageInScope = (inScope: ReadonlySet<string>, passageId: unknown): WindowedPassage => {
     const id = text(passageId, "passageId", 200);
     const passage = deps.passage(id);
-    if (!passage || !scopeOf(pairing, undefined).includes(passage.documentId)) {
+    if (!passage || !inScope.has(passage.documentId)) {
       throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
     }
     return passage;
@@ -491,9 +507,9 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     search(input, signal) {
       const query = typeof input?.query === "string" ? input.query : "";
       return call("search", query, [READ_DOCUMENTS], async (pairing) => {
-        const words = text(input.query, "query", MAX_QUERY_CHARS);
-        const page = whole(input.page, "page", 1, MAX_SEARCH_PAGE, 1);
-        const documentIds = scopeOf(pairing, input.folderIds);
+        const words = text(input?.query, "query", MAX_QUERY_CHARS);
+        const page = whole(input?.page, "page", 1, MAX_SEARCH_PAGE, 1);
+        const documentIds = scopeOf(pairing, input?.folderIds);
         if (documentIds.length === 0) {
           return { result: { passages: [], page, more: false }, count: 0, documentIds: [] };
         }
@@ -527,7 +543,7 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
         let from: number;
         let to: number;
         if (input?.passageId !== undefined) {
-          const passage = passageInScope(pairing, input.passageId);
+          const passage = passageInScope(new Set(scopeOf(pairing, undefined)), input.passageId);
           documentId = passage.documentId;
           from = Math.max(0, passage.position - before);
           to = passage.position + after;
@@ -579,12 +595,15 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
             `citations must list 1 to ${MAX_CITES} quotes, each with its passageId.`,
           );
         }
+        const inScope = new Set(scopeOf(pairing, undefined));
+        const read: string[] = [];
         const citations: AgentCited[] = list.map((entry) => {
           const record = (typeof entry === "object" && entry !== null ? entry : {}) as Record<
             string,
             unknown
           >;
-          const passage = passageInScope(pairing, record.passageId);
+          const passage = passageInScope(inScope, record.passageId);
+          read.push(passage.documentId);
           const quote = text(record.quote, "quote", MAX_QUOTE_CHARS);
           const citation = deps.citing.citeQuote(passage.passageId, quote);
           if (!citation) throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
@@ -606,10 +625,7 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
         return {
           result: { citations },
           count: citations.filter((each) => each.check === "found").length,
-          documentIds: citations.flatMap((each) => {
-            const passage = deps.passage(each.passageId);
-            return passage ? [passage.documentId] : [];
-          }),
+          documentIds: read,
         };
       });
     },
@@ -653,7 +669,9 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
             changed: now.contentHash !== null && now.contentHash !== kept.contentHash,
           });
         }
-        const uncited = sentencesOf(draft.replace(/^#{1,6}\s.*$/gm, ""))
+        // Headings and table rows aren't sentences that make claims of their own.
+        const prose = draft.replace(/^#{1,6}\s.*$/gm, "").replace(/^\s*\|.*$/gm, "");
+        const uncited = sentencesOf(prose)
           .filter((sentence) => !sentence.match(CITATION_TOKEN) && makesAClaim(sentence))
           .slice(0, MAX_UNCITED)
           .map((sentence) => clip(sentence, 200));
@@ -661,6 +679,44 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
           result: { citations, uncited },
           count: citations.length,
           documentIds: [],
+        };
+      });
+    },
+
+    showCitation(input) {
+      const given = typeof input?.cite === "string" ? input.cite : "";
+      return call("show_citation", given, [READ_DOCUMENTS], (pairing) => {
+        const tag = text(input?.cite, "cite", 100);
+        const token = [...tag.matchAll(CITATION_TOKEN)][0]?.[1] ?? tag;
+        const kept = deps.citations.find(token);
+        if (!kept || !scopeOf(pairing, undefined).includes(kept.documentId)) {
+          throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
+        }
+        const now = deps.recheck({
+          documentId: kept.documentId,
+          quote: kept.quote,
+          pageFrom: kept.pageFrom,
+          pageTo: kept.pageTo,
+        });
+        if (now.contentHash === null) {
+          throw new AgentRefusedError("not-found", t("agents.problem.not-found"));
+        }
+        const where = label(now.location ?? kept.location, now.pageFrom, now.pageTo);
+        deps.show({
+          documentId: kept.documentId,
+          ...(now.pageFrom !== null && { pageFrom: now.pageFrom }),
+          ...(now.pageTo !== null && { pageTo: now.pageTo }),
+          quote: kept.quote,
+          citation: {
+            check: now.check,
+            ...(where && { label: where }),
+            contentHash: now.contentHash,
+          },
+        });
+        return {
+          result: { shown: true as const, document: kept.documentName, location: where },
+          count: 1,
+          documentIds: [kept.documentId],
         };
       });
     },
@@ -749,8 +805,8 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
     ask(input, signal) {
       const question = typeof input?.question === "string" ? input.question : "";
       return call("ask", question, [READ_DOCUMENTS], async (pairing) => {
-        const asked = text(input.question, "question", MAX_QUERY_CHARS * 4);
-        const documentIds = scopeOf(pairing, input.folderIds);
+        const asked = text(input?.question, "question", MAX_QUERY_CHARS * 4);
+        const documentIds = scopeOf(pairing, input?.folderIds);
         const controller = new AbortController();
         const stop = () => controller.abort();
         signal?.addEventListener("abort", stop, { once: true });
@@ -759,6 +815,10 @@ export function createAgentAccess(deps: AgentAccessDeps, pairingId: string): Age
           outcome = await deps.answer(asked, documentIds, controller.signal);
         } finally {
           signal?.removeEventListener("abort", stop);
+        }
+        // Local mode turned on while the call was on its way: paused, as every Tool is.
+        if (!outcome.asked && outcome.reason === "local-mode") {
+          throw new AgentRefusedError("local-mode", t("agents.problem.local-mode"));
         }
         if (!outcome.asked) {
           throw new AgentRefusedError(
