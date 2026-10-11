@@ -312,7 +312,11 @@ test("retrieval and Citation evaluation", async () => {
     others = await openOtherSearches(
       builtIn,
       set.questions,
-      { chat: config.chat, resultsDir: config.resultsDir },
+      {
+        chat: config.chat,
+        resultsDir: config.resultsDir,
+        localQueryModes: config.localQueryModes,
+      },
       log,
     );
     const runs = [
