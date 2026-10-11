@@ -4,14 +4,21 @@
  * with the system save dialog), so nothing here touches the file system.
  */
 import type * as Y from "yjs";
+import {
+  type CitationStyle,
+  type CitationStyleId,
+  citationStyle,
+} from "../../shared/citationStyles";
 import { citationState, citedLocation } from "../../shared/citations";
 import { translate } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import type {
   CitationAttributes,
+  CitationFormatRequest,
   Document,
   ExportFormat,
   ExportMindOptions,
+  FormattedCitations,
   KeptCitationText,
   Mind,
   MindExport,
@@ -21,6 +28,7 @@ import { InvalidInputError, isRecord } from "../errors";
 import { safeFileName } from "../fileNames";
 import type { Language } from "../language";
 import { type Block, countQuestions, type Footnote, footnotesIn, readBlocks } from "../mindText";
+import { styleCitations } from "./citations";
 import { renderDocx } from "./docx";
 import { renderMarkdown } from "./markdown";
 
@@ -35,6 +43,10 @@ export interface ExportsDependencies {
   keptCitationTexts(): KeptCitationText[];
   /** The interface language, which the export's own words are in. */
   language(): Language;
+  /** The Mind's citation style (#289). */
+  citationStyle(mindId: string): CitationStyleId;
+  /** Formats Citations in a style, as the editor does (see `CoreApi.formatCitations`). */
+  formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
   now(): string;
 }
 
@@ -47,6 +59,7 @@ interface Prepared {
   blocks: Block[];
   preview: MindExportPreview;
   language: Language;
+  style: CitationStyle;
 }
 
 export function createExports(deps: ExportsDependencies) {
@@ -54,13 +67,22 @@ export function createExports(deps: ExportsDependencies) {
     const { format, includeQuestions } = parseExportOptions(input);
     const mind = deps.mind(mindId);
     const language = deps.language();
+    const style = citationStyle(deps.citationStyle(mind.id));
     const documents = deps.liveDocuments();
     const kept = deps.keptCitationTexts();
     const footnote = (attributes: Record<string, unknown>): Footnote =>
       footnoteOf(attributes as Partial<CitationAttributes>, documents, kept, language);
+    // Footnotes go right after the word, and so do Numbered's Citations; a style decides for
+    // its own (./citations).
+    const trimBeforeCitation = style.form === "numbered";
 
     const { blocks, questions } = deps.read(mind.id, (fragment) => ({
-      blocks: readBlocks(fragment, { includeQuestions, footnote, trimBeforeCitation: true }),
+      blocks: readBlocks(fragment, {
+        includeQuestions,
+        footnote,
+        trimBeforeCitation,
+        trimBeforeFootnote: true,
+      }),
       questions: countQuestions(fragment),
     }));
     const footnotes = footnotesIn(blocks);
@@ -70,7 +92,7 @@ export function createExports(deps: ExportsDependencies) {
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
     };
-    return { format, title: mind.title, blocks, preview, language };
+    return { format, title: mind.title, blocks, preview, language, style };
   };
 
   return {
@@ -78,8 +100,13 @@ export function createExports(deps: ExportsDependencies) {
       return prepare(mindId, options).preview;
     },
 
-    export(mindId: unknown, options: unknown): MindExport {
-      const { title, blocks, preview, language, format } = prepare(mindId, options);
+    async export(mindId: unknown, options: unknown): Promise<MindExport> {
+      const prepared = prepare(mindId, options);
+      const { title, preview, language, format, style } = prepared;
+      const blocks =
+        style.form === "numbered"
+          ? prepared.blocks
+          : await styleCitations(prepared.blocks, style, deps.formatCitations);
       const labels = {
         question: translate(language, "export.question"),
         unverified: translate(language, "export.unverified"),
