@@ -22,7 +22,7 @@ import { SidebarToggle } from "../SidebarToggle";
 import { openRowMenu } from "../sidebarRows";
 import { GroupMenu, StripButton, TabMenu } from "./TabMenus";
 import { focusTab, splitToTheRight } from "./tabActions";
-import { TabIcon, useTabTitle } from "./tabItems";
+import { MeetingTabTime, TabIcon, useTabTitle } from "./tabItems";
 import type { TabDrag } from "./useTabDrag";
 
 /*
@@ -291,6 +291,7 @@ function Tab({ tab, groupId, selected, focusedGroup, divider, dragged, drag }: T
             {title}
           </span>
         )}
+        {tab.item.kind === "mind" && <MeetingTabTime mindId={tab.item.mindId} />}
         {tab.pinned ? (
           <button
             type="button"

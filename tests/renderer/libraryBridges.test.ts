@@ -61,6 +61,7 @@ describe("the Mind a Question from the Library goes in", () => {
   const mind = (id: string): Mind => ({
     id,
     title: id,
+    autoTitle: "",
     kind: "mind",
     createdAt: "",
     updatedAt: "",

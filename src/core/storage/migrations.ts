@@ -742,6 +742,76 @@ export const migrations: readonly Migration[] = [
         ON document_group_rejections (document_id, group_id) WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 38,
+    description:
+      "Meetings: a recording's state, its stretches and how long its audio is kept (#135)",
+    // The audio itself is in the data folder, meetings/<id>/, one WAV file per 10 seconds per
+    // source (src/core/meetings/audioFiles.ts): the files are what survives a crash, so they
+    // aren't listed here. periods is JSON, the stretches recorded, in order: each
+    // { start, offsetMs, end, endedBy }, start and end ISO 8601 UTC wall-clock times (end null
+    // while it lasts), offsetMs the Meeting's time when it began, endedBy one of 'pause',
+    // 'stop', 'sleep' or 'interrupted' (IncarnaMind closed while recording).
+    sql: `
+      CREATE TABLE meetings (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL REFERENCES minds(id),
+        status TEXT NOT NULL CHECK (status IN ('ready', 'recording', 'paused', 'stopped')),
+        paused_by TEXT CHECK (paused_by IN ('user', 'interrupted')),
+        system_audio INTEGER NOT NULL DEFAULT 1,
+        periods TEXT NOT NULL DEFAULT '[]',
+        started_at TEXT,
+        stopped_at TEXT,
+        audio_expires_at TEXT,
+        audio_deleted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX meetings_by_mind ON meetings (mind_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 37 and 38 are reserved by work in progress.
+    version: 39,
+    description:
+      "Recently deleted: what was deleted permanently, and what a Folder's deletion took out",
+    // Restoring a deleted row brings back the rows deleted with it: those whose deleted_at is
+    // its own (src/core/recentlyDeleted.ts).
+    sql: `
+      -- When a deleted row's content was dropped, by the User or 30 days after it was
+      -- deleted. The row stays as its tombstone, so a later sync can pass the deletion on.
+      ALTER TABLE minds ADD COLUMN purged_at TEXT;
+      ALTER TABLE documents ADD COLUMN purged_at TEXT;
+      ALTER TABLE tags ADD COLUMN purged_at TEXT;
+      ALTER TABLE library_groups ADD COLUMN purged_at TEXT;
+      CREATE INDEX documents_by_deleted_at ON documents (deleted_at)
+        WHERE deleted_at IS NOT NULL AND purged_at IS NULL;
+
+      -- What deleting a Folder (library_groups) took out of it: one row per Document and Mind
+      -- in it (item_kind 'document' or 'mind', checked in code), so restoring the Folder puts
+      -- back those still in none, a suggested Folder as a suggestion again (suggested is 1).
+      -- Restoring it marks its rows deleted.
+      CREATE TABLE deleted_folder_items (
+        id TEXT PRIMARY KEY NOT NULL,
+        folder_id TEXT NOT NULL,
+        item_kind TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        suggested INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX deleted_folder_items_by_folder ON deleted_folder_items (folder_id)
+        WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    version: 40,
+    description: "A Mind without a title is named by its first line of text",
+    // Kept up to date by the core as the Mind is edited; the title the User typed stays in `title`.
+    sql: `ALTER TABLE minds ADD COLUMN auto_title TEXT NOT NULL DEFAULT '';`,
+  },
 ];
 
 /**

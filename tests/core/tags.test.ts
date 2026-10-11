@@ -687,7 +687,7 @@ describe("Merging Tags", { timeout: 30_000 }, () => {
     const tagged = nextEvent(core, "documents.tagged");
     const merged = await core.mergeTags(report.id, findings.id);
 
-    expect(merged).toMatchObject({ id: findings.id, name: "Findings" });
+    expect(merged.tag).toMatchObject({ id: findings.id, name: "Findings" });
     expect(ids(await tagsChanged)).not.toContain(report.id);
     expect(ids(await tagged).sort()).toEqual([auto.id, both.id].sort());
     const tagsOf = async (id: string) =>

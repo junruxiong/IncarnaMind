@@ -8,11 +8,12 @@ import { en } from "../../src/shared/i18n/en";
 import { zhCN } from "../../src/shared/i18n/zh-CN";
 
 describe("Settings pages", () => {
-  test("are General, Models, Search, Connectors, Skills and Privacy, in that order", () => {
+  test("are General, Models, Search, Meetings, Connectors, Skills and Privacy, in that order", () => {
     expect(settingsPages).toEqual([
       "general",
       "models",
       "search",
+      "meetings",
       "connectors",
       "skills",
       "privacy",
@@ -33,6 +34,8 @@ describe("Settings pages", () => {
     expect(zhCN["settings.pages.models"]).toBe("模型");
     expect(en["settings.pages.search"]).toBe("Search");
     expect(zhCN["settings.pages.search"]).toBe("搜索");
+    expect(en["settings.pages.meetings"]).toBe("Meetings");
+    expect(zhCN["settings.pages.meetings"]).toBe("会议");
   });
 
   test("a link to a page that was folded into another opens where its settings went", () => {

@@ -8,6 +8,7 @@ import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
+import { MeetingsSettings } from "./MeetingsSettings";
 import { OrganizationSettings } from "./OrganizationSettings";
 import { OutputLocationSettings } from "./OutputLocationSettings";
 import { PrivacySettings } from "./PrivacySettings";
@@ -39,6 +40,7 @@ const pageLabels: Record<SettingsPage, MessageKey> = {
   general: "privacy.tabs.general",
   models: "settings.pages.models",
   search: "settings.pages.search",
+  meetings: "settings.pages.meetings",
   connectors: "connectors.settings.title",
   skills: "skills.settings.title",
   privacy: "privacy.tabs.privacy",
@@ -48,7 +50,7 @@ const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
 
 /**
  * Settings, in a native modal <dialog>: a list of pages on the frame on the
- * left (General, Models, Search, Connectors, Skills, Privacy; Meetings and Memory join when a setting lands on them), and the chosen page on the right under its serif title.
+ * left (General, Models, Search, Meetings, Connectors, Skills, Privacy; Memory joins when a setting lands on it), and the chosen page on the right under its serif title.
  */
 export function SettingsDialog() {
   const t = useT();
@@ -174,6 +176,12 @@ function PageContent({ page }: { page: SettingsPage }) {
             <EmbeddingSettingsSection />
           </Titled>
           <RerankSettingsSection />
+        </Page>
+      );
+    case "meetings":
+      return (
+        <Page>
+          <MeetingsSettings />
         </Page>
       );
     case "connectors":

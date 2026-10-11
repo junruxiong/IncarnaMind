@@ -14,17 +14,19 @@ export const EDIT_TOUCH_INTERVAL_MS = 10_000;
 interface MindRow {
   id: string;
   title: string;
+  auto_title: string;
   kind: string;
   created_at: string;
   updated_at: string;
   folder_id: string | null;
 }
 
-const COLUMNS = "id, title, kind, created_at, updated_at, folder_id";
+const COLUMNS = "id, title, auto_title, kind, created_at, updated_at, folder_id";
 
 const toMind = (row: MindRow): Mind => ({
   id: row.id,
   title: row.title,
+  autoTitle: row.auto_title,
   kind: row.kind,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -99,7 +101,7 @@ export function createMinds(db: Database, now: () => string) {
         [id, title, kind, at, at, folderId],
       );
       touched(id, at);
-      return { id, title, kind, createdAt: at, updatedAt: at, folderId };
+      return { id, title, autoTitle: "", kind, createdAt: at, updatedAt: at, folderId };
     },
 
     list(): Mind[] {
@@ -119,6 +121,17 @@ export function createMinds(db: Database, now: () => string) {
       db.run("UPDATE minds SET title = ?, updated_at = ? WHERE id = ?", [newTitle, at, mind.id]);
       touched(mind.id, at);
       return { ...mind, title: newTitle, updatedAt: at };
+    },
+
+    /** Sets the name taken from the Mind's text. Returns whether it changed; `updatedAt` stays. */
+    setAutoTitle(mindId: string, autoTitle: string): boolean {
+      const row = db.get<{ auto_title: string }>(
+        "SELECT auto_title FROM minds WHERE id = ? AND deleted_at IS NULL",
+        [mindId],
+      );
+      if (!row || row.auto_title === autoTitle) return false;
+      db.run("UPDATE minds SET auto_title = ? WHERE id = ?", [autoTitle, mindId]);
+      return true;
     },
 
     /**
@@ -142,18 +155,30 @@ export function createMinds(db: Database, now: () => string) {
       });
     },
 
-    /** A Folder was deleted: its Minds go to Not in a Folder. Returns whether there were any. */
-    leaveFolder(folderId: string): boolean {
-      const inIt = db.get<{ count: number }>(
-        "SELECT count(*) AS count FROM minds WHERE folder_id = ? AND deleted_at IS NULL",
-        [folderId],
-      );
-      // Live Minds only: a deleted one stays as it was deleted.
-      db.run(
-        "UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ? AND deleted_at IS NULL",
-        [now(), folderId],
-      );
-      return (inIt?.count ?? 0) > 0;
+    /**
+     * A Folder was deleted: its Minds go to Not in a Folder, deleted ones too, so none is
+     * restored into a deleted Folder. Returns them, for restoring the Folder.
+     */
+    leaveFolder(folderId: string): { id: string; live: boolean }[] {
+      return db
+        .all<{ id: string; live: number }>(
+          `UPDATE minds SET folder_id = NULL, updated_at = ? WHERE folder_id = ?
+           RETURNING id, deleted_at IS NULL AS live`,
+          [now(), folderId],
+        )
+        .map((row) => ({ id: row.id, live: row.live === 1 }));
+    },
+
+    /** A deleted Folder was restored: these Minds go back into it, those still in none. Returns whether a live one did. */
+    returnToFolder(mindIds: readonly string[], folderId: string): boolean {
+      return db
+        .all<{ live: number }>(
+          `UPDATE minds SET folder_id = ?, updated_at = ?
+           WHERE folder_id IS NULL AND id IN (SELECT value FROM json_each(?))
+           RETURNING deleted_at IS NULL AS live`,
+          [folderId, now(), JSON.stringify(mindIds)],
+        )
+        .some((row) => row.live === 1);
     },
 
     /** Marks the Mind deleted at `at`. Its content rows are the caller's to mark. */
@@ -162,6 +187,11 @@ export function createMinds(db: Database, now: () => string) {
       db.run("UPDATE minds SET deleted_at = ?, updated_at = ? WHERE id = ?", [at, at, mind.id]);
       if (lastTouched?.mindId === mind.id) lastTouched = null;
       return mind;
+    },
+
+    /** Brings back a deleted Mind (the caller checks it may). Its content rows are the caller's. */
+    restore(mindId: string): void {
+      db.run("UPDATE minds SET deleted_at = NULL, updated_at = ? WHERE id = ?", [now(), mindId]);
     },
 
     /**
