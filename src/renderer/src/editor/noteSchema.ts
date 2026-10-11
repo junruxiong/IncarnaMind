@@ -45,12 +45,13 @@ export interface NoteSchemaOptions {
 
 /**
  * What a Mind can hold, and how it is stored. Notes: headings, bold, italic,
- * strikethrough, highlight, lists, code blocks highlighted by lowlight,
- * inline and block math rendered by KaTeX, and tables, each with an "include
- * in Question context" flag. Questions and Answers, top-level only. Citations,
- * inline in Answers and in whatever they are copied into, table cells
- * included. Every Block has a UUID. The editor adds its interface on top
- * (collaboration, menus, the drag handle, smart typography); tests use this alone.
+ * underline, links, strikethrough, highlight, lists, code blocks highlighted
+ * by lowlight, inline and block math rendered by KaTeX, and tables, each with
+ * an "include in Question context" flag. Questions and Answers, top-level
+ * only. Citations, inline in Answers and in whatever they are copied into,
+ * table cells included. Every Block has a UUID. The editor adds its interface
+ * on top (collaboration, menus, the drag handle, smart typography); tests use
+ * this alone.
  */
 export function noteExtensions({
   onEditMath,
