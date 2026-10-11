@@ -105,7 +105,13 @@ function tableMarkdown(rows: readonly TableCell[][]): string {
     const cells: string[] = [];
     for (const { cell, continued } of row) {
       const text = cell && !continued ? blocksMarkdown(cell.content) : "";
-      cells.push(text.replace(/\|/g, "\\|").replace(/\n+/g, "<br>"));
+      // A backslash before a pipe is escaped first, or it would escape the pipe's own escape.
+      cells.push(
+        text
+          .replace(/\\(?=\|)/g, "\\\\")
+          .replace(/\|/g, "\\|")
+          .replace(/\n+/g, "<br>"),
+      );
       for (let more = 1; more < (cell?.colspan ?? 1); more++) cells.push("");
     }
     while (cells.length < layout.columns) cells.push("");

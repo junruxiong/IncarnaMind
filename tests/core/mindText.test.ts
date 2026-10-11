@@ -9,6 +9,7 @@ import {
 } from "../../src/core/answers/blocks";
 import { buildQuestionContext } from "../../src/core/answers/context";
 import { type ReadOptions, readBlock, readBlocks } from "../../src/core/mindText";
+import { tableCellRanges } from "../../src/shared/markdownTables";
 
 const text = (value: string, ...marks: string[]): NodeJSON => ({
   type: "text",
@@ -150,11 +151,25 @@ describe("a Block as the text Question context shows the model", () => {
                   paragraph(text("a | b")),
                 ],
               },
+              // A regex in a Note: its backslash before a pipe stays a backslash.
+              { type: "tableCell", content: [paragraph(text(String.raw`a\|b`))] },
             ],
           },
         ],
       }),
-    ).toBe("| Head | Cell |\n| --- | --- |\n| Next [Tides, p. 2]<br>a \\| b |  |");
+    ).toBe(
+      [
+        "| Head | Cell |",
+        "| --- | --- |",
+        String.raw`| Next [Tides, p. 2]<br>a \| b | a\\\|b |`,
+      ].join("\n"),
+    );
+    // Read back as a table, that row still has two cells.
+    const row = String.raw`| Next [Tides, p. 2]<br>a \| b | a\\\|b |`;
+    expect(tableCellRanges(row).map(({ start, end }) => row.slice(start, end))).toEqual([
+      String.raw`Next [Tides, p. 2]<br>a \| b`,
+      String.raw`a\\\|b`,
+    ]);
     expect(markdownOf({ type: "image", attrs: { src: "x.png", alt: "A figure" } })).toBe("");
   });
 
