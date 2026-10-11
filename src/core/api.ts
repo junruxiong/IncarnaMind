@@ -557,7 +557,8 @@ export const MAX_CITED_PAGES = 2;
  * - "section": the heading of the section the quote sits under; null before
  *   the first heading. `notes`: a Word file's footnotes and endnotes.
  *   `comment`: the quote is in a Word comment anchored in that section, by
- *   its author (null when the file names none) (#76).
+ *   its author (null when the file names none) (#76). `paragraphs`: in a
+ *   web page, the paragraphs of the section the quote covers, from 1 (#261).
  * - "lines": the lines the quote covers, or the cited block's.
  */
 export type CitationLocation =
@@ -569,6 +570,7 @@ export type CitationLocation =
       heading: string | null;
       notes?: boolean;
       comment?: { author: string | null };
+      paragraphs?: { from: number; to: number };
     };
 
 /**
@@ -890,10 +892,11 @@ export type LayoutChange =
   | { type: "equalize" };
 
 /**
- * The kinds of file that can be added as Documents (ADR-0011): PDF, plain
- * text, Markdown, Word (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV.
+ * The kinds of Document (ADR-0011): files of PDF, plain text, Markdown, Word
+ * (.docx), PowerPoint (.pptx), Excel (.xlsx) and CSV, and web pages saved by
+ * their address (#261).
  */
-export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv";
+export type DocumentKind = "pdf" | "text" | "markdown" | "docx" | "pptx" | "xlsx" | "csv" | "web";
 
 /**
  * Where a Document is in processing: "queued", then "extracting" its text,
@@ -1022,7 +1025,10 @@ export interface Document {
    * moved. The same content at two paths is two Documents.
    */
   contentHash: string;
-  /** The file, where the User keeps it: an absolute path. IncarnaMind never changes it. */
+  /**
+   * The file, where the User keeps it: an absolute path. IncarnaMind never
+   * changes it. A web page's is its snapshot, in the data folder.
+   */
   path: string;
   /** Where the file is: see `DocumentFileStatus`. */
   fileStatus: DocumentFileStatus;
@@ -1067,6 +1073,8 @@ export interface Document {
    * heading, else its first line. Null if it has none, or until it is read.
    */
   title: string | null;
+  /** A web page's address and what it says of itself; null for a file. */
+  web: WebPageInfo | null;
   /**
    * What a Citation of it needs to say (#286): its reference record, read
    * from its file and edited by the User. Null until its file has been read.
@@ -1077,6 +1085,76 @@ export interface Document {
   /** ISO 8601, UTC. */
   updatedAt: string;
 }
+
+/**
+ * A web page saved as a Document (#261): its snapshot is the Document's file,
+ * kept in the data folder, and each fetch that changed it is a new version.
+ */
+export interface WebPageInfo {
+  /** The address it was saved from: http or https, without a fragment. */
+  address: string;
+  /** The site's name, as the page gives it, else its host. */
+  siteName: string;
+  author: string | null;
+  /** When the page says it was published, as it gives it; null if it doesn't. */
+  published: string | null;
+  /** When it was last fetched. ISO 8601, UTC. */
+  fetchedAt: string;
+  /** When each version kept was last fetched, for the Citations that quote an older one. */
+  versions: { contentHash: string; fetchedAt: string }[];
+}
+
+/** What `saveWebPage` takes. */
+export interface SaveWebPageInput {
+  /** An http or https address; one without a scheme ("example.com/page") is read as https. */
+  address: string;
+  /** The page's HTML, when the caller has it already (a page open in the app): nothing is fetched. */
+  html?: string;
+  /** The Library Folder to file a new Document in; none or null: Unsorted. */
+  folderId?: string | null;
+}
+
+/**
+ * Why a web page wasn't saved, or wasn't fetched again:
+ * - "invalid-address": not an http or https address.
+ * - "unreachable": the site couldn't be reached (offline, no such site, a
+ *   connection refused or a certificate that isn't valid).
+ * - "timed-out": the site took too long to answer.
+ * - "not-found": the site has no such page (404, 410).
+ * - "needs-sign-in": the page is behind a sign-in (401, 403, a login form).
+ * - "too-large": the page is larger than IncarnaMind fetches.
+ * - "site-error": the site answered with another error.
+ * - "not-a-page": the address is a file (a PDF, an image), not a web page.
+ * - "video": the page is a video, with little text to read.
+ * - "not-text": the page has too little text to read, such as an app.
+ */
+export type WebPageFailureReason =
+  | "invalid-address"
+  | "unreachable"
+  | "timed-out"
+  | "not-found"
+  | "needs-sign-in"
+  | "too-large"
+  | "site-error"
+  | "not-a-page"
+  | "video"
+  | "not-text";
+
+export interface WebPageFailure {
+  reason: WebPageFailureReason;
+  /** Technical detail in English, for logs and tooltips. */
+  message: string;
+}
+
+/** What saving a web page, or fetching it again, came to. */
+export type WebPageResult =
+  | {
+      outcome: "saved";
+      document: Document;
+      /** The address was saved already: `saveWebPage` returns its Document as it is. */
+      existing: boolean;
+    }
+  | { outcome: "failed"; address: string; failure: WebPageFailure };
 
 /**
  * The kinds of work a reference record describes (#286), by their Citation
@@ -3757,6 +3835,25 @@ export interface CoreApi {
    */
   saveTextAsDocument(input: { name: string; text: string }): Promise<Document>;
   /**
+   * Saves a web page as a Document (#261): its readable text, without
+   * navigation, ads or scripts, kept as a snapshot that Citations point at
+   * and the check reads, named by the page's title. The page is fetched from
+   * this computer, with a time and size limit, unless `html` is given (a
+   * page the app has open). Its images aren't fetched. An address saved
+   * already gives its Document, as it is. "document.status" events report
+   * its processing. A page that can't be fetched, or that is mostly not text,
+   * isn't saved: the result says why.
+   */
+  saveWebPage(input: SaveWebPageInput): Promise<WebPageResult>;
+  /**
+   * "Fetch again" on a web page Document: its address is fetched anew, and a
+   * page that changed becomes a new version. Citations keep pointing at the
+   * version they quote. One that can't be fetched now leaves the Document as
+   * it was: the result says why. Throws NotFoundError for an unknown
+   * Document, and InvalidInputError for one that isn't a web page.
+   */
+  fetchWebPageAgain(documentId: string): Promise<WebPageResult>;
+  /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its
    * sub-Folders if asked; with a Tag, only the Documents carrying it; with a
@@ -4621,6 +4718,8 @@ const methods: Record<CoreApiMethod, true> = {
   getLayout: true,
   changeLayout: true,
   addDocuments: true,
+  saveWebPage: true,
+  fetchWebPageAgain: true,
   saveTextAsDocument: true,
   listDocuments: true,
   renameDocument: true,

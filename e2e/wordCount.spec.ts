@@ -8,6 +8,7 @@ import {
   newMind,
   removeDataFolder,
   setWindowSize,
+  WORD_KEY,
 } from "./app";
 
 /*
@@ -49,8 +50,8 @@ test("the count follows the writing, in words and in characters, and the selecti
   await expect(button).toHaveAttribute("title", /Citation markers/);
 
   // Select the last two words with the keyboard.
-  await window.keyboard.press("Shift+Alt+ArrowLeft");
-  await window.keyboard.press("Shift+Alt+ArrowLeft");
+  await window.keyboard.press(`Shift+${WORD_KEY}+ArrowLeft`);
+  await window.keyboard.press(`Shift+${WORD_KEY}+ArrowLeft`);
   await expect(button).toHaveText("2 of 5 words");
   await window.keyboard.press("ArrowRight");
   await expect(button).toHaveText("5 words");
