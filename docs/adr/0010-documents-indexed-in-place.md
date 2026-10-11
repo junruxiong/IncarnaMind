@@ -21,6 +21,7 @@ Settled with the User on 2026-10-07:
 - **Big folders.** Linking says how many files and roughly how long before indexing starts. Indexing runs newest first, and can be paused and resumed.
 - **Read-only.** IncarnaMind never writes, renames or deletes anything in a Linked folder. (Amended on 2026-10-10, below: it may add new files there with the folder's permission, and still never changes the files already there.)
 - **Other Documents.** Files added on their own form the "Other Documents" group, below the Linked folders.
+- **Web pages** (2026-10-10, #261) have no file of the User's to index in place: a page saved by its address is kept as a snapshot in the data folder ("Web pages"), which is its Document's file, and "Fetch again" writes its new versions there (ADR-0011's amendment).
 
 This replaces the spec's original choice (issue #20, story 41: "copied into the app's data folder, so that moving or deleting the originals breaks nothing") and narrows ADR-0008: the data folder no longer holds Document files.
 

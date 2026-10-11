@@ -997,12 +997,15 @@ export function createConnectors(options: ConnectorsOptions) {
       const { row, config } = requireRemote(id);
       if (row.enabled !== 1) throw new InvalidInputError("Turn the Connector on first.");
       const storage = secrets.status();
-      // Check before the User signs in, not after: the tokens would have nowhere to go.
+      const runtime = runtimeOf(row.id);
+      // Check before the User signs in, not after: the tokens would have nowhere to go. The
+      // Connector says so under its row, or the click would seem to do nothing.
       if (!storage.canSave) {
         const error = new SecretStorageError(storage.protection);
-        return { ok: false, error: { kind: "secret-storage", message: error.message } };
+        runtime.signInError = { kind: "secret-storage", message: error.message };
+        changed();
+        return { ok: false, error: runtime.signInError };
       }
-      const runtime = runtimeOf(row.id);
       await cancelSignIn(runtime);
       if (closed || rowById(row.id)?.enabled !== 1) {
         return { ok: false, error: { kind: "cancelled", message: "The sign-in was cancelled." } };

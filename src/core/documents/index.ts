@@ -83,6 +83,8 @@ import {
 import { detectLanguage, languageList, type TextLanguage } from "./textLanguage";
 import { createVectorIndex } from "./vectors";
 import type { WatchFolder } from "./watcher";
+import type { SnapshotFile } from "./web";
+import { webPageInfo } from "./web/store";
 
 const DEFAULT_SEARCH_LIMIT = 20;
 const MAX_SEARCH_LIMIT = 200;
@@ -428,6 +430,7 @@ export function createDocuments(options: DocumentsOptions) {
           : null,
       creationDate: row.creation_date,
       title: row.title,
+      web: row.kind === "web" ? webPageInfo(db, row.id) : null,
       reference: referenceOf(db, row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -903,6 +906,11 @@ export function createDocuments(options: DocumentsOptions) {
       );
       db.run(
         `UPDATE document_tags SET deleted_at = ?, updated_at = ?
+         WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
+        [at, at, list],
+      );
+      db.run(
+        `UPDATE web_pages SET deleted_at = ?, updated_at = ?
          WHERE document_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL`,
         [at, at, list],
       );
@@ -1579,6 +1587,40 @@ export function createDocuments(options: DocumentsOptions) {
       return { documents, skipped };
     },
 
+    /**
+     * Adds a web page's snapshot, in the data folder, as a new Document
+     * named `name`, and queues it; `record` runs in the same transaction.
+     */
+    addSnapshot(id: string, name: string, file: SnapshotFile, record: () => void): Document {
+      const at = now();
+      db.transaction(() => {
+        db.run(
+          `INSERT INTO documents (id, content_hash, name, kind, size, status, path,
+             linked_folder_id, folder_id, file_status, file_mtime_ms, created_at, updated_at)
+           VALUES (?, ?, ?, 'web', ?, 'queued', ?, NULL, NULL, 'available', ?, ?, ?)`,
+          [
+            id,
+            file.contentHash,
+            parseName(name.slice(0, MAX_NAME_LENGTH)),
+            file.size,
+            file.path,
+            file.mtimeMs,
+            at,
+            at,
+          ],
+        );
+        record();
+      });
+      announce(id);
+      process(id);
+      const row = find(id);
+      if (!row) throw new NotFoundError("There is no such Document.");
+      return toDocument(row);
+    },
+
+    /** Looks at a file again now, as when it is opened: a new version is processed. */
+    check: (path: string) => library.check([path]),
+
     list,
     ids,
 
@@ -1631,7 +1673,7 @@ export function createDocuments(options: DocumentsOptions) {
 
     /**
      * Brings back Documents the User deleted (the caller checks they may), with the
-     * Passages, text and Tags deleted with them, without reading their files. Run in the
+     * Passages, text, Tags and web page versions deleted with them, without reading their files. Run in the
      * caller's transaction, then `restored`.
      */
     restore(ids: readonly string[]): void {
@@ -1651,6 +1693,10 @@ export function createDocuments(options: DocumentsOptions) {
         );
         db.run(
           "UPDATE document_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
+          deleted,
+        );
+        db.run(
+          "UPDATE web_pages SET deleted_at = NULL, updated_at = ? WHERE document_id = ? AND deleted_at = ?",
           deleted,
         );
         db.run(
