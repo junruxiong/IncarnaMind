@@ -14,6 +14,7 @@ import { extractDocx } from "./docx";
 import { ExtractionError } from "./errors";
 import { extractPptx } from "./pptx";
 import { lineUnits, markdownUnits } from "./text";
+import { readVtt, transcriptUnits } from "./vtt";
 import { webUnits } from "./web";
 import { extractXlsx } from "./xlsx";
 
@@ -46,5 +47,12 @@ export async function extractUnits(
       return extractCsv(bytes).units;
     case "web":
       return webUnits(new TextDecoder().decode(bytes));
+    case "transcript": {
+      const text = decodeText(bytes);
+      if (text === null) {
+        throw new ExtractionError("unreadable", "The file holds binary data, not text.");
+      }
+      return transcriptUnits(readVtt(text));
+    }
   }
 }
