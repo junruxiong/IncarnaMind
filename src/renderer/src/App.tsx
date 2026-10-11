@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GAP, isSide, RAIL, SIDE_MIN, shownDock } from "./assistantPlace";
+import { useEditMenu } from "./commands/edit";
 import { sidebarHandle, useHandle } from "./commands/handles";
 import { useKeymap } from "./commands/keymap";
 import { AddWebPageDialog } from "./components/AddWebPageDialog";
@@ -177,6 +178,7 @@ function Workspace() {
   });
   const openSettings = useAppStore((state) => state.openSettings);
   useKeymap();
+  useEditMenu();
   useRememberSidebarWidth(device?.sidebarWidth);
   const sidebar = useSidebarControl(device?.sidebarHidden ?? false);
   const peek = useSidebarPeek(sidebar.hidden);

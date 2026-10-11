@@ -24,7 +24,7 @@ import {
 } from "./editor/proposalReview";
 import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
-import { useUndo } from "./undo";
+import { type Undoable, useUndo } from "./undo";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
 export const TRANSLATE_LANGUAGES: readonly { id: string; name: string; prompt: string }[] = [
@@ -309,31 +309,29 @@ interface UndoStack {
   off(event: "stack-item-added" | "stack-item-popped", listener: () => void): void;
 }
 
-/** "Accepted 2 changes · Undo", which takes the step back while nothing has been done since. */
+/**
+ * "Accepted 2 changes · Undo", which takes the note's step back while it is the
+ * note's last: once the User edits again, takes it back in the note, or closes
+ * the note, it leaves the app's undo stack.
+ */
 function offerUndo(editor: Editor, message: string): void {
   const manager: UndoStack | undefined = yUndoPluginKey.getState(editor.state)?.undoManager;
   const step = manager?.undoStack.at(-1);
   if (!manager || step === undefined) return;
-  useUndo.getState().offer({
+  const change: Undoable = {
     message,
     undo: async () => {
       if (!editor.isDestroyed && manager.undoStack.at(-1) === step) editor.commands.undo();
     },
-  });
-  const offered = useUndo.getState().last?.id;
-  // Once the User edits again, or takes it back with ⌘Z, the line has nothing left to undo.
+  };
   const stale = () => {
     manager.off("stack-item-added", stale);
     manager.off("stack-item-popped", stale);
-    stopWatching();
-    if (useUndo.getState().last?.id === offered) useUndo.getState().dismiss();
+    editor.off("destroy", stale);
+    useUndo.getState().withdraw(change);
   };
-  const stopWatching = useUndo.subscribe((state) => {
-    if (state.last?.id === offered) return;
-    manager.off("stack-item-added", stale);
-    manager.off("stack-item-popped", stale);
-    stopWatching();
-  });
   manager.on("stack-item-added", stale);
   manager.on("stack-item-popped", stale);
+  editor.on("destroy", stale);
+  useUndo.getState().push(change);
 }
