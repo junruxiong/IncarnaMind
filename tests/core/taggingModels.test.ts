@@ -164,6 +164,21 @@ describe("Automatic picks the model that tags", () => {
     expect(models.options.map((option) => option.name)).not.toContain("gpt-oss:20b-cloud");
   });
 
+  test("2. Ollama on another computer is not Ollama's cloud: its own model tags", async () => {
+    const { core } = await start();
+    const provider = await core.saveChatProvider({
+      kind: "ollama",
+      baseUrl: "http://192.168.1.20:11434",
+      modelId: "llama-lan",
+    });
+    expect(await automaticOf(core)).toMatchObject({
+      classifier: { kind: "chat", choice: { providerId: provider.id, modelId: "llama-lan" } },
+      reason: "answers-model",
+    });
+    const { options } = await core.getTaggingModels();
+    expect(options.map((option) => option.name)).toContain("llama-lan");
+  });
+
   test("3. a local decision model in Ollama, before the chat model on this computer", async () => {
     const { core } = await start({ localModels: async () => ["qwen3.5:4b", "tev1:4b"] });
     await core.saveChatProvider({ kind: "ollama", modelId: "qwen3.5:4b" });

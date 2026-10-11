@@ -405,7 +405,7 @@ export function createChat(options: {
       kind,
       catalogId: row.catalog_id,
       service,
-      ollamaCloud: kind === "ollama" && service !== null,
+      ollamaCloud: kind === "ollama" && service?.id === OLLAMA_CLOUD.id,
       readsImages: readsImages(capabilities),
       name: catalogModel(set, choice.modelId)?.name ?? choice.modelId,
       price: capabilities.facts.price,
@@ -425,8 +425,10 @@ export function createChat(options: {
     const answers = base && describeModel(base);
     let chosen: ChatModelChoice | null = own && rowById(own.providerId) ? own : null;
     if (!chosen && answers) {
+      // A model server the User runs (Ollama, here or elsewhere, or one on this computer)
+      // does its own small calls: its catalog roles name models it may not have.
       const catalogRole =
-        answers.service === null || answers.ollamaCloud
+        answers.service === null || answers.kind === "ollama"
           ? undefined
           : catalogRoleModel(answers.kind, role);
       chosen = catalogRole ? { providerId: answers.choice.providerId, modelId: catalogRole } : base;
@@ -586,8 +588,8 @@ export function createChat(options: {
      * The quick-tasks model for Answers asked with `answers` (the default
      * model when left out), for the calls that don't write the Answer (#180):
      * the one the User set, else the catalog's for a cloud provider, else the
-     * Answers model itself. A model on this computer does its own small calls,
-     * as a second one would push it out of memory. In local mode a cloud model
+     * Answers model itself. A model on this computer, or in Ollama anywhere,
+     * does its own small calls, as a second one would push it out of memory. In local mode a cloud model
      * gives way to the Answers model, when that is on this computer, or to
      * none. Null with no Answers model.
      */
