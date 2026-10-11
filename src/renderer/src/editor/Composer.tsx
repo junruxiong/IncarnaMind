@@ -51,6 +51,7 @@ import { SkillChip } from "./QuestionView";
 import { ScopeChips } from "./ScopeChips";
 import { type ChoiceListHandle, ScopeChoiceList } from "./ScopePicker";
 import { SkillChoiceList } from "./SkillChoiceList";
+import { SuggestionOffer } from "./SuggestionOffer";
 
 /** In the composer, a long Search scope shows this many chips, then "+N more". */
 const CHIPS_SHOWN = 3;
@@ -102,7 +103,8 @@ export interface ComposerHandle {
  * "@" adds more), and the Ask button (an up arrow). A Mind in a Folder starts
  * with the Folder's chip; taking it out searches everything (see
  * `composerScope`). Why a Question couldn't be asked shows on one line above
- * them, with the one thing that fixes it.
+ * them, with the one thing that fixes it; so does the offer to suggest as the
+ * User writes (`SuggestionOffer`).
  */
 export function Composer({
   editor,
@@ -464,6 +466,7 @@ export function Composer({
       data-expanded={expanded || undefined}
       className={expanded ? "composer composer--expanded" : "composer"}
     >
+      <SuggestionOffer mindId={mindId} doc={doc} editor={editor} />
       {problem && (
         <ComposerProblem
           problem={problem}

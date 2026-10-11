@@ -14,6 +14,7 @@ import {
   type CitedVersions,
   isCited,
 } from "./answers/citedVersions";
+import { createCiting } from "./answers/citing";
 import type {
   ChatModelChoice,
   CoreApi,
@@ -21,6 +22,7 @@ import type {
   EmbeddingSettings,
   Mind,
   ProviderError,
+  SearchScope,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
@@ -79,6 +81,7 @@ import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
 import { createScriptRunner } from "./skills/scripts";
 import { migrate, openDatabase } from "./storage";
+import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
@@ -522,6 +525,24 @@ export function createCore(adapters: CoreAdapters): Core {
   // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
+  /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
+  const searchDocuments = (
+    query: string,
+    documentIds: readonly string[] | null,
+    signal?: AbortSignal,
+  ) =>
+    documents.searchTool(query, {
+      signal,
+      rerank: adapters.reranker ?? rerank.active(),
+      documentIds: documentIds ?? undefined,
+    });
+  const resolveScope = (scope: SearchScope) =>
+    resolveSearchScope(scope, {
+      folderTree: (folderId) => folders.subtree(folderId),
+      organizedFolderDocuments: (folderId) => library.documentIds(folderId),
+      documentIds: (filter) => documents.ids(filter),
+    });
+
   const answers = createAnswers({
     content,
     events,
@@ -543,12 +564,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
-      search: (query, documentIds, signal) =>
-        documents.searchTool(query, {
-          signal,
-          rerank: adapters.reranker ?? rerank.active(),
-          documentIds: documentIds ?? undefined,
-        }),
+      search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
@@ -570,14 +586,35 @@ export function createCore(adapters: CoreAdapters): Core {
       availability: (name) => skills.availability(name),
       openSession: (forced) => skills.openSession(forced),
     },
-    resolveScope: (scope) =>
-      resolveSearchScope(scope, {
-        folderTree: (folderId) => folders.subtree(folderId),
-        organizedFolderDocuments: (folderId) => library.documentIds(folderId),
-        documentIds: (filter) => documents.ids(filter),
-      }),
+    resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => background.setAnswering(writing),
+    reportError: (error) => console.error(error),
+  });
+
+  // Suggest as I write (#282): Passages found and quotes checked as Answers do (see ./answers/citing).
+  const citing = createCiting({
+    search: searchDocuments,
+    citationSource: (passageId) => documents.citationSource(passageId),
+    pageTexts: (documentId, contentHash, from, to) =>
+      documents.pageTexts(documentId, contentHash, from, to),
+  });
+  const suggestions = createSuggestions({
+    enabled: () => settings.get().user.suggestWhileWriting,
+    model: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    citing,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    resolveScope,
+    searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+    localOnly: () => embedding.localOnly(),
+    events,
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    now: () => adapters.now?.() ?? new Date(),
     reportError: (error) => console.error(error),
   });
 
@@ -931,7 +968,16 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new InvalidInputError("That chat provider doesn't exist.");
       }
       const scriptsWere = settings.get().device.skillScriptsEnabled;
-      const updated = settings.update(patch);
+      let change = patch;
+      // Suggestions turned on: the User allows what they send first. Declined, they stay as they were.
+      if (isRecord(patch) && isRecord(patch.user) && patch.user.suggestWhileWriting === true) {
+        if (!(await suggestions.allow())) {
+          const { suggestWhileWriting: _declined, ...user } = patch.user;
+          change = { ...patch, user };
+        }
+      }
+      const updated = settings.update(change);
+      if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
       if (scriptsWere && !updated.device.skillScriptsEnabled) {
@@ -1062,6 +1108,10 @@ export function createCore(adapters: CoreAdapters): Core {
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
     stopAnswer: async (input) => answers.stop(input),
+    suggestNext: (request) => suggestions.suggest(request),
+    cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
+    acceptSuggestion: async (input) => suggestions.accept(input),
+    getSuggestionStatus: () => suggestions.status(),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -1347,6 +1397,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
+      suggestions.stop();
       scriptRunner.close();
       approvals.close();
       connectors.close();

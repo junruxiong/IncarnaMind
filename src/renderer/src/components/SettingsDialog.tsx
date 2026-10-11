@@ -17,6 +17,7 @@ import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
+import { SuggestionSettings } from "./SuggestionSettings";
 import {
   buttonClass,
   dialogFrameClass,
@@ -150,6 +151,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <SuggestionSettings />
           <DataFolderSettings />
           <AboutSettings />
         </Page>
