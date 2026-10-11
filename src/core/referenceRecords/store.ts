@@ -4,7 +4,9 @@
  * The rules for who may change a field live here:
  * - reading the file replaces only what an earlier reading gave ("file");
  * - the User's edits ("user") are kept through every later reading;
- * - Look up ("lookup") fills only empty fields, and the type unless the User chose it.
+ * - Look up ("lookup") fills only empty fields, and the type unless the User chose it;
+ * - an import ("import", #287) fills empty fields and replaces what the file or an
+ *   earlier import gave, never what the User edited or Look up found.
  */
 import { randomUUID } from "node:crypto";
 import { emptyReferenceFields, isEmptyValue } from "../../shared/references";
@@ -19,24 +21,24 @@ import {
 import { isRecord } from "../errors";
 import type { Database } from "../storage";
 
-type FieldValue = ReferenceFields[ReferenceField];
+export type FieldValue = ReferenceFields[ReferenceField];
 
 /** A field as stored: its value, and where it came from. */
-interface StoredField {
+export interface StoredField {
   value: FieldValue;
   source: ReferenceSource;
 }
 
-type StoredFields = Partial<Record<ReferenceField, StoredField>>;
+export type StoredFields = Partial<Record<ReferenceField, StoredField>>;
 
-interface RecordRow {
+export interface RecordRow {
   id: string;
   fields: string;
   looked_up_at: string | null;
   updated_at: string;
 }
 
-const SOURCES: readonly ReferenceSource[] = ["file", "lookup", "user"];
+const SOURCES: readonly ReferenceSource[] = ["file", "lookup", "user", "import"];
 
 export const isReferenceSource = (value: unknown): value is ReferenceSource =>
   SOURCES.some((source) => source === value);
@@ -58,7 +60,7 @@ export function isFieldValue(field: ReferenceField, value: unknown): value is Fi
 }
 
 /** The stored fields, skipping any this version can't read (a newer one's). */
-function parseStored(json: string): StoredFields {
+export function parseStored(json: string): StoredFields {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -75,7 +77,7 @@ function parseStored(json: string): StoredFields {
   return stored;
 }
 
-function toRecord(row: RecordRow): ReferenceRecord {
+export function toRecord(row: RecordRow): ReferenceRecord {
   const stored = parseStored(row.fields);
   const fields = emptyReferenceFields();
   const sources: ReferenceRecord["sources"] = {};
@@ -99,7 +101,7 @@ export function referenceOf(db: Database, documentId: string): ReferenceRecord |
   return row ? toRecord(row) : null;
 }
 
-const same = (a: FieldValue | undefined, b: FieldValue | undefined) =>
+export const same = (a: FieldValue | undefined, b: FieldValue | undefined) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -117,21 +119,35 @@ function change(
   const row = findRow(db, documentId);
   const stored = row ? parseStored(row.fields) : {};
   if (!edit(stored) && row) return false;
+  save(db, row?.id ?? null, documentId, stored, at, lookedUp);
+  return true;
+}
+
+/** Writes a record's fields: updates the row, or inserts one (for a Document, or none yet). */
+export function save(
+  db: Database,
+  id: string | null,
+  documentId: string | null,
+  stored: StoredFields,
+  at: string,
+  lookedUp = false,
+): string {
   const json = JSON.stringify(stored);
-  if (row) {
+  if (id) {
     db.run(
       `UPDATE reference_records SET fields = ?, looked_up_at = coalesce(?, looked_up_at),
          updated_at = ? WHERE id = ?`,
-      [json, lookedUp ? at : null, at, row.id],
+      [json, lookedUp ? at : null, at, id],
     );
-  } else {
-    db.run(
-      `INSERT INTO reference_records (id, document_id, fields, looked_up_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), documentId, json, lookedUp ? at : null, at, at],
-    );
+    return id;
   }
-  return true;
+  const created = randomUUID();
+  db.run(
+    `INSERT INTO reference_records (id, document_id, fields, looked_up_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [created, documentId, json, lookedUp ? at : null, at, at],
+  );
+  return created;
 }
 
 /**

@@ -180,5 +180,9 @@ export function badgeMessage(
       return { key: `citation.badge.notFound.${where}`, params };
     case "cant-check":
       return { key: "citation.badge.cantCheck" };
+    case "unsupported":
+      return { key: "citation.badge.unsupported" };
+    case "contradicted":
+      return { key: "citation.badge.contradicted" };
   }
 }

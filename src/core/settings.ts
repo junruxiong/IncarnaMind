@@ -41,11 +41,12 @@ export const isChatModelChoice = (value: unknown): value is ChatModelChoice =>
 const userScope: Scope<UserSettings> = {
   name: "user",
   table: "user_settings",
-  defaults: { language: "system", chatModel: null },
+  defaults: { language: "system", chatModel: null, suggestWhileWriting: false },
   validators: {
     language: isLanguagePreference,
     chatModel: (value): value is ChatModelChoice | null =>
       value === null || isChatModelChoice(value),
+    suggestWhileWriting: isBoolean,
   },
 };
 
@@ -79,6 +80,7 @@ const deviceScope: Scope<DeviceSettings> = {
     },
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
+    suggestionOffers: 0,
     meetingsEnabled: false,
     meetingSystemAudio: true,
     meetingNoticeAccepted: false,
@@ -90,6 +92,8 @@ const deviceScope: Scope<DeviceSettings> = {
     gettingStarted: isGettingStarted,
     skillScriptsEnabled: isBoolean,
     skillScriptTimeoutSeconds: isScriptTimeout,
+    suggestionOffers: (value): value is number =>
+      typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
     meetingsEnabled: isBoolean,
     meetingSystemAudio: isBoolean,
     meetingNoticeAccepted: isBoolean,

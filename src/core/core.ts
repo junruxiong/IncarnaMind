@@ -14,6 +14,7 @@ import {
   type CitedVersions,
   isCited,
 } from "./answers/citedVersions";
+import { createCiting } from "./answers/citing";
 import type {
   AddDocumentsResult,
   ChatModelChoice,
@@ -23,12 +24,14 @@ import type {
   ExportMindOptions,
   Mind,
   ProviderError,
+  SearchScope,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
 import { createBackgroundQueue } from "./backgroundQueue";
 import { createConnectors } from "./connectors";
 import { createConsent, type DataFlowRegistry } from "./consent";
+import { createConversations } from "./conversations";
 import {
   createDocuments,
   type DocumentFile,
@@ -91,10 +94,12 @@ import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
 import {
+  createReferenceImport,
   createReferences,
   REFERENCE_LOOKUP_SENDS,
   REFERENCE_SERVICE_URLS,
 } from "./referenceRecords";
+import { parseReference } from "./references";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -102,6 +107,7 @@ import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
 import { createScriptRunner } from "./skills/scripts";
 import { migrate, openDatabase } from "./storage";
+import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
@@ -220,6 +226,9 @@ export function createCore(adapters: CoreAdapters): Core {
     return mind;
   };
   const mindsChanged = () => events.emit("minds.changed", minds.list());
+  // The assistant's conversations (ADR-0017); Answers a quit left being written are settled now.
+  const conversations = createConversations(db, now);
+  const conversationsChanged = () => events.emit("conversations.changed", null);
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
     const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
@@ -318,13 +327,14 @@ export function createCore(adapters: CoreAdapters): Core {
         prepareRerank();
         documentReady(documentId);
       },
-      // Citations live in Minds, anywhere: in Answers, or copied into Notes.
+      // Citations live in Minds, anywhere: in Answers, or copied into Notes; and in conversations.
       citedUnits: (documentIds) => {
         const wanted = new Set(documentIds);
         const cited: CitedUnits[] = [];
         for (const mind of minds.list()) {
           content.peek(mind.id, (fragment) => addCitedUnits(fragment, wanted, cited));
         }
+        conversations.addCitedUnits(wanted, cited);
         return cited;
       },
       // iCloud Drive before macOS 14 downloads a stub's file when asked by its command-line tool.
@@ -352,6 +362,7 @@ export function createCore(adapters: CoreAdapters): Core {
       for (const mind of minds.list()) {
         content.peek(mind.id, (fragment) => addCitedVersions(fragment, cited));
       }
+      conversations.addCitedVersions(cited);
       const quoted = (documentId: string, contentHash: string) =>
         isCited(cited, documentId, contentHash);
       documents.collectOldVersions(quoted);
@@ -593,6 +604,24 @@ export function createCore(adapters: CoreAdapters): Core {
   // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
+  /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
+  const searchDocuments = (
+    query: string,
+    documentIds: readonly string[] | null,
+    signal?: AbortSignal,
+  ) =>
+    documents.searchTool(query, {
+      signal,
+      rerank: adapters.reranker ?? rerank.active(),
+      documentIds: documentIds ?? undefined,
+    });
+  const resolveScope = (scope: SearchScope) =>
+    resolveSearchScope(scope, {
+      folderTree: (folderId) => folders.subtree(folderId),
+      organizedFolderDocuments: (folderId) => library.documentIds(folderId),
+      documentIds: (filter) => documents.ids(filter),
+    });
+
   const answers = createAnswers({
     content,
     events,
@@ -614,12 +643,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
-      search: (query, documentIds, signal) =>
-        documents.searchTool(query, {
-          signal,
-          rerank: adapters.reranker ?? rerank.active(),
-          documentIds: documentIds ?? undefined,
-        }),
+      search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
@@ -641,14 +665,56 @@ export function createCore(adapters: CoreAdapters): Core {
       availability: (name) => skills.availability(name),
       openSession: (forced) => skills.openSession(forced),
     },
-    resolveScope: (scope) =>
-      resolveSearchScope(scope, {
-        folderTree: (folderId) => folders.subtree(folderId),
-        organizedFolderDocuments: (folderId) => library.documentIds(folderId),
-        documentIds: (filter) => documents.ids(filter),
-      }),
+    // Every window hears of each message as it is added or written.
+    conversations: {
+      add: (input, answerModel) => {
+        const turn = conversations.add(input, answerModel);
+        events.emit("conversation.message", turn.question);
+        events.emit("conversation.message", turn.answer);
+        conversationsChanged();
+        return turn;
+      },
+      questionOf: (input) => conversations.questionOf(input),
+      restartAnswer: (answerId, answerModel) => {
+        const turn = conversations.restartAnswer(answerId, answerModel);
+        events.emit("conversation.message", turn.answer);
+        return turn;
+      },
+      writeAnswer: (answerId, write) => {
+        const answer = conversations.writeAnswer(answerId, write);
+        if (answer) events.emit("conversation.message", answer);
+        return answer !== null;
+      },
+    },
+    resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => background.setAnswering(writing),
+    reportError: (error) => console.error(error),
+  });
+
+  // Suggest as I write (#282): Passages found and quotes checked as Answers do (see ./answers/citing).
+  const citing = createCiting({
+    search: searchDocuments,
+    citationSource: (passageId) => documents.citationSource(passageId),
+    pageTexts: (documentId, contentHash, from, to) =>
+      documents.pageTexts(documentId, contentHash, from, to),
+  });
+  const suggestions = createSuggestions({
+    enabled: () => settings.get().user.suggestWhileWriting,
+    model: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    citing,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    resolveScope,
+    searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+    localOnly: () => embedding.localOnly(),
+    events,
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    now: () => adapters.now?.() ?? new Date(),
     reportError: (error) => console.error(error),
   });
 
@@ -844,6 +910,16 @@ export function createCore(adapters: CoreAdapters): Core {
     changed: (list) => events.emit("references.changed", list),
     signal: lifetime.signal,
   });
+  // Importing references (#287) reads a file the User chose and sends nothing.
+  const referenceImport = createReferenceImport({
+    db,
+    now,
+    documents: () => documents.list({}),
+    document: (id) => documents.get(id),
+    addDocuments: (paths) => addDocuments(paths),
+    changed: (list) => events.emit("references.changed", list),
+    progress: (done, total) => events.emit("references.importProgress", { done, total }),
+  });
   // Look up goes to Crossref or arXiv only when the User asks, so the flow goes nowhere until
   // then; the Privacy page lists each service once the User has decided on it.
   consent.registry.register({
@@ -858,10 +934,12 @@ export function createCore(adapters: CoreAdapters): Core {
     say: (key, params) => translate(settings.get().language, key, params),
     minds,
     content,
+    conversations,
     documents,
     tags,
     library,
     mindsChanged,
+    conversationsChanged,
     tagsChanged,
     tagged: announceTagged,
   });
@@ -1064,6 +1142,16 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
 
+  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+    const batchId = batches.begin(library.target(options));
+    const since = now();
+    const result = await documents
+      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .finally(() => batches.done(batchId));
+    usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
+    return { ...result, batchId };
+  };
+
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => {
@@ -1109,6 +1197,36 @@ export function createCore(adapters: CoreAdapters): Core {
     closeMind: async (mindId) => {
       content.close(parseMindId(mindId));
     },
+    askInConversation: async (input) =>
+      answers.askInConversation(conversations.parseQuestion(input)),
+    regenerateConversationAnswer: async (input) => answers.regenerateInConversation(input),
+    stopConversationAnswer: async (input) => answers.stopInConversation(input),
+    listConversations: async (options) => conversations.list(options),
+    getConversation: async (conversationId) => conversations.content(conversationId),
+    searchConversations: async (query) => conversations.search(query),
+    renameConversation: async (conversationId, title) => {
+      const conversation = conversations.rename(conversationId, title);
+      conversationsChanged();
+      return conversation;
+    },
+    deleteConversation: async (conversationId) => {
+      // What an Answer being written has is kept, before the conversation goes.
+      answers.stopConversation(conversations.get(conversationId).id);
+      conversations.delete(conversationId, now());
+      conversationsChanged();
+    },
+    resolveReference: async (input) => {
+      const reference = parseReference(input);
+      if (!reference) throw new InvalidInputError("That isn't a reference IncarnaMind can follow.");
+      const found =
+        reference.artifactKind === "mind"
+          ? minds.locate(reference.artifactId)
+          : conversations.locate(reference.artifactId, reference.anchor.messageId);
+      if (!found) return { status: "gone", reference };
+      return found.deletedAt === null
+        ? { status: "available", reference, name: found.name }
+        : { status: "deleted", reference, name: found.name, deletedAt: found.deletedAt };
+    },
     getSettings: async () => settings.get(),
     getLayout: async (windowId) => layouts.get(windowId),
     changeLayout: async (windowId, change) => layouts.change(windowId, change),
@@ -1119,7 +1237,16 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new InvalidInputError("That chat provider doesn't exist.");
       }
       const scriptsWere = settings.get().device.skillScriptsEnabled;
-      const updated = settings.update(patch);
+      let change = patch;
+      // Suggestions turned on: the User allows what they send first. Declined, they stay as they were.
+      if (isRecord(patch) && isRecord(patch.user) && patch.user.suggestWhileWriting === true) {
+        if (!(await suggestions.allow())) {
+          const { suggestWhileWriting: _declined, ...user } = patch.user;
+          change = { ...patch, user };
+        }
+      }
+      const updated = settings.update(change);
+      if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
       if (scriptsWere && !updated.device.skillScriptsEnabled) {
@@ -1130,15 +1257,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
-    addDocuments: async (paths, options) => {
-      const batchId = batches.begin(library.target(options));
-      const since = now();
-      const result = await documents
-        .add(paths, (documentId) => batches.added(batchId, documentId))
-        .finally(() => batches.done(batchId));
-      usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
-      return { ...result, batchId };
-    },
+    addDocuments,
     saveWebPage: async (input) => {
       const folderId = isRecord(input) ? input.folderId : undefined;
       if (
@@ -1217,6 +1336,13 @@ export function createCore(adapters: CoreAdapters): Core {
     restoreReference: async (documentId, before, fields) =>
       references.restore(documentId, before, fields),
     lookUpReference: (documentId) => references.lookUp(documentId),
+    importReferences: (path) => referenceImport.run(path),
+    undoReferenceImport: async (importId) => {
+      referenceImport.undo(importId);
+    },
+    addImportedReferenceFiles: (importId) => referenceImport.addFiles(importId),
+    listUnmatchedReferences: async () => referenceImport.unmatched(),
+    addReferenceFile: (recordId, path) => referenceImport.addFile(recordId, path),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
     createExamples: async (group) => examples.create(group),
@@ -1290,6 +1416,10 @@ export function createCore(adapters: CoreAdapters): Core {
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
     stopAnswer: async (input) => answers.stop(input),
+    suggestNext: (request) => suggestions.suggest(request),
+    cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
+    acceptSuggestion: async (input) => suggestions.accept(input),
+    getSuggestionStatus: () => suggestions.status(),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -1371,13 +1501,17 @@ export function createCore(adapters: CoreAdapters): Core {
       const deletion = db.transaction(() => {
         const folder = library.folder(id);
         const left = minds.leaveFolder(folder.id);
-        const { assignments } = library.delete(
-          folder.id,
-          left.map((mind) => mind.id),
-        );
-        return { assignments, mindIds: left.filter((mind) => mind.live).map((mind) => mind.id) };
+        const leftConversations = conversations.leaveFolder(folder.id);
+        const { assignments } = library.delete(folder.id, {
+          minds: left.map((mind) => mind.id),
+          conversations: leftConversations.map((conversation) => conversation.id),
+        });
+        const live = (items: { id: string; live: boolean }[]) =>
+          items.filter((item) => item.live).map((item) => item.id);
+        return { assignments, mindIds: live(left), conversationIds: live(leftConversations) };
       });
       if (deletion.mindIds.length > 0) mindsChanged();
+      if (deletion.conversationIds.length > 0) conversationsChanged();
       return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
@@ -1411,16 +1545,20 @@ export function createCore(adapters: CoreAdapters): Core {
       const folderId = parseFolderChoice(input.folderId);
       const mindIds = parseIds(input.mindIds, "The Minds to move");
       const documentIds = parseIds(input.documentIds, "The Documents to move");
+      const conversationIds = parseIds(input.conversationIds, "The conversations to move");
       // All or none: every one is checked before anything moves.
       if (folderId !== null) library.folder(folderId);
       for (const id of mindIds) minds.get(id);
+      for (const id of conversationIds) conversations.get(id);
       const move = db.transaction(() => ({
         folderId,
         minds: minds.move(mindIds, folderId),
         documents: library.move(documentIds, folderId),
+        conversations: conversations.move(conversationIds, folderId),
       }));
       // Said once it is saved, so a move that rolled back says nothing.
       if (move.minds.some((item) => item.from !== folderId)) mindsChanged();
+      if (move.conversations.some((item) => item.from !== folderId)) conversationsChanged();
       library.moved(move.documents.map((item) => item.id));
       return move;
     },
@@ -1630,6 +1768,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
+      suggestions.stop();
       scriptRunner.close();
       approvals.close();
       connectors.close();

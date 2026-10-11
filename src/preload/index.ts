@@ -73,6 +73,7 @@ const files: FilesBridge = {
     ipcRenderer.invoke(FILES_CHANNELS.showDocumentInFolder, documentId),
   pickLinkedFolder: () => ipcRenderer.invoke(FILES_CHANNELS.pickLinkedFolder),
   pickDocuments: () => ipcRenderer.invoke(FILES_CHANNELS.pickDocuments),
+  pickReferenceFile: () => ipcRenderer.invoke(FILES_CHANNELS.pickReferenceFile),
   showLinkedFolder: (linkedFolderId) =>
     ipcRenderer.invoke(FILES_CHANNELS.showLinkedFolder, linkedFolderId),
   logError: (report) => ipcRenderer.send(FILES_CHANNELS.logError, report),

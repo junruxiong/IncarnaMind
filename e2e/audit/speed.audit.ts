@@ -508,6 +508,35 @@ test("B2 typing: a short Mind and a long one (~300 blocks, many Citations)", asy
       mainThread: busy(m0, await cdpMetrics(session)),
     });
 
+    // The same Mind with suggestions as the User writes on (#282): typing with a pause every
+    // 40 keys, so suggestions are asked for, shown and typed over while the keys are timed.
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { suggestWhileWriting: true } });
+    });
+    await window.keyboard.press("Enter");
+    await takeKeyLatency(window);
+    const m3 = await cdpMetrics(session);
+    const stopSuggestFrames = await startFrames(window);
+    for (let i = 0; i < 4; i++) {
+      await typeFor(window, 40);
+      await window.waitForTimeout(1500);
+    }
+    const suggestFrames = await stopSuggestFrames();
+    record("speed.typing.shortSuggestions", {
+      ...(await takeKeyLatency(window)),
+      frames: suggestFrames,
+      mainThread: busy(m3, await cdpMetrics(session)),
+      shown: await window.evaluate(async () => {
+        const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        return (await bridge.getSuggestionStatus()).today.shown;
+      }),
+    });
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { suggestWhileWriting: false } });
+    });
+
     // A long Mind: Questions answered with Citations, then their cited sentences
     // and Notes pasted (through the editor's own clipboard HTML) until ~300 blocks.
     await window.keyboard.press("Enter");

@@ -560,6 +560,122 @@ describe("exporting a Mind", () => {
     expect(document).toContain('<wp:extent cx="9525" cy="9525"/>');
   });
 
+  test("a table made in the editor, Citations in its cells: a GitHub table with footnotes, and a Word table with its alignment, merged cells and real footnotes", async () => {
+    const { core, mind, client, tides } = await setUp();
+    const cell = (
+      type: "tableHeader" | "tableCell",
+      content: JSONContent[],
+      attrs: Record<string, unknown> = {},
+    ): JSONContent => ({ type, attrs: { colspan: 1, rowspan: 1, ...attrs }, content });
+    writeMind(client, [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              cell("tableHeader", [paragraph(text("Tide"))], { align: "left" }),
+              cell("tableHeader", [paragraph(text("When"))]),
+              cell("tableHeader", [paragraph(text("Range"))], { align: "right" }),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              cell("tableCell", [paragraph(text("Spring"))], { rowspan: 2 }),
+              cell("tableCell", [
+                paragraph(text("At new and full moon "), citation(tides, [2, 2], "found")),
+              ]),
+              cell("tableCell", [paragraph(text("Largest", "bold"))], { align: "right" }),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              cell("tableCell", [
+                paragraph(
+                  text("满月和新月"),
+                  citation(tides, [2, 2], "not-found", "quote-not-on-pages"),
+                ),
+              ]),
+              cell("tableCell", [paragraph(text("a | b"))], { align: "right" }),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              cell("tableCell", [paragraph(text("Line one")), paragraph(text("Line two"))], {
+                colspan: 2,
+              }),
+              cell("tableCell", [paragraph(text("—"))], { align: "right" }),
+            ],
+          },
+        ],
+      },
+    ]);
+    await client.settled();
+
+    const markdown = await core.exportMind(mind.id, { format: "markdown" });
+    expect(decode(markdown)).toBe(
+      [
+        "# Tides",
+        "",
+        "| Tide | When | Range |",
+        "| :--- | --- | ---: |",
+        "| Spring | At new and full moon[^1] | **Largest** |",
+        "|  | 满月和新月[^2] | a \\| b |",
+        "| Line one<br>Line two |  | — |",
+        "",
+        "[^1]: Tides, p. 2",
+        "[^2]: Tides, p. 2 [unverified]",
+        "",
+      ].join("\n"),
+    );
+    expect(markdown).toMatchObject({ citations: 2, unverifiedCitations: 1 });
+
+    const exported = await core.exportMind(mind.id, { format: "docx" });
+    const { document, footnotes } = docxParts(exported);
+    const table = /<w:tbl>[\s\S]*<\/w:tbl>/.exec(document)?.[0] ?? "";
+    expect(table.match(/<w:gridCol /g)).toHaveLength(3);
+    const rows = [...table.matchAll(/<w:tr>([\s\S]*?)<\/w:tr>/g)].map((row) => row[1] as string);
+    expect(rows).toHaveLength(4);
+    // The heading row repeats on each page, shaded, its first and last cells aligned.
+    expect(rows[0]).toContain("<w:trPr><w:tblHeader/></w:trPr>");
+    const cellsOf = (row: string) =>
+      [...row.matchAll(/<w:tc>([\s\S]*?)<\/w:tc>/g)].map((each) => each[1] as string);
+    const heading = cellsOf(rows[0] as string);
+    expect(heading.map((each) => /<w:jc w:val="(\w+)"\/>/.exec(each)?.[1] ?? null)).toEqual([
+      "left",
+      null,
+      "right",
+    ]);
+    // "Spring" is merged down over two rows; "Line one" across two columns, a line each.
+    const [spring, , largest] = cellsOf(rows[1] as string);
+    expect(spring).toContain('<w:vMerge w:val="restart"/>');
+    expect(largest).toContain("<w:b/>");
+    const below = cellsOf(rows[2] as string);
+    expect(below).toHaveLength(3);
+    expect(below[0]).toContain("<w:vMerge/>");
+    expect(textOf(below[0] as string)).toBe("");
+    expect(textOf(below[1] as string)).toBe("满月和新月[2]");
+    const last = cellsOf(rows[3] as string);
+    expect(last).toHaveLength(2);
+    expect(last[0]).toContain('<w:gridSpan w:val="2"/>');
+    expect(paragraphsOf(last[0] as string).map((each) => each.text)).toEqual([
+      "Line one",
+      "Line two",
+    ]);
+    // Each Citation is a Word footnote, referenced from its cell.
+    expect(textOf(cellsOf(rows[1] as string)[1] as string)).toBe("At new and full moon[1]");
+    expect(footnotesOf(footnotes)).toEqual({
+      "1": "Tides, p. 2",
+      "2": "Tides, p. 2 [unverified]",
+    });
+    expect(zipFingerprint(exported.data)).toBe(
+      "e693192b33d772ddc9eadcea5a350af859450e560ec32592e487cdd7a652a880",
+    );
+  });
+
   test("its own words are in the interface language", async () => {
     const { core, mind, client, tides } = await setUp();
     await core.updateSettings({ user: { language: "zh-CN" } });

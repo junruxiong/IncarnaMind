@@ -1017,6 +1017,98 @@
     }
   }
 
+  /* The count under the title: quiet status text, pulled up into the title's margin. */
+  .mind-count {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: -16px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+  }
+  .mind-count-button {
+    min-width: 0;
+    padding: 2px 4px;
+    margin-left: -4px;
+    border-radius: 4px;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    outline: none;
+
+    &:hover,
+    &:focus-visible,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink-secondary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
+  }
+  .mind-count-progress {
+    flex: 0 0 48px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--color-rule);
+    overflow: hidden;
+  }
+  .mind-count-fill {
+    display: block;
+    height: 100%;
+    background: var(--color-accent);
+  }
+  .count-menu {
+    width: 280px;
+  }
+  .count-target {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--color-rule);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .count-target-field {
+    min-width: 0;
+    padding: 2px 6px;
+    border: 1px solid var(--color-rule);
+    border-radius: 6px;
+    background: var(--color-sheet);
+    outline: none;
+
+    &:focus-visible {
+      border-color: var(--color-accent);
+    }
+
+    &[aria-invalid="true"] {
+      border-color: var(--color-danger);
+    }
+  }
+  .count-target-set {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    color: var(--color-accent);
+    outline: none;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--color-hover);
+    }
+  }
+  .count-target-problem {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--color-danger);
+  }
+
   /* The editor and the margin column of checks beside it. */
   .mind-editor-frame {
     position: relative;
@@ -1756,6 +1848,79 @@
     }
     > hr {
       margin-block: 28px;
+    }
+
+    /*
+     * A table: the measure wide, ruled in `rule` with a radius of 8, its
+     * heading row on the frame in Sans, its cells in the writing's face a
+     * step smaller. Columns size to their text, never under 6rem so Chinese
+     * keeps a few characters a line; a table wider than the measure scrolls
+     * sideways inside the note, never the page.
+     */
+    .tableWrapper {
+      overflow-x: auto;
+      overflow-y: hidden;
+      /* Room for the scrollbar under the table's bottom rule. */
+      padding-bottom: 1px;
+    }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+    }
+    :where(th, td) {
+      position: relative;
+      min-width: 6rem;
+      padding: 6px 12px;
+      border-right: 1px solid var(--color-rule);
+      border-bottom: 1px solid var(--color-rule);
+      vertical-align: top;
+      text-align: start;
+      font-size: 15px;
+      line-height: 24px;
+    }
+    :where(th) {
+      background: var(--color-frame);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 24px;
+      font-weight: 600;
+      color: var(--color-ink-secondary);
+    }
+    :where(tr > :last-child) {
+      border-right: 0;
+    }
+    :where(tr:last-child > *) {
+      border-bottom: 0;
+    }
+    :where(tr:first-child > :first-child) {
+      border-top-left-radius: 7px;
+    }
+    :where(tr:first-child > :last-child) {
+      border-top-right-radius: 7px;
+    }
+    :where(tr:last-child > :first-child) {
+      border-bottom-left-radius: 7px;
+    }
+    :where(tr:last-child > :last-child) {
+      border-bottom-right-radius: 7px;
+    }
+    :where(th > * + *, td > * + *) {
+      margin-top: 8px;
+    }
+    /* Cells selected together (a drag across cells, or Shift and the arrows). */
+    .selectedCell::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--color-accent-wash);
+      mix-blend-mode: multiply;
+      pointer-events: none;
+    }
+    &.ProseMirror .selectedCell ::selection {
+      background: transparent;
     }
 
     /* A Note switched out of Question context: still there, but muted. */
@@ -2568,10 +2733,17 @@
     &:hover {
       background: var(--color-hover);
     }
-    &[data-check="not-found"] {
+    &[data-check="not-found"],
+    &[data-check="unsupported"] {
       background: var(--color-warning-wash);
       font-weight: 700;
       color: var(--color-warning);
+    }
+    &[data-check="contradicted"] {
+      background: var(--color-sheet);
+      box-shadow: inset 0 0 0 1.5px var(--color-danger);
+      font-weight: 700;
+      color: var(--color-danger);
     }
     /* Selected: its card is open, or it is the node selected. */
     &:focus-visible,
@@ -2581,6 +2753,52 @@
       outline-offset: 1px;
     }
   }
+  /*
+   * A suggestion as the User writes (#282): grey text after the caret, then
+   * its Citation's marker, outlined as one that isn't there yet, and the key
+   * that accepts it. It isn't part of the Mind until accepted, and a click
+   * goes through it to the text, except on the marker, whose tooltip shows
+   * the quote and where it is.
+   */
+  .suggestion {
+    color: var(--color-ink-placeholder);
+    pointer-events: none;
+    user-select: none;
+  }
+  .suggestion-citation {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 18px;
+    height: 18px;
+    margin: 0 1px 0 4px;
+    padding: 0 4px;
+    border-radius: 4px;
+    box-shadow: inset 0 0 0 1px var(--color-rule-strong);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--color-ink-placeholder);
+    vertical-align: 2px;
+    white-space: nowrap;
+    pointer-events: auto;
+    cursor: default;
+  }
+  .suggestion-key {
+    margin-left: 6px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--color-hover);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--color-ink-meta);
+    vertical-align: 2px;
+    white-space: nowrap;
+  }
+
   /* The check's icon shows in the marker only when the margin has folded away. */
   .citation-marker-icon {
     display: none;
@@ -2640,9 +2858,16 @@
     --check-wash: var(--color-success-wash);
   }
   .margin-check[data-check="not-found"],
-  .citation-card--not-found {
+  .margin-check[data-check="unsupported"],
+  .citation-card--not-found,
+  .citation-card--unsupported {
     --check-ink: var(--color-warning);
     --check-wash: var(--color-warning-wash);
+  }
+  .margin-check[data-check="contradicted"],
+  .citation-card--contradicted {
+    --check-ink: var(--color-danger);
+    --check-wash: var(--color-danger-wash);
   }
   .margin-check[data-check="cant-check"],
   .citation-card--cant-check {
@@ -2657,6 +2882,21 @@
   .margin-check {
     background: var(--check-wash);
     color: var(--check-ink);
+
+    /* Found stays quiet: a tick with its number, no fill. */
+    &[data-check="found"] {
+      background: none;
+      color: var(--color-ink-meta);
+
+      .margin-check-icon {
+        color: var(--color-success);
+      }
+    }
+    /* Contradicted is outlined, so it reads without its colour. */
+    &[data-check="contradicted"] {
+      background: var(--color-sheet);
+      box-shadow: inset 0 0 0 1.5px var(--color-danger);
+    }
 
     /* Only the dot pulses while it is checked: the number keeps its contrast. */
     &[data-check="checking"] .margin-check-icon {
@@ -2678,7 +2918,7 @@
     flex-direction: column;
     gap: 10px;
     box-sizing: border-box;
-    width: 340px;
+    width: 360px;
     max-width: calc(100vw - 16px);
     padding: 14px 16px;
     border-radius: 10px;
@@ -2737,6 +2977,13 @@
     background: var(--check-wash);
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
+  }
+  /* A Citation's verdict, the one line a claim check adds. */
+  .citation-card-verdict {
+    padding-left: 22px;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--check-ink);
   }
   .citation-card-note {
     padding-left: 22px;
@@ -2863,6 +3110,29 @@
   }
   .block-handle[data-dragging="true"] > button {
     cursor: grabbing;
+  }
+
+  /* The table menu's ⋯ button, inside the top-right corner of the cell the cursor is in (TableMenu). */
+  .table-menu-button {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: var(--color-sheet);
+    box-shadow: inset 0 0 0 1px var(--color-rule);
+    color: var(--color-ink-meta);
+
+    &:is(:hover, [aria-expanded="true"]) {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &[hidden] {
+      display: none;
+    }
   }
 
   /* The editor's popovers sit where Popover puts them, not where [popover] would. */

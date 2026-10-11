@@ -38,7 +38,8 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | English | Chinese | Notes |
 |---|---|---|
 | Mind | Mind | A product name, like Notion: no translation, no plural, no measure word in labels. "新建 Mind", "Mind（3）", "这个 Mind" in prose. |
-| Chat | 对话 | "新对话", "历史对话". As Doubao, Yuanbao, DeepSeek, Qwen, Feishu, Cherry Studio and Open WebUI show it. |
+| Assistant | 助手 | The one per window. "显示助手", "收起助手". As Kimi, Doubao and Yuanbao call themselves (智能助手, AI 助手). |
+| Conversation | 对话 | New chat is "新对话", History "历史对话", counted with 个: "3 个对话". As Doubao, Yuanbao, DeepSeek, Qwen, Feishu, Cherry Studio and Open WebUI show it. |
 | Note | 笔记 | |
 | Block | 块 | "块选项". As Feishu does. |
 | Question | 问题 | Ask: 提问. "就此文档提问". |
@@ -58,6 +59,8 @@ The words from `CONTEXT.md`, then the ones the interaction rules bring in. Where
 | Reference record | 引用信息 | The "Cite as" panel's title too. Its fields: 类型、标题、作者、日期、期刊（出处）、卷、期、页码、出版者、DOI、网址、语言. |
 | Needs details (a reference record) | 信息待补充 | |
 | Look up (a reference record) | 查询 | "按 DOI 从 Crossref 补全空白字段". |
+| Import references | 导入引用信息… | From a CSL JSON, BibTeX or RIS file. Counted with 条: "导入了 3 条". |
+| Reference without a Document | 还没有文档 | Its list: "添加 PDF…" links it. |
 | Folder | 文件夹 | |
 | Source location | 文件位置 | The sidebar view of the files as they are on disk. |
 | Tag | 标签 | Tagging is 打标签; automatic tagging is 自动打标签. |

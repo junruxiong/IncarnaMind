@@ -19,20 +19,30 @@ A Block the User writes.
 _Avoid_: text block
 
 **Question**:
-A Block in which the User asks for an Answer.
+What the User asks for an Answer: a Block in a Mind, or a message in a Conversation.
 _Avoid_: query, prompt
 
 **Answer**:
-A Block generated in response to exactly one Question.
+What is generated in response to exactly one Question, right after it: a Block in a Mind, or a message in a Conversation.
 _Avoid_: output, response, reply
 
 **Question context**:
-What an Answer is generated from: every Block above its Question in the Mind, except Notes the User has excluded, plus Passages from the Documents in the Question's Search scope.
+What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers. Plus Passages from the Documents in the Question's Search scope.
 _Avoid_: prompt, history
 
 **Search scope**:
 The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope, which the User can remove; a Question with no Search scope searches all Documents.
 _Avoid_: filter, context
+
+### The assistant
+
+**Assistant**:
+The one place in each window where the User asks Questions and reads their Answers, beside the Mind in focus and outside any tab; it reads that Mind and keeps its Conversations as its own history.
+_Avoid_: chat panel, thread, copilot, bot
+
+**Conversation**:
+The assistant's history of one exchange: its messages, each a Question or an Answer, in order. It belongs to the Folder of the Mind its first Question was asked from, or to none; each Question records the Mind it was asked from. A Conversation is not a Mind: it is listed only in the assistant's History, never in the sidebar or a tab, and exists once it has a Question. New chat starts one.
+_Avoid_: chat (except in "New chat"), thread, session
 
 ### Documents
 
@@ -69,7 +79,7 @@ A reference, anchored in the text of an Answer, to the Passage a claim was drawn
 _Avoid_: source, reference
 
 **Reference record**:
-What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details".
+What a citation style needs to cite a Document: its type, title, authors, date, where it was published, volume, issue, pages, publisher, DOI, URL and language. It is read from the Document's file, the User can edit every field (an edit is never replaced by a later read), and Look up can fill its empty fields from the Document's DOI or arXiv ID. A record of a known type that lacks its title, authors or date "needs details". A file exported from Zotero, EndNote or Mendeley (CSL JSON, BibTeX or RIS) can be imported: each reference is matched to a Document, or kept as a record with no Document until its PDF is added; the User's edits win over an import.
 _Avoid_: metadata, bibliographic entry, citation (a Citation is the reference in an Answer)
 
 **Location**:
@@ -140,7 +150,7 @@ A saved copy of a Mind as it was just before an AI change, which the User can co
 _Avoid_: snapshot, version, backup, undo
 
 **Recently deleted**:
-Where a deleted Mind, Chat, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
+Where a deleted Mind, Conversation, Document, Folder or Tag waits for 30 days, from where it can be restored or deleted permanently. Deleting never touches the User's files.
 _Avoid_: trash, bin, archive
 
 ### Checks
