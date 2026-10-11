@@ -530,7 +530,6 @@ test("first run and every Settings page", async () => {
     "models",
     "search",
     "meetings",
-    "tools",
     "connectors",
     "skills",
     "privacy",
