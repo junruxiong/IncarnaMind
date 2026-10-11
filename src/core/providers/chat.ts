@@ -38,7 +38,6 @@ import {
   type Price,
 } from "./catalog";
 import { endpointOf } from "./catalog/providers";
-import { isChatGptPlanModel } from "./chatgpt/codexEndpoint";
 import type { ChatGptPlan } from "./chatgpt/plan";
 import {
   acceptsApiKey,
@@ -206,10 +205,10 @@ function parseApiKey(value: unknown, kind: ChatProviderKind): string | null | un
 const displayName = (kind: ChatProviderKind, baseUrl: string | null) =>
   serviceFor(kind, baseUrl)?.name ?? baseUrl ?? kind;
 
-/** What chat providers need from the experimental ChatGPT plan provider. */
+/** What chat providers need from the ChatGPT plan provider. */
 export type ChatGptPlanAccess = Pick<
   ChatGptPlan,
-  "enabled" | "hasSignIn" | "credentials" | "codexBaseUrl"
+  "hasSignIn" | "credentials" | "apiBaseUrl" | "modelIds"
 >;
 
 export function createChat(options: {
@@ -270,29 +269,22 @@ export function createChat(options: {
       ? OLLAMA_CLOUD
       : null);
 
-  /** A ChatGPT plan provider counts only while the experimental switch is on. */
-  const usable = (row: ProviderRow | undefined) =>
-    row && (row.kind !== "chatgpt" || chatGpt.enabled()) ? row : undefined;
   /** Model lists by provider and server, with when they were fetched. */
   const modelLists = new Map<string, { at: number; models: ListedModel[] }>();
   const listKey = (row: ProviderRow) => `${row.id}\n${row.base_url ?? ""}\n${row.endpoint ?? ""}`;
 
   const rowById = (id: string) =>
-    usable(
-      db.get<ProviderRow>(
-        `SELECT ${ROW_COLUMNS} FROM chat_providers WHERE id = ? AND deleted_at IS NULL`,
-        [id],
-      ),
+    db.get<ProviderRow>(
+      `SELECT ${ROW_COLUMNS} FROM chat_providers WHERE id = ? AND deleted_at IS NULL`,
+      [id],
     );
 
   const rowByServer = ({ kind, baseUrl, endpoint, catalogId }: ParsedServer) =>
-    usable(
-      db.get<ProviderRow>(
-        `SELECT ${ROW_COLUMNS} FROM chat_providers
-         WHERE coalesce(catalog_id, kind) = ? AND coalesce(base_url, '') = ?
-           AND coalesce(endpoint, '') = ? AND deleted_at IS NULL`,
-        [catalogId ?? kind, baseUrl ?? "", endpoint ?? ""],
-      ),
+    db.get<ProviderRow>(
+      `SELECT ${ROW_COLUMNS} FROM chat_providers
+       WHERE coalesce(catalog_id, kind) = ? AND coalesce(base_url, '') = ?
+         AND coalesce(endpoint, '') = ? AND deleted_at IS NULL`,
+      [catalogId ?? kind, baseUrl ?? "", endpoint ?? ""],
     );
 
   /** Rows of a kind this version knows; rows from a newer version are left alone. */
@@ -302,7 +294,7 @@ export function createChat(options: {
         `SELECT ${ROW_COLUMNS} FROM chat_providers WHERE deleted_at IS NULL
          ORDER BY created_at, rowid`,
       )
-      .filter((row) => isChatProviderKind(row.kind) && usable(row));
+      .filter((row) => isChatProviderKind(row.kind));
 
   /** Where a row's requests go. */
   const rowService = (row: ProviderRow) =>
@@ -343,7 +335,7 @@ export function createChat(options: {
     if (kind === "chatgpt") {
       return {
         kind,
-        baseUrl: chatGpt.codexBaseUrl,
+        baseUrl: chatGpt.apiBaseUrl,
         apiKey: null,
         modelId,
         credentials: chatGpt.credentials,
@@ -371,17 +363,6 @@ export function createChat(options: {
         }),
       ...(thinking && { thinking }),
     };
-  };
-
-  /** The ChatGPT plan takes only the models its endpoint accepts, and only while it's turned on. */
-  const checkChatGpt = (kind: ChatProviderKind, modelId: string) => {
-    if (kind !== "chatgpt") return;
-    if (!chatGpt.enabled()) {
-      throw new InvalidInputError("Turn on the ChatGPT plan provider in Settings first.");
-    }
-    if (!isChatGptPlanModel(modelId)) {
-      throw new InvalidInputError(`The ChatGPT plan doesn't offer the model "${modelId}".`);
-    }
   };
 
   const toProvider = async (row: ProviderRow, modelId?: string): Promise<ChatProvider> => {
@@ -524,7 +505,6 @@ export function createChat(options: {
       const server = parseServer(input);
       const apiKey = parseApiKey(input.apiKey, server.kind);
       const modelId = parseModelId(input.modelId);
-      checkChatGpt(server.kind, modelId);
 
       const existing = rowByServer(server);
       const id = existing?.id ?? randomUUID();
@@ -575,28 +555,6 @@ export function createChat(options: {
         }
       });
       await secrets.delete(keyName(id));
-    },
-
-    /** Removes every provider of a kind (e.g. when the ChatGPT plan is turned off), keys included. */
-    async deleteKind(kind: ChatProviderKind): Promise<void> {
-      const rows = db.all<{ id: string }>(
-        "SELECT id FROM chat_providers WHERE kind = ? AND deleted_at IS NULL",
-        [kind],
-      );
-      const at = now();
-      db.transaction(() => {
-        for (const { id } of rows) {
-          db.run("UPDATE chat_providers SET deleted_at = ?, updated_at = ? WHERE id = ?", [
-            at,
-            at,
-            id,
-          ]);
-          if (settings.get().user.chatModel?.providerId === id) {
-            settings.update({ user: { chatModel: null } });
-          }
-        }
-      });
-      for (const { id } of rows) await secrets.delete(keyName(id));
     },
 
     exists: (id: string) => rowById(id) !== undefined,
@@ -700,6 +658,11 @@ export function createChat(options: {
           const cacheKey = listKey(row);
           const cached = modelLists.get(cacheKey);
           let listed = cached && Date.now() - cached.at < MODEL_LIST_TTL_MS ? cached.models : null;
+          if (provider.kind === "chatgpt") {
+            // The account's own list, read with its sign-in like the sign-in's own traffic, and
+            // kept by the plan itself: it carries nothing of the User's.
+            listed = (await chatGpt.modelIds()).map((id) => ({ id }));
+          }
           if (!listed && !mayAsk) listed = [];
           if (!listed) {
             const apiKey = provider.hasApiKey ? await secrets.tryGet(keyName(row.id)) : null;
@@ -752,11 +715,10 @@ export function createChat(options: {
           `Enter an API key for ${displayName(server.kind, server.baseUrl)}.`,
         );
       }
-      checkChatGpt(server.kind, modelId);
       if (server.kind === "chatgpt" && !(await chatGpt.hasSignIn())) {
         return {
           ok: false,
-          error: { kind: "not-signed-in", message: "Sign in to ChatGPT first." },
+          error: { kind: "not-signed-in", message: "Continue with ChatGPT to sign in first." },
         };
       }
 

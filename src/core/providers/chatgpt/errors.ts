@@ -6,17 +6,17 @@ export class ChatGptSignInRequiredError extends Error {
   constructor(
     readonly reason: "signed-out" | "expired",
     message = reason === "expired"
-      ? "Your ChatGPT sign-in expired. Sign in again."
-      : "Sign in to ChatGPT first.",
+      ? "Your ChatGPT sign-in expired. Continue with ChatGPT to sign in again."
+      : "Continue with ChatGPT to sign in first.",
   ) {
     super(message);
   }
 }
 
 /**
- * The ChatGPT plan's endpoint refused a request made with a valid sign-in:
- * "plan-limit" when the plan's usage limit is reached (or the plan doesn't
- * include this use), "blocked" for 401 or 403.
+ * OpenAI refused a request made with a valid sign-in: "plan-limit" when the
+ * plan's or this app's usage limit is reached, "blocked" when the plan can't
+ * be used here (an ineligible plan, a region, a refused permission).
  */
 export class ChatGptPlanError extends Error {
   override name = "ChatGptPlanError";
@@ -28,5 +28,25 @@ export class ChatGptPlanError extends Error {
     readonly resetsAt: number | null = null,
   ) {
     super(message);
+  }
+}
+
+/** The User signed in but didn't allow IncarnaMind to use their ChatGPT plan. */
+export class ChatGptPlanNotAllowedError extends Error {
+  override name = "ChatGptPlanNotAllowedError";
+  constructor() {
+    super("ChatGPT plan use wasn't allowed, so IncarnaMind can't use your plan.");
+  }
+}
+
+/** A sign-in came back for another ChatGPT account than the one this device is registered with. */
+export class ChatGptOtherAccountError extends Error {
+  override name = "ChatGptOtherAccountError";
+  constructor(readonly expected: string | null) {
+    super(
+      expected
+        ? `That's another ChatGPT account. Sign in as ${expected}, or use another account.`
+        : "That's another ChatGPT account than before. Sign in with the same one, or use another account.",
+    );
   }
 }

@@ -239,5 +239,15 @@ export function createSettings(
       if (validatorFor(deviceScope, key)) throw new Error(`"${key}" is a device setting.`);
       write(db, deviceScope.table, key, value, now());
     },
+
+    /** Forgets a value `writeDeviceValue` kept, e.g. one a removed feature left behind. */
+    deleteDeviceValue(key: string): void {
+      if (validatorFor(deviceScope, key)) throw new Error(`"${key}" is a device setting.`);
+      const at = now();
+      db.run(
+        `UPDATE ${deviceScope.table} SET deleted_at = ?, updated_at = ? WHERE key = ? AND deleted_at IS NULL`,
+        [at, at, key],
+      );
+    },
   };
 }
