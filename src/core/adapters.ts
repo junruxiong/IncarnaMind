@@ -44,6 +44,12 @@ export interface Paths {
    */
   examples?: string;
   /**
+   * The citation-style engine and the CSL styles and locales the app ships (ADR-0016):
+   * `resources/citation-styles/` in the repository, copied into the packaged app's resources.
+   * Not given: only Numbered, IncarnaMind's own style, can be formatted.
+   */
+  citationStyles?: string;
+  /**
    * The User's Documents folder: the first save offers "IncarnaMind" in it as
    * the Output location. Defaults to "Documents" in the home folder.
    */

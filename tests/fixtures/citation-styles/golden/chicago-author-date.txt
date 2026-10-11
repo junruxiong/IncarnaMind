@@ -1,0 +1,71 @@
+# chicago-author-date (chicago-author-date.csl)
+
+## Citations (34)
+
+1. (Shannon 1940)
+2. (Kahneman and Tversky 1979, 265)
+3. (Jumper et al. 2021, 585)
+4. (Vaswani et al. 2017)
+5. (van der Maaten and Hinton 2008)
+6. (Zhou 2018)
+7. (Kuhn [1962] 2012, 52)
+8. (Tversky and Kahneman 1982, 11–12)
+9. (World Health Organization 2023)
+10. (Citation Style Language, n.d.)
+11. (Intergovernmental Panel on Climate Change 2023)
+12. (International Organization for Standardization 2021)
+13. (General Data Protection Regulation 2016)
+14. (“Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use” 2023)
+15. (OECD 2019a)
+16. (OECD 2019b)
+17. (钱 et al. 1990, 5)
+18. (刘 et al. 2016)
+19. (费 2012, 23)
+20. (周 2016, 12–15)
+21. (白 1998)
+22. (吴 2003)
+23. (贾 and 柯 2011)
+24. (中国互联网络信息中心 2012)
+25. (中华人民共和国国家质量监督检验检疫总局 and 中国国家标准化管理委员会 2015)
+26. (中华人民共和国个人信息保护法 2021)
+27. (萧 2001)
+28. (丁 2000)
+29. (昂温 and 昂温 1988)
+30. (中国力学学会 1990)
+31. (Vaswani et al. 2017; Kahneman and Tversky 1979; 刘 et al. 2016)
+32. (Kuhn [1962] 2012, 60)
+33. (Kuhn [1962] 2012, 61)
+34. (OECD 2019a; 2019b)
+
+## Bibliography (30, hanging)
+
+- en-nature-2023: “Tools Such as Chatgpt Threaten Transparent Science; Here Are Our Ground Rules for Their Use.” 2023. <i>Nature</i> 613 (7945): 612. https://doi.org/10.1038/d41586-023-00191-1.
+- en-csl-nd: Citation Style Language. n.d. “Citation Style Language 1.0.2 Specification.” Citationstyles.org. Accessed October 1, 2026. https://docs.citationstyles.org/en/stable/specification.html.
+- en-ipcc-2023: Intergovernmental Panel on Climate Change. 2023. <i>Climate Change 2023: Synthesis Report</i>. IPCC. https://doi.org/10.59327/IPCC/AR6-9789291691647.
+- en-iso-690: International Organization for Standardization. 2021. <i>Information and Documentation — Guidelines for Bibliographic References and Citations to Information Resources</i>. ISO 690:2021. 4th ed. ISO, June.
+- en-jumper-2021: Jumper, John, Richard Evans, Alexander Pritzel, et al. 2021. “Highly Accurate Protein Structure Prediction with Alphafold.” <i>Nature</i> 596 (7873): 583–89. https://doi.org/10.1038/s41586-021-03819-2.
+- en-kahneman-1979: Kahneman, Daniel, and Amos Tversky. 1979. “Prospect Theory: An Analysis of Decision under Risk.” <i>Econometrica</i> 47 (2): 263–91. https://doi.org/10.2307/1914185.
+- en-kuhn-2012: Kuhn, Thomas S. (1962) 2012. <i>The Structure of Scientific Revolutions</i>. 4th ed. University of Chicago Press.
+- en-vandermaaten-2008: Maaten, Laurens van der, and Geoffrey Hinton. 2008. “Visualizing Data Using t-Sne.” <i>Journal of Machine Learning Research</i> 9 (86): 2579–605. http://jmlr.org/papers/v9/vandermaaten08a.html.
+- en-oecd-2019a: OECD. 2019a. <i>OECD Skills Outlook 2019: Thriving in a Digital World</i>. OECD Publishing. https://doi.org/10.1787/df80bc12-en.
+- en-oecd-2019b: OECD. 2019b. <i>PISA 2018 Results (Volume I): What Students Know and Can Do</i>. OECD Publishing. https://doi.org/10.1787/5f07c754-en.
+- en-gdpr-2016: Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the Protection of Natural Persons with Regard to the Processing of Personal Data and on the Free Movement of Such Data (General Data Protection Regulation), L 119 Official Journal of the European Union 1 (2016). http://data.europa.eu/eli/reg/2016/679/oj.
+- en-shannon-1940: Shannon, Claude Elwood. 1940. “An Algebra for Theoretical Genetics.” Doctoral dissertation, Massachusetts Institute of Technology. http://hdl.handle.net/1721.1/11174.
+- en-tversky-1982: Tversky, Amos, and Daniel Kahneman. 1982. “Judgment under Uncertainty: Heuristics and Biases.” In <i>Judgment under Uncertainty: Heuristics and Biases</i>, edited by Daniel Kahneman, Paul Slovic, and Amos Tversky. Cambridge University Press. https://doi.org/10.1017/CBO9780511809477.002.
+- en-vaswani-2017: Vaswani, Ashish, Noam Shazeer, Niki Parmar, et al. 2017. “Attention Is All You Need.” <i>Advances in Neural Information Processing Systems 30</i> (Red Hook, NY), 5998–6008. https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+- en-who-2023: World Health Organization. 2023. “Depression.” Fact sheet. WHO, March 31. https://www.who.int/news-room/fact-sheets/detail/depression.
+- en-zhou-2018: Zhou, Zhi-Hua. 2018. “A Brief Introduction to Weakly Supervised Learning.” <i>National Science Review</i> 5 (1): 44–53. https://doi.org/10.1093/nsr/nwx106.
+- zh-ding-2000: 丁文祥. 2000. “数字革命与竞争国际化.” 中国青年报, November 20.
+- zh-pipl-2021: 中华人民共和国个人信息保护法 (2021).
+- zh-gbt7714-2015: 中华人民共和国国家质量监督检验检疫总局, and 中国国家标准化管理委员会. 2015. 信息与文献 参考文献著录规则. GB/T 7714—2015. 中国标准出版社, May 15.
+- zh-cnnic-2012: 中国互联网络信息中心. 2012. 第29次中国互联网络发展状况统计报告. http://www.cnnic.net.cn/hlwfzyj/hlwxzbg/201201/P020120709345264469680.pdf.
+- zh-mechanics-1990: 中国力学学会. 1990. 第3届全国实验流体力学学术会议论文集. 天津.
+- zh-liu-2016: 刘知远, 孙茂松, 林衍凯, and 谢若冰. 2016. “知识表示学习研究进展.” 计算机研究与发展 53 (2): 247–61. https://doi.org/10.7544/issn1000-1239.2016.20160020.
+- zh-wu-2003: 吴云芳. 2003. “面向中文信息处理的现代汉语并列结构研究.” 博士学位论文, 北京大学. http://thesis.lib.pku.edu.cn/dlib/List.asp?lang=gb&amp;type=Reader&amp;DocGroupID=4&amp;DocID=6328.
+- zh-zhou-2016: 周志华. 2016. 机器学习. 清华大学出版社.
+- zh-unwin-1988: 昂温G, and 昂温P S. 1988. 外国出版史. Translated by 陈生铮. 中国书籍出版社.
+- zh-bai-1998: 白书农. 1998. “植物开花研究.” In 植物科学进展, edited by 李承森. 高等教育出版社.
+- zh-xiao-2001: 萧钰. 2001. “出版业信息化迈入快车道.” December 19. http://www.creader.com/news/20011219/200112190019.html.
+- zh-fei-2012: 费孝通. 2012. 乡土中国. 北京大学出版社.
+- zh-jia-2011: 贾东琴, and 柯平. 2011. “面向数字素养的高校图书馆数字服务体系研究.” In 中国图书馆学会年会论文集：2011年卷, edited by 中国图书馆学会. 国家图书馆出版社.
+- zh-qian-1990: 钱学森, 于景元, and 戴汝为. 1990. “一个科学新领域——开放的复杂巨系统及其方法论.” 自然杂志 13 (1): 3–10.
