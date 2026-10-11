@@ -4,7 +4,7 @@ import { NodeRangeSelection } from "@tiptap/extension-node-range";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
-import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../../../core/api";
+import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { useT } from "../i18n";
@@ -208,7 +208,8 @@ export function BlockHandle({ editor }: { editor: Editor }) {
           hovered.current = node ? { node, pos } : null;
           for (const shown of editor.view.dom.querySelectorAll("[data-handle-on]"))
             shown.removeAttribute("data-handle-on");
-          const dom = node ? editor.view.nodeDOM(pos) : null;
+          // Only a Question's node view ignores attribute changes; on a text Block ProseMirror would redraw it.
+          const dom = node?.type.name === QUESTION_BLOCK ? editor.view.nodeDOM(pos) : null;
           if (dom instanceof Element) dom.setAttribute("data-handle-on", "");
         }}
       >
