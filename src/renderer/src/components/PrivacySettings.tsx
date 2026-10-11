@@ -10,6 +10,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { ApprovalsSettings } from "./ApprovalsSettings";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataDialog";
 import {
   buttonStyle,
@@ -148,6 +149,11 @@ export function PrivacySettings() {
             ),
           )}
         </ul>
+      </section>
+
+      <section data-testid="approvals" className="flex flex-col">
+        <h4 className={`mb-2 ${sectionTitleClass}`}>{t("approvals.settings.title")}</h4>
+        <ApprovalsSettings />
       </section>
 
       <section data-testid="skill-scripts-note" role="note" className="flex flex-col">

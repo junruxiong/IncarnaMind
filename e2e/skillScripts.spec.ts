@@ -163,7 +163,7 @@ test("Always run shows a risk warning first; confirmed, the Skill's scripts run 
 
   // Settings: the policy is listed under Tools and can be revoked; the switch, under
   // Skills, is on.
-  await openSettings(window, "tools");
+  await openSettings(window, "privacy");
   const policy = window.getByTestId("approvals-settings").getByTestId("approval-policy");
   await expect(policy).toHaveCount(1);
   await expect(policy).toContainText("Scripts of greeter");
