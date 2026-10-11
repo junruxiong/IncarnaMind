@@ -1,5 +1,5 @@
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ANSWER_BLOCK,
@@ -11,10 +11,12 @@ import { badgeMessage, type CitationState, citationState } from "../../../shared
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { useAnswers } from "../answers";
 import { citationHandle } from "../commands/handles";
-import { commands } from "../commands/registry";
+import { type CommandContext, commands } from "../commands/registry";
+import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { useTabPlace } from "../components/tabs/tabItems";
 import { useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
+import type { ObjectRef } from "../objects";
 import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import { citationNumberOf } from "./citationNumbers";
@@ -181,6 +183,18 @@ export function CitationView({
     };
   }, [open]);
 
+  const menuId = useId();
+  const objectMenu = useObjectMenu({ kind: "citation", id: menuId });
+  const here = {
+    ...(state.reason !== "document-removed" && {
+      "citation.open": () => openFromCardRef.current(),
+    }),
+    "citation.remove": () => {
+      dismiss();
+      deleteNode();
+    },
+  };
+
   // The number, the Document, where it points and the check: the marker only shows the number.
   const label = inFootnote
     ? t("citation.inFootnote.label", { document: pointsTo, badge: badgeText })
@@ -195,6 +209,7 @@ export function CitationView({
       data-reason={state.reason ?? undefined}
       data-number={number || undefined}
       contentEditable={false}
+      {...objectMenu.rowProps}
     >
       <button
         ref={marker}
@@ -218,6 +233,13 @@ export function CitationView({
         <CheckMarkIcon check={state.check} className="citation-marker-icon" />
         <span>{inFootnote ? pointsTo : number || "·"}</span>
       </button>
+      <ObjectMenu
+        target={{ kind: "citation", id: menuId }}
+        label={t("citation.more")}
+        here={here}
+        className="citation-menu-anchor"
+        tabIndex={-1}
+      />
       {open &&
         marker.current &&
         // In the body, not the editor: ProseMirror must not see the card's events.
@@ -255,6 +277,7 @@ export function CitationView({
                 }
               }}
               inAnswer={answerAround(editor, getPos()) !== null}
+              menu={{ target: { kind: "citation", id: menuId }, here }}
             />
           </Popover>,
           document.body,
@@ -277,7 +300,10 @@ function CitationCard({
   onOpen,
   onRemove,
   onRegenerate,
+  menu,
 }: {
+  /** The ⋯ at the card's end: the same menu as the right-click on the marker. */
+  menu: { target: ObjectRef; here: CommandContext["here"] };
   state: CitationState;
   attributes: CitationAttributes;
   badgeText: string;
@@ -391,6 +417,12 @@ function CitationCard({
             </button>
           )
         )}
+        <ObjectMenu
+          target={menu.target}
+          label={t("citation.more")}
+          here={menu.here}
+          className="citation-card-action ml-auto"
+        />
         {web && state.documentId && (
           <button
             type="button"

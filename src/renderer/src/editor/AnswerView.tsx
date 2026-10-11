@@ -15,6 +15,7 @@ import { useApprovals, waitingFor } from "../approvals";
 import { useIsExampleAnswer } from "../components/GettingStarted";
 import { PlugIcon, ScriptIcon, SkillIcon, StopIcon } from "../components/icons";
 import { FindSourcesLineIcon } from "../components/lineIcons";
+import { ObjectMenu, useObjectMenu } from "../components/ObjectMenu";
 import { ProblemLine } from "../components/ProblemLine";
 import { useFindSources } from "../findSources";
 import { useT } from "../i18n";
@@ -69,7 +70,7 @@ function Dotted({ items }: { items: ReactNode[] }) {
  * calls and Skill scripts it used; under it, what went wrong and how to fix
  * it, and the approval cards of calls waiting for the User.
  */
-export function AnswerView({ node }: ReactNodeViewProps) {
+export function AnswerView({ node, editor, getPos }: ReactNodeViewProps) {
   const t = useT();
   const mindId = useMindId();
   const answerId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
@@ -95,6 +96,17 @@ export function AnswerView({ node }: ReactNodeViewProps) {
 
   const writeAgain = (discardEdits = false) => {
     if (answerId && questionId) void regenerate(mindId, answerId, questionId, discardEdits);
+  };
+  const objectMenu = useObjectMenu({ kind: "answer", id: answerId ?? "" });
+  const here = {
+    "answer.copy": () => {
+      navigator.clipboard.writeText(node.textContent).catch(useAppStore.getState().reportError);
+    },
+    ...(!streaming && questionId && { "answer.regenerate": () => writeAgain() }),
+    "block.delete": () => {
+      const pos = getPos();
+      if (pos !== undefined) editor.commands.deleteBlock(pos);
+    },
   };
 
   const meta: ReactNode[] = [];
@@ -130,6 +142,7 @@ export function AnswerView({ node }: ReactNodeViewProps) {
       data-testid="answer"
       data-status={streaming ? "streaming" : status}
       data-answer-id={answerId ?? undefined}
+      {...(answerId ? objectMenu.rowProps : {})}
     >
       <span contentEditable={false} className="sr-only">
         {t("answer.label")}
@@ -219,6 +232,14 @@ export function AnswerView({ node }: ReactNodeViewProps) {
             <RegenerateSmallIcon className="size-3" />
             {t("answer.regenerate")}
           </button>
+        )}
+        {answerId && (
+          <ObjectMenu
+            target={{ kind: "answer", id: answerId }}
+            label={t("answer.more")}
+            here={here}
+            className="answer-action"
+          />
         )}
       </div>
     </NodeViewWrapper>

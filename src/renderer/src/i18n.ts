@@ -9,11 +9,16 @@ export function useLanguage(): Language {
   return language ?? resolveLanguage("system", navigator.languages);
 }
 
+/** The interface language now, outside React. */
+export function languageNow(): Language {
+  return (
+    useAppStore.getState().settings?.language ?? resolveLanguage("system", navigator.languages)
+  );
+}
+
 /** A message in the interface language now, outside React: e.g. an Undo line's. */
 export function translateNow(key: MessageKey, params?: MessageParams): string {
-  const language =
-    useAppStore.getState().settings?.language ?? resolveLanguage("system", navigator.languages);
-  return translate(language, key, params);
+  return translate(languageNow(), key, params);
 }
 
 /** Returns `t(key, params)` for the current interface language. */

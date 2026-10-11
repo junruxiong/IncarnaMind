@@ -122,9 +122,8 @@ export function MoveToPicker({
         }
       }}
       onKeyDown={onKeyDown}
-      // A portal still hands React events to the row it is drawn from: not its drag and right-click.
+      // A portal still hands React events to the row it is drawn from: not its drag.
       onDragStart={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.stopPropagation()}
       className={`${menuClass} w-64`}
     >
       {open && (

@@ -10,6 +10,7 @@ import { DropOverlay, useFileDrop } from "./components/FileDrop";
 import { FileWriteDialog } from "./components/FileWriteDialog";
 import { MeetingNoticeDialog } from "./components/MeetingNoticeDialog";
 import { ChatSetupDialog } from "./components/providers/ChatSetupDialog";
+import { RequestedDialogs } from "./components/RequestedDialogs";
 import { ResizeRod } from "./components/ResizeRod";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -251,6 +252,7 @@ function Workspace() {
         <TabNoticeLine />
         <SettingsDialog />
         <TagsDialog />
+        <RequestedDialogs />
         <AddWebPageDialog />
         <ChatSetupDialog />
         <UsageDataDialog />

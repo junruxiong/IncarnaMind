@@ -1,24 +1,14 @@
-import type { Document } from "../../../core/api";
 import { files } from "../core";
 import { useAppStore } from "../store";
 import { useWebPages } from "../webPages";
 import type { Command, CommandContext } from "./registry";
+import { documentsOf, everyDocument } from "./targets";
 
-/** The web page Documents a command acts on: the selection, else the focus. */
-function webPagesOf(ctx: CommandContext): Document[] {
-  const refs = ctx.selection.length > 0 ? ctx.selection : ctx.focus ? [ctx.focus] : [];
-  const { documents } = useAppStore.getState();
-  return refs.flatMap((ref) => {
-    const document = documents.find((each) => each.id === ref.id);
-    return document?.web ? [document] : [];
-  });
-}
+/** The web page Documents a command acts on. */
+const webPagesOf = (ctx: CommandContext) => documentsOf(ctx).filter((document) => document.web);
 
 /** Only while every Document it acts on is a web page. */
-const onWebPages = (ctx: CommandContext) => {
-  const count = ctx.selection.length > 0 ? ctx.selection.length : ctx.focus ? 1 : 0;
-  return count > 0 && webPagesOf(ctx).length === count;
-};
+const onWebPages = (ctx: CommandContext) => everyDocument(ctx, (document) => !!document.web);
 
 const reportError = (error: unknown) => useAppStore.getState().reportError(error);
 
