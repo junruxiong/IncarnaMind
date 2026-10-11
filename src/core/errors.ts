@@ -44,6 +44,25 @@ export class ConsentDeclinedError extends Error {
   }
 }
 
+/** Thrown when the User didn't choose where new files go: nothing was saved. */
+export class FileWriteCancelledError extends Error {
+  override name = "FileWriteCancelledError";
+  constructor() {
+    super("You didn't choose where to save new files, so nothing was saved.");
+  }
+}
+
+/** Thrown when a new file would go inside a Linked folder the User said IncarnaMind may not add files to. */
+export class LinkedFolderWritesDeclinedError extends Error {
+  override name = "LinkedFolderWritesDeclinedError";
+  constructor(
+    readonly linkedFolderId: string,
+    readonly linkedFolderPath: string,
+  ) {
+    super("You said IncarnaMind may not add files to this Linked folder, so nothing was saved.");
+  }
+}
+
 /** Thrown when Questions can't be answered yet; `readiness` says what to configure. */
 export class ChatNotReadyError extends Error {
   override name = "ChatNotReadyError";
