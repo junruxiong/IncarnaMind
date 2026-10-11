@@ -3,8 +3,9 @@ name: Citation-style engine
 # The citation-style engine (ADR-0016) is built from wasm/citation-styles and committed as
 # resources/citation-styles/engine.wasm, so `npm ci` and the app's build need no Rust. When
 # either changes, this rebuilds it from source with the pinned toolchain and checks the result
-# is byte for byte the committed file.
+# is byte for byte the committed file. It can also be run by hand, to build the engine for a change.
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "wasm/citation-styles/**"
@@ -32,8 +33,9 @@ jobs:
       - run: sh wasm/citation-styles/build.sh --check
         env:
           CHECK_OUT: ${{ runner.temp }}/engine-check
+      # The file to commit after a change to the binding, as the check builds it on Linux.
       - name: Upload what was built
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: citation-engine-built
