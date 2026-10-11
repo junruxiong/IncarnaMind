@@ -1,21 +1,13 @@
 import { isMacOS } from "@tiptap/core";
-import { type ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
 import type { AudioSource, Meeting, MeetingSourceState } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
+import { shortcutLabel } from "../commands/keymap";
 import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
 import { PauseLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
-
-/** Pause and Resume (DESIGN.md, Names and shortcuts). */
-export const PAUSE_SHORTCUT = isMacOS() ? "⌘⇧P" : "Ctrl+Shift+P";
-
-const isPauseKey = (event: KeyboardEvent) =>
-  event.code === "KeyP" &&
-  event.shiftKey &&
-  !event.altKey &&
-  (isMacOS() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
 /**
  * The meeting bar, while the Mind's Meeting records or is paused: at the top
@@ -42,7 +34,8 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
 
 /**
  * The live-recording dot (red, the one red outside Citation checks; grey
- * while paused), "Recording 24:16" (or "Paused"), Pause or Resume (⌘⇧P) and Stop.
+ * while paused), "Recording 24:16" (or "Paused"), Pause or Resume and Stop.
+ * ⌘⇧P is the "meeting.pauseResume" command's (../commands/meetings).
  */
 function MeetingControls({ meeting }: { meeting: Meeting }) {
   const t = useT();
@@ -50,18 +43,7 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
   const { pause, resume, stop } = useMeetings.getState();
   const recording = meeting.status === "recording";
   const toggle = () => void (recording ? pause(meeting.id) : resume(meeting.id));
-
-  // ⌘⇧P anywhere in the window but a dialog, as long as the bar is shown.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !isPauseKey(event)) return;
-      if (document.querySelector("dialog[open]")) return;
-      event.preventDefault();
-      toggle();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
+  const shortcut = shortcutLabel("meeting.pauseResume");
 
   return (
     <div data-testid="meeting-controls" className="meeting-controls">
@@ -82,12 +64,8 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
       <button
         type="button"
         data-testid={recording ? "meeting-pause" : "meeting-resume"}
-        aria-label={t(recording ? "meetings.bar.pause" : "meetings.bar.resume", {
-          shortcut: PAUSE_SHORTCUT,
-        })}
-        title={t(recording ? "meetings.bar.pause" : "meetings.bar.resume", {
-          shortcut: PAUSE_SHORTCUT,
-        })}
+        aria-label={t(recording ? "meetings.bar.pause" : "meetings.bar.resume", { shortcut })}
+        title={t(recording ? "meetings.bar.pause" : "meetings.bar.resume", { shortcut })}
         onClick={toggle}
         className="meeting-button meeting-button--icon"
       >

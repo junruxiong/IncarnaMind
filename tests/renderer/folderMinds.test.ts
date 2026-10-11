@@ -20,6 +20,7 @@ import { hasSearchScope } from "../../src/shared/searchScope";
 const mind = (id: string, folderId: string | null, title = id): Mind => ({
   id,
   title,
+  autoTitle: "",
   kind: "mind",
   createdAt: "",
   updatedAt: "",

@@ -14,6 +14,7 @@ import {
   type CitedVersions,
   isCited,
 } from "./answers/citedVersions";
+import { createCiting } from "./answers/citing";
 import type {
   ChatModelChoice,
   CoreApi,
@@ -22,6 +23,7 @@ import type {
   ExportMindOptions,
   Mind,
   ProviderError,
+  SearchScope,
   Unsubscribe,
 } from "./api";
 import { createApprovals } from "./approvals";
@@ -61,6 +63,7 @@ import { documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+
 import {
   createMinds,
   parseCreateMindInput,
@@ -68,6 +71,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
+import { firstLineOf } from "./mindText";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -86,6 +90,12 @@ import {
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
 import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
+import {
+  createReferenceImport,
+  createReferences,
+  REFERENCE_LOOKUP_SENDS,
+  REFERENCE_SERVICE_URLS,
+} from "./referenceRecords";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -93,6 +103,7 @@ import { createSettings, isChatModelChoice } from "./settings";
 import { createSkills } from "./skills";
 import { createScriptRunner } from "./skills/scripts";
 import { migrate, openDatabase } from "./storage";
+import { createSuggestions } from "./suggestions";
 import { createTags } from "./tags";
 import { chatClassifier } from "./tags/classify";
 import { createJevTagging } from "./tags/jev";
@@ -212,7 +223,8 @@ export function createCore(adapters: CoreAdapters): Core {
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
-    if (minds.markEdited(mindId)) mindsChanged();
+    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+    if (minds.markEdited(mindId) || renamed) mindsChanged();
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
@@ -572,6 +584,24 @@ export function createCore(adapters: CoreAdapters): Core {
   // time, giving way to Answers.
   const background = createBackgroundQueue({ reportError: (error) => console.error(error) });
 
+  /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose. */
+  const searchDocuments = (
+    query: string,
+    documentIds: readonly string[] | null,
+    signal?: AbortSignal,
+  ) =>
+    documents.searchTool(query, {
+      signal,
+      rerank: adapters.reranker ?? rerank.active(),
+      documentIds: documentIds ?? undefined,
+    });
+  const resolveScope = (scope: SearchScope) =>
+    resolveSearchScope(scope, {
+      folderTree: (folderId) => folders.subtree(folderId),
+      organizedFolderDocuments: (folderId) => library.documentIds(folderId),
+      documentIds: (filter) => documents.ids(filter),
+    });
+
   const answers = createAnswers({
     content,
     events,
@@ -593,12 +623,7 @@ export function createCore(adapters: CoreAdapters): Core {
       searchableNames: (documentIds, limit) =>
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
-      search: (query, documentIds, signal) =>
-        documents.searchTool(query, {
-          signal,
-          rerank: adapters.reranker ?? rerank.active(),
-          documentIds: documentIds ?? undefined,
-        }),
+      search: searchDocuments,
       citationSource: (passageId) => documents.citationSource(passageId),
       pageTexts: (documentId, contentHash, from, to) =>
         documents.pageTexts(documentId, contentHash, from, to),
@@ -620,14 +645,35 @@ export function createCore(adapters: CoreAdapters): Core {
       availability: (name) => skills.availability(name),
       openSession: (forced) => skills.openSession(forced),
     },
-    resolveScope: (scope) =>
-      resolveSearchScope(scope, {
-        folderTree: (folderId) => folders.subtree(folderId),
-        organizedFolderDocuments: (folderId) => library.documentIds(folderId),
-        documentIds: (filter) => documents.ids(filter),
-      }),
+    resolveScope,
     emptyScopeAnswer: () => translate(settings.get().language, "scope.answer.empty"),
     onWritingChange: (writing) => background.setAnswering(writing),
+    reportError: (error) => console.error(error),
+  });
+
+  // Suggest as I write (#282): Passages found and quotes checked as Answers do (see ./answers/citing).
+  const citing = createCiting({
+    search: searchDocuments,
+    citationSource: (passageId) => documents.citationSource(passageId),
+    pageTexts: (documentId, contentHash, from, to) =>
+      documents.pageTexts(documentId, contentHash, from, to),
+  });
+  const suggestions = createSuggestions({
+    enabled: () => settings.get().user.suggestWhileWriting,
+    model: () => settings.get().user.chatModel,
+    chat,
+    consent,
+    citing,
+    requireMind: (mindId) => {
+      writableMind(mindId);
+    },
+    resolveScope,
+    searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
+    localOnly: () => embedding.localOnly(),
+    events,
+    readValue: (key) => settings.readDeviceValue(key),
+    writeValue: (key, value) => settings.writeDeviceValue(key, value),
+    now: () => adapters.now?.() ?? new Date(),
     reportError: (error) => console.error(error),
   });
 
@@ -810,6 +856,36 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
+
+  // Reference records (#286): read from files as they're processed, edited by the User, and
+  // filled by Look up, which sends a DOI or an arXiv id only, with consent, never in local mode.
+  const references = createReferences({
+    db,
+    now,
+    consent,
+    localOnly: () => embedding.localOnly(),
+    urls: { ...REFERENCE_SERVICE_URLS, ...adapters.referenceLookup },
+    document: (id) => documents.get(id),
+    changed: (list) => events.emit("references.changed", list),
+    signal: lifetime.signal,
+  });
+  // Importing references (#287) reads a file the User chose and sends nothing.
+  const referenceImport = createReferenceImport({
+    db,
+    now,
+    documents: () => documents.list({}),
+    document: (id) => documents.get(id),
+    addDocuments: (paths) => addDocuments(paths),
+    changed: (list) => events.emit("references.changed", list),
+    progress: (done, total) => events.emit("references.importProgress", { done, total }),
+  });
+  // Look up goes to Crossref or arXiv only when the User asks, so the flow goes nowhere until
+  // then; the Privacy page lists each service once the User has decided on it.
+  consent.registry.register({
+    id: "reference-lookup",
+    sends: REFERENCE_LOOKUP_SENDS,
+    services: async () => [],
+  });
 
   const recentlyDeleted = createRecentlyDeleted({
     db,
@@ -1023,6 +1099,16 @@ export function createCore(adapters: CoreAdapters): Core {
     log: adapters.log ?? silentLogger,
   });
 
+  const addDocuments: CoreApi["addDocuments"] = async (paths, options) => {
+    const batchId = batches.begin(library.target(options));
+    const since = now();
+    const result = await documents
+      .add(paths, (documentId) => batches.added(batchId, documentId))
+      .finally(() => batches.done(batchId));
+    usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
+    return { ...result, batchId };
+  };
+
   // Async on purpose: the renderer reaches these over IPC, and a future hosted core may be remote.
   return {
     createMind: async (input) => {
@@ -1078,7 +1164,16 @@ export function createCore(adapters: CoreAdapters): Core {
         throw new InvalidInputError("That chat provider doesn't exist.");
       }
       const scriptsWere = settings.get().device.skillScriptsEnabled;
-      const updated = settings.update(patch);
+      let change = patch;
+      // Suggestions turned on: the User allows what they send first. Declined, they stay as they were.
+      if (isRecord(patch) && isRecord(patch.user) && patch.user.suggestWhileWriting === true) {
+        if (!(await suggestions.allow())) {
+          const { suggestWhileWriting: _declined, ...user } = patch.user;
+          change = { ...patch, user };
+        }
+      }
+      const updated = settings.update(change);
+      if (!updated.user.suggestWhileWriting) suggestions.stop();
       events.emit("settings.changed", updated);
       // Skill scripts turned off: none runs any more, and none waits to.
       if (scriptsWere && !updated.device.skillScriptsEnabled) {
@@ -1089,15 +1184,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
-    addDocuments: async (paths, options) => {
-      const batchId = batches.begin(library.target(options));
-      const since = now();
-      const result = await documents
-        .add(paths, (documentId) => batches.added(batchId, documentId))
-        .finally(() => batches.done(batchId));
-      usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
-      return { ...result, batchId };
-    },
+    addDocuments,
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
         throw new InvalidInputError("There is no text to save.");
@@ -1148,6 +1235,17 @@ export function createCore(adapters: CoreAdapters): Core {
     listLinkedFolders: async () => documents.linkedFolders.list(),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
+    updateReference: async (documentId, patch) => references.update(documentId, patch),
+    restoreReference: async (documentId, before, fields) =>
+      references.restore(documentId, before, fields),
+    lookUpReference: (documentId) => references.lookUp(documentId),
+    importReferences: (path) => referenceImport.run(path),
+    undoReferenceImport: async (importId) => {
+      referenceImport.undo(importId);
+    },
+    addImportedReferenceFiles: (importId) => referenceImport.addFiles(importId),
+    listUnmatchedReferences: async () => referenceImport.unmatched(),
+    addReferenceFile: (recordId, path) => referenceImport.addFile(recordId, path),
     getExamples: async (group) => examples.status(group),
     offerExamples: async () => examples.offer(minds.list().length > 0),
     createExamples: async (group) => examples.create(group),
@@ -1221,6 +1319,10 @@ export function createCore(adapters: CoreAdapters): Core {
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) => answers.regenerate(input),
     stopAnswer: async (input) => answers.stop(input),
+    suggestNext: (request) => suggestions.suggest(request),
+    cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
+    acceptSuggestion: async (input) => suggestions.accept(input),
+    getSuggestionStatus: () => suggestions.status(),
 
     getSecretStorage: async () => secrets.status(),
     acceptPlainTextSecretStorage: async () => secrets.acceptPlainText(),
@@ -1556,6 +1658,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // Answers being written keep what they have, marked "stopped"; Tool calls waiting for
       // the User's approval are denied, and Skill scripts running are stopped.
       answers.stopAll();
+      suggestions.stop();
       scriptRunner.close();
       approvals.close();
       connectors.close();

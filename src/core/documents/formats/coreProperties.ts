@@ -1,7 +1,8 @@
 /**
  * The core properties of an Office package (.docx, .pptx, .xlsx): the part
- * the package's relationships name, usually docProps/core.xml. Only the
- * creation date is read (#53), never dcterms:modified.
+ * the package's relationships name, usually docProps/core.xml: its creation
+ * date (#53), never dcterms:modified, its title (#213), and its author and
+ * language for its reference record (#286).
  */
 import { child, elements, parseXml, textOf } from "./xml";
 import { openPackage, resolvePart } from "./zip";
@@ -19,10 +20,20 @@ const DEFAULT_PART = "docProps/core.xml";
 /** The core properties part is a few hundred bytes: more than this isn't one. */
 const MAX_BYTES = 1024 * 1024;
 
-/** The package's creation date (dcterms:created) and title (dc:title) as written, each null if absent. */
-export async function officeProperties(
-  bytes: Uint8Array,
-): Promise<{ created: string | null; title: string | null }> {
+/** What an Office package's core properties say, as written. */
+export interface OfficeProperties {
+  /** dcterms:created. */
+  created: string | null;
+  /** dc:title. */
+  title: string | null;
+  /** dc:creator: the author, as the person who made the file set it (or their computer did). */
+  creator: string | null;
+  /** dc:language. */
+  language: string | null;
+}
+
+/** The package's core properties as written, each null if absent. */
+export async function officeProperties(bytes: Uint8Array): Promise<OfficeProperties> {
   const zip = openPackage(bytes);
   const relsXml = await zip.readText("_rels/.rels", MAX_BYTES);
   const target = relsXml
@@ -30,12 +41,16 @@ export async function officeProperties(
         .Target
     : undefined;
   const xml = await zip.readText(target ? resolvePart("", target) : DEFAULT_PART, MAX_BYTES);
-  if (xml === undefined) return { created: null, title: null };
+  if (xml === undefined) return { created: null, title: null, creator: null, language: null };
   const root = parseXml(xml);
-  const created = child(root, "created");
-  const title = child(root, "title");
+  const property = (name: string) => {
+    const element = child(root, name);
+    return element ? textOf(element).trim() : null;
+  };
   return {
-    created: created ? textOf(created).trim() : null,
-    title: title ? textOf(title).trim() : null,
+    created: property("created"),
+    title: property("title"),
+    creator: property("creator"),
+    language: property("language"),
   };
 }

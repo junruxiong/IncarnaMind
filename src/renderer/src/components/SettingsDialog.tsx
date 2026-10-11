@@ -6,7 +6,6 @@ import { errorMessage } from "../errors";
 import { useT } from "../i18n";
 import { type SettingsPage, settingsPages } from "../settingsPages";
 import { recordUsage, useAppStore } from "../store";
-import { ApprovalsSettings } from "./ApprovalsSettings";
 import { ConnectorsSettings } from "./connectors/ConnectorsSettings";
 import { CloseLineIcon } from "./lineIcons";
 import { MeetingsSettings } from "./MeetingsSettings";
@@ -19,6 +18,7 @@ import { EmbeddingSettingsSection } from "./providers/EmbeddingSettings";
 import { JevSettingsSection } from "./providers/JevSettings";
 import { RerankSettingsSection } from "./providers/RerankSettings";
 import { SkillScriptsSettings, SkillsSettings } from "./SkillsSettings";
+import { SuggestionSettings } from "./SuggestionSettings";
 import {
   buttonClass,
   dialogFrameClass,
@@ -42,7 +42,6 @@ const pageLabels: Record<SettingsPage, MessageKey> = {
   models: "settings.pages.models",
   search: "settings.pages.search",
   meetings: "settings.pages.meetings",
-  tools: "settings.pages.tools",
   connectors: "connectors.settings.title",
   skills: "skills.settings.title",
   privacy: "privacy.tabs.privacy",
@@ -52,7 +51,7 @@ const REPOSITORY_URL = "https://github.com/junruxiong/IncarnaMind";
 
 /**
  * Settings, in a native modal <dialog>: a list of pages on the frame on the
- * left (General, Models, Search, Meetings, Tools, Connectors, Skills, Privacy), and the chosen page on the right under its serif title.
+ * left (General, Models, Search, Meetings, Connectors, Skills, Privacy; Memory joins when a setting lands on it), and the chosen page on the right under its serif title.
  */
 export function SettingsDialog() {
   const t = useT();
@@ -127,7 +126,7 @@ export function SettingsDialog() {
           {/*
            * Rendered only while open, so each opening loads fresh data. A page
            * stays rendered (hidden) once shown, so a form half filled in, or
-           * Tools unfolded, are still there after a look at another page.
+           * a Connector unfolded, are still there after a look at another page.
            */}
           <div className="relative min-h-0 flex-1">
             {visited.map((each) => (
@@ -153,6 +152,7 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <LanguageSettings />
+          <SuggestionSettings />
           <OutputLocationSettings />
           <DataFolderSettings />
           <AboutSettings />
@@ -184,14 +184,6 @@ function PageContent({ page }: { page: SettingsPage }) {
       return (
         <Page>
           <MeetingsSettings />
-        </Page>
-      );
-    case "tools":
-      return (
-        <Page>
-          <Titled title="approvals.settings.title">
-            <ApprovalsSettings />
-          </Titled>
         </Page>
       );
     case "connectors":

@@ -54,6 +54,11 @@ export interface LaunchOptions {
   /** A home folder for the app instead of the User's, so nothing it writes there is theirs. */
   home?: string;
   /**
+   * Where Look up asks Crossref and arXiv: a local server standing in for
+   * both (tests/helpers/referenceServices.ts). A test build honours it.
+   */
+  referenceLookup?: string;
+  /**
    * Leaves the window at the size and place it opened at, instead of making
    * it `WINDOW_SIZE`: for a test of how the window opens.
    */
@@ -90,6 +95,7 @@ export async function launchApp(
     usageData,
     examples = false,
     home,
+    referenceLookup,
     keepWindow = false,
     computerSound = "allowed",
   }: LaunchOptions = {},
@@ -105,6 +111,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_POSTHOG_HOST;
   delete env.INCARNAMIND_TEST_TESTER_BUILD;
   delete env.POSTHOG_CAPTURE_MODE;
+  delete env.INCARNAMIND_TEST_REFERENCE_LOOKUP;
   env.INCARNAMIND_TEST_AUDIO = "fake";
   env.INCARNAMIND_TEST_AUDIO_SYSTEM = computerSound;
   if (examples) env.INCARNAMIND_TEST_EXAMPLES = "1";
@@ -115,6 +122,7 @@ export async function launchApp(
     if (usageData.testerBuild) env.INCARNAMIND_TEST_TESTER_BUILD = "1";
   }
   if (home) env.HOME = home;
+  if (referenceLookup) env.INCARNAMIND_TEST_REFERENCE_LOOKUP = referenceLookup;
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
@@ -212,7 +220,6 @@ export type SettingsPage =
   | "models"
   | "search"
   | "meetings"
-  | "tools"
   | "connectors"
   | "skills"
   | "privacy";
@@ -646,6 +653,32 @@ export async function clickEmptyLine(line: Locator): Promise<void> {
       }),
     )
     .toBe(true);
+}
+
+/**
+ * Selects `words` in a line of text as a person does with the mouse: slides to
+ * the first letter, presses, slides along to the end of them and lets go.
+ */
+export async function slideSelect(window: Page, line: Locator, words: string): Promise<void> {
+  const box = await line.evaluate((element, wanted) => {
+    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = node.textContent?.indexOf(wanted) ?? -1;
+      if (at < 0) continue;
+      const range = element.ownerDocument.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + wanted.length);
+      const rect = range.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+    }
+    return null;
+  }, words);
+  if (!box) throw new Error(`"${words}" isn't in the line.`);
+  await window.mouse.move(box.left - 6, box.y, { steps: 4 });
+  await window.mouse.move(box.left + 1, box.y, { steps: 2 });
+  await window.mouse.down();
+  await window.mouse.move(box.right - 1, box.y, { steps: 12 });
+  await window.mouse.up();
 }
 
 /**

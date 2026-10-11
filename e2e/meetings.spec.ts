@@ -175,17 +175,39 @@ test("a meeting records from the + menu, after the one-time notice: the bar, ⌘
   }, file);
   await expect(window.getByTestId("reading-paused")).toBeVisible();
 
-  // ⌘⇧P (Ctrl+Shift+P) pauses and resumes, wherever the focus is.
-  await window.getByTestId("mind-title").focus();
+  // ⌘⇧P (Ctrl+Shift+P) is the "Pause recording" command, bound in the window's one keymap:
+  // it works while the User types in the meeting's notes, and types nothing there.
+  const notes = window.getByTestId("mind-editor");
+  await notes.click();
+  await window.keyboard.press("End");
+  await window.keyboard.type(" Next item");
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(bar).toHaveAttribute("data-status", "paused");
   await expect(bar).toContainText("Paused");
+  await expect(notes).toContainText("Next item");
+  await expect(notes).not.toContainText(/Next itemP/i);
   await expect(bar.getByTestId("meeting-dot")).not.toHaveCSS(
     "background-color",
     "rgb(180, 35, 24)",
   );
   await expect(window.getByTestId("meeting-resume")).toHaveAccessibleName(/Resume recording/);
   await shot(window, "meeting-paused-en");
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(bar).toHaveAttribute("data-status", "recording");
+
+  // From another Mind, the key pauses the meeting that records: its tab's dot turns grey.
+  // Resuming is for the meeting in view, so a paused meeting never starts from elsewhere.
+  const meetingTab = window.getByTestId("mind-tab").filter({ hasText: "Meeting" });
+  await window.keyboard.press("ControlOrMeta+KeyN");
+  await expect(window.getByTestId("mind-tab")).toHaveCount(2);
+  await expect(window.getByTestId("mind-title")).toBeFocused();
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  const tabDot = meetingTab.getByTestId("mind-tab-recording");
+  await expect(tabDot).toHaveAttribute("data-status", "paused");
+  await window.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(tabDot).toHaveAttribute("data-status", "paused");
+  await meetingTab.click();
+  await expect(bar).toHaveAttribute("data-status", "paused");
   await window.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(bar).toHaveAttribute("data-status", "recording");
 
