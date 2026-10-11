@@ -7,6 +7,7 @@ registerMenu("mind", [
   "mind.open",
   "mind.openSide",
   "mind.export",
+  "mind.citationStyle",
   "mind.moveTo",
   "mind.rename",
   "mind.delete",

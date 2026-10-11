@@ -109,12 +109,17 @@ describe("the menus", () => {
   });
 
   test("a Mind's is Open, Open to the side, Export, Move to, Rename, then Delete after a rule", () => {
-    const here = { "mind.moveTo": () => undefined, "mind.rename": () => undefined };
+    const here = {
+      "mind.citationStyle": () => undefined,
+      "mind.moveTo": () => undefined,
+      "mind.rename": () => undefined,
+    };
     expect(idsIn(buildMenu("mind", focusOn("mind", here)))).toEqual([
       "mind.open",
       "mind.openSide",
       "—",
       "mind.export",
+      "mind.citationStyle",
       "—",
       "mind.moveTo",
       "—",

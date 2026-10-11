@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
 import { mindName } from "../../../shared/naming";
+import { useCitationStylePicker } from "../citationStylePicker";
 import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
@@ -133,6 +134,15 @@ export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
           label={t("mind.more", { title })}
           here={{
             "mind.rename": () => setRenaming(true),
+            "mind.citationStyle": () =>
+              requestAnimationFrame(() =>
+                useCitationStylePicker
+                  .getState()
+                  .show(
+                    mind.id,
+                    row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null,
+                  ),
+              ),
             // Once the menu has closed and given the focus back, so the picker opens beside the button.
             "mind.moveTo": () =>
               requestAnimationFrame(() =>
