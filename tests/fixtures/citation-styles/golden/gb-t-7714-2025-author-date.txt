@@ -1,0 +1,71 @@
+# gb-t-7714-2025-author-date (china-national-standard-gb-t-7714-2025-author-date.csl)
+
+## Citations (34)
+
+1. （Shannon，1940）
+2. （Kahneman et al.，1979）
+3. （Jumper et al.，2021）
+4. （Vaswani et al.，2017）
+5. （van der Maaten et al.，2008）
+6. （Zhou，2018）
+7. （Kuhn，2012）
+8. （Tversky et al.，1982）
+9. （World Health Organization，2023）
+10. （Citation Style Language，[2026]）
+11. （Intergovernmental Panel on Climate Change，2023）
+12. （International Organization for Standardization，2021）
+13. （Anon，2016）
+14. （Anon，2023）
+15. （OECD，2019a）
+16. （OECD，2019b）
+17. （钱等，1990）
+18. （刘等，2016）
+19. （费，2012）
+20. （周，2016）
+21. （白，1998）
+22. （吴，2003）
+23. （贾等，2011）
+24. （中国互联网络信息中心，2012）
+25. （中华人民共和国国家质量监督检验检疫总局等，2015）
+26. （全国人民代表大会常务委员会，2021）
+27. （萧，2001）
+28. （丁，2000）
+29. （昂温等，1988）
+30. （中国力学学会，1990）
+31. （刘等，2016；Kahneman et al.，1979；Vaswani et al.，2017）
+32. （Kuhn，2012）
+33. （Kuhn，2012）
+34. （OECD，2019a；2019b）
+
+## Bibliography (30, hanging)
+
+- zh-unwin-1988: 昂温G，昂温P S，1988. 外国出版史[M]. 陈生铮，译. 北京：中国书籍出版社.
+- zh-bai-1998: 白书农，1998. 植物开花研究[M]//李承森. 植物科学进展. 北京：高等教育出版社：146-163.
+- zh-ding-2000: 丁文祥，2000. 数字革命与竞争国际化[N]. 中国青年报，2000-11-20（15）.
+- zh-fei-2012: 费孝通，2012. 乡土中国[M]. 北京：北京大学出版社.
+- zh-jia-2011: 贾东琴，柯平，2011. 面向数字素养的高校图书馆数字服务体系研究[C]//中国图书馆学会. 中国图书馆学会年会论文集：2011年卷. 北京：国家图书馆出版社：45-52.
+- zh-liu-2016: 刘知远，孙茂松，林衍凯，等，2016. 知识表示学习研究进展[J/OL]. 计算机研究与发展，53（2）：247-261. DOI:<a href="https://doi.org/10.7544/issn1000-1239.2016.20160020">10.7544/issn1000-1239.2016.20160020</a>.
+- zh-qian-1990: 钱学森，于景元，戴汝为，1990. 一个科学新领域——开放的复杂巨系统及其方法论[J]. 自然杂志，13（1）：3-10.
+- zh-pipl-2021: 全国人民代表大会常务委员会，2021. 中华人民共和国个人信息保护法[Z].
+- zh-wu-2003: 吴云芳，2003. 面向中文信息处理的现代汉语并列结构研究[D/OL]. 北京：北京大学. http://thesis.lib.pku.edu.cn/dlib/List.asp?lang=gb&amp;type=Reader&amp;DocGroupID=4&amp;DocID=6328.
+- zh-xiao-2001: 萧钰，2001. 出版业信息化迈入快车道[EB/OL]. （2001-12-19）[2002-04-15]. http://www.creader.com/news/20011219/200112190019.html.
+- en-gdpr-2016: Anon，2016. Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation)[EB/OL]//Official Journal of the European Union：v.L 119. http://data.europa.eu/eli/reg/2016/679/oj.
+- en-nature-2023: Anon，2023. Tools such as ChatGPT threaten transparent science; here are our ground rules for their use[J/OL]. Nature，613（7945）：612. DOI:<a href="https://doi.org/10.1038/d41586-023-00191-1">10.1038/d41586-023-00191-1</a>.
+- zh-cnnic-2012: 中国互联网络信息中心，2012. 第29次中国互联网络发展状况统计报告[R/OL]. 2012-01-16. http://www.cnnic.net.cn/hlwfzyj/hlwxzbg/201201/P020120709345264469680.pdf.
+- zh-mechanics-1990: 中国力学学会，1990. 第3届全国实验流体力学学术会议论文集[M]. 天津.
+- zh-gbt7714-2015: 中华人民共和国国家质量监督检验检疫总局，中国国家标准化管理委员会，2015. GB/T 7714—2015 信息与文献 参考文献著录规则[S].
+- zh-zhou-2016: 周志华，2016. 机器学习[M]. 北京：清华大学出版社.
+- en-csl-nd: Citation Style Language，[2026]. Citation Style Language 1.0.2 specification[EB/OL]. [2026-10-01]. https://docs.citationstyles.org/en/stable/specification.html.
+- en-ipcc-2023: Intergovernmental Panel on Climate Change，2023. Climate change 2023: Synthesis report[R/OL]. Geneva：IPCC. DOI:<a href="https://doi.org/10.59327/IPCC/AR6-9789291691647">10.59327/IPCC/AR6-9789291691647</a>.
+- en-iso-690: International Organization for Standardization，2021. ISO 690:2021 Information and documentation — Guidelines for bibliographic references and citations to information resources[S].
+- en-jumper-2021: Jumper J，Evans R，Pritzel A， et al.，2021. Highly accurate protein structure prediction with AlphaFold[J/OL]. Nature，596（7873）：583-589. DOI:<a href="https://doi.org/10.1038/s41586-021-03819-2">10.1038/s41586-021-03819-2</a>.
+- en-kahneman-1979: Kahneman D，Tversky A，1979. Prospect theory: An analysis of decision under risk[J/OL]. Econometrica，47（2）：263-291. DOI:<a href="https://doi.org/10.2307/1914185">10.2307/1914185</a>.
+- en-kuhn-2012: Kuhn T S，2012. The structure of scientific revolutions[M]. 4th ed. Chicago：University of Chicago Press.
+- en-oecd-2019a: OECD，2019a. OECD skills outlook 2019: Thriving in a digital world[M/OL]. Paris：OECD Publishing. DOI:<a href="https://doi.org/10.1787/df80bc12-en">10.1787/df80bc12-en</a>.
+- en-oecd-2019b: OECD，2019b. PISA 2018 results (Volume I): What students know and can do[M/OL]. Paris：OECD Publishing. DOI:<a href="https://doi.org/10.1787/5f07c754-en">10.1787/5f07c754-en</a>.
+- en-shannon-1940: Shannon C E，1940. An algebra for theoretical genetics[D/OL]. Cambridge, MA：Massachusetts Institute of Technology. http://hdl.handle.net/1721.1/11174.
+- en-tversky-1982: Tversky A，Kahneman D，1982. Judgment under uncertainty: Heuristics and biases[M/OL]//Kahneman D，Slovic P，Tversky A. Judgment under uncertainty: Heuristics and biases. Cambridge：Cambridge University Press：3-20. DOI:<a href="https://doi.org/10.1017/CBO9780511809477.002">10.1017/CBO9780511809477.002</a>.
+- en-vandermaaten-2008: van der Maaten L，Hinton G，2008. Visualizing data using t-SNE[J/OL]. Journal of Machine Learning Research，9（86）：2579-2605. http://jmlr.org/papers/v9/vandermaaten08a.html.
+- en-vaswani-2017: Vaswani A，Shazeer N，Parmar N， et al.，2017. Attention is all you need[C/OL]//Advances in Neural Information Processing Systems 30. Red Hook, NY：Curran Associates：5998-6008. https://papers.nips.cc/paper/7181-attention-is-all-you-need.
+- en-who-2023: World Health Organization，2023. Depression[EB/OL]. （2023-03-31）[2026-09-01]. https://www.who.int/news-room/fact-sheets/detail/depression.
+- en-zhou-2018: Zhou Z-H，2018. A brief introduction to weakly supervised learning[J/OL]. National Science Review，5（1）：44-53. DOI:<a href="https://doi.org/10.1093/nsr/nwx106">10.1093/nsr/nwx106</a>.

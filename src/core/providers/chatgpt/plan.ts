@@ -166,7 +166,7 @@ export function createChatGptPlan(options: {
     /**
      * Forgets what the experimental provider kept on this device: its tokens,
      * which belong to another app's sign-in and can't be used here, and its
-     * switch (migration 52 already kept or removed its providers by it).
+     * switch (migration 53 already kept or removed its providers by it).
      * Does nothing on a device that never had it.
      */
     async forgetCodexSignIn(): Promise<void> {
