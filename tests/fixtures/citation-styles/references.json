@@ -334,10 +334,7 @@
     "id": "zh-jia-2011",
     "type": "paper-conference",
     "language": "zh-CN",
-    "author": [
-      { "family": "贾", "given": "东琴" },
-      { "family": "柯", "given": "平" }
-    ],
+    "author": [{ "family": "贾", "given": "东琴" }, { "family": "柯", "given": "平" }],
     "editor": [{ "literal": "中国图书馆学会" }],
     "title": "面向数字素养的高校图书馆数字服务体系研究",
     "container-title": "中国图书馆学会年会论文集：2011年卷",
@@ -402,10 +399,7 @@
     "id": "zh-unwin-1988",
     "type": "book",
     "language": "zh-CN",
-    "author": [
-      { "family": "昂温", "given": "G" },
-      { "family": "昂温", "given": "P S" }
-    ],
+    "author": [{ "family": "昂温", "given": "G" }, { "family": "昂温", "given": "P S" }],
     "translator": [{ "family": "陈", "given": "生铮" }],
     "title": "外国出版史",
     "publisher": "中国书籍出版社",
