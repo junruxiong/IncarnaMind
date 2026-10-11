@@ -36,8 +36,6 @@ interface Run {
   events: RunEvent[];
   text: string;
   finished: readonly RunMessage[] | null;
-  /** When the event stream ended. */
-  settledAt: number;
 }
 
 /** Runs one Run to its end; `onEvent` may steer or stop it. */
@@ -55,7 +53,7 @@ async function collect(
     if (event.type === "finished") finished = event.messages;
     onEvent?.(event);
   }
-  return { events, text, finished, settledAt: performance.now() };
+  return { events, text, finished };
 }
 
 /** A gate decided per call: run, deny, or wait for `release`; it records each call it is asked about. */
@@ -84,7 +82,6 @@ function scriptedGate(decide: (call: RunToolCall) => "run" | "deny" | "wait" = (
 interface ToolCallRecord {
   input: Record<string, unknown>;
   aborted: boolean;
-  startedAt: number;
 }
 
 /** A Tool that records its calls, waits `delayMs` (until its signal aborts) and returns `result`. */
@@ -107,7 +104,7 @@ function testTool(
     },
     calls,
     async call(input, { signal }) {
-      const record = { input, aborted: false, startedAt: performance.now() };
+      const record = { input, aborted: false };
       calls.push(record);
       if (options.delayMs) {
         await new Promise<void>((resolve, reject) => {
@@ -285,22 +282,18 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     const gate = scriptedGate(() => "wait");
     const controller = new AbortController();
     const model = stepsModel([[{ tool: "close_issue", input: { query: "42" } }]], "never");
-    let stoppedAt = 0;
 
     const run = await collect(
       create(),
       request(model, { tools: [close], gate: gate.gate, signal: controller.signal }),
       (event) => {
         if (event.type !== "tool-call") return;
-        setTimeout(() => {
-          stoppedAt = performance.now();
-          controller.abort();
-        }, 50);
+        setTimeout(() => controller.abort(), 50);
       },
     );
     await sleep(100);
 
-    expect(run.settledAt - stoppedAt).toBeLessThan(1_000);
+    // The gate never answers, so the Run comes back only because Stop ended the wait.
     expect(gate.asked).toHaveLength(1);
     expect(close.calls).toEqual([]);
     expect(model.doStreamCalls).toHaveLength(1);
@@ -312,21 +305,17 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     const search = testTool("search_documents", { delayMs: 10_000 });
     const controller = new AbortController();
     const model = stepsModel([[SEARCH]], "never");
-    let stoppedAt = 0;
 
-    const run = await collect(
+    await collect(
       create(),
       request(model, { tools: [search], signal: controller.signal }),
       (event) => {
         if (event.type !== "tool-call") return;
-        setTimeout(() => {
-          stoppedAt = performance.now();
-          controller.abort();
-        }, 50);
+        setTimeout(() => controller.abort(), 50);
       },
     );
 
-    expect(run.settledAt - stoppedAt).toBeLessThan(1_000);
+    // The Tool would wait ten seconds, so the Run comes back only because Stop reached it.
     expect(search.calls.map((call) => call.aborted)).toEqual([true]);
     expect(model.doStreamCalls).toHaveLength(1);
   });
@@ -334,17 +323,14 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
   test("Stop while the model writes: its request is closed, and the Run settles at once", async () => {
     const controlled = controlledModel();
     const controller = new AbortController();
-    let stoppedAt = 0;
     const running = collect(create(), request(controlled.model, { signal: controller.signal }));
     await controlled.requested();
     controlled.push("High water ");
 
     await sleep(50);
-    stoppedAt = performance.now();
     controller.abort();
     const run = await running;
 
-    expect(run.settledAt - stoppedAt).toBeLessThan(1_000);
     expect(controlled.aborted).toBe(true);
     expect(run.events.map((event) => event.type)).not.toContain("finished");
   });

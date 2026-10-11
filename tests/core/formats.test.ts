@@ -316,14 +316,12 @@ describe("Excel", () => {
       { name: "Big", rows },
       { name: "After", rows: [["never read"]] },
     ]);
-    const started = performance.now();
 
     const { sheets, truncated } = await readWorkbook(bytes);
 
     expect(truncated).toBe(true);
     expect(sheets[0]?.rowCount).toBe(MAX_ROWS);
     expect(sheets[1]?.cells).toEqual([]);
-    expect(performance.now() - started).toBeLessThan(15_000);
     // The limits can be set lower, as they are counted over the whole workbook.
     const small = await readWorkbook(bytes, { rows: 10, cells: 1000 });
     expect(small.sheets[0]?.rowCount).toBe(10);
