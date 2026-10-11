@@ -73,6 +73,15 @@ export interface OpenReranker {
   close(): void;
 }
 
+/** An open reranker that also gives the model's scores, for the dumps (./dumps). */
+export interface ScoringReranker extends OpenReranker {
+  /** The Passages in the model's order, each with its score from 0 to 1. */
+  rerankScored(
+    query: string,
+    passages: readonly PassageSearchResult[],
+  ): Promise<(PassageSearchResult & { score: number })[]>;
+}
+
 const quantile = (sorted: readonly number[], share: number) =>
   sorted[Math.min(sorted.length - 1, Math.ceil(share * sorted.length) - 1)] ?? 0;
 
@@ -99,7 +108,7 @@ export async function openReranker(
   cacheDir: string,
   log: Log,
   mode = `rerank:${definition.id}`,
-): Promise<OpenReranker> {
+): Promise<ScoringReranker> {
   let lastLogged = 0;
   const ready = Promise.withResolvers<void>();
   const model = createRerankingModel({
@@ -135,16 +144,21 @@ export async function openReranker(
 
   let loadSeconds = 0;
   const latencies: number[] = [];
+  const rerankScored: ScoringReranker["rerankScored"] = async (query, passages) => {
+    const started = performance.now();
+    const ranked = await model.rerank(query, passages);
+    const ms = performance.now() - started;
+    // The first call loads the model.
+    if (loadSeconds === 0) loadSeconds = ms / 1000;
+    else latencies.push(ms);
+    if (!ranked) throw new Error(`${definition.name} isn't ready.`);
+    return ranked;
+  };
   return {
     mode,
+    rerankScored,
     async rerank(query, passages) {
-      const started = performance.now();
-      const ranked = await model.rerank(query, passages);
-      const ms = performance.now() - started;
-      // The first call loads the model.
-      if (loadSeconds === 0) loadSeconds = ms / 1000;
-      else latencies.push(ms);
-      if (!ranked) throw new Error(`${definition.name} isn't ready.`);
+      const ranked = await rerankScored(query, passages);
       return ranked.map(({ score: _score, ...passage }) => passage);
     },
     info() {
