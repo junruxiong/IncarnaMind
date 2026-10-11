@@ -1,3 +1,4 @@
+import { blockMenuOpeners } from "../editor/blockMenuOpeners";
 import { noteHolding } from "../editor/noteKeymap";
 import { useFindSources } from "../findSources";
 import { useReferenceImport } from "../referenceImport";
@@ -12,6 +13,12 @@ import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
 import { webPageCommands } from "./webPages";
+
+/** What opens the menu of the Block with this ID, if its Mind is open. */
+function blockMenuFor(blockId: string) {
+  const editor = noteHolding(blockId);
+  return (editor && blockMenuOpeners.get(editor)) ?? null;
+}
 
 const appCommands: readonly Command[] = [
   {
@@ -98,6 +105,19 @@ const appCommands: readonly Command[] = [
     run(ctx) {
       // The Blocks the note's selection touches, the focused one among them.
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
+    },
+  },
+  {
+    // The keyboard's twin of clicking the Block handle.
+    id: "block.menu",
+    label: "editor.block.menu",
+    shortcut: { keys: "CmdOrCtrl+Alt+M" },
+    group: "main",
+    appliesTo: ["block"],
+    reversible: true,
+    when: (ctx) => ctx.focus?.kind === "block" && blockMenuFor(ctx.focus.id) !== null,
+    run(ctx) {
+      if (ctx.focus?.kind === "block") blockMenuFor(ctx.focus.id)?.(ctx.focus.id);
     },
   },
   ...footnoteCommands,

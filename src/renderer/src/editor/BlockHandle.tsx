@@ -4,11 +4,12 @@ import { NodeRangeSelection } from "@tiptap/extension-node-range";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
-import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES, QUESTION_BLOCK } from "../../../core/api";
+import { INCLUDE_IN_CONTEXT_ATTRIBUTE, NOTE_BLOCK_TYPES } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { CheckIcon, GripIcon, TrashIcon } from "../components/icons";
 import { useT } from "../i18n";
 import { findBlock, questionWithAnswer } from "./blockCommands";
+import { blockMenuOpeners } from "./blockMenuOpeners";
 import { BLOCK_ID_ATTRIBUTE } from "./noteSchema";
 import { Popover } from "./Popover";
 
@@ -29,9 +30,9 @@ function firstTextPos(node: ProseMirrorNode, pos: number): number | null {
 
 /**
  * Where the handle goes: in the left margin, a fixed gap left of the Mind's
- * text edge (the CSS sets `--handle-gap`, wider for a Question, whose band
- * and Ask button take the margin), level with the Block's first line of text.
- * An Answer's first line is its first paragraph, under the "Answer" label.
+ * text edge (the CSS sets `--handle-gap`), level with the Block's first line
+ * of text. A Question's fold chevron takes the 20px beside the text, so the
+ * handle's place is clear of it (styles.css, `.mind-editor`).
  */
 function handleAnchor(
   editor: Editor,
@@ -43,9 +44,7 @@ function handleAnchor(
     contextElement: view.dom,
     getBoundingClientRect: () => {
       const style = getComputedStyle(view.dom);
-      const gapName =
-        block.node.type.name === QUESTION_BLOCK ? "--handle-gap-question" : "--handle-gap";
-      const gap = Number.parseFloat(style.getPropertyValue(gapName)) || 0;
+      const gap = Number.parseFloat(style.getPropertyValue("--handle-gap")) || 0;
       // The text edge: the editor's box reaches over the margin (styles.css, `--editor-gutter`).
       const edge = view.dom.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft);
       const x = edge - gap;
@@ -70,6 +69,8 @@ const isNote = (node: ProseMirrorNode) =>
 
 /** The Block whose menu is open: its ID, where it was when the menu opened, and what it is. */
 interface MenuTarget {
+  /** What the menu sits next to: the handle, or the Block's own spot when the keyboard opened it. */
+  anchor: Element | VirtualElement;
   id: unknown;
   pos: number;
   /** Null for Blocks that aren't Notes (Questions, Answers), which have no context flag. */
@@ -133,11 +134,13 @@ export function BlockHandle({ editor }: { editor: Editor }) {
       editor.view.dispatch(editor.state.tr.setMeta("lockDragHandle", locked));
   };
 
-  const openMenu = () => {
-    const block = hovered.current;
-    if (!block) return;
+  const openMenuFor = (
+    block: { node: ProseMirrorNode; pos: number },
+    anchor: MenuTarget["anchor"],
+  ) => {
     lockHandle(true);
     setMenuFor({
+      anchor,
       id: block.node.attrs[BLOCK_ID_ATTRIBUTE],
       pos: block.pos,
       included: isNote(block.node)
@@ -145,6 +148,22 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         : null,
     });
   };
+
+  const openMenu = () => {
+    const block = hovered.current;
+    if (block && grip.current) openMenuFor(block, grip.current);
+  };
+
+  // The keyboard's way in (the "block.menu" command): the handle shows only under the mouse.
+  useEffect(() => {
+    blockMenuOpeners.set(editor, (id) => {
+      const found = findBlock(editor.state.doc, id);
+      if (found) openMenuFor(found, handleAnchor(editor, found) ?? editor.view.dom);
+    });
+    return () => {
+      blockMenuOpeners.delete(editor);
+    };
+  });
 
   const closeMenu = (refocus: boolean) => {
     setMenuFor(null);
@@ -188,6 +207,11 @@ export function BlockHandle({ editor }: { editor: Editor }) {
         getReferencedVirtualElement={() => handleAnchor(editor, hovered.current)}
         onNodeChange={({ node, pos }) => {
           hovered.current = node ? { node, pos } : null;
+          // A Question's spark gives its place to the handle while the handle is on it (styles.css).
+          for (const shown of editor.view.dom.querySelectorAll("[data-handle-on]"))
+            shown.removeAttribute("data-handle-on");
+          const dom = node ? editor.view.nodeDOM(pos) : null;
+          if (dom instanceof Element) dom.setAttribute("data-handle-on", "");
         }}
       >
         <button
@@ -203,9 +227,9 @@ export function BlockHandle({ editor }: { editor: Editor }) {
           <GripIcon className="size-4" />
         </button>
       </DragHandle>
-      {menuFor && grip.current && (
+      {menuFor && (
         <BlockMenu
-          anchor={grip.current}
+          anchor={menuFor.anchor}
           included={menuFor.included}
           onDelete={deleteBlock}
           onToggleContext={toggleContext}
@@ -223,7 +247,7 @@ function BlockMenu({
   onToggleContext,
   onClose,
 }: {
-  anchor: Element;
+  anchor: Element | VirtualElement;
   /** The Note's context flag, or null when the Block isn't a Note. */
   included: boolean | null;
   onDelete(): void;

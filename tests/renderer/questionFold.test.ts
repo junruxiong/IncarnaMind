@@ -4,11 +4,7 @@ import type { DecorationSet } from "@tiptap/pm/view";
 import { describe, expect, test } from "vitest";
 import { ANSWER_BLOCK, QUESTION_BLOCK } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
-import {
-  foldToggled,
-  isFolded,
-  questionFoldPlugin,
-} from "../../src/renderer/src/editor/questionFold";
+import { foldToggled, questionFoldPlugin } from "../../src/renderer/src/editor/questionFold";
 import { sentencesEnd, spokenText } from "../../src/renderer/src/editor/spokenText";
 
 const schema = getSchema(noteExtensions());
@@ -37,7 +33,7 @@ function folded(state: EditorState): string[] {
   const set = plugin?.props.decorations?.call(plugin, state) as DecorationSet | null | undefined;
   return (set?.find() ?? []).map((decoration) => {
     const node = state.doc.nodeAt(decoration.from);
-    return `${node?.type.name}: ${isFolded([decoration]) ? "folded" : "hidden"}`;
+    return `${node?.type.name}: ${(decoration.spec as { folded?: unknown }).folded !== undefined ? "folded" : "hidden"}`;
   });
 }
 
