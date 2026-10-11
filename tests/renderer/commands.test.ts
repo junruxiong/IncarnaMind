@@ -138,8 +138,8 @@ describe("shortcuts", () => {
       for (const command of all) {
         if (!command.shortcut || command.shortcut.list) continue;
         const form = keysForm(keysOn(command.shortcut.keys, mac), mac);
-        // A plain key, or one with Shift, types.
-        expect(/(meta|ctrl|alt)\+/.test(form), command.id).toBe(true);
+        // A plain key, or one with Shift, types; a function key doesn't.
+        expect(/(meta|ctrl|alt)\+|(^|\+)f\d+$/i.test(form), command.id).toBe(true);
         // Undo and Redo take the keys of text only where the focus isn't in text.
         if (command.shortcut.outsideText) {
           expect(command.appliesTo, command.id).toBeUndefined();

@@ -11,6 +11,7 @@ import {
   launchApp,
   linkedFolderRow,
   linkFolderFromSidebar,
+  motionSettled,
   newMind,
   removeDataFolder,
   setWindowSize,
@@ -92,14 +93,9 @@ async function sameFromBothWays(
   const byRightClick = await commandsIn(menu);
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
-  await expect(button).toHaveAttribute("aria-expanded", "false");
   await slideTo(window, hit);
   await row.hover();
-  // A click that lands while the first menu is still leaving doesn't open a second: click again.
-  await expect(async () => {
-    if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
-    await expect(menu).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 10_000 });
+  await button.click();
   const byButton = await commandsIn(menu);
   expect(byButton).toEqual(byRightClick);
   await window.keyboard.press("Escape");
@@ -158,6 +154,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "mind.delete",
   ]);
   await rightClick(window, mind.getByTestId("mind-list-item"));
+  await commandsIn(mind.getByTestId("mind-actions"));
   await screenshot(window, "menu-mind");
   await window.keyboard.press("Escape");
 
@@ -187,6 +184,7 @@ test("a right-click opens the menu the ⋯ button opens, for a Mind, a Document,
     "document.delete",
   ]);
   await rightClick(window, document.getByTestId("open-document"));
+  await commandsIn(document.getByTestId("document-file-actions"));
   await screenshot(window, "menu-document");
   await window.keyboard.press("Escape");
 
@@ -387,11 +385,11 @@ test("a right-click opens the menu at the pointer, the ⋯ at its button, and th
   const mind = window.getByTestId("mind-row").first();
   const menu = mind.getByTestId("mind-actions");
   const nearBy = async (point: { x: number; y: number }) => {
+    await motionSettled(window);
     const box = await menu.boundingBox();
     if (!box) throw new Error("The menu isn't laid out.");
-    expect(Math.abs(box.x - point.x)).toBeLessThan(16);
-    expect(box.y).toBeGreaterThanOrEqual(point.y - 2);
-    expect(box.y).toBeLessThan(point.y + 16);
+    expect(Math.abs(point.x - box.x)).toBeLessThan(4);
+    expect(Math.abs(point.y - box.y)).toBeLessThan(4);
   };
 
   const point = await rightClick(window, mind.getByTestId("mind-list-item"));
@@ -404,6 +402,7 @@ test("a right-click opens the menu at the pointer, the ⋯ at its button, and th
   await mind.hover();
   const button = mind.getByTestId("mind-menu");
   await button.click();
+  await motionSettled(window);
   const buttonBox = await button.boundingBox();
   const menuBox = await menu.boundingBox();
   if (!buttonBox || !menuBox) throw new Error("Not laid out.");
@@ -413,6 +412,7 @@ test("a right-click opens the menu at the pointer, the ⋯ at its button, and th
   // The keyboard opens it at the focused row.
   await mind.getByTestId("mind-list-item").focus();
   await window.keyboard.press("Shift+F10");
+  await motionSettled(window);
   const rowBox = await mind.boundingBox();
   const keyedBox = await menu.boundingBox();
   if (!rowBox || !keyedBox) throw new Error("Not laid out.");
@@ -458,5 +458,46 @@ test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and D
   await rightClick(window, tag.getByTestId("row-text"));
   await tag.getByTestId("tag.delete").click();
   await expect(dialog.getByTestId("confirm-delete-tag")).toBeVisible();
+  await app.close();
+});
+
+test("a menu opens at once while another is closing, and a right-click on another row replaces the open menu", async () => {
+  const { app, window } = await launchApp(dataDir);
+  await dismissChatSetup(window);
+  await newMind(window);
+  await newMind(window);
+  const [first, second] = [
+    window.getByTestId("mind-row").nth(0),
+    window.getByTestId("mind-row").nth(1),
+  ];
+  const firstMenu = first.getByTestId("mind-actions");
+  const secondMenu = second.getByTestId("mind-actions");
+
+  // Esc, then at once a right-click on another row: the new menu opens, the old one is gone.
+  await rightClick(window, first.getByTestId("mind-list-item"));
+  await expect(firstMenu).toBeVisible();
+  await window.keyboard.press("Escape");
+  await rightClick(window, second.getByTestId("mind-list-item"));
+  await expect(secondMenu).toBeVisible();
+  await expect(firstMenu).toBeHidden();
+
+  // With no Esc, a right-click on the row above dismisses it and opens that row's menu at once.
+  await rightClick(window, first.getByTestId("mind-list-item"));
+  await expect(firstMenu).toBeVisible();
+  await expect(secondMenu).toBeHidden();
+
+  // Esc, then at once the ⋯ of the other row: one click opens it, though the first is still leaving.
+  await window.keyboard.press("Escape");
+  await second.hover();
+  await second.getByTestId("mind-menu").click();
+  await expect(secondMenu).toBeVisible();
+  await expect(firstMenu).toBeHidden();
+
+  // Esc, then at once Shift+F10 on the other row.
+  await window.keyboard.press("Escape");
+  await first.getByTestId("mind-list-item").focus();
+  await window.keyboard.press("Shift+F10");
+  await expect(firstMenu).toBeVisible();
+  await expect(secondMenu).toBeHidden();
   await app.close();
 });
