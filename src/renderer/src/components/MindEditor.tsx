@@ -244,13 +244,19 @@ function MindEditorView({
   }, [editor, label, emptyFormula]);
 
   // The cursor is where the next Question goes while the focus is in the editor, or has gone
-  // from it only to the composer; anywhere else, Questions go at the end of the Mind.
+  // from it only to the composer; anywhere else, Questions go at the end of the Mind. A dialog
+  // that asks something on the way (consent to send, say) gives the focus back: it doesn't count.
   useEffect(() => {
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (editor.view.dom.contains(target)) cursorInMind.current = true;
-      else if (!dock?.contains(target)) cursorInMind.current = false;
+      else if (
+        !dock?.contains(target) &&
+        !(target instanceof Element && target.closest("dialog"))
+      ) {
+        cursorInMind.current = false;
+      }
     };
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
