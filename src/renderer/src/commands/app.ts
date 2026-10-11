@@ -1,7 +1,8 @@
 import { noteHolding } from "../editor/noteKeymap";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
-import { composerHandle, sidebarHandle } from "./handles";
+import { assistantCommands } from "./assistant";
+import { sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
 import { tabCommands } from "./tabs";
@@ -29,15 +30,7 @@ const appCommands: readonly Command[] = [
     when: () => sidebarHandle.current !== null,
     run: () => sidebarHandle.current?.toggle(),
   },
-  {
-    id: "composer.focus",
-    label: "command.composer.focus",
-    shortcut: { keys: "CmdOrCtrl+J" },
-    group: "main",
-    reversible: true,
-    when: () => composerHandle.current !== null,
-    run: () => composerHandle.current?.focus(),
-  },
+  ...assistantCommands,
   {
     id: "references.import",
     label: "references.import.menu",

@@ -268,15 +268,17 @@ function MindEditorView({
   }, [editor, label, emptyFormula]);
 
   // The cursor is where the next Question goes while the focus is in the editor, or has gone
-  // from it only to the composer; anywhere else, Questions go at the end of the Mind. A dialog
-  // that asks something on the way (consent to send, say) gives the focus back: it doesn't count.
+  // from it only to the assistant the composer is in (its menus, its header); anywhere else,
+  // Questions go at the end of the Mind. A dialog that asks something on the way (consent to
+  // send, say) gives the focus back: it doesn't count.
   useEffect(() => {
+    const assistant = dock?.closest("[data-assistant]") ?? dock;
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (editor.view.dom.contains(target)) cursorInMind.current = true;
       else if (
-        !dock?.contains(target) &&
+        !assistant?.contains(target) &&
         !(target instanceof Element && target.closest("dialog"))
       ) {
         cursorInMind.current = false;

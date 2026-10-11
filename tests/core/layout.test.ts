@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   DATABASE_FILE,
+  DEFAULT_ASSISTANT,
   InvalidInputError,
   type LayoutChange,
   NotFoundError,
@@ -438,6 +439,8 @@ describe("Tabs and groups", () => {
     expect(describeLayout(layout, { [alpha.id]: "Alpha", [beta.id]: "Beta" })).toEqual([
       "Library Alpha *Beta",
     ]);
+    // Kept before there was an assistant: it starts where a new window's does.
+    expect(layout.assistant).toEqual(DEFAULT_ASSISTANT);
   });
 
   test("resize and equalize keep the widths shares of 1; bad input is refused", async () => {
@@ -466,6 +469,44 @@ describe("Tabs and groups", () => {
     ]) {
       await expect(change(bad as unknown as LayoutChange)).rejects.toThrow(InvalidInputError);
     }
+  });
+
+  test("the assistant starts docked on the right; its place, sizes and fold survive a restart, and bad input is refused", async () => {
+    const { core, dataDir, change } = await setUp();
+    expect((await core.getLayout(WINDOW)).assistant).toEqual(DEFAULT_ASSISTANT);
+    expect(DEFAULT_ASSISTANT).toMatchObject({ dock: "right", folded: false, width: 360 });
+
+    // What is given changes; the rest stays.
+    let layout = await change({ type: "assistant", place: { dock: "left", width: 412.4 } });
+    expect(layout.assistant).toEqual({ ...DEFAULT_ASSISTANT, dock: "left", width: 412 });
+    const float = { width: 400, height: 300, corner: "bottom-left", x: 40, y: 32 } as const;
+    layout = await change({ type: "assistant", place: { dock: "float", float, folded: true } });
+    expect(layout.assistant).toMatchObject({ dock: "float", folded: true, width: 412, float });
+    await change({ type: "assistant", place: { height: 240 } });
+    core.close();
+
+    const restarted = startCore(dataDir);
+    expect((await restarted.getLayout(WINDOW)).assistant).toEqual({
+      dock: "float",
+      folded: true,
+      width: 412,
+      height: 240,
+      float,
+    });
+    for (const place of [
+      { dock: "top" },
+      { folded: "yes" },
+      { width: 0 },
+      { height: Number.POSITIVE_INFINITY },
+      { float: { width: 300, height: 200, corner: "middle", x: 0, y: 0 } },
+      { float: { width: 300, height: 200, corner: "top-left", x: -5, y: 0 } },
+    ]) {
+      await expect(
+        restarted.changeLayout(WINDOW, { type: "assistant", place } as unknown as LayoutChange),
+      ).rejects.toThrow(InvalidInputError);
+    }
+    // Refused changes leave it as it was.
+    expect((await restarted.getLayout(WINDOW)).assistant.dock).toBe("float");
   });
 
   test("each window keeps its own layout, and a window is named by a short ID", async () => {

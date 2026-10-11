@@ -10,7 +10,6 @@ import {
   useId,
   useImperativeHandle,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -19,7 +18,6 @@ import type { SearchScope } from "../../../core/api";
 import { mindModelOf } from "../../../shared/mindModel";
 import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
-import { composerHandle, useHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon } from "../components/icons";
 import { ProblemLine } from "../components/ProblemLine";
@@ -95,8 +93,9 @@ export interface ComposerHandle {
 }
 
 /**
- * The one input at the foot of the Mind (DESIGN.md, Composer): "Ask, or say
- * what to change…". ⌘J focuses it from anywhere in the window; Enter asks
+ * The one input, at the foot of the assistant (DESIGN.md, Composer; #253),
+ * for the Mind the assistant reads: "Ask, or say what to change…". ⌘J
+ * focuses it from anywhere in the window, unfolding the assistant; Enter asks
  * (Shift+Enter breaks the line); Esc closes its picker, or goes back to the
  * note. Asking puts the Question into the note as one grey line, at the cursor
  * (`cursorInMind`) or at the end of the Mind, and its Answer streams in below.
@@ -223,44 +222,37 @@ export function Composer({
     return { kind, query, from, to: at };
   };
 
-  const focus = (end = true) => {
-    const element = field.current;
-    if (!element) return;
-    element.focus();
-    if (end) element.setSelectionRange(element.value.length, element.value.length);
-  };
-
   useImperativeHandle(ref, () => ({
     focus(given) {
       if (given) updateScope(given);
       cursorInMind.current = false;
-      focus();
+      useComposer.getState().requestFocus();
     },
   }));
 
-  // ⌘J, anywhere in the window but a dialog ("composer.focus"): the composer takes the focus.
-  const handle = useMemo(
-    () => ({
-      focus() {
-        const element = field.current;
-        if (element && document.activeElement !== element) {
-          element.focus();
-          element.setSelectionRange(element.value.length, element.value.length);
-        }
-      },
-    }),
-    [],
-  );
-  useHandle(composerHandle, handle);
-
-  // Asked from elsewhere, e.g. a Skill chosen in the note's slash menu.
-  const focusRequests = useComposer((state) => state.focusRequests);
-  const seenRequests = useRef(focusRequests);
+  // Asked for from elsewhere: ⌘J anywhere in the window but a dialog ("composer.focus"), a
+  // Skill chosen in the note's slash menu. Taken once the field is on screen: the assistant
+  // it sits in unfolds for it first.
+  const focusWanted = useComposer((state) => state.focusWanted);
   useEffect(() => {
-    if (focusRequests === seenRequests.current) return;
-    seenRequests.current = focusRequests;
-    field.current?.focus();
-  }, [focusRequests]);
+    const element = field.current;
+    if (!focusWanted || !element) return;
+    const take = () => {
+      if (element.getClientRects().length === 0) return false;
+      if (document.activeElement !== element) {
+        element.focus();
+        element.setSelectionRange(element.value.length, element.value.length);
+      }
+      useComposer.getState().focusTaken();
+      return true;
+    };
+    if (take()) return;
+    const observer = new ResizeObserver(() => {
+      if (take()) observer.disconnect();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [focusWanted]);
 
   const onChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const text = event.target.value;
