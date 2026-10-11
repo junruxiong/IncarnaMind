@@ -3790,6 +3790,26 @@
     max-width: 90vw;
     padding: 8px;
   }
+  /* Where a link goes, with Open, Edit and Remove: the address gives way to the buttons. */
+  .link-bubble {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    max-width: min(460px, 92vw);
+    .link-bubble-address {
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      padding: 0 8px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--color-ink-secondary);
+    }
+    .selection-format {
+      flex: none;
+      padding: 0 8px;
+    }
+  }
 
   /* The handle left of the Block under the mouse: drag it to move the Block, click it for its menu. */
   .block-handle > button {

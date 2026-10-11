@@ -2,12 +2,15 @@ import { expect, test } from "@playwright/test";
 import {
   createDataFolder,
   dismissChatSetup,
+  interceptOpenExternal,
   launchApp,
   newMind,
   pointAndClick,
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  slideSelect,
+  urlsOpened,
 } from "./app";
 
 /*
@@ -40,7 +43,7 @@ async function startMind(language: "en" | "zh-CN" = "en", width = 1280) {
 const BLOCKS = [
   { id: "bulleted-list", selector: "ul > li > p", typed: "bullet" },
   { id: "numbered-list", selector: "ol > li > p", typed: "numbered" },
-  { id: "checklist", selector: 'ul:has(> li[data-checked]) > li > div > p', typed: "check" },
+  { id: "checklist", selector: "ul:has(> li[data-checked]) > li > div > p", typed: "check" },
   { id: "quote", selector: "blockquote > p", typed: "quote" },
 ] as const;
 
@@ -75,7 +78,7 @@ test('"/" offers lists, a checklist, a quote and a divider, chosen by keyboard o
   await window.keyboard.type("/check");
   await window.keyboard.press("Enter");
   await window.keyboard.type("Buy milk");
-  const box = editor.locator('li[data-checked] input').last();
+  const box = editor.locator("li[data-checked] input").last();
   await box.hover();
   await box.click();
   await expect(editor.locator('li[data-checked="true"]')).toHaveCount(1);
@@ -112,5 +115,86 @@ test('"/" finds the new items by their Chinese names', async () => {
   }
   await window.keyboard.type("/待办");
   await window.keyboard.press("Enter");
-  await expect(editor.locator('ul:has(> li[data-checked])')).toHaveCount(1);
+  await expect(editor.locator("ul:has(> li[data-checked])")).toHaveCount(1);
+});
+
+test("a link: added with the button or ⌘K on a selection, edited, opened and removed in place, each undone", async () => {
+  const { app, window, editor } = await startMind();
+  await interceptOpenExternal(app);
+  await window.keyboard.type("Read the Tides paper today and the Moon one tomorrow");
+  const line = editor.locator("p").first();
+  const menu = window.getByTestId("selection-menu");
+  const field = window.getByTestId("link-field");
+
+  // ⌘K on a selection opens the address field; Enter makes the link.
+  await slideSelect(window, line, "Tides paper");
+  await expect(menu).toBeVisible();
+  await window.keyboard.press("ControlOrMeta+K");
+  await expect(field).toBeFocused();
+  await window.keyboard.type("example.com/tides");
+  await window.keyboard.press("Enter");
+  await expect(line.locator("a")).toHaveText("Tides paper");
+  await expect(line.locator("a")).toHaveAttribute("href", "https://example.com/tides");
+  // Undo takes the link back as one step.
+  await window.keyboard.press("ControlOrMeta+Z");
+  await expect(line.locator("a")).toHaveCount(0);
+  await expect(line).toHaveText("Read the Tides paper today and the Moon one tomorrow");
+
+  // The selection menu's link button does the same, by mouse.
+  await slideSelect(window, line, "Moon one");
+  await expect(menu).toBeVisible();
+  await window.getByTestId("format-link").hover();
+  await window.getByTestId("format-link").click();
+  await expect(field).toBeFocused();
+  await window.keyboard.type("https://example.com/moon");
+  await window.keyboard.press("Enter");
+  const link = line.locator("a");
+  await expect(link).toHaveAttribute("href", "https://example.com/moon");
+
+  // A click in the link shows where it goes, without leaving the page.
+  await link.hover();
+  await link.click();
+  const bubble = window.getByTestId("link-bubble-address");
+  await expect(bubble).toHaveText("https://example.com/moon");
+  await window.getByTestId("link-open").hover();
+  await window.getByTestId("link-open").click();
+  await expect.poll(() => urlsOpened(app)).toEqual(["https://example.com/moon"]);
+
+  // Edit in place: the field has the address; a new one replaces it on the whole link.
+  await window.getByTestId("link-edit").hover();
+  await window.getByTestId("link-edit").click();
+  await expect(field).toHaveValue("https://example.com/moon");
+  await field.fill("example.com/moons");
+  await field.press("Enter");
+  await expect(link).toHaveAttribute("href", "https://example.com/moons");
+  await expect(link).toHaveText("Moon one");
+
+  // Remove it from the bubble; Undo puts it back.
+  await link.click();
+  await window.getByTestId("link-remove").hover();
+  await window.getByTestId("link-remove").click();
+  await expect(line.locator("a")).toHaveCount(0);
+  await window.keyboard.press("ControlOrMeta+Z");
+  await expect(link).toHaveAttribute("href", "https://example.com/moons");
+
+  // By keyboard: the cursor into the link, ⌘K edits it, Esc leaves it as it was.
+  await window.keyboard.press("End");
+  for (let count = 0; count < 12; count++) await window.keyboard.press("ArrowLeft");
+  await expect(bubble).toBeVisible();
+  await window.keyboard.press("ControlOrMeta+K");
+  await expect(field).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(field).toHaveCount(0);
+  await expect(link).toHaveAttribute("href", "https://example.com/moons");
+  await expect(editor).toBeFocused();
+
+  // Cleared and confirmed, the field removes the link.
+  await window.keyboard.press("ControlOrMeta+K");
+  await field.fill("");
+  await field.press("Enter");
+  await expect(line.locator("a")).toHaveCount(0);
+
+  // With nothing selected and the cursor outside a link, ⌘K does nothing here.
+  await window.keyboard.press("ControlOrMeta+K");
+  await expect(field).toHaveCount(0);
 });

@@ -10,6 +10,7 @@ import { assistantCommands } from "./assistant";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
+import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
 import { proposalCommands } from "./proposals";
 import { type Command, commands, fromMenu } from "./registry";
@@ -158,6 +159,7 @@ const appCommands: readonly Command[] = [
     },
   },
   ...footnoteCommands,
+  ...linkCommands,
   ...tableCommands,
   ...proposalCommands,
 ];
