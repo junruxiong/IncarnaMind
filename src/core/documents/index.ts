@@ -70,6 +70,8 @@ import {
   HYBRID_CANDIDATES,
   keywordOnlyPassages,
   keywordSearch,
+  livePassage,
+  passagesBetween,
   passagesBySeq,
   passagesInWindow,
   type WindowedPassage,
@@ -1392,6 +1394,13 @@ export function createDocuments(options: DocumentsOptions) {
         toolOptions,
       );
     },
+
+    /** A live Passage of a live Document, as search returns it; null for any other. */
+    passage: (passageId: string): WindowedPassage | null => livePassage(db, passageId),
+
+    /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
+    passagesBetween: (documentId: string, from: number, to: number): WindowedPassage[] =>
+      passagesBetween(db, documentId, from, to),
 
     /**
      * How far embedding with the current model has got: the live Documents

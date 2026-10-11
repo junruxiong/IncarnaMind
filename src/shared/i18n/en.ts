@@ -2155,4 +2155,37 @@ export const en = {
   "command.assistant.fold": "Assistant: Fold",
   "command.assistant.unfold": "Assistant: Show",
   "command.assistant.history": "Conversation history",
+  // Outside agents (#351): the consent for each agent the User connects, and what IncarnaMind
+  // tells an agent when a call can't be done, which the agent passes on to the User.
+  "consent.flow.agents": "Your AI agents",
+  "consent.flow.agents.purpose":
+    "let an AI agent you use, such as Claude or Codex, read your Documents and cite them",
+  "consent.data.scoped-passages":
+    "Passages from the Documents in the folders you choose, as the agent searches and reads them",
+  "consent.data.scoped-minds": "Your Minds in those folders, when the agent reads them",
+  "consent.data.answers": "IncarnaMind’s Answers to the agent’s Questions, with their quotes",
+  "agents.problem.unpaired":
+    "This agent isn’t connected to IncarnaMind any more. Connect it again in IncarnaMind, in Settings → Agents.",
+  "agents.problem.off":
+    "Connecting agents is turned off in IncarnaMind. Turn it on in Settings → Agents.",
+  "agents.problem.local-mode":
+    "Connected agents are paused while IncarnaMind keeps everything on this computer, because an agent sends what it reads to its own AI model. To go on, turn off “Keep everything on this computer” in IncarnaMind, in Settings → Search.",
+  "agents.problem.consent":
+    "This agent isn’t allowed to read your Documents any more. Allow it again in IncarnaMind, in Settings → Agents.",
+  "agents.problem.no-folders":
+    "This agent can’t read any Documents yet. Choose its folders in IncarnaMind, in Settings → Agents.",
+  "agents.problem.outside-scope":
+    "That folder isn’t shared with this agent. Share more folders with it in IncarnaMind, in Settings → Agents.",
+  "agents.problem.not-found":
+    "There’s no such Passage, Document, Mind or Citation in the folders shared with this agent.",
+  "agents.problem.chat-not-ready":
+    "IncarnaMind has no chat model ready to answer. Set one up in IncarnaMind, in Settings → Models, or search and cite instead.",
+  "agents.problem.chat-consent":
+    "IncarnaMind’s chat model isn’t allowed yet. Ask one Question in IncarnaMind to allow it, or search and cite instead.",
+  "agents.problem.answer-failed": "IncarnaMind couldn’t answer: {message}",
+  "agents.problem.invalid": "IncarnaMind couldn’t read that request.",
+  "agents.problem.failed": "Something went wrong in IncarnaMind. Try again.",
+  "agents.answer.notFound": "[quote not found]",
+  "agents.answer.cantCheck": "[can’t be checked]",
+  "agents.mind.outsideCitation": "a Document in a folder not shared with this agent",
 } as const satisfies Record<string, string>;

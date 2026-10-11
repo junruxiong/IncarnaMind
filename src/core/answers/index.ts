@@ -44,7 +44,10 @@ import {
   type CitationSupport,
   type ConversationAskResult,
   type ConversationQuestion,
+  type CoreEventName,
+  type CoreEvents,
   type Effect,
+  type ExternalService,
   type MarkedCitation,
   type ProviderError,
   QUESTION_BLOCK,
@@ -166,6 +169,23 @@ export interface AnswerConversations {
 
 /** Why a Question wasn't asked, before anything was kept or sent. */
 type NotAsked = Extract<AskResult, { reason: "not-ready" | "skill-unavailable" }>;
+
+/**
+ * An Answer written for an outside agent (see `answerOutside`): its Markdown
+ * with Citation markers and its Citations, each checked; or why it wasn't
+ * asked: the default chat model isn't ready, or the User has yet to allow it.
+ */
+export type OutsideAnswer =
+  | { asked: false; reason: "not-ready" | "consent-needed" }
+  | {
+      asked: true;
+      status: "done" | "stopped" | "failed";
+      markdown: string;
+      citations: MarkedCitation[];
+      error: ProviderError | null;
+      /** Where the Question went: the chat model's service; null for a model on this computer. */
+      service: ExternalService | null;
+    };
 
 /** No Search scope: every Document. */
 const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
@@ -414,9 +434,19 @@ export function createAnswers(options: AnswersOptions) {
     forcedSkill: string | null;
     /** The User has yet to allow the chat flow to the model's service: they are asked first. */
     consentNeeded: boolean;
+    /**
+     * An Answer for an outside agent (#351): no window hears of it (it is in
+     * no Mind or conversation), and it uses the Documents and Skills only: no
+     * Connector, and no Skill script, so nothing it does waits for the User.
+     */
+    outside?: boolean;
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
+    const outside = input.outside === true;
     const { place } = home;
+    const announce = <E extends CoreEventName>(event: E, payload: CoreEvents[E]) => {
+      if (!outside) events.emit(event, payload);
+    };
     const controller = new AbortController();
     /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
@@ -431,7 +461,7 @@ export function createAnswers(options: AnswersOptions) {
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
       onRecord: (marker, citation) =>
-        events.emit("answer.citationAdded", { ...place, answerId, marker, citation }),
+        announce("answer.citationAdded", { ...place, answerId, marker, citation }),
     });
 
     /** Writes the Answer as it stands into its home; false if it is gone. */
@@ -497,9 +527,9 @@ export function createAnswers(options: AnswersOptions) {
       }
       const written = write(outcome);
       if (outcome.status === "failed") {
-        events.emit("answer.failed", { ...place, answerId, error: outcome.error });
+        announce("answer.failed", { ...place, answerId, error: outcome.error });
       } else {
-        events.emit("answer.finished", {
+        announce("answer.finished", {
           ...place,
           answerId,
           status: written ? outcome.status : "stopped",
@@ -521,14 +551,14 @@ export function createAnswers(options: AnswersOptions) {
 
     active.set(answerId, { home, finish });
     if (active.size === 1) options.onWritingChange?.(true);
-    events.emit("answer.started", { ...place, answerId, questionId: input.questionId, model });
+    announce("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
     const base = answerInstructions(context.question);
     const callStarted = (call: AnswerToolCall) => {
       // A call that asks the User first may already be there (see `ask`).
       if (toolCalls.some((each) => each.id === call.id)) return;
       toolCalls.push(call);
-      events.emit("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
+      announce("answer.toolCallStarted", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
     const callFinished = (id: string, ok: boolean, resultCount: number | null) => {
@@ -538,7 +568,7 @@ export function createAnswers(options: AnswersOptions) {
       const ran = call.script === undefined || call.script.exitCode === 0;
       call.status = ok && call.approval !== "denied" && ran ? "done" : "failed";
       call.resultCount = resultCount;
-      events.emit("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
+      announce("answer.toolCallFinished", { ...place, answerId, call: { ...call } });
       writeSoon();
     };
     const setApproval = (id: string, approval: ToolCallApproval) => {
@@ -756,7 +786,7 @@ export function createAnswers(options: AnswersOptions) {
         if (finished) return;
         const text = options.emptyScopeAnswer();
         markdown = text;
-        events.emit("answer.delta", { ...place, answerId, text });
+        announce("answer.delta", { ...place, answerId, text });
         finish({ status: "done" });
         return;
       }
@@ -779,7 +809,7 @@ export function createAnswers(options: AnswersOptions) {
               : "writing";
         if (finished || phase === shown) return;
         shown = phase;
-        events.emit("answer.phase", { ...place, answerId, phase });
+        announce("answer.phase", { ...place, answerId, phase });
       };
       // Nothing is sent before the User says: the Answer waits for them.
       if (consenting) showPhase();
@@ -803,7 +833,7 @@ export function createAnswers(options: AnswersOptions) {
       // the Documents' and the Skills'. A Connector's Tool asks the User first unless it needn't
       // (see `gate`).
       const provided: Tool[] = [];
-      for (const provider of options.toolProviders) {
+      for (const provider of outside ? [] : options.toolProviders) {
         // Find sources' Tool only for a Question that asks for papers or other sources.
         if (provider.kind === "sources" && !asksForSources(context.question)) continue;
         try {
@@ -817,7 +847,7 @@ export function createAnswers(options: AnswersOptions) {
       const fromConnectors = provided.filter((tool) => tool.provider.kind === "connector");
       // Connectors waiting for a sign-in offer nothing. The Answer shows a card for each, which
       // didn't run, and the model is told, so the Answer can say why.
-      const signInNeeded = options.connectorsNeedingSignIn?.() ?? [];
+      const signInNeeded = outside ? [] : (options.connectorsNeedingSignIn?.() ?? []);
       for (const connector of signInNeeded) {
         const id = `sign-in:${connector.id}`;
         callStarted({
@@ -845,7 +875,7 @@ export function createAnswers(options: AnswersOptions) {
         correctQuote: (marker, quote) => session.tools.correctQuote?.(marker, quote) ?? false,
       };
       // Scripts can run when a Skill has some, unless the User turned them off.
-      const scripts = opened.hasScripts && options.scripts.enabled();
+      const scripts = !outside && opened.hasScripts && options.scripts.enabled();
       const fromSkills: Tool[] =
         listed.length > 0 || (forced && forced.files.length > 1)
           ? skillTools({
@@ -947,7 +977,7 @@ export function createAnswers(options: AnswersOptions) {
             responded = true;
             showPhase();
             markdown += event.text;
-            events.emit("answer.delta", { ...place, answerId, text: event.text });
+            announce("answer.delta", { ...place, answerId, text: event.text });
             writeSoon();
             break;
           case "text-retracted":
@@ -1254,6 +1284,58 @@ export function createAnswers(options: AnswersOptions) {
       if (generation?.home.place.conversationId === conversationId) {
         generation.finish({ status: "stopped" });
       }
+    },
+
+    /**
+     * Answers a Question for an outside agent (#351) from these Documents, on
+     * the default chat model, as the assistant would but kept nowhere: the
+     * Answer comes back once written, its Citations checked. Asks nothing of
+     * the User: if the chat model isn't ready, or its data flow not allowed
+     * yet, it says so instead. `signal` stops it, keeping what was written.
+     */
+    async answerOutside(
+      question: string,
+      documentIds: string[],
+      signal: AbortSignal,
+    ): Promise<OutsideAnswer> {
+      const readiness = await options.readiness(undefined);
+      if (!readiness.ready) return { asked: false, reason: "not-ready" };
+      if (readiness.consent === "needed") return { asked: false, reason: "consent-needed" };
+      const model = { providerId: readiness.provider.id, modelId: readiness.modelId };
+      const { service } = readiness.provider;
+      const answerId = randomUUID();
+      return new Promise<OutsideAnswer>((resolve) => {
+        start({
+          home: {
+            place: { mindId: null },
+            write(answer, outcome) {
+              if (outcome) {
+                resolve({
+                  asked: true,
+                  status: outcome.status,
+                  markdown: answer.markdown,
+                  citations: answer.citations(),
+                  error: outcome.status === "failed" ? outcome.error : null,
+                  service,
+                });
+              }
+              return true;
+            },
+          },
+          answerId,
+          questionId: answerId,
+          model,
+          context: conversationContext([], question),
+          documentIds,
+          emptyScope: options.documents.searchableCount(documentIds) === 0,
+          forcedSkill: null,
+          consentNeeded: false,
+          outside: true,
+        });
+        const stop = () => active.get(answerId)?.finish({ status: "stopped" });
+        if (signal.aborted) stop();
+        else signal.addEventListener("abort", stop, { once: true });
+      });
     },
 
     /** Stops every Answer being written in a conversation, e.g. before it is deleted. */
