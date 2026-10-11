@@ -56,6 +56,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the pull request's CI checks are green on GitHub, not when the tests pass on your computer.
 
 - Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`, and `npm run test:smoke` for the specs your change touches.
+- Try the edge cases in `docs/agents/testing.md` that apply (empty and huge input, Chinese, broken files, offline, failing models, quitting halfway, twice and Undo), and say which in the pull request.
 - Update or remove the tests for UI you changed.
 - Watch `gh pr checks <number> --watch` and fix any red check before reporting.
 - Tests must pass on any machine:
@@ -64,7 +65,7 @@ Read [`docs/agents/testing.md`](docs/agents/testing.md). Work is done when the p
   - wait for states rather than times;
   - keep wall-clock limits out of unit tests.
 - Test through the core's public interface, as the UI uses it, and assert what a User would see. Tests need no API keys and no network.
-- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with a real model: a cloud model on your own key, a small Ollama model, or an Ollama cloud model if your computer is busy. The pull request says which model you used.
+- Automated tests use the scripted chat model. Before calling an AI feature done, use it by hand with real models from at least three providers, including Anthropic and OpenAI, plus an Ollama cloud model or a small local Ollama model (the local one whenever the feature runs in Local mode). The pull request says which models you used and where one did worse.
 
 ## UI
 
