@@ -213,6 +213,10 @@ _Avoid_: export folder, downloads, save path
 Anonymous events about using IncarnaMind, such as "a Question was asked with a local model", sent only while the User agrees, under a random install ID. It never holds a Document's content or name, a Question, an Answer or anything the User typed.
 _Avoid_: telemetry, tracking
 
+**AI use record**:
+What the AI put into a Mind, or proposed and the User turned down, and what became of it (kept, edited, deleted), kept per Mind on this computer. It holds kinds, sizes, the model and times, never text, and is never sent, whatever the User chose about Usage data.
+_Avoid_: AI log, AI history
+
 ### Window
 
 **Tab**:

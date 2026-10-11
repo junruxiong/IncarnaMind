@@ -2289,6 +2289,81 @@ export interface PrivacySettingsPatch {
 }
 
 // ---------------------------------------------------------------------------
+// The record of AI use (#292)
+
+/**
+ * What the AI put into a Mind, or proposed and the User turned down. A new kind
+ * is a change here, in `src/core/aiUse.ts` and in docs/privacy.md.
+ */
+export const aiUseKinds = [
+  /** An Answer added to a note ("Add to note", #201). */
+  "answer-added",
+  /** A writing suggestion accepted as the User writes (#282). */
+  "suggestion-accepted",
+  /** One Block of a change the assistant proposed, accepted (#202). */
+  "assistant-change-accepted",
+  /** One Block of a change the assistant proposed, rejected (#202). Nothing was inserted. */
+  "assistant-change-rejected",
+  /** A change from Edit with AI accepted (#93). */
+  "edit-with-ai-accepted",
+] as const;
+export type AiUseKind = (typeof aiUseKinds)[number];
+
+/**
+ * What became of an insertion, as far as the record can tell. `kept`: its Blocks
+ * are in the Mind as inserted; `edited`: the User changed their text, or some
+ * but not all are gone; `deleted`: all are gone; `rejected`: proposed, never inserted.
+ */
+export const aiUseOutcomes = ["kept", "edited", "deleted", "rejected"] as const;
+export type AiUseOutcome = (typeof aiUseOutcomes)[number];
+
+/**
+ * One AI insertion. It holds no text: the record is about how the AI was
+ * used, and stays on this computer whatever the usage-data setting (ADR-0014).
+ */
+export interface AiUseEntry {
+  id: string;
+  mindId: string;
+  kind: AiUseKind;
+  outcome: AiUseOutcome;
+  /** The model that wrote it; null when it isn't known. */
+  providerId: string | null;
+  modelId: string | null;
+  /** How much the AI wrote, in characters. */
+  characters: number;
+  /** The Blocks it made, by their stable ids; none for a rejected proposal or a suggestion. */
+  blockIds: string[];
+  /** When the User accepted or rejected it, ISO 8601 UTC. */
+  occurredAt: string;
+}
+
+export interface RecordAiUseInput {
+  mindId: string;
+  kind: AiUseKind;
+  providerId?: string | null;
+  modelId?: string | null;
+  characters: number;
+  /**
+   * The Blocks the insertion made, already in the Mind (send the Mind's update
+   * first). Their later edits and deletions update the entry's outcome.
+   */
+  blockIds?: string[];
+  /** Defaults to now. */
+  occurredAt?: string;
+}
+
+export interface AiUseStatus {
+  /** How many entries the record holds. */
+  entries: number;
+}
+
+/** What `clearAiUse` removed; `restoreAiUse` takes it back. */
+export interface AiUseCleared {
+  clearedAt: string;
+  count: number;
+}
+
+// ---------------------------------------------------------------------------
 // TypeSafe Jev, the optional tagger (ADR-0005)
 
 /** The model Jev requests name unless the User changes it: TypeSafe's latest stable Jev. */
@@ -3440,6 +3515,22 @@ export interface CoreApi {
   /** Gives this install a new random ID: events from now on carry it instead of the old one. */
   resetUsageInstallId(): Promise<void>;
   /**
+   * Adds what the AI wrote, or proposed and was turned down, to the record of
+   * AI use (#292), one entry per input, all or none. Each Mind must exist.
+   * Returns the entries. The record stays on this computer; see `AiUseEntry`.
+   */
+  recordAiUse(inputs: RecordAiUseInput[]): Promise<AiUseEntry[]>;
+  /**
+   * The record, oldest first, optionally of one Mind. Outcomes are brought up
+   * to date with the Minds' content first.
+   */
+  listAiUse(mindId?: string): Promise<AiUseEntry[]>;
+  getAiUseStatus(): Promise<AiUseStatus>;
+  /** Empties the record. `restoreAiUse` takes it back. */
+  clearAiUse(): Promise<AiUseCleared>;
+  /** Brings back what `clearAiUse` emptied at `clearedAt`. */
+  restoreAiUse(clearedAt: string): Promise<AiUseStatus>;
+  /**
    * The Folders of every Linked folder, as a flat list in name order (ignoring
    * case). Build the tree from each Folder's `parentId`; siblings keep the
    * list's order. Each Linked folder's own Folder has no parent.
@@ -3758,6 +3849,8 @@ export interface CoreEvents {
   "dataFlows.changed": RegisteredDataFlow[];
   /** The privacy choices changed, e.g. crash reports were turned on. */
   "privacy.changed": PrivacySettings;
+  /** The record of AI use gained or lost entries (recorded, cleared or restored). */
+  "aiUse.changed": AiUseStatus;
   /** Progress of a model download through Ollama. */
   "ollama.pullProgress": OllamaPullProgress;
   /**
@@ -3950,6 +4043,11 @@ const methods: Record<CoreApiMethod, true> = {
   updatePrivacySettings: true,
   recordUsage: true,
   resetUsageInstallId: true,
+  recordAiUse: true,
+  listAiUse: true,
+  getAiUseStatus: true,
+  clearAiUse: true,
+  restoreAiUse: true,
   listFolders: true,
   getLibrary: true,
   createLibraryGroup: true,
