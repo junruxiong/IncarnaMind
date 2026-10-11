@@ -134,21 +134,6 @@ function createPkcePair(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-/**
- * The claims in a JWT's payload, without verifying its signature: only for
- * reading what a token we just received from the server says about itself.
- */
-export function decodeJwtClaims(token: string): Record<string, unknown> | null {
-  const parts = token.split(".");
-  if (parts.length !== 3 || !parts[1]) return null;
-  try {
-    const claims: unknown = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    return isRecord(claims) ? claims : null;
-  } catch {
-    return null;
-  }
-}
-
 const escapeHtml = (text: string) =>
   text.replace(
     /[&<>"']/g,
