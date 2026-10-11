@@ -29,19 +29,13 @@ const INSET = 4;
 const actionOf = (id: TableActionId) =>
   TABLE_ACTIONS.find((action) => action.id === id) as TableAction;
 
-/** The groups of the menu, in order, a rule between each: adding, the heading row, deleting last. */
 const GROUPS: readonly (readonly TableActionId[])[] = [
   ["rowAbove", "rowBelow", "columnLeft", "columnRight"],
   ["headerRow"],
   ["deleteRow", "deleteColumn", "deleteTable"],
 ];
 
-/**
- * Keeps the button at the top-right corner of the cell, inside it, as the
- * Mind scrolls, the cell grows or the table scrolls sideways: positioned in
- * `frame`, so it scrolls with the text and stays under the composer. Hidden
- * while the cell is out of the table's view.
- */
+/** In `frame`, not fixed, so it scrolls with the text and stays under the composer. */
 function placeOnCell(cell: HTMLElement, button: HTMLElement, frame: HTMLElement): () => void {
   const place = () => {
     const box = cell.getBoundingClientRect();
@@ -100,7 +94,6 @@ export function TableMenu({ editor }: { editor: Editor }) {
     return placeOnCell(dom, element, frame);
   }, [editor, cell, shown, button]);
 
-  /** Closes the menu, then does it, back in the cell. */
   const choose = (action: TableAction) => {
     menu.close();
     runTableAction(editor, action);
@@ -125,7 +118,6 @@ export function TableMenu({ editor }: { editor: Editor }) {
       return t("editor.table.deleteColumns", { count: spot.columns });
     return t(actionOf(id).label);
   };
-  /** Why an action can't be done now, or null. */
   const whyNot = (id: TableActionId): string | null => {
     const reason = spot && unavailable(id, spot);
     return reason ? t(reason) : null;
