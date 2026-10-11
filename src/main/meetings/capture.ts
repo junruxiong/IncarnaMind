@@ -64,11 +64,16 @@ function samplesOf(value: unknown): Int16Array | null {
 /** Lets only the capture window's session use media, and answers its display capture with loopback audio. */
 function prepareSession(log: Logger): Session {
   const captureSession = session.fromPartition(CAPTURE_PARTITION, { cache: false });
-  const audioOnly = (types: readonly string[] | undefined) =>
+  // The microphone asks for "media" with mediaTypes ["audio"]; display capture (Electron 44)
+  // asks for "media" with none, and our handler below decides what it gets. A camera never.
+  const microphoneOrDisplay = (types: readonly string[] | undefined) =>
     (types ?? []).every((type) => type === "audio");
   captureSession.setPermissionRequestHandler((_contents, permission, callback, details) => {
     const mediaTypes = "mediaTypes" in details ? details.mediaTypes : undefined;
-    callback((permission === "media" && audioOnly(mediaTypes)) || permission === "display-capture");
+    callback(
+      (permission === "media" && microphoneOrDisplay(mediaTypes)) ||
+        permission === "display-capture",
+    );
   });
   captureSession.setPermissionCheckHandler(
     (_contents, permission, _origin, details) =>

@@ -66,7 +66,7 @@ mac:
   # and in Chinese from zh_CN.lproj (tests/main/meetingPermissions.test.ts checks both).
   extendInfo:
     NSMicrophoneUsageDescription: "When you record a meeting, IncarnaMind records your microphone. The audio stays on this Mac."
-    NSAudioCaptureUsageDescription: "When you record a meeting, IncarnaMind records the computer's sound: the other people on the call. The audio stays on this Mac."
+    NSAudioCaptureUsageDescription: "When you record a meeting, IncarnaMind records the computer's sound: the other people in the meeting. The audio stays on this Mac."
   extraResources:
     - from: build/zh_CN.lproj
       to: zh_CN.lproj
