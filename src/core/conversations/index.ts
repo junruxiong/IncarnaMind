@@ -10,6 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { conversationName, cutTitle } from "../../shared/naming";
+import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
   addCitedUnit,
   addCitedVersion,
@@ -34,6 +35,7 @@ import type {
   ProviderError,
   ProviderErrorKind,
   SearchScope,
+  ThirdPartySource,
 } from "../api";
 import { InvalidInputError, isRecord, NotFoundError } from "../errors";
 import { parseSearchScope } from "../scope";
@@ -59,6 +61,8 @@ export interface AnswerWrite {
   citations: MarkedCitation[];
   toolCalls: AnswerToolCall[];
   support: CitationSupport | null;
+  /** Where the third-party text its Run had read came from (#78); null: none. */
+  textOrigin: ThirdPartySource | null;
   outcome?: { status: Exclude<AnswerStatus, "streaming">; error: ProviderError | null };
 }
 
@@ -99,6 +103,7 @@ interface MessageRow {
   citation_support: string | null;
   citations: string;
   tool_calls: string;
+  text_origin: string | null;
   created_at: string;
   updated_at: string;
   /** Joined in: the asked-from Mind's name, and 1 if it is deleted or not on this computer. */
@@ -200,6 +205,7 @@ function toAnswer(row: MessageRow): ConversationAnswer {
     errorMessage: status === "failed" ? row.error_message : null,
     citationSupport: SUPPORTS.find((each) => each === row.citation_support) ?? null,
     toolCalls: storedList<AnswerToolCall>(row.tool_calls),
+    textOrigin: parseThirdPartySource(row.text_origin),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -550,7 +556,8 @@ export function createConversations(db: Database, now: () => string) {
         db.run(
           `UPDATE conversation_messages SET text = '', citations = '[]', tool_calls = '[]',
              status = 'streaming', error_kind = NULL, error_message = NULL,
-             citation_support = NULL, provider_id = ?, model_id = ?, updated_at = ?
+             citation_support = NULL, text_origin = NULL, provider_id = ?, model_id = ?,
+             updated_at = ?
            WHERE id = ?`,
           [answerModel?.providerId ?? null, answerModel?.modelId ?? null, now(), answerId],
         );
@@ -570,13 +577,15 @@ export function createConversations(db: Database, now: () => string) {
       db.transaction(() => {
         db.run(
           `UPDATE conversation_messages SET text = ?, citations = ?, tool_calls = ?,
-             citation_support = ?, status = ?, error_kind = ?, error_message = ?, updated_at = ?
+             citation_support = ?, text_origin = ?, status = ?, error_kind = ?,
+             error_message = ?, updated_at = ?
            WHERE id = ?`,
           [
             write.text,
             JSON.stringify(write.citations),
             JSON.stringify(write.toolCalls),
             write.support,
+            write.textOrigin,
             outcome?.status ?? "streaming",
             outcome?.error?.kind ?? null,
             outcome?.error?.message ?? null,

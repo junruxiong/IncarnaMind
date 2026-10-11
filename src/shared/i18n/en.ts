@@ -1908,6 +1908,20 @@ export const en = {
   "approvals.card.alwaysAllowHint":
     "Run {tool} from now on without asking. You can revoke this in Settings, under Approvals.",
   "approvals.card.deny": "Deny",
+  "approvals.thirdParty.read.webPage": "This Answer read a web page, so it asks you first.",
+  "approvals.thirdParty.read.checkedDocument":
+    "This Answer read the document being checked, so it asks you first.",
+  "approvals.thirdParty.mind.imported": "This Mind contains imported text, so it asks you first.",
+  "approvals.thirdParty.mind.webPage":
+    "This Mind contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.mind.checkedDocument":
+    "This Mind contains text from the document being checked, so it asks you first.",
+  "approvals.thirdParty.conversation.imported":
+    "This conversation contains imported text, so it asks you first.",
+  "approvals.thirdParty.conversation.webPage":
+    "This conversation contains text from a web page, so it asks you first.",
+  "approvals.thirdParty.conversation.checkedDocument":
+    "This conversation contains text from the document being checked, so it asks you first.",
   "approvals.call.waiting": "Waiting for your approval: {connector}: {tool}",
   "approvals.call.denied": "Not allowed: {connector}: {tool}",
   "approvals.call.allowed": "Asked {connector} with your approval: {tool}",

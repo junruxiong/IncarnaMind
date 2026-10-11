@@ -21,6 +21,14 @@
  * script's card also keeps how the run ended and what it wrote. Stopping the
  * Answer stops a running script.
  *
+ * Third-party text (CONTEXT.md, #78): an Answer whose Question context holds
+ * text someone else wrote (Blocks, or earlier Answers, with a third-party
+ * origin), or whose Run reads a saved web page, asks before a call that writes
+ * or sends data, even where the User chose "always"; its approval request
+ * says why. The Answer keeps where that text came from (beside a Mind's
+ * Blocks, `MIND_TEXT_ORIGINS_FIELD`, or on a conversation's Answer), so a
+ * later Question with the Answer in its context counts as having read it too.
+ *
  * A Question with a Search scope searches only the Documents it covers,
  * resolved when the Question is asked (or its Answer regenerated), and the
  * instructions name only those. When the scope covers no Document with
@@ -30,7 +38,9 @@
  */
 import { randomUUID } from "node:crypto";
 import type * as Y from "yjs";
+import { runsByDefault } from "../../shared/approvalRules";
 import { searchScopeOf } from "../../shared/searchScope";
+import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
   type AnswerAttributes,
@@ -52,6 +62,8 @@ import {
   type SearchScope,
   type SkillAvailability,
   type SkillScriptRun,
+  type ThirdPartyReason,
+  type ThirdPartySource,
   type ToolCallApproval,
 } from "../api";
 import type { CallToDecide, ToolCallToApprove } from "../approvals";
@@ -97,7 +109,13 @@ import {
   withCitations,
   withoutFootnoteDefinitions,
 } from "./citations";
-import { buildQuestionContext, conversationContext, type QuestionContext } from "./context";
+import {
+  buildQuestionContext,
+  conversationContext,
+  conversationContextOrigins,
+  type QuestionContext,
+  questionContextOrigins,
+} from "./context";
 import type { AnswerEngine, AnswerTools, DocumentLanguage, GatedCall } from "./engine";
 import { markdownToBlocks } from "./markdown";
 import {
@@ -150,6 +168,8 @@ interface WrittenAnswer {
   citations(): MarkedCitation[];
   toolCalls: AnswerToolCall[];
   support: CitationSupport | null;
+  /** Where the third-party text its Run had read came from (#78); null: none. */
+  textOrigin: ThirdPartySource | null;
 }
 
 /** What Answers need of the assistant's conversations (see ../conversations). */
@@ -251,6 +271,19 @@ const deniedResult = (call: ToolCallToApprove) =>
   "script" in call
     ? `The User denied running ${call.script} of the Skill "${call.skill.name}", so it didn't run. Carry on without it, don't run it again, and say what wasn't done.`
     : `The User denied this call of ${call.tool} (from the Connector "${call.connector.name}"), so it wasn't made and nothing was sent. Carry on without it, don't call it again, and say what wasn't done.`;
+
+/**
+ * What the model reads for a call of a Tool whose side effect nothing can
+ * approve yet: a later provider's (a Files Tool, say), before it can ask.
+ */
+const UNAPPROVED =
+  "This call wasn't made: IncarnaMind can't ask the User about it yet, so nothing was changed or sent. Carry on without it and say what wasn't done.";
+
+/** Why a call's Run counts as having read third-party text, for its approval request: absent when it doesn't. */
+const readReasons = (
+  thirdParty: readonly ThirdPartyReason[],
+): { thirdParty?: ThirdPartyReason[] } =>
+  thirdParty.length > 0 ? { thirdParty: [...thirdParty] } : {};
 
 /** Where a Tool-call card says a call's Tool comes from: its provider's kind, as Minds store it. */
 const CARD_SOURCES: Record<ToolProviderKind, AnswerToolCall["source"]> = {
@@ -414,12 +447,32 @@ export function createAnswers(options: AnswersOptions) {
     forcedSkill: string | null;
     /** The User has yet to allow the chat flow to the model's service: they are asked first. */
     consentNeeded: boolean;
+    /** Where the third-party text in its Question context came from (#78); empty: none. */
+    contextOrigins: readonly ThirdPartySource[];
   }): void {
     const { home, answerId, model, context, documentIds, forcedSkill } = input;
     const { place } = home;
     const controller = new AbortController();
     /** What the model wrote: Markdown, with Citation markers. */
     let markdown = "";
+    /**
+     * Why its Run counts as having read third-party text, from its start: its
+     * Question context holds some. The Run adds what its Tools read (see the
+     * gate's `thirdParty`).
+     */
+    const contextReasons: ThirdPartyReason[] = input.contextOrigins.map((source) => ({
+      via: "context",
+      source,
+    }));
+    /**
+     * Where the third-party text the Run had read came from: what its Question
+     * context holds, else what it read first. Kept with the Answer, so a later
+     * Question that has the Answer in its context counts as having read it too.
+     * None for the Answer that says the Search scope is empty: no model wrote it.
+     */
+    let textOrigin: ThirdPartySource | null = input.emptyScope
+      ? null
+      : (input.contextOrigins[0] ?? null);
     let timer: ReturnType<typeof setTimeout> | null = null;
     let finished = false;
     let support: CitationSupport | null = null;
@@ -466,6 +519,7 @@ export function createAnswers(options: AnswersOptions) {
             },
             toolCalls,
             support,
+            textOrigin,
           },
           outcome,
         );
@@ -593,7 +647,7 @@ export function createAnswers(options: AnswersOptions) {
      */
     const scriptGate = async (
       session: SkillSession,
-      { id: toolCallId, input, tainted }: GatedCall,
+      { id: toolCallId, input, tainted, thirdParty }: GatedCall,
       effects: Effect[],
     ): Promise<string | null> => {
       const shown = scriptCallInput(input);
@@ -627,6 +681,7 @@ export function createAnswers(options: AnswersOptions) {
           args,
           effects,
           tainted,
+          ...readReasons(thirdParty),
         },
         card,
       );
@@ -638,11 +693,14 @@ export function createAnswers(options: AnswersOptions) {
      * The gate the engine awaits before each Tool call (see `RunRequest.gate`):
      * a Connector's Tool asks first unless the User or its Effects say it
      * needn't; a Skill script is checked, then asks unless the Skill's scripts
-     * always run (see `scriptGate`). Every other Tool runs. Whether the Answer
-     * had read untrusted content first (`tainted`) goes to approvals with the call.
+     * always run (see `scriptGate`). Whether the Answer had read untrusted
+     * content first (`tainted`), and third-party text (`thirdParty`), goes to
+     * approvals with the call. Every other Tool runs if each of its Effects
+     * runs without asking; a side effect of a provider whose calls nothing can
+     * approve yet is refused (see `UNAPPROVED`).
      */
     const gate = async (tool: Tool, call: GatedCall): Promise<GateDecision> => {
-      const { id, input, tainted } = call;
+      const { id, input, tainted, thirdParty } = call;
       let denied: string | null = null;
       if (tool.provider.kind === "connector") {
         const connector = { id: tool.provider.id, name: tool.provider.name };
@@ -662,6 +720,7 @@ export function createAnswers(options: AnswersOptions) {
             readOnly: effects.every((effect) => effect.action !== "write"),
             effects,
             tainted,
+            ...readReasons(thirdParty),
           },
           {
             id,
@@ -675,6 +734,13 @@ export function createAnswers(options: AnswersOptions) {
         );
       } else if (tool.name === SKILL_TOOLS.runScript && skills) {
         denied = await scriptGate(skills, call, tool.effects(input));
+      } else if (!tool.effects(input).every(runsByDefault)) {
+        // New side-effecting Tools ask unless a scope grant covers them (ADR-0013): until their
+        // provider can ask, their side effects never run.
+        options.reportError(
+          new Error(`${tool.name} (${tool.provider.kind}) has a side effect nothing can approve.`),
+        );
+        denied = UNAPPROVED;
       }
       return denied === null ? { run: true } : { run: false, result: denied };
     };
@@ -916,6 +982,7 @@ export function createAnswers(options: AnswersOptions) {
         documents,
         tools: [...provided, ...fromSkills],
         gate,
+        thirdParty: contextReasons,
         support: startingSupport(prepared.support, supportByModel.get(learntKey)),
         structuredOutput: givesStructuredOutput(prepared.capabilities),
         takesTemperature: prepared.capabilities.facts.temperature,
@@ -973,6 +1040,12 @@ export function createAnswers(options: AnswersOptions) {
           case "tool-call-finished":
             callFinished(event.id, event.ok, event.resultCount);
             break;
+          case "read-third-party":
+            if (textOrigin === null) {
+              textOrigin = event.source;
+              writeSoon();
+            }
+            break;
           case "finished":
             outcome = { status: "done" };
             break;
@@ -1005,6 +1078,8 @@ export function createAnswers(options: AnswersOptions) {
         if (answer.support && textAttribute(element, "citationSupport") !== answer.support) {
           setAttributes(element, { citationSupport: answer.support });
         }
+        // Beside the Blocks, by the Answer's id: a later Question above which it stands reads it.
+        if (blocks.doc) setTextOrigin(blocks.doc, [answerId], answer.textOrigin);
         if (outcome) {
           setAttributes(element, {
             status: outcome.status,
@@ -1027,6 +1102,7 @@ export function createAnswers(options: AnswersOptions) {
         citations: answer.citations(),
         toolCalls: answer.toolCalls,
         support: answer.support,
+        textOrigin: answer.textOrigin,
         ...(outcome && {
           outcome: {
             status: outcome.status,
@@ -1077,6 +1153,7 @@ export function createAnswers(options: AnswersOptions) {
       questionId: question.id,
       model: ready.model,
       context: conversationContext(turn.earlier, question.text),
+      contextOrigins: conversationContextOrigins(turn.earlier),
       documentIds,
       emptyScope,
       forcedSkill: question.forcedSkill,
@@ -1131,14 +1208,22 @@ export function createAnswers(options: AnswersOptions) {
     if (currentId) active.get(currentId)?.finish({ status: "stopped" });
 
     /** What the Answer is written from: its Question context and Search scope, as they are now. */
-    type Asked = { context: QuestionContext; documentIds: string[] | null; emptyScope: boolean };
+    type Asked = {
+      context: QuestionContext;
+      contextOrigins: ThirdPartySource[];
+      documentIds: string[] | null;
+      emptyScope: boolean;
+    };
     const written = content.edit(
       mindId,
       (blocks): { edited: string } | ({ answerId: string } & Asked) => {
         const question = findBlock(blocks, QUESTION_BLOCK, questionId);
         if (!question) throw new NotFoundError("That Question isn't in this Mind.");
         const context = buildQuestionContext(blocks, question.index);
-        const asked = askedWith(context, question.element);
+        const asked = {
+          ...askedWith(context, question.element),
+          contextOrigins: questionContextOrigins(blocks, question.index),
+        };
         const attributes: Partial<AnswerAttributes> = {
           questionId,
           // No model writes an Answer that says the Search scope is empty.
