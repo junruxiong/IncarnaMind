@@ -7,11 +7,13 @@
  * never as an edit, and that the paragraph's Citation is still there, and
  * still found, once they are accepted.
  *
- *   ANTHROPIC_API_KEY        Claude (LIVE_ANTHROPIC_MODEL, Haiku by default)
- *   OPENAI_API_KEY           OpenAI (LIVE_OPENAI_MODEL, its quick-tasks model by default)
- *   LIVE_OLLAMA_MODEL        a model in Ollama on this computer, e.g. qwen3.5:4b, in local mode
+ *   INCARNAMIND_LIVE_ANTHROPIC_KEY   Claude (INCARNAMIND_LIVE_ANTHROPIC_MODEL, Haiku by default)
+ *   INCARNAMIND_LIVE_OPENAI_KEY      OpenAI (INCARNAMIND_LIVE_OPENAI_MODEL, its quick-tasks model by default)
+ *   INCARNAMIND_LIVE_OLLAMA_MODEL    a model in Ollama on this computer, e.g. qwen3.5:4b, in local mode
  *
- * Set LIVE_REPORT to a file to keep what each model gave back.
+ * Names of their own, so a key a shell has for other tools never starts paid requests here.
+ *
+ * Set INCARNAMIND_LIVE_REPORT to a file to keep what each model gave back.
  */
 import { appendFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
@@ -59,25 +61,26 @@ const LIVE: Live[] = [
   {
     name: "Anthropic",
     kind: "anthropic",
-    apiKey: process.env.ANTHROPIC_API_KEY,
+    apiKey: process.env.INCARNAMIND_LIVE_ANTHROPIC_KEY,
     model:
-      process.env.LIVE_ANTHROPIC_MODEL ??
+      process.env.INCARNAMIND_LIVE_ANTHROPIC_MODEL ??
       (catalogProvider("anthropic")?.roles.quickTasks as string),
     local: false,
   },
   {
     name: "OpenAI",
     kind: "openai",
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.INCARNAMIND_LIVE_OPENAI_KEY,
     model:
-      process.env.LIVE_OPENAI_MODEL ?? (catalogProvider("openai")?.roles.quickTasks as string),
+      process.env.INCARNAMIND_LIVE_OPENAI_MODEL ??
+      (catalogProvider("openai")?.roles.quickTasks as string),
     local: false,
   },
   {
     name: "Ollama",
     kind: "ollama",
-    apiKey: process.env.LIVE_OLLAMA_MODEL ? "" : undefined,
-    model: process.env.LIVE_OLLAMA_MODEL ?? "",
+    apiKey: process.env.INCARNAMIND_LIVE_OLLAMA_MODEL ? "" : undefined,
+    model: process.env.INCARNAMIND_LIVE_OLLAMA_MODEL ?? "",
     local: true,
   },
 ];
@@ -221,11 +224,13 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
             result.kind === "proposed"
               ? `, ${result.proposals} changes, ${result.droppedCitations} Citations dropped`
               : result.kind === "failed"
-                ? `: ${result.error.kind} ${result.error.message}`
+                ? `: ${result.error.kind}`
                 : ""
           }, ${seconds.toFixed(1)} s\n  ${proposed}`,
         );
-        expect(result.kind, JSON.stringify(result)).toBe("proposed");
+        expect(result.kind, result.kind === "failed" ? result.error.kind : result.kind).toBe(
+          "proposed",
+        );
         // Nothing is applied before it is accepted: the text as it was is all there.
         expect(pendingProposals(client.blocks).length).toBeGreaterThan(0);
         client.doc.transact(() => {
@@ -239,8 +244,8 @@ describe.each(LIVE)("Edit with AI, live: $name", (live) => {
           expect(kept[0]?.check).toBe("found");
         }
       }
-      if (process.env.LIVE_REPORT) {
-        await appendFile(process.env.LIVE_REPORT, `${report.join("\n")}\n\n`);
+      if (process.env.INCARNAMIND_LIVE_REPORT) {
+        await appendFile(process.env.INCARNAMIND_LIVE_REPORT, `${report.join("\n")}\n\n`);
       }
     },
   );

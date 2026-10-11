@@ -10,17 +10,19 @@ import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import type { ChatReadiness, EditAction, EditWithAiResult } from "../../core/api";
-import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { mindModelOf } from "../../shared/mindModel";
+import { aiUseOfAccepted } from "../../shared/proposals";
 import { core } from "./core";
 import { selectionForEdit } from "./editor/editSelection";
 import {
+  editorDoc,
   editTarget,
   type PendingProposal,
   pendingIn,
   resolveInEditor,
   setEditTarget,
 } from "./editor/proposalReview";
+import { translateNow } from "./i18n";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -79,8 +81,7 @@ const set = <K extends keyof EditsState>(
     return { [key]: next } as Partial<EditsState>;
   });
 
-const t = (key: MessageKey, params?: MessageParams) =>
-  translate(useAppStore.getState().settings?.language ?? "en", key, params);
+const t = translateNow;
 
 let spokenAt = 0;
 /** Tells a screen reader, through the Mind's live region (see `ProposalBars`). */
@@ -263,6 +264,8 @@ export function editFromComposer(
 /**
  * Accepts or rejects Proposals in the open Mind, as one step of its Undo,
  * and offers Undo on the undo line while that step is still the last one.
+ * What an accepted Proposal wrote goes into the record of AI use (#292),
+ * after the change itself has gone to the core.
  */
 export function resolveProposalsIn(
   editor: Editor,
@@ -273,6 +276,13 @@ export function resolveProposalsIn(
   if (editor.isDestroyed || ids.length === 0) return;
   const resolved = resolveInEditor(editor, new Set(ids), outcome);
   if (resolved.length === 0) return;
+  const doc = editorDoc(editor);
+  if (outcome === "accept" && doc) {
+    const entries = aiUseOfAccepted(doc, mindId, resolved, new Date().toISOString());
+    if (entries.length > 0) {
+      core.recordAiUse(entries).catch(useAppStore.getState().reportError);
+    }
+  }
   const count = resolved.length;
   const message =
     outcome === "accept"
