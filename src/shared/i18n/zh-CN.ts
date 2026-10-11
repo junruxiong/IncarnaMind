@@ -892,6 +892,7 @@ export const zhCN = {
   "tagging.other": "其他模型…",
   "tagging.other.hint": "按名称使用列表中没有的模型",
   "tagging.other.decision": "{model}（本地分类模型）",
+  "tagging.other.auto": "本地分类模型（按文档自动选择）· Ollama",
   "tagging.other.save": "使用此模型",
   "tagging.localMode": "本地模式已开启，只用本机的模型给文档打标签。",
   "tagging.plan":

@@ -940,6 +940,7 @@ export const en = {
   "tagging.other": "Other model…",
   "tagging.other.hint": "A model the list doesn't have, by its name",
   "tagging.other.decision": "{model}, a local decision model",
+  "tagging.other.auto": "Local decision models, picked per Document · Ollama",
   "tagging.other.save": "Use this model",
   "tagging.localMode": "Local mode is on, so only models on this computer tag your Documents.",
   "tagging.plan":
