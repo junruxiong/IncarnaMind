@@ -11,7 +11,7 @@ import { useAnswers } from "../answers";
 import { SkillIcon } from "../components/icons";
 import { SparkLineIcon } from "../components/lineIcons";
 import { ProblemLine } from "../components/ProblemLine";
-import { ReadinessExplanation, readinessAction } from "../components/providers/ChatReadinessNotice";
+import { ReadinessLine } from "../components/providers/ChatReadinessNotice";
 import { useT } from "../i18n";
 import { useAppStore } from "../store";
 import { ChevronDownSmallIcon, RemoveIcon } from "./icons";
@@ -38,7 +38,6 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
   const mindId = useMindId();
   const questionId = text(node.attrs[BLOCK_ID_ATTRIBUTE]);
   const blocked = useAnswers((state) => (questionId ? state.blocked[questionId] : undefined));
-  const openSettings = useAppStore((state) => state.openSettings);
   const forcedSkill = text(node.attrs.forcedSkill);
   const skill = useAppStore((state) =>
     forcedSkill ? state.skills.find((each) => each.name === forcedSkill) : undefined,
@@ -120,13 +119,12 @@ export function QuestionView({ node, editor, decorations, updateAttributes }: Re
       </div>
       {blocked?.kind === "not-ready" && (
         <div contentEditable={false} className="question-problem">
-          <ProblemLine
-            role="status"
+          <ReadinessLine
+            readiness={blocked.readiness}
             testId="question-not-ready"
-            action={readinessAction(blocked.readiness, t, openSettings, "question.setUp")}
-          >
-            <ReadinessExplanation readiness={blocked.readiness} inLine />
-          </ProblemLine>
+            setUpLabel={t("question.setUp")}
+            refused
+          />
         </div>
       )}
       {blocked?.kind === "skill-unavailable" && (

@@ -197,6 +197,8 @@ export function createChat(options: {
   chatGpt: ChatGptPlanAccess;
   /** Looks up models in Ollama, for the settings their requests carry and how they cite. */
   ollamaModels: OllamaModels;
+  /** Whether "Keep everything on this computer" is on: Questions then go only to a model on this computer. */
+  localOnly(): boolean;
 }) {
   const { db, now, settings, secrets, consent, createModel, chatGpt, ollamaModels } = options;
 
@@ -396,6 +398,10 @@ export function createChat(options: {
     const { modelId } = choice;
     await refreshRemote(row.kind as ChatProviderKind, row.base_url, modelId);
     const provider = await toProvider(row, modelId);
+    // Before the key and the consent: local mode refuses a Question however the service is set up.
+    if (flow === "chat" && provider.service && options.localOnly()) {
+      return { ready: false, reason: "local-mode", provider, modelId };
+    }
     if (requiresApiKey(provider.kind) && !provider.hasApiKey) {
       return { ready: false, reason: "missing-api-key", provider, modelId };
     }

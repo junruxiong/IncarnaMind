@@ -44,7 +44,7 @@ export function EditStatus({ mindId }: { mindId: string }) {
         <ProblemLine
           testId="edit-problem"
           className="composer-problem"
-          action={readinessAction(problem.readiness, t, openSettings, "question.setUp", () =>
+          action={readinessAction(problem.readiness, t, openSettings, t("question.setUp"), () =>
             dismissEditProblem(mindId),
           )}
         >
