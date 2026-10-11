@@ -169,8 +169,8 @@ function PageContent({ page }: { page: SettingsPage }) {
           <Titled title="providers.settings.title">
             <ChatModelSettings />
           </Titled>
-          <JevSettingsSection />
           <ChatGptPlanSettings />
+          <JevSettingsSection />
           <Titled title="library.settingsTitle" testId="organization-settings">
             <OrganizationSettings />
           </Titled>
