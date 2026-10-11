@@ -545,6 +545,10 @@ export function createCore(adapters: CoreAdapters): Core {
       usageData.localModeChanged();
       privacyChanged();
       await rerankChanged();
+      // Questions to a cloud model are refused now (or allowed again): the chat model's readiness changed.
+      await readinessChanged();
+      // An Answer on its way to a cloud model stops at once, with the reason.
+      if (embedding.localOnly()) await answers.stopCloud();
     }
     return embeddingSettings();
   };
@@ -568,6 +572,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createModel: adapters.createChatModel ?? createAiSdkChatModel,
     chatGpt,
     ollamaModels: adapters.ollamaModels ?? createOllamaModels(),
+    localOnly: () => embedding.localOnly(),
   });
 
   /** Set once readiness can be reported: Connectors turned on or off change what chat sends. */

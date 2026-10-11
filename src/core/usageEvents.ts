@@ -112,6 +112,7 @@ const ANSWER_ERRORS = [
   "network",
   "provider",
   "consent-declined",
+  "local-mode",
   "not-signed-in",
   "plan-limit",
   "blocked",

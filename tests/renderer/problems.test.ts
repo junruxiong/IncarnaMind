@@ -11,6 +11,7 @@ const KINDS: ProviderErrorKind[] = [
   "network",
   "provider",
   "consent-declined",
+  "local-mode",
   "not-signed-in",
   "plan-limit",
   "blocked",
