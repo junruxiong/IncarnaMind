@@ -86,6 +86,24 @@ describe("counting a Mind", () => {
     expect(across.selection && countFor(across.selection, "words")).toBe(4);
   });
 
+  test("a change still waiting counts as the text it would replace", () => {
+    const change = { id: "c1", request: "r1", target: "x" };
+    const doc = docOf(
+      paragraph(
+        text("The tides are "),
+        { ...text("very"), marks: [{ type: "proposalDelete", attrs: change }] },
+        { ...text("not at all"), marks: [{ type: "proposalInsert", attrs: change }] },
+        text(" strong."),
+      ),
+      {
+        type: "paragraph",
+        attrs: { proposal: { ...change, id: "c2", kind: "insert" } },
+        content: [text("A whole new paragraph from the AI.")],
+      },
+    );
+    expect(countFor(countMind(doc, { from: 0, to: 0 }).total, "words")).toBe(5);
+  });
+
   test("Blocks are counted, Questions are not", () => {
     const doc = docOf(
       paragraph(text("One two three.")),
