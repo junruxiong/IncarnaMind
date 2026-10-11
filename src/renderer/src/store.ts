@@ -374,6 +374,42 @@ const documentUpdates = createDocumentUpdates((changes) =>
   })),
 );
 
+/**
+ * Whole lists the core pushes by event, and `load` reads too. A list pushed
+ * after `load` read its own is newer, so `load` must not put its copy back
+ * over it: on a slow first run, the example Linked folder's Folder, made by
+ * its first scan, was pushed while `load` still waited, and then vanished.
+ * The core's events and replies arrive in the order it sent them.
+ */
+type PushedList =
+  | "settings"
+  | "minds"
+  | "folders"
+  | "linkedFolders"
+  | "keptCitationTexts"
+  | "tags"
+  | "skills"
+  | "chatReadiness"
+  | "embeddingModel"
+  | "embedding"
+  | "rerank"
+  | "privacy";
+let pushes = 0;
+const lastPushed = new Map<PushedList, number>();
+const pushed = (list: PushedList) => lastPushed.set(list, ++pushes);
+
+/** Reads a list for `load`, noting which pushes it already includes. */
+function readList<T>(list: PushedList, request: Promise<T>, readAt: Map<PushedList, number>) {
+  return request.then((value) => {
+    readAt.set(list, pushes);
+    return value;
+  });
+}
+
+/** Whether the list was pushed after `load` read it. */
+const pushedSince = (list: PushedList, readAt: Map<PushedList, number>) =>
+  (lastPushed.get(list) ?? 0) > (readAt.get(list) ?? 0);
+
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
   /** The interface's words, outside React: for the lines the store writes (Undo's). */
@@ -570,6 +606,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         const offered = await core.offerExamples().catch(() => null);
         if (offered?.mindId) await startGettingStarted(offered.mindId);
         await get().loadLayout();
+        const readAt = new Map<PushedList, number>();
         const [
           minds,
           settings,
@@ -587,29 +624,28 @@ export const useAppStore = create<AppState>()((set, get) => {
           rerank,
           privacy,
         ] = await Promise.all([
-          core.listMinds(),
-          core.getSettings(),
+          readList("minds", core.listMinds(), readAt),
+          readList("settings", core.getSettings(), readAt),
           core.listDocuments(),
-          core.getChatReadiness(),
-          core.listFolders(),
-          core.getEmbeddingModel(),
-          core.listTags(),
-          core.listSkills(),
-          core.getEmbeddingSettings(),
-          core.listLinkedFolders(),
-          core.listKeptCitationTexts(),
+          readList("chatReadiness", core.getChatReadiness(), readAt),
+          readList("folders", core.listFolders(), readAt),
+          readList("embeddingModel", core.getEmbeddingModel(), readAt),
+          readList("tags", core.listTags(), readAt),
+          readList("skills", core.listSkills(), readAt),
+          readList("embedding", core.getEmbeddingSettings(), readAt),
+          readList("linkedFolders", core.listLinkedFolders(), readAt),
+          readList("keptCitationTexts", core.listKeptCitationTexts(), readAt),
           core.getExamples(),
           core.listConnectors(),
-          core.getRerankSettings(),
-          core.getPrivacySettings(),
+          readList("rerank", core.getRerankSettings(), readAt),
+          readList("privacy", core.getPrivacySettings(), readAt),
         ]);
         // What the core's events brought before this is in the lists just read.
         documentUpdates.flush();
-        set({
+        const read = {
           linkedFolders,
           minds,
           settings,
-          documents,
           keptCitationTexts,
           chatReadiness,
           folders,
@@ -618,10 +654,12 @@ export const useAppStore = create<AppState>()((set, get) => {
           skills,
           embedding,
           rerank,
-          examples,
           privacy,
-          status: { kind: "ready" },
-        });
+        } satisfies Pick<AppState, PushedList>;
+        const fresh = Object.fromEntries(
+          Object.entries(read).filter(([list]) => !pushedSince(list as PushedList, readAt)),
+        ) as Partial<Pick<AppState, PushedList>>;
+        set({ ...fresh, documents, examples, status: { kind: "ready" } });
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
@@ -1127,11 +1165,15 @@ function tickIndexed(connectors: number): void {
 }
 
 // Settings can change outside this window (another window, or the core itself), so follow the core's event.
-core.on("settings.changed", (settings) => useAppStore.setState({ settings }));
+core.on("settings.changed", (settings) => {
+  pushed("settings");
+  useAppStore.setState({ settings });
+});
 
 // The same for the list of Minds: created, renamed, deleted, or reordered by an edit.
 // A deleted Mind's tab closes in the core, which says so with "layout.changed".
 core.on("minds.changed", (minds) => {
+  pushed("minds");
   const { examples } = useAppStore.getState();
   useAppStore.setState({ minds });
   // The example Mind deleted like any other: no longer the examples.
@@ -1159,7 +1201,10 @@ core.on("examples.changed", (examples) => {
 });
 
 // Privacy choices change on the Privacy page, at the first run's question, or with local mode.
-core.on("privacy.changed", (privacy) => useAppStore.setState({ privacy }));
+core.on("privacy.changed", (privacy) => {
+  pushed("privacy");
+  useAppStore.setState({ privacy });
+});
 
 /**
  * Whether the first run's question about usage data (in a test build, its
@@ -1186,7 +1231,10 @@ core.on("answer.started", ({ answerId }) => {
   if (answerId !== examples?.answerId) updateGettingStarted({ askedOwn: true });
 });
 
-core.on("chatReadiness.changed", (chatReadiness) => useAppStore.setState({ chatReadiness }));
+core.on("chatReadiness.changed", (chatReadiness) => {
+  pushed("chatReadiness");
+  useAppStore.setState({ chatReadiness });
+});
 
 // An outside agent asked to show one of its Citations (#351): it opens beside the Mind, at its quote.
 core.on("agents.citationShown", (place) => {
@@ -1196,24 +1244,40 @@ core.on("agents.citationShown", (place) => {
 });
 
 // The embedding model downloads in the background: follow its state and progress.
-core.on("embeddingModel.status", (embeddingModel) => useAppStore.setState({ embeddingModel }));
+core.on("embeddingModel.status", (embeddingModel) => {
+  pushed("embeddingModel");
+  useAppStore.setState({ embeddingModel });
+});
 
 // The embedding model can change in Settings or by local mode, and a rebuild reports its progress.
-core.on("embedding.changed", (embedding) => useAppStore.setState({ embedding }));
+core.on("embedding.changed", (embedding) => {
+  pushed("embedding");
+  useAppStore.setState({ embedding });
+});
 
 // Reranking changes in Settings, and the built-in reranking model downloads in the background.
-core.on("rerank.changed", (rerank) => useAppStore.setState({ rerank }));
+core.on("rerank.changed", (rerank) => {
+  pushed("rerank");
+  useAppStore.setState({ rerank });
+});
 
 // Folders change through this window or another: follow the list. The sidebar's tree follows it.
-core.on("folders.changed", (folders) => useAppStore.setState({ folders }));
+core.on("folders.changed", (folders) => {
+  pushed("folders");
+  useAppStore.setState({ folders });
+});
 
 // Linked folders added, removed, or scanning, paused, out of reach, or making progress.
-core.on("linkedFolders.changed", (linkedFolders) => useAppStore.setState({ linkedFolders }));
+core.on("linkedFolders.changed", (linkedFolders) => {
+  pushed("linkedFolders");
+  useAppStore.setState({ linkedFolders });
+});
 
 // A Linked folder was unlinked: the text its Citations quote is kept, so they can still be checked.
-core.on("keptCitationTexts.changed", (keptCitationTexts) =>
-  useAppStore.setState({ keptCitationTexts }),
-);
+core.on("keptCitationTexts.changed", (keptCitationTexts) => {
+  pushed("keptCitationTexts");
+  useAppStore.setState({ keptCitationTexts });
+});
 
 // Documents removed from the index, e.g. with their Linked folder.
 core.on("documents.removed", (removed) => documentUpdates.remove(removed));
@@ -1223,6 +1287,7 @@ core.on("documents.moved", (moved) => documentUpdates.upsert(moved));
 
 // Tags change through this window or another: follow the list, and drop a deleted Tag from the filter.
 core.on("tags.changed", (tags) => {
+  pushed("tags");
   const { tagFilter } = useAppStore.getState();
   const kept = tagFilter.filter(
     (value) => value === NEEDS_REVIEW || tags.some((tag) => tag.id === value),
@@ -1231,7 +1296,10 @@ core.on("tags.changed", (tags) => {
 });
 
 // Skills are imported, turned on or off, or removed, through this window or another.
-core.on("skills.changed", (skills) => useAppStore.setState({ skills }));
+core.on("skills.changed", (skills) => {
+  pushed("skills");
+  useAppStore.setState({ skills });
+});
 
 // Documents' Tags, or their tagging, changed: by the User, by automatic tagging, or with a deleted Tag.
 core.on("documents.tagged", (tagged) => documentUpdates.upsert(tagged));
