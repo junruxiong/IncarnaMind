@@ -78,7 +78,9 @@ export interface LaunchOptions {
  * 1024 × 768 one (677px high once the menu bar and the Dock are off it), where
  * a window opened 1024 wide folds the Mind's margins away. macOS lets a window
  * be wider than its screen, but not taller, so each launch sets this size and
- * checks the page got it, and says so if a screen is too short for it.
+ * checks the page got it, and says so if a screen is too short for it. It is
+ * the page's size, the window's content: on Linux the window also holds the
+ * menu bar, above the page.
  */
 export const WINDOW_SIZE = { width: 1280, height: 660 };
 
@@ -135,7 +137,7 @@ export async function launchApp(
   await window.getByTestId("plus-menu").waitFor();
   if (!keepWindow) {
     await app.evaluate(({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height);
+      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
     }, WINDOW_SIZE);
     await expect
       .poll(() => window.evaluate(() => [globalThis.innerWidth, globalThis.innerHeight]), {
@@ -489,7 +491,12 @@ export async function addDocuments(window: Page, paths: string[]): Promise<void>
   if (paths.length > listed) await expectReadyDocuments(window, paths.length);
 }
 
-/** Sizes the app's window, e.g. to its narrowest (900px wide, the minimum) or a wide one. */
+/**
+ * Sizes the app's page, e.g. to its narrowest (900px wide, the minimum) or a
+ * wide one, as `WINDOW_SIZE` is: its content, without Linux's menu bar. The
+ * screen may not have room for the height (see `WINDOW_SIZE`), so only the
+ * width is waited for.
+ */
 export async function setWindowSize(
   app: ElectronApplication,
   window: Page,
@@ -497,7 +504,8 @@ export async function setWindowSize(
   height: number,
 ): Promise<void> {
   await app.evaluate(
-    ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height),
+    ({ BrowserWindow }, size) =>
+      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height),
     { width, height },
   );
   await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(width);
