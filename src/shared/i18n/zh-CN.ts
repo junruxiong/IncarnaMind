@@ -2133,6 +2133,7 @@ export const zhCN = {
   "agents.pairing.readsNothing": "还没有可读取的文件夹",
   "agents.pairing.lastUsed": "上次使用：{when}",
   "agents.pairing.notUsed": "尚未使用",
+  "agents.pairing.renameLabel": "{agent} 的名称",
   "agents.pairing.folders": "文件夹…",
   "agents.pairing.foldersTitle": "{agent} 可以读取的文件夹",
   "agents.pairing.activity": "活动",

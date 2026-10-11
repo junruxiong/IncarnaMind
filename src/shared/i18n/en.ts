@@ -2255,6 +2255,7 @@ export const en = {
   "agents.pairing.readsNothing": "Reads no folders yet",
   "agents.pairing.lastUsed": "Last used {when}",
   "agents.pairing.notUsed": "Not used yet",
+  "agents.pairing.renameLabel": "Name of {agent}",
   "agents.pairing.folders": "Folders…",
   "agents.pairing.foldersTitle": "Folders {agent} may read",
   "agents.pairing.activity": "Activity",

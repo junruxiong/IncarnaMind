@@ -177,7 +177,20 @@ test("an agent set up by pasting its settings searches, its activity shows each 
       await row.getByTestId("agent-pairing-folders").getByRole("checkbox").uncheck();
       await expect(row.getByTestId("agent-pairing-reads")).toHaveText("Reads no folders yet");
 
-      await row.getByTestId("agent-disconnect").click();
+      // Its name renames in place: a double-click, or F2; Esc cancels and leaves Settings open.
+      await row.getByTestId("agent-pairing-name").dblclick();
+      await row.getByTestId("agent-pairing-rename").fill("Research agent");
+      await window.keyboard.press("Enter");
+      const renamed = page.getByTestId("agent-pairing").filter({ hasText: "Research agent" });
+      await expect(renamed.getByTestId("agent-pairing-name")).toHaveText("Research agent");
+      await renamed.getByTestId("agent-pairing-name").focus();
+      await window.keyboard.press("F2");
+      await renamed.getByTestId("agent-pairing-rename").fill("Something else");
+      await window.keyboard.press("Escape");
+      await expect(renamed.getByTestId("agent-pairing-name")).toHaveText("Research agent");
+      await expect(page).toBeVisible();
+
+      await renamed.getByTestId("agent-disconnect").click();
       await expect(page.getByTestId("agent-pairing")).toHaveCount(0);
     } finally {
       await agent.close();
