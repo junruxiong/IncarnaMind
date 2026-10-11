@@ -725,9 +725,9 @@ export const zhCN = {
   "embeddingProviders.confirm.turnOff": "关闭",
   "embeddingProviders.localOnly.label": "所有内容都留在这台电脑上",
   "embeddingProviders.localOnly.body":
-    "开启后，嵌入只使用内置模型或 Ollama，搜索结果不会发送出去重新排序，也不发送使用数据。如果正在使用云端嵌入模型，会切换回内置模型，并重新处理你的文档。",
+    "开启后，嵌入只使用内置模型或 Ollama，搜索结果不会发送出去重新排序，问题只交给这台电脑上的模型回答，也不发送使用数据。如果正在使用云端嵌入模型，会切换回内置模型，并重新处理你的文档。",
   "embeddingProviders.localOnly.cloudChat":
-    "你的对话模型仍会把问题发送到 {service}。如果也想让问题留在本机，请在“对话模型”中选择本地模型。",
+    "你的对话模型在 {service}，因此开启期间不会发送问题。想提问，请在“对话模型”中选择本地模型。",
   "embeddingProviders.rebuild.title": "正在为搜索嵌入文档：{done} / {total} 个",
   "embeddingProviders.rebuild.localMode": "为了让所有内容留在这台电脑上，搜索现在使用内置模型。",
   "embeddingProviders.rebuild.note": "每个文档处理完之前，搜索按关键词查找它的段落。",
@@ -979,6 +979,8 @@ export const zhCN = {
   "providers.test.rate-limit": "提供商正在限制此密钥的请求，请稍后再试。",
   "providers.test.network": "无法连接到服务器。请检查地址和网络连接。",
   "providers.test.provider": "提供商返回了错误。",
+  "providers.test.local-mode":
+    "没有发送任何内容：已开启“所有内容都留在这台电脑上”，而此模型不在这台电脑上。",
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
   "providers.test.unknown": "测试未通过。",
@@ -1005,7 +1007,13 @@ export const zhCN = {
     "此设备上没有保存 {service} 的 API 密钥。请在设置中添加后再提问。",
   "providers.readiness.consent-declined":
     "你选择了不向 {service} 发送数据，因此无法提问。请选择其他提供商或本地模型，或在设置中允许发送。",
+  "providers.readiness.local-mode":
+    "已开启“所有内容都留在这台电脑上”，因此不会向 {service} 发送问题。",
   "providers.readiness.setUp": "去设置",
+  "localMode.refused": "已开启“所有内容都留在这台电脑上”，这个问题没有发送给 {service}",
+  "localMode.useLocal": "改用本地模型",
+  "localMode.turnOff": "关闭本地模式",
+  "localMode.turnedOff": "已关闭“所有内容都留在这台电脑上”",
 
   "providers.settings.title": "对话模型",
   "providers.settings.none": "尚未设置对话模型。",
@@ -1213,7 +1221,7 @@ export const zhCN = {
   "privacy.intro":
     "IncarnaMind 不收集任何使用数据。本页列出它从这台电脑发出的所有内容，你可以在这里更改。",
   "privacy.flows.intro":
-    "以下数据流会把你的内容发送到这台电脑以外的服务。在你允许之前，不会发送任何内容。提供商允许选择时，IncarnaMind 会要求它不要保存你的请求。",
+    "以下数据流会把你的内容发送到这台电脑以外的服务。在你允许之前，不会发送任何内容；开启“所有内容都留在这台电脑上”时，一律不会发送。提供商允许选择时，IncarnaMind 会要求它不要保存你的请求。",
   "privacy.flows.service": "发送到 {service}",
   "privacy.flows.local": "留在这台电脑上",
   "privacy.flows.sends": "发送：",
@@ -1331,6 +1339,7 @@ export const zhCN = {
   "composer.model.hint.local": "数据留在这台电脑上",
   "composer.model.hint.localMac": "数据留在这台 Mac 上",
   "composer.model.hint.cloud": "云端：会发送到 ollama.com",
+  "composer.model.localModeOff": "不可用：已开启“所有内容都留在这台电脑上”",
   "composer.model.via.keys": "使用你的密钥",
   "composer.model.via.plan": "使用你的 ChatGPT 订阅",
   "composer.model.via.local": "在这台电脑上运行",
@@ -1387,6 +1396,9 @@ export const zhCN = {
   "answer.error.network": "无法连接提供商",
   "answer.error.provider": "提供商出错",
   "answer.error.consent-declined": "没有发送任何内容：你选择了不向这个服务发送数据",
+  "answer.error.local-mode":
+    "已停止：已开启“所有内容都留在这台电脑上”，而 {model} 不在这台电脑上运行",
+  "answer.error.useLocal": "改用本地模型",
   "answer.error.too-long":
     "这个问题太长，即使不带上方的笔记，也超出了本地模型的上下文窗口。请缩短问题，或为这个问题换一个模型",
   "answer.error.unknown": "无法生成这个回答",
