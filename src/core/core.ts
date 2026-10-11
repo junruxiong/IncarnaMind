@@ -55,6 +55,7 @@ import { createFolders } from "./folders";
 import { createLayouts } from "./layout";
 import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
+import { createBatches } from "./library/batches";
 import { chatGroupClassifier, decisionGroupClassifier } from "./library/classifier";
 import { documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
@@ -227,6 +228,11 @@ export function createCore(adapters: CoreAdapters): Core {
   /** Set once rerank exists: a Document became ready, so the built-in reranking model is needed. */
   let prepareRerank = () => {};
   let libraryDocumentChanged = (_documentId: string) => {};
+  const batches = createBatches({
+    db,
+    emit: (batch) => events.emit("documents.batch", batch),
+    file: (documentId, groupId) => library.file(documentId, groupId),
+  });
   const secrets = createSecrets(adapters.keychain, settings);
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
@@ -274,13 +280,21 @@ export function createCore(adapters: CoreAdapters): Core {
       emitStatus: (document) => {
         events.emit("document.status", document);
         libraryDocumentChanged(document.id);
+        batches.changed([document.id]);
         rebuildMayHaveProgressed();
       },
       emitMoved: (moved) => events.emit("documents.moved", moved),
-      emitRemoved: (ids) => events.emit("documents.removed", ids),
+      emitRemoved: (ids) => {
+        events.emit("documents.removed", ids);
+        batches.changed(ids);
+      },
       emitKept: (kept) => events.emit("keptCitationTexts.changed", kept),
       foldersChanged,
-      linkedFoldersChanged: (list) => events.emit("linkedFolders.changed", list),
+      linkedFoldersChanged: (list) => {
+        events.emit("linkedFolders.changed", list);
+        batches.linkedFoldersChanged(list);
+      },
+      onFound: (documentId) => batches.found(documentId),
       onReady: (documentId) => {
         // There is something to search now: the built-in reranking model downloads, if it reranks.
         prepareRerank();
@@ -713,8 +727,14 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     settings,
     background,
-    changed: () => events.emit("library.changed", null),
-    assigned: (assignments) => events.emit("library.assignments", assignments),
+    changed: () => {
+      events.emit("library.changed", null);
+      batches.libraryChanged();
+    },
+    assigned: (assignments) => {
+      events.emit("library.assignments", assignments);
+      batches.changed(assignments.map((each) => each.documentId));
+    },
     providerExists: (id) => chat.exists(id),
     chatReadsImages: (choice) => chat.readsImages(choice),
     async pageImages(id, contentHash, signal) {
@@ -1048,11 +1068,14 @@ export function createCore(adapters: CoreAdapters): Core {
       if (chatModel !== undefined || flowChanged) await readinessChanged();
       return updated;
     },
-    addDocuments: async (paths) => {
+    addDocuments: async (paths, options) => {
+      const batchId = batches.begin(library.target(options));
       const since = now();
-      const result = await documents.add(paths);
+      const result = await documents
+        .add(paths, (documentId) => batches.added(batchId, documentId))
+        .finally(() => batches.done(batchId));
       usageData.record({ event: "documents_added", fields: addedCounts(result, since) });
-      return result;
+      return { ...result, batchId };
     },
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
@@ -1089,10 +1112,17 @@ export function createCore(adapters: CoreAdapters): Core {
     retryDocument: async (id) => documents.retry(id),
     readDocumentText: async (id) => documents.readText(id),
     previewLinkedFolder: (path) => documents.linkedFolders.preview(path),
-    addLinkedFolder: async (path) => {
+    addLinkedFolder: async (path, options) => {
+      const groupId = library.target(options);
+      const known = new Set(documents.linkedFolders.list().map((each) => each.id));
       const linked = await documents.linkedFolders.add(path);
+      // Its first scan only starts adding Documents once this has returned.
+      const batchId = batches.begin(groupId);
+      // A folder inside one already linked adds nothing: its scans aren't this batch.
+      if (known.has(linked.id)) batches.done(batchId);
+      else batches.linking(batchId, linked);
       usageData.record({ event: "folder_linked", fields: {} });
-      return linked;
+      return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
@@ -1272,6 +1302,8 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
+    acceptAssignments: async (ids) => library.accept(ids),
+    rejectAssignments: async (ids) => library.reject(ids),
     moveToFolder: async (input) => {
       if (!isRecord(input)) throw new InvalidInputError("moveToFolder expects an object.");
       const folderId = parseFolderChoice(input.folderId);
@@ -1494,6 +1526,7 @@ export function createCore(adapters: CoreAdapters): Core {
       connectors.close();
       tagger.close();
       library.close();
+      batches.close();
       skills.close();
       stopTrackingUsage();
       consent.close();
