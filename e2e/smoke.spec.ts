@@ -12,6 +12,7 @@ import {
   openDocumentMenu,
   openSettings,
   removeDataFolder,
+  setWindowSize,
   showSettingsPage,
   showSourceLocations,
 } from "./app";
@@ -243,7 +244,7 @@ test('after "Don\'t allow", a connection test offers to ask again, and asks befo
 
 test("first run fits a small window; the not-ready notice and a long title keep the Mind's text edge", async () => {
   const { app, window } = await launchApp(dataDir);
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 600));
+  await setWindowSize(app, window, 1000, 600);
   const setup = window.getByTestId("chat-setup");
   await setup.getByTestId("chat-choice-api-key").check();
   await setup
