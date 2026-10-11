@@ -888,6 +888,13 @@ export const zhCN = {
   "settings.language.system": "跟随系统",
   "settings.language.en": "English",
   "settings.language.zh-CN": "简体中文",
+  "settings.motion": "动效",
+  "settings.motion.body":
+    "打开、关闭和移动时的动画。选“减弱”只保留短暂的淡入淡出，选“关”则所有变化立即完成。",
+  "settings.motion.on": "开",
+  "settings.motion.reduced": "减弱",
+  "settings.motion.off": "关",
+  "settings.motion.system": "在你选择之前，跟随系统设置。",
   "settings.close": "关闭设置",
   "settings.about.title": "关于",
   "settings.about.body": "IncarnaMind 是开源软件，采用 Apache 2.0 许可证。",
