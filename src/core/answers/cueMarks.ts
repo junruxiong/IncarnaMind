@@ -11,6 +11,8 @@ import type { PageText } from "../documents/passages";
 export function withCueMarks(text: string, units: readonly PageText[]): string {
   let marked = "";
   let from = 0;
+  /** Where the next cue's line is looked for: after the line last marked. */
+  let searchFrom = 0;
   for (const unit of units) {
     if (unit.kind !== "cues") continue;
     for (const [index, anchor] of (unit.anchors ?? []).entries()) {
@@ -18,7 +20,7 @@ export function withCueMarks(text: string, units: readonly PageText[]): string {
       const head = unit.text.slice(anchor.start, anchor.end).trim().slice(0, 200);
       if (!cue || !head) continue;
       let at = -1;
-      for (let line = from; line >= 0 && line < text.length; ) {
+      for (let line = searchFrom; line >= 0 && line < text.length; ) {
         const rest = text.slice(line, line + head.length);
         if (rest.length > 0 && head.startsWith(rest)) {
           at = line;
@@ -31,6 +33,8 @@ export function withCueMarks(text: string, units: readonly PageText[]): string {
       const speaker = unit.label?.speakers?.[index]?.replace(/[\]\n]+/g, " ");
       marked += `${text.slice(from, at)}[${clockTime(cue.startMs)}${speaker ? ` ${speaker}` : ""}] `;
       from = at;
+      const next = text.indexOf("\n", at);
+      searchFrom = next < 0 ? text.length : next + 1;
     }
   }
   return marked + text.slice(from);

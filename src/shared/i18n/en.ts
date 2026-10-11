@@ -2082,6 +2082,7 @@ export const en = {
   "meetings.line.openSettings.mac": "Open System Settings",
   "meetings.line.openSettings.other": "Open Settings",
   "meetings.transcript.name": "Transcript · {meeting}",
+  "meetings.transcript.nameAlone": "Transcript",
   "meetings.bar.showTranscript": "Show transcript",
   "meetings.bar.hideTranscript": "Hide transcript",
   "meetings.bar.transcriptSoon": "The transcript appears with its first line",

@@ -1971,6 +1971,7 @@ export const zhCN = {
   "meetings.line.openSettings.mac": "打开系统设置",
   "meetings.line.openSettings.other": "打开设置",
   "meetings.transcript.name": "转写稿 · {meeting}",
+  "meetings.transcript.nameAlone": "转写稿",
   "meetings.bar.showTranscript": "显示转写稿",
   "meetings.bar.hideTranscript": "隐藏转写稿",
   "meetings.bar.transcriptSoon": "第一句话转写后即可显示转写稿",
