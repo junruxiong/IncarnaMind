@@ -59,6 +59,10 @@ export interface AgentsConfig {
   ollamaUrl: string;
   /** Stops a run that takes longer, counted as a failure. */
   runTimeoutMs: number;
+  /** Before each run, wait until the one-minute load average is at most this (0: never wait). */
+  maxLoad: number;
+  /** The longest that wait lasts; the run then goes ahead, its load recorded. */
+  calmWaitMs: number;
   /** Judge uncited claims and correctness with the chat model (on by default). */
   judge: boolean;
   /** Keep each run's temporary folders. */
@@ -154,6 +158,8 @@ export function readAgentsConfig(root: string, processEnv: Env = process.env): A
     localNumCtx: Number(value("AGENTS_LOCAL_NUM_CTX") ?? 8192),
     ollamaUrl: value("AGENTS_OLLAMA_URL") ?? "http://127.0.0.1:11434",
     runTimeoutMs: Number(value("AGENTS_RUN_TIMEOUT_S") ?? 300) * 1000,
+    maxLoad: Number(value("AGENTS_MAX_LOAD") ?? 0),
+    calmWaitMs: Number(value("AGENTS_CALM_WAIT_S") ?? 600) * 1000,
     judge: value("AGENTS_JUDGE") !== "off",
     keep: value("KEEP_DATA") === "1",
     scratch: resolve(value("AGENTS_SCRATCH") ?? join(tmpdir(), "incarnamind-bakeoff")),
