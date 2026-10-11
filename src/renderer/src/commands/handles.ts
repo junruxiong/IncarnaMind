@@ -13,6 +13,9 @@ export const assistantHandle: Handle<{ openHistory(): void }> = { current: null 
 /** The Citation whose card is open: what "Open cited page" opens. */
 export const citationHandle: Handle<{ open(): void }> = { current: null };
 
+/** The open Mind's find bar: what "Find next" and "Find previous" do. */
+export const findHandle: Handle<{ next(): void; previous(): void }> = { current: null };
+
 export const sidebarHandle: Handle<{ hidden: boolean; toggle(): void }> = { current: null };
 
 /** The Mind the User last wrote in: its editor and its document, for the commands on its text. */

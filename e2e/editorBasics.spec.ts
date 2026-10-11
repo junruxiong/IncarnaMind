@@ -11,6 +11,7 @@ import {
   setWindowSize,
   slideSelect,
   urlsOpened,
+  useLocalChatModel,
 } from "./app";
 
 /*
@@ -275,4 +276,95 @@ test("the outline of a Mind with no headings says how to add one", async () => {
   await expect(window.getByTestId("mind-outline-empty")).toBeVisible();
   await window.keyboard.press("Escape");
   await expect(window.getByTestId("mind-outline")).toHaveCount(0);
+});
+
+test("find in the Mind: a count, next and previous by keyboard and mouse, Chinese text, and Esc leaves the cursor on the match", async () => {
+  const { window, editor } = await startMind("zh-CN");
+  await window.keyboard.type("潮汐是海水的周期性涨落。大潮和小潮交替出现。");
+  await window.keyboard.press("Enter");
+  await window.keyboard.type("Tides follow the Moon, and tides are strongest at new moon.");
+  const bar = window.getByTestId("find-bar");
+  const field = window.getByTestId("find-field");
+  const count = window.getByTestId("find-count");
+  const current = editor.locator(".find-match--current");
+
+  await window.keyboard.press("ControlOrMeta+F");
+  await expect(bar).toBeVisible();
+  await expect(field).toBeFocused();
+
+  // A word of Chinese is found as it comes: 潮 is in 潮汐, 大潮 and 小潮.
+  await window.keyboard.type("潮");
+  await expect(count).toHaveText("1 / 3");
+  await expect(editor.locator(".find-match")).toHaveCount(3);
+  await expect(current).toHaveText("潮");
+  await window.keyboard.type("汐");
+  await expect(count).toHaveText("1 / 1");
+  await window.keyboard.press("Backspace");
+
+  // Enter and Shift+Enter go round the matches; the buttons do the same.
+  await window.keyboard.press("Enter");
+  await expect(count).toHaveText("2 / 3");
+  await window.keyboard.press("Enter");
+  await window.keyboard.press("Enter");
+  await expect(count).toHaveText("1 / 3");
+  await window.keyboard.press("Shift+Enter");
+  await expect(count).toHaveText("3 / 3");
+  await window.getByTestId("find-next").hover();
+  await window.getByTestId("find-next").click();
+  await expect(count).toHaveText("1 / 3");
+  await window.getByTestId("find-previous").hover();
+  await window.getByTestId("find-previous").click();
+  await expect(count).toHaveText("3 / 3");
+
+  // Case doesn't matter in Latin text, and a miss says so.
+  await field.fill("TIDES");
+  await expect(count).toHaveText("1 / 2");
+  await field.fill("xyz");
+  await expect(count).toHaveText("没有匹配项");
+  await expect(editor.locator(".find-match")).toHaveCount(0);
+  await expect(window.getByTestId("find-next")).toBeDisabled();
+
+  // Esc closes the bar, clears the marks and selects the current match.
+  await field.fill("moon");
+  await expect(count).toHaveText("1 / 2");
+  await window.keyboard.press("Enter");
+  await window.keyboard.press("Escape");
+  await expect(bar).toHaveCount(0);
+  await expect(editor.locator(".find-match")).toHaveCount(0);
+  await expect(editor).toBeFocused();
+  expect(await window.evaluate(() => globalThis.getSelection()?.toString())).toBe("moon");
+
+  // The close button does the same, and ⌘F opens it again with the selected words.
+  await window.keyboard.press("ControlOrMeta+F");
+  await expect(field).toHaveValue("moon");
+  await window.getByTestId("find-close").hover();
+  await window.getByTestId("find-close").click();
+  await expect(bar).toHaveCount(0);
+});
+
+test("find in the Mind keeps counting while an Answer streams in", async () => {
+  const running = await launchApp(dataDir, { fakeChat: true });
+  const { window } = running;
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(running.app, window, 1280, 700);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  await editor.click();
+  await window.keyboard.press("ControlOrMeta+J");
+  await window.keyboard.type("Tides tides");
+  await window.keyboard.press("Enter");
+  const answer = editor.getByTestId("answer");
+  await expect(answer).toHaveAttribute("data-status", "streaming");
+
+  await window.keyboard.press("ControlOrMeta+F");
+  await window.keyboard.type("tides");
+  // The Question's two, then the Answer's two once it has written them.
+  await expect(window.getByTestId("find-count")).toHaveText(/ of 4$/);
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  // The current match stayed the first while the text grew after it.
+  await expect(window.getByTestId("find-count")).toHaveText("1 of 4");
+  await window.keyboard.press("Enter");
+  await window.keyboard.press("Escape");
+  await expect(window.getByTestId("find-bar")).toHaveCount(0);
 });

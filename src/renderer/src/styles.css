@@ -3790,6 +3790,74 @@
     max-width: 90vw;
     padding: 8px;
   }
+  /* The find bar over the Mind's top right corner; its matches are marked in the text. */
+  .find-bar {
+    position: fixed;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: calc(100vw - 32px);
+    padding: 4px;
+    border-radius: 8px;
+    background: var(--color-sheet);
+    box-shadow: var(--shadow-popover);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+    color: var(--color-ink);
+
+    input {
+      width: 160px;
+      min-width: 0;
+      flex: 1 1 auto;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--color-chip);
+      outline: none;
+    }
+    .find-count {
+      flex: none;
+      min-width: 3.5em;
+      padding: 0 6px;
+      text-align: center;
+      font-size: var(--text-meta);
+      color: var(--color-ink-meta);
+      white-space: nowrap;
+    }
+    .find-count--none {
+      color: var(--color-danger);
+    }
+    button {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: var(--color-ink-secondary);
+      outline: none;
+
+      &:hover:not(:disabled),
+      &:focus-visible {
+        background: var(--color-hover);
+        color: var(--color-ink);
+      }
+      &:disabled {
+        opacity: 0.4;
+      }
+    }
+  }
+  .find-match {
+    border-radius: 2px;
+    background: rgb(250 204 21 / 0.35);
+    color: inherit;
+  }
+  .find-match--current {
+    background: rgb(250 204 21 / 0.85);
+  }
   .mind-outline {
     width: min(320px, 92vw);
     max-height: min(60vh, 420px);

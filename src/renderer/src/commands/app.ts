@@ -10,7 +10,7 @@ import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
 import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
-import { citationHandle, sidebarHandle } from "./handles";
+import { citationHandle, findHandle, sidebarHandle } from "./handles";
 import { linkCommands } from "./links";
 import { meetingCommands } from "./meetings";
 import { proposalCommands } from "./proposals";
@@ -172,6 +172,36 @@ const appCommands: readonly Command[] = [
       const mindId = mindInFront();
       if (mindId) useMindTools.getState().showOutline(mindId);
     },
+  },
+  {
+    id: "mind.find",
+    label: "editor.find.label",
+    shortcut: { keys: "CmdOrCtrl+F" },
+    group: "main",
+    reversible: true,
+    when: () => mindInFront() !== null,
+    run: () => {
+      const mindId = mindInFront();
+      if (mindId) useMindTools.getState().showFind(mindId);
+    },
+  },
+  {
+    id: "mind.findNext",
+    label: "command.mind.findNext",
+    shortcut: { keys: "CmdOrCtrl+G" },
+    group: "main",
+    reversible: true,
+    when: () => findHandle.current !== null,
+    run: () => findHandle.current?.next(),
+  },
+  {
+    id: "mind.findPrevious",
+    label: "command.mind.findPrevious",
+    shortcut: { keys: "CmdOrCtrl+Shift+G" },
+    group: "main",
+    reversible: true,
+    when: () => findHandle.current !== null,
+    run: () => findHandle.current?.previous(),
   },
   ...footnoteCommands,
   ...linkCommands,
