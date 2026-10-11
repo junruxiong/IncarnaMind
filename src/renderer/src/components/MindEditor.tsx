@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import * as Y from "yjs";
 import { ANSWER_BLOCK, MIND_CONTENT_FIELD, type MindAccess } from "../../../core/api";
 import { translate } from "../../../shared/i18n";
+import { shortcutLabel } from "../commands/keymap";
 import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
@@ -21,9 +22,10 @@ import { FormatMenu } from "../editor/FormatMenu";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { ComposerDockContext, MindIdContext } from "../editor/mindContext";
+import { NoteKeymap } from "../editor/noteKeymap";
 import { noteExtensions } from "../editor/noteSchema";
 import { QuestionView } from "../editor/QuestionView";
-import { askInEditor, QUESTION_SHORTCUT_LABEL, QuestionCommands } from "../editor/questionCommands";
+import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ScopePicker } from "../editor/ScopePicker";
 import { SlashMenu } from "../editor/SlashMenu";
@@ -175,7 +177,7 @@ function MindEditorView({
           ? "editor.hint.example"
           : "editor.hint.afterAnswer";
     const [before = "", after = ""] = t(key, { ask: ASK }).split(ASK);
-    return { before, ask: t(`${key}.ask`, { shortcut: QUESTION_SHORTCUT_LABEL }), after };
+    return { before, ask: t(`${key}.ask`, { shortcut: shortcutLabel("composer.focus") }), after };
   };
   const label = t("mind.editor.label");
   const emptyFormula = t("editor.math.empty");
@@ -226,6 +228,7 @@ function MindEditorView({
         ScopePicker,
         MathEditing.configure({ onEdit: setEditingMath }),
         BlockCommands,
+        NoteKeymap,
         QuestionCommands.configure({
           onAsk: (current, questionId) => void askInEditor(current, mindId, questionId),
         }),

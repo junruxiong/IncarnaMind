@@ -10,6 +10,7 @@ import {
   useId,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -18,6 +19,8 @@ import type { SearchScope } from "../../../core/api";
 import { mindModelOf } from "../../../shared/mindModel";
 import { hasSearchScope, type ScopeKind, scopeIds } from "../../../shared/searchScope";
 import { useAnswers } from "../answers";
+import { composerHandle, useHandle } from "../commands/handles";
+import { shortcutLabel } from "../commands/keymap";
 import { SearchIcon } from "../components/icons";
 import { ProblemLine } from "../components/ProblemLine";
 import { ReadinessExplanation, settingsPageFor } from "../components/providers/ChatReadinessNotice";
@@ -233,21 +236,20 @@ export function Composer({
     },
   }));
 
-  // ⌘J, anywhere in the window but a dialog: the composer takes the focus.
-  useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.shiftKey || !isCommand(event)) return;
-      if (event.code !== "KeyJ" || document.querySelector("dialog[open]")) return;
-      event.preventDefault();
-      const element = field.current;
-      if (element && document.activeElement !== element) {
-        element.focus();
-        element.setSelectionRange(element.value.length, element.value.length);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // ⌘J, anywhere in the window but a dialog ("composer.focus"): the composer takes the focus.
+  const handle = useMemo(
+    () => ({
+      focus() {
+        const element = field.current;
+        if (element && document.activeElement !== element) {
+          element.focus();
+          element.setSelectionRange(element.value.length, element.value.length);
+        }
+      },
+    }),
+    [],
+  );
+  useHandle(composerHandle, handle);
 
   // Asked from elsewhere, e.g. a Skill chosen in the note's slash menu.
   const focusRequests = useComposer((state) => state.focusRequests);
@@ -548,7 +550,7 @@ export function Composer({
           ref={field}
           rows={1}
           data-testid="composer-input"
-          aria-label={t("composer.label", { shortcut: SHORTCUT })}
+          aria-label={t("composer.label", { shortcut: shortcutLabel("composer.focus") })}
           placeholder={t("composer.placeholder")}
           aria-autocomplete="list"
           aria-controls={picking ? listId : undefined}
@@ -651,8 +653,6 @@ export function Composer({
 }
 
 const EMPTY: Draft = { text: "", scope: null, skill: null, pastes: [] };
-
-const SHORTCUT = isMacOS() ? "⌘J" : "Ctrl+J";
 
 /** The draft's list of each kind of Search scope item. */
 const SCOPE_LISTS: Record<ScopeKind, keyof SearchScope> = {
