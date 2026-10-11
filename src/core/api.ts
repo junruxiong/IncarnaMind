@@ -30,6 +30,7 @@ export type {
  * This file must stay free of imports with side effects: the preload script and
  * the renderer import it.
  */
+import type { CitationForm, CitationStyleId } from "../shared/citationStyles";
 import type { TagColour } from "../shared/tagColours";
 import type { UnitKind, UnitLabel } from "../shared/units";
 import type { Language, LanguagePreference } from "./language";
@@ -3278,6 +3279,88 @@ export type SavedMindExport =
   | { status: "not-allowed"; linkedFolderId: string; linkedFolderPath: string };
 
 // ---------------------------------------------------------------------------
+// Citation styles (#289, ADR-0016)
+
+/**
+ * A run of text a citation style formatted: text with formatting flags, never markup, so
+ * nothing from a reference's fields is ever parsed as HTML or XML.
+ */
+export interface StyledRun {
+  text: string;
+  italic?: boolean;
+  bold?: boolean;
+  smallCaps?: boolean;
+  underline?: boolean;
+  script?: "sup" | "sub";
+  link?: string;
+}
+
+/** One Citation as a style needs it: the Document it cites, and where. */
+export interface CitedWork {
+  documentId: string | null;
+  /** The Document's name when it was cited, which still names a Document deleted since. */
+  documentName: string | null;
+  location: CitationLocation | null;
+}
+
+/**
+ * Citations next to each other in the text, which a style writes as one:
+ * "(Bowler et al., 2010; Oke, 1982)" or "[1, 3]". One Citation on its own is a cluster too.
+ */
+export interface CitationCluster {
+  works: CitedWork[];
+}
+
+export interface CitationFormatRequest {
+  style: CitationStyleId;
+  /** In the order they appear in the Mind. */
+  clusters: CitationCluster[];
+}
+
+/** One cluster in the style: its runs, each marked with the work it belongs to. */
+export interface FormattedCluster {
+  /**
+   * Each run's `work` is the index, in the cluster's `works`, of the Citation it writes;
+   * none for what the style puts around and between them ("(", "; ", ")"). A style may sort
+   * the works, and may write some as part of a range ("[1–3]"), with no run of their own.
+   */
+  runs: (StyledRun & { work?: number })[];
+}
+
+/** One entry of the Bibliography. */
+export interface BibliographyEntry {
+  /** The Document it lists; null for a Citation's Document deleted since. */
+  documentId: string | null;
+  /** The number the style sets apart before the entry ("[1]"), or null. */
+  label: StyledRun[] | null;
+  runs: StyledRun[];
+  /**
+   * Its reference record (#286) is too thin to cite well: it has none, or lacks its title,
+   * authors or date, so the style printed what little it has.
+   */
+  needsDetails: boolean;
+}
+
+/** A Mind's Citations and Bibliography in a citation style. */
+export interface FormattedCitations {
+  style: CitationStyleId;
+  form: CitationForm;
+  /** One per cluster of the request, in its order. */
+  clusters: FormattedCluster[];
+  /** In the style's order; each cited Document once. */
+  bibliography: BibliographyEntry[];
+  /** The style hangs its entries: the first line starts further left than the rest. */
+  hangingIndent: boolean;
+}
+
+/** The citation style a Mind is in. */
+export interface MindCitationStyle {
+  style: CitationStyleId;
+  /** The Mind chose it; otherwise it follows the default for the interface language. */
+  chosen: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Files IncarnaMind creates
 
 /**
@@ -4201,9 +4284,11 @@ export interface CoreApi {
   /**
    * Exports a Mind as a file, which the host saves: its title, its Notes
    * (those switched out of Question context too), its Answers and, if
-   * included, its Questions, in order. Each Citation becomes its own footnote
-   * naming its Document and pages, e.g. "Tides, p. 12–13", marked
-   * "[unverified]" unless its quote was found. Math stays LaTeX.
+   * included, its Questions, in order. Its Citations are in the Mind's
+   * citation style (#289): in the text, or as notes, with the Bibliography at
+   * the end; in Numbered, each is its own footnote naming its Document and
+   * pages, e.g. "Tides, p. 12–13". A Citation is marked "[unverified]" unless
+   * its quote was found. Math stays LaTeX.
    */
   exportMind(mindId: string, options: ExportMindOptions): Promise<MindExport>;
   /**
@@ -4211,6 +4296,17 @@ export interface CoreApi {
    * next free name, asking where new files go the first time.
    */
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
+
+  /**
+   * Formats Citations and their Bibliography in a citation style (#289), from the cited
+   * Documents' reference records as they are now. The work is done off the main thread, and a
+   * request like the last ones is answered from memory.
+   */
+  formatCitations(request: CitationFormatRequest): Promise<FormattedCitations>;
+  /** The citation style a Mind is in: its own choice, or the default for the interface language. */
+  getMindCitationStyle(mindId: string): Promise<MindCitationStyle>;
+  /** Chooses the Mind's citation style; null forgets the choice. Undo sets the one before. */
+  setMindCitationStyle(mindId: string, style: CitationStyleId | null): Promise<MindCitationStyle>;
 
   /** Where new files go, and the Linked folders IncarnaMind may or may not add files to. */
   getOutputSettings(): Promise<OutputSettings>;
@@ -4603,6 +4699,9 @@ const methods: Record<CoreApiMethod, true> = {
   previewMindExport: true,
   exportMind: true,
   saveMindExport: true,
+  formatCitations: true,
+  getMindCitationStyle: true,
+  setMindCitationStyle: true,
   getOutputSettings: true,
   setOutputLocation: true,
   setLinkedFolderWriting: true,

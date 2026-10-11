@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { onTestFinished } from "vitest";
 import {
   type Core,
@@ -15,6 +16,11 @@ import {
 import { createFakeEmbedder } from "../../src/core/embedding/fake";
 import { createFakeCrossEncoder } from "../../src/core/reranking/fake";
 import { openDatabase, type SqlValue } from "../../src/core/storage";
+
+/** The citation-style engine, styles and locales the app ships (ADR-0016). */
+export const CITATION_STYLES = fileURLToPath(
+  new URL("../../resources/citation-styles", import.meta.url),
+);
 
 /** A model source with nothing to download: the fake embedding model needs no files. */
 export const NO_MODEL_FILES = { baseUrl: "http://127.0.0.1/", files: [] } as const;
@@ -71,7 +77,7 @@ export function createMemoryKeychain(protection: SecretProtection = "os"): Memor
 export function startCore(dataDir: string, overrides: Partial<CoreAdapters> = {}): Core {
   const core = createCore({
     // A Documents folder of its own, so a test that saves a file never writes into the User's.
-    paths: { dataDir, documents: join(dataDir, "Documents") },
+    paths: { dataDir, documents: join(dataDir, "Documents"), citationStyles: CITATION_STYLES },
     systemLanguages: () => ["en-US"],
     keychain: createMemoryKeychain(),
     browser: {
