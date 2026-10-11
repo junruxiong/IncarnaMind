@@ -10,7 +10,6 @@
  * It runs under Vitest only for its TypeScript and worker threads
  * (eval/hard/vitest.config.ts); neither `npm test` nor `npm run eval` runs it.
  */
-import { execFileSync } from "node:child_process";
 import { arch, cpus, platform, totalmem } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +21,7 @@ import {
   type Embedder,
 } from "../../src/core";
 import { openDatabase } from "../../src/core/storage";
-import type { UnitKind, UnitLabel } from "../../src/shared/units";
+import { commitOf } from "../lib/commit";
 import { readConfig } from "../lib/config";
 import { createWorkerEmbedder } from "../lib/embedder";
 import { openLibrary } from "../lib/library";
@@ -34,27 +33,12 @@ import { fetchLibrary } from "./lib/fetch";
 import { embedEveryPassage } from "./lib/indexing";
 import { timeKeywordSearch } from "./lib/keywordTiming";
 import { downloadBytes, loadManifest, MANIFEST } from "./lib/manifest";
-import {
-  type HardQuestion,
-  loadHardQuestions,
-  type StoredText,
-  textProblems,
-} from "./lib/questions";
+import { type HardQuestion, loadHardQuestions, textProblems } from "./lib/questions";
 import { type HardReport, hardSummary, modeLabels, writeHardReports } from "./lib/report";
 import { HARD_RERANKED_SEARCHES, rerankAll, searchAll, summariseHard } from "./lib/scoring";
+import { storedTextReader } from "./lib/stored";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
-
-function commit(): string {
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
-  try {
-    const changed = git("status", "--porcelain") !== "";
-    return `${git("rev-parse", "--short", "HEAD")}${changed ? " (with uncommitted changes)" : ""}`;
-  } catch {
-    return "unknown";
-  }
-}
 
 /** The built-in model, timing how long it spends embedding until `stop` is called. */
 function timedEmbedder(embedder: Embedder) {
@@ -146,32 +130,7 @@ test("the hard tier", async () => {
       );
       const ids = new Map([...library.documents].map(([key, document]) => [key, document.id]));
 
-      // What the app stored for each Document, read back to check each Question against.
-      const storedCache = new Map<string, StoredText>();
-      const stored = (key: string): StoredText | undefined => {
-        if (!readyKeys.has(key)) return undefined;
-        let text = storedCache.get(key);
-        if (!text) {
-          const id = ids.get(key) ?? "";
-          text = {
-            units: db
-              .all<{ page: number | null; kind: UnitKind; label: string | null; text: string }>(
-                "SELECT page, kind, label, text FROM document_pages WHERE document_id = ? AND deleted_at IS NULL ORDER BY page",
-                [id],
-              )
-              .map((unit) => ({
-                ...unit,
-                label: unit.label ? (JSON.parse(unit.label) as UnitLabel) : null,
-              })),
-            passages: db.all<{ pageFrom: number | null; pageTo: number | null; text: string }>(
-              "SELECT page_from AS pageFrom, page_to AS pageTo, text FROM passages WHERE document_id = ? AND deleted_at IS NULL",
-              [id],
-            ),
-          };
-          storedCache.set(key, text);
-        }
-        return text;
-      };
+      const stored = storedTextReader(db, ids, readyKeys);
       const leftOutQuestions: { id: string; reasons: string[] }[] = [];
       const scored: HardQuestion[] = [];
       for (const question of set.questions) {
@@ -246,7 +205,7 @@ test("the hard tier", async () => {
         run: {
           startedAt: started.toISOString(),
           seconds: (Date.now() - started.getTime()) / 1000,
-          commit: commit(),
+          commit: commitOf(root),
           node: process.version,
           platform: `${platform()} ${arch()}`,
           cpu: `${cpu[0]?.model.trim() ?? "unknown CPU"} (${cpu.length} cores)`,

@@ -124,6 +124,33 @@ Per domain: contracts 33, filings 46, papers 32, reports 57, manuals 16, medical
 - **Reported:** per difficulty, per domain, per language, and per domain × difficulty in each mode; ranks per Question; indexing time in two passes (every Document ready with embeddings off; then embedding every Passage, and the embedding model's own time), Passages and peak memory after each; keyword search's time per query (median, 95th percentile) beside the reranker's.
 - **Citations,** with a chat model, per difficulty: the gating set's figures, how many Answers cite a Document the Question needs (for a near-duplicate, the right version, and how many cite another), and, for unanswerable Questions, how many are answered without a Citation.
 
+## Dumps, and scoring other orders offline
+
+`npm run eval:hard` takes most of an hour, so studying the order of results (a different reranker, a blend, top 8 or 10) needs the search kept: `npm run eval:dump` runs the hard tier with keyword search only, as the app does by default, and writes `hard.json` (the format and the scorer are in `../README.md`, "Offline scoring"; `INCARNAMIND_EVAL_DUMP_SETS=hard` dumps only this set, and `INCARNAMIND_EVAL_QUESTIONS=<ids>` a chosen subset of Questions, over the whole library).
+
+```sh
+INCARNAMIND_EVAL_DUMP_SETS=hard npm run eval:dump
+npm run eval:score -- eval/results/<start time>-dumps/hard.json --blend 0.5
+```
+
+It fetches the library into the cache as above (a later run fetches nothing), adds the Documents with embeddings off, checks the Questions against the stored text as the hard tier does, and for each query of each of the 180 Questions with something to find (the Question, and its translation for a cross-lingual one) keeps keyword search's best 150 Passages, the built-in model's score for the first 60, each candidate's `rerankText`, a hit flag for each Passage the answer needs, and the Passages the search Tool hands the model. No embedding model runs. `INCARNAMIND_EVAL_KEEP_DATA=1` keeps the data folder. The scorer's `--by` takes `difficulty` (the default), `domain` or `language`.
+
+The run scores the same Questions as `npm run eval:hard` scores keyword search and keyword top 60 + rerank, and fails unless the dump's top 5 are the same numbers. The scorer reproduces them from the file; the **search Tool** row is new: how many Questions have every Passage they need among the Passages the Tool hands the model, which is what an Answer sees, where the top 5 is the order of the search before the Tool groups it into windows.
+
+**Measured,** on an Apple M2 Max (12 cores) with other work running on it, library already cached: indexing 400 Documents (47,897 Passages) with embeddings off took 138 s, and writing the dump 17 minutes, which is the built-in model scoring 60 candidates for each of the 206 queries; the check against the run's own scoring took 13 minutes more. `hard.json` is 62 MB, and the scorer reads it and prints the table in under a second. The figures it gave, top 5, which the run's own scoring matched:
+
+| | keyword | keyword + rerank | search Tool |
+|---|---|---|---|
+| Easy | 22/29 | 24/29 | 21/29 |
+| Paraphrase | 14/32 | 23/32 | 21/32 |
+| Table number | 17/26 | 18/26 | 18/26 |
+| Multi-page | 3/23 | 11/23 | 4/23 |
+| Cross-document | 3/20 | 4/20 | 5/20 |
+| Cross-lingual, with the translation | 20/26 | 24/26 | 20/26 |
+| Near-duplicate | 19/24 | 20/24 | 18/24 |
+| **All** | **98/180** | **124/180** | **107/180** |
+
+Keyword + rerank at the top 8 and 10 is 135 and 143 of 180. The search Tool's figure is lower than the reranked top 5 because it hands the model whole windows of three Passages, at most 8 Passages from at most 4 Documents, so a Question that needs many Passages (multi-page) can lose some to the limits.
 ## Results
 
 ### 2026-10-10: the first run
@@ -149,9 +176,9 @@ The 180 Questions with something to find, top 5 (unanswerable Questions are scor
 
 ## Files
 
-- `run.hard.ts` and `vitest.config.ts`: the run.
+- `run.hard.ts` and `vitest.config.ts`: the run. `../dumps/run.dump.ts` and `../score.ts`: the dumps and the offline scorer (see above).
 - `library.json`: the Documents and their sources; `lib/manifest.ts` reads and checks it.
 - `lib/fetch.ts`: fetching into the cache, with checksums.
 - `questions.json`: the Questions; `lib/questions.ts` reads and checks them, and checks them against the stored text.
-- `lib/scoring.ts`: searches, reranking, hits and tallies; `lib/keywordTiming.ts`: keyword search's time per query; `lib/citations.ts`: Citations per difficulty; `lib/report.ts`: the reports.
+- `lib/scoring.ts`: searches, reranking, hits and tallies; `lib/keywordTiming.ts`: keyword search's time per query; `lib/stored.ts`: the stored text each Question is checked against; `lib/citations.ts`: Citations per difficulty; `lib/report.ts`: the reports.
 - Tests (`npm test`, no network, no models): `tests/eval/hardLibrary.test.ts`, `tests/eval/hardQuestions.test.ts`, `tests/eval/hardScoring.test.ts`.
