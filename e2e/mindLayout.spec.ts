@@ -3,7 +3,6 @@ import { join, resolve } from "node:path";
 import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import type { CoreBridge } from "../src/core/api";
-import type { TestHooks } from "../src/shared/testHooks";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   addDocuments,
@@ -14,6 +13,7 @@ import {
   launchApp,
   newMind,
   removeDataFolder,
+  setGroupBeside,
   useLocalChatModel,
 } from "./app";
 
@@ -87,15 +87,6 @@ function expectNear(actual: number, expected: number, tolerance: number, what: s
 }
 
 /** Opens or closes the Document viewer through the test hook, as a Citation would. */
-function setViewer(window: Page, open: boolean) {
-  return window.evaluate((show) => {
-    const hooks = (globalThis as { incarnamindTestHooks?: TestHooks }).incarnamindTestHooks;
-    if (!hooks) throw new Error("Test hooks are off: launch with INCARNAMIND_TEST_HOOKS=1.");
-    if (show) hooks.openViewer();
-    else hooks.closeViewer();
-  }, open);
-}
-
 /**
  * Adds a sentence with two more Citations to the Answer, after its first
  * paragraph, as copies of its own Citation: one found, and one whose quote
@@ -237,7 +228,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await markers.nth(0).click();
   await expect(card.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
   await expect(markers.nth(0)).toHaveAttribute("aria-expanded", "true");
-  await setViewer(window, false);
+  await setGroupBeside(window, false);
   await expect(window.getByTestId("viewer")).toHaveCount(0);
   await expect(marks.nth(0)).toHaveAttribute("data-open", "true");
   expectNear((await box(card.locator(".citation-card"))).width, 340, 1, "the card's width");
@@ -255,7 +246,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await expect(card).toHaveCount(0);
 
   // Under 900px (here, the viewer open beside it) the margins fold away: the markers show the checks.
-  await setViewer(window, true);
+  await setGroupBeside(window, true);
   await expect(window.getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
   expectNear((await box(texts.note)).x, (await textColumn(editor)).x, 1, "narrow: the Note's edge");
@@ -272,7 +263,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
     "narrow: the Answer's edge",
   );
   await screenshot(window, "mind-narrow.png");
-  await setViewer(window, false);
+  await setGroupBeside(window, false);
   await expect(window.getByTestId("margin-checks")).toBeVisible();
 
   // Two markers on one line: their marks stack, the first level with the line.

@@ -92,7 +92,7 @@ function selectedBlocks({ $from, $to }: Selection): Range | null {
   return from < to ? { from, to } : null;
 }
 
-/** Deleting Blocks as a whole: `deleteBlock`, which the "block.delete" command runs (⌘⇧⌫). */
+/** Deleting Blocks as a whole: `deleteBlock`, which the "block.delete" command runs (⇧⌘⌫). */
 export const BlockCommands = Extension.create({
   name: "blockCommands",
 
