@@ -1,7 +1,14 @@
 import { useEffect, useId, useState } from "react";
-import type { AgentClient, AgentSetupPreview, LibraryGroup } from "../../../../core/api";
+import type {
+  AgentClient,
+  AgentSetupPreview,
+  LibraryGroup,
+  SecretStorageStatus,
+} from "../../../../core/api";
 import { core } from "../../core";
 import { useT } from "../../i18n";
+import { useAppStore } from "../../store";
+import { SecretStorageNotice } from "../providers/ProviderForm";
 import {
   buttonClass,
   dialogActionsClass,
@@ -45,6 +52,9 @@ export function ConnectAgentDialog({
   const dialog = useModal(client !== null, { focusDialog: true });
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [preview, setPreview] = useState<AgentSetupPreview | null>(null);
+  /** Where the agent's key can be kept: with no keyring (Linux), only once the User allows plain text. */
+  const [storage, setStorage] = useState<SecretStorageStatus | null>(null);
+  const reportError = useAppStore((state) => state.reportError);
   const titleId = useId();
   const clientId = client?.id ?? null;
 
@@ -54,16 +64,17 @@ export function ConnectAgentDialog({
     setPreview(null);
     if (!clientId) return;
     let current = true;
-    core.previewAgentSetup(clientId).then(
-      (value) => {
-        if (current) setPreview(value);
-      },
-      () => undefined,
-    );
+    core.previewAgentSetup(clientId).then((value) => {
+      if (current) setPreview(value);
+    }, reportError);
+    core.getSecretStorage().then((value) => {
+      if (current) setStorage(value);
+    }, reportError);
     return () => {
       current = false;
     };
-  }, [clientId]);
+  }, [clientId, reportError]);
+  const canKeepKey = storage?.canSave !== false;
 
   const agent = client ? clientName(client, t) : "";
   const toggle = (folderId: string, on: boolean) => {
@@ -137,6 +148,12 @@ export function ConnectAgentDialog({
         {folders.length > 0 && chosen.size === 0 && (
           <p className={hintClass}>{t("agents.connect.pickOne")}</p>
         )}
+        {storage && !storage.canSave && (
+          <SecretStorageNotice
+            status={storage}
+            onAccept={() => core.acceptPlainTextSecretStorage().then(setStorage, reportError)}
+          />
+        )}
         {problem && (
           <p data-testid="connect-agent-problem" role="alert" className={errorTextClass}>
             {problem}
@@ -149,7 +166,7 @@ export function ConnectAgentDialog({
           <button
             type="button"
             data-testid="connect-agent-allow"
-            disabled={chosen.size === 0 || busy}
+            disabled={chosen.size === 0 || busy || !canKeepKey}
             onClick={() => onAllow([...chosen])}
             className={primaryButtonClass}
           >
