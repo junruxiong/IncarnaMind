@@ -602,13 +602,14 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
     const composer = await box(window.getByTestId("composer"));
     const edge = await textColumn(editor);
-    const col = await box(column);
+    const dock = await box(window.getByTestId("assistant"));
     expectNear(composer.x, edge.x, 1, "the composer's left edge");
+    expectNear(composer.x - dock.x, 40, 1, "the composer's left gutter");
     expectNear(
-      col.x + col.width - (composer.x + composer.width),
-      col.x + col.width - (edge.x + edge.width),
+      dock.x + dock.width - (composer.x + composer.width),
+      40,
       1,
-      "the composer's right edge",
+      "the composer's right gutter",
     );
     await screenshot(window, `folded-${language}.png`);
     await app.close();
