@@ -2,13 +2,15 @@
  * The main process's half of the renderer's file helpers (`FilesBridge`):
  * choosing the Output location and showing a file saved there, showing the data and logs
  * folders, choosing a Skill folder or zip to import, choosing a folder to
- * link, opening a Document's file in another app or showing it (or a Linked
- * folder) in the file manager, and logging the window's uncaught errors. The core saves
+ * link or where a Linked folder is now, opening a Document's file in another
+ * app or showing it (or a Linked folder) in the file manager, and logging the
+ * window's uncaught errors. The core saves
  * files, reads the Skill, and checks a Document is live and its
  * file there before it hands the file's path to the shell adapter; only
  * this side touches dialogs.
  */
 import { mkdir } from "node:fs/promises";
+import { basename } from "node:path";
 import {
   app,
   BrowserWindow,
@@ -24,7 +26,7 @@ import { FILES_CHANNELS } from "../shared/bridge";
 import { translate } from "../shared/i18n";
 import { type FileLogger, logsFolder, logWindowError } from "./log";
 import { setMenuSidebarHidden } from "./menu";
-import { rememberPick, startFolder } from "./pickerFolders";
+import { rememberPick, startFolder, startNear } from "./pickerFolders";
 
 /** What "Add Documents" offers; the core decides what it takes (and says what it skipped). */
 const DOCUMENT_EXTENSIONS = ["pdf", "docx", "pptx", "xlsx", "csv", "txt", "md", "markdown"];
@@ -123,23 +125,41 @@ export function serveFileActions(
     await core.showDocumentInFolder(documentId as string);
   });
 
-  ipcMain.handle(FILES_CHANNELS.pickLinkedFolder, async (event): Promise<string | null> => {
-    refuseUnknown(event);
-    const { language } = await core.getSettings();
-    const openOptions: OpenDialogOptions = {
-      title: translate(language, "linkedFolders.pick.title"),
-      buttonLabel: translate(language, "linkedFolders.pick.button"),
-      properties: ["openDirectory"],
-      defaultPath: startFolder(dataDir, "folders", app.getPath("home")),
-    };
-    const window = BrowserWindow.fromWebContents(event.sender);
-    const { canceled, filePaths } = window
-      ? await dialog.showOpenDialog(window, openOptions)
-      : await dialog.showOpenDialog(openOptions);
-    const picked = canceled ? null : (filePaths[0] ?? null);
-    if (picked) rememberPick(dataDir, "folders", picked);
-    return picked;
-  });
+  ipcMain.handle(
+    FILES_CHANNELS.pickLinkedFolder,
+    async (event, locating: unknown): Promise<string | null> => {
+      refuseUnknown(event);
+      const { language } = await core.getSettings();
+      const moved =
+        typeof locating === "string"
+          ? (await core.listLinkedFolders()).find((each) => each.id === locating)
+          : undefined;
+      const start = startFolder(dataDir, "folders", app.getPath("home"));
+      const openOptions: OpenDialogOptions = moved
+        ? {
+            title: translate(language, "linkedFolders.locate.pickTitle", {
+              name: basename(moved.path) || moved.path,
+            }),
+            buttonLabel: translate(language, "linkedFolders.locate.pickButton"),
+            properties: ["openDirectory"],
+            // A folder that moved is most likely near where it was.
+            defaultPath: startNear(moved.path, start),
+          }
+        : {
+            title: translate(language, "linkedFolders.pick.title"),
+            buttonLabel: translate(language, "linkedFolders.pick.button"),
+            properties: ["openDirectory"],
+            defaultPath: start,
+          };
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const { canceled, filePaths } = window
+        ? await dialog.showOpenDialog(window, openOptions)
+        : await dialog.showOpenDialog(openOptions);
+      const picked = canceled ? null : (filePaths[0] ?? null);
+      if (picked) rememberPick(dataDir, "folders", picked);
+      return picked;
+    },
+  );
 
   // A sheet on the window that starts in a folder on this computer (see pickerFolders.ts),
   // instead of the web file input, which starts wherever macOS last was, often iCloud.

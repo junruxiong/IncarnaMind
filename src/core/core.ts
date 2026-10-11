@@ -138,6 +138,7 @@ import { createJevTagging } from "./tags/jev";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
+import { ensureWorkspace } from "./workspace";
 
 export const DATABASE_FILE = "incarnamind.db";
 
@@ -232,6 +233,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
   try {
     purgeExpired(db, now());
+    ensureWorkspace(db, now);
   } catch (error) {
     db.close();
     throw error;
@@ -414,6 +416,7 @@ export function createCore(adapters: CoreAdapters): Core {
         retryMs: adapters.linkedFolders?.retryMs ?? 30_000,
         detectDataless: adapters.linkedFolders?.detectDatalessFiles ?? platform === "darwin",
       },
+      say: (key, params) => translate(settings.get().language, key, params),
     });
     // Old versions' text, and the text kept of unlinked Documents, that no
     // Citation quotes and no feature retains any more goes, at startup only:
@@ -1594,6 +1597,8 @@ export function createCore(adapters: CoreAdapters): Core {
       return { ...linked, batchId };
     },
     listLinkedFolders: async () => documents.linkedFolders.list(),
+    locateLinkedFolder: (linkedFolderId, path) =>
+      documents.linkedFolders.locate(linkedFolderId, path),
     removeLinkedFolder: async (linkedFolderId) => unlinkFolder(linkedFolderId),
     listKeptCitationTexts: async () => documents.keptCitationTexts(),
     updateReference: async (documentId, patch) => references.update(documentId, patch),

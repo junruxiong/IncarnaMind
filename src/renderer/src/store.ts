@@ -30,6 +30,7 @@ import type { DocumentLocation } from "../../shared/documentViewer";
 import { type MessageKey, type MessageParams, translate } from "../../shared/i18n";
 import { core, files } from "./core";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
+import { errorMessage } from "./errors";
 import {
   createLayoutSlice,
   currentMindIdOf,
@@ -287,6 +288,12 @@ interface AppState extends LayoutSlice {
   downloadOnlineOnlyFiles(linkedFolderId: string): Promise<void>;
   /** Shows a Linked folder in the system's file manager. */
   showLinkedFolder(linkedFolderId: string): Promise<void>;
+  /**
+   * "Locate folder…": the system's folder picker, then the Linked folder is
+   * looked for there, its Documents keeping their ids and Citations. Says why
+   * if the folder picked isn't it.
+   */
+  locateLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Unlinks a folder: its Documents leave the index; nothing on disk changes. */
   removeLinkedFolder(linkedFolderId: string): Promise<void>;
   /** Adds a Tag to the filter, or takes it out if it is in it. */
@@ -314,8 +321,6 @@ interface AppState extends LayoutSlice {
   /** Installs the built-in Skills the User removed again. */
   restoreBuiltInSkills(): Promise<void>;
 }
-
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) ?? path;
 
@@ -399,7 +404,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     try {
       await action();
     } catch (error) {
-      set({ actionError: messageOf(error) });
+      set({ actionError: errorMessage(error) });
     }
   };
 
@@ -423,7 +428,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (get().linking?.path === path) set({ linking: { path, preview, error: null } });
     } catch (error) {
       if (get().linking?.path === path) {
-        set({ linking: { path, preview: null, error: messageOf(error) } });
+        set({ linking: { path, preview: null, error: errorMessage(error) } });
       }
     }
   };
@@ -499,7 +504,7 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 
   return {
-    ...createLayoutSlice(set, get, (error) => set({ actionError: messageOf(error) })),
+    ...createLayoutSlice(set, get, (error) => set({ actionError: errorMessage(error) })),
     status: { kind: "loading" },
     minds: [],
     titleToFocus: null,
@@ -620,7 +625,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
-        set({ status: { kind: "failed", message: messageOf(error) } });
+        set({ status: { kind: "failed", message: errorMessage(error) } });
       }
     },
 
@@ -787,7 +792,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       }),
 
     reportError(error) {
-      set({ actionError: messageOf(error) });
+      set({ actionError: errorMessage(error) });
     },
 
     openDocument(location, how = { as: "list" }) {
@@ -978,6 +983,15 @@ export const useAppStore = create<AppState>()((set, get) => {
     showLinkedFolder: (linkedFolderId) =>
       attempt(async () => {
         await files.showLinkedFolder(linkedFolderId);
+      }),
+
+    // Its Documents follow the core's events, as its scan finds them there.
+    locateLinkedFolder: (linkedFolderId) =>
+      attempt(async () => {
+        const path = await files.pickLinkedFolder(linkedFolderId);
+        if (!path) return;
+        const linked = await core.locateLinkedFolder(linkedFolderId, path);
+        set((state) => ({ linkedFolders: replaceLinked(state.linkedFolders, linked) }));
       }),
 
     // The list, its Folders and Documents follow the core's events.

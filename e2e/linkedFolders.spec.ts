@@ -519,6 +519,80 @@ test("a Linked folder that can't be reached shows as unavailable, and so do its 
   await running.app.close();
 });
 
+test("a Linked folder that moved is located from its menu, and its Document and the Citation quoting it come back as they were", async () => {
+  const library = join(sources, "Library");
+  await mkdir(library, { recursive: true });
+  await writeFile(join(library, "Tides.pdf"), TIDES);
+  const first = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(first.window);
+  await useLocalChatModel(first.window);
+  await linkFolderFromSidebar(first.app, first.window, library);
+  await showSourceLocations(first.window);
+  await expect(linkedFolderRow(first.window, "Library")).toHaveAttribute("data-state", "idle");
+  await newMind(first.window);
+  await first.window.getByTestId("mind-editor").click();
+  await first.window.keyboard.press("ControlOrMeta+j");
+  await first.window.keyboard.type("When do spring tides happen?");
+  await first.window.keyboard.press("Enter");
+  const answered = first.window.getByTestId("mind-editor").getByTestId("answer");
+  await expect(answered).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+  await expect(answered.getByTestId("citation")).toHaveAttribute("data-check", "found");
+  const before = await first.window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.listDocuments()).map(({ id, contentHash }) => ({ id, contentHash }));
+  });
+  await first.app.close();
+
+  // Moved and renamed while the app was closed, as when the data folder is opened on another computer.
+  const moved = join(sources, "Archive", "Library 2026");
+  await mkdir(dirname(moved));
+  await rename(library, moved);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await showSourceLocations(window);
+  const row = linkedFolderRow(window, "Library");
+  await expect(row).toHaveAttribute("data-state", "unavailable", { timeout: 15_000 });
+  await expect(row.getByTestId("folder-status")).toHaveAttribute(
+    "title",
+    /If it moved, choose Locate folder… in its menu\.$/,
+  );
+
+  await interceptOpenDialog(app, moved);
+  const menu = await openLinkedFolderMenu(row);
+  await menu.getByTestId("linked-folder-locate").click();
+  const located = linkedFolderRow(window, "Library 2026");
+  await expect(located).toHaveAttribute("data-state", "idle", { timeout: 15_000 });
+  await expect(located.getByTestId("folder-toggle")).toHaveAttribute("title", moved);
+  const item = window.getByTestId("document-list-item");
+  await expect(item).toHaveCount(1);
+  await expect(item).toHaveAttribute("data-file-status", "available");
+  // The same Document and version, not a new one.
+  expect(
+    await window.evaluate(async () => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      return (await bridge.listDocuments()).map(({ id, contentHash }) => ({ id, contentHash }));
+    }),
+  ).toEqual(before);
+
+  // Its Mind is open again in its tab: the Citation is still found, and opens its page.
+  const citation = window.getByTestId("mind-editor").getByTestId("citation");
+  await expect(citation).toHaveAttribute("data-check", "found");
+  await citation.getByTestId("citation-chip").click();
+  await expect(window.getByTestId("citation-badge")).toHaveText("Quote found on p. 2");
+  await expect(window.getByTestId("viewer-title")).toHaveText("Tides");
+  await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
+  await screenshot(window, "located-folder");
+
+  // A folder that doesn't hold its files is refused, in plain words, and nothing changes.
+  await interceptOpenDialog(app, sources);
+  await (await openLinkedFolderMenu(located)).getByTestId("linked-folder-locate").click();
+  await expect(window.getByRole("alert")).toHaveText(
+    /^That didn't work: None of the files in “Library 2026” are in that folder\. Choose the folder that holds them now\./,
+  );
+  await expect(located).toHaveAttribute("data-state", "idle");
+  await expect(item).toHaveAttribute("data-file-status", "available");
+  await app.close();
+});
+
 test("an empty Linked folder says so; with nothing linked or added, the sidebar says where to start", async () => {
   const empty = join(sources, "Projects");
   await mkdir(empty);

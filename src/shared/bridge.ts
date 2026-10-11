@@ -51,10 +51,11 @@ export interface FilesBridge {
   showDocumentInFolder(documentId: string): Promise<void>;
   /**
    * Shows the system's open dialog for a folder to link (see
-   * `CoreApi.addLinkedFolder`). Resolves with its absolute path, or null if
-   * the User cancelled.
+   * `CoreApi.addLinkedFolder`), or, given a Linked folder's id, for where
+   * that folder is now (see `CoreApi.locateLinkedFolder`). Resolves with its
+   * absolute path, or null if the User cancelled.
    */
-  pickLinkedFolder(): Promise<string | null>;
+  pickLinkedFolder(locating?: string): Promise<string | null>;
   /**
    * Shows the system's open dialog for Documents to add, as a sheet on the
    * window, starting in the folder last picked from (else Downloads).

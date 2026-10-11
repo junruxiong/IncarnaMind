@@ -25,7 +25,8 @@ const REVEAL_LABEL = revealLabelKey(navigator.platform);
 /**
  * A Linked folder's "More" menu, on its row: pause or resume its indexing,
  * show it as Folders or as a flat list, download and index its online-only
- * files (when it has some), show it in the system's file manager, and unlink it.
+ * files (when it has some), show it in the system's file manager, locate it
+ * where it is now, and unlink it.
  */
 export function LinkedFolderMenu({
   linked,
@@ -44,6 +45,7 @@ export function LinkedFolderMenu({
   const setLayout = useAppStore((state) => state.setLinkedFolderLayout);
   const download = useAppStore((state) => state.downloadOnlineOnlyFiles);
   const reveal = useAppStore((state) => state.showLinkedFolder);
+  const locate = useAppStore((state) => state.locateLinkedFolder);
   const menu = usePopoverMenu();
   const paused = linked.status === "paused";
   const unreachable = linked.status === "unavailable";
@@ -123,6 +125,15 @@ export function LinkedFolderMenu({
           className={`${menuItemClass} ${menuItemUnavailableClass} pl-2`}
         >
           {t(REVEAL_LABEL)}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="linked-folder-locate"
+          onClick={choose(() => void locate(linked.id))}
+          className={`${menuItemClass} pl-2`}
+        >
+          {t("linkedFolders.locateAction")}
         </button>
         <div className={menuRuleClass} />
         <button
