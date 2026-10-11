@@ -11,6 +11,7 @@ What IncarnaMind sends from your computer, and how to change it. **Settings → 
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
 - **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy.
+- **The cost record** stays on this computer and is never sent. For each request to a cloud model it notes the model, the tokens its provider reported and what that cost at its price, with no text, for this month's figure and the monthly cap in Settings → General.
 
 ## Usage data
 

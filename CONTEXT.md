@@ -221,6 +221,16 @@ _Avoid_: grid, spreadsheet
 What IncarnaMind has been asked to remember about the User, kept only when the User says so and open to read, change and delete.
 _Avoid_: history, profile, learned preferences
 
+### Cost
+
+**Monthly cap**:
+The most IncarnaMind may spend in a calendar month on the models the User pays for by the token, on their own keys; off until the User sets it. A request that could pass it isn't sent, and a run it stops says so.
+_Avoid_: budget, quota, spending limit
+
+**Plan**:
+A subscription the User signs in with, such as ChatGPT Plus, whose own limits apply instead of a price. A plan's limit stops a run as the monthly cap does.
+_Avoid_: subscription key, membership
+
 ### Meetings
 
 **Meeting**:

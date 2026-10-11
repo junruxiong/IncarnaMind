@@ -135,6 +135,20 @@ export interface Price {
   cacheRead?: number;
   /** E.g. "Prompts over 100K tokens: $0.50 / $2.50". */
   note?: Localized;
+  /** Outside its peak hours the price is cut, by `factor`. */
+  offPeak?: OffPeak;
+}
+
+/**
+ * The hours a price is full, on the provider's clock (`utcOffset` hours from
+ * UTC), as [from, to) pairs of hours. Weekends are off-peak all day, unless
+ * the peak hours hold `everyDay`.
+ */
+export interface OffPeak {
+  factor: number;
+  utcOffset: number;
+  peakHours: readonly (readonly [number, number])[];
+  everyDay?: true;
 }
 
 /** What a model can do and what it costs. */
