@@ -14,6 +14,7 @@ import {
   dismissChatSetup,
   enterContent,
   launchApp,
+  mindWrittenBefore,
   motionSettled,
   newMind,
   pointAndClick,
@@ -477,17 +478,16 @@ for (const language of ["en", "zh-CN"] as const) {
         const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
         await bridge.updateSettings({ user: { language: chosen } });
       }, language);
-      await newMind(window);
-      await window.getByTestId("mind-title").fill("Tides");
-      await enterContent(window);
+      // A Question is asked in the assistant now (#201): a Mind written before holds one, with
+      // its Answer under it.
+      await mindWrittenBefore(window, "Tides", [
+        { note: "Spring tides follow the Moon." },
+        { question: "When do spring tides happen?", answer: "At new moon and at full moon." },
+      ]);
+      await window.getByTestId("mind-list-item").filter({ hasText: "Tides" }).click();
       const editor = window.getByTestId("mind-editor");
-      await window.keyboard.type("Spring tides follow the Moon.");
-      await window.keyboard.press("Enter");
-      await window.keyboard.press("ControlOrMeta+j");
-      await window.keyboard.type("When do spring tides happen?");
-      await window.keyboard.press("Enter");
       const answer = editor.getByTestId("answer");
-      await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+      await expect(answer).toHaveAttribute("data-status", "done");
       await sizeMind(app, window, mindWidth);
 
       const question = editor.getByTestId("question");
