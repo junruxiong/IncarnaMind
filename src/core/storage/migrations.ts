@@ -928,7 +928,39 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    // 46 and 47 are reserved by work in progress.
+    version: 46,
+    description: "The record of AI use: what the AI wrote into a Mind and what became of it (#292)",
+    sql: `
+      -- One row per AI insertion (or rejected proposal) in a Mind (src/core/aiUse).
+      -- Kept on this computer and never sent anywhere (ADR-0014). It holds no
+      -- text of the Mind or of the AI: only the kind of use, the model, the size
+      -- in characters, the Block ids the insertion made, and a hash of each
+      -- Block's text when it was inserted, so a later edit or deletion can be
+      -- told from the Block id alone. kind: answer-added | suggestion-accepted |
+      -- assistant-change-accepted | assistant-change-rejected | edit-with-ai-accepted.
+      -- outcome: kept | edited | deleted | rejected. blocks is JSON:
+      -- [{ "id": "<Block id>", "hash": "<sha-256 of its text>" | null }], hash
+      -- NULL until the Block has been seen in the Mind. No foreign key to
+      -- minds: a later sync may deliver a row before its Mind.
+      CREATE TABLE ai_use (
+        id TEXT PRIMARY KEY NOT NULL,
+        mind_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        provider_id TEXT,
+        model_id TEXT,
+        characters INTEGER NOT NULL,
+        blocks TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      ) STRICT;
+      CREATE INDEX ai_use_by_mind ON ai_use (mind_id) WHERE deleted_at IS NULL;
+    `,
+  },
+  {
+    // 47 is reserved by work in progress.
     version: 48,
     description:
       "Versions of Documents that check results, saved pages, Tasks and Checkpoints need",
