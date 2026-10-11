@@ -84,6 +84,8 @@ export function noteExtensions({
       undoRedo: false,
       // It would add a paragraph to Minds that end in another Block just by opening them.
       trailingNode: false,
+      // A click puts the cursor in a link and shows its address with Open, Edit and Remove (LinkBubble).
+      link: { openOnClick: false },
       // Shows where a dragged Block will land.
       dropcursor: { color: "rgb(14 165 233)", width: 2 },
     }),

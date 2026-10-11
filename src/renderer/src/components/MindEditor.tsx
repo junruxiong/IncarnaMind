@@ -28,6 +28,7 @@ import { FootnoteArea } from "../editor/FootnoteArea";
 import { FootnotePopover } from "../editor/FootnotePopover";
 import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
 import { FootnoteKeys } from "../editor/footnoteSchema";
+import { LinkBubble } from "../editor/LinkBubble";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
@@ -440,6 +441,7 @@ function MindEditorView({
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} ai={aiActions} />}
+      {!readOnly && <LinkBubble editor={editor} />}
       <FootnotePopover editor={editor} citationView={citationView} />
       {editingMath !== null && (
         <MathEditor
