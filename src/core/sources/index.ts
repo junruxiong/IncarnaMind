@@ -452,7 +452,9 @@ export function createSources(options: SourcesOptions) {
       };
     }
     const reason = work.fullText.length > 0 ? "download-failed" : "closed";
-    const { landingUrl } = work;
+    // An open copy that couldn't be had here, the User's browser may: else its page at its publisher.
+    const landingUrl =
+      (reason === "download-failed" ? work.fullText[0]?.url : null) ?? work.landingUrl;
     if (existing) {
       return {
         outcome: "reference",

@@ -1981,6 +1981,7 @@ export const zhCN = {
   "sources.addReference": "添加引用信息",
   "sources.adding": "正在添加…",
   "sources.getPdf": "获取 PDF…",
+  "sources.openPage": "打开免费全文…",
   "sources.inLibrary": "已在资料库中",
   "sources.inLibrary.reference": "已作为引用信息在资料库中",
   "sources.open": "打开",

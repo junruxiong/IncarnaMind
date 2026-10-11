@@ -1476,6 +1476,7 @@ export type AddFoundSourceResult =
       recordId: string;
       /** Why no Document: "closed", no open full text; "download-failed", no open copy could be had. */
       reason: "closed" | "download-failed";
+      /** For the User's browser: the open copy that couldn't be had, else the work's page at its publisher. */
       landingUrl: string | null;
       existing: boolean;
     }
