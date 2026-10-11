@@ -1799,6 +1799,35 @@
       padding-left: 24px;
     }
 
+    /* A checklist: the box hangs in the margin like a bullet; a done item is struck through. */
+    ul:has(> li[data-checked]) {
+      list-style: none;
+    }
+    li[data-checked] {
+      display: flex;
+      gap: 8px;
+      margin-left: -24px;
+    }
+    li[data-checked] > label {
+      flex: none;
+      width: 16px;
+      padding-top: 5px;
+      user-select: none;
+    }
+    li[data-checked] > label > input {
+      margin: 0;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+    }
+    li[data-checked] > div {
+      flex: 1;
+      min-width: 0;
+    }
+    li[data-checked="true"] > div {
+      color: var(--color-ink-secondary);
+      text-decoration: line-through;
+    }
+
     /* A quote: its rule hangs in the margin, so its text keeps the edge. */
     blockquote {
       margin-left: -14px;

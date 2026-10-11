@@ -1,6 +1,7 @@
 import type { Extensions, NodeViewRenderer } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Highlight from "@tiptap/extension-highlight";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { BlockMath, InlineMath } from "@tiptap/extension-mathematics";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import UniqueID from "@tiptap/extension-unique-id";
@@ -94,6 +95,9 @@ export function noteExtensions({
     InlineMath.configure({ katexOptions: { throwOnError: false }, onClick }),
     // Columns size to their text: dragging their edges would need a way by keyboard too.
     // Tab and Shift-Tab move between cells; Tab in the last cell adds a row.
+    // A checklist: its items hold a box and Blocks, as list items do.
+    TaskList,
+    TaskItem.configure({ nested: true }),
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,
