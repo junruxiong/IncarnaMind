@@ -2,7 +2,7 @@ import { noteHolding } from "../editor/noteKeymap";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
 import { assistantCommands } from "./assistant";
-import { sidebarHandle } from "./handles";
+import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
@@ -32,6 +32,16 @@ const appCommands: readonly Command[] = [
     run: () => sidebarHandle.current?.toggle(),
   },
   ...assistantCommands,
+  {
+    id: "citation.open",
+    label: "command.citation.open",
+    shortcut: { keys: "CmdOrCtrl+Alt+O" },
+    group: "open",
+    reversible: true,
+    // While a Citation's card shows (hovered, focused or clicked).
+    when: () => citationHandle.current !== null,
+    run: () => citationHandle.current?.open(),
+  },
   {
     id: "references.import",
     label: "references.import.menu",

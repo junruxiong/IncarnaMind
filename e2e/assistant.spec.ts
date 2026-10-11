@@ -543,6 +543,18 @@ test("moving, resizing and folding it keep the composer's draft, the Mind's scro
   await fromMenu(window, "left");
   await fromMenu(window, "right");
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(scrolled);
+
+  // History lists the assistant's conversations (#300), newest first: here one asked through
+  // the core, as the conversation in the assistant will ask (#201).
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.askInConversation({ text: "When do neap tides come?" });
+  });
+  await window.getByTestId("assistant-history").click();
+  const rows = window.getByTestId("assistant-history-row");
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText("When do neap tides come");
+  await window.keyboard.press("Escape");
   await app.close();
 });
 

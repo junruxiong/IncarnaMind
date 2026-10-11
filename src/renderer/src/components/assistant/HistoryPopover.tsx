@@ -1,18 +1,23 @@
 import { useRef } from "react";
+import { conversationName } from "../../../../shared/naming";
+import { useConversations } from "../../conversations";
 import { Popover } from "../../editor/Popover";
-import { useT } from "../../i18n";
+import { useLanguage, useT } from "../../i18n";
 import { CloseLineIcon, HistoryLineIcon } from "../lineIcons";
 import { iconButtonClass } from "../ui";
 
 /**
  * The assistant's History, from its clock button, its title's ▾ or
- * "Conversation history" in ⌘K. The assistant's conversations are kept with
- * #300 and listed here with #258 (this Folder's first, All Folders, search);
- * until then there are none, and it says so.
+ * "Conversation history" in ⌘K: the assistant's conversations (#300), newest
+ * first, each with its name and when it was last asked in. Opening one, this
+ * Folder's first, All Folders, search and each row's menu come with #258.
  */
 export function HistoryPopover({ anchor, onClose }: { anchor: Element; onClose(): void }) {
   const t = useT();
+  const language = useLanguage();
   const close = useRef<HTMLButtonElement>(null);
+  const conversations = useConversations((state) => state.list);
+  const when = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" });
   return (
     <Popover
       anchor={anchor}
@@ -37,9 +42,31 @@ export function HistoryPopover({ anchor, onClose }: { anchor: Element; onClose()
             <CloseLineIcon className="size-4" />
           </button>
         </header>
-        <p data-testid="assistant-history-empty" className="assistant-history-empty">
-          {t("assistant.history.empty")}
-        </p>
+        {conversations.length === 0 ? (
+          <p data-testid="assistant-history-empty" className="assistant-history-empty">
+            {t("assistant.history.empty")}
+          </p>
+        ) : (
+          <ul aria-label={t("assistant.history")} className="assistant-history-list">
+            {conversations.map((conversation) => {
+              const name = conversationName(conversation) || t("conversation.untitled");
+              return (
+                <li
+                  key={conversation.id}
+                  data-testid="assistant-history-row"
+                  className="assistant-history-row"
+                >
+                  <span title={name} className="min-w-0 flex-1 truncate">
+                    {name}
+                  </span>
+                  <time dateTime={conversation.updatedAt} className="shrink-0 text-ink-meta">
+                    {when.format(new Date(conversation.updatedAt))}
+                  </time>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </Popover>
   );

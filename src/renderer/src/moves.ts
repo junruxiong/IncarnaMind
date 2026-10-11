@@ -1,33 +1,41 @@
 /**
- * Moving Minds and Documents between Folders, as the sidebar's drag and drop,
- * a Mind's "Move to…" and (#212) the Library's do it: one shape for what is
+ * Moving Minds, Documents and conversations between Folders, as the sidebar's
+ * drag and drop, a Mind's "Move to…" and (#212) the Library's do it: one shape for what is
  * moved, the store as it looks at once (before the core confirms), the line
  * that says what happened, and the moves that take it back. Pure: no store,
  * no bridge, so the tests import it.
  */
 
 import type {
+  Conversation,
   Document,
   DocumentGroupAssignment,
   FolderMove,
   LibrarySnapshot,
   Mind,
+  MovedItem,
 } from "../../core/api";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
-import { mindName } from "../../shared/naming";
+import { conversationName, mindName } from "../../shared/naming";
 import { applyAssignments } from "./documentUpdates";
 
-/** What a move takes: Minds and Documents, by id, any number of each. */
+/** What a move takes: Minds, Documents and conversations, by id, any number of each. */
 export interface MoveItems {
   mindIds?: readonly string[];
   documentIds?: readonly string[];
+  conversationIds?: readonly string[];
 }
 
 /** The ids of each kind, each once. */
-export function itemsOf(items: MoveItems): { mindIds: string[]; documentIds: string[] } {
+export function itemsOf(items: MoveItems): {
+  mindIds: string[];
+  documentIds: string[];
+  conversationIds: string[];
+} {
   return {
     mindIds: [...new Set(items.mindIds ?? [])],
     documentIds: [...new Set(items.documentIds ?? [])],
+    conversationIds: [...new Set(items.conversationIds ?? [])],
   };
 }
 
@@ -61,17 +69,22 @@ export function movedLocally(
 }
 
 /**
- * The moves that take a move's Minds back: each to the Folder it was in, in as
- * few moves as there were Folders they came from. Those that didn't move are
- * left. Its Documents go back with `restoreAssignment`, so an automatic choice
- * stays automatic.
+ * The moves that take a move's Minds and conversations back: each to the Folder
+ * it was in, in as few moves as there were Folders they came from. Those that
+ * didn't move are left. Its Documents go back with `restoreAssignment`, so an
+ * automatic choice stays automatic.
  */
 export function undoMoves(move: FolderMove): { items: MoveItems; folderId: string | null }[] {
-  const back = new Map<string | null, string[]>();
-  for (const { id, from } of move.minds) {
-    if (from !== move.folderId) back.set(from, [...(back.get(from) ?? []), id]);
-  }
-  return [...back].map(([folderId, mindIds]) => ({ folderId, items: { mindIds } }));
+  const back = new Map<string | null, { mindIds?: string[]; conversationIds?: string[] }>();
+  const add = (kind: "mindIds" | "conversationIds", { id, from }: MovedItem) => {
+    if (from === move.folderId) return;
+    const items = back.get(from) ?? {};
+    items[kind] = [...(items[kind] ?? []), id];
+    back.set(from, items);
+  };
+  for (const item of move.minds) add("mindIds", item);
+  for (const item of move.conversations) add("conversationIds", item);
+  return [...back].map(([folderId, items]) => ({ folderId, items }));
 }
 
 /**
@@ -82,21 +95,32 @@ export function moveMessage(
   t: (key: MessageKey, params?: MessageParams) => string,
   items: MoveItems,
   folderName: string,
-  names: { minds: readonly Mind[]; documents: readonly Document[] },
+  names: {
+    minds: readonly Mind[];
+    documents: readonly Document[];
+    conversations?: readonly Conversation[];
+  },
 ): string {
-  const { mindIds, documentIds } = itemsOf(items);
-  const count = mindIds.length + documentIds.length;
+  const { mindIds, documentIds, conversationIds } = itemsOf(items);
+  const count = mindIds.length + documentIds.length + conversationIds.length;
   if (count === 1) {
     const mind = names.minds.find((each) => each.id === mindIds[0]);
     const document = names.documents.find((each) => each.id === documentIds[0]);
-    const name = mind ? mindName(mind) || t("mind.untitled") : (document?.name ?? "");
+    const conversation = names.conversations?.find((each) => each.id === conversationIds[0]);
+    const name = mind
+      ? mindName(mind) || t("mind.untitled")
+      : conversation
+        ? conversationName(conversation) || t("conversation.untitled")
+        : (document?.name ?? "");
     return t("move.done", { name, folder: folderName });
   }
-  const key: MessageKey =
-    documentIds.length === 0
-      ? "move.done.minds"
-      : mindIds.length === 0
-        ? "move.done.documents"
+  const only = (ids: readonly string[]) => ids.length === count;
+  const key: MessageKey = only(mindIds)
+    ? "move.done.minds"
+    : only(documentIds)
+      ? "move.done.documents"
+      : only(conversationIds)
+        ? "move.done.conversations"
         : "move.done.items";
   return t(key, { count, folder: folderName });
 }

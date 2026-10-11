@@ -178,14 +178,14 @@ export function Assistant({
             data-testid="assistant-title"
             aria-haspopup="dialog"
             aria-expanded={history !== null}
-            aria-label={t("assistant.titleButton", { title: t("assistant.newChat") })}
+            aria-label={t("assistant.titleButton", { title: t("conversation.untitled") })}
             title={t("assistant.history")}
             onClick={(event) => openHistory(event.currentTarget)}
             className="assistant-title"
           >
             <ChatLineIcon className="size-4 shrink-0 text-ink-meta" />
-            {/* An empty conversation is "New chat"; its own title comes with #235 and #300. */}
-            <span className="truncate">{t("assistant.newChat")}</span>
+            {/* An empty conversation is "New chat"; the one open, with its title, comes with #258. */}
+            <span className="truncate">{t("conversation.untitled")}</span>
             <ChevronDownLineIcon className="size-3 shrink-0 text-ink-meta" />
           </button>
           <span className="flex-1" />
