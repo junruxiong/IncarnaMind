@@ -3432,8 +3432,9 @@
     transition: opacity 80ms ease-out;
     animation: assistant-fade-in 120ms ease-out both;
 
+    /* Over a zone it gives way, so the zone's name reads through it. */
     &[data-over-zone] {
-      opacity: 0.55;
+      opacity: 0.4;
     }
   }
   .assistant-stand-in-head {
