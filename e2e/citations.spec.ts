@@ -10,6 +10,7 @@ import {
   launchApp,
   newMind,
   placeAssistant,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   useLocalChatModel,
@@ -135,21 +136,28 @@ test("a quote that isn't on its page says so, and the page can still be opened, 
   await expect(window.getByTestId("pdf-page-number")).toHaveValue("2");
   await expect(window.getByTestId("viewer").locator("[data-quote-highlight]")).toHaveCount(0);
 
-  // Regenerating from the card writes the Answer again: it wasn't edited, so it doesn't ask.
+  // Regenerating from the card writes the Answer again, in place: it wasn't edited.
   await citation.getByTestId("citation-chip").click();
   await window.getByTestId("citation-card").getByTestId("citation-regenerate").click();
   await expect(answer).toHaveAttribute("data-status", "streaming");
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
-  await expect(answer.getByTestId("answer-confirm")).toHaveCount(0);
+  const changes = window.getByTestId("proposals-bar");
+  await expect(changes).toHaveCount(0);
 
-  // Removing the Citation edits the Answer; regenerating it now asks first.
+  // Removing the Citation edits the Answer; regenerating it now comes back as changes over
+  // the User's version, which stays until they accept them.
   await citation.getByTestId("citation-chip").click();
   await window.getByTestId("citation-card").getByTestId("citation-remove").click();
   await expect(answer.getByTestId("citation")).toHaveCount(0);
   await expect(answer).toContainText("Your Documents answer this");
   await answer.hover();
   await answer.getByTestId("answer-regenerate").click();
-  await expect(answer.getByTestId("answer-confirm")).toBeVisible();
+  await expect(changes).toBeVisible({ timeout: 15_000 });
+  await expect(answer.locator(".proposal-node--insert, ins.proposal-insert")).not.toHaveCount(0);
+  await expect(answer).toHaveAttribute("data-status", "done");
+  await pointAndClick(window, changes.getByTestId("proposals-accept-all"));
+  await expect(changes).toHaveCount(0);
+  await expect(answer.getByTestId("citation")).toHaveCount(1);
   await app.close();
 });
 
