@@ -673,11 +673,8 @@ export async function clickEmptyLine(line: Locator): Promise<void> {
     .toBe(true);
 }
 
-/**
- * Selects `words` in a line of text as a person does with the mouse: slides to
- * the first letter, presses, slides along to the end of them and lets go.
- */
-export async function slideSelect(window: Page, line: Locator, words: string): Promise<void> {
+/** Where `words` are drawn in a line of text: their left and right edges, and their middle line. */
+async function wordsBox(line: Locator, words: string) {
   const box = await line.evaluate((element, wanted) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -692,10 +689,26 @@ export async function slideSelect(window: Page, line: Locator, words: string): P
     return null;
   }, words);
   if (!box) throw new Error(`"${words}" isn't in the line.`);
+  return box;
+}
+
+/**
+ * Selects `words` in a line of text as a person does with the mouse: slides to
+ * the first letter, presses, slides along to the end of them and lets go. With
+ * `to`, the drag goes on to the end of other words, in a line further down.
+ */
+export async function slideSelect(
+  window: Page,
+  line: Locator,
+  words: string,
+  to?: { line: Locator; words: string },
+): Promise<void> {
+  const box = await wordsBox(line, words);
+  const end = to ? await wordsBox(to.line, to.words) : box;
   await window.mouse.move(box.left - 6, box.y, { steps: 4 });
   await window.mouse.move(box.left + 1, box.y, { steps: 2 });
   await window.mouse.down();
-  await window.mouse.move(box.right - 1, box.y, { steps: 12 });
+  await window.mouse.move(end.right - 1, end.y, { steps: 12 });
   await window.mouse.up();
 }
 

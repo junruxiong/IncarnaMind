@@ -1,7 +1,9 @@
 import { Editor, type JSONContent } from "@tiptap/core";
 import { CellSelection } from "@tiptap/pm/tables";
 import { describe, expect, onTestFinished, test } from "vitest";
+import { CITATION_NODE } from "../../src/core";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
+import { canTurnInto, TURN_INTO } from "../../src/renderer/src/editor/selectionCommands";
 import {
   emptyTable,
   runTableAction,
@@ -156,5 +158,70 @@ describe("tables in the editor", () => {
     const editor = editorWith([paragraph("Plain")]);
     editor.commands.setTextSelection(2);
     expect(tableSpot(editor.state)).toBeNull();
+  });
+});
+
+describe('the selection menu\'s Text › "Table"', () => {
+  const turnIntoTable = (editor: Editor) => {
+    const kind = TURN_INTO.find((each) => each.id === "table");
+    if (!kind) throw new Error("No table to turn into.");
+    return kind.run(editor);
+  };
+  const marked = (value: string, mark: string): JSONContent => ({
+    type: "text",
+    text: value,
+    marks: [{ type: mark }],
+  });
+  const cited: JSONContent = {
+    type: CITATION_NODE,
+    attrs: { passageId: "p1", documentId: "d1", documentName: "Tides", quote: "new moon" },
+  };
+
+  test("each line of the Blocks selected becomes a row, cut into cells at tabs, keeping marks and Citations, with no heading row", () => {
+    const editor = editorWith([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Spring\tAt " }, marked("new moon", "bold"), cited],
+      },
+      { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Neap" }] },
+      paragraph("After"),
+    ]);
+    const second = editor.state.doc.child(0).nodeSize + 3;
+    editor.commands.setTextSelection({ from: 3, to: second });
+    expect(canTurnInto(editor)).toBe(true);
+
+    expect(turnIntoTable(editor)).toBe(true);
+    expect(grid(editor)).toEqual([
+      ["Spring", "At new moon"],
+      ["Neap", ""],
+    ]);
+    const table = editor.state.doc.child(0);
+    expect(table.type.name).toBe("table");
+    const cell = table.child(0).child(1).child(0);
+    expect(cell.child(1).marks.map((mark) => mark.type.name)).toEqual(["bold"]);
+    expect(cell.child(2).type.name).toBe(CITATION_NODE);
+    expect(cell.child(2).attrs.quote).toBe("new moon");
+    expect(editor.state.doc.child(1).textContent).toBe("After");
+    expect(tableSpot(editor.state)?.headerRow).toBe(false);
+  });
+
+  test("a list turns as a whole, an item a row; a table itself isn't turned into anything", () => {
+    const item = (value: string): JSONContent => ({
+      type: "listItem",
+      content: [paragraph(value)],
+    });
+    const editor = editorWith([
+      { type: "bulletList", content: [item("High water"), item("Low water")] },
+      named(),
+    ]);
+    editor.commands.setTextSelection(4);
+    turnIntoTable(editor);
+    expect(grid(editor).slice(0, 2)).toEqual([["High water"], ["Low water"]]);
+
+    editor.commands.setTextSelection(inCell(editor, 2, 1));
+    expect(editor.state.selection.$head.parent.textContent).toBe("b1");
+    expect(canTurnInto(editor)).toBe(false);
+    editor.commands.setTextSelection({ from: 3, to: editor.state.doc.content.size - 3 });
+    expect(canTurnInto(editor)).toBe(false);
   });
 });

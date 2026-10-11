@@ -1,9 +1,9 @@
 import { type Editor, Extension, type JSONContent } from "@tiptap/core";
 import { type EditorState, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { CellSelection, cellAround, isInTable, rowIsHeader, selectedRect } from "@tiptap/pm/tables";
-import { yUndoPluginKey } from "@tiptap/y-tiptap";
 import type { CommandId, Keys } from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
+import { asOwnUndoStep } from "./selectionCommands";
 
 export type TableActionId =
   | "rowAbove"
@@ -82,15 +82,6 @@ export const TABLE_ACTIONS: readonly TableAction[] = [
 
 /** As ⌘/ opens the menu over selected text (#91). */
 export const TABLE_MENU_KEYS: Keys = "CmdOrCtrl+/";
-
-/** Collaboration's undo merges changes made close together: this one stays an Undo step of its own. */
-export function asOwnUndoStep<T>(editor: Editor, run: () => T): T {
-  const undo = yUndoPluginKey.getState(editor.state)?.undoManager;
-  undo?.stopCapturing();
-  const result = run();
-  undo?.stopCapturing();
-  return result;
-}
 
 /** Not while an input method composes: what it is writing isn't in the cell yet. */
 export function runTableAction(editor: Editor, action: TableAction): boolean {
