@@ -4,7 +4,8 @@
  * as `$…$` and `$$…$$`, highlights as `==…==` (as Obsidian, Typora and
  * markdown-it-mark read them), and each Citation as its own footnote.
  */
-import type { Block, Footnote, Inline, Marks } from "../mindText";
+import type { TableAlign } from "../../shared/markdownTables";
+import { type Block, type Footnote, type Inline, type Marks, tableLayout } from "../mindText";
 
 export interface MarkdownLabels {
   /** Marks a Question, e.g. "Question:". */
@@ -117,23 +118,35 @@ class MarkdownWriter {
       .join("\n");
   }
 
-  /** A GitHub table: its first row is the header row, as GitHub requires one. */
+  /**
+   * A GitHub table: its first row is the header row, as GitHub requires one,
+   * and each column is aligned as its first row's cell is. A cell over
+   * several columns or rows fills the first; the rest are left empty.
+   */
   private table(rows: Extract<Block, { kind: "table" }>["rows"]): string {
-    const columns = Math.max(
-      1,
-      ...rows.map((row) => row.reduce((count, cell) => count + cell.colspan, 0)),
-    );
-    const lines = rows.map((row) => {
+    const layout = tableLayout(rows);
+    const { columns } = layout;
+    const align: TableAlign[] = [];
+    const lines = layout.rows.map((row, index) => {
       const cells: string[] = [];
-      for (const cell of row) {
-        cells.push(this.blocks(cell.content, { table: true }).replace(/\n+/g, "<br>"));
-        for (let more = 1; more < cell.colspan; more++) cells.push("");
+      for (const { cell, continued } of row) {
+        if (index === 0) align.push(cell?.align ?? null);
+        cells.push(
+          cell && !continued
+            ? this.blocks(cell.content, { table: true }).replace(/\n+/g, "<br>")
+            : "",
+        );
+        for (let more = 1; more < (cell?.colspan ?? 1); more++) {
+          if (index === 0) align.push(null);
+          cells.push("");
+        }
       }
       while (cells.length < columns) cells.push("");
       return `| ${cells.join(" | ")} |`;
     });
     if (lines.length === 0) return "";
-    lines.splice(1, 0, `|${" --- |".repeat(columns)}`);
+    const delimiters = Array.from({ length: columns }, (_, column) => delimiter(align[column]));
+    lines.splice(1, 0, `|${delimiters.map((each) => ` ${each} |`).join("")}`);
     return lines.join("\n");
   }
 
@@ -195,6 +208,20 @@ class MarkdownWriter {
       case "image":
         return image(item.image.src, item.image.alt, context);
     }
+  }
+}
+
+/** A column's cell in a table's delimiter row, which says how the column is aligned. */
+function delimiter(align: TableAlign | undefined): string {
+  switch (align) {
+    case "left":
+      return ":---";
+    case "center":
+      return ":---:";
+    case "right":
+      return "---:";
+    default:
+      return "---";
   }
 }
 
