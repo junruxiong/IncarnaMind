@@ -842,7 +842,8 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 43,
+    // 41, 43 and 44 are reserved by work in progress.
+    version: 45,
     description: "Conversations: the assistant's own history, kept per Folder (ADR-0017)",
     // No foreign keys: a later sync may bring a message before its conversation, or a
     // conversation before its Folder or the Mind a Question was asked from.
