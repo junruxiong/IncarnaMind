@@ -88,7 +88,6 @@ export const SETTINGS_PAGES = [
   "models",
   "search",
   "meetings",
-  "tools",
   "connectors",
   "skills",
   "privacy",
