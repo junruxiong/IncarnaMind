@@ -79,23 +79,23 @@ const assignmentOf = async (core: Core, id: string) =>
   (await core.getLibrary()).assignments.find((each) => each.documentId === id);
 
 describe("Restoring what was deleted", { timeout: 30_000 }, () => {
-  test("a Mind and a Chat come back with their content", async () => {
+  test("Minds come back with their content", async () => {
     const { core, clock } = await start();
     const mind = await core.createMind({ title: "Tides" });
     const client = await connectToMind(core, mind.id);
     writeMind(client, [note("Spring tides follow the new moon.")]);
     await client.settled();
     await core.closeMind(mind.id);
-    const chat = await core.createMind({ title: "Ask about tides", kind: "chat" });
+    const other = await core.createMind({ title: "Ask about tides" });
     const before = withoutTimes(await core.listMinds());
 
     clock.advance(1000);
     await core.deleteMind(mind.id);
     clock.advance(1000);
-    await core.deleteMind(chat.id);
+    await core.deleteMind(other.id);
     expect(await core.listMinds()).toEqual([]);
     expect((await core.listDeleted()).map((item) => [item.kind, item.name])).toEqual([
-      ["chat", "Ask about tides"],
+      ["mind", "Ask about tides"],
       ["mind", "Tides"],
     ]);
 
@@ -103,10 +103,10 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
     clock.advance(1000);
     await core.restore([
       { kind: "mind", id: mind.id },
-      { kind: "chat", id: chat.id },
+      { kind: "mind", id: other.id },
     ]);
 
-    expect(ids(byId(await changed))).toEqual(ids(byId([mind, chat])));
+    expect(ids(byId(await changed))).toEqual(ids(byId([mind, other])));
     expect(withoutTimes(await core.listMinds())).toEqual(before);
     expect(readMind(await connectToMind(core, mind.id)).textContent).toBe(
       "Spring tides follow the new moon.",
@@ -242,7 +242,7 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
     const finance = await core.createLibraryGroup({ name: "Finance", description: "Money." });
     const budget = await addText(core, "Budget.txt", "The budget for next year.");
     const plan = await core.createMind({ title: "Plan", folderId: finance.id });
-    const chat = await core.createMind({ title: "Ask", kind: "chat", folderId: finance.id });
+    const ask = await core.createMind({ title: "Ask", folderId: finance.id });
     const old = await core.createMind({ title: "Old notes", folderId: finance.id });
     await core.moveToFolder({ documentIds: [budget.id], folderId: finance.id });
     const before = {
@@ -254,7 +254,7 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
 
     clock.advance(1000);
     const deletion = await core.deleteLibraryGroup(finance.id);
-    expect(deletion.mindIds.sort()).toEqual([plan.id, chat.id].sort());
+    expect(deletion.mindIds.sort()).toEqual([plan.id, ask.id].sort());
     expect(deletion.assignments.map((each) => each.documentId)).toEqual([budget.id]);
     expect((await core.listMinds()).map((mind) => mind.folderId)).toEqual([null, null]);
     expect(await assignmentOf(core, budget.id)).toMatchObject({ groupId: null });
@@ -266,7 +266,7 @@ describe("Restoring what was deleted", { timeout: 30_000 }, () => {
       { kind: "mind", id: old.id },
     ]);
 
-    expect(ids(byId(await changed))).toEqual(ids(byId([plan, chat, old])));
+    expect(ids(byId(await changed))).toEqual(ids(byId([plan, ask, old])));
     expect(withoutTimes(await core.listMinds())).toEqual(before.minds);
     expect((await core.getLibrary()).assignments).toEqual(before.assignments);
   });
