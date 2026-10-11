@@ -8,7 +8,11 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 const [work, engineName, styleFile, pkgDir] = process.argv.slice(2);
-const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
+// The fixtures moved to the unit tests, which run them through every shipped style (#289).
+const fixtures = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../tests/fixtures/citation-styles",
+);
 const t0 = performance.now();
 const read = (p) => fs.readFileSync(path.join(work, p), "utf8");
 const styleXml = read(`styles/${styleFile}`);
