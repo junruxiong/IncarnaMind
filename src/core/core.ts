@@ -87,6 +87,7 @@ import {
 } from "./providers/ollama";
 import { createOllamaModels } from "./providers/ollamaModels";
 import { createAiSdkRerankingModel, createRerank } from "./providers/rerank";
+import { createRecentlyDeleted, purgeExpired } from "./recentlyDeleted";
 import { BUILT_IN_RERANKING_MODEL, createRerankingModel } from "./reranking";
 import { resolveSearchScope } from "./scope";
 import { createSecrets } from "./secrets";
@@ -182,6 +183,12 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  try {
+    purgeExpired(db, now());
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   const events = createEventHub();
   // Logs what happens from here on, from the events: never the User's content.
   const activity = logActivity(events, adapters.log ?? silentLogger);
@@ -807,6 +814,20 @@ export function createCore(adapters: CoreAdapters): Core {
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
 
+  const recentlyDeleted = createRecentlyDeleted({
+    db,
+    now,
+    say: (key, params) => translate(settings.get().language, key, params),
+    minds,
+    content,
+    documents,
+    tags,
+    library,
+    mindsChanged,
+    tagsChanged,
+    tagged: announceTagged,
+  });
+
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
     const status = await jev.status();
@@ -1281,12 +1302,17 @@ export function createCore(adapters: CoreAdapters): Core {
     createLibraryGroup: async (input) => library.create(input),
     updateLibraryGroup: async (id, input) => library.update(id, input),
     deleteLibraryGroup: async (id) => {
-      // Its Minds go to Not in a Folder with it, as its Documents do.
-      const moved = db.transaction(() => {
-        library.delete(id);
-        return minds.leaveFolder(id as string);
+      const deletion = db.transaction(() => {
+        const folder = library.folder(id);
+        const left = minds.leaveFolder(folder.id);
+        const { assignments } = library.delete(
+          folder.id,
+          left.map((mind) => mind.id),
+        );
+        return { assignments, mindIds: left.filter((mind) => mind.live).map((mind) => mind.id) };
       });
-      if (moved) mindsChanged();
+      if (deletion.mindIds.length > 0) mindsChanged();
+      return deletion;
     },
     addLibraryStarterGroups: async (keys) => library.addStarters(keys),
     saveLibrarySettings: async (input) => library.saveSettings(input),
@@ -1305,6 +1331,10 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     assignDocumentGroup: async (id, groupId) => library.assign(id, groupId),
+    restoreAssignment: async (id, previous) => library.restoreAssignment(id, previous),
+    restore: async (refs) => recentlyDeleted.restore(refs),
+    listDeleted: async () => recentlyDeleted.list(),
+    deletePermanently: async (refs) => recentlyDeleted.deletePermanently(refs),
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
     moveToFolder: async (input) => {
@@ -1367,12 +1397,17 @@ export function createCore(adapters: CoreAdapters): Core {
       tagMany(documentIds, (id) => tags.addToDocument(id, tagId)),
     removeTagFromDocuments: async (documentIds, tagId) =>
       tagMany(documentIds, (id) => tags.removeFromDocument(id, tagId)),
+    revertDocumentTags: async (links) => {
+      const changed = recentlyDeleted.revertTags(links);
+      if (changed.length > 0) announceTagged(changed);
+      return documents.getMany([...new Set(links.map((link) => link.documentId))]);
+    },
     mergeTags: async (tagId, intoTagId) => {
-      const documentIds = tags.merge(tagId, intoTagId, now());
+      const { documentIds, links } = tags.merge(tagId, intoTagId, now());
       // Tags first, so a listener filtering by the merged Tag hears it's gone before it refreshes.
       tagsChanged();
       announceTagged(documentIds);
-      return tags.get(intoTagId);
+      return { tag: tags.get(intoTagId), merged: { kind: "tag", id: tagId, links } };
     },
     retagDocuments: async (documentIds) => {
       if (organizationConfigured()) return library.classify(documentIds);

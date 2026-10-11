@@ -70,4 +70,17 @@ describe("a Mind without a title", () => {
 
     expect((await core.listMinds())[0]?.autoTitle).toBe("");
   });
+
+  test("is listed in Recently deleted by that name once deleted", async () => {
+    const core = startCore(await createTempDataFolder());
+    const mind = await core.createMind();
+    const client = await connectToMind(core, mind.id);
+    appendParagraph(client, "Tides and the moon");
+    await client.settled();
+
+    await core.deleteMind(mind.id);
+
+    const deleted = (await core.listDeleted()).find((item) => item.id === mind.id);
+    expect(deleted?.name).toBe("Tides and the moon");
+  });
 });
