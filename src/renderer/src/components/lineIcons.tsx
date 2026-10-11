@@ -248,12 +248,46 @@ export function SidebarLineIcon(props: IconProps) {
   );
 }
 
+/** Recording a meeting, as an action ("Record a meeting", "Start recording"): a ring and a dot. */
+export function RecordingLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <circle cx="12" cy="12" r="8.25" />
+      <circle cx="12" cy="12" r="3.75" fill="currentColor" stroke="none" />
+    </LineIcon>
+  );
+}
+
 /** Split to the right: a window cut in two halves, as in VS Code. */
 export function SplitLineIcon(props: IconProps) {
   return (
     <LineIcon {...props}>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
       <path d="M12 4.5v15" />
+    </LineIcon>
+  );
+}
+
+export function PauseLineIcon(props: IconProps) {
+  return (
+    <LineIcon strokeWidth={2.25} {...props}>
+      <path d="M9 6.5v11M15 6.5v11" />
+    </LineIcon>
+  );
+}
+
+export function ResumeLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M8 5.5v13l10.5-6.5z" fill="currentColor" />
+    </LineIcon>
+  );
+}
+
+export function StopLineIcon(props: IconProps) {
+  return (
+    <LineIcon {...props}>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" />
     </LineIcon>
   );
 }
