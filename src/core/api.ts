@@ -2210,6 +2210,8 @@ export type ProviderErrorKind =
   | "network"
   | "provider"
   | "consent-declined"
+  /** "Keep everything on this computer" is on and the model isn't on this computer: nothing was sent, or the Answer was stopped. */
+  | "local-mode"
   /** ChatGPT plan: there is no sign-in on this device, or it expired: sign in again. */
   | "not-signed-in"
   /** ChatGPT plan: the plan's usage limit is reached, or the plan doesn't include this use. */
@@ -2258,8 +2260,11 @@ export type ChatReadiness =
        * "consent-declined": the User declined sending data to its service.
        * "sign-in-required": the provider uses a sign-in (the ChatGPT plan) and
        * this device has none, e.g. the User signed out or it expired.
+       * "local-mode": "Keep everything on this computer" is on and the model isn't
+       * on this computer, so no Question is sent to it (each other flow checks
+       * local mode itself).
        */
-      reason: "missing-api-key" | "consent-declined" | "sign-in-required";
+      reason: "missing-api-key" | "consent-declined" | "sign-in-required" | "local-mode";
       provider: ChatProvider;
       modelId: string;
     };
@@ -4414,7 +4419,9 @@ export interface CoreApi {
    * device. Turning it on switches a cloud embedding provider back to the
    * built-in model, which embeds every Document again (an embedding provider
    * on this computer, e.g. Ollama, is kept), and pauses a reranking service
-   * (the built-in reranking model carries on).
+   * (the built-in reranking model carries on). Questions are then asked only of a
+   * model on this computer: a cloud model is refused before anything is sent, and
+   * an Answer streaming to one is stopped.
    */
   setLocalOnly(enabled: boolean): Promise<EmbeddingSettings>;
 
