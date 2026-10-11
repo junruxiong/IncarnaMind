@@ -16,6 +16,8 @@ npm run test:smoke   # Playwright: builds the app and drives it in Electron
 npm run eval         # the retrieval evaluation (see below)
 ```
 
+npm 11.20 and newer run a dependency's install script only if `allowScripts` in `package.json` approves it ([`npm install-scripts`](https://docs.npmjs.com/cli/v11/commands/npm-install-scripts)); esbuild and onnxruntime-node are approved, and a new dependency with an install script needs an entry too. Electron has no install script: its binary downloads the first time the app or a smoke spec launches, so that first launch needs the network.
+
 Keep development data apart from your real data folder by pointing the app at another one: `INCARNAMIND_DATA_DIR=/tmp/incarnamind-dev npm run dev`.
 
 On Linux with no desktop, run the smoke test on a virtual display, as CI does: `xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run test:smoke`.

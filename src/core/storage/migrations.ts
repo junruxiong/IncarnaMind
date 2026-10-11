@@ -1221,6 +1221,18 @@ export const migrations: readonly Migration[] = [
         WHERE service_id = 'https://chatgpt.com' AND deleted_at IS NULL;
     `,
   },
+  {
+    version: 54,
+    description:
+      "Answers in conversations keep where the third-party text their Run read came from (#78)",
+    sql: `
+      -- An Answer written by a Run that had read third-party text (src/core/answers, ADR-0013):
+      -- where it came from, 'imported' | 'web-page' | 'checked-document', checked in code.
+      -- NULL: the Run read none. A later Question in the conversation then counts as having
+      -- read it too, and asks before an "always allowed" write or send. Questions keep NULL.
+      ALTER TABLE conversation_messages ADD COLUMN text_origin TEXT;
+    `,
+  },
 ];
 
 /**

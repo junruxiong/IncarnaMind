@@ -25,6 +25,7 @@ export function createCrossref(baseUrl: string = CROSSREF_URL): SourceProvider {
   };
   return {
     id: "crossref",
+    resolves: ["doi"],
     name: "Crossref",
     service: { id: "https://api.crossref.org", name: "Crossref" },
     terms,

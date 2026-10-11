@@ -51,15 +51,26 @@
  * before each call. The gate is told whether the Run had read untrusted
  * content first (`GatedCall.tainted`): the loop records it, above the engine,
  * from the results of the Tools that declare them untrusted
- * (docs/designs/agent-extensibility.md §4.6). The loop names none of the
- * Tools but the Documents' own: every call shows as a Tool-call card, from
- * its provider, except `cite`, whose records become Citations; results that
- * aren't Passages are never cited. With Skills or Connector Tools but no
- * Documents, the loop runs with those alone; a model that can't call Tools
- * answers without.
+ * (docs/designs/agent-extensibility.md §4.6). It is told too why the Run
+ * counts as having read third-party text (`GatedCall.thirdParty`, #78): what
+ * the request starts it with, then what its Tools say they read, such as a
+ * search that found a saved web page's Passages. Each Run is offered a Tool
+ * set (`ToolSet`): an Answer every Tool, a check Run the Documents' search
+ * and `cite` only. The loop names none of the Tools but the Documents' own:
+ * every call shows as a Tool-call card, from its provider, except `cite`,
+ * whose records become Citations; results that aren't Passages are never
+ * cited. With Skills or Connector Tools but no Documents, the loop runs with
+ * those alone; a model that can't call Tools answers without.
  */
 import { generateText, jsonSchema, Output, parsePartialJson, streamText } from "ai";
-import type { AnswerPhase, CitationSupport, ProviderError, QuoteRetry } from "../api";
+import type {
+  AnswerPhase,
+  CitationSupport,
+  ProviderError,
+  QuoteRetry,
+  ReadThirdPartySource,
+  ThirdPartyReason,
+} from "../api";
 import { detectLanguage } from "../documents/textLanguage";
 import type { ChatLanguageModel, ContextWindow } from "../providers/models";
 import { cacheProviderOptions, tokenUsageOf } from "../providers/promptCache";
@@ -140,6 +151,11 @@ export interface SearchResultForModel {
    * relevant (see ./window). Absent: their order is their relevance.
    */
   ranks?: number[];
+  /**
+   * The third-party text among the Passages: "web-page" when one is a saved
+   * web page's (#78). Reading it makes the Run third-party. Absent: none.
+   */
+  thirdParty?: readonly ReadThirdPartySource[];
 }
 
 /** A language the Documents to search are in, and how many of them are. */
@@ -213,7 +229,24 @@ export interface GatedCall extends RunToolCall {
    * Passages (docs/designs/agent-extensibility.md §4.6).
    */
   tainted: boolean;
+  /**
+   * Why the Run counts as having read third-party text before this call (#78):
+   * what it started with (`AnswerRequest.thirdParty`), then what its Tools
+   * read, oldest first, each once. Empty: none.
+   */
+  thirdParty: readonly ThirdPartyReason[];
 }
+
+/**
+ * Which Tools a Run is offered (#78):
+ * - "answer": an ordinary Answer's: the Documents' search and `cite`, and
+ *   every other Tool the request brings (Skills, Connectors, Find sources);
+ * - "check": a check Run's (find support, verify, a comparison table's
+ *   cells, contradiction watch): the Documents' search and `cite` only,
+ *   whatever the request brings, so the text it checks can't steer a write or
+ *   a send.
+ */
+export type ToolSet = "answer" | "check";
 
 export interface AnswerRequest {
   /**
@@ -244,6 +277,14 @@ export interface AnswerRequest {
    * it, every call runs.
    */
   gate?(tool: Tool, call: GatedCall): Promise<GateDecision>;
+  /** Which Tools the Run is offered. Absent: "answer", every Tool. */
+  toolSet?: ToolSet;
+  /**
+   * The Run counts as having read third-party text from its start: its
+   * Question context holds some, or (a check Run) it reads the document it
+   * checks (#78). Each call's gate is told (`GatedCall.thirdParty`).
+   */
+  thirdParty?: readonly ThirdPartyReason[];
   /** How this model is known to cite, from its capabilities or earlier Answers. Unknown: try Tools first. */
   support?: CitationSupport;
   /** False: the model is known to give no structured output, so it isn't tried. */
@@ -307,6 +348,11 @@ export type AnswerEngineEvent =
       input: Record<string, unknown>;
     }
   | { type: "tool-call-finished"; id: string; ok: boolean; resultCount: number | null }
+  /**
+   * The Run read third-party text (#78): a search found a saved web page's
+   * Passages. Once per source, before the Tool-call card of the call that read it finishes.
+   */
+  | { type: "read-third-party"; source: ReadThirdPartySource }
   /** A model call ended, with the tokens its provider counted, the cached ones too. */
   | { type: "usage"; usage: TokenUsage }
   /** The Answer is complete. Nothing follows. */
@@ -644,7 +690,9 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
   const tokenFactors = new Map<string, number>();
 
   return {
-    async *generate(request) {
+    async *generate(asked) {
+      // A check Run is offered the Documents' search and `cite` only (see `ToolSet`).
+      const request: AnswerRequest = asked.toolSet === "check" ? { ...asked, tools: [] } : asked;
       const failed = (error: unknown): AnswerEngineEvent => ({
         type: "failed",
         error: classifyProviderError(error),
@@ -802,6 +850,7 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
         ];
         yield { type: "phase", phase: "searching" };
         const results: SearchResultForModel[] = [];
+        const read = new Set<ReadThirdPartySource>();
         for (const [id, each] of searches) {
           yield {
             type: "tool-call-started",
@@ -812,6 +861,11 @@ export function createAiSdkAnswerEngine(options: AiSdkAnswerEngineOptions = {}):
           };
           try {
             const result = await request.documents.searchDocuments(each, signal);
+            for (const source of result.thirdParty ?? []) {
+              if (read.has(source)) continue;
+              read.add(source);
+              yield { type: "read-third-party", source };
+            }
             yield { type: "tool-call-finished", id, ok: true, resultCount: result.passageCount };
             results.push(result);
           } catch (error) {
@@ -913,7 +967,7 @@ export function documentTools(
       effects: () => [{ action: "read", scope: { kind: "documents" } }],
       // The User didn't write their Documents.
       untrustedResult: true,
-      async call({ query }, { toolCallId, signal }) {
+      async call({ query }, { toolCallId, signal, readThirdParty }) {
         let found: SearchResultForModel;
         try {
           found = await documents.searchDocuments(String(query ?? ""), signal);
@@ -922,6 +976,7 @@ export function documentTools(
           if (!signal.aborted) console.error(error);
           throw error;
         }
+        for (const source of found.thirdParty ?? []) readThirdParty?.(source);
         const result = hooks.fit(found);
         hooks.searched(toolCallId, result.passageCount);
         return result.text;
@@ -1012,9 +1067,21 @@ async function* toolLoop(
    */
   let tainted = false;
   /**
+   * Why this Run counts as having read third-party text: what it started
+   * with, then what its Tools read, each once; each call's gate is told.
+   */
+  const thirdParty: ThirdPartyReason[] = [...(request.thirdParty ?? [])];
+  /** What the Tools read since the last event: the Answer hears of it with the call's result. */
+  const unannounced: ReadThirdPartySource[] = [];
+  const readThirdParty = (source: ReadThirdPartySource) => {
+    if (thirdParty.some((each) => each.via === "read" && each.source === source)) return;
+    thirdParty.push({ via: "read", source });
+    unannounced.push(source);
+  };
+  /**
    * A Tool as the engine calls it: one with untrusted results taints the Run
    * once it returns some; one that counts what it found (Find sources) says
-   * so for its card.
+   * so for its card; one that read third-party text says so.
    */
   const tracked = (tool: Tool): Tool => ({
     ...tool,
@@ -1022,6 +1089,7 @@ async function* toolLoop(
       const result = await tool.call(input, {
         ...context,
         counted: (count) => results.set(context.toolCallId, count),
+        readThirdParty,
       });
       // A search that found nothing (no Passages, no works) read nothing untrusted.
       const read = results.has(context.toolCallId)
@@ -1091,7 +1159,9 @@ async function* toolLoop(
     cacheKey: request.cacheKey,
     gate: async (call) => {
       const tool = offered.get(call.tool);
-      return tool && request.gate ? request.gate(tool, { ...call, tainted }) : RUN;
+      return tool && request.gate
+        ? request.gate(tool, { ...call, tainted, thirdParty: [...thirdParty] })
+        : RUN;
     },
     window,
     temperature,
@@ -1128,6 +1198,7 @@ async function* toolLoop(
         break;
       }
       case "tool-result": {
+        for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
         // A failed call (a Skill or file that isn't there, a Connector's failure or a declined
         // consent) is told to the model; its card says it failed.
         const called = calls.get(event.id);
@@ -1170,6 +1241,7 @@ async function* toolLoop(
               };
         return;
       case "failed":
+        for (const source of unannounced.splice(0)) yield { type: "read-third-party", source };
         yield { type: "failed", error: event.error };
         return;
       case "finished":

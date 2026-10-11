@@ -1,0 +1,250 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT04625985",
+      "orgStudyIdInfo": {
+        "id": "SIL-30000-II-20(2)"
+      },
+      "organization": {
+        "fullName": "Laboratorios Silanes S.A. de C.V.",
+        "class": "INDUSTRY"
+      },
+      "briefTitle": "Metformin Glycinate, Treatment of Patients With COVID-19 and Severe Acute Respiratory Syndrome Secondary to SARS-CoV-2.",
+      "officialTitle": "Adaptive Study to Demonstrate Efficacy and Safety of Metformin Glycinate for the Treatment of Hospitalized Patients With Severe Acute Respiratory Syndrome Secondary to SARS-CoV-2. Randomized, Double-Blind, Phase IIIb",
+      "acronym": "DMMETCOV19-2"
+    },
+    "statusModule": {
+      "statusVerifiedDate": "2021-04",
+      "overallStatus": "COMPLETED",
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      },
+      "startDateStruct": {
+        "date": "2020-07-14",
+        "type": "ACTUAL"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2021-03-08",
+        "type": "ACTUAL"
+      },
+      "completionDateStruct": {
+        "date": "2021-03-18",
+        "type": "ACTUAL"
+      },
+      "studyFirstSubmitDate": "2020-10-23",
+      "studyFirstSubmitQcDate": "2020-11-10",
+      "studyFirstPostDateStruct": {
+        "date": "2020-11-12",
+        "type": "ACTUAL"
+      },
+      "lastUpdateSubmitDate": "2021-04-05",
+      "lastUpdatePostDateStruct": {
+        "date": "2021-04-08",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "responsibleParty": {
+        "type": "SPONSOR"
+      },
+      "leadSponsor": {
+        "name": "Laboratorios Silanes S.A. de C.V.",
+        "class": "INDUSTRY"
+      }
+    },
+    "oversightModule": {
+      "oversightHasDmc": false,
+      "isFdaRegulatedDrug": false,
+      "isFdaRegulatedDevice": false
+    },
+    "descriptionModule": {
+      "briefSummary": "The purpose of this study is to evaluate the efficacy and safety of the metformin glycinate and standard treatment of the hospital in hospitalized patients with Severe Acute Respiratory Syndrome secondary to SARS-CoV2.",
+      "detailedDescription": "After being informed about the study and potential risks, all patients giving written informed consent will undergo a 1 day screening period to determine eligibility for study entry. At day 0, patients who meet the eligibility requirements will be randomized in a double blind manner (participant and investigator) in a 1:1 ratio to metformin glycinate (620 mg, taken orally, twice daily) plus standard treatment or placebo (taken orally, twice daily) plus standard treatment, both for 14 days."
+    },
+    "conditionsModule": {
+      "conditions": ["Severe Acute Respiratory Syndrome Coronavirus 2"],
+      "keywords": ["SARS-COV 2", "Severe acute respiratory syndrome"]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": ["PHASE2"],
+      "designInfo": {
+        "allocation": "RANDOMIZED",
+        "interventionModel": "PARALLEL",
+        "interventionModelDescription": "Experimental: Metformin glycinate 620 mg bid (PO) for 14 days plus standard treatment Control group: placebo bid (PO) for 14 days plus standard treatment\n\nComparator: Placebo Placebo pill bid (PO) for 14 days plus standard treatment",
+        "primaryPurpose": "TREATMENT",
+        "maskingInfo": {
+          "masking": "QUADRUPLE",
+          "maskingDescription": "Parallel Assignment Experimental and placebo tablets will have same physical appearance and medicine box will be identified by kit number.",
+          "whoMasked": ["PARTICIPANT", "CARE_PROVIDER", "INVESTIGATOR", "OUTCOMES_ASSESSOR"]
+        }
+      },
+      "enrollmentInfo": {
+        "count": 20,
+        "type": "ACTUAL"
+      }
+    },
+    "armsInterventionsModule": {
+      "armGroups": [
+        {
+          "label": "Metformin glycinate",
+          "type": "EXPERIMENTAL",
+          "description": "620 mg bid (PO) for 14 days plus standard treatment",
+          "interventionNames": ["Drug: Metformin Glycinate"]
+        },
+        {
+          "label": "Placebo",
+          "type": "PLACEBO_COMPARATOR",
+          "description": "Placebo tablet bid (PO) for 14 days plus standard treatment",
+          "interventionNames": ["Drug: Placebo oral tablet"]
+        }
+      ],
+      "interventions": [
+        {
+          "type": "DRUG",
+          "name": "Metformin Glycinate",
+          "description": "Participants randomized to metformin glycinate will take 620 mg bid (PO) for 14 days plus standard treatment",
+          "armGroupLabels": ["Metformin glycinate"],
+          "otherNames": ["DMMET"]
+        },
+        {
+          "type": "DRUG",
+          "name": "Placebo oral tablet",
+          "description": "Participants randomized to placebo will take a tablet bid (PO) for 14 days in plus standard treatment",
+          "armGroupLabels": ["Placebo"],
+          "otherNames": ["Placebo"]
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Viral load",
+          "description": "Assess differences in SARS-CoV-2 viral load between participants that receive placebo vs metformin glycinate",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "consciousness level",
+          "description": "Clinical status assessed by measurement of consciousness level: alertness",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "temperature",
+          "description": "Clinical status assessed by measurement of axillary body temperature in °C: \\<37.2.",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "systolic blood pressure",
+          "description": "Clinical status assessed by measurement of systolic blood pressure in mmHg: \\>90.",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "Oxigen saturation",
+          "description": "Clinical status assessed by measurement of oxygen saturation in %: \\>90.",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "Heart rate",
+          "description": "Clinical status assessed by measurement of heart rate in beats per minute: \\<100 bpm.",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "respiratory rate",
+          "description": "Clinical status assessed by measurement of respiratory rate in breaths per minute: \\<24 bpm,",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "Days of hospitalization",
+          "description": "Assess length of hospitalization",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "Days of supplementary oxygen if applies",
+          "description": "Assess length of supplementary oxygen",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "Days of supplementary mechanical ventilation",
+          "description": "Assess length of mechanical ventilation",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        }
+      ],
+      "secondaryOutcomes": [
+        {
+          "measure": "Toxicity of study drug assessed by incidence of adverse events (grade 3 or 4)",
+          "description": "Assess by incidence of Grade 3, Grade 4, and Serious Adverse Events (AEs)",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        },
+        {
+          "measure": "Changes in laboratory test results",
+          "description": "Changes in serum levels from security laboratories compared to baseline levels and between groups.",
+          "timeFrame": "Day 0 to Day 28 or patient discharge day"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Inclusion Criteria:\n\n1. ≥ 18 years old\n2. Ability to understand and the willingness to sign a written informed consent document before any study procedure\n3. Coronavirus infection, severe acute respiratory syndrome (SARS-CoV)-2 confirmed by the polymerase chain reaction (PCR) test ≤ 4 days before randomization.\n4. Hospitalized\n5. Radiographic evidence of pulmonary infiltrates\n\nExclusion Criteria:\n\n1. Participation in any other clinical trial of an experimental treatment for COVID-19\n2. Evidence of multi-organ failure\n3. Require mechanical ventilation before randomization\n4. Pregnant patients\n5. Patients with kidney failure, cancer and among other conditions that due to their treatment and / or baseline condition, affect the distribution, bioavailability and elimination of the studied drug",
+      "healthyVolunteers": false,
+      "sex": "ALL",
+      "minimumAge": "18 Years",
+      "stdAges": ["ADULT", "OLDER_ADULT"]
+    },
+    "contactsLocationsModule": {},
+    "referencesModule": {
+      "references": [
+        {
+          "pmid": "20380657",
+          "type": "BACKGROUND",
+          "citation": "Fischer M, Timper K, Radimerski T, Dembinski K, Frey DM, Zulewski H, Keller U, Muller B, Christ-Crain M, Grisouard J. Metformin induces glucose uptake in human preadipocyte-derived adipocytes from various fat depots. Diabetes Obes Metab. 2010 Apr;12(4):356-9. doi: 10.1111/j.1463-1326.2009.01169.x."
+        },
+        {
+          "pmid": "19538242",
+          "type": "BACKGROUND",
+          "citation": "Cuthbertson J, Patterson S, O'Harte FP, Bell PM. Investigation of the effect of oral metformin on dipeptidylpeptidase-4 (DPP-4) activity in Type 2 diabetes. Diabet Med. 2009 Jun;26(6):649-54. doi: 10.1111/j.1464-5491.2009.02748.x."
+        },
+        {
+          "pmid": "12086935",
+          "type": "RESULT",
+          "citation": "Musi N, Hirshman MF, Nygren J, Svanfeldt M, Bavenholm P, Rooyackers O, Zhou G, Williamson JM, Ljunqvist O, Efendic S, Moller DE, Thorell A, Goodyear LJ. Metformin increases AMP-activated protein kinase activity in skeletal muscle of subjects with type 2 diabetes. Diabetes. 2002 Jul;51(7):2074-81. doi: 10.2337/diabetes.51.7.2074."
+        },
+        {
+          "pmid": "16308421",
+          "type": "RESULT",
+          "citation": "Shaw RJ, Lamia KA, Vasquez D, Koo SH, Bardeesy N, Depinho RA, Montminy M, Cantley LC. The kinase LKB1 mediates glucose homeostasis in liver and therapeutic effects of metformin. Science. 2005 Dec 9;310(5754):1642-6. doi: 10.1126/science.1120781. Epub 2005 Nov 24."
+        },
+        {
+          "pmid": "11960602",
+          "type": "RESULT",
+          "citation": "Detaille D, Guigas B, Leverve X, Wiernsperger N, Devos P. Obligatory role of membrane events in the regulatory effect of metformin on the respiratory chain function. Biochem Pharmacol. 2002 Apr 1;63(7):1259-72. doi: 10.1016/s0006-2952(02)00858-4."
+        },
+        {
+          "pmid": "17941868",
+          "type": "RESULT",
+          "citation": "Tamura Y, Watada H, Sato F, Kumashiro N, Sakurai Y, Hirose T, Tanaka Y, Kawamori R. Effects of metformin on peripheral insulin sensitivity and intracellular lipid contents in muscle and liver of overweight Japanese subjects. Diabetes Obes Metab. 2008 Sep;10(9):733-8. doi: 10.1111/j.1463-1326.2007.00801.x. Epub 2007 Oct 15."
+        },
+        {
+          "pmid": "11756340",
+          "type": "RESULT",
+          "citation": "Standeven KF, Ariens RA, Whitaker P, Ashcroft AE, Weisel JW, Grant PJ. The effect of dimethylbiguanide on thrombin activity, FXIII activation, fibrin polymerization, and fibrin clot formation. Diabetes. 2002 Jan;51(1):189-97. doi: 10.2337/diabetes.51.1.189."
+        },
+        {
+          "pmid": "22974412",
+          "type": "RESULT",
+          "citation": "Gonzalez-Ortiz M, Martinez-Abundis E, Robles-Cervantes JA, Ramos-Zavala MG, Barrera-Duran C, Gonzalez-Canudas J. Effect of metformin glycinate on glycated hemoglobin A1C concentration and insulin sensitivity in drug-naive adult patients with type 2 diabetes mellitus. Diabetes Technol Ther. 2012 Dec;14(12):1140-4. doi: 10.1089/dia.2012.0097. Epub 2012 Sep 13."
+        },
+        {
+          "type": "RESULT",
+          "citation": "Jorge González Canudas, COMET GROUP Diabetes Efficacy and Safety of Metformin Glycinate vs. Metformin Hydrochloride in Metabolic Control and Inflammatory Mediators in Type 2 Diabetes Mellitus Patients. Diabetes 2019 Jun; 68(Supplement 1)"
+        },
+        {
+          "type": "RESULT",
+          "citation": "Garza-Ocañas L, Tamez-de la O E, Iglesias-Chiesa J, Gonzalez Canudas J, Rivas-Ruiz R: Pharmacokinetics and gastrointestinal tolerability of DMMET 01 (glycinate of metformin): results of a prospective randomized trial in healthy volunteers [abstract]. Diabetes 2009;58(Suppl 1):A533"
+        }
+      ]
+    },
+    "ipdSharingStatementModule": {
+      "ipdSharing": "NO"
+    }
+  },
+  "hasResults": false
+}
