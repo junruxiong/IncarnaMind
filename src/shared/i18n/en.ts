@@ -2299,8 +2299,9 @@ export const en = {
   // Settings → Agents (#351): plain words for people who never edit a settings file.
   "settings.pages.agents": "Agents",
   "agents.settings.experimental": "Experimental",
+  "agents.settings.lead": "Ask Claude, Codex or Cursor about your Documents.",
   "agents.settings.intro":
-    "Let an AI agent you already use, such as Claude, Codex or Cursor, search the folders you choose and cite them. IncarnaMind checks every quote it gives.",
+    "Connect the AI tool you already use and choose which folders it may read. Its answers will cite those Documents, and IncarnaMind checks every quote.",
   "agents.settings.switch": "Connect AI agents",
   "agents.settings.switch.off": "Off: no agent can reach your Documents.",
   "agents.settings.switch.on":
