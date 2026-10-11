@@ -9,8 +9,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import type { ChatSettings } from "../../eval/lib/config";
 import { type CorpusPassage, createCorpus } from "../../eval/lib/corpus";
 import type { EvalQuestion } from "../../eval/lib/evaluationSet";
+import type { Library } from "../../eval/lib/library";
+import { openOtherSearches } from "../../eval/lib/otherSearches";
 import { type EvalReport, terminalSummary, writeReports } from "../../eval/lib/report";
 import type { OpenReranker, RerankerInfo } from "../../eval/lib/rerank";
 import {
@@ -384,5 +387,83 @@ describe("The report of the other searches", () => {
     } finally {
       await rm(results, { recursive: true, force: true });
     }
+  });
+});
+
+describe("The chat-model modes with a local chat model", () => {
+  const chat: ChatSettings = {
+    kind: "ollama",
+    modelId: "llama3.2",
+    apiKey: null,
+    baseUrl: null,
+    numCtx: null,
+    citing: null,
+  };
+  const question = {
+    id: "en-01",
+    language: "en",
+    crossLingual: false,
+    question: "What are tides?",
+    expected: { document: "d", pages: [1, 1], quote: "tides" },
+  } satisfies EvalQuestion;
+
+  /** A library whose chat provider sends to `service` (null: this computer), and how many times the chat model was called. */
+  async function open(service: { name: string } | null, localQueryModes?: boolean) {
+    const dir = await mkdtemp(join(tmpdir(), "incarnamind-modes-"));
+    let calls = 0;
+    const core = {
+      searchPassages: async () => [],
+      saveChatProvider: async () => ({ service }),
+    } as unknown as Core;
+    const library = {
+      core,
+      documents: new Map([["d", { id: "doc-d" }]]),
+      passages: () => [],
+      pageTexts: () => [],
+    } as unknown as Library;
+    try {
+      const opened = await openOtherSearches(
+        library,
+        [question],
+        {
+          chat,
+          resultsDir: dir,
+          ...(localQueryModes !== undefined && { localQueryModes }),
+          generate: async () => {
+            calls++;
+            return { text: "tides at the full moon", inputTokens: 1, outputTokens: 1 };
+          },
+        },
+        () => {},
+      );
+      opened.close();
+      return { opened, calls };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  test("are skipped by default, and the report says why", async () => {
+    const { opened, calls } = await open(null);
+    expect(calls).toBe(0);
+    expect(Object.keys(opened.sources)).not.toContain("rewrites");
+    expect(Object.keys(opened.sources)).not.toContain("sub-questions");
+    expect(opened.report.skipped.rewrites).toMatch(/runs on this computer.*LOCAL_QUERY_MODES=on/);
+    expect(opened.report.skipped["sub-questions"]).toMatch(/LOCAL_QUERY_MODES=on/);
+  });
+
+  test("run when the variable is on", async () => {
+    const { opened, calls } = await open(null, true);
+    expect(calls).toBe(2);
+    expect(Object.keys(opened.sources)).toEqual(
+      expect.arrayContaining(["rewrites", "sub-questions"]),
+    );
+    expect(opened.report.skipped).toEqual({});
+  });
+
+  test("run for a model that sends to a service, whatever the variable says", async () => {
+    const { opened, calls } = await open({ name: "Anthropic" });
+    expect(calls).toBe(2);
+    expect(opened.report.skipped).toEqual({});
   });
 });

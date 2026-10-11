@@ -1,0 +1,5 @@
+The ChatGPT logo on IncarnaMind's "Continue with ChatGPT" button is a trademark of OpenAI.
+IncarnaMind shows it unchanged, as OpenAI's Sign in with ChatGPT guidelines ask
+(https://developers.openai.com/siwc/ui-ux-guidelines), under OpenAI's brand guidelines
+(https://openai.com/brand/). It isn't covered by IncarnaMind's licence (Apache-2.0), and its
+use doesn't mean that OpenAI sponsors or endorses IncarnaMind.
