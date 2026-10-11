@@ -29,6 +29,9 @@ interface PopoverProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 
+/** The editor's popovers that are open, in the order they opened. */
+const openPopovers: HTMLElement[] = [];
+
 /** A native popover in the top layer, next to `anchor`, for the editor's small menus and fields. */
 export function Popover({
   anchor,
@@ -65,16 +68,18 @@ export function Popover({
       });
     };
     const stopFollowing = autoUpdate(anchor, element, place);
+    openPopovers.push(element);
     /**
-     * Whether an event happened in another of the editor's popovers: one
-     * opened from inside this one, such as the card of a Citation in a
-     * footnote's text, which is not outside it.
+     * Whether an event happened in a popover opened after this one, such as
+     * the card of a Citation in a footnote's text: from inside this one, so
+     * not outside it. Esc there closes that one, the innermost, first.
      */
-    const inAnother = (target: EventTarget | null) =>
-      target instanceof Element && !element.contains(target) && !!target.closest(".editor-popover");
+    const inLater = (target: EventTarget | null) =>
+      target instanceof Node &&
+      openPopovers.slice(openPopovers.indexOf(element) + 1).some((later) => later.contains(target));
     const dismissOnPressOutside = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Node) || element.contains(target) || inAnother(target)) return;
+      if (!(target instanceof Node) || element.contains(target) || inLater(target)) return;
       if (anchor instanceof Element && anchor.contains(target)) return;
       dismiss.current();
     };
@@ -82,7 +87,7 @@ export function Popover({
     // button that opened it. Captured, and marked handled, before the
     // Document viewer's own Esc sees it; inside, `onKeyDown` handles it.
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || inAnother(event.target)) return;
+      if (event.key !== "Escape" || event.defaultPrevented || inLater(event.target)) return;
       if (event.target instanceof Node && element.contains(event.target)) return;
       event.preventDefault();
       dismiss.current();
@@ -90,6 +95,7 @@ export function Popover({
     document.addEventListener("pointerdown", dismissOnPressOutside, true);
     document.addEventListener("keydown", dismissOnEscape, true);
     return () => {
+      openPopovers.splice(openPopovers.indexOf(element), 1);
       stopFollowing();
       document.removeEventListener("pointerdown", dismissOnPressOutside, true);
       document.removeEventListener("keydown", dismissOnEscape, true);
