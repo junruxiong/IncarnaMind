@@ -8,6 +8,7 @@ What IncarnaMind sends from your computer, and how to change it. **Settings → 
 - **Web pages you add** are fetched from your computer, straight from their site, when you add one and when you choose Fetch again. Nothing else on the page is loaded: not its pictures, scripts or trackers.
 - **Crash reports**: off unless you turn them on, and stripped of your content first.
 - **Usage data**: only if you agree, described below.
+- **The AI use record** stays on this computer and is never sent, whatever you choose about usage data. It notes each time the AI wrote into a Mind and what you did with it, as sizes, kinds, the model's name and times, with no text. Clear it in Settings → Privacy.
 
 ## Usage data
 

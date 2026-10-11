@@ -10,6 +10,7 @@ import { core } from "../core";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { useAppStore } from "../store";
+import { AiUseSettings } from "./AiUseSettings";
 import { ApprovalsSettings } from "./ApprovalsSettings";
 import { USAGE_DATA_DETAILS_URL } from "./UsageDataDialog";
 import {
@@ -160,6 +161,8 @@ export function PrivacySettings() {
         <h4 className={sectionTitleClass}>{t("privacy.skills.title")}</h4>
         <p className={`mt-0.5 ${rowTextClass}`}>{t("privacy.skills.body")}</p>
       </section>
+
+      <AiUseSettings />
 
       {/* Only a copy built with a crash-report address can send reports, so only it offers them. */}
       {choices?.crashReports.available && (
