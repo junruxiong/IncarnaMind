@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import type { TestHooks } from "../src/shared/testHooks";
 import {
+  clickNow,
   closeSettings,
   createDataFolder,
   dismissChatSetup,
@@ -154,11 +155,7 @@ test("a click on an item while its menu is still opening acts on it", async () =
       { capture: true, once: true },
     );
   });
-  const item = await window.getByTestId("plus-new-mind").boundingBox();
-  if (!item) throw new Error("New Mind isn't on screen.");
-  await window.mouse.move(item.x + item.width / 2, item.y + item.height / 2, { steps: 4 });
-  await window.mouse.down();
-  await window.mouse.up();
+  await clickNow(window, window.getByTestId("plus-new-mind"));
 
   const pressedAt = await window.evaluate(() => (globalThis as { pressedAt?: number }).pressedAt);
   expect(pressedAt).toBeGreaterThanOrEqual(0);

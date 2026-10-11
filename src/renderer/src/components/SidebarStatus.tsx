@@ -4,6 +4,7 @@ import type { DocumentStatus, EmbeddingModelError } from "../../../core/api";
 import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { useCapturing } from "../meetings";
+import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { isOwnDocument, useAppStore } from "../store";
 import { CloseLineIcon } from "./lineIcons";
@@ -167,7 +168,12 @@ function MoreStatuses({ others }: { others: Status[] }) {
         aria-label={label}
         data-testid="status-others"
         onBeforeToggle={(event: ToggleEvent<HTMLDivElement>) => {
-          if (event.newState === "open") place(event.currentTarget);
+          const list = event.currentTarget;
+          if (event.newState === "open") {
+            place(list);
+            // Once it shows, before that frame paints: it grows from the button.
+            requestAnimationFrame(() => enterFrom(list, button.current));
+          } else exitToward(list, button.current);
           setOpen(event.newState === "open");
         }}
         className="inset-auto m-0 rounded-lg border-0 bg-sheet p-1 font-normal shadow-popover [&>*+*]:border-t [&>*+*]:border-rule"

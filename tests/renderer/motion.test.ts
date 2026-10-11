@@ -145,6 +145,17 @@ describe("each helper, On, Reduced and Off", () => {
     });
   });
 
+  test("an offset left undefined keeps where it rests", () => {
+    expect(planEnter("on", { x: undefined, y: -4 })?.keyframes).toEqual({
+      opacity: [0, 1],
+      y: [-4, 0],
+    });
+    expect(planExit("on", { x: undefined, scale: 0.96 })?.keyframes).toEqual({
+      opacity: [1, 0],
+      scale: [1, 0.96],
+    });
+  });
+
   test("On: leaving shrinks toward its offset as it fades, from where it is", () => {
     expect(planExit("on", { y: -4, scale: 0.96 })).toEqual({
       keyframes: { opacity: [1, 0], y: [0, -4], scale: [1, 0.96] },

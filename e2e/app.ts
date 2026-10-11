@@ -521,6 +521,21 @@ export async function motionSettled(window: Page): Promise<void> {
     .toBe(0);
 }
 
+/**
+ * Clicks `target` where it is now, as a person does, without waiting for it to
+ * stop moving (a menu still growing from its button): the app takes a click
+ * during an animation. For a test that races work in the background, which
+ * waiting would let finish first.
+ */
+export async function clickNow(window: Page, target: Locator): Promise<void> {
+  await expect(target).toBeVisible();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("The element isn't on screen.");
+  await window.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await window.mouse.down();
+  await window.mouse.up();
+}
+
 /** Plays every animation at `speed` (0.2: five times slower), so a test can look, or act, during one. */
 export async function setMotionSpeed(window: Page, speed: number): Promise<void> {
   await window.evaluate(
