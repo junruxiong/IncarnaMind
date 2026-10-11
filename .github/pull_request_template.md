@@ -8,6 +8,7 @@
 
 - [ ] `npm run typecheck`, `npm run lint` and `npm test` pass
 - [ ] The smoke tests that touch this change pass (`npm run test:smoke`), and tests for changed or removed UI are updated
+- [ ] The edge cases in [the testing guide](https://github.com/junruxiong/IncarnaMind/blob/main/docs/agents/testing.md#edge-cases) that apply were tried: <!-- list them, and which don't apply -->
 - [ ] CI is green on this pull request: <!-- link the run -->
 
 ## If this changes UI

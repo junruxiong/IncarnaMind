@@ -2733,10 +2733,17 @@
     &:hover {
       background: var(--color-hover);
     }
-    &[data-check="not-found"] {
+    &[data-check="not-found"],
+    &[data-check="unsupported"] {
       background: var(--color-warning-wash);
       font-weight: 700;
       color: var(--color-warning);
+    }
+    &[data-check="contradicted"] {
+      background: var(--color-sheet);
+      box-shadow: inset 0 0 0 1.5px var(--color-danger);
+      font-weight: 700;
+      color: var(--color-danger);
     }
     /* Selected: its card is open, or it is the node selected. */
     &:focus-visible,
@@ -2851,9 +2858,16 @@
     --check-wash: var(--color-success-wash);
   }
   .margin-check[data-check="not-found"],
-  .citation-card--not-found {
+  .margin-check[data-check="unsupported"],
+  .citation-card--not-found,
+  .citation-card--unsupported {
     --check-ink: var(--color-warning);
     --check-wash: var(--color-warning-wash);
+  }
+  .margin-check[data-check="contradicted"],
+  .citation-card--contradicted {
+    --check-ink: var(--color-danger);
+    --check-wash: var(--color-danger-wash);
   }
   .margin-check[data-check="cant-check"],
   .citation-card--cant-check {
@@ -2868,6 +2882,21 @@
   .margin-check {
     background: var(--check-wash);
     color: var(--check-ink);
+
+    /* Found stays quiet: a tick with its number, no fill. */
+    &[data-check="found"] {
+      background: none;
+      color: var(--color-ink-meta);
+
+      .margin-check-icon {
+        color: var(--color-success);
+      }
+    }
+    /* Contradicted is outlined, so it reads without its colour. */
+    &[data-check="contradicted"] {
+      background: var(--color-sheet);
+      box-shadow: inset 0 0 0 1.5px var(--color-danger);
+    }
 
     /* Only the dot pulses while it is checked: the number keeps its contrast. */
     &[data-check="checking"] .margin-check-icon {
@@ -2889,7 +2918,7 @@
     flex-direction: column;
     gap: 10px;
     box-sizing: border-box;
-    width: 340px;
+    width: 360px;
     max-width: calc(100vw - 16px);
     padding: 14px 16px;
     border-radius: 10px;
@@ -2948,6 +2977,13 @@
     background: var(--check-wash);
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
+  }
+  /* A Citation's verdict, the one line a claim check adds. */
+  .citation-card-verdict {
+    padding-left: 22px;
+    font-size: var(--text-meta);
+    line-height: 18px;
+    color: var(--check-ink);
   }
   .citation-card-note {
     padding-left: 22px;

@@ -58,8 +58,11 @@ export interface Mind {
   folderId: string | null;
 }
 
-/** The kinds of Mind this version opens. `chat` is a conversation with no note behind it. */
-export const MIND_KINDS = ["mind", "chat"] as const;
+/**
+ * The kinds of Mind this version opens. Sheets, decks and boards may come later; the
+ * assistant's conversations are not Minds (ADR-0017).
+ */
+export const MIND_KINDS = ["mind"] as const;
 export type MindKind = (typeof MIND_KINDS)[number];
 
 /** The kind of every Mind made before kinds existed, and of a new Mind by default. */
@@ -106,31 +109,53 @@ export const CONTENT_SCHEMA_VERSION_KEY = "schemaVersion";
  */
 export type MindAccess = "edit" | "read-only" | "update-required";
 
-/** A place in an artifact that a reference points to. Only Blocks for now; sheets, decks and boards add their own. */
+/** A place in a Mind that a reference points to: a Block. Sheets, decks and boards add their own. */
 export interface BlockAnchor {
   kind: "block";
   /** The Block's stable UUID (`BLOCK_ID_ATTRIBUTE`), never its position. */
   blockId: string;
 }
-export type ReferenceAnchor = BlockAnchor;
+
+/** A place in a conversation that a reference points to: one of its messages, a Question or an Answer. */
+export interface MessageAnchor {
+  kind: "message";
+  messageId: string;
+}
+
+export type ReferenceAnchor = BlockAnchor | MessageAnchor;
+
+/** What a reference points into: a Mind, or one of the assistant's conversations (ADR-0017). */
+export type ArtifactKind = "mind" | "conversation";
 
 /**
- * One reference from one artifact to another: a Block's origin, the link back
- * from a Note to the chat it came from. An artifact is a Mind now (a chat is a
- * Mind of kind `chat`); other kinds will have their own IDs.
+ * One reference from one artifact to another (ADR-0003, ADR-0017): a Block's
+ * origin, or the link back from a Note to the Answer in the conversation it
+ * came from. A Mind's anchor is a Block, a conversation's a message.
  */
-export interface ArtifactReference {
-  artifactId: string;
-  anchor: ReferenceAnchor;
-}
+export type ArtifactReference =
+  | { artifactKind: "mind"; artifactId: string; anchor: BlockAnchor }
+  | { artifactKind: "conversation"; artifactId: string; anchor: MessageAnchor };
+
+/**
+ * Where a reference leads now (`CoreApi.resolveReference`): to its artifact, there to
+ * open (a Mind's Block isn't looked for: it may have been removed since); to one in
+ * Recently deleted, which restoring brings back; or nowhere, when it was deleted
+ * permanently, or its message is gone, or it was never on this computer. `name` is the
+ * artifact's name, "" when it has none (the UI says "Untitled" or "New chat").
+ */
+export type ReferenceTarget =
+  | { status: "available"; reference: ArtifactReference; name: string }
+  | { status: "deleted"; reference: ArtifactReference; name: string; deletedAt: string }
+  | { status: "gone"; reference: ArtifactReference };
 
 /**
  * What to move into a Folder, or out of every Folder (`folderId` null: Not
- * in a Folder): Minds and Documents, any number of each, in one go.
+ * in a Folder): Minds, Documents and conversations, any number of each, in one go.
  */
 export interface FolderMoveInput {
   mindIds?: string[];
   documentIds?: string[];
+  conversationIds?: string[];
   folderId: string | null;
 }
 
@@ -141,14 +166,16 @@ export interface MovedItem {
 }
 
 /**
- * What a move did: each Mind and Document it moved, with where it was. Those
- * already in the Folder are listed too, with the Folder as `from`. Undoing
- * moves each Mind back to its `from`, and puts back each Document's `previous`.
+ * What a move did: each Mind, Document and conversation it moved, with where it
+ * was. Those already in the Folder are listed too, with the Folder as `from`.
+ * Undoing moves each Mind and conversation back to its `from`, and puts back
+ * each Document's `previous`.
  */
 export interface FolderMove {
   folderId: string | null;
   minds: MovedItem[];
   documents: MovedDocument[];
+  conversations: MovedItem[];
 }
 
 /** A Document a move moved, with its assignment before (null: none), for `restoreAssignment`. */
@@ -375,8 +402,16 @@ export const CITATION_NODE = "citation";
  * - "checking": the Answer is still being written.
  * - "found", "not-found": see `checkReason` for why it wasn't found.
  * - "cant-check": there is no text to look in (see `checkReason`).
+ * - "unsupported", "contradicted": the verdict of checking the claim itself against
+ *   the Documents, not only its quote (`verdict` says what the evidence says).
  */
-export type CitationCheck = "checking" | "found" | "not-found" | "cant-check";
+export type CitationCheck =
+  | "checking"
+  | "found"
+  | "not-found"
+  | "cant-check"
+  | "unsupported"
+  | "contradicted";
 
 export type CitationCheckReason =
   /** Not found: the quote isn't in the text of the cited Units (pages, slides…). */
@@ -497,6 +532,8 @@ export interface CitationAttributes {
   quote: string | null;
   check: CitationCheck;
   checkReason: CitationCheckReason | null;
+  /** One line on what the evidence says, when a claim check has one ("The agreement says 31 October 2026, p. 7"). */
+  verdict?: string | null;
 }
 
 /** A Citation, as the Answer event stream reports it. */
@@ -1890,9 +1927,19 @@ export type AskResult =
    */
   | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
 
-/** An Answer started: it is in the Mind with status "streaming". */
-export interface AnswerStarted {
-  mindId: string;
+/**
+ * Where an Answer the events are about is written: in a Mind, or in one of the
+ * assistant's conversations (ADR-0017).
+ */
+export interface AnswerPlace {
+  /** The Mind it is written into; null for an Answer in a conversation. */
+  mindId: string | null;
+  /** The conversation it is in; absent for an Answer in a Mind. */
+  conversationId?: string;
+}
+
+/** An Answer started: it is in its Mind or conversation with status "streaming". */
+export interface AnswerStarted extends AnswerPlace {
   answerId: string;
   questionId: string;
   /** The model writing it. */
@@ -1900,8 +1947,7 @@ export interface AnswerStarted {
 }
 
 /** More of an Answer's text arrived, as the model wrote it (Markdown). */
-export interface AnswerDelta {
-  mindId: string;
+export interface AnswerDelta extends AnswerPlace {
   answerId: string;
   text: string;
 }
@@ -1923,15 +1969,13 @@ export type AnswerPhase =
   | "checking-quotes";
 
 /** An Answer being written moved to another phase. */
-export interface AnswerPhaseEvent {
-  mindId: string;
+export interface AnswerPhaseEvent extends AnswerPlace {
   answerId: string;
   phase: AnswerPhase;
 }
 
 /** A Tool call of an Answer started, or finished (see `call.status`). */
-export interface AnswerToolCallEvent {
-  mindId: string;
+export interface AnswerToolCallEvent extends AnswerPlace {
   answerId: string;
   call: AnswerToolCall;
 }
@@ -1940,8 +1984,7 @@ export interface AnswerToolCallEvent {
  * The model gave the record for a Citation marker in the Answer: the marker
  * becomes this Citation, "checking" until the Answer finishes.
  */
-export interface AnswerCitationAdded {
-  mindId: string;
+export interface AnswerCitationAdded extends AnswerPlace {
   answerId: string;
   /** The number of the marker the model wrote in the text, e.g. 1 for "[^1]". */
   marker: number;
@@ -1958,8 +2001,7 @@ export interface RejectedRecord {
 }
 
 /** An Answer is complete ("done") or the User stopped it ("stopped"), keeping what was written. */
-export interface AnswerFinished {
-  mindId: string;
+export interface AnswerFinished extends AnswerPlace {
   answerId: string;
   status: "done" | "stopped";
   /** The Answer's Citations, checked, in the order of their markers in the text, each once. */
@@ -1996,10 +2038,168 @@ export interface QuoteRetry {
 }
 
 /** An Answer failed; the Answer shows the error by kind. */
-export interface AnswerFailed {
-  mindId: string;
+export interface AnswerFailed extends AnswerPlace {
   answerId: string;
   error: ProviderError;
+}
+
+// ---------------------------------------------------------------------------
+// Conversations (CONTEXT.md, ADR-0017): the assistant's own history
+
+/** The Mind a Question was asked from, by its name now; `deleted` once it is deleted. */
+export interface AskedFrom {
+  mindId: string;
+  /** Its title, else its first line; "" when it has neither (the UI says "Untitled"). */
+  name: string;
+  /** Deleted (in Recently deleted, or for good), or not on this computer. */
+  deleted: boolean;
+}
+
+/** A conversation, as History lists it. It exists once it has a Question; it is never a Mind. */
+export interface Conversation {
+  /** A random UUID generated on this device. */
+  id: string;
+  /** The title the User typed; "" when they haven't. A name it gives itself never replaces it. */
+  title: string;
+  /** Its name from what was asked: the first Question, cut (`cutTitle`). */
+  autoTitle: string;
+  /**
+   * The Folder (an in-app one, a `LibraryGroup`) it belongs to, or null: Not in
+   * a Folder. It is the Folder of the Mind its first Question was asked from.
+   */
+  folderId: string | null;
+  /** The Minds its Questions were asked from, each once, in the order first asked from. */
+  askedFrom: AskedFrom[];
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC: moves when a Question is asked, and when it is renamed, moved or restored. */
+  updatedAt: string;
+}
+
+/** A Question in a conversation. */
+export interface ConversationQuestion {
+  kind: "question";
+  id: string;
+  conversationId: string;
+  /** What the User asked. */
+  text: string;
+  /** The Mind in focus when it was asked; null: none (Home, or no Mind in focus). */
+  askedFrom: AskedFrom | null;
+  /** Its Search scope; null: none, every Document. */
+  scope: SearchScope | null;
+  /** The model picked for it; null: the default. */
+  model: ChatModelChoice | null;
+  /** The Skill forced on it, by name; null: none. */
+  forcedSkill: string | null;
+  /** ISO 8601, UTC. */
+  createdAt: string;
+}
+
+/** A Citation of an Answer in a conversation: where it goes is its marker ("[^2]") in the text. */
+export interface MarkedCitation extends Citation {
+  marker: number;
+}
+
+/**
+ * An Answer in a conversation: the Markdown the model wrote, with a Citation
+ * marker ("[^2]") where each Citation goes, and the Citations by marker
+ * (ADR-0017). A marker with no Citation is left out when it is shown. It is
+ * written as it streams.
+ */
+export interface ConversationAnswer {
+  kind: "answer";
+  id: string;
+  conversationId: string;
+  questionId: string;
+  text: string;
+  /** In the order of their markers in the text, each once. */
+  citations: MarkedCitation[];
+  /** The model that wrote it; null for one that says its Search scope has no Documents. */
+  model: ChatModelChoice | null;
+  status: AnswerStatus;
+  /** Why it failed, when `status` is "failed". */
+  errorKind: ProviderErrorKind | null;
+  errorMessage: string | null;
+  citationSupport: CitationSupport | null;
+  /** The Tools it called, in order: its searches, Skills and Connectors' Tools. */
+  toolCalls: AnswerToolCall[];
+  /** ISO 8601, UTC. */
+  createdAt: string;
+  /** ISO 8601, UTC. */
+  updatedAt: string;
+}
+
+/** A message of a conversation: a Question or an Answer. */
+export type ConversationMessage = ConversationQuestion | ConversationAnswer;
+
+/** A conversation and its messages, in order. */
+export interface ConversationContent {
+  conversation: Conversation;
+  messages: ConversationMessage[];
+}
+
+/** Which conversations to list: those of one Folder (null: Not in a Folder), or all of them. */
+export interface ListConversationsOptions {
+  folderId?: string | null;
+}
+
+/** Asking a Question in the assistant. */
+export interface AskInConversationInput {
+  /** The conversation to ask in; none or null starts one, which exists once it has this Question. */
+  conversationId?: string | null;
+  /** What the User asked. */
+  text: string;
+  /**
+   * The Mind in focus, which the Question records; none or null: none (Home). A
+   * new conversation belongs to its Folder.
+   */
+  mindId?: string | null;
+  /** Its Search scope; none or null: every Document. */
+  scope?: SearchScope | null;
+  /** The model to answer with; none or null: the default. */
+  model?: ChatModelChoice | null;
+  /** A Skill to load up front, by name. */
+  forcedSkill?: string | null;
+}
+
+/** An Answer in a conversation, for regenerating or stopping it. */
+export interface ConversationAnswerInput {
+  conversationId: string;
+  answerId: string;
+}
+
+/** What asking in a conversation (or regenerating an Answer there) did. */
+export type ConversationAskResult =
+  /** The Answer is being written into the conversation, right after its Question. */
+  | { asked: true; conversation: Conversation; questionId: string; answerId: string }
+  /** Nothing was kept or sent: Questions can't be asked yet, and `readiness` says why. */
+  | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
+  /** Nothing was kept or sent: the Question forces a Skill (`skill`) that is off or gone. */
+  | { asked: false; reason: "skill-unavailable"; skill: string; state: SkillAvailability };
+
+/** Where words of a search are in a piece of text: `start` to `end`, in UTF-16 code units. */
+export interface TextRange {
+  start: number;
+  end: number;
+}
+
+/** A message that matches a search: a short excerpt of it as plain text, with the words found. */
+export interface MessageMatch {
+  messageId: string;
+  kind: ConversationMessage["kind"];
+  excerpt: string;
+  highlights: TextRange[];
+}
+
+/**
+ * A conversation that matches a search: every word searched for is in its name
+ * or its messages. `titleHighlights` marks the words in its name (its title,
+ * else its `autoTitle`), and `messages` the messages that match, in order.
+ */
+export interface ConversationMatch {
+  conversation: Conversation;
+  titleHighlights: TextRange[];
+  messages: MessageMatch[];
 }
 
 // ---------------------------------------------------------------------------
@@ -2815,9 +3015,8 @@ export interface ApprovalResponseOptions {
  */
 export type ApprovalRequest = ToolApprovalRequest | SkillScriptApprovalRequest;
 
-interface ApprovalRequestBase {
+interface ApprovalRequestBase extends AnswerPlace {
   requestId: string;
-  mindId: string;
   answerId: string;
   /** The call's id among the Answer's `toolCalls`. */
   toolCallId: string;
@@ -2895,8 +3094,8 @@ export interface ToolApprovalRequest extends ApprovalRequestBase {
 /** How many days deleted things wait in Recently deleted before they are deleted permanently. */
 export const RECENTLY_DELETED_DAYS = 30;
 
-/** What deleting puts in Recently deleted. A Chat is a Mind of kind "chat"; a Folder is an in-app one. */
-export type DeletedKind = "mind" | "chat" | "document" | "folder" | "tag";
+/** What deleting puts in Recently deleted. A conversation is the assistant's (ADR-0017); a Folder is an in-app one. */
+export type DeletedKind = "mind" | "conversation" | "document" | "folder" | "tag";
 
 export interface DeletedRef {
   kind: DeletedKind;
@@ -2917,16 +3116,20 @@ export interface DeletedItem {
   deletedAt: string;
   /** A Document's kind; null for the others. */
   documentKind: DocumentKind | null;
-  /** The in-app Folder (`LibraryGroup`) a Mind or Document was in, or null: none, and for the others. */
+  /** The in-app Folder (`LibraryGroup`) a Mind, conversation or Document was in, or null: none, and for the others. */
   groupId: string | null;
   /** A Document's Linked folder, or null: a file added on its own, and for the others. */
   linkedFolderId: string | null;
 }
 
-/** What a deleted Folder held: its Documents, as they were filed, and its Minds. Restoring it puts back each one still in no Folder. */
+/**
+ * What a deleted Folder held: its Documents, as they were filed, its Minds and its
+ * conversations. Restoring it puts back each one still in no Folder.
+ */
 export interface FolderDeletion {
   assignments: DocumentGroupAssignment[];
   mindIds: string[];
+  conversationIds: string[];
 }
 
 /** How a Document carried a Tag before a change, for `revertDocumentTags`. */
@@ -3160,7 +3363,10 @@ export interface CoreApi {
   getLibrary(): Promise<LibrarySnapshot>;
   createLibraryGroup(input: LibraryGroupInput): Promise<LibraryGroup>;
   updateLibraryGroup(groupId: string, input: LibraryGroupInput): Promise<LibraryGroup>;
-  /** Its Minds and Documents go to Not in a Folder. Returns what it held, which restoring it puts back. */
+  /**
+   * Its Minds, Documents and conversations go to Not in a Folder. Returns what it held,
+   * which restoring it puts back.
+   */
   deleteLibraryGroup(groupId: string): Promise<FolderDeletion>;
   addLibraryStarterGroups(keys: string[]): Promise<void>;
   saveLibrarySettings(settings: LibrarySettings): Promise<void>;
@@ -3201,30 +3407,31 @@ export interface CoreApi {
    */
   rejectAssignments(documentIds: string[]): Promise<AssignmentChange[]>;
   /**
-   * Moves Minds and Documents into a Folder, or out of every Folder (null),
-   * all or none: an unknown Mind, Document or Folder changes nothing and
-   * throws. A Document's move is a manual choice, which Organize keeps.
-   * Returns where each was, for Undo: each Mind moved back to its `from`, and each
-   * Document's `previous` assignment put back with `restoreAssignment`.
-   * "minds.changed" and "library.assignments" follow, once each.
+   * Moves Minds, Documents and conversations into a Folder, or out of every Folder
+   * (null), all or none: an unknown Mind, Document, conversation or Folder changes
+   * nothing and throws. A Document's move is a manual choice, which Organize keeps.
+   * Returns where each was, for Undo: each Mind and conversation moved back to its
+   * `from`, and each Document's `previous` assignment put back with `restoreAssignment`.
+   * "minds.changed", "library.assignments" and "conversations.changed" follow, once each.
    */
   moveToFolder(move: FolderMoveInput): Promise<FolderMove>;
 
   /**
-   * Brings back deleted Minds and Chats with their content, Documents with their Passages,
-   * text and Tags, Folders with the Minds and Documents their deletion took out (those in no
-   * Folder since)
+   * Brings back deleted Minds with their content, conversations with their messages,
+   * Documents with their Passages, text and Tags, Folders with the Minds, conversations and
+   * Documents their deletion took out (those in no Folder since)
    * and Tags with their links, all or none, and sends the events any change sends. One not
    * deleted is left as it is. Throws, changing nothing, for one deleted permanently or more
    * than `RECENTLY_DELETED_DAYS` ago, or that can't come back now (its name taken, its
    * Linked folder unlinked). Never touches the User's files.
    */
   restore(refs: RestoreRef[]): Promise<void>;
-  /** What can be restored: the Minds, Chats, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
+  /** What can be restored: the Minds, conversations, Documents, Folders and Tags deleted in the last `RECENTLY_DELETED_DAYS`, newest first. */
   listDeleted(): Promise<DeletedItem[]>;
   /**
-   * Drops deleted things' content (a Mind's notes, a Document's Passages and text, a Tag's
-   * links), keeping each one's id and when it was deleted, so a later sync can pass the
+   * Drops deleted things' content (a Mind's notes, a conversation's messages and titles, a
+   * Document's Passages and text, a Tag's links), keeping each one's id and when it was
+   * deleted, so a later sync can pass the
    * deletion on. They can't be restored afterwards. Throws for one not deleted. Never
    * touches the User's files. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
    */
@@ -3251,6 +3458,49 @@ export interface CoreApi {
    * Mind's stored updates and free its memory. Editing the Mind again is fine.
    */
   closeMind(mindId: string): Promise<void>;
+
+  /**
+   * Asks a Question in the assistant (ADR-0017): adds it to the conversation, or starts
+   * a conversation with it, and the Answer streams into the conversation ("answer.*"
+   * events with its `conversationId`, and each write as "conversation.message"). The
+   * Question records the Mind in focus; a new conversation belongs to that Mind's Folder,
+   * or to none. When the Question can't be asked, nothing is kept: no Question, and no
+   * conversation. "conversations.changed" follows.
+   */
+  askInConversation(input: AskInConversationInput): Promise<ConversationAskResult>;
+  /** Writes an Answer of a conversation again, in place, for its Question as it was asked. */
+  regenerateConversationAnswer(input: ConversationAnswerInput): Promise<ConversationAskResult>;
+  /** Stops an Answer of a conversation being written, keeping what it has. */
+  stopConversationAnswer(input: ConversationAnswerInput): Promise<void>;
+  /**
+   * The conversations that aren't deleted, newest first: all of them, or those of one
+   * Folder (`folderId` null: Not in a Folder). Only the assistant's History lists them.
+   */
+  listConversations(options?: ListConversationsOptions): Promise<Conversation[]>;
+  /** A conversation and its messages, in order. Throws for a deleted or unknown one. */
+  getConversation(conversationId: string): Promise<ConversationContent>;
+  /**
+   * The conversations, in every Folder, whose name or messages hold every word of
+   * `query` (English and Chinese, as Document search reads them; the last letters of
+   * each word may be still to type), newest first, with the messages that match.
+   */
+  searchConversations(query: string): Promise<ConversationMatch[]>;
+  /**
+   * Gives a conversation the title the User typed (trimmed; empty goes back to its own
+   * name) and returns it. A name the conversation gives itself never replaces it.
+   */
+  renameConversation(conversationId: string, title: string): Promise<Conversation>;
+  /**
+   * Sends a conversation to Recently deleted (`restore` brings it back), stopping an
+   * Answer being written in it. Its rows stay, marked deleted (ADR-0003).
+   */
+  deleteConversation(conversationId: string): Promise<void>;
+  /**
+   * Where a reference leads now: a link back from a Note to the Answer it came from, or a
+   * Block's origin. Restoring what it points into makes it lead there again.
+   */
+  resolveReference(reference: ArtifactReference): Promise<ReferenceTarget>;
+
   getSettings(): Promise<Settings>;
   /**
    * Changes only the fields given and returns the settings now in effect.
@@ -3928,6 +4178,16 @@ export interface CoreEvents {
    * their Folder was deleted or restored: the list as `listMinds` now returns it.
    */
   "minds.changed": Mind[];
+  /**
+   * Conversations were started, asked in, renamed, moved to another Folder, deleted or
+   * restored, or their Folder was deleted or restored: read `listConversations` again.
+   */
+  "conversations.changed": null;
+  /**
+   * A message of a conversation, whole: a Question was asked, or an Answer was written
+   * (as it streams, at most every 50 ms, and when it ends). Replace it by its `id`.
+   */
+  "conversation.message": ConversationMessage;
   /** A window's tabs and groups changed: by `changeLayout`, or a deleted Mind's tab closed. */
   "layout.changed": { windowId: string; layout: WindowLayout };
   "examples.changed": Examples;
@@ -4098,6 +4358,15 @@ const methods: Record<CoreApiMethod, true> = {
   openMind: true,
   applyMindUpdate: true,
   closeMind: true,
+  askInConversation: true,
+  regenerateConversationAnswer: true,
+  stopConversationAnswer: true,
+  listConversations: true,
+  getConversation: true,
+  searchConversations: true,
+  renameConversation: true,
+  deleteConversation: true,
+  resolveReference: true,
   getSettings: true,
   updateSettings: true,
   getLayout: true,

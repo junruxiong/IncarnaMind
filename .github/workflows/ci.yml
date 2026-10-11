@@ -40,6 +40,9 @@ jobs:
   # it every night (nightly.yml), for what only macOS has, such as the traffic lights.
   smoke:
     name: Electron smoke test (Linux)
+    # A pull request merges only when it is up to date with main and this passed, so the merge
+    # commit's tree is the one already tested. Running it again on main tests nothing new.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
