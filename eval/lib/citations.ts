@@ -16,6 +16,7 @@ import * as Y from "yjs";
 import {
   ANSWER_BLOCK,
   type AnswerFinished,
+  type AnswerUsage,
   BLOCK_ID_ATTRIBUTE,
   CITATION_NODE,
   type CitationAttributes,
@@ -120,6 +121,8 @@ export interface AnswerRecord {
    * absent: none was made.
    */
   quoteRetry?: QuoteRetry | null;
+  /** The tokens the Answer's model calls counted (#343); absent in a result file from before. */
+  usage?: AnswerUsage | null;
   /** Each sentence of the Answer (headings and code left out), and whether a Citation is anchored in it. */
   sentences: { text: string; cited: boolean }[];
   citations: CitationRecord[];
@@ -154,6 +157,14 @@ export interface GroupSummary {
   citationSupport: Partial<Record<CitationSupport | "unknown", number>>;
   /** What the requests for exact quotes cost and gave (see `AnswerRecord.quoteRetry`). */
   quoteRetries: QuoteRetrySummary;
+  /** The tokens the group's Answers used and the share of the input the provider's prompt cache served. */
+  usage: UsageSummary;
+}
+
+/** The tokens a group of Answers used (see `AnswerUsage`). */
+export interface UsageSummary extends AnswerUsage {
+  /** Cached input tokens over all input tokens; null when the provider reported no input tokens. */
+  cacheHitRate: number | null;
 }
 
 /** The requests for exact quotes of a group of Answers. */
@@ -564,6 +575,7 @@ async function askOne(
     droppedRecords: finished?.droppedRecords ?? 0,
     rejectedRecords: finished?.rejectedRecords ?? [],
     quoteRetry: finished?.quoteRetry ?? null,
+    usage: finished?.usage ?? null,
     sentences: sentences.map((sentence) => ({
       text: sentence.text,
       cited: sentence.citations.length > 0,
@@ -587,6 +599,19 @@ function median(values: readonly number[]): number | null {
   return sorted.length % 2 === 1
     ? (sorted[middle] as number)
     : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
+}
+
+/** The tokens a group of Answers used, and how much of the input was served from the provider's cache. */
+export function summariseUsage(answers: readonly AnswerRecord[]): UsageSummary {
+  const total = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 };
+  for (const { usage } of answers) {
+    if (!usage) continue;
+    total.inputTokens += usage.inputTokens;
+    total.outputTokens += usage.outputTokens;
+    total.cachedInputTokens += usage.cachedInputTokens;
+    total.cacheWriteTokens += usage.cacheWriteTokens;
+  }
+  return { ...total, cacheHitRate: share(total.cachedInputTokens, total.inputTokens) };
 }
 
 /** What a group of Answers' requests for exact quotes cost and gave. */
@@ -645,6 +670,7 @@ export function summariseGroup(answers: readonly AnswerRecord[]): GroupSummary {
     droppedRecords: answers.reduce((sum, answer) => sum + answer.droppedRecords, 0),
     citationSupport,
     quoteRetries: summariseQuoteRetries(answers),
+    usage: summariseUsage(answers),
   };
 }
 
