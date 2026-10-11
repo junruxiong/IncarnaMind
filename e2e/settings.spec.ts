@@ -19,6 +19,7 @@ const PAGES = [
     name: "General",
     sections: [
       "language-settings",
+      "motion-settings",
       "output-location-settings",
       "data-folder-settings",
       "about-settings",

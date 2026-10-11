@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { ChatProvider, ChatReadiness, ProviderErrorKind } from "../../../../core/api";
 import { catalogProviderOfKind } from "../../../../core/providers/catalog/providers";
+import { OLLAMA_CLOUD } from "../../../../core/providers/ollamaCloud";
 import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -37,6 +38,10 @@ export function providerLabel(provider: ChatProvider, t: Translate): string {
     return provider.endpoint === "cn" || provider.endpoint === "intl"
       ? `${kind} · ${t(`providers.region.${provider.endpoint}`)}`
       : kind;
+  }
+  // Ollama's default model can be a cloud model, which runs on ollama.com, not here.
+  if (provider.kind === "ollama" && provider.service?.id === OLLAMA_CLOUD.id) {
+    return `${kind} · ${t("providers.settings.cloud")}`;
   }
   return `${kind} · ${provider.service?.name ?? t("providers.settings.local")}`;
 }

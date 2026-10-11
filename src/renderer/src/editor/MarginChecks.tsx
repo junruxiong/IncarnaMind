@@ -4,6 +4,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { CitationAttributes, CitationCheck } from "../../../core/api";
 import { badgeMessage, citationState } from "../../../shared/citations";
 import { useT } from "../i18n";
+import { motionMode, subscribeMotion } from "../motion";
 import { useAppStore } from "../store";
 import { type NumberedCitation, numberedCitations, textBlockEdited } from "./citationNumbers";
 import { CheckMarkIcon } from "./icons";
@@ -192,11 +193,14 @@ export function MarginChecks({ editor }: { editor: Editor }) {
         mark.top = Math.max(Math.round(mark.middle - MARK_HEIGHT / 2), bottom + MARK_GAP);
         bottom = mark.top + MARK_HEIGHT;
       }
-      revealed
-        .sort((a, b) => a.top - b.top)
-        .forEach((mark, index) => {
-          reveals.current.set(`${mark.key}:${mark.check}`, index * REVEAL_STEP_MS);
-        });
+      // Only with motion on: otherwise the marks are there at once, with no cascade to end.
+      if (motionMode() === "on") {
+        revealed
+          .sort((a, b) => a.top - b.top)
+          .forEach((mark, index) => {
+            reveals.current.set(`${mark.key}:${mark.check}`, index * REVEAL_STEP_MS);
+          });
+      }
       for (const mark of next)
         mark.delay = reveals.current.get(`${mark.key}:${mark.check}`) ?? null;
       setMarks((drawn) => (sameMarks(drawn, next) ? drawn : next));
@@ -255,6 +259,22 @@ export function MarginChecks({ editor }: { editor: Editor }) {
     described.current = new WeakMap();
     remeasure.current();
   }, [t, documents, kept]);
+
+  // Motion turned to Reduced or Off stops the cascade (styles.css), so it never ends on its own:
+  // its marks are simply there, and can't play it later if motion comes back on.
+  useEffect(
+    () =>
+      subscribeMotion(() => {
+        if (motionMode() === "on") return;
+        reveals.current.clear();
+        setMarks((drawn) =>
+          drawn.some((mark) => mark.delay !== null)
+            ? drawn.map((mark) => (mark.delay === null ? mark : { ...mark, delay: null }))
+            : drawn,
+        );
+      }),
+    [],
+  );
 
   return (
     <div ref={layer} className="margin-checks" data-testid="margin-checks">

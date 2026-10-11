@@ -19,6 +19,7 @@ import type { ModelFactsLayer } from "./capabilities";
 import { isNonChatModel, type ModelInput, modelsProviderOfKind } from "./catalog";
 import { KNOWN_PLAN_MODELS } from "./chatgpt/planEndpoint";
 import { endpointUrl } from "./kinds";
+import { isCloudModelName, isRemoteEntry } from "./ollamaCloud";
 
 const LIST_TIMEOUT_MS = 5_000;
 /** The picker shows at most this many models per provider. */
@@ -37,6 +38,8 @@ export interface ModelListSpec {
 export interface ListedModel {
   id: string;
   facts?: ModelFactsLayer;
+  /** An Ollama model that runs on ollama.com, not on this computer. */
+  cloud?: boolean;
 }
 
 async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
@@ -173,10 +176,13 @@ async function fetchModels({ kind, baseUrl, apiKey, endpoint }: ModelListSpec) {
             const name = model.name ?? model.model;
             if (typeof name !== "string") return [];
             const capabilities = Array.isArray(model.capabilities) ? model.capabilities : null;
+            const cloud = isRemoteEntry(model) || isCloudModelName(name);
             return [
-              capabilities
-                ? { id: name, facts: { tools: capabilities.includes("tools") } }
-                : { id: name },
+              {
+                id: name,
+                ...(capabilities && { facts: { tools: capabilities.includes("tools") } }),
+                ...(cloud && { cloud }),
+              },
             ];
           })
       );

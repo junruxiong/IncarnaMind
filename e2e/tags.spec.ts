@@ -8,6 +8,7 @@ import {
   dismissChatSetup,
   filterByTag,
   launchApp,
+  motionSettled,
   openDocumentTags,
   removeDataFolder,
   setWindowSize,
@@ -180,12 +181,14 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
 
   const last = window.getByTestId("document-list-item").last();
   const menu = last.getByTestId("document-tags-popover");
-  // Where the menu is in the first frame drawn once it shows.
+  // Where the menu is laid out in the first frame drawn once it shows (as it grows in place
+  // there, its transform aside: offsetTop and offsetHeight leave it out).
   await menu.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) throw new Error("The menu isn't an HTML element.");
     const firstFrame = new Promise((resolve) => {
       const measure = () => {
-        const { top, bottom } = element.getBoundingClientRect();
-        resolve({ top, bottom });
+        const top = element.offsetTop;
+        resolve({ top, bottom: top + element.offsetHeight });
       };
       element.addEventListener("beforetoggle", () => requestAnimationFrame(measure), {
         once: true,
@@ -196,6 +199,8 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   await last.hover();
   await last.getByTestId("document-tags-menu").click();
   await expect(menu).toBeVisible();
+  // Measured once it has grown from its button.
+  await motionSettled(window);
   const box = await menu.boundingBox();
   const height = await window.evaluate(() => globalThis.innerHeight);
   if (!box) throw new Error("The menu isn't visible.");
@@ -211,9 +216,11 @@ test("a Document's Tags menu near the window's bottom opens upward with its firs
   // The picker takes the focus into its field, ready to type a Tag.
   await expect(menu.getByTestId("tag-picker-input")).toBeFocused();
 
-  // Esc closes the menu, and leaves the Document's tab open.
+  // Esc closes the menu at once, and leaves the Document's tab open, its copy fading included.
   await window.keyboard.press("Escape");
   await expect(menu).toBeHidden();
+  await expect(window.getByTestId("viewer")).toBeVisible();
+  await motionSettled(window);
   await expect(window.getByTestId("viewer")).toBeVisible();
   await app.close();
 });
