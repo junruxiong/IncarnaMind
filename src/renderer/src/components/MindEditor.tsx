@@ -16,8 +16,12 @@ import { BlockCommands } from "../editor/blockCommands";
 import { CitationView } from "../editor/CitationView";
 import { CodeBlockView } from "../editor/CodeBlockView";
 import { Composer, type ComposerHandle } from "../editor/Composer";
-import { CitationNumbers } from "../editor/citationNumbers";
+import { CitationNumbers, redrawFootnotes } from "../editor/citationNumbers";
 import { EndHint, type HintPlace, type HintText, isEmptyMind } from "../editor/EndHint";
+import { FootnoteArea } from "../editor/FootnoteArea";
+import { FootnotePopover } from "../editor/FootnotePopover";
+import { type FootnoteLabel, footnoteView } from "../editor/FootnoteView";
+import { FootnoteKeys } from "../editor/footnoteSchema";
 import { MarginChecks } from "../editor/MarginChecks";
 import { MathEditing, MathEditor } from "../editor/MathEditor";
 import { ComposerDockContext, CountSlotContext, MindIdContext } from "../editor/mindContext";
@@ -195,6 +199,12 @@ function MindEditorView({
   };
   const label = t("mind.editor.label");
   const emptyFormula = t("editor.math.empty");
+  /** How a footnote's marker is named, in the interface's language as it is now. */
+  const footnoteLabel = useRef<FootnoteLabel>(() => "");
+  footnoteLabel.current = (number, text) =>
+    text
+      ? t("editor.footnote.labelWithText", { number, text })
+      : t("editor.footnote.label", { number });
   /** The position of the formula whose LaTeX is being edited. */
   const [editingMath, setEditingMath] = useState<number | null>(null);
 
@@ -210,8 +220,10 @@ function MindEditorView({
           questionView: ReactNodeViewRenderer(QuestionView),
           answerView: ReactNodeViewRenderer(AnswerView),
           citationView,
+          footnoteView: footnoteView(() => footnoteLabel.current),
         }),
         CitationNumbers,
+        FootnoteKeys,
         Collaboration.configure({ document: doc, field: MIND_CONTENT_FIELD }),
         Placeholder.configure({
           // An empty Mind's line and the line after an Answer have their hint drawn over them (EndHint).
@@ -265,9 +277,11 @@ function MindEditorView({
     [doc, readOnly],
   );
 
-  // When the language changes: relabel. Setting the props also redraws the placeholder.
+  // When the language changes: relabel. Setting the props also redraws the placeholder,
+  // and the footnotes' markers are named anew.
   useEffect(() => {
     editor.setOptions({ editorProps: editorPropsFor(label, emptyFormula) });
+    if (!editor.isDestroyed) redrawFootnotes(editor.view);
   }, [editor, label, emptyFormula]);
 
   // The cursor is where the next Question goes while the focus is in the editor, or has gone
@@ -324,6 +338,7 @@ function MindEditorView({
         {!readOnly && <EndHint editor={editor} text={hintText} onAsk={askOnLine} />}
         <MarginChecks editor={editor} />
         {!readOnly && <TableMenu editor={editor} />}
+        <FootnoteArea editor={editor} citationView={citationView} />
       </div>
       {dock &&
         !readOnly &&
@@ -340,6 +355,7 @@ function MindEditorView({
       {guide && <StartGuide />}
       {!readOnly && <BlockHandle editor={editor} />}
       {!readOnly && <SelectionMenu editor={editor} />}
+      <FootnotePopover editor={editor} citationView={citationView} />
       {editingMath !== null && (
         <MathEditor
           key={editingMath}

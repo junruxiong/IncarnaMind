@@ -1,5 +1,5 @@
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ANSWER_BLOCK,
@@ -19,7 +19,7 @@ import { recordUsage, useAppStore } from "../store";
 import { pageDate } from "../webPages";
 import { citationNumberOf } from "./citationNumbers";
 import { CheckMarkIcon, CheckStateIcon } from "./icons";
-import { useMindId } from "./mindContext";
+import { InFootnoteContext, useMindId } from "./mindContext";
 import { Popover } from "./Popover";
 import { onPeek } from "./peek";
 
@@ -51,14 +51,16 @@ function answerAround(
 }
 
 /**
- * A Citation in the text: an 18px marker with its number, the Citation's
- * order within its Answer (see `CitationNumbers`). It stays neutral unless the
+ * A Citation in the text: an 18px marker with its number, its place among the
+ * Mind's footnotes (see `CitationNumbers`). It stays neutral unless the
  * quote wasn't found; the check itself shows in the margin (`MarginChecks`),
- * or, in a narrow Mind, as an icon inside the marker. Hovering or focusing it
- * (or its mark in the margin) shows its card: the check in words, the quote,
- * and Open; Esc closes it. Clicking it opens the cited page and keeps the
- * card; when the quote wasn't found, the card offers ways on: open the page
- * anyway, remove the Citation, or regenerate the Answer.
+ * or, in a narrow Mind, as an icon inside the marker. In a footnote's text
+ * it is part of the footnote: the marker shows where it points and its
+ * check's icon instead of a number. Hovering or focusing it (or its mark in
+ * the margin) shows its card: the check in words, the quote, and Open; Esc
+ * closes it. Clicking it opens the cited page and keeps the card; when the
+ * quote wasn't found, the card offers ways on: open the page anyway, remove
+ * the Citation, or regenerate the Answer.
  */
 export function CitationView({
   node,
@@ -84,6 +86,11 @@ export function CitationView({
   const badgeText = t(badge.key, badge.params);
   const documentName = attributes.documentName ?? "";
   const number = citationNumberOf(decorations);
+  // In a footnote's text it is part of the footnote: it shows where it points, not a number.
+  const inFootnote = useContext(InFootnoteContext);
+  const pointsTo = where
+    ? t("citation.where", { document: documentName, location: where })
+    : documentName;
   /** Clicked: the card stays until it is dismissed. */
   const [pinned, setPinned] = useState(false);
   /** Hovered or focused, with the card, the marker or its mark. */
@@ -175,13 +182,9 @@ export function CitationView({
   }, [open]);
 
   // The number, the Document, where it points and the check: the marker only shows the number.
-  const label = t("citation.label", {
-    number,
-    document: where
-      ? t("citation.where", { document: documentName, location: where })
-      : documentName,
-    badge: badgeText,
-  });
+  const label = inFootnote
+    ? t("citation.inFootnote.label", { document: pointsTo, badge: badgeText })
+    : t("citation.label", { number, document: pointsTo, badge: badgeText });
 
   return (
     <NodeViewWrapper
@@ -199,7 +202,7 @@ export function CitationView({
         data-testid="citation-chip"
         data-check={state.check}
         data-number={number || undefined}
-        className="citation-marker"
+        className={`citation-marker ${inFootnote ? "citation-marker--source" : ""}`}
         aria-label={label}
         title={label}
         aria-haspopup="dialog"
@@ -213,7 +216,7 @@ export function CitationView({
         onClick={onClick}
       >
         <CheckMarkIcon check={state.check} className="citation-marker-icon" />
-        <span>{number || "·"}</span>
+        <span>{inFootnote ? pointsTo : number || "·"}</span>
       </button>
       {open &&
         marker.current &&
