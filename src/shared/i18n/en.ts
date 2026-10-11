@@ -236,7 +236,7 @@ export const en = {
   "tabs.notice.noGroup": "There’s no group {n}. {shortcut} splits the shown tab to the right.",
   "tabs.notice.pinned": "“{title}” is pinned: close it from its menu, or unpin it first.",
   "tabs.notice.merged":
-    "Groups sit side by side when the window is at least 1,000 px wide; they come back when it’s wider.",
+    "There isn’t room for groups side by side, so they share one strip. Widen the window, or fold or move the assistant.",
   "tabs.notice.dismiss": "Dismiss",
   "tabs.drop.left": "Split left",
   "tabs.drop.right": "Split right",
@@ -1893,4 +1893,44 @@ export const en = {
   "meetings.command.stopConfirm":
     "Stop recording? This meeting can’t be picked up again. What was recorded is kept.",
   "meetings.command.noneLive": "No meeting is being recorded",
+  "assistant.label": "Assistant",
+  "assistant.newChat": "New chat",
+  "assistant.newChat.button": "New chat ({shortcut})",
+  "assistant.titleButton": "{title} · History",
+  "assistant.history": "History",
+  "assistant.history.empty": "No conversations yet.",
+  "assistant.history.close": "Close History",
+  "assistant.more": "More for the assistant",
+  "assistant.fold": "Fold the assistant",
+  "assistant.unfold": "Show the assistant ({shortcut})",
+  "assistant.move": "Drag to move the assistant: dock it to an edge, or drop it anywhere to float",
+  "assistant.dock.right": "Dock on the right",
+  "assistant.dock.left": "Dock on the left",
+  "assistant.dock.bottom": "Dock at the bottom",
+  "assistant.dock.float": "Float",
+  "assistant.floatHere": "Float here",
+  "assistant.lastToNewMind": "Add the last Answer to a new Mind",
+  "assistant.lastToNewMind.unavailable": "There’s no Answer in this conversation yet",
+  "assistant.clear": "Clear this conversation",
+  "assistant.clear.unavailable": "This conversation is empty",
+  "assistant.resize.side":
+    "Resize the assistant: ← and → move it; a double-click restores its size",
+  "assistant.resize.bottom":
+    "Resize the assistant: ↑ and ↓ move it; a double-click restores its size",
+  "assistant.resize.float":
+    "Resize the assistant: the arrow keys change its size; a double-click restores it",
+  "assistant.reads.all": "Reads “{mind}” · searches All Documents",
+  "assistant.reads.one": "Reads “{mind}” · searches “{scope}”",
+  "assistant.reads.more": "Reads “{mind}” · searches “{scope}” and {count} more",
+  "assistant.searchesAll": "Searches All Documents",
+  "assistant.empty":
+    "Ask about the Mind you’re in or your Documents. The Question and its Answer go into that Mind, where its cursor is, with every Citation checked.",
+  "assistant.noMind": "Open a Mind to ask about it here, or ask in a new one.",
+  "assistant.noMind.ask": "Ask in a new Mind",
+  "assistant.narrow":
+    "While the window is narrower than 1,000 px the assistant sits at the bottom; it goes back to the side when the window is wider.",
+  "command.assistant.dock": "Assistant: {dock}",
+  "command.assistant.fold": "Assistant: Fold",
+  "command.assistant.unfold": "Assistant: Show",
+  "command.assistant.history": "Conversation history",
 } as const satisfies Record<string, string>;

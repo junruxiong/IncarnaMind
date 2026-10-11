@@ -8,6 +8,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  placeAssistant,
   removeDataFolder,
   setGroupBeside,
   useLocalChatModel,
@@ -127,6 +128,9 @@ for (const language of ["en", "zh-CN"] as const) {
       [1000, true],
     ] as const) {
       await resize(app, window, width, 900);
+      // Docked on the right in the wide window; at the bottom in the narrow one, where the
+      // card keeps the room for the viewer beside the Mind (#253).
+      await placeAssistant(window, { dock: width < 1400 ? "bottom" : "right" });
       await setGroupBeside(window, viewer);
       await pointAndClick(window, input);
       await window.keyboard.press("ControlOrMeta+a");

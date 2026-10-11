@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
+  type AssistantCorner,
+  type AssistantDock,
+  type AssistantFloat,
+  type AssistantPlace,
   type CitationCheck,
+  DEFAULT_ASSISTANT,
   type DocumentPlace,
   type LayoutChange,
   type LayoutGroup,
@@ -23,6 +28,7 @@ import { InvalidInputError, isRecord, NotFoundError } from "./errors";
 interface Layout {
   groups: LayoutGroup[];
   focusedGroupId: string;
+  assistant: AssistantPlace;
 }
 
 /** A tab closed in this session, and where it was, for ⇧⌘T. */
@@ -128,6 +134,75 @@ const optionalBoolean = (value: unknown, name: string): boolean | undefined => {
   throw new InvalidInputError(`"${name}" is true or false.`);
 };
 
+const DOCKS: readonly AssistantDock[] = ["right", "left", "bottom", "float"];
+const CORNERS: readonly AssistantCorner[] = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+];
+/** Larger than any screen: it bounds what a saved layout can hold. The window fits the rest. */
+const MAX_PX = 10_000;
+
+/** A size or distance in CSS pixels, whole; null if it isn't one. */
+function readPx(value: unknown, { min }: { min: number }): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > MAX_PX) {
+    return null;
+  }
+  return Math.round(value);
+}
+
+function readFloat(value: unknown): AssistantFloat | null {
+  if (!isRecord(value) || !CORNERS.includes(value.corner as AssistantCorner)) return null;
+  const width = readPx(value.width, { min: 1 });
+  const height = readPx(value.height, { min: 1 });
+  const x = readPx(value.x, { min: 0 });
+  const y = readPx(value.y, { min: 0 });
+  if (width === null || height === null || x === null || y === null) return null;
+  return { width, height, corner: value.corner as AssistantCorner, x, y };
+}
+
+/** The assistant's place as the renderer sent it: only what it changes, each part checked. */
+function parseAssistantPlace(value: unknown): Partial<AssistantPlace> {
+  if (!isRecord(value)) throw new InvalidInputError("The assistant's place is an object.");
+  const place: Partial<AssistantPlace> = {};
+  if (value.dock !== undefined) {
+    if (!DOCKS.includes(value.dock as AssistantDock)) {
+      throw new InvalidInputError("The assistant docks right, left or at the bottom, or floats.");
+    }
+    place.dock = value.dock as AssistantDock;
+  }
+  const folded = optionalBoolean(value.folded, "folded");
+  if (folded !== undefined) place.folded = folded;
+  for (const key of ["width", "height"] as const) {
+    if (value[key] === undefined) continue;
+    const px = readPx(value[key], { min: 1 });
+    if (px === null) throw new InvalidInputError(`The assistant's ${key} is a size in pixels.`);
+    place[key] = px;
+  }
+  if (value.float !== undefined) {
+    const float = readFloat(value.float);
+    if (!float)
+      throw new InvalidInputError("A floating assistant has a size, a corner and a place.");
+    place.float = float;
+  }
+  return place;
+}
+
+/** The assistant's place as any version saved it: what this one can't read is the default. */
+function readSavedAssistant(value: unknown): AssistantPlace {
+  if (!isRecord(value)) return structuredClone(DEFAULT_ASSISTANT);
+  return {
+    dock: DOCKS.includes(value.dock as AssistantDock)
+      ? (value.dock as AssistantDock)
+      : DEFAULT_ASSISTANT.dock,
+    folded: value.folded === true,
+    width: readPx(value.width, { min: 1 }) ?? DEFAULT_ASSISTANT.width,
+    height: readPx(value.height, { min: 1 }) ?? DEFAULT_ASSISTANT.height,
+    float: readFloat(value.float) ?? { ...DEFAULT_ASSISTANT.float },
+  };
+}
+
 function requireId(value: unknown, name: string): string {
   if (!isId(value)) throw new InvalidInputError(`The change needs its ${name}.`);
   return value;
@@ -197,6 +272,8 @@ export function parseLayoutChange(value: unknown): LayoutChange {
       }
       return { type: "resize", widths: widths as number[] };
     }
+    case "assistant":
+      return { type: "assistant", place: parseAssistantPlace(value.place) };
     default:
       throw new InvalidInputError("That isn't a layout change.");
   }
@@ -241,7 +318,11 @@ function readSavedLayout(value: unknown): Layout | null {
   }
   if (groups.length === 0) return null;
   const focused = groups.find((group) => group.id === value.focusedGroupId) ?? groups[0];
-  return { groups, focusedGroupId: (focused as LayoutGroup).id };
+  return {
+    groups,
+    focusedGroupId: (focused as LayoutGroup).id,
+    assistant: readSavedAssistant(value.assistant),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +338,11 @@ const sameItem = (a: TabItem, b: TabItem): boolean =>
 
 function emptyLayout(newId: () => string): Layout {
   const group: LayoutGroup = { id: newId(), tabs: [], activeTabId: null, width: 1 };
-  return { groups: [group], focusedGroupId: group.id };
+  return {
+    groups: [group],
+    focusedGroupId: group.id,
+    assistant: structuredClone(DEFAULT_ASSISTANT),
+  };
 }
 
 const focusedGroup = (layout: Layout): LayoutGroup =>
@@ -544,6 +629,9 @@ class WindowState {
       case "equalize":
         for (const group of layout.groups) group.width = 1;
         break;
+      case "assistant":
+        layout.assistant = { ...layout.assistant, ...change.place };
+        break;
     }
     tidy(layout);
   }
@@ -682,7 +770,11 @@ export function createLayouts(deps: LayoutDependencies) {
       activeTabId: (shown ?? tabs[0])?.id ?? null,
       width: 1,
     };
-    return { groups: [group], focusedGroupId: group.id };
+    return {
+      groups: [group],
+      focusedGroupId: group.id,
+      assistant: structuredClone(DEFAULT_ASSISTANT),
+    };
   };
 
   /** Leaves out the tabs of what isn't there any more; says whether any went. */

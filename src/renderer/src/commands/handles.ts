@@ -5,7 +5,8 @@ export interface Handle<T> {
   current: T | null;
 }
 
-export const composerHandle: Handle<{ focus(): void }> = { current: null };
+/** The window's one assistant (#253): what only it can do, such as open its History. */
+export const assistantHandle: Handle<{ openHistory(): void }> = { current: null };
 
 export const sidebarHandle: Handle<{ hidden: boolean; toggle(): void }> = { current: null };
 

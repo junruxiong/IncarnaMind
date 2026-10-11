@@ -1,4 +1,13 @@
-import type { LayoutChange, LayoutGroup, LayoutTab, TabItem, WindowLayout } from "../../core/api";
+import { create } from "zustand";
+import type {
+  AssistantPlace,
+  LayoutChange,
+  LayoutGroup,
+  LayoutTab,
+  TabItem,
+  WindowLayout,
+} from "../../core/api";
+import { groupsMergedAt } from "./assistantPlace";
 import { core } from "./core";
 
 /*
@@ -11,11 +20,14 @@ import { core } from "./core";
 export const WINDOW_ID =
   new URLSearchParams(globalThis.location?.search ?? "").get("window") ?? "main";
 
-/** Below this window width the groups merge into one strip, and come back when it is wider. */
-export const MERGE_BELOW = 1000;
+/** The card's width as last measured, which the groups share; null until it is. */
+export const useCardWidth = create<{ width: number | null }>()(() => ({ width: null }));
 
-/** Whether the window is too narrow for groups side by side right now. */
-export const groupsMerged = () => window.innerWidth < MERGE_BELOW;
+/**
+ * Whether there is no room for groups side by side right now: the window is
+ * narrow, or the card is (`groupsMergedAt`).
+ */
+export const groupsMerged = () => groupsMergedAt(window.innerWidth, useCardWidth.getState().width);
 
 /** A line about the tabs, shown for a moment where the sidebar ends. */
 export type TabNotice =
@@ -23,7 +35,9 @@ export type TabNotice =
   | { kind: "maxGroups" }
   | { kind: "noGroup"; group: number }
   | { kind: "pinned"; item: TabItem }
-  | { kind: "merged" };
+  | { kind: "merged" }
+  /** A side dock chosen in a narrow window: it stays at the bottom until the window is wider. */
+  | { kind: "assistantNarrow" };
 
 export interface LayoutSlice {
   /** Null until loaded. */
@@ -35,14 +49,27 @@ export interface LayoutSlice {
   loadLayout(): Promise<void>;
   /** Changes the layout through the core; resolves with it once the store has it (null if refused). */
   changeLayout(change: LayoutChange): Promise<WindowLayout | null>;
+  /**
+   * Moves, resizes, folds or unfolds the assistant: shown at once, then kept
+   * through the core (and put back as the core has it if it refuses).
+   */
+  placeAssistant(place: Partial<AssistantPlace>): Promise<void>;
   showTabNotice(notice: TabNotice | null): void;
   /** Starts typing a tab's name in it, or stops (null). */
   renameTab(tabId: string | null): void;
 }
 
 type Set = (partial: Partial<LayoutSlice>) => void;
+type Get = () => LayoutSlice;
 
-export function createLayoutSlice(set: Set, report: (error: unknown) => void): LayoutSlice {
+/** How many times the assistant was placed in this window, to tell the latest answer. */
+let placings = 0;
+
+export function createLayoutSlice(
+  set: Set,
+  get: Get,
+  report: (error: unknown) => void,
+): LayoutSlice {
   return {
     layout: null,
     tabNotice: null,
@@ -58,6 +85,20 @@ export function createLayoutSlice(set: Set, report: (error: unknown) => void): L
       } catch (error) {
         report(error);
         return null;
+      }
+    },
+    async placeAssistant(place) {
+      const layout = get().layout;
+      if (!layout) return;
+      const placing = ++placings;
+      set({ layout: { ...layout, assistant: { ...layout.assistant, ...place } } });
+      try {
+        const kept = await core.changeLayout(WINDOW_ID, { type: "assistant", place });
+        // A later move is shown already: its own answer comes next.
+        if (placing === placings) set({ layout: kept });
+      } catch (error) {
+        report(error);
+        if (placing === placings) await get().loadLayout().catch(report);
       }
     },
     showTabNotice(notice) {
@@ -103,6 +144,18 @@ export function currentMindIdOf(layout: WindowLayout | null): string | null {
   const shown = [focusedGroupOf(layout), ...layout.groups].map((group) => activeTabOf(group));
   const mind = shown.find((tab) => tab?.item.kind === "mind")?.item;
   return mind?.kind === "mind" ? mind.mindId : null;
+}
+
+/**
+ * The Mind tab the assistant reads and asks in: the focused group's shown
+ * tab when it is a Mind, else the first group on screen that shows a Mind
+ * (a Document opened beside it, say). Null when no group on screen shows one.
+ */
+export function assistantTabOf(layout: WindowLayout | null, merged: boolean): LayoutTab | null {
+  if (!layout) return null;
+  const focused = focusedGroupOf(layout);
+  const shown = [focused, ...visibleGroupsOf(layout, merged).filter((group) => group !== focused)];
+  return shown.map((group) => activeTabOf(group)).find((tab) => tab?.item.kind === "mind") ?? null;
 }
 
 /** Whether a group shows this, in its front tab. */

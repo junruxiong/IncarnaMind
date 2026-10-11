@@ -128,11 +128,16 @@ test("typing in the composer and pressing Enter puts the Question into the note 
   const ask = composer.getByTestId("composer-ask");
   await expect(ask).toBeDisabled();
   await expect(ask).toHaveAccessibleName("Ask (Enter)");
-  // Pinned below the Mind, the measure wide, at the text's edge.
+  // At the foot of the assistant, beside the card (#253), and as wide as the assistant lets it be.
   const inputBox = await composer.boundingBox();
-  const textBox = await editor.locator(":scope > p").first().boundingBox();
-  expect(Math.abs((inputBox?.x ?? 0) - (textBox?.x ?? 0))).toBeLessThanOrEqual(1);
-  expect(Math.round(inputBox?.width ?? 0)).toBe(680);
+  const assistantBox = await window.getByTestId("assistant").boundingBox();
+  const cardBox = await window.getByTestId("card").boundingBox();
+  expect(inputBox?.x ?? 0).toBeGreaterThan((cardBox?.x ?? 0) + (cardBox?.width ?? 0));
+  expect(inputBox?.x ?? 0).toBeGreaterThan(assistantBox?.x ?? 0);
+  expect((inputBox?.x ?? 0) + (inputBox?.width ?? 0)).toBeLessThan(
+    (assistantBox?.x ?? 0) + (assistantBox?.width ?? 0),
+  );
+  expect(inputBox?.width ?? 0).toBeGreaterThan((assistantBox?.width ?? 0) - 32);
   await screenshot(window, "composer-empty-en");
 
   // Clicked into, then typed in: the Ask button turns primary; Enter asks.
@@ -599,23 +604,16 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   await expect.poll(() => opacityOf(question.getByTestId("question-meta"))).toBe(1);
   await screenshot(window, "question-hover-zh");
 
-  // A narrow window: the margins fold away, and the composer keeps the text's edge.
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 800));
-  const note = editor.locator(":scope > p").first();
-  const offset = async () =>
-    Math.round(((await composer.boundingBox())?.x ?? 0) - ((await note.boundingBox())?.x ?? 0));
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeLessThan(1100);
-  await expect.poll(offset).toBe(0);
-  // The editor's text column: the composer is as wide.
-  const column = await editor.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return (
-      element.getBoundingClientRect().width -
-      Number.parseFloat(style.paddingLeft) -
-      Number.parseFloat(style.paddingRight)
-    );
-  });
-  expect(Math.abs(((await composer.boundingBox())?.width ?? 0) - column)).toBeLessThanOrEqual(1);
+  // A narrow window: the assistant goes to the bottom (#253), and the composer spans it there,
+  // up to the Mind's column.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(960, 640));
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBeLessThan(1000);
+  const assistant = window.getByTestId("assistant");
+  await expect(assistant).toHaveAttribute("data-dock", "bottom");
+  const card = await window.getByTestId("card").boundingBox();
+  const below = await composer.boundingBox();
+  expect(below?.y ?? 0).toBeGreaterThan((card?.y ?? 0) + (card?.height ?? 0));
+  expect(below?.width ?? 0).toBeGreaterThan((card?.width ?? 0) - 40);
   await screenshot(window, "composer-narrow-zh");
   await app.close();
 });

@@ -9,7 +9,7 @@ import {
   type Page,
   test,
 } from "@playwright/test";
-import type { CoreBridge } from "../src/core/api";
+import type { AssistantPlace, CoreBridge } from "../src/core/api";
 import type { DocumentLocation } from "../src/shared/documentViewer";
 import type { TestHooks } from "../src/shared/testHooks";
 
@@ -72,15 +72,19 @@ export interface LaunchOptions {
 }
 
 /**
- * The window every spec runs in, the same on every machine: the app's default
- * width, and a height that fits the smallest screen the specs run on. The app
- * opens no bigger than the screen, and GitHub's macOS runners have a
- * 1024 × 768 one (677px high once the menu bar and the Dock are off it), where
- * a window opened 1024 wide folds the Mind's margins away. macOS lets a window
- * be wider than its screen, but not taller, so each launch sets this size and
- * checks the page got it, and says so if a screen is too short for it.
+ * The window every spec runs in, the same on every machine, and a height that
+ * fits the smallest screen the specs run on. The app opens no bigger than the
+ * screen, and GitHub's macOS runners have a 1024 × 768 one (677px high once
+ * the menu bar and the Dock are off it), where a window opened 1024 wide folds
+ * the Mind's margins away. macOS lets a window be wider than its screen, but
+ * not taller, so each launch sets this size and checks the page got it, and
+ * says so if a screen is too short for it.
+ *
+ * It is wider than the app's default (1280): the assistant docked on the right
+ * takes 368px (#253), and this leaves the card about the room a 1280px window
+ * gave it before, so groups sit side by side and the Mind keeps its margins.
  */
-export const WINDOW_SIZE = { width: 1280, height: 660 };
+export const WINDOW_SIZE = { width: 1600, height: 660 };
 
 /**
  * Launches the built app (`out/`) on the given data folder, with test hooks on
@@ -444,6 +448,24 @@ export async function setGroupBeside(window: Page, open: boolean): Promise<void>
     }
   }, open);
   await expect(window.getByTestId("tab-group")).toHaveCount(open ? 2 : 1);
+}
+
+/**
+ * Places the window's assistant (#253) through the core's bridge, as its ⋯
+ * menu does: for a spec about something else that needs the card's room, such
+ * as two groups side by side in a narrow window (docked at the bottom).
+ */
+export async function placeAssistant(window: Page, place: Partial<AssistantPlace>): Promise<void> {
+  await window.evaluate(async (given) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.changeLayout("main", { type: "assistant", place: given });
+  }, place);
+  const assistant = window.getByTestId("assistant");
+  if (place.dock) await expect(assistant).toHaveAttribute("data-chosen-dock", place.dock);
+  if (place.folded !== undefined) {
+    if (place.folded) await expect(assistant).toHaveAttribute("data-folded", "true");
+    else await expect(assistant).not.toHaveAttribute("data-folded");
+  }
 }
 
 /**

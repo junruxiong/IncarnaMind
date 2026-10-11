@@ -9,6 +9,7 @@ import {
   interceptOpenDialog,
   launchApp,
   linkedFolderRow,
+  placeAssistant,
   previewLink,
   removeDataFolder,
   showSourceLocations,
@@ -69,11 +70,16 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     await expect.poll(() => window.evaluate(() => globalThis.innerHeight)).toBeGreaterThan(600);
     const height = await window.evaluate(() => globalThis.innerHeight);
 
-    // The sidebar is exactly 248px; the card follows after an 8px gap and ends 8px short of the window.
+    // The sidebar is exactly 248px; the card follows after an 8px gap, 8px from the top and
+    // the bottom, and ends 8px before the assistant docked on the right (#253), which ends 8px
+    // short of the window.
     const sidebar = await boxOf(window.getByTestId("sidebar"));
     expect(sidebar.width).toBe(248);
     const card = await boxOf(window.getByTestId("card"));
-    expect(card).toEqual({ x: 256, y: 8, width: width - 256 - 8, height: height - 16 });
+    const assistant = await boxOf(window.getByTestId("assistant"));
+    expect(assistant).toMatchObject({ y: 8, height: height - 16 });
+    expect(assistant.x + assistant.width).toBe(width - 8);
+    expect(card).toEqual({ x: 256, y: 8, width: assistant.x - 8 - 256, height: height - 16 });
     const style = await window
       .getByTestId("card")
       .evaluate((element) => getComputedStyle(element).borderTopLeftRadius);
@@ -91,17 +97,22 @@ test("the Mind sits in a card 8px from the sidebar and the window's edges, with 
     if (SCREENSHOTS) await window.screenshot({ path: join(SCREENSHOTS, `shell-${width}.png`) });
 
     // Split into two groups, both inside the card, the second's strip continuing the band.
+    // At 1,000px the card beside the assistant is too narrow for two: with the assistant at the
+    // bottom, it has the room.
+    if (width < 1400) await placeAssistant(window, { dock: "bottom" });
     await window.keyboard.press("ControlOrMeta+Alt+Backslash");
     const groups = window.getByTestId("tab-group");
     await expect(groups).toHaveCount(2);
     const right = await boxOf(groups.nth(1));
-    expect(right.x + right.width).toBe(width - 8);
+    const cardNow = await boxOf(window.getByTestId("card"));
+    expect(right.x + right.width).toBe(cardNow.x + cardNow.width);
     expect(await boxOf(window.getByTestId("tab-strip").nth(1))).toMatchObject({ y: 8, height: 36 });
     if (SCREENSHOTS) {
       await window.screenshot({ path: join(SCREENSHOTS, `shell-${width}-groups.png`) });
     }
     await window.keyboard.press("ControlOrMeta+w");
     await expect(groups).toHaveCount(1);
+    await placeAssistant(window, { dock: "right" });
   }
   await app.close();
 });

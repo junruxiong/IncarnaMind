@@ -58,14 +58,15 @@ async function screenshot(window: Page, name: string) {
 }
 
 /**
- * A window wide enough that a Document's group beside the Mind is over 860px:
- * room for each page's margin, where the mark and its label go.
+ * A window wide enough that a Document's group beside the Mind is over 860px,
+ * with the assistant docked beside them (#253): room for each page's margin,
+ * where the mark and its label go.
  */
 async function widen(app: ElectronApplication, window: Page) {
   await app.evaluate(({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(2000, 1000);
+    BrowserWindow.getAllWindows()[0]?.setSize(2400, 1000);
   });
-  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(2000);
+  await expect.poll(() => window.evaluate(() => globalThis.innerWidth)).toBe(2400);
 }
 
 /** An element's box; it must be shown. */
