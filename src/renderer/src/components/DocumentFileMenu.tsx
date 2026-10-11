@@ -4,7 +4,7 @@ import { displayName } from "../../../shared/documentNames";
 import { commands } from "../commands/registry";
 import { files } from "../core";
 import { errorMessage } from "../errors";
-import { useLeftOutOfEvidence } from "../evidence";
+import { useCountedByChoice, useLeftOutOfEvidence } from "../evidence";
 import { useT } from "../i18n";
 import type { LibraryBridge } from "../libraryBridges";
 import { fileStatusLabel } from "../linkedFolders";
@@ -47,6 +47,7 @@ export function DocumentFileMenu({
   const reason = fileState ? t(fileState.reason) : undefined;
   const canRetry = item.status === "failed" && fileState === null;
   const leftOut = useLeftOutOfEvidence(item);
+  const countedByChoice = useCountedByChoice(item);
   const { web } = item;
   const runCommand = (id: CommandId) => {
     menu.close();
@@ -142,7 +143,7 @@ export function DocumentFileMenu({
           </button>
         )}
         {/* A file IncarnaMind wrote: checks leave it out until it is counted, and back (#80). */}
-        {(leftOut || item.ownFile?.counted) && (
+        {(leftOut || countedByChoice) && (
           <button
             type="button"
             role="menuitem"

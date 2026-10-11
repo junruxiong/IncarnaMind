@@ -51,7 +51,7 @@ export const zhCN = {
   "library.description": "描述",
   "library.descriptionHint": "哪些文档属于此文件夹？",
   "library.countsOwnFiles": "在此文件夹中，将 IncarnaMind 导出的文件计为依据",
-  "library.countsOwnFiles.hint": "在其他文件夹中，核对时仍不计为依据。",
+  "library.countsOwnFiles.hint": "其他文件夹中 IncarnaMind 导出的文件，核对时仍不计为依据。",
   "library.countsOwnFiles.everywhere": "所有文件夹都会计入：“设置 → 搜索”中没有排除这些文件。",
   "library.save": "保存文件夹",
   "library.startersHint": "先选择需要的文件夹，之后随时可以重命名或新建。",
@@ -511,7 +511,7 @@ export const zhCN = {
   "evidence.settings.title": "核对",
   "evidence.settings.switch": "不把 IncarnaMind 导出的文件计为依据",
   "evidence.settings.body":
-    "核对你写的内容或对比文档时，IncarnaMind 保存的导出文件和原文包不计为依据，以免笔记自己证明自己。正在核对的文档的副本始终不计入。转写稿和保存的网页照常计为依据。",
+    "开启后，核对你写的内容或对比文档时，IncarnaMind 保存的导出文件和原文包不计为依据，以免笔记自己证明自己。单个文件夹或文档仍可将它们计入。正在核对的文档的副本始终不计入。转写稿和保存的网页照常计为依据。",
   "documents.remove.title": "移除这个文档？",
   "documents.remove.body":
     "“{name}”已不在原文件夹中。移除后，IncarnaMind 为它保存的文字也会删除，指向它的引用将无法再核对。",

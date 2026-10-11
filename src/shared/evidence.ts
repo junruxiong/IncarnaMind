@@ -18,3 +18,22 @@ export function leftOutOfEvidence(
   const folder = folderId ? library?.groups.find((group) => group.id === folderId) : undefined;
   return !folder?.countsOwnFiles;
 }
+
+/**
+ * Whether the Document counts only because the User counted it ("Count it"):
+ * taking that back would leave it out. False while Settings or its Folder
+ * counts it anyway, where taking it back would change nothing.
+ */
+export function countedByChoice(
+  document: Pick<Document, "id" | "ownFile">,
+  settings: Pick<Settings, "user"> | null,
+  library: Pick<LibrarySnapshot, "groups" | "assignments"> | null,
+): boolean {
+  const { ownFile } = document;
+  if (!ownFile?.counted) return false;
+  return leftOutOfEvidence(
+    { ...document, ownFile: { ...ownFile, counted: false } },
+    settings,
+    library,
+  );
+}

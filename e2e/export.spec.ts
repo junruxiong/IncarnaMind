@@ -366,10 +366,10 @@ test("an export saved into a Linked folder is IncarnaMind's file: its viewer say
   await bridge(window).language("zh-CN");
   await setWindowSize(app, window, 900, WINDOW_SIZE.height);
   await expect(line).toHaveText("这个文件由 IncarnaMind 导出，核对时不计为依据 · 计为依据");
+  await expect(line).toBeVisible();
   const [lineBox, viewerBox] = await Promise.all([line.boundingBox(), viewer.boundingBox()]);
-  expect((lineBox?.x ?? 0) + (lineBox?.width ?? 0)).toBeLessThanOrEqual(
-    (viewerBox?.x ?? 0) + (viewerBox?.width ?? 0),
-  );
+  if (!lineBox || !viewerBox) throw new Error("The line or the viewer isn't laid out.");
+  expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(viewerBox.x + viewerBox.width);
   await screenshot(viewer, "own-file-viewer-zh-narrow");
   await bridge(window).language("en");
   await setWindowSize(app, window, WINDOW_SIZE.width, WINDOW_SIZE.height);
