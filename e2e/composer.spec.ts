@@ -61,7 +61,7 @@ async function pointAt(window: Page, target: Locator): Promise<void> {
 
 /**
  * The Mind as wide as the approved mockups drew it (a 1440px window's card),
- * beside the assistant docked on the right (#253), which takes 368px of it.
+ * beside the assistant docked on the right (#253), which takes 328px of it.
  */
 async function atMockupSize(app: ElectronApplication, window: Page) {
   await setWindowSize(app, window, 1600, 900);
@@ -605,7 +605,8 @@ test("in Chinese: the composer with a Search scope and a Skill chosen from its p
   const card = await window.getByTestId("card").boundingBox();
   const below = await composer.boundingBox();
   expect(below?.y ?? 0).toBeGreaterThan((card?.y ?? 0) + (card?.height ?? 0));
-  expect(below?.width ?? 0).toBeGreaterThan((card?.width ?? 0) - 40);
+  // Under the card, in its 40px gutters.
+  expect(below?.width ?? 0).toBeGreaterThanOrEqual((card?.width ?? 0) - 80 - 1);
   await screenshot(window, "composer-narrow-zh");
   await app.close();
 });
