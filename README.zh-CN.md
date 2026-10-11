@@ -105,4 +105,4 @@ IncarnaMind 最早是 2023 年的一个 Python 命令行工具，用来和 PDF �
 
 ## 许可证
 
-[Apache License 2.0](LICENSE)。应用内置的字体（Source Serif 4、Source Sans 3 和 JetBrains Mono）采用 [SIL Open Font License 1.1](https://openfontlicense.org)。
+[Apache License 2.0](LICENSE)。应用内置的字体（Source Serif 4、Source Sans 3 和 JetBrains Mono）采用 [SIL Open Font License 1.1](https://openfontlicense.org)。引用格式和语言文件原样取自 [Citation Style Language](https://citationstyles.org/) 项目，采用 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)；排版引擎是 [Hayagriva](https://github.com/typst/hayagriva)（MIT 或 Apache-2.0）。相关声明见 [`resources/notices`](resources/notices)。
