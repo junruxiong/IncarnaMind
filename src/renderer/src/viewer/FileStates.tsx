@@ -33,6 +33,15 @@ export function FileStates<T>({
           <FileGone quote={quote} />
         </>
       );
+    case "too-large":
+      return (
+        <>
+          <ViewerHeader />
+          <ViewerMessage tone="error">
+            {t("documents.status.failed", { reason: t("documents.failure.tooLarge") })}
+          </ViewerMessage>
+        </>
+      );
     case "failed":
       return (
         <>
