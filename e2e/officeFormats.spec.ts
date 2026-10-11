@@ -694,9 +694,19 @@ test("a Word file over 500 MB fails as too large to open, in English and Chinese
     // Opened, the viewer says why it can't show it.
     const viewer = window.getByTestId("viewer");
     await refused.getByTestId("open-document").click();
-    await expect(viewer.getByRole("alert")).toHaveText(
-      "This Document couldn't be shown: Too large to open (limit 500 MB).",
-      { timeout: 30_000 },
+    await expect(viewer.getByRole("alert")).toHaveText("Failed: the file is too large to open", {
+      timeout: 30_000,
+    });
+    await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: "zh-CN" },
+      }),
+    );
+    await expect(viewer.getByRole("alert")).toHaveText("失败：文件太大，无法打开");
+    await window.evaluate(() =>
+      (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.updateSettings({
+        user: { language: "en" },
+      }),
     );
     // The Word file beside it is drawn as before.
     await review.getByTestId("open-document").click();
