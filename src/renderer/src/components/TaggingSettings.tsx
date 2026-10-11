@@ -76,6 +76,12 @@ function costText(
   }
 }
 
+/** A model's name to show: Ollama's decision models picked per Document say so. */
+const nameOf = (
+  option: TaggingModelOption,
+  t: (key: MessageKey, params?: Record<string, string | number>) => string,
+) => (option.classifier.kind === "auto" ? t("tagging.decision.auto") : option.name);
+
 const providerOf = (option: TaggingModelOption, language: Language) =>
   option.provider ? (language === "zh-CN" ? option.provider.zh : option.provider.en) : null;
 
@@ -212,14 +218,14 @@ export function TaggingSettings() {
         {onPlan && <p data-testid="tagging-plan">{t("tagging.plan")}</p>}
         {onPlan && localDecision && (
           <p>
-            {t("tagging.plan.local", { model: localDecision.name })}{" "}
+            {t("tagging.plan.local", { model: nameOf(localDecision, t) })}{" "}
             <button
               type="button"
               data-testid="tagging-use-local"
               onClick={() => choose(localDecision.classifier)}
               className="text-accent underline-offset-2 hover:text-accent-strong hover:underline"
             >
-              {t("tagging.plan.useLocal", { model: localDecision.name })}
+              {t("tagging.plan.useLocal", { model: nameOf(localDecision, t) })}
             </button>
           </p>
         )}
@@ -235,9 +241,7 @@ export function TaggingSettings() {
         )}
         {inUse && (
           <p data-testid="tagging-review">
-            {t(inUse.likelihoods ? "tagging.review.marked" : "tagging.review.kept", {
-              model: inUse.name,
-            })}
+            {t(inUse.likelihoods ? "tagging.review.marked" : "tagging.review.kept")}
           </p>
         )}
       </div>
@@ -286,7 +290,7 @@ function ModelRow({
       <span className="flex min-w-0 flex-col">
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="min-w-0 truncate text-ui text-ink" title={option.name}>
-            {option.name}
+            {nameOf(option, t)}
           </span>
           {provider && <span className="text-[13px] leading-5 text-ink-meta">{provider}</span>}
           {option.decisionModel ? (

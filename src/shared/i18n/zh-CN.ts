@@ -889,6 +889,7 @@ export const zhCN = {
   "tagging.cost.dollars": "每 100 个文档约 {amount} 美元",
   "tagging.cost.underYuan": "每 100 个文档不到 ¥0.01",
   "tagging.cost.yuan": "每 100 个文档约 ¥{amount}",
+  "tagging.decision.auto": "Tev1 和 Clef-Flash，按文档自动选择",
   "tagging.other": "其他模型…",
   "tagging.other.hint": "按名称使用列表中没有的模型",
   "tagging.other.decision": "{model}（本地分类模型）",
@@ -900,8 +901,8 @@ export const zhCN = {
   "tagging.plan.local": "想把订阅留给聊天，可以改用本机模型打标签。",
   "tagging.plan.useLocal": "使用 {model}",
   "tagging.plan.paused": "ChatGPT 订阅的用量已达上限：将在 {time} 继续打标签。",
-  "tagging.review.marked": "{model} 会给出把握程度：拿不准的标签会标记出来，供你确认。",
-  "tagging.review.kept": "{model} 不会给出把握程度，所以它添加的标签都会保留。不需要的可以移除。",
+  "tagging.review.marked": "此模型会给出每个标签的可能性，并把拿不准的标签标记出来，供你确认。",
+  "tagging.review.kept": "此模型不会给出把握程度，所以它添加的标签都会保留。不需要的可以移除。",
   "status.taggingPaused": "等待 ChatGPT 订阅额度恢复",
   "status.taggingPaused.full": "ChatGPT 订阅的用量已达上限，打标签会等额度恢复后自动继续。",
 
