@@ -286,6 +286,8 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await shot(window, "meeting-transcript-wide-en");
   // A narrow window shows its groups merged: the Transcript is the tab after the Mind's.
   await setWindowSize(app, window, 900, 700);
+  await expect(bar).toBeVisible();
+  await shot(window, "meeting-bar-narrow-en");
   const transcriptTab = window.getByTestId("document-tab").filter({ hasText: "Transcript" });
   await transcriptTab.click();
   await expect(transcript).toBeVisible();
@@ -323,6 +325,9 @@ test("Show transcript opens the live Transcript beside the meeting, Hide transcr
   await expect(window.getByTestId("transcript-live")).toHaveText("实时");
   await shot(window, "meeting-transcript-wide-zh");
   await setWindowSize(app, window, 900, 700);
+  await window.getByTestId("mind-tab").filter({ hasText: "Meeting" }).click();
+  await expect(bar).toBeVisible();
+  await shot(window, "meeting-bar-narrow-zh");
   // Named when its first line came, the Transcript keeps its name in another language.
   await transcriptTab.click();
   await expect(transcript).toBeVisible();
