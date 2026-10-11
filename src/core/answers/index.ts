@@ -37,6 +37,7 @@ import {
   type AnswerPhase,
   type AnswerPlace,
   type AnswerToolCall,
+  type AnswerUsage,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
@@ -106,6 +107,7 @@ import {
   documentInstructions,
   LISTED_DOCUMENTS,
   type ListedDocuments,
+  languageInstruction,
   loadedSkillText,
   signInNeededInstructions,
   skillInstructions,
@@ -433,6 +435,13 @@ export function createAnswers(options: AnswersOptions) {
     let placedMarkers = 0;
     /** The one request for exact quotes, if the engine made it (see ./quoteRetry). */
     let quoteRetry: QuoteRetry | null = null;
+    /** What the model calls counted, the cached input tokens too. */
+    const usage: AnswerUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+    };
     const toolCalls: AnswerToolCall[] = [];
     let skills: SkillSession | null = null;
     const session = createCitationSession(inScope(options.documents, documentIds), {
@@ -513,6 +522,7 @@ export function createAnswers(options: AnswersOptions) {
           placedMarkers,
           citationSupport: support,
           quoteRetry,
+          usage,
         });
       }
     };
@@ -529,7 +539,8 @@ export function createAnswers(options: AnswersOptions) {
     if (active.size === 1) options.onWritingChange?.(true);
     events.emit("answer.started", { ...place, answerId, questionId: input.questionId, model });
 
-    const base = answerInstructions(context.question);
+    const base = answerInstructions();
+    const language = languageInstruction(context.question);
     const callStarted = (call: AnswerToolCall) => {
       // A call that asks the User first may already be there (see `ask`).
       if (toolCalls.some((each) => each.id === call.id)) return;
@@ -913,6 +924,7 @@ export function createAnswers(options: AnswersOptions) {
             connectorTools ? connectorInstructions(fromConnectors, mode === "no-documents") : "",
             sourcesInstructions(sourceTools),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
+            language,
           ]
             .filter(Boolean)
             .join("\n\n"),
@@ -927,6 +939,7 @@ export function createAnswers(options: AnswersOptions) {
         takesTemperature: prepared.capabilities.facts.temperature,
         window: prepared.window,
         retryQuotes: prepared.retryQuotes,
+        cacheKey: place.conversationId ?? place.mindId ?? undefined,
         signal: controller.signal,
       })) {
         if (finished) break;
@@ -948,6 +961,12 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "quotes-retried":
             quoteRetry = event.retry;
+            break;
+          case "usage":
+            usage.inputTokens += event.usage.inputTokens ?? 0;
+            usage.outputTokens += event.usage.outputTokens ?? 0;
+            usage.cachedInputTokens += event.usage.cachedInputTokens ?? 0;
+            usage.cacheWriteTokens += event.usage.cacheWriteTokens ?? 0;
             break;
           case "text-delta":
             responded = true;

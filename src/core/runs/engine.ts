@@ -107,6 +107,8 @@ export interface RunRequest {
   window?: RunWindow;
   /** Left out: the provider's default. A refusal comes back as a "refused" event. */
   temperature?: number;
+  /** Names the conversation, for providers that route requests to a prompt cache by a key (see ../providers/promptCache). */
+  cacheKey?: string;
   signal: AbortSignal;
 }
 
@@ -150,6 +152,11 @@ export type RunEvent =
 
 /** What a provider counted of a model call. */
 export interface TokenUsage {
+  /** All input tokens, the cached ones too. */
   inputTokens?: number;
   outputTokens?: number;
+  /** Of the input tokens, those the provider read from its prompt cache (billed at a fraction). */
+  cachedInputTokens?: number;
+  /** Of the input tokens, those the provider wrote to its prompt cache (Anthropic bills these above the base price). */
+  cacheWriteTokens?: number;
 }
