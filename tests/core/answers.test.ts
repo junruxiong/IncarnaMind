@@ -37,6 +37,7 @@ const NO_CITATIONS = {
   placedMarkers: 0,
   citationSupport: null,
   quoteRetry: null,
+  usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 },
 };
 
 /** A core with a local chat model set up (so no consent is needed), and a Mind with two clients. */
@@ -142,7 +143,14 @@ describe("Asking a Question", () => {
 
     const finished = nextEvent(core, "answer.finished");
     controlled.finish();
-    expect(await finished).toEqual({ ...NO_CITATIONS, mindId: mind.id, answerId, status: "done" });
+    expect(await finished).toEqual({
+      ...NO_CITATIONS,
+      mindId: mind.id,
+      answerId,
+      status: "done",
+      // What the model's stand-in counted (tests/helpers/models.ts).
+      usage: { inputTokens: 5, outputTokens: 1, cachedInputTokens: 0, cacheWriteTokens: 0 },
+    });
     expect(outline(reader)).toEqual(["question", "answer:done", "paragraph"]);
     expect(answerText(reader, answerId)).toBe("A Mind is a notebook.");
 

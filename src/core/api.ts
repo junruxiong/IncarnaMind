@@ -2594,6 +2594,24 @@ export interface AnswerFinished extends AnswerPlace {
    * was made. The evaluation counts these.
    */
   quoteRetry: QuoteRetry | null;
+  /** The tokens its model calls counted (#343). */
+  usage: AnswerUsage;
+}
+
+/**
+ * The tokens an Answer's model calls used, added up. `inputTokens` counts all
+ * input, the cached tokens too, so the share served from the provider's prompt
+ * cache is `cachedInputTokens / inputTokens`; the estimate of cost (#83) prices
+ * the cached and the written tokens at their own rates. All 0 for a provider
+ * that reports no counts (a local model).
+ */
+export interface AnswerUsage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Of the input, the tokens read from the provider's prompt cache. */
+  cachedInputTokens: number;
+  /** Of the input, the tokens written to it (Anthropic bills these above the base price). */
+  cacheWriteTokens: number;
 }
 
 /** What an Answer's one request for exact quotes did (see `AnswerFinished.quoteRetry`). */
