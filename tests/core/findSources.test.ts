@@ -245,13 +245,23 @@ describe("Find sources: searching", () => {
   test("the same search again soon is answered from what was found, without asking again", async () => {
     const { core, services } = await setUp();
     answerConsent(core);
+    // As an Answer searches: every provider, unnamed.
     const first = found(await core.findSources({ query: "CRISPR off-target detection" }));
     const asked = services.requests.length;
 
-    const again = found(await core.findSources({ query: "  CRISPR   off-target detection " }));
+    // As the Library's "Show results" searches it again: the same providers, named.
+    const again = found(
+      await core.findSources({
+        query: "  CRISPR   off-target detection ",
+        providers: ["openalex", "arxiv", "pubmed"],
+      }),
+    );
 
     expect(again.works.map((each) => each.key)).toEqual(first.works.map((each) => each.key));
     expect(services.requests).toHaveLength(asked);
+    // One provider fewer is another search.
+    await core.findSources({ query: "CRISPR off-target detection", providers: ["openalex"] });
+    expect(services.requests).toHaveLength(asked + 1);
   });
 
   test("a provider that fails says why, and the others' results still come", async () => {
