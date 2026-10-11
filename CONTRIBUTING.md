@@ -6,7 +6,7 @@ Thank you for helping. Code, testing with your own documents, translations and i
 
 - Found a bug, or want a feature? [Open an issue](https://github.com/junruxiong/IncarnaMind/issues/new/choose). For a bug, say what you did, what you expected and what happened, and your operating system.
 - Questions and ideas: [Discussions](https://github.com/junruxiong/IncarnaMind/discussions).
-- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) or [help wanted](https://github.com/junruxiong/IncarnaMind/labels/help%20wanted) are a good start. Say in the issue that you're taking it.
+- Looking for something to work on? Issues labelled [good first issue](https://github.com/junruxiong/IncarnaMind/labels/good%20first%20issue) are a good start. Say in the issue that you're taking it.
 
 ## Labels
 
@@ -32,7 +32,7 @@ You need Node.js 24 or newer. Clone the repository, then run `npm install` and `
 - Use the words defined in [`CONTEXT.md`](CONTEXT.md) (a Passage, not a chunk; a Connector, not a plugin), and say so when a change goes against an ADR in [`docs/adr/`](docs/adr/).
 - Test through the core's public interface, as the UI uses it, and assert what a User would see. The core tests need no API keys and no network.
 - Keep `src/core` free of Electron imports; Biome enforces it.
-- Run `npm run typecheck`, `npm run lint`, `npm test` and the smoke tests your change touches before opening a pull request. CI runs all of them on every push, and a pull request is merged only when its checks are green. The [tests and CI rules](docs/agents/testing.md) say how to write tests that pass on any machine.
+- Run `npm run typecheck`, `npm run lint`, `npm test` and the smoke tests your change touches before opening a pull request. CI runs all of them on every pull request, and a pull request is merged only when its checks are green. The [tests and CI rules](docs/agents/testing.md) say how to write tests that pass on any machine.
 - The interface is in English and Simplified Chinese: a new string goes into both dictionaries in `src/shared/i18n/`.
 - Keep pull requests small and say what they change and why.
 

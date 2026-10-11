@@ -24,10 +24,14 @@ export const PROPOSAL_NODE_TYPES = [
   "hardBreak",
 ] as const;
 
-/** The Proposal a mark belongs to: kept in the Mind, never read from pasted HTML. */
+/**
+ * The Proposal a mark belongs to, and the text it changes (`ProposalRef`):
+ * kept in the Mind, never read from pasted HTML.
+ */
 const refAttributes = () => ({
   id: { default: null, parseHTML: () => null, renderHTML: () => ({}) },
   request: { default: null, parseHTML: () => null, renderHTML: () => ({}) },
+  target: { default: null, parseHTML: () => null, renderHTML: () => ({}) },
 });
 
 /**

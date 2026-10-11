@@ -1703,6 +1703,7 @@ export function createCore(adapters: CoreAdapters): Core {
     acceptSuggestion: async (input) => suggestions.accept(input),
     getSuggestionStatus: () => suggestions.status(),
     editWithAi: (input) => edits.editWithAi(input),
+    regenerateProposal: (input) => edits.regenerateProposal(input),
     cancelEdit: async (requestId) => edits.cancel(requestId),
 
     getSecretStorage: async () => secrets.status(),
