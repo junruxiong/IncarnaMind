@@ -208,7 +208,16 @@ describe("Requests to OpenAI say not to store", () => {
 
     const tagged = await chatClassifier(openai()).decide({ tags, excerpt, signal });
     const organized = await chatGroupClassifier(openai(), false).organize(
-      [{ id: "g-reports", name: "Reports", description: "Reports", createdAt: "", updatedAt: "" }],
+      [
+        {
+          id: "g-reports",
+          name: "Reports",
+          description: "Reports",
+          countsOwnFiles: false,
+          createdAt: "",
+          updatedAt: "",
+        },
+      ],
       tags,
       excerpt,
       signal,

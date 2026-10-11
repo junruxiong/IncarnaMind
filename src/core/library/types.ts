@@ -5,6 +5,11 @@ export interface LibraryGroup {
   id: string;
   name: string;
   description: string;
+  /**
+   * Checks count the files IncarnaMind wrote in this Folder as evidence (#80):
+   * the User switched their exclusion off here. False by default.
+   */
+  countsOwnFiles: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,4 +94,6 @@ export interface LibrarySnapshot {
 export interface LibraryGroupInput {
   name: string;
   description: string;
+  /** See `LibraryGroup.countsOwnFiles`. Left out, it stays as it was (false for a new Folder). */
+  countsOwnFiles?: boolean;
 }
