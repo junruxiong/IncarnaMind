@@ -41,6 +41,11 @@ export interface Paths {
    */
   examples?: string;
   /**
+   * The User's Documents folder: the first save offers "IncarnaMind" in it as
+   * the Output location. Defaults to "Documents" in the home folder.
+   */
+  documents?: string;
+  /**
    * Where each program a Tool runs (a Skill script) gets its own temporary
    * working folder from the local `Executor`, removed when the run ends.
    * Defaults to the OS's temporary folder.

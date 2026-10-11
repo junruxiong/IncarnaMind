@@ -53,7 +53,7 @@ A Document whose Linked folder can't be reached for now, such as on an unplugged
 _Avoid_: offline, missing
 
 **Linked folder**:
-A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes anything in it. Files a cloud drive keeps online only are indexed when the User asks.
+A folder on the User's computer that IncarnaMind keeps in sync: every supported file in it, at any depth, is a Document, and new, changed and removed files are picked up. IncarnaMind never changes or deletes a file in it, and adds a new file there only once the User allows it for that folder. Files a cloud drive keeps online only are indexed when the User asks.
 _Avoid_: workspace, vault, source
 
 **Other Documents**:
