@@ -54,12 +54,6 @@ function rowOf(db: Database, target: ImportTarget): RecordRow | undefined {
   return undefined;
 }
 
-/** The record with this id, or null if there is none (or it was removed). */
-export function recordById(db: Database, id: string): ReferenceRecord | null {
-  const row = rowOf(db, { recordId: id });
-  return row ? toRecord(row) : null;
-}
-
 /** The records with no Document, oldest first. */
 export function unlinkedRecords(db: Database): ReferenceRecord[] {
   return db
