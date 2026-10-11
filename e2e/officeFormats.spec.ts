@@ -18,13 +18,13 @@ import {
   createDataFolder,
   dismissChatSetup,
   documentIdOf,
-  interceptSaveDialog,
   launchApp,
   linkFolderFromSidebar,
   newMind,
   openDocumentAt,
   removeDataFolder,
   useLocalChatModel,
+  useOutputLocation,
 } from "./app";
 
 const FIXTURES = join(__dirname, "..", "tests", "fixtures", "formats");
@@ -255,7 +255,7 @@ test("Word, PowerPoint, Excel and CSV files in a linked folder are cited by sect
 
   // Exported to .docx, each Citation's footnote names its Location.
   const target = join(sources, "Formats.docx");
-  await interceptSaveDialog(app, target);
+  await useOutputLocation(window, sources);
   await window.keyboard.press("Escape");
   await window.getByTestId("export-mind").click();
   const dialog = window.getByTestId("export-dialog");
