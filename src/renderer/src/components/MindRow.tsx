@@ -6,13 +6,12 @@ import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
 import { useMindStatus } from "../mindStatus";
 import { useAppStore } from "../store";
-import { isMoveToKey, MOVE_TO_SHORTCUT, RENAME_SHORTCUT, TREE_ROW } from "../treeKeys";
+import { isMoveToKey, TREE_ROW } from "../treeKeys";
 import { ExampleChip, useIsExample } from "./GettingStarted";
-import { MindLineIcon, MoreLineIcon } from "./lineIcons";
+import { MindLineIcon } from "./lineIcons";
 import { MoveToPicker } from "./MoveToPicker";
+import { ObjectMenu, useObjectMenu } from "./ObjectMenu";
 import {
-  openRowMenu,
-  rowActionButtonClass,
   rowActionsClass,
   rowButtonClass,
   rowClass,
@@ -20,8 +19,6 @@ import {
   rowInputClass,
   rowPadding,
 } from "./sidebarRows";
-import { menuClass, menuItemClass, menuRuleClass } from "./ui";
-import { usePopoverMenu } from "./usePopoverMenu";
 
 /**
  * A Mind in the sidebar's tree, in its Folder (`depth` 1) or Not in a Folder
@@ -32,16 +29,7 @@ import { usePopoverMenu } from "./usePopoverMenu";
  * It drags onto a Folder; its menu (⋯, or a right-click) and ⇧⌘M offer the
  * same as "Move to…".
  */
-export function MindRow({
-  mind,
-  depth,
-  onDelete,
-}: {
-  mind: Mind;
-  depth: number;
-  /** Asks before deleting it. */
-  onDelete(mind: Mind): void;
-}) {
+export function MindRow({ mind, depth }: { mind: Mind; depth: number }) {
   const t = useT();
   const isOpen = useAppStore((state) => {
     const shown = currentTabOf(state.layout)?.item;
@@ -53,7 +41,9 @@ export function MindRow({
   const [renaming, setRenaming] = useState(false);
   const [moving, setMoving] = useState<HTMLElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLLIElement>(null);
   const title = mindName(mind) || t("mind.untitled");
+  const objectMenu = useObjectMenu({ kind: "mind", id: mind.id });
 
   if (renaming) {
     return (
@@ -94,7 +84,8 @@ export function MindRow({
       data-folder-id={mind.folderId ?? ""}
       draggable
       onDragStart={(event) => startMoveDrag(event, { mindIds: [mind.id] })}
-      onContextMenu={(event) => openRowMenu(event, "mind-menu")}
+      {...objectMenu.rowProps}
+      ref={row}
       className={rowClass(isOpen)}
     >
       <button
@@ -137,11 +128,17 @@ export function MindRow({
         )}
       </button>
       <div className={rowActionsClass}>
-        <MindMenu
-          mind={mind}
-          onMove={(anchor) => setMoving(anchor)}
-          onRename={() => setRenaming(true)}
-          onDelete={() => onDelete(mind)}
+        <ObjectMenu
+          target={{ kind: "mind", id: mind.id }}
+          label={t("mind.more", { title })}
+          here={{
+            "mind.rename": () => setRenaming(true),
+            // Once the menu has closed and given the focus back, so the picker opens beside the button.
+            "mind.moveTo": () =>
+              requestAnimationFrame(() =>
+                setMoving(row.current?.querySelector<HTMLElement>("[data-object-menu]") ?? null),
+              ),
+          }}
         />
       </div>
       <MoveToPicker
@@ -156,117 +153,6 @@ export function MindRow({
         onClose={() => setMoving(null)}
       />
     </li>
-  );
-}
-
-/**
- * A Mind's menu, from its ⋯ or a right-click, in the shared order: Open,
- * Open in a new tab; Move to…; Rename; Delete….
- */
-function MindMenu({
-  mind,
-  onMove,
-  onRename,
-  onDelete,
-}: {
-  mind: Mind;
-  /** Opens "Move to…" beside this element. */
-  onMove(anchor: HTMLElement): void;
-  onRename(): void;
-  onDelete(): void;
-}) {
-  const t = useT();
-  const menu = usePopoverMenu();
-  const openMind = useAppStore((state) => state.openMind);
-  const label = t("mind.more", { title: mindName(mind) || t("mind.untitled") });
-  const anchor = useRef<HTMLButtonElement>(null);
-
-  /** Closes the menu, then does it. */
-  const choose = (action: () => void) => () => {
-    menu.close();
-    action();
-  };
-
-  return (
-    <>
-      <button
-        {...menu.buttonProps}
-        ref={(element) => {
-          menu.buttonProps.ref.current = element;
-          anchor.current = element;
-        }}
-        type="button"
-        data-testid="mind-menu"
-        aria-label={label}
-        title={label}
-        className={rowActionButtonClass}
-      >
-        <MoreLineIcon className="size-4" />
-      </button>
-      <div
-        {...menu.menuProps}
-        role="menu"
-        aria-label={label}
-        data-testid="mind-actions"
-        className={menuClass}
-      >
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="mind-open"
-          onClick={choose(() => openMind(mind.id))}
-          className={`${menuItemClass} pl-2`}
-        >
-          {t("mind.open")}
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="mind-open-side"
-          onClick={choose(() => openMind(mind.id, { side: true }))}
-          className={`${menuItemClass} pl-2`}
-        >
-          {t("mind.openSide")}
-        </button>
-        <div className={menuRuleClass} />
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="mind-move-to"
-          onClick={choose(() => {
-            // Once the menu has closed and given the focus back to its button.
-            requestAnimationFrame(() => {
-              if (anchor.current) onMove(anchor.current);
-            });
-          })}
-          className={`${menuItemClass} pl-2`}
-        >
-          <span className="flex-1">{t("mind.moveTo")}</span>
-          <span className="pl-4 text-[13px] text-ink-meta">{MOVE_TO_SHORTCUT}</span>
-        </button>
-        <div className={menuRuleClass} />
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="rename-mind"
-          onClick={choose(onRename)}
-          className={`${menuItemClass} pl-2`}
-        >
-          <span className="flex-1">{t("mind.rename")}</span>
-          <span className="pl-4 text-[13px] text-ink-meta">{RENAME_SHORTCUT}</span>
-        </button>
-        <div className={menuRuleClass} />
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="delete-mind"
-          onClick={choose(onDelete)}
-          className={`${menuItemClass} pl-2 text-danger`}
-        >
-          {t("mind.deleteAction")}
-        </button>
-      </div>
-    </>
   );
 }
 

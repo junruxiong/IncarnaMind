@@ -99,7 +99,7 @@ test("the sidebar lists the most recently edited Mind first, and a deleted Mind 
   const older = window.getByTestId("mind-row").filter({ hasText: "Older" });
   await older.hover();
   await older.getByTestId("mind-menu").click();
-  await older.getByTestId("delete-mind").click();
+  await older.getByTestId("mind.delete").click();
   await window.getByTestId("confirm-delete-mind").click();
   await expect(items).toHaveText(["Newer"]);
   await expect(window.getByTestId("mind-tab").getByTestId("tab-title")).toHaveText(["Newer"]);
@@ -144,7 +144,7 @@ test("added files are processed, show as ready in the sidebar, and can be delete
     await expect(restored).toHaveCount(2);
     const doomed = restored.filter({ hasText: "Reading notes" });
     await openDocumentMenu(doomed);
-    await doomed.getByTestId("delete-document").click();
+    await doomed.getByTestId("document.delete").click();
     await second.window.getByTestId("confirm-delete-document").click();
     await expect(restored).toHaveCount(1);
     await expect(restored).toHaveAttribute("data-status", "ready");

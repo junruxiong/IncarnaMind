@@ -7,7 +7,17 @@ import { evidenceCommands } from "./evidence";
 import { footnoteCommands } from "./footnotes";
 import { citationHandle, sidebarHandle } from "./handles";
 import { meetingCommands } from "./meetings";
+import {
+  answerCommands,
+  citationCommands,
+  documentCommands,
+  folderCommands,
+  linkedFolderCommands,
+  mindCommands,
+  tagCommands,
+} from "./objects";
 import { proposalCommands } from "./proposals";
+import "./objectMenus";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
@@ -20,6 +30,13 @@ const appCommands: readonly Command[] = [
     reversible: true,
     run: () => useAppStore.getState().createMind(),
   },
+  ...mindCommands,
+  ...documentCommands,
+  ...folderCommands,
+  ...tagCommands,
+  ...linkedFolderCommands,
+  ...answerCommands,
+  ...citationCommands,
   ...tabCommands,
   ...meetingCommands,
   ...webPageCommands,
@@ -53,9 +70,9 @@ const appCommands: readonly Command[] = [
     shortcut: { keys: "CmdOrCtrl+Alt+O" },
     group: "open",
     reversible: true,
-    // While a Citation's card shows (hovered, focused or clicked).
-    when: () => citationHandle.current !== null,
-    run: () => citationHandle.current?.open(),
+    // While a Citation's card shows (hovered, focused or clicked), or from its menu.
+    when: (ctx) => ctx.here?.["citation.open"] !== undefined || citationHandle.current !== null,
+    run: (ctx) => (ctx.here?.["citation.open"] ?? citationHandle.current?.open)?.(),
   },
   {
     id: "references.import",
@@ -92,10 +109,13 @@ const appCommands: readonly Command[] = [
     label: "editor.block.delete",
     shortcut: { keys: "CmdOrCtrl+Shift+Backspace" },
     group: "danger",
-    appliesTo: ["block"],
+    destructive: true,
+    appliesTo: ["block", "answer"],
     // The note's own undo (⌘Z) brings it back.
     reversible: true,
     run(ctx) {
+      // An Answer's menu deletes that Answer, wherever the cursor is.
+      if (ctx.here?.["block.delete"]) return ctx.here["block.delete"]();
       // The Blocks the note's selection touches, the focused one among them.
       if (ctx.focus) noteHolding(ctx.focus.id)?.commands.deleteBlock();
     },

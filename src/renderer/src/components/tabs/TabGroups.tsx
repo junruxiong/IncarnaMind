@@ -4,7 +4,6 @@ import { useT } from "../../i18n";
 import { activeTabOf, focusedGroupOf } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { useGroupsMerged } from "../../useWindowWidth";
-import { ExportDialog } from "../ExportDialog";
 import { LibraryPane } from "../LibraryPane";
 import { ResizeRod } from "../ResizeRod";
 import { DocumentTab } from "./DocumentTab";
@@ -30,9 +29,6 @@ export function TabGroups() {
   const width = useWidth(container);
   /** Widths while a divider is dragged, before the core has them. */
   const [dragging, setDragging] = useState<number[] | null>(null);
-  /** The Mind whose export dialog is open. */
-  const [exporting, setExporting] = useState<string | null>(null);
-  const exportMind = useAppStore((state) => state.minds.find((mind) => mind.id === exporting));
 
   // A double-click on a divider makes the groups equal, as in VS Code.
   useEffect(() => {
@@ -82,13 +78,11 @@ export function TabGroups() {
               share={merged ? 1 : (shares[index] ?? 1)}
               merged={merged}
               drag={drag}
-              onExport={setExporting}
             />
           </Fragment>
         ))}
       </div>
       <DragFeedback dragged={drag.dragged} target={drag.target} />
-      <ExportDialog mind={exportMind ?? null} onClose={() => setExporting(null)} />
     </>
   );
 }
@@ -154,14 +148,12 @@ function TabGroup({
   share,
   merged,
   drag,
-  onExport,
 }: {
   group: LayoutGroup;
   index: number;
   share: number;
   merged: boolean;
   drag: TabDrag;
-  onExport(mindId: string): void;
 }) {
   const t = useT();
   const focused = useAppStore((state) => merged || state.layout?.focusedGroupId === group.id);
@@ -179,7 +171,7 @@ function TabGroup({
           void useAppStore.getState().changeLayout({ type: "focus", groupId: group.id });
       }}
     >
-      <TabStrip group={group} index={index} merged={merged} drag={drag} onExport={onExport} />
+      <TabStrip group={group} index={index} merged={merged} drag={drag} />
       <div
         data-group-body={group.id}
         className="tab-body"

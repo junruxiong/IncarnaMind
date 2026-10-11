@@ -190,7 +190,7 @@ export async function openFolderInLibrary(window: Page, name: string): Promise<v
   const folder = sidebarFolder(window, name);
   await folder.getByTestId("folder-row").hover();
   await folder.getByTestId("folder-menu").click();
-  await folder.getByTestId("folder-open").click();
+  await folder.getByTestId("folder.open").click();
   await expect(window.getByTestId("library")).toBeVisible();
 }
 
@@ -927,3 +927,7 @@ export async function removeDataFolder(dataDir: string): Promise<void> {
   }
   await rm(dataDir, { recursive: true, force: true, maxRetries: 3 });
 }
+
+/** The core's bridge in the page, for a test to set things up or read them: `(await coreOf(window)).evaluate(...)`. */
+export const coreOf = (window: Page) =>
+  window.evaluateHandle(() => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind);

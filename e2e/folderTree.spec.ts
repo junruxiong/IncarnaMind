@@ -125,7 +125,7 @@ test("each Folder lists its Minds above its Documents and opens in place; a Mind
     // "New Mind here", from its menu (a right-click, as in Finder): listed in the Folder,
     // above its Documents, and open.
     await folder.getByTestId("folder-row").click({ button: "right" });
-    await folder.getByTestId("folder-new-mind-here").click();
+    await folder.getByTestId("folder.newMind").click();
     await window.getByTestId("mind-title").fill("Tide questions");
     const listed = folder.locator(":scope > ul > li");
     await expect(listed.first()).toHaveAttribute("data-testid", "mind-row");
@@ -230,11 +230,12 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await expect(actions.getByRole("menuitem")).toHaveText([
       /^Open$/,
       /^Open to the side$/,
+      /^Export…$/,
       /^Move to…(⇧⌘M|Ctrl\+Shift\+M)$/,
       /^Rename(↩|F2)$/,
       /^Delete…$/,
     ]);
-    await actions.getByTestId("mind-move-to").click();
+    await actions.getByTestId("mind.moveTo").click();
     const picker = window.getByTestId("move-to-picker");
     await expect(picker).toBeVisible();
     await expect(picker.getByTestId("move-to-search")).toBeFocused();
@@ -261,9 +262,9 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
     await window.keyboard.press("Tab");
     await expect(shortlist.getByTestId("mind-menu")).toBeFocused();
     await window.keyboard.press("Enter");
-    await expect(actions.getByTestId("mind-open")).toBeFocused();
-    for (let step = 0; step < 2; step++) await window.keyboard.press("ArrowDown");
-    await expect(actions.getByTestId("mind-move-to")).toBeFocused();
+    await expect(actions.getByTestId("mind.open")).toBeFocused();
+    for (let step = 0; step < 3; step++) await window.keyboard.press("ArrowDown");
+    await expect(actions.getByTestId("mind.moveTo")).toBeFocused();
     await window.keyboard.press("Enter");
     await expect(picker.getByTestId("move-to-search")).toBeFocused();
     await window.keyboard.type("res");
@@ -340,7 +341,7 @@ test("a Mind moves by its menu, by the keyboard and by dragging, each with Undo;
       /^Rename(↩|F2)$/,
       /^Delete…$/,
     ]);
-    await folderActions.getByTestId("folder-delete").click();
+    await folderActions.getByTestId("folder.delete").click();
     const dialog = window.getByTestId("delete-folder-dialog");
     await expect(dialog).toContainText("Delete the Folder “Research notes”?");
     await expect(dialog).toContainText("move to Not in a Folder");
