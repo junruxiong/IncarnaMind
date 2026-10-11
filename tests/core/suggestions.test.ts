@@ -336,6 +336,11 @@ describe("suggestions as the User writes", () => {
     await core.acceptSuggestion({ suggestionId: suggestion.suggestionId, characters: 42 });
     await core.acceptSuggestion({ suggestionId: "made-up", characters: 1 });
     expect((await core.getSuggestionStatus()).today).toEqual({ shown: 1, accepted: 1 });
+
+    // The record of AI use heard it: one entry, with the model and the size, and no text.
+    expect(await core.listAiUse(mind.id)).toMatchObject([
+      { kind: "suggestion-accepted", outcome: "kept", modelId: "local-model", characters: 42 },
+    ]);
   });
 
   test("turning them off stops the request in flight and sends no more", async () => {
