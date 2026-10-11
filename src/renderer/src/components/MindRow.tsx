@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { Mind } from "../../../core/api";
+import { mindName } from "../../../shared/naming";
 import { startMoveDrag } from "../folderDrag";
 import { useT } from "../i18n";
 import { currentTabOf } from "../layoutSlice";
@@ -52,7 +53,7 @@ export function MindRow({
   const [renaming, setRenaming] = useState(false);
   const [moving, setMoving] = useState<HTMLElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const title = mind.title || t("mind.untitled");
+  const title = mindName(mind) || t("mind.untitled");
 
   if (renaming) {
     return (
@@ -120,7 +121,7 @@ export function MindRow({
         <MindLineIcon className={rowIconClass(isOpen)} />
         <span
           data-testid="row-text"
-          className={`min-w-0 flex-1 truncate ${mind.title ? "" : "text-ink-meta"}`}
+          className={`min-w-0 flex-1 truncate ${mindName(mind) ? "" : "text-ink-meta"}`}
         >
           {title}
         </span>
@@ -177,7 +178,7 @@ function MindMenu({
   const t = useT();
   const menu = usePopoverMenu();
   const openMind = useAppStore((state) => state.openMind);
-  const label = t("mind.more", { title: mind.title || t("mind.untitled") });
+  const label = t("mind.more", { title: mindName(mind) || t("mind.untitled") });
   const anchor = useRef<HTMLButtonElement>(null);
 
   /** Closes the menu, then does it. */
@@ -295,8 +296,8 @@ function RenameMind({ mind, onDone }: { mind: Mind; onDone(): void }) {
       ref={field}
       value={value}
       data-testid="mind-rename"
-      aria-label={t("mind.renameLabel", { title: mind.title || t("mind.untitled") })}
-      placeholder={t("mind.untitled")}
+      aria-label={t("mind.renameLabel", { title: mindName(mind) || t("mind.untitled") })}
+      placeholder={mindName(mind) || t("mind.untitled")}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;

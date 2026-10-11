@@ -806,6 +806,12 @@ export const migrations: readonly Migration[] = [
         WHERE deleted_at IS NULL;
     `,
   },
+  {
+    version: 40,
+    description: "A Mind without a title is named by its first line of text",
+    // Kept up to date by the core as the Mind is edited; the title the User typed stays in `title`.
+    sql: `ALTER TABLE minds ADD COLUMN auto_title TEXT NOT NULL DEFAULT '';`,
+  },
 ];
 
 /**

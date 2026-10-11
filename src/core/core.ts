@@ -63,6 +63,7 @@ import { documentPageImages } from "./library/pageImages";
 import { createMeetings } from "./meetings";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
+
 import {
   createMinds,
   parseCreateMindInput,
@@ -70,6 +71,7 @@ import {
   parseIds,
   parseMindId,
 } from "./minds";
+import { firstLineOf } from "./mindText";
 import { createOutputFiles } from "./outputFiles";
 import { createPrivacy, type NetworkTrafficRegistry } from "./privacy";
 import { readsImages } from "./providers/capabilities";
@@ -215,7 +217,8 @@ export function createCore(adapters: CoreAdapters): Core {
   const mindsChanged = () => events.emit("minds.changed", minds.list());
   const content = createMindContent(db, now, (mindId, update) => {
     events.emit("mind.update", { mindId, update });
-    if (minds.markEdited(mindId)) mindsChanged();
+    const renamed = minds.setAutoTitle(mindId, content.peek(mindId, firstLineOf));
+    if (minds.markEdited(mindId) || renamed) mindsChanged();
   });
   // The level Skill scripts run at: the given Executor's, else the local one's below ("none").
   const scriptSandbox = adapters.executor?.level ?? "none";
