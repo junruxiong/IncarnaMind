@@ -1400,7 +1400,7 @@ export const zhCN = {
     "已停止：已开启“所有内容都留在这台电脑上”，而 {model} 不在这台电脑上运行",
   "answer.error.useLocal": "改用本地模型",
   "answer.error.too-long":
-    "这个问题太长，即使不带上方的笔记，也超出了本地模型的上下文窗口。请缩短问题，或为这个问题换一个模型",
+    "这个问题太长，即使不带前面的内容，也超出了模型的上下文窗口。请缩短问题，或换一个模型",
   "answer.error.unknown": "无法生成这个回答",
   "answer.error.not-signed-in": "你还没有登录 ChatGPT",
   "answer.error.plan-limit": "你的 ChatGPT 订阅已达到用量上限",
