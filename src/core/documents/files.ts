@@ -23,6 +23,8 @@ export const DOCUMENT_EXTENSIONS: Readonly<Record<DocumentKind, readonly string[
   pptx: ["pptx"],
   xlsx: ["xlsx"],
   csv: ["csv"],
+  // Saved by their address, never added as files: a .html file isn't a web page Document.
+  web: [],
 };
 
 const KINDS: ReadonlyMap<string, DocumentKind> = new Map(
@@ -239,6 +241,9 @@ export async function hashFile(path: string): Promise<HashedFile> {
   }
   return { contentHash: hash.digest("hex"), size };
 }
+
+export const hashBytes = (bytes: Uint8Array): string =>
+  createHash("sha256").update(bytes).digest("hex");
 
 /**
  * Opens a file for reading, as a Web stream of its bytes, with its size now.

@@ -7,6 +7,7 @@ import { useCapturing } from "../meetings";
 import { enterFrom, exitToward } from "../motion";
 import { rerankingModelStatus } from "../rerankStatus";
 import { isOwnDocument, useAppStore } from "../store";
+import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
@@ -58,9 +59,10 @@ interface Status {
 
 /**
  * The sidebar footer's status row, above Settings: what the app is doing
- * with the Documents (processing, tagging, the search model's download or a
- * rebuild) or what needs the User (tagging waits for a model, a failure to
- * retry, skipped files, files that were in IncarnaMind already). One line:
+ * with the Documents (processing, tagging, fetching web pages, the search
+ * model's download or a rebuild) or what needs the User (tagging waits for a
+ * model, a failure to retry, a web page that couldn't be added, skipped
+ * files, files that were in IncarnaMind already). One line:
  * the most pressing status, and "+N" for the others, which lists them above
  * the row. Its 28px are kept even when there is nothing to say, so the tree
  * above never moves.
@@ -224,6 +226,13 @@ function useStatuses(): Status[] {
   const dismissSkipped = useAppStore((state) => state.dismissSkippedFiles);
   const dismissAlreadyAdded = useAppStore((state) => state.dismissAlreadyAdded);
   const openSettings = useAppStore((state) => state.openSettings);
+  // The dialog shows how the pages typed in it go; the rest are said here.
+  const fetchingPages = useWebPages(
+    (state) => state.fetching.filter((key) => outsideDialog(state, key)).length,
+  );
+  const pageProblems = useWebPages(
+    useShallow((state) => state.problems.filter((each) => outsideDialog(state, each.key))),
+  );
   const statuses: Status[] = [];
   // The built-in reranking model, on by default, downloads once there are Documents to search.
   const rerankingStatus = rerankingModelStatus(rerank, t);
@@ -273,6 +282,31 @@ function useStatuses(): Status[] {
         reason: t(testErrorKey(embedding.error.kind)),
       })}\n${embedding.error.message}`,
       action: { label: t("status.retry"), run: () => void retryEmbedding() },
+    });
+  }
+
+  for (const problem of pageProblems) {
+    const refused = !canTryAgain(problem);
+    const reason = t(reasonKey(problem.reason));
+    const short = problem.document
+      ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
+      : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason });
+    const { tryAgain, dismiss } = useWebPages.getState();
+    statuses.push({
+      testId: `web-page-problem:${problem.key}`,
+      tone: refused ? "waiting" : "error",
+      short,
+      full: `${short}\n${problem.address}\n${problem.message}`,
+      ...(refused
+        ? {}
+        : {
+            action: {
+              label: t("webPages.tryAgain"),
+              testId: "web-page-try-again",
+              run: () => void tryAgain(problem),
+            },
+          }),
+      dismiss: () => dismiss(problem),
     });
   }
 
@@ -343,6 +377,14 @@ function useStatuses(): Status[] {
       short: t("status.rebuilding", { done: rebuild.done, total: rebuild.total }),
       full: `${reason}${title}\n${t("embeddingProviders.rebuild.note")}`,
     });
+  }
+
+  if (fetchingPages > 0) {
+    const text =
+      fetchingPages === 1
+        ? t("webPages.fetching.one")
+        : t("webPages.fetching.other", { count: fetchingPages });
+    statuses.push({ testId: "web-pages-fetching", tone: "progress", short: text, full: text });
   }
 
   // While a Meeting records, Documents wait to be read, and tagging waits too (#135).
