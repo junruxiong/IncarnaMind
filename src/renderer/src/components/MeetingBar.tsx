@@ -5,7 +5,7 @@ import type { MessageKey } from "../../../shared/i18n";
 import { useT } from "../i18n";
 import { useMeetings, useMeetingTime } from "../meetings";
 import { clockTime, durationLabel } from "../meetingTime";
-import { PauseLineIcon, RecordingLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
+import { PauseLineIcon, ResumeLineIcon, StopLineIcon } from "./lineIcons";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 
 /** Pause and Resume (DESIGN.md, Names and shortcuts). */
@@ -41,8 +41,8 @@ export function MeetingBar({ meeting, children }: { meeting: Meeting; children?:
 }
 
 /**
- * The ring-and-dot icon (in ink, never red), "Recording 24:16" (or
- * "Paused"), Pause or Resume (⌘⇧P) and Stop.
+ * The live-recording dot (red, the one red outside Citation checks; grey
+ * while paused), "Recording 24:16" (or "Paused"), Pause or Resume (⌘⇧P) and Stop.
  */
 function MeetingControls({ meeting }: { meeting: Meeting }) {
   const t = useT();
@@ -66,9 +66,11 @@ function MeetingControls({ meeting }: { meeting: Meeting }) {
   return (
     <div data-testid="meeting-controls" className="meeting-controls">
       <span className="meeting-state">
-        <RecordingLineIcon
-          live={recording}
-          className={`size-4 shrink-0 ${recording ? "text-ink" : "text-ink-meta"}`}
+        <span
+          aria-hidden="true"
+          data-testid="meeting-dot"
+          data-status={meeting.status}
+          className="recording-dot"
         />
         <span className="font-semibold">
           {t(recording ? "meetings.bar.recording" : "meetings.bar.paused")}

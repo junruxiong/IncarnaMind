@@ -666,8 +666,12 @@
       background: var(--color-attention);
     }
   }
-  /* A Meeting recording: a small red dot (the owner's choice), grey while paused. */
-  .mind-tab-recording {
+  /*
+   * A Meeting recording, on its tab and in its bar: a small red dot, the one
+   * red outside Citation checks (the owner's choice), grey while paused.
+   */
+  .recording-dot {
+    flex-shrink: 0;
     width: 7px;
     height: 7px;
     border-radius: 9999px;
