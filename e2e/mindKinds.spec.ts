@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import * as Y from "yjs";
-import type { CoreBridge } from "../src/core/api";
+import { CONTENT_SCHEMA_VERSION, type CoreBridge } from "../src/core/api";
 import { openDatabase } from "../src/core/storage";
 import { createDataFolder, dismissChatSetup, launchApp, removeDataFolder } from "./app";
 
@@ -27,7 +27,7 @@ function newerContent(): number[] {
   const future = new Y.XmlElement("futureWidget");
   future.setAttribute("layout", "grid");
   doc.getXmlFragment("blocks").push([paragraph, future]);
-  doc.getMap("settings").set("schemaVersion", 2);
+  doc.getMap("settings").set("schemaVersion", CONTENT_SCHEMA_VERSION + 1);
   return Array.from(Y.encodeStateAsUpdate(doc));
 }
 
