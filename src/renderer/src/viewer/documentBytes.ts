@@ -5,6 +5,10 @@ export class MissingDocumentError extends Error {
   override name = "MissingDocumentError";
 }
 
+export class TooLargeDocumentError extends Error {
+  override name = "TooLargeDocumentError";
+}
+
 /**
  * Reads a Document's whole file from the main process's document protocol.
  * XMLHttpRequest rather than fetch: the protocol is registered with only the
@@ -18,6 +22,7 @@ export function loadDocumentBytes(documentId: string, signal: AbortSignal): Prom
     request.onload = () => {
       if (request.status === 200) resolve(new Uint8Array(request.response as ArrayBuffer));
       else if (request.status === 404) reject(new MissingDocumentError("The Document is gone."));
+      else if (request.status === 413) reject(new TooLargeDocumentError("Too large to open."));
       else reject(new Error(`The Document's file couldn't be read (status ${request.status}).`));
     };
     request.onerror = () => reject(new Error("The Document's file couldn't be read."));
