@@ -1,0 +1,130 @@
+{
+  "id": "https://openalex.org/W4323666400",
+  "doi": "https://doi.org/10.3389/fbioe.2023.1143157",
+  "display_name": "Off-target effects in CRISPR/Cas9 gene editing",
+  "publication_date": "2023-03-09",
+  "authorships": [
+    {
+      "author_position": "first",
+      "author": {
+        "id": "https://openalex.org/A5061369579",
+        "display_name": "Congting Guo"
+      }
+    },
+    {
+      "author_position": "middle",
+      "author": {
+        "id": "https://openalex.org/A5008825234",
+        "display_name": "Xiaoteng Ma"
+      }
+    },
+    {
+      "author_position": "middle",
+      "author": {
+        "id": "https://openalex.org/A5012061252",
+        "display_name": "Fei Gao"
+      }
+    },
+    {
+      "author_position": "last",
+      "author": {
+        "id": "https://openalex.org/A5084882105",
+        "display_name": "Yuxuan Guo"
+      }
+    }
+  ],
+  "primary_location": {
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.3389/fbioe.2023.1143157",
+    "pdf_url": "http://STANDIN/files/paywall.pdf",
+    "source": {
+      "id": "https://openalex.org/S2595131146",
+      "display_name": "Frontiers in Bioengineering and Biotechnology",
+      "type": "journal",
+      "host_organization_name": "Frontiers Media"
+    },
+    "license": "cc-by",
+    "version": "publishedVersion"
+  },
+  "locations": [
+    {
+      "is_oa": true,
+      "landing_page_url": "https://doi.org/10.3389/fbioe.2023.1143157",
+      "pdf_url": "http://STANDIN/files/paywall.pdf",
+      "source": {
+        "id": "https://openalex.org/S2595131146",
+        "display_name": "Frontiers in Bioengineering and Biotechnology",
+        "type": "journal",
+        "host_organization_name": "Frontiers Media"
+      },
+      "license": "cc-by",
+      "version": "publishedVersion"
+    },
+    {
+      "is_oa": false,
+      "landing_page_url": "https://pubmed.ncbi.nlm.nih.gov/36970624",
+      "pdf_url": null,
+      "source": {
+        "id": "https://openalex.org/S4306525036",
+        "display_name": "PubMed",
+        "type": "repository",
+        "host_organization_name": "National Institutes of Health"
+      },
+      "license": null,
+      "version": "publishedVersion"
+    },
+    {
+      "is_oa": true,
+      "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/10034092",
+      "pdf_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10034092/pdf/fbioe-11-1143157.pdf",
+      "source": {
+        "id": "https://openalex.org/S2764455111",
+        "display_name": "PubMed Central",
+        "type": "repository",
+        "host_organization_name": "National Institutes of Health"
+      },
+      "license": "cc-by",
+      "version": "submittedVersion"
+    },
+    {
+      "is_oa": true,
+      "landing_page_url": "https://doaj.org/article/ef24fdada7f846b1afbab64c81655a9b",
+      "pdf_url": null,
+      "source": {
+        "id": "https://openalex.org/S4306401280",
+        "display_name": "DOAJ (DOAJ: Directory of Open Access Journals)",
+        "type": "repository",
+        "host_organization_name": null
+      },
+      "license": "cc-by-sa",
+      "version": "submittedVersion"
+    }
+  ],
+  "best_oa_location": {
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.3389/fbioe.2023.1143157",
+    "pdf_url": "http://STANDIN/files/paywall.pdf",
+    "source": {
+      "id": "https://openalex.org/S2595131146",
+      "display_name": "Frontiers in Bioengineering and Biotechnology",
+      "type": "journal",
+      "host_organization_name": "Frontiers Media"
+    },
+    "license": "cc-by",
+    "version": "publishedVersion"
+  },
+  "cited_by_count": 619,
+  "type": "article",
+  "language": "en",
+  "ids": {
+    "openalex": "https://openalex.org/W4323666400",
+    "doi": "https://doi.org/10.3389/fbioe.2023.1143157",
+    "pmid": "https://pubmed.ncbi.nlm.nih.gov/36970624"
+  },
+  "biblio": {
+    "volume": "11",
+    "issue": null,
+    "first_page": "1143157",
+    "last_page": "1143157"
+  }
+}

@@ -94,6 +94,10 @@ _Avoid_: citation format, reference style
 Every Document a Mind cites, once each, in its citation style: the References at the Mind's end, kept up to date, and the end of its exports. A Document whose reference record is too thin to cite is listed by its name, marked "needs details".
 _Avoid_: works cited (except as a style's own heading), sources list
 
+**Source provider**:
+A public service that Find sources searches for works to add to the Library: OpenAlex, arXiv and PubMed (Crossref looks a DOI up); later, services for laws, regulations, filings and drug labels. A work with an open-access copy is added as a Document, which keeps the provider it came from and the date of the version it holds; any other work, as its Reference record alone. Each Source provider is asked once for consent before anything is sent to it.
+_Avoid_: source (a Document is not one), database, provider on its own (an AI model's provider)
+
 **Location**:
 Where in a Document a Citation points, in the unit the Document's own readers use: one or two pages of a PDF, one or two slides of a deck (speaker notes count as part of their slide), a sheet and a range of rows of a spreadsheet, the section a quote sits under in a Word file or Markdown (for a quote of a Word comment, the section the comment is anchored in, and that it is a comment by its author), the section and paragraphs of a Web page, or a range of lines in plain text.
 _Avoid_: page (for anything that isn't a PDF), position, anchor
