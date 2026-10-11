@@ -4302,6 +4302,11 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    /* "Stopped" and the dots between are never cut: the model and the scope give way first. */
+    > [aria-hidden],
+    > .assistant-answer-status {
+      flex-shrink: 0;
+    }
   }
   .assistant-answer-actions--added {
     gap: 4px;
