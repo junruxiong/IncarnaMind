@@ -25,6 +25,13 @@ export interface Shortcut {
    * anywhere in the window.
    */
   list?: true;
+  /**
+   * Keys the User also types with (⌘⌫ deletes to the line's start), which the
+   * command takes only where its `when` holds in the note: ⌘⌫ rejects the
+   * change the cursor is in, and deletes as ever anywhere else. Such a
+   * command acts on a Block (`appliesTo`) and says where it applies (`when`).
+   */
+  inText?: true;
 }
 
 export interface CommandContext {

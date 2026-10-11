@@ -57,3 +57,11 @@ One core call does all of this for every feature that makes a file (`OutputFiles
 - **Overwrite the original, with a backup:** the most convenient, like saving in Word, but it fights cloud-drive sync clients and risks losing the User's file.
 - **Never write inside a Linked folder** (the rule until now): the strictest, but every Word round trip would be saved somewhere away from its original.
 - **Ask before every save into a Linked folder:** safe, but asking again and again teaches the User to click through; adding a file is not destructive, so one answer per folder is enough.
+
+## Amendment: check results, saved pages, Tasks and Checkpoints retain old versions too (2026-10-11, #79)
+
+An old version's text was kept only while a Citation quoted it. Check results (their evidence), saved pages, unfinished Tasks and Checkpoints point at versions too, and they are kept outside Minds. Each now retains the versions it needs, and where in them, in one table (migration 48, `src/core/documents/retention.ts`):
+
+- The start-up clean-up keeps a version that a Citation quotes or something retains. It reads every retained version with one query, beside its walk over Minds, which isn't extended.
+- Unlinking a Linked folder keeps the Units retained, as it keeps those Citations point to.
+- Once its last owner releases a version, and no Citation quotes it, its text goes at the next start. A release stays as a deleted row for 30 days, for a later sync to pass on, and is then forgotten.
