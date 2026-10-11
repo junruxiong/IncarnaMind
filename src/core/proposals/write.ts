@@ -125,6 +125,13 @@ export interface Selection {
   text: string;
   /** The whole paragraphs it is in, the same way. */
   context: string;
+  /**
+   * The words just before and just after it in its paragraphs, when it is
+   * part of one: its new text must fit between them, and not repeat them.
+   * "" at a paragraph's edge.
+   */
+  before: string;
+  after: string;
   /** How many characters it holds, for the model's window. */
   characters: number;
 }
@@ -275,6 +282,8 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
     context.push(blockText(element));
     characters += shownText.length;
   }
+  const firstBlock = chosen[0]?.element;
+  const lastBlock = chosen.at(-1)?.element;
   return {
     ok: true,
     selection: {
@@ -284,9 +293,25 @@ export function readSelection(blocks: Y.XmlFragment, from: TextPlace, to: TextPl
       plain: plain.join("\n"),
       text: text.filter((each) => each !== "").join("\n\n"),
       context: context.join("\n\n"),
+      before: firstBlock ? nearWords(blockText(firstBlock, 0, from.offset), "before") : "",
+      after: lastBlock ? nearWords(blockText(lastBlock, to.offset), "after") : "",
       characters,
     },
   };
+}
+
+/** About this many characters of the words around a selection are shown to the model. */
+const NEAR_CHARACTERS = 80;
+
+/**
+ * The end of `text` nearest the selection, `NEAR_CHARACTERS` of it at most,
+ * without a word cut in two at the far end.
+ */
+function nearWords(text: string, side: "before" | "after"): string {
+  if (text.length <= NEAR_CHARACTERS) return text.trim();
+  const cut = side === "before" ? text.slice(-NEAR_CHARACTERS) : text.slice(0, NEAR_CHARACTERS);
+  const whole = side === "before" ? cut.replace(/^\S*\s+/u, "") : cut.replace(/\s+\S*$/u, "");
+  return (whole === "" ? cut : whole).trim();
 }
 
 /** How an inline node is compared, and read by the model; a footnote moved takes its text along (`source`). */
@@ -349,19 +374,32 @@ function tokensIn(
   return tokens;
 }
 
-/** A paragraph's whole text as context for the model: inline nodes as they read, Citations as "[·]". */
-function blockText(element: Y.XmlElement): string {
-  return layout(element)
-    .map(({ node }) => {
-      if (node instanceof Y.XmlText) {
-        return (node.toDelta() as Run[]).map((run) => stringOf(run.insert)).join("");
+/**
+ * A paragraph's text as context for the model, all of it or from `start` to
+ * `end` (`TextPlace` offsets), as the Mind reads it: what Proposals still
+ * waiting add left out, inline nodes as they read, Citations as "[·]".
+ */
+function blockText(element: Y.XmlElement, start = 0, end = Number.POSITIVE_INFINITY): string {
+  let text = "";
+  for (const { node, start: at, size } of layout(element)) {
+    if (at + size <= start || at >= end) continue;
+    if (node instanceof Y.XmlText) {
+      let offset = at;
+      for (const run of node.toDelta() as Run[]) {
+        const words = stringOf(run.insert);
+        const from = offset;
+        offset += typeof run.insert === "string" ? words.length : 1;
+        if (run.attributes && PROPOSAL_INSERT_MARK in run.attributes) continue;
+        text += words.slice(Math.max(0, start - from), Math.max(0, end - from));
       }
-      if (node.nodeName === MATH) return `$${stringOf(node.getAttribute("latex"))}$`;
-      if (node.nodeName === BREAK) return "\n";
-      return node.nodeName === CITATION_NODE ? "[·]" : "";
-    })
-    .join("")
-    .trim();
+      continue;
+    }
+    if (readProposalAttribute(node.getAttribute(PROPOSAL_ATTRIBUTE))?.kind === "insert") continue;
+    if (node.nodeName === MATH) text += `$${stringOf(node.getAttribute("latex"))}$`;
+    else if (node.nodeName === BREAK) text += "\n";
+    else if (node.nodeName === CITATION_NODE) text += "[·]";
+  }
+  return text.trim();
 }
 
 // ---------------------------------------------------------------------------

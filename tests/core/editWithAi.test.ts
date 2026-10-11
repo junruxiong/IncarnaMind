@@ -236,9 +236,12 @@ describe("Edit with AI", () => {
     ]);
   });
 
-  test("a selection inside a paragraph changes only what was selected", async () => {
-    const { core, mind, client } = await setUp(editingModel(() => "Moon"));
-    const note = paragraph(text("The moon pulls the sea, and the moon sets the tides."));
+  test("a selection inside a paragraph changes only what was selected, and the model sees the words around it", async () => {
+    const calls: EditCall[] = [];
+    const { core, mind, client } = await setUp(editingModel(() => "Moon", calls));
+    const long =
+      "Long before anyone kept tide tables, sailors watched how the water rose and fell. ";
+    const note = paragraph(text(`${long}The moon pulls the sea, and the moon sets the tides.`));
     writeMind(client, [note]);
     await client.settled();
     const plain = plainOf(client, note.attrs.id);
@@ -255,8 +258,13 @@ describe("Edit with AI", () => {
     });
 
     expect(shownWithChanges(client)).toEqual([
-      "The moon pulls the sea, and the [-moon-]{+Moon+} sets the tides.",
+      `${long}The moon pulls the sea, and the [-moon-]{+Moon+} sets the tides.`,
     ]);
+    // About 80 characters before it, no word cut in two, and what follows it.
+    expect(calls[0]?.prompt).toContain(
+      "<before>\nsailors watched how the water rose and fell. The moon pulls the sea, and the\n</before>",
+    );
+    expect(calls[0]?.prompt).toContain("<after>\nsets the tides.\n</after>");
   });
 
   test("a Citation the new text keeps stays, and is checked again; one it drops is shown for review", async () => {
@@ -823,6 +831,16 @@ describe("Changes out of date", () => {
       }),
     ).toMatchObject({ kind: "proposed", proposals: 1, outOfDate: 0 });
     expect(calls.at(-1)).toMatchObject({ passage: "really", action: "improve" });
+    // A few words in a sentence: the model sees the words around them, to fit between and not repeat.
+    expect(calls.at(-1)?.prompt).toContain(
+      "<before>\nThe tides are strong and\n</before>\n\n<passage>\nreally\n</passage>\n\n<after>\nregular.\n</after>",
+    );
+    expect(calls.at(-1)?.system).toContain(
+      "The new text must fit between the words before and after it. Never repeat those words in it.",
+    );
+    // A whole paragraph has no words around it.
+    expect(calls[0]?.prompt).not.toContain("<before>");
+    expect(calls[0]?.prompt).not.toContain("<after>");
     expect(shownWithChanges(client)).toEqual([
       "The tides are strong and [-really-]{+truly+} regular.",
     ]);
