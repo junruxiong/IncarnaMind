@@ -1809,4 +1809,10 @@ export const en = {
     "Audio stays on this Mac and is deleted a day after each meeting at the latest.",
   "meetings.settings.kept.other":
     "Audio stays on this computer and is deleted a day after each meeting at the latest.",
+  "meetings.command.pause": "Pause recording",
+  "meetings.command.resume": "Resume recording",
+  "meetings.command.stop": "Stop recording",
+  "meetings.command.stopConfirm":
+    "Stop recording? This meeting can’t be picked up again. What was recorded is kept.",
+  "meetings.command.noneLive": "No meeting is being recorded",
 } as const satisfies Record<string, string>;

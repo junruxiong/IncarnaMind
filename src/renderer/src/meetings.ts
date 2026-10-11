@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
-import type { AudioSource, Meeting } from "../../core/api";
+import type { AudioSource, Meeting, Settings } from "../../core/api";
 import { core } from "./core";
 import { errorMessage } from "./errors";
 import { useAppStore } from "./store";
@@ -13,6 +13,8 @@ interface MeetingsState {
   noticeFor: { meetingId: string; systemAudio: boolean } | null;
   /** The gaps the User has dismissed, by Meeting: how many of its gaps they have seen. */
   gapsSeen: Readonly<Record<string, number>>;
+  /** Lists the Meetings, at startup; the core's events keep the list after that. */
+  load(): Promise<void>;
   /** "Record a meeting": a new Mind, in a tab of its own, with the start block. */
   record(): Promise<void>;
   /** Start recording, after the one-time notice if this device hasn't shown it. */
@@ -46,6 +48,14 @@ export const useMeetings = create<MeetingsState>()((set, get) => {
     problems: {},
     noticeFor: null,
     gapsSeen: {},
+
+    async load() {
+      try {
+        set({ meetings: await core.listMeetings() });
+      } catch (error) {
+        useAppStore.getState().reportError(error);
+      }
+    },
 
     async record() {
       try {
@@ -100,11 +110,11 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
   return rest;
 }
 
-core.listMeetings().then(
-  (meetings) => useMeetings.setState({ meetings }),
-  (error: unknown) => useAppStore.getState().reportError(error),
-);
 core.on("meetings.changed", (meetings) => useMeetings.setState({ meetings }));
+
+/** Meetings are turned on in Settings, and this copy can record. */
+export const canRecordMeetings = (settings: Settings | null): boolean =>
+  !!settings?.device.meetingsEnabled && settings.meetingAudio !== "none";
 
 /** The Mind's Meeting, if it has one. */
 export const useMeetingOf = (mindId: string): Meeting | undefined =>

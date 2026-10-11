@@ -1,6 +1,7 @@
 import { noteHolding } from "../editor/noteKeymap";
 import { useAppStore } from "../store";
 import { composerHandle, sidebarHandle } from "./handles";
+import { meetingCommands } from "./meetings";
 import { type Command, commands, fromMenu } from "./registry";
 import { tableCommands } from "./tables";
 import { tabCommands } from "./tabs";
@@ -13,6 +14,7 @@ const appCommands: readonly Command[] = [
     run: () => useAppStore.getState().createMind(),
   },
   ...tabCommands,
+  ...meetingCommands,
   {
     ...fromMenu("settings.open"),
     group: "open",
