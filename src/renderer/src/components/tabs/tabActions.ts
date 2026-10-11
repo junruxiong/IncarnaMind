@@ -1,20 +1,11 @@
-import { MAX_TAB_GROUPS } from "../../../../core/api";
+import { type LayoutChange, type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
 import { activeTabOf, focusedGroupOf, groupOfTab, groupsMerged } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 
 /*
- * What the tab shortcuts, menus and buttons do beyond one change to the
- * layout: they say why nothing happened, and move the keyboard's focus with
- * the tab.
+ * What the tab commands and buttons do beyond one change to the layout: they
+ * say why nothing happened, and move the keyboard's focus with the tab.
  */
-
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** ⌥⌘\ as this system writes it: ⌘\ shows and hides the sidebar. */
-export const SPLIT_SHORTCUT = isMac ? "⌥⌘\\" : "Ctrl+Alt+\\";
-/** ⌘W, ⇧⌘T and ⌘T as this system writes them. */
-export const CLOSE_SHORTCUT = isMac ? "⌘W" : "Ctrl+W";
-export const REOPEN_SHORTCUT = isMac ? "⇧⌘T" : "Ctrl+Shift+T";
 
 /** Moves the keyboard's focus to a tab once it is drawn. */
 export function focusTab(tabId: string | null | undefined): void {
@@ -63,6 +54,15 @@ export async function moveToGroup(tabId: string, direction: -1 | 1): Promise<voi
     ? await store.changeLayout({ type: "move", tabId, groupId: target.id, before: null })
     : await store.changeLayout({ type: "split", tabId, side: "right", copy: false });
   if (next) focusTab(tabId);
+}
+
+/** Closes tabs, then says how many, with Reopen. */
+export async function closeSome(change: LayoutChange, tab: LayoutTab): Promise<void> {
+  const store = useAppStore.getState();
+  const before = store.layout?.reopenable ?? 0;
+  const next = await store.changeLayout(change);
+  const count = next ? next.reopenable - before : 0;
+  if (count > 0) store.showTabNotice({ kind: "closed", item: tab.item, count });
 }
 
 /** Shows the next or previous tab of the focused group (Ctrl+Tab, Ctrl+Shift+Tab). */

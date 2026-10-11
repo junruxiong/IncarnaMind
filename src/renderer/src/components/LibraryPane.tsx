@@ -169,6 +169,7 @@ export function LibraryPane() {
   return (
     <section
       data-testid="library"
+      data-surface="library"
       role="tabpanel"
       id="mind-tabpanel"
       aria-labelledby="library-tab"

@@ -29,11 +29,15 @@ export interface LayoutSlice {
   /** Null until loaded. */
   layout: WindowLayout | null;
   tabNotice: TabNotice | null;
+  /** The tab whose name is being typed in it, if any. */
+  renamingTabId: string | null;
   /** Reads the window's layout from the core, as it was left. */
   loadLayout(): Promise<void>;
   /** Changes the layout through the core; resolves with it once the store has it (null if refused). */
   changeLayout(change: LayoutChange): Promise<WindowLayout | null>;
   showTabNotice(notice: TabNotice | null): void;
+  /** Starts typing a tab's name in it, or stops (null). */
+  renameTab(tabId: string | null): void;
 }
 
 type Set = (partial: Partial<LayoutSlice>) => void;
@@ -42,6 +46,7 @@ export function createLayoutSlice(set: Set, report: (error: unknown) => void): L
   return {
     layout: null,
     tabNotice: null,
+    renamingTabId: null,
     async loadLayout() {
       set({ layout: await core.getLayout(WINDOW_ID) });
     },
@@ -57,6 +62,9 @@ export function createLayoutSlice(set: Set, report: (error: unknown) => void): L
     },
     showTabNotice(notice) {
       set({ tabNotice: notice });
+    },
+    renameTab(tabId) {
+      set({ renamingTabId: tabId });
     },
   };
 }

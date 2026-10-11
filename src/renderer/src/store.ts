@@ -33,7 +33,6 @@ import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from ".
 import {
   createLayoutSlice,
   currentMindIdOf,
-  currentTabOf,
   followLayout,
   groupsMerged,
   type LayoutSlice,
@@ -210,8 +209,6 @@ interface AppState extends LayoutSlice {
   openMind(id: string, options?: { side?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;
-  /** ⌘W: closes the focused group's shown tab, unless it is pinned. */
-  closeActiveTab(): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
   reopenTab(): void;
   renameMind(id: string, title: string): Promise<void>;
@@ -770,14 +767,6 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (tab) void closeTabWith(tab);
     },
 
-    closeActiveTab() {
-      const tab = currentTabOf(get().layout);
-      if (!tab) return;
-      // As in VS Code: a pinned tab closes from its menu, or once unpinned.
-      if (tab.pinned) get().showTabNotice({ kind: "pinned", item: tab.item });
-      else void closeTabWith(tab);
-    },
-
     reopenTab() {
       if (!get().layout?.reopenable) return;
       get().showTabNotice(null);
@@ -1148,7 +1137,10 @@ core.on("document.status", (changed) => {
 });
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".
-core.on("examples.changed", (examples) => useAppStore.setState({ examples }));
+// The screen shows the tea example; the groups' examples open from the first run's picks.
+core.on("examples.changed", (examples) => {
+  if (examples.group === "tea") useAppStore.setState({ examples });
+});
 
 // Privacy choices change on the Privacy page, at the first run's question, or with local mode.
 core.on("privacy.changed", (privacy) => useAppStore.setState({ privacy }));

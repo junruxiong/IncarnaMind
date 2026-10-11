@@ -1,152 +1,117 @@
 import type { ReactNode } from "react";
-import { type LayoutChange, type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
+import { type LayoutTab, MAX_TAB_GROUPS } from "../../../../core/api";
+import type { CommandId } from "../../../../shared/commands";
+import { shortcutLabel } from "../../commands/keymap";
+import { type CommandContext, commands, isEnabled, offered } from "../../commands/registry";
 import { useT } from "../../i18n";
 import { groupOfTab } from "../../layoutSlice";
 import { useAppStore } from "../../store";
 import { MoreLineIcon } from "../lineIcons";
 import { menuClass, menuItemClass, menuRuleClass } from "../ui";
 import { usePopoverMenu } from "../usePopoverMenu";
-import {
-  CLOSE_SHORTCUT,
-  focusTab,
-  moveToGroup,
-  REOPEN_SHORTCUT,
-  SPLIT_SHORTCUT,
-  splitToTheRight,
-} from "./tabActions";
+import { focusTab } from "./tabActions";
 
-/** One item of a tab's or group's menu, or a rule between them. */
+/** One item of a tab's or group's menu, which runs a command, or a rule between them. */
 type Item =
   | {
+      /** Its test ID, after "tab-menu-". */
       id: string;
+      command: CommandId;
+      /** Shorter than the command's label: the menu says what it acts on. */
       label: string;
-      shortcut?: string;
       disabled?: boolean;
-      run(): void;
     }
   | "rule";
 
-function MenuItems({ items, close }: { items: (Item | false)[]; close(): void }) {
+const onTab = (tabId: string | undefined): CommandContext => ({
+  selection: [],
+  focus: tabId ? { kind: "tab", id: tabId } : null,
+  surface: "mind",
+});
+
+function MenuItems({
+  items,
+  ctx,
+  close,
+}: {
+  items: (Item | false)[];
+  ctx: CommandContext;
+  close(): void;
+}) {
   return items.map((item, index) => {
     if (item === false) return null;
     if (item === "rule") {
       // biome-ignore lint/suspicious/noArrayIndexKey: rules have no identity but their place.
       return <div key={`rule-${index}`} className={menuRuleClass} />;
     }
+    const command = commands.get(item.command);
+    const usable = command !== undefined && offered(command, ctx) && isEnabled(command, ctx);
     return (
       <button
         key={item.id}
         type="button"
         role="menuitem"
         data-testid={`tab-menu-${item.id}`}
-        disabled={item.disabled}
+        disabled={item.disabled || !usable}
         onClick={() => {
           close();
-          item.run();
+          commands.run(item.command, ctx).catch(useAppStore.getState().reportError);
         }}
         className={`${menuItemClass} pl-2`}
       >
         <span className="flex-1">{item.label}</span>
-        {item.shortcut && <span className="pl-4 text-[13px] text-ink-meta">{item.shortcut}</span>}
+        {command?.shortcut && (
+          <span className="pl-4 text-[13px] text-ink-meta">{shortcutLabel(item.command)}</span>
+        )}
       </button>
     );
   });
-}
-
-/** Closes tabs, then says how many, with Reopen. */
-async function closeSome(change: LayoutChange, tab: LayoutTab): Promise<void> {
-  const store = useAppStore.getState();
-  const before = store.layout?.reopenable ?? 0;
-  const next = await store.changeLayout(change);
-  const count = next ? next.reopenable - before : 0;
-  if (count > 0) store.showTabNotice({ kind: "closed", item: tab.item, count });
 }
 
 /**
  * A tab's menu: its right-click menu, and what Shift+F10 or the context-menu
  * key open on it. Its button is out of sight in the tab, so the menu opens under the tab.
  */
-export function TabMenu({
-  tab,
-  title,
-  onRename,
-}: {
-  tab: LayoutTab;
-  title: string;
-  onRename(): void;
-}) {
+export function TabMenu({ tab, title }: { tab: LayoutTab; title: string }) {
   const t = useT();
   const menu = usePopoverMenu();
   const layout = useAppStore((state) => state.layout);
   const at = groupOfTab(layout, tab.id);
-  const { changeLayout, closeTab } = useAppStore.getState();
   const groups = layout?.groups.length ?? 1;
-  const group = at?.group;
   const index = at?.index ?? 0;
-  const position = group?.tabs.findIndex((each) => each.id === tab.id) ?? 0;
+  const moveRight = index < groups - 1;
   const items: (Item | false)[] = menu.open
     ? [
-        tab.preview && {
-          id: "keep",
-          label: t("tabs.menu.keep"),
-          run: () => void changeLayout({ type: "keep", tabId: tab.id }),
-        },
+        tab.preview && { id: "keep", command: "tab.keep", label: t("tabs.menu.keep") },
         {
           id: tab.pinned ? "unpin" : "pin",
+          command: "tab.pin",
           label: t(tab.pinned ? "tabs.menu.unpin" : "tabs.menu.pin"),
-          run: () => void changeLayout({ type: "pin", tabId: tab.id, pinned: !tab.pinned }),
         },
         "rule",
+        // At three groups ⌥⌘\ says why nothing happens; here the item is off.
         {
           id: "side",
+          command: "tab.split",
           label: t("tabs.menu.side"),
-          shortcut: SPLIT_SHORTCUT,
           disabled: groups >= MAX_TAB_GROUPS,
-          run: () => void splitToTheRight(tab.id),
         },
-        index > 0 && {
-          id: "move-left",
-          label: t("tabs.menu.moveLeft"),
-          run: () => void moveToGroup(tab.id, -1),
+        index > 0 && { id: "move-left", command: "tab.moveLeft", label: t("tabs.menu.moveLeft") },
+        {
+          id: moveRight ? "move-right" : "move-new",
+          command: "tab.moveRight",
+          label: t(moveRight ? "tabs.menu.moveRight" : "tabs.menu.moveNew"),
         },
-        index < groups - 1
-          ? {
-              id: "move-right",
-              label: t("tabs.menu.moveRight"),
-              run: () => void moveToGroup(tab.id, 1),
-            }
-          : groups < MAX_TAB_GROUPS &&
-            (group?.tabs.length ?? 0) > 1 && {
-              id: "move-new",
-              label: t("tabs.menu.moveNew"),
-              run: () => void moveToGroup(tab.id, 1),
-            },
         tab.item.kind === "mind" && "rule",
         tab.item.kind === "mind" && {
           id: "rename",
+          command: "tab.rename",
           label: t("tabs.menu.rename"),
-          shortcut: "F2",
-          run: onRename,
         },
         "rule",
-        {
-          id: "close",
-          label: t("tabs.menu.close"),
-          shortcut: CLOSE_SHORTCUT,
-          run: () => closeTab(tab.id),
-        },
-        {
-          id: "close-others",
-          label: t("tabs.menu.closeOthers"),
-          disabled: (group?.tabs.length ?? 0) < 2,
-          run: () => void closeSome({ type: "closeOthers", tabId: tab.id }, tab),
-        },
-        {
-          id: "close-right",
-          label: t("tabs.menu.closeRight"),
-          disabled: position >= (group?.tabs.length ?? 0) - 1,
-          run: () => void closeSome({ type: "closeToTheRight", tabId: tab.id }, tab),
-        },
+        { id: "close", command: "tab.close", label: t("tabs.menu.close") },
+        { id: "close-others", command: "tab.closeOthers", label: t("tabs.menu.closeOthers") },
+        { id: "close-right", command: "tab.closeToTheRight", label: t("tabs.menu.closeRight") },
       ]
     : [];
   return (
@@ -173,57 +138,33 @@ export function TabMenu({
           if (event.key === "Escape") focusTab(tab.id);
         }}
       >
-        <MenuItems items={items} close={menu.close} />
+        <MenuItems items={items} ctx={onTab(tab.id)} close={menu.close} />
       </div>
     </>
   );
 }
 
-/** The ⋯ at a group strip's end: what applies to the group and its tabs. */
+/** The ⋯ at a group strip's end: what applies to the group and its shown tab. */
 export function GroupMenu({ groupId, merged }: { groupId: string; merged: boolean }) {
   const t = useT();
   const menu = usePopoverMenu();
   const layout = useAppStore((state) => state.layout);
   const group = layout?.groups.find((each) => each.id === groupId);
-  const groups = layout?.groups.length ?? 1;
-  const store = useAppStore.getState();
-  const shown = group?.tabs.find((tab) => tab.id === group.activeTabId);
+  const full = (layout?.groups.length ?? 0) >= MAX_TAB_GROUPS;
   const items: (Item | false)[] =
     menu.open && group
       ? [
           {
             id: "split",
+            command: "tab.split",
             label: t("tabs.menu.split"),
-            shortcut: SPLIT_SHORTCUT,
-            disabled: !shown || groups >= MAX_TAB_GROUPS || merged,
-            run: () => void splitToTheRight(shown?.id),
+            disabled: merged || full,
           },
-          {
-            id: "equal",
-            label: t("tabs.menu.equal"),
-            disabled: groups < 2 || merged,
-            run: () => void store.changeLayout({ type: "equalize" }),
-          },
+          { id: "equal", command: "group.equalize", label: t("tabs.menu.equal") },
           "rule",
-          {
-            id: "reopen",
-            label: t("tabs.menu.reopen"),
-            shortcut: REOPEN_SHORTCUT,
-            disabled: !layout?.reopenable,
-            run: () => store.reopenTab(),
-          },
-          {
-            id: "close-others",
-            label: t("tabs.menu.closeOthers"),
-            disabled: !shown || group.tabs.length < 2,
-            run: () => shown && void closeSome({ type: "closeOthers", tabId: shown.id }, shown),
-          },
-          {
-            id: "close-group",
-            label: t("tabs.menu.closeGroup"),
-            disabled: group.tabs.length === 0,
-            run: () => shown && void closeSome({ type: "closeGroup", groupId: group.id }, shown),
-          },
+          { id: "reopen", command: "tab.reopen", label: t("tabs.menu.reopen") },
+          { id: "close-others", command: "tab.closeOthers", label: t("tabs.menu.closeOthers") },
+          { id: "close-group", command: "group.close", label: t("tabs.menu.closeGroup") },
         ]
       : [];
   return (
@@ -245,7 +186,12 @@ export function GroupMenu({ groupId, merged }: { groupId: string; merged: boolea
         data-testid="group-menu-items"
         className={menuClass}
       >
-        <MenuItems items={items} close={menu.close} />
+        <MenuItems
+          items={items}
+          // An empty group has no tab to act on.
+          ctx={onTab(group?.activeTabId ?? undefined)}
+          close={menu.close}
+        />
       </div>
     </>
   );

@@ -1,20 +1,9 @@
 import { createContext, useContext, useEffect, useRef } from "react";
+import { shortcutLabel } from "../commands/keymap";
 import { files } from "../core";
 import { useT } from "../i18n";
 import { SidebarLineIcon } from "./lineIcons";
 import { iconButtonClass } from "./ui";
-
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** The shortcut as this system writes it. */
-export const SIDEBAR_SHORTCUT = isMac ? "⌘\\" : "Ctrl+\\";
-
-/** Whether a key press is the sidebar's shortcut: ⌘\ (Ctrl+\), as in Notion. */
-export const isSidebarShortcut = (event: KeyboardEvent): boolean =>
-  !event.altKey &&
-  !event.shiftKey &&
-  event.code === "Backslash" &&
-  (isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
 /** What the window tells the sidebar's toggle buttons (see `Workspace` in App.tsx). */
 export interface SidebarControl {
@@ -59,7 +48,7 @@ export function SidebarToggle({ place }: { place: "header" | "band" }) {
       aria-label={label}
       aria-expanded={!control.hidden}
       aria-controls="sidebar"
-      title={`${label} (${SIDEBAR_SHORTCUT})`}
+      title={`${label} (${shortcutLabel("sidebar.toggle")})`}
       onClick={control.toggle}
       className={`${iconButtonClass} sidebar-toggle text-ink-secondary`}
     >
