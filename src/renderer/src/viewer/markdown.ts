@@ -11,6 +11,12 @@
  * Every piece of text points back into the source (`start`/`end`), so a quote
  * found in the source can be highlighted where it is rendered.
  */
+import {
+  type CellRange,
+  delimiterRow,
+  type TableAlign,
+  tableCellRanges,
+} from "../../../shared/markdownTables";
 
 export type Inline =
   | { kind: "text"; start: number; end: number }
@@ -23,7 +29,7 @@ export type Inline =
   /** A hard line break: two spaces or a backslash at the end of a line. */
   | { kind: "break" };
 
-export type Align = "left" | "center" | "right" | null;
+export type Align = TableAlign;
 
 export interface ListItem {
   /** The item's first paragraph. */
@@ -66,7 +72,6 @@ const LIST_ITEM = /^( {0,3})(?:([-*+])|(\d{1,9})([.)]))(?:[ \t]+|$)/;
 const TASK = /^\[([ xX])\][ \t]+/;
 const DEFINITION =
   /^ {0,3}\[([^\]]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$/;
-const DELIMITER_CELL = /^:?-+:?$/;
 const BLANK = /^[ \t]*$/;
 const ESCAPABLE = /[!-/:-@[-`{-~]/;
 const SAFE_LINK = /^(?:https?:|mailto:)/i;
@@ -122,50 +127,11 @@ function interrupts(text: string): boolean {
 }
 
 /** The cells of a table row, as ranges of the source, split at "|" outside code and escapes. */
-function tableCells(line: Line): { start: number; end: number }[] {
-  const cells: { start: number; end: number }[] = [];
-  const text = line.text;
-  let at = 0;
-  let cellStart = 0;
-  let inCode = false;
-  // A leading pipe opens the first cell.
-  const lead = text.search(/\S/);
-  if (lead >= 0 && text[lead] === "|") {
-    at = lead + 1;
-    cellStart = at;
-  }
-  for (; at < text.length; at++) {
-    const char = text[at];
-    if (char === "\\") at++;
-    else if (char === "`") inCode = !inCode;
-    else if (char === "|" && !inCode) {
-      cells.push({ start: cellStart, end: at });
-      cellStart = at + 1;
-    }
-  }
-  if (text.slice(cellStart).trim() !== "") cells.push({ start: cellStart, end: text.length });
-  return cells.map(({ start, end }) => {
-    let from = start;
-    let to = end;
-    while (from < to && /\s/.test(text[from] as string)) from++;
-    while (to > from && /\s/.test(text[to - 1] as string)) to--;
-    return { start: line.start + from, end: line.start + to };
-  });
-}
-
-function isDelimiterRow(line: Line | undefined, source: string): Align[] | null {
-  if (!line?.text.includes("-") || BLANK.test(line.text)) return null;
-  const cells = tableCells(line).map(({ start, end }) => source.slice(start, end));
-  if (cells.length === 0 || !cells.every((cell) => DELIMITER_CELL.test(cell))) return null;
-  return cells.map((cell) =>
-    cell.startsWith(":") && cell.endsWith(":")
-      ? "center"
-      : cell.endsWith(":")
-        ? "right"
-        : cell.startsWith(":")
-          ? "left"
-          : null,
-  );
+function tableCells(line: Line): CellRange[] {
+  return tableCellRanges(line.text).map(({ start, end }) => ({
+    start: line.start + start,
+    end: line.start + end,
+  }));
 }
 
 /**
@@ -339,7 +305,8 @@ function parseBlocks(context: Context, lines: readonly Line[]): Block[] {
       continue;
     }
 
-    const align = text.includes("|") ? isDelimiterRow(lines[index + 1], context.source) : null;
+    const below = lines[index + 1];
+    const align = text.includes("|") && below ? delimiterRow(below.text) : null;
     if (align) {
       const head = tableCells(line);
       if (head.length === align.length) {
