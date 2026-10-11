@@ -265,14 +265,14 @@ test("sidebar rows share one text edge, in the Folders view and on disk, a folde
 
   // The sidebar's header is 44px; the card's band of tabs is 36px, 8px down, so its bottom
   // lines up with the header's rule.
-  const mindHeader = window.getByTestId("mind-header");
+  const mindHeader = window.getByTestId("tab-strip");
   const sidebarHeader = await boxOf(header);
   const mindHeaderBox = await boxOf(mindHeader);
   expect(sidebarHeader.height).toBe(44);
   expect(mindHeaderBox.height).toBe(36);
   expect(mindHeaderBox.y + mindHeaderBox.height).toBe(sidebarHeader.y + sidebarHeader.height);
   await expect(
-    mindHeader.locator('[role="tab"][aria-selected="true"]').getByTestId("mind-tab-title"),
+    mindHeader.locator('[role="tab"][aria-selected="true"]').getByTestId("tab-title"),
   ).toHaveText("Reading notes: LM scaling");
 
   // Folding a Folder hides what's inside it.
@@ -503,7 +503,7 @@ test("a Mind whose Answer waits for the User's approval shows an amber dot in th
   );
   expect((await boxOf(tabDot)).width).toBe(6);
   await screenshot(window, "sidebar-approval", window.getByTestId("sidebar"));
-  await screenshot(window, "tabs-approval", window.getByTestId("mind-header"));
+  await screenshot(window, "tabs-approval", window.getByTestId("tab-strip"));
 
   await card.getByTestId("approval-deny").click();
   await expect(dot).toHaveCount(0);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChatProvider } from "../../../../core/api";
 import { core } from "../../core";
 import { useT } from "../../i18n";
+import { currentMindIdOf, currentTabOf } from "../../layoutSlice";
 import { usageDataQuestionWaiting, useAppStore } from "../../store";
 import { buttonStyle, dialogClass } from "../ui";
 import { useModal } from "../useModal";
@@ -16,12 +17,13 @@ import { useOllama } from "./OllamaCard";
  */
 export function ChatSetupDialog() {
   const readiness = useAppStore((state) => state.chatReadiness);
-  const libraryOpen = useAppStore((state) => state.libraryOpen);
+  const libraryOpen = useAppStore((state) => currentTabOf(state.layout)?.item.kind === "library");
   const dismissed = useAppStore((state) => state.settings?.device.chatSetupDismissed);
   // The example Mind works without a model: setting one up is offered once the User moves on.
-  const onExample = useAppStore(
-    (state) => state.openMindId !== null && state.openMindId === state.examples?.mindId,
-  );
+  const onExample = useAppStore((state) => {
+    const mindId = currentMindIdOf(state.layout);
+    return mindId !== null && mindId === state.examples?.mindId;
+  });
   // The first run's question about usage data comes first.
   const usageQuestion = useAppStore((state) => usageDataQuestionWaiting(state.privacy));
   const open =

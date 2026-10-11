@@ -1,5 +1,10 @@
 import type { ComponentType } from "react";
-import type { CommandId, ShortcutKeys } from "../../../shared/commands";
+import {
+  type CommandId,
+  MENU_COMMANDS,
+  type MenuCommandId,
+  type ShortcutKeys,
+} from "../../../shared/commands";
 import type { MessageKey } from "../../../shared/i18n";
 import type { ObjectKind, ObjectRef, Translate, Undoable } from "../objects";
 import { checkKeys } from "./keys";
@@ -47,6 +52,13 @@ export interface Command {
   reversible: true | { confirm: MessageKey };
   run(ctx: CommandContext): void | Undoable | Promise<Undoable | void>;
 }
+
+/** A menu item's command takes its label and keys from the menu's list, so they agree. */
+export const fromMenu = (id: MenuCommandId) => ({
+  id,
+  label: MENU_COMMANDS[id].label,
+  shortcut: { keys: MENU_COMMANDS[id].keys },
+});
 
 const NO_CONTEXT: CommandContext = { selection: [], focus: null, surface: "mind" };
 
