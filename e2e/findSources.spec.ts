@@ -12,6 +12,7 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { type SourceServices, startSourceServices } from "../tests/helpers/sourceServices";
 import {
+  acceptPlainTextKeys,
   createDataFolder,
   dismissChatSetup,
   interceptOpenExternal,
@@ -321,6 +322,7 @@ test("choosing openFDA finds a drug label and shows its disclaimer; an openFDA k
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-pressed", "false");
     }
+    await acceptPlainTextKeys(window);
     await panel.getByTestId("find-sources-key-open").click();
     const key = panel.getByTestId("find-sources-key");
     await expect(key).toHaveAttribute("type", "password");
