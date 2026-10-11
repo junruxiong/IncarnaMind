@@ -13,9 +13,11 @@ import {
   launchApp,
   motionSettled,
   newMind,
+  pointAndClick,
   removeDataFolder,
   setGroupBeside,
   setWindowSize,
+  slideToHandle,
   useLocalChatModel,
 } from "./app";
 
@@ -47,7 +49,7 @@ test.afterEach(async () => {
 
 /**
  * The Mind as wide as the approved mockups drew it (a 1440px window's card),
- * beside the assistant docked on the right (#253), which takes 368px of it.
+ * beside the assistant docked on the right (#253), which takes 328px of it.
  */
 async function useMockupSize(app: ElectronApplication, window: Page) {
   await setWindowSize(app, window, 1600, 900);
@@ -252,7 +254,7 @@ test("every text in a Mind starts at one edge, its controls sit in the left marg
   await window.mouse.click(away.x, away.y);
   await expect(card).toHaveCount(0);
 
-  // Under 900px (here, the viewer open beside it) the margins fold away: the markers show the checks.
+  // Under 760px (here, the viewer open beside it) the margins fold away: the markers show the checks.
   await setGroupBeside(window, true);
   await expect(window.getByTestId("margin-checks")).toBeHidden();
   await expect(markers.nth(0).locator(".citation-marker-icon")).toBeVisible();
@@ -443,3 +445,173 @@ test("an approval card is a ruled block whose sections share one text edge, for 
   await expect(second).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await app.close();
 });
+
+/** Sizes the window until the Mind's column is `width` wide: the sidebar and the assistant take the rest. */
+async function sizeMind(app: ElectronApplication, window: Page, width: number) {
+  const column = window.locator(".mind-column");
+  let windowWidth = width + 400;
+  for (let tries = 0; tries < 3; tries++) {
+    await setWindowSize(app, window, windowWidth, 900);
+    const have = (await box(column)).width;
+    if (Math.abs(have - width) <= 1) return;
+    windowWidth += Math.round(width - have);
+  }
+  await expect.poll(async () => Math.abs((await box(column)).width - width)).toBeLessThanOrEqual(1);
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  for (const mindWidth of [650, 800, 1440]) {
+    test(`a Question's fold chevron and the Block handle share the 40px left margin without covering each other, in a ${mindWidth}px Mind (${language})`, async () => {
+      const { app, window } = await launchApp(dataDir, { fakeChat: true });
+      await dismissChatSetup(window);
+      await useLocalChatModel(window);
+      await window.evaluate(async (chosen) => {
+        const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        await bridge.updateSettings({ user: { language: chosen } });
+      }, language);
+      await newMind(window);
+      await window.getByTestId("mind-title").fill("Tides");
+      await enterContent(window);
+      const editor = window.getByTestId("mind-editor");
+      await window.keyboard.type("Spring tides follow the Moon.");
+      await window.keyboard.press("Enter");
+      await window.keyboard.press("ControlOrMeta+j");
+      await window.keyboard.type("When do spring tides happen?");
+      await window.keyboard.press("Enter");
+      const answer = editor.getByTestId("answer");
+      await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
+      await sizeMind(app, window, mindWidth);
+
+      const question = editor.getByTestId("question");
+      const fold = question.getByTestId("question-fold");
+      const handle = window.getByTestId("block-handle");
+      const edge = (await textColumn(editor)).x;
+
+      // Hover the Question: the handle shows, in the outer half of the margin, and the
+      // chevron stays in the inner half. Neither covers the other, and both are in the margin.
+      await slideToHandle(window, question);
+      const [foldBox, handleBox] = [await box(fold), await box(handle)];
+      expect(
+        handleBox.x + handleBox.width,
+        "the handle is left of the chevron",
+      ).toBeLessThanOrEqual(foldBox.x + 0.5);
+      expect(handleBox.x, "the handle is inside the margin").toBeGreaterThanOrEqual(edge - 40 - 1);
+      expect(foldBox.x + foldBox.width, "the chevron is left of the text").toBeLessThanOrEqual(
+        edge + 1,
+      );
+      // The spark gives its place to the handle, so nothing sits under it.
+      await expect(question.locator(".question-spark")).toHaveCSS("opacity", "0");
+      await screenshot(window, `question-margin-${language}-${mindWidth}.png`);
+
+      // The mouse: the chevron folds the Answer and unfolds it again.
+      await pointAndClick(window, fold);
+      await expect(fold).toHaveAttribute("aria-expanded", "false");
+      await expect(answer).toBeHidden();
+      await pointAndClick(window, fold);
+      await expect(answer).toBeVisible();
+      await expect(fold).toHaveAttribute("aria-expanded", "true");
+
+      // The mouse: the handle opens its menu.
+      await (await slideToHandle(window, question)).click();
+      await expect(window.getByTestId("block-menu")).toBeVisible();
+      await window.keyboard.press("Escape");
+      await expect(window.getByTestId("block-menu")).toHaveCount(0);
+      await expect(editor).toBeFocused();
+
+      // The keyboard: the chevron takes Enter, and Shift+F10 opens the Block's menu.
+      await fold.focus();
+      await window.keyboard.press("Enter");
+      await expect(fold).toHaveAttribute("aria-expanded", "false");
+      await expect(fold).toBeFocused();
+      await window.keyboard.press("Enter");
+      await expect(fold).toHaveAttribute("aria-expanded", "true");
+      await question.locator(".question-text").click();
+      await window.keyboard.press("Shift+F10");
+      await expect(window.getByTestId("block-menu")).toBeVisible();
+      await window.keyboard.press("Escape");
+      await expect(window.getByTestId("block-menu")).toHaveCount(0);
+      await app.close();
+    });
+  }
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`the margins narrow to 40px before they fold at 760px, where the checks move inline and both gutters stay 40px, with the composer under the text (${language})`, async () => {
+    await writeFile(join(sources, "Tides.pdf"), TIDES);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await window.evaluate(async (chosen) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      await bridge.updateSettings({ user: { language: chosen } });
+    }, language);
+    await addDocuments(window, [join(sources, "Tides.pdf")]);
+    await setWindowSize(app, window, 1440, 900);
+    await newMind(window);
+    await window.getByTestId("mind-title").fill("Tides");
+    await enterContent(window);
+    const editor = window.getByTestId("mind-editor");
+    await window.keyboard.type("Spring tides follow the Moon.");
+    await window.keyboard.press("Enter");
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type("When do spring tides happen, and what makes them stronger?");
+    await window.keyboard.press("Enter");
+    await expect(editor.getByTestId("answer")).toHaveAttribute("data-status", "done", {
+      timeout: 15_000,
+    });
+    const column = window.locator(".mind-column");
+    const gutters = async () => {
+      const [text, col] = [await textColumn(editor), await box(column)];
+      return { left: text.x - col.x, right: col.x + col.width - (text.x + text.width) };
+    };
+
+    // A 1,440px window with the assistant docked at its default width: the checks stay in the margin.
+    await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "right");
+    expect(await (await box(window.getByTestId("assistant"))).width).toBeCloseTo(320, 0);
+    const marks = window.getByTestId("margin-check");
+    await expect(marks.first()).toBeVisible();
+    expect((await box(column)).width, "the Mind is under the old 900px fold").toBeLessThan(900);
+    const wide = await gutters();
+    expect.soft(wide.left, "the left margin holds the controls").toBeGreaterThanOrEqual(40);
+    expect.soft(wide.right, "the right margin holds the checks").toBeGreaterThanOrEqual(40);
+
+    // Narrowed, not folded, at 760px: both margins 40px, the checks still beside the text.
+    await sizeMind(app, window, 760);
+    await expect(window.getByTestId("margin-checks")).toBeVisible();
+    const at760 = await gutters();
+    expectNear(at760.left, 40, 1, "the left margin at 760px");
+    expectNear(at760.right, 40, 1, "the right margin at 760px");
+    const mark = await box(marks.first());
+    const text = await textColumn(editor);
+    expect.soft(mark.x).toBeGreaterThanOrEqual(text.x + text.width);
+    expect.soft(mark.x + mark.width).toBeLessThanOrEqual(text.x + text.width + 40);
+
+    // Folded under 760px: the checks move inline, both gutters stay 40px, and the text edge doesn't move.
+    await sizeMind(app, window, 650);
+    await expect(window.getByTestId("margin-checks")).toBeHidden();
+    await expect(
+      editor.getByTestId("citation-chip").first().locator(".citation-marker-icon"),
+    ).toBeVisible();
+    const folded = await gutters();
+    expectNear(folded.left, 40, 1, "the left gutter when folded");
+    expectNear(folded.right, 40, 1, "the right gutter when folded");
+    expectNear(folded.left, at760.left, 1, "the text edge across the fold");
+
+    // The composer, drawn at the foot in a window this narrow, lines up with the text.
+    await setWindowSize(app, window, 900, 900);
+    await expect(window.getByTestId("assistant")).toHaveAttribute("data-dock", "bottom");
+    const composer = await box(window.getByTestId("composer"));
+    const edge = await textColumn(editor);
+    const dock = await box(window.getByTestId("assistant"));
+    expectNear(composer.x, edge.x, 1, "the composer's left edge");
+    expectNear(composer.x - dock.x, 40, 1, "the composer's left gutter");
+    expectNear(
+      dock.x + dock.width - (composer.x + composer.width),
+      40,
+      1,
+      "the composer's right gutter",
+    );
+    await screenshot(window, `folded-${language}.png`);
+    await app.close();
+  });
+}

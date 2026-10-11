@@ -3,14 +3,20 @@
  * every Block above the Question, in order, except Notes the User switched off:
  * Notes and earlier Questions as the User's words, earlier Answers as the
  * model's. In a conversation, its earlier Questions and Answers the same way.
- * When that is over the token budget, the oldest content goes first.
+ * When that is over the token budget, the oldest content goes first. Where
+ * the third-party text in it came from is read beside it (#78): an Answer to
+ * such a context is written by a Run that counts as having read that text.
  */
 import * as Y from "yjs";
+import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
+  BLOCK_ID_ATTRIBUTE,
   type ConversationMessage,
   INCLUDE_IN_CONTEXT_ATTRIBUTE,
+  MIND_TEXT_ORIGINS_FIELD,
   QUESTION_BLOCK,
+  type ThirdPartySource,
 } from "../api";
 import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks";
 import { answerMarkdown } from "./contextText";
@@ -31,6 +37,8 @@ const MIN_TAIL_TOKENS = 64;
 interface Piece {
   role: AnswerMessage["role"];
   text: string;
+  /** Where the third-party text in it came from (#78); absent: none. */
+  origins?: readonly ThirdPartySource[];
 }
 
 /** Characters written with one token each, roughly: CJK, kana, Hangul and full-width forms. */
@@ -97,6 +105,39 @@ export interface QuestionContext {
   question: string;
 }
 
+/** A Question context, and where the third-party text it holds came from. */
+export interface QuestionContextWithOrigins {
+  context: QuestionContext;
+  /**
+   * Where the third-party text in what the context keeps came from (#78),
+   * each once, the newest first: the Blocks (or earlier Answers) it keeps, in
+   * whole or in part, that someone else's text went into. A Run that answers
+   * it counts as having read that text. Empty: none.
+   */
+  origins: ThirdPartySource[];
+}
+
+/**
+ * The third-party sources recorded for a Block and the Blocks nested in it
+ * (a quote added inside a list, say), each once, in the order found.
+ */
+function originsIn(block: Y.XmlElement, origins: Y.Map<unknown>): ThirdPartySource[] {
+  const found = new Set<ThirdPartySource>();
+  const visit = (element: Y.XmlElement) => {
+    const id = textAttribute(element, BLOCK_ID_ATTRIBUTE);
+    const source = id === null ? null : parseThirdPartySource(origins.get(id));
+    if (source) found.add(source);
+    for (const child of element.toArray()) if (child instanceof Y.XmlElement) visit(child);
+  };
+  visit(block);
+  return [...found];
+}
+
+/** Where the third-party text of kept pieces (oldest first) came from: each source once, the newest first. */
+const originsOf = (kept: readonly Piece[]): ThirdPartySource[] => [
+  ...new Set(kept.toReversed().flatMap((piece) => piece.origins ?? [])),
+];
+
 /**
  * The Question context of the Question at `index` among the Mind's top-level
  * Blocks. The Question itself is always kept, even alone over the budget.
@@ -106,21 +147,39 @@ export function buildQuestionContext(
   index: number,
   budget = QUESTION_CONTEXT_TOKEN_BUDGET,
 ): QuestionContext {
+  return questionContextOf(blocks, index, budget).context;
+}
+
+/**
+ * `buildQuestionContext`, with where the third-party text in the Blocks it
+ * keeps came from, as the Mind's `textOrigins` records it.
+ */
+export function questionContextOf(
+  blocks: Y.XmlFragment,
+  index: number,
+  budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+): QuestionContextWithOrigins {
   const children = blocks.toArray();
   const question = children[index];
   if (!(question instanceof Y.XmlElement)) throw new Error("No Question at that index.");
   const questionText = toMarkdown(question);
+  const origins = blocks.doc?.getMap<unknown>(MIND_TEXT_ORIGINS_FIELD);
+  const recorded = origins && origins.size > 0 ? origins : null;
   /** What the Blocks above contribute, newest first, read only as far as the budget goes. */
   const newestFirst = function* (): Generator<Piece> {
     for (let at = index - 1; at >= 0; at--) {
       const block = children[at];
       const piece = block instanceof Y.XmlElement ? pieceOf(block) : null;
-      if (piece) yield piece;
+      if (!piece) continue;
+      yield recorded && block instanceof Y.XmlElement
+        ? { ...piece, origins: originsIn(block, recorded) }
+        : piece;
     }
   };
+  const kept = keptWithinBudget(newestFirst(), budget - estimateTokens(questionText));
   return {
-    messages: withinBudget(newestFirst(), questionText, budget - estimateTokens(questionText)),
-    question: questionText,
+    context: { messages: asMessages(kept, questionText), question: questionText },
+    origins: originsOf(kept),
   };
 }
 
@@ -135,30 +194,40 @@ export function conversationContext(
   question: string,
   budget = QUESTION_CONTEXT_TOKEN_BUDGET,
 ): QuestionContext {
+  return conversationContextOf(earlier, question, budget).context;
+}
+
+/**
+ * `conversationContext`, with where the third-party text in the earlier
+ * Answers it keeps came from: Answers written in a Run that had read some.
+ */
+export function conversationContextOf(
+  earlier: readonly ConversationMessage[],
+  question: string,
+  budget = QUESTION_CONTEXT_TOKEN_BUDGET,
+): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
     if (message.kind === "question")
       return message.text ? [{ role: "user", text: message.text }] : [];
     if (message.status === "failed") return [];
     const text = answerMarkdown(message.text, message.citations);
-    return text ? [{ role: "assistant", text }] : [];
+    if (!text) return [];
+    return [
+      { role: "assistant", text, ...(message.textOrigin && { origins: [message.textOrigin] }) },
+    ];
   });
-  return {
-    messages: withinBudget(pieces.reverse(), question, budget - estimateTokens(question)),
-    question,
-  };
+  const kept = keptWithinBudget(pieces.reverse(), budget - estimateTokens(question));
+  return { context: { messages: asMessages(kept, question), question }, origins: originsOf(kept) };
 }
 
 /**
- * The Question after the newest pieces above it that fit in `remaining`
- * tokens, as messages: the oldest pieces are the ones left out, and the
- * newest piece that doesn't fit whole keeps its end, marked as cut, when that
- * is worth keeping.
+ * The newest pieces above the Question that fit in `remaining` tokens, oldest
+ * first: the oldest pieces are the ones left out, and the newest piece that
+ * doesn't fit whole keeps its end, marked as cut, when that is worth keeping.
+ * Those before the first of the User's are left out too: a conversation
+ * starts with the User.
  */
-function withinBudget(
-  newestFirst: Iterable<Piece>,
-  question: string,
-  remaining: number,
-): AnswerMessage[] {
+function keptWithinBudget(newestFirst: Iterable<Piece>, remaining: number): Piece[] {
   const kept: Piece[] = [];
   for (const piece of newestFirst) {
     if (remaining <= 0) break;
@@ -172,18 +241,31 @@ function withinBudget(
     }
   }
   kept.reverse();
-  kept.push({ role: "user", text: question });
+  while (kept[0]?.role === "assistant") kept.shift();
+  return kept;
+}
 
-  // One message per run of the same role, as providers expect roles to alternate.
+/** The kept pieces, then the Question, as messages: one per run of the same role, as providers expect roles to alternate. */
+function asMessages(kept: readonly Piece[], question: string): AnswerMessage[] {
   const messages: AnswerMessage[] = [];
-  for (const piece of kept) {
+  for (const piece of [...kept, { role: "user", text: question } satisfies Piece]) {
     const last = messages.at(-1);
     if (last?.role === piece.role) last.content = `${last.content}\n\n${piece.text}`;
     else messages.push({ role: piece.role, content: piece.text });
   }
-  // A conversation starts with the User.
-  while (messages[0]?.role === "assistant") messages.shift();
   return messages;
+}
+
+/**
+ * The Question after the newest pieces above it that fit in `remaining`
+ * tokens, as messages (see `keptWithinBudget`).
+ */
+function withinBudget(
+  newestFirst: Iterable<Piece>,
+  question: string,
+  remaining: number,
+): AnswerMessage[] {
+  return asMessages(keptWithinBudget(newestFirst, remaining), question);
 }
 
 /**
