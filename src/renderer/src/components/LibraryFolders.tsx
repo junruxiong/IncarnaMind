@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { useFolderDrop } from "../folderDrag";
 import { useT } from "../i18n";
+import { currentMindIdOf, currentTabOf } from "../layoutSlice";
 import { useAppStore } from "../store";
 import { RENAME_SHORTCUT, TREE_ROW } from "../treeKeys";
 import { DeleteMindDialog } from "./DeleteMindDialog";
@@ -145,9 +146,10 @@ export function LibraryFolders({
   const assignments = useAppStore((state) => state.library?.assignments);
   const minds = useAppStore((state) => state.minds);
   const openMindFolder = useAppStore(
-    (state) => state.minds.find((mind) => mind.id === state.openMindId)?.folderId ?? null,
+    (state) =>
+      state.minds.find((mind) => mind.id === currentMindIdOf(state.layout))?.folderId ?? null,
   );
-  const openMindId = useAppStore((state) => state.openMindId);
+  const openMindId = useAppStore((state) => currentMindIdOf(state.layout));
   const [deletingMind, setDeletingMind] = useState<Mind | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<LibraryGroup | null>(null);
 
@@ -287,7 +289,10 @@ function FolderGroup({
   onDelete(): void;
 }) {
   const expanded = useFolds((state) => state.open.has(folder.id));
-  const selected = useAppStore((state) => state.libraryOpen && state.libraryFilter === folder.id);
+  const selected = useAppStore(
+    (state) =>
+      currentTabOf(state.layout)?.item.kind === "library" && state.libraryFilter === folder.id,
+  );
   const drop = useFolderDrop(folder.id);
   const [renaming, setRenaming] = useState(false);
   const button = useRef<HTMLButtonElement>(null);

@@ -15,7 +15,8 @@ import {
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** Lists whose items can be selected, where a list's own keys act. */
-const SELECTABLE_LIST = '[role="listbox"], [role="tree"], [role="treegrid"], [role="grid"]';
+const SELECTABLE_LIST =
+  '[role="listbox"], [role="tree"], [role="treegrid"], [role="grid"], [role="tablist"]';
 
 function typesText(target: EventTarget | null): boolean {
   return (
@@ -60,6 +61,8 @@ export function runShortcut(
   ctx: CommandContext,
   { objectsOnly = false } = {},
 ): boolean {
+  // Windows reports AltGr as Ctrl+Alt: what it types (a German \, a Polish ą) is text.
+  if (event.getModifierState("AltGraph")) return false;
   for (const command of commands.all()) {
     const shortcut = command.shortcut;
     if (!shortcut || (objectsOnly && !command.appliesTo)) continue;
