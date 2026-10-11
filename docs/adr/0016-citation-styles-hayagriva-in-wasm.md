@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted (2026-10-11)
 ---
 
 # Citation styles are formatted by Hayagriva, built to wasm
