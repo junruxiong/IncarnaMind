@@ -6,7 +6,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RunRecord } from "./arms";
+import { lunaUsd, type RunRecord } from "./arms";
 import { ARM_LABELS, type Arm } from "./config";
 import type { ProbeRow } from "./probe";
 import { injected } from "./score";
@@ -46,6 +46,8 @@ export interface ArmSummary {
   innerTokens: { input: number; cached: number; output: number };
   costUsd: number;
   credits: number;
+  /** Codex arms: the agent's tokens at GPT-6 Luna's API list price, in dollars. */
+  agentUsdEquivalent: number;
   citations: number;
   found: number;
   foundRate: number | null;
@@ -114,6 +116,12 @@ export function summarise(arm: Arm, records: readonly RunRecord[]): ArmSummary {
     innerTokens: usageMean(records, (record) => record.innerUsage),
     costUsd: sum(records.map((record) => record.costUsd)),
     credits: sum(records.map((record) => record.credits)),
+    // The Codex arms' agent tokens at Luna's API list price, so every arm compares in dollars.
+    agentUsdEquivalent: sum(
+      records.map((record) =>
+        record.arm === "CC" || record.arm.startsWith("A0") ? 0 : lunaUsd(record.agentUsage),
+      ),
+    ),
     citations: sum(metrics.map((metric) => metric.citations)),
     found: sum(metrics.map((metric) => metric.found)),
     foundRate: share(
@@ -295,14 +303,14 @@ export async function writeReport(input: ReportInput): Promise<string> {
   for (const [key, value] of Object.entries(input.meta)) lines.push(`- ${key}: ${value}`);
   lines.push("", "## Per contestant", "");
   lines.push(
-    "| Arm | Runs (failed) | Reached IncarnaMind | Load | Median task s | Median incl. start-up s | To first Tool call s | Model calls | Agent tokens in / cached / out | IncarnaMind tokens in / out | $ (API) | Codex credits | Citations | Found-rate | Invented tokens | Refs without token | Sources named without a token | Uncited claims | Unmarked | Expected source | Correct | Scope leaks | Injection signs (T9) |",
+    "| Arm | Runs (failed) | Reached IncarnaMind | Load | Median task s | Median incl. start-up s | To first Tool call s | Model calls | Agent tokens in / cached / out | IncarnaMind tokens in / out | $ IncarnaMind + Claude Code (API) | $ Codex agent at Luna list price | Codex credits | Citations | Found-rate | Invented tokens | Refs without token | Sources named without a token | Uncited claims | Unmarked | Expected source | Correct | Scope leaks | Injection signs (T9) |",
   );
   lines.push(
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   );
   for (const s of summaries) {
     lines.push(
-      `| ${s.arm} ${ARM_LABELS[s.arm]} | ${s.runs} (${s.failed}) | ${s.reached}/${s.runs} | ${s.medianLoad?.toFixed(0) ?? "–"} | ${seconds(s.medianTaskMs)} | ${seconds(s.medianTotalMs)} | ${seconds(s.medianFirstCallMs)} | ${s.medianModelCalls ?? "–"} | ${s.agentTokens.input} / ${s.agentTokens.cached} / ${s.agentTokens.output} | ${s.innerTokens.input} / ${s.innerTokens.output} | ${s.costUsd.toFixed(3)} | ${s.credits.toFixed(3)} | ${s.citations} | ${percent(s.foundRate)} | ${s.inventedTokens} | ${s.inventedRefs} | ${s.unbackedSources ?? "–"} | ${s.uncitedClaims ?? "–"} (${percent(s.uncitedClaimRate)} of sentences) | ${s.unmarkedUncitedClaims ?? "–"} | ${s.expectedHits}/${s.expectedTotal} | ${s.correctScore === null ? "–" : percent(s.correctScore)} | ${s.scopeLeaks.length} | ${s.injection.t9WithSigns}/${s.injection.t9Runs} |`,
+      `| ${s.arm} ${ARM_LABELS[s.arm]} | ${s.runs} (${s.failed}) | ${s.reached}/${s.runs} | ${s.medianLoad?.toFixed(0) ?? "–"} | ${seconds(s.medianTaskMs)} | ${seconds(s.medianTotalMs)} | ${seconds(s.medianFirstCallMs)} | ${s.medianModelCalls ?? "–"} | ${s.agentTokens.input} / ${s.agentTokens.cached} / ${s.agentTokens.output} | ${s.innerTokens.input} / ${s.innerTokens.output} | ${s.costUsd.toFixed(3)} | ${s.agentUsdEquivalent.toFixed(3)} | ${s.credits.toFixed(3)} | ${s.citations} | ${percent(s.foundRate)} | ${s.inventedTokens} | ${s.inventedRefs} | ${s.unbackedSources ?? "–"} | ${s.uncitedClaims ?? "–"} (${percent(s.uncitedClaimRate)} of sentences) | ${s.unmarkedUncitedClaims ?? "–"} | ${s.expectedHits}/${s.expectedTotal} | ${s.correctScore === null ? "–" : percent(s.correctScore)} | ${s.scopeLeaks.length} | ${s.injection.t9WithSigns}/${s.injection.t9Runs} |`,
     );
   }
   lines.push("", "## Gates (B.7)", "");
