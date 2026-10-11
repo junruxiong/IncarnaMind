@@ -77,6 +77,17 @@ describe("a pause while suggestions are off", () => {
     expect(updateSettings).toHaveBeenCalledWith({ device: { suggestionOffers: 1 } });
   });
 
+  test("offers nothing when the User said Not now in that Mind while the pause's request was out", async () => {
+    const doc = new Y.Doc();
+    suggestNext.mockImplementation(async () => {
+      suggestions.declineOffer(doc);
+      return { kind: "off", scopeHasDocuments: true };
+    });
+    await ask(doc);
+    expect(suggestions.useSuggestionOffer.getState().shown).toBeNull();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
   test("offers nothing with no Documents to suggest from", async () => {
     suggestNext.mockResolvedValue({ kind: "off", scopeHasDocuments: false });
     await ask();

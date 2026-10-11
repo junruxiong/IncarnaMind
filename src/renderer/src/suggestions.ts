@@ -78,11 +78,13 @@ export async function askForSuggestion(
   const folderId = minds.find((mind) => mind.id === mindId)?.folderId ?? null;
   const scope = composerScope(useComposer.getState().draft(mindId), folderId);
   const outcome = await core.suggestNext({ ...request, mindId, scope });
-  if (outcome.kind === "off" && outcome.scopeHasDocuments && mayOffer) {
+  // As they are now, after the reply: another Mind may have offered, or this one said Not now.
+  const stillMayOffer =
+    mayOffer && useSuggestionOffer.getState().shown === null && !offerDeclined(doc);
+  if (outcome.kind === "off" && outcome.scopeHasDocuments && stillMayOffer) {
     useSuggestionOffer.setState({ shown: { mindId, line: "offer" } });
-    await useAppStore.getState().updateSettings({
-      device: { suggestionOffers: settings.device.suggestionOffers + 1 },
-    });
+    const offers = useAppStore.getState().settings?.device.suggestionOffers ?? 0;
+    await useAppStore.getState().updateSettings({ device: { suggestionOffers: offers + 1 } });
   }
   return outcome.kind === "suggestion" ? outcome.suggestion : null;
 }
